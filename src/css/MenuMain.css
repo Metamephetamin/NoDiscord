@@ -1,32 +1,59 @@
+#root {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
 .menu__main {
 	min-height: 99.99vh;
 	display: grid;
 	grid-template-columns: 90px 350px 1fr;
+	background-color: rgb(20, 20, 20);
+	gap: 10px;
 }
 
 .box1 {
-	background-color: rgb(27, 27, 27);
-	border: 1px solid white;
+	background-color: rgb(20, 20, 20);
+	border: 1px solid rgb(61, 61, 61);
+	height: 730px;
 	color: aliceblue;
 	text-align: center;
-	padding-top: 10px;
+	padding-top: 20px;
+	margin-left: 10px;
+	border-radius: 10px;
 }
 
-.box1 > img {
+.btn__create-serever {
+	width: 40px;
+	margin-top: 10px;
+	border-radius: 10px;
+}
+
+.btn__create-serever:hover {
+	background-color: #ca8aff;
+	transition: 0.2s;
+}
+
+.btn__server {
 	width: 60px;
 	border-radius: 15px;
+}
+
+.box1 > .btn__server:hover {
+	opacity: 0.8;
+	transition: 0.2s;
 }
 
 .box2 {
 	text-align: center;
 	font-size: 13px;
 	color: aliceblue;
-	/* background-color: rgb(255, 113, 113); */
+	border-radius: 10px;
 }
 
 .box2 > h1 {
 	font-family: "Raleway";
-	border-bottom: 2px solid white;
+	/* border-bottom: 2px solid white; */
 }
 
 span {
@@ -43,12 +70,19 @@ ul {
 }
 
 li {
+	color: rgb(163, 163, 163);
 	text-indent: 20px;
 	display: flex;
 	text-align: start;
 	align-items: center;
 	height: 40px;
-	border: 1px solid white;
+	border: 1px solid rgb(61, 61, 61);
+	border-radius: 10px;
+}
+
+li:hover {
+	color: aliceblue;
+	transition: 0.1s;
 }
 
 li,
@@ -63,39 +97,82 @@ p {
 .text__channel {
 	display: flex;
 	text-align: start;
-	text-indent: 20px;
+	text-indent: 15px;
 	gap: 20px;
 	flex-direction: column;
-	/* text-align: center; */
-	border: 1px solid white;
+	/* border: 1px solid white; */
 	color: aliceblue;
-	background-color: rgb(160, 160, 160);
+	background-color: rgb(20, 20, 20);
+	cursor: default;
 }
 
 .voice__channel {
-	text-indent: 20px;
+	text-indent: 15px;
 	padding-top: 60px;
 	display: flex;
 	gap: 20px;
 	flex-direction: column;
 	text-align: start;
-	border: 1px solid white;
+	/* border: 1px solid white; */
 	color: aliceblue;
-	background-color: rgb(160, 160, 160);
+	background-color: rgb(20, 20, 20);
+	cursor: default;
+	border-radius: 10px;
 }
 
 .box3 {
 	display: grid;
-	background-color: rgb(3, 3, 3);
-	border: 1px solid white;
+	background-color: rgb(20, 20, 20);
+	/* border: 1px solid rgb(136, 136, 136); */
 	color: aliceblue;
 	grid-template-rows: 1fr 100px;
+	border-radius: 10px;
 }
 
 .boxwr {
 	color: aliceblue;
-	background-color: rgb(28, 28, 28);
-	border: 1px solid rgb(240, 240, 240);
+	background-color: rgb(20, 20, 20);
+	border: 1px solid rgb(61, 61, 61);
+	border-radius: 10px;
+}
+
+.input__chat {
+	position: relative;
+	display: flex;
+	align-items: start;
+	justify-content: start;
+	line-height: 1.7;
+	font-weight: 500;
+	font-size: 18px;
+	color: aliceblue;
+	background-color: rgb(25, 25, 25);
+	border-radius: 20px;
+	min-height: 40px;
+	max-height: 70px;
+	resize: none;
+	outline: none;
+	box-sizing: border-box;
+	width: 99%;
+	padding-top: 17px;
+	padding-left: 55px;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.wrapper__chat {
+	display: flex;
+	align-items: center;
+	justify-content: start;
+}
+
+.btn__plus {
+	position: absolute;
+	z-index: 1;
+	padding-left: 10px;
+}
+
+.btn__plus:hover {
+	opacity: 0.7;
 }
 
 .menu__main > img {
