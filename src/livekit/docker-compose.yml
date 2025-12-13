@@ -1,0 +1,16 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit
+    ports:
+      - "7880:7880"  # HTTPS / WSS
+      - "7881:7881"  # gRPC
+    environment:
+      LIVEKIT_KEYS: "localKey: rT6p8X9awd1f3wq2mZ1vC4jH7nB5sE0yU3kL8"
+      LIVEKIT_TLS_CERT_PATH: "/certs/server-cert.pem"
+      LIVEKIT_TLS_KEY_PATH: "/certs/server-key.pem"
+    volumes:
+      - ./livekit_certs:/certs
+    command:
+      - "--node-ip"
+      - "0.0.0.0"

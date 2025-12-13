@@ -1,0 +1,111 @@
+.textchat-container {
+	display: flex;
+	flex-direction: column;
+	flex: 1; /* займет всю высоту родителя */
+	min-height: 0; /* критично для flex + overflow */
+	background-color: #141414;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.messages-list {
+	flex: 1; /* занимает все свободное место над input */
+	min-height: 0; /* обязательно */
+	overflow-y: auto; /* скролл */
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	/* padding: 10px; */
+}
+
+.message-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+
+.msg-avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+}
+
+.msg-content {
+	display: flex;
+	flex-direction: column;
+	word-wrap: break-word;
+}
+
+.message-author {
+	font-weight: bold;
+	color: #fff;
+	font-size: 14px;
+}
+
+.message-time {
+	font-weight: normal;
+	font-size: 12px;
+	color: #bbb;
+	margin-left: 5px;
+}
+
+.message-text {
+	color: #fff;
+	font-size: 14px;
+	margin-top: 2px;
+}
+
+.input-area {
+	display: flex;
+	text-align: center;
+	background-color: #1f1f1f;
+	flex-shrink: 0;
+	border-radius: 15px;
+}
+
+textarea {
+	flex: 1;
+	min-height: 50px;
+	justify-content: center;
+	align-items: center;
+	resize: auto;
+	border-radius: 15px;
+	color: #fff;
+	background-color: #272727;
+	text-indent: 10px;
+	font-size: 15px;
+	display: flex;
+	align-items: center;
+	border: none;
+	outline: 1px solid rgb(80, 79, 79);
+}
+
+.input-area button {
+	padding: 0 15px;
+	border-radius: 5px;
+	background: #5865f2;
+	color: #fff;
+	border: none;
+	cursor: pointer;
+}
+
+.input-area button:hover {
+	opacity: 0.8;
+	transition: 0.2s;
+}
+
+@media (max-width: 768px) {
+	.textchat-container {
+		font-size: 13px;
+	}
+
+	.input-area textarea {
+		height: 50px;
+		font-size: 13px;
+	}
+
+	.msg-avatar {
+		width: 35px;
+		height: 35px;
+	}
+}
