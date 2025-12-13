@@ -5,5 +5,9 @@ body {
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
-	background-color: rgb(43, 43, 43);
+	background-color: rgb(18, 18, 18);
+}
+
+#root {
+	background-color: rgb(23, 23, 23);
 }
