@@ -1,0 +1,48 @@
+.voice-channel-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.voice-channel-item {
+	cursor: pointer;
+	padding: 8px 12px;
+	margin-bottom: 6px;
+	background-color: #f0f0f0;
+	border-radius: 4px;
+}
+
+.voice-channel-item .channel-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.participants-list {
+	list-style: none;
+	padding-left: 12px;
+	margin-top: 4px;
+}
+
+.participant-item {
+	display: flex;
+	align-items: center;
+	margin-bottom: 4px;
+}
+
+.participant-item .avatar {
+	width: 24px;
+	height: 24px;
+	background-color: #888;
+	border-radius: 50%;
+	color: white;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	margin-right: 8px;
+	font-size: 12px;
+}
+
+.participant-name {
+	font-size: 14px;
+}
