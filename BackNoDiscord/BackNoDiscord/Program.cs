@@ -75,6 +75,8 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<CryptoService>();
+builder.Services.AddSingleton<ServerInviteService>();
+builder.Services.AddSingleton<ServerStateService>();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {

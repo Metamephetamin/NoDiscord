@@ -17,7 +17,7 @@ export default function ScreenShareButton({
     try {
       await onStart();
     } catch (error) {
-      console.error("Ошибка screen share:", error);
+      console.error("Ошибка запуска трансляции:", error);
     } finally {
       setIsStarting(false);
     }
@@ -31,7 +31,7 @@ export default function ScreenShareButton({
     try {
       await onStop();
     } catch (error) {
-      console.error("Ошибка остановки screen share:", error);
+      console.error("Ошибка остановки трансляции:", error);
     } finally {
       setIsStopping(false);
     }

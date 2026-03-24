@@ -104,3 +104,8 @@ out/
 *.wsuo
 *.vsidx
 slnx.sqlite
+
+# Backend runtime data
+BackNoDiscord/BackNoDiscord/App_Data/*.json
+BackNoDiscord/BackNoDiscord/wwwroot/chat-files/
+BackNoDiscord/BackNoDiscord/wwwroot/avatars/user-*

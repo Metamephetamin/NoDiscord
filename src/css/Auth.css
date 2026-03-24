@@ -14,7 +14,71 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.68;
+  opacity: 0.88;
+}
+
+.auth-brand {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(100vw - 48px);
+}
+
+.auth-brand__badge {
+  flex-shrink: 0;
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: 26px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 20px 44px rgba(8, 16, 30, 0.26);
+  backdrop-filter: blur(14px);
+}
+
+.auth-brand__logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgba(27, 55, 120, 0.18));
+}
+
+.auth-brand__copy {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 18px;
+  padding-top: 0;
+}
+
+.auth-brand__name {
+  color: #ffffff;
+  font-size: clamp(34px, 4.4vw, 72px);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 18px 44px rgba(9, 18, 34, 0.34);
+}
+
+.auth-brand__title {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(34px, 4.4vw, 72px);
+  font-weight: 800;
+  line-height: 0.96;
+  white-space: nowrap;
+  text-shadow: 0 16px 40px rgba(9, 18, 34, 0.28);
 }
 
 .auth-card {
@@ -26,22 +90,22 @@
   gap: 12px;
   padding: 28px;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(18, 24, 34, 0.7);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 24px 60px rgba(4, 13, 27, 0.22);
+  backdrop-filter: blur(12px);
 }
 
 .auth-card h2 {
   margin: 0;
-  color: #f8fafc;
+  color: #172133;
   font-size: 28px;
   text-align: center;
 }
 
 .auth-subtitle {
   margin: 0 0 8px;
-  color: #b8c1d5;
+  color: #4a5973;
   font-size: 14px;
   text-align: center;
   line-height: 1.5;
@@ -52,16 +116,21 @@
   box-sizing: border-box;
   height: 46px;
   padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(121, 137, 173, 0.24);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.8);
+  color: #172133;
   font-size: 15px;
   outline: none;
 }
 
+.auth-input::placeholder {
+  color: #6a7891;
+}
+
 .auth-input:focus {
   border-color: rgba(91, 124, 255, 0.42);
+  box-shadow: 0 0 0 3px rgba(91, 124, 255, 0.12);
 }
 
 .auth-submit {
@@ -79,7 +148,84 @@
 
 .auth-message {
   margin: 4px 0 0;
-  color: #ffb4b4;
+  color: #b83232;
   font-size: 14px;
   text-align: center;
+}
+
+@media (max-width: 900px) {
+  .auth-page {
+    place-items: end center;
+    padding: 24px 18px 18px;
+  }
+
+  .auth-brand {
+    top: 38px;
+    left: 50%;
+    right: auto;
+    gap: 14px;
+    max-width: calc(100vw - 40px);
+  }
+
+  .auth-brand__badge {
+    width: 72px;
+    height: 72px;
+    border-radius: 22px;
+  }
+
+  .auth-brand__logo {
+    width: 54px;
+    height: 54px;
+  }
+
+  .auth-brand__name {
+    font-size: clamp(28px, 8vw, 48px);
+    letter-spacing: 0.06em;
+  }
+
+  .auth-brand__title {
+    font-size: clamp(28px, 8vw, 48px);
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-page {
+    place-items: center;
+    padding-top: 152px;
+  }
+
+  .auth-brand {
+    top: 26px;
+    left: 50%;
+    right: auto;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .auth-brand__copy {
+    gap: 12px;
+    padding-top: 4px;
+  }
+
+  .auth-brand__badge {
+    width: 62px;
+    height: 62px;
+    border-radius: 20px;
+  }
+
+  .auth-brand__logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .auth-brand__name {
+    font-size: clamp(24px, 8vw, 34px);
+    letter-spacing: 0.05em;
+  }
+
+  .auth-brand__title {
+    font-size: clamp(24px, 8vw, 34px);
+    line-height: 1;
+  }
 }

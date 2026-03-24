@@ -1,21 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export default function ScreenShareViewer({
   stream,
   videoSrc,
   imageSrc,
-  hasAudio = false,
   title,
   subtitle,
-  onClose,
   debugInfo,
 }) {
   const videoRef = useRef(null);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-
-  useEffect(() => {
-    setIsAudioEnabled(false);
-  }, [stream, videoSrc, imageSrc]);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     if (!videoRef.current) {
@@ -24,7 +18,7 @@ export default function ScreenShareViewer({
 
     videoRef.current.srcObject = stream || null;
     videoRef.current.src = stream ? "" : videoSrc || "";
-    videoRef.current.muted = !isAudioEnabled;
+    videoRef.current.muted = true;
 
     if (stream) {
       videoRef.current.play().catch((error) => console.error("Ошибка запуска просмотра трансляции:", error));
@@ -38,7 +32,7 @@ export default function ScreenShareViewer({
         videoRef.current.src = "";
       }
     };
-  }, [stream, videoSrc, isAudioEnabled]);
+  }, [stream, videoSrc]);
 
   useEffect(() => {
     if (!videoSrc || !videoRef.current) {
@@ -84,10 +78,18 @@ export default function ScreenShareViewer({
     };
   }, [videoSrc]);
 
+  const requestFullscreen = async () => {
+    try {
+      await containerRef.current?.requestFullscreen?.();
+    } catch (error) {
+      console.error("Ошибка перехода в полноэкранный режим:", error);
+    }
+  };
+
   const hasVideo = Boolean(stream || videoSrc || imageSrc);
 
   return (
-    <div className="stream-viewer">
+    <div className="stream-viewer" ref={containerRef}>
       <div className="stream-viewer__header">
         <div>
           <h1>{title}</h1>
@@ -95,16 +97,8 @@ export default function ScreenShareViewer({
         </div>
 
         <div className="stream-viewer__actions">
-          <button
-            type="button"
-            className={`stream-viewer__audio ${isAudioEnabled ? "stream-viewer__audio--active" : ""}`}
-            onClick={() => setIsAudioEnabled((previous) => !previous)}
-            disabled={!hasAudio}
-          >
-            {isAudioEnabled ? "Выключить звук" : "Включить звук"}
-          </button>
-          <button type="button" className="stream-viewer__close" onClick={onClose}>
-            Назад к чату
+          <button type="button" className="stream-viewer__fullscreen" onClick={requestFullscreen}>
+            На весь экран
           </button>
         </div>
       </div>
@@ -113,9 +107,9 @@ export default function ScreenShareViewer({
         {hasVideo ? (
           <>
             {stream ? (
-              <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline controls />
+              <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline />
             ) : videoSrc ? (
-              <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline controls />
+              <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline />
             ) : (
               <img src={imageSrc} alt={title} className="stream-viewer__image" />
             )}
@@ -123,7 +117,7 @@ export default function ScreenShareViewer({
               <div className="stream-viewer__debug">
                 <div>stream: {stream ? "yes" : videoSrc ? "mse" : "frame"}</div>
                 <div>video tracks: {debugInfo.videoTracks}</div>
-                <div>audio: {hasAudio ? "yes" : "no"}</div>
+                <div>audio: {debugInfo.hasAudio ? "yes" : "no"}</div>
                 <div>state: {debugInfo.readyState}</div>
                 <div>frame updated: {debugInfo.updatedAt || "none"}</div>
               </div>

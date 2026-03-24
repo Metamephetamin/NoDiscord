@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "./VoiceChannelList";
 import TextChat from "./TextChat";
 import ScreenShareButton from "./ScreenShareButton";
 import ScreenShareViewer from "./ScreenShareViewer";
+import ServerInvitesPanel from "./ServerInvitesPanel";
 import "../css/MenuMain.css";
 import "../css/MenuProfile.css";
 import "../css/ListChannels.css";
-import { API_URL } from "../config/runtime";
+import { API_BASE_URL, API_URL } from "../config/runtime";
 import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
 import { DEFAULT_AVATAR, DEFAULT_SERVER_ICON, readFileAsDataUrl, resolveMediaUrl } from "../utils/media";
 
@@ -80,6 +81,12 @@ const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
 const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 const getCurrentUserId = (user) => String(user?.id || user?.email || "");
+const getUserStorageScope = (user) => String(user?.id || user?.email || "guest");
+const getScopedDefaultServerId = (user) =>
+  `server-main-${getUserStorageScope(user)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "guest"}`;
 const readSessionUser = () => {
   try {
     const raw = localStorage.getItem("user");
@@ -184,9 +191,10 @@ const createDefaultServer = (user) => {
     : { userId: ownerId, name: "Owner", avatar: "", roleId: "owner" };
 
   return {
-  id: "server-main",
+  id: getScopedDefaultServerId(ownerUser),
   name: "Основной сервер",
   icon: DEFAULT_SERVER_ICON,
+  isShared: false,
   ownerId,
   roles: createDefaultRoles(),
   members: [ownerMember],
@@ -205,6 +213,7 @@ const createServer = (name, user) => {
   id: createId("server"),
   name: name?.trim() || "Новый сервер",
   icon: "",
+  isShared: false,
   ownerId,
   roles: createDefaultRoles(),
   members: [ownerMember],
@@ -225,9 +234,14 @@ const normalizeChannels = (channels, type) => {
 const normalizeServers = (value, currentUser) => {
   if (!Array.isArray(value) || value.length === 0) return [createDefaultServer(currentUser)];
   return value.map((server, index) => ({
-    id: String(server?.id || (index === 0 ? "server-main" : createId("server"))),
+    id: String(
+      !Boolean(server?.isShared) && (!server?.id || server.id === "server-main")
+        ? getScopedDefaultServerId(currentUser)
+        : server?.id || (index === 0 ? getScopedDefaultServerId(currentUser) : createId("server"))
+    ),
     name: String(server?.name || `Сервер ${index + 1}`),
     icon: server?.icon ?? (index === 0 ? DEFAULT_SERVER_ICON : ""),
+    isShared: Boolean(server?.isShared),
     ownerId: String(server?.ownerId || server?.owner_id || getCurrentUserId(currentUser) || createId("owner")),
     roles: normalizeRoles(server?.roles),
     members: (() => {
@@ -246,14 +260,11 @@ const normalizeServers = (value, currentUser) => {
     voiceChannels: normalizeChannels(server?.voiceChannels, "voice"),
   }));
 };
-const getUserStorageScope = (user) => String(user?.id || user?.email || "guest");
 const getServersStorageKey = (user) => `${SERVERS_STORAGE_KEY}:${getUserStorageScope(user)}`;
 const getActiveServerStorageKey = (user) => `${ACTIVE_SERVER_STORAGE_KEY}:${getUserStorageScope(user)}`;
 const readStoredServers = (user) => {
   try {
-    const raw =
-      localStorage.getItem(getServersStorageKey(user)) ||
-      (!user ? localStorage.getItem(SERVERS_STORAGE_KEY) : null);
+    const raw = localStorage.getItem(getServersStorageKey(user));
     return raw ? normalizeServers(JSON.parse(raw), user) : [createDefaultServer(user)];
   } catch {
     return [createDefaultServer(user)];
@@ -284,8 +295,11 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [pingMs, setPingMs] = useState(null);
   const [selectedStreamUserId, setSelectedStreamUserId] = useState(null);
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
+  const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
+  const [memberRoleMenu, setMemberRoleMenu] = useState(null);
 
   const popupRef = useRef(null);
+  const serverMembersRef = useRef(null);
   const avatarInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
   const voiceClientRef = useRef(null);
@@ -300,9 +314,11 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const currentVoiceChannelName = useMemo(() => servers.flatMap((server) => server.voiceChannels).find((channel) => channel.id === currentVoiceChannel)?.name || currentVoiceChannel, [currentVoiceChannel, servers]);
   const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
   const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
+  const isServerOwner = useMemo(() => String(activeServer?.ownerId || "") === String(currentUserId), [activeServer?.ownerId, currentUserId]);
   const canManageServer = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_server"), [activeServer, currentUserId]);
   const canManageChannels = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_channels"), [activeServer, currentUserId]);
   const canManageRoles = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_roles"), [activeServer, currentUserId]);
+  const canInviteMembers = useMemo(() => hasServerPermission(activeServer, currentUserId, "invite_members"), [activeServer, currentUserId]);
   const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
   const selectedResolutionOption = useMemo(() => STREAM_RESOLUTION_OPTIONS.find((option) => option.value === resolution) || STREAM_RESOLUTION_OPTIONS[1], [resolution]);
   const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
@@ -351,27 +367,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
     try {
       const existingScopedValue = localStorage.getItem(serversStorageKey);
-      const legacyValue = localStorage.getItem(SERVERS_STORAGE_KEY);
       const nextServers = existingScopedValue
         ? normalizeServers(JSON.parse(existingScopedValue), user)
-        : legacyValue
-          ? normalizeServers(JSON.parse(legacyValue), user)
-          : [createDefaultServer(user)];
+        : [createDefaultServer(user)];
       const nextActiveServerId =
         localStorage.getItem(activeServerStorageKey) ||
-        (existingScopedValue ? null : localStorage.getItem(ACTIVE_SERVER_STORAGE_KEY)) ||
         nextServers[0]?.id ||
         "server-main";
       const nextActiveServer = nextServers.find((server) => server.id === nextActiveServerId) || nextServers[0];
-
-      if (!existingScopedValue && legacyValue) {
-        localStorage.setItem(serversStorageKey, legacyValue);
-      }
-
-      const legacyActiveServerId = localStorage.getItem(ACTIVE_SERVER_STORAGE_KEY);
-      if (!localStorage.getItem(activeServerStorageKey) && legacyActiveServerId) {
-        localStorage.setItem(activeServerStorageKey, legacyActiveServerId);
-      }
 
       setServers(nextServers);
       setActiveServerId(nextActiveServerId);
@@ -395,6 +398,25 @@ export default function MenuMain({ user, setUser, onLogout }) {
     localStorage.setItem(activeServerStorageKey, activeServerId);
   }, [activeServerId, activeServerStorageKey, user]);
   useEffect(() => {
+    if (!activeServer?.isShared || !currentUserId) return;
+
+    const timeoutId = window.setTimeout(() => {
+      syncServerSnapshot(activeServer);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeServer, currentUserId]);
+  useEffect(() => {
+    if (!activeServer?.id || !activeServer?.isShared) return;
+
+    refreshServerSnapshot(activeServer.id);
+    const intervalId = window.setInterval(() => {
+      refreshServerSnapshot(activeServer.id);
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeServer?.id, activeServer?.isShared]);
+  useEffect(() => {
     if (!servers.length) {
       const fallback = createDefaultServer(user);
       setServers([fallback]);
@@ -416,10 +438,15 @@ export default function MenuMain({ user, setUser, onLogout }) {
   useEffect(() => {
     const handleClick = (event) => {
       if (popupRef.current && !popupRef.current.contains(event.target)) setOpenSettings(false);
+      if (serverMembersRef.current && !serverMembersRef.current.contains(event.target)) setShowServerMembersPanel(false);
+      setMemberRoleMenu(null);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+  useEffect(() => {
+    setShowServerMembersPanel(false);
+  }, [activeServerId]);
   useEffect(() => {
     let disposed = false;
     const measurePing = async () => {
@@ -478,10 +505,68 @@ export default function MenuMain({ user, setUser, onLogout }) {
     previousScreenShareRef.current = isSharingScreen;
   }, [isSharingScreen]);
 
+  const replaceServerSnapshot = (snapshot, { activate = false } = {}) => {
+    if (!snapshot) return;
+
+    const normalizedServer = normalizeServers([snapshot], user)[0];
+    setServers((previous) => {
+      const existingIndex = previous.findIndex((server) => server.id === normalizedServer.id);
+      if (existingIndex === -1) {
+        return [...previous, normalizedServer];
+      }
+
+      const nextServers = [...previous];
+      nextServers[existingIndex] = {
+        ...normalizedServer,
+        isShared: previous[existingIndex]?.isShared || normalizedServer.isShared,
+      };
+      return nextServers;
+    });
+
+    if (activate) {
+      setActiveServerId(normalizedServer.id);
+      setCurrentTextChannelId(normalizedServer.textChannels?.[0]?.id || "");
+    }
+  };
   const updateServer = (updater) => setServers((previous) => previous.map((server) => (server.id === activeServerId ? updater(server) : server)));
+  const syncServerSnapshot = async (serverSnapshot) => {
+    if (!serverSnapshot || !currentUserId) return;
+
+    try {
+      await fetch(`${API_BASE_URL}/server-invites/server-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actorUserId: currentUserId,
+          serverSnapshot,
+        }),
+      });
+    } catch (error) {
+      console.error("Ошибка синхронизации сервера:", error);
+    }
+  };
+  const refreshServerSnapshot = async (serverId) => {
+    if (!serverId) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/server-invites/server/${serverId}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const snapshot = await response.json();
+      replaceServerSnapshot(snapshot);
+    } catch (error) {
+      console.error("Ошибка обновления сервера:", error);
+    }
+  };
   const openSettingsPanel = () => setOpenSettings(true);
   const handleAddServer = () => {
-    const server = createServer(`Сервер ${servers.length + 1}`);
+    const server = createServer(`Сервер ${servers.length + 1}`, user);
     setServers((previous) => [...previous, server]);
     setActiveServerId(server.id);
     setCurrentTextChannelId(server.textChannels[0]?.id || "");
@@ -493,7 +578,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!serverToDelete) return;
     if (serverToDelete.voiceChannels.some((channel) => channel.id === currentVoiceChannel)) await leaveVoiceChannel();
     const nextServers = servers.filter((server) => server.id !== serverId);
-    const fallbackServers = nextServers.length ? nextServers : [createDefaultServer()];
+    const fallbackServers = nextServers.length ? nextServers : [createDefaultServer(user)];
     const nextActiveId = activeServerId === serverId ? fallbackServers[0].id : activeServerId;
     const nextActiveServer = fallbackServers.find((server) => server.id === nextActiveId) || fallbackServers[0];
     setServers(fallbackServers);
@@ -547,6 +632,24 @@ export default function MenuMain({ user, setUser, onLogout }) {
     setAudioVolume(value);
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : value);
   };
+  const updateMemberRole = (memberUserId, roleId) => {
+    if (!isServerOwner || !activeServer) return;
+    updateServer((server) => ({
+      ...server,
+      members: server.members.map((member) =>
+        String(member.userId) === String(memberUserId) ? { ...member, roleId } : member
+      ),
+    }));
+    setMemberRoleMenu(null);
+  };
+  const markServerAsShared = (serverId) => {
+    if (!serverId) return;
+    setServers((previous) =>
+      previous.map((server) =>
+        server.id === serverId ? { ...server, isShared: true } : server
+      )
+    );
+  };
   const joinVoiceChannel = async (channel) => {
     if (!voiceClientRef.current || !user?.id || !channel?.id) return;
     try { await voiceClientRef.current.joinChannel(channel.id, user); } catch (error) { console.error("Ошибка входа в голосовой канал:", error); }
@@ -583,8 +686,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
   };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
+    if (String(selectedStreamUserId || "") === normalizedUserId) {
+      setSelectedStreamUserId(null);
+      return;
+    }
     setSelectedStreamUserId(normalizedUserId);
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
+  };
+  const handleImportServer = (snapshot) => {
+    if (!snapshot) return;
+    replaceServerSnapshot(snapshot, { activate: true });
+    setOpenSettings(false);
   };
   const toggleMicMute = () => setIsMicMuted((previous) => !previous);
   const toggleSoundMute = () => setIsSoundMuted((previous) => !previous);
@@ -637,13 +749,73 @@ export default function MenuMain({ user, setUser, onLogout }) {
       <aside className="sidebar__channels">
         <div className="channels__top">
           {activeServer && (
-            <div className="server-summary">
-              {activeServer.icon ? <img className="server-summary__icon" src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)} alt={activeServer.name || "Без названия"} /> : <div className="server-summary__icon server-summary__icon--empty" aria-hidden="true" />}
-              <div className="server-summary__content">
-                <div className="server-summary__name">{activeServer.name || "Без названия"}</div>
-                <div className="server-summary__subtitle">Активный сервер</div>
+            <div className="server-summary-wrap" ref={serverMembersRef}>
+              <button type="button" className="server-summary" onClick={() => setShowServerMembersPanel((previous) => !previous)}>
+                {activeServer.icon ? <img className="server-summary__icon" src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)} alt={activeServer.name || "Server"} /> : <div className="server-summary__icon server-summary__icon--empty" aria-hidden="true" />}
+                <div className="server-summary__content">
+                  <div className="server-summary__name">{activeServer.name || "Server"}</div>
+                  <div className="server-summary__subtitle">Активный сервер</div>
+                </div>
+              </button>
+
+              {showServerMembersPanel && (
+                <div className="server-members-panel">
+                  <div className="server-members-panel__header">
+                    <h3>Участники сервера</h3>
+                    <span>{activeServer?.members?.length || 0}</span>
+                  </div>
+                  <div className="server-members-panel__list">
+                    {(activeServer?.members || []).map((member) => {
+                      const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
+                      return (
+                        <div
+                          key={member.userId}
+                          className="server-members-panel__item"
+                          onContextMenu={(event) => {
+                            if (!isServerOwner || String(member.userId) === String(currentUserId)) {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            setMemberRoleMenu({
+                              memberUserId: member.userId,
+                              x: event.clientX,
+                              y: event.clientY,
+                            });
+                          }}
+                        >
+                          <img className="server-members-panel__avatar" src={resolveMediaUrl(member.avatar, DEFAULT_AVATAR)} alt={member.name} />
+                          <div className="server-members-panel__meta">
+                            <span className="server-members-panel__name">
+                              <span className="server-members-panel__role-dot" style={{ backgroundColor: memberRole?.color || "#7b89a8" }} aria-hidden="true" />
+                              {member.name}
+                            </span>
+                            <span className="server-members-panel__role">{memberRole?.name || "Member"}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <ServerInvitesPanel activeServer={activeServer} user={user} canInvite={canInviteMembers} onImportServer={handleImportServer} onServerShared={markServerAsShared} />
+                </div>
+              )}
+              {memberRoleMenu && (
+                <div className="member-role-menu" style={{ left: memberRoleMenu.x, top: memberRoleMenu.y }}>
+                  {(activeServer?.roles || []).map((role) => (
+                    <button
+                      key={role.id}
+                      type="button"
+                      className="member-role-menu__item"
+                      onClick={() => updateMemberRole(memberRoleMenu.memberUserId, role.id)}
+                    >
+                      <span className="member-role-menu__dot" style={{ backgroundColor: role.color || "#7b89a8" }} aria-hidden="true" />
+                      {role.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               </div>
-            </div>
           )}
 
           <div className="text__channel">
@@ -667,7 +839,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <h2>Голосовые каналы</h2>
               <button type="button" className="channel-add-button" onClick={addVoiceChannel} disabled={!canManageChannels}>+</button>
             </div>
-            <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={participantsMap} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={openSettingsPanel} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} />
+            <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={participantsMap} serverMembers={activeServer?.members || []} serverRoles={activeServer?.roles || []} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={openSettingsPanel} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} />
           </div>
         </div>
 
@@ -684,7 +856,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
               <div className="profile__icons">
                 <button type="button" className="wrap__icon" onClick={() => setOpenSettings((previous) => !previous)}><img src="/icons/settings.png" alt="settings" className="icon__settings" /></button>
-                <button type="button" className={`wrap__icon wrap__icon--compact ${isMicMuted || isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleMicMute}><img src="/icons/microphone.png" alt="microphone" className="icon__phone" /></button>
+                <button type="button" className={`wrap__icon ${isMicMuted || isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleMicMute}><img src="/icons/microphone.png" alt="microphone" className="icon__phone" /></button>
                 <button type="button" className={`wrap__icon ${isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleSoundMute}><img src="/icons/volumespeacker.png" alt="volume" className="icon__volumespeacker" /></button>
                 <button type="button" className={`wrap__icon ${isSharingScreen ? "wrap__icon--danger" : ""}`} onClick={handleScreenShareAction}><img src={isSharingScreen ? "/icons/close.svg" : "/icons/camera.png"} alt={isSharingScreen ? "stop stream" : "start stream"} className="icon__camera" /></button>
               </div>
@@ -697,7 +869,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
                 <div className="profile__names">
                   <span className="profile__username">{getDisplayName(user)}</span>
-                  <span className="status__profile">Статус: Online</span>
+                  <div className="status__profile">
+                    <span>{currentServerRole?.name || "Member"}</span>
+                    <span
+                      className="status__role-dot"
+                      style={{ backgroundColor: currentServerRole?.color || "#7b89a8" }}
+                      aria-hidden="true"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -715,7 +894,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 <h1>{getChannelDisplayName(currentTextChannel?.name || "# channel", "text")}</h1>
                 <span className="chat__subtitle">Общий чат сервера</span>
               </div>
-              {currentTextChannel && <TextChat channelId={currentTextChannel.id} user={user} />}
+              {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} />}
             </>
           )}
         </div>
@@ -730,7 +909,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
           <div className="settings-section">
             <div className="settings-section__header">
-              <h4>Roles And Access</h4>
+              <h4>Роли и доступ</h4>
               <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
             </div>
             <div className="settings-list">
@@ -741,20 +920,28 @@ export default function MenuMain({ user, setUser, onLogout }) {
                     <span className="settings-role-description">
                       {(role.permissions || []).length
                         ? role.permissions.map((permission) => ROLE_PERMISSION_LABELS[permission] || permission).join(", ")
-                        : "Basic access"}
+                        : "Базовый доступ"}
                     </span>
                   </div>
                 </div>
               ))}
             </div>
             <div className="settings-helper">
-              Hierarchy is enforced in the model: owner {">"} admin {">"} moderator {">"} member.
+              Иерархия ролей: owner {">"} admin {">"} moderator {">"} member.
             </div>
           </div>
 
+          <ServerInvitesPanel
+            activeServer={activeServer}
+            user={user}
+            canInvite={canInviteMembers}
+            onImportServer={handleImportServer}
+            onServerShared={markServerAsShared}
+          />
+
           <div className="settings-section">
             <div className="settings-section__header">
-              <h4>Members</h4>
+              <h4>Участники</h4>
               <span className="settings-role-current">{activeServer?.members?.length || 0}</span>
             </div>
             <div className="settings-list">
@@ -866,21 +1053,21 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 ))}
               </select>
             </label>
-              <label className="stream-modal__field">
-                <span>FPS</span>
-                <select value={fps} onChange={(event) => setFps(Number(event.target.value))}>
-                  {STREAM_FPS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="stream-modal__check">
-                <input type="checkbox" checked={shareStreamAudio} onChange={(event) => setShareStreamAudio(event.target.checked)} />
-                <span>Передавать звук экрана, если система это поддерживает</span>
-              </label>
-              <div className="stream-modal__hint">
-                {`${selectedResolutionOption.label} • ${selectedResolutionOption.description} • ${fps} FPS`}
-              </div>
+            <label className="stream-modal__field">
+              <span>FPS</span>
+              <select value={fps} onChange={(event) => setFps(Number(event.target.value))}>
+                {STREAM_FPS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="stream-modal__check">
+              <input type="checkbox" checked={shareStreamAudio} onChange={(event) => setShareStreamAudio(event.target.checked)} />
+              <span>Передавать звук экрана, если система это поддерживает</span>
+            </label>
+            <div className="stream-modal__hint">
+              {`${selectedResolutionOption.label} • ${selectedResolutionOption.description} • ${fps} FPS`}
+            </div>
             <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isSharingScreen} disabled={!currentVoiceChannel} />
             <div className="stream-modal__status">{activeStreamCount > 0 ? `Активных трансляций: ${activeStreamCount}` : "Сейчас трансляций нет"}</div>
             {!currentVoiceChannel && <div className="stream-modal__hint">Сначала подключитесь к голосовому каналу.</div>}

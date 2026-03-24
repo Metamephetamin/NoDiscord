@@ -16,7 +16,7 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   }
 
   if (value.startsWith("/")) {
-    if (value.startsWith("/avatars/")) {
+    if (value.startsWith("/avatars/") || value.startsWith("/chat-files/")) {
       return `${API_URL}${value}`;
     }
 

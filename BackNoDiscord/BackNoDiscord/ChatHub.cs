@@ -1,11 +1,14 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 using BackNoDiscord.Services;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace BackNoDiscord
 {
     public class ChatHub : Hub
     {
+        private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
+
         private readonly AppDbContext _context;
         private readonly CryptoService _crypto;
 
@@ -33,7 +36,15 @@ namespace BackNoDiscord
                 .SendAsync("ReceiveIceCandidate", Context.ConnectionId, candidate);
         }
 
-        public async Task SendMessage(string channelId, string username, string message, string photoUrl)
+        public async Task SendMessage(
+            string channelId,
+            string username,
+            string message,
+            string photoUrl,
+            string? attachmentUrl = null,
+            string? attachmentName = null,
+            long? attachmentSize = null,
+            string? attachmentContentType = null)
         {
             if (string.IsNullOrWhiteSpace(channelId))
                 throw new HubException("channelId is required");
@@ -41,16 +52,26 @@ namespace BackNoDiscord
             if (string.IsNullOrWhiteSpace(username))
                 throw new HubException("username is required");
 
-            if (string.IsNullOrWhiteSpace(message))
-                throw new HubException("message is required");
+            var payload = new ChatMessagePayload
+            {
+                Message = message?.Trim() ?? string.Empty,
+                AttachmentUrl = attachmentUrl?.Trim(),
+                AttachmentName = attachmentName?.Trim(),
+                AttachmentSize = attachmentSize,
+                AttachmentContentType = attachmentContentType?.Trim()
+            };
 
-            var encrypted = _crypto.Encrypt(message);
+            if (string.IsNullOrWhiteSpace(payload.Message) && string.IsNullOrWhiteSpace(payload.AttachmentUrl))
+                throw new HubException("message or attachment is required");
+
+            var serializedPayload = SerializePayload(payload);
+            var encrypted = _crypto.Encrypt(serializedPayload);
 
             var msg = new Message
             {
                 ChannelId = channelId,
                 Username = username,
-                Content = message,
+                Content = serializedPayload,
                 EncryptedContent = encrypted,
                 PhotoUrl = photoUrl,
                 Timestamp = DateTime.UtcNow,
@@ -60,14 +81,7 @@ namespace BackNoDiscord
             _context.Messages.Add(msg);
             await _context.SaveChangesAsync();
 
-            await Clients.Group(channelId).SendAsync("ReceiveMessage", new
-            {
-                Id = msg.Id,
-                Username = msg.Username,
-                Message = message,
-                PhotoUrl = msg.PhotoUrl,
-                Timestamp = msg.Timestamp
-            });
+            await Clients.Group(channelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
         }
 
         public async Task<List<MessageDto>> JoinChannel(string channelId)
@@ -83,16 +97,16 @@ namespace BackNoDiscord
                 .Take(100)
                 .ToListAsync();
 
-            return lastMessages.Select(m => new MessageDto
-            {
-                Id = m.Id,
-                Username = m.Username,
-                Message = !string.IsNullOrWhiteSpace(m.EncryptedContent)
-                    ? _crypto.Decrypt(m.EncryptedContent)
-                    : (m.Content ?? string.Empty),
-                PhotoUrl = m.PhotoUrl,
-                Timestamp = m.Timestamp
-            }).ToList();
+            return lastMessages
+                .Select(message =>
+                {
+                    var rawPayload = !string.IsNullOrWhiteSpace(message.EncryptedContent)
+                        ? _crypto.Decrypt(message.EncryptedContent)
+                        : (message.Content ?? string.Empty);
+
+                    return ToMessageDto(message, DeserializePayload(rawPayload));
+                })
+                .ToList();
         }
 
         public async Task LeaveChannel(string channelId)
@@ -114,6 +128,49 @@ namespace BackNoDiscord
 
             await Clients.Group(msg.ChannelId).SendAsync("MessageDeleted", messageId);
         }
+
+        private static MessageDto ToMessageDto(Message message, ChatMessagePayload payload)
+        {
+            return new MessageDto
+            {
+                Id = message.Id,
+                Username = message.Username,
+                Message = payload.Message,
+                PhotoUrl = message.PhotoUrl,
+                AttachmentUrl = payload.AttachmentUrl,
+                AttachmentName = payload.AttachmentName,
+                AttachmentSize = payload.AttachmentSize,
+                AttachmentContentType = payload.AttachmentContentType,
+                Timestamp = message.Timestamp
+            };
+        }
+
+        private static string SerializePayload(ChatMessagePayload payload)
+        {
+            return $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
+        }
+
+        private static ChatMessagePayload DeserializePayload(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return new ChatMessagePayload();
+            }
+
+            if (!raw.StartsWith(MessagePayloadPrefix, StringComparison.Ordinal))
+            {
+                return new ChatMessagePayload { Message = raw };
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<ChatMessagePayload>(raw[MessagePayloadPrefix.Length..]) ?? new ChatMessagePayload();
+            }
+            catch
+            {
+                return new ChatMessagePayload { Message = raw };
+            }
+        }
     }
 
     public class MessageDto
@@ -122,6 +179,19 @@ namespace BackNoDiscord
         public string Username { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public string? PhotoUrl { get; set; }
+        public string? AttachmentUrl { get; set; }
+        public string? AttachmentName { get; set; }
+        public long? AttachmentSize { get; set; }
+        public string? AttachmentContentType { get; set; }
         public DateTime Timestamp { get; set; }
+    }
+
+    public class ChatMessagePayload
+    {
+        public string Message { get; set; } = string.Empty;
+        public string? AttachmentUrl { get; set; }
+        public string? AttachmentName { get; set; }
+        public long? AttachmentSize { get; set; }
+        public string? AttachmentContentType { get; set; }
     }
 }

@@ -6,6 +6,8 @@ const VoiceChannelList = ({
   channels,
   activeChannelId,
   participantsMap,
+  serverMembers = [],
+  serverRoles = [],
   onJoinChannel,
   onLeaveChannel,
   onRenameChannel,
@@ -17,12 +19,24 @@ const VoiceChannelList = ({
 }) => {
   const liveUsers = new Set(liveUserIds);
   const speakingUsers = new Set(speakingUserIds);
-  const normalizeParticipant = (participant = {}) => ({
-    userId: participant.userId || participant.UserId || "",
-    name: participant.name || participant.Name || "Unknown",
-    avatar: participant.avatar || participant.Avatar || DEFAULT_AVATAR,
-    isScreenSharing: participant.isScreenSharing || participant.IsScreenSharing || false,
-  });
+  const roleColorByUserId = new Map(
+    (serverMembers || []).map((member) => {
+      const role = (serverRoles || []).find((item) => item.id === member.roleId);
+      return [String(member.userId), role?.color || "#7b89a8"];
+    })
+  );
+
+  const normalizeParticipant = (participant = {}) => {
+    const userId = participant.userId || participant.UserId || "";
+
+    return {
+      userId,
+      name: participant.name || participant.Name || "Unknown",
+      avatar: participant.avatar || participant.Avatar || DEFAULT_AVATAR,
+      isScreenSharing: participant.isScreenSharing || participant.IsScreenSharing || false,
+      roleColor: roleColorByUserId.get(String(userId)) || "#7b89a8",
+    };
+  };
 
   return (
     <ul className="voice-channel-list">
@@ -39,7 +53,6 @@ const VoiceChannelList = ({
                 onClick={() => onJoinChannel?.(channel)}
               >
                 <span className="voice-channel__title">{channel.name}</span>
-                <span className="voice-channel__count">{participants.length}</span>
               </button>
 
               <button
@@ -66,12 +79,20 @@ const VoiceChannelList = ({
             {participants.length > 0 && (
               <div className="participant-list">
                 {participants.map((participant) => (
-                  <div key={participant.userId} className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}>
+                  <div
+                    key={participant.userId}
+                    className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}
+                  >
                     <img
                       src={resolveMediaUrl(participant.avatar, DEFAULT_AVATAR)}
                       alt={participant.name}
                     />
                     <span className="participant-item__name">{participant.name}</span>
+                    <span
+                      className="participant-item__role-dot"
+                      style={{ backgroundColor: participant.roleColor }}
+                      aria-hidden="true"
+                    />
                     {(liveUsers.has(participant.userId) || participant.isScreenSharing) && (
                       <button
                         type="button"
