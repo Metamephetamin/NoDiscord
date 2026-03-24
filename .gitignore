@@ -94,6 +94,7 @@ typings/
 out/
 
 # IDE and .NET build artifacts
+.dotnet/
 **/.vs/
 **/bin/
 **/obj/
