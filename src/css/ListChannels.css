@@ -1,0 +1,156 @@
+.voice-channel-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list__items {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.list__items:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.list__items--active {
+  background: rgba(91, 124, 255, 0.12);
+  border-color: rgba(91, 124, 255, 0.28);
+}
+
+.voice-channel__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-channel__button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #eef2ff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.voice-channel__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.voice-channel__count {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c8d0e2;
+  font-size: 12px;
+}
+
+.voice-channel__leave {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 97, 97, 0.14);
+  color: #ffb0b0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.channel-edit-button {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8def0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.channel-edit-button img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
+.channel-edit-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.participant-list {
+  margin-top: 10px;
+  padding-left: 2px;
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: #c8d0e2;
+  font-size: 13px;
+}
+
+.participant-item img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.participant-item--speaking img {
+  border-color: #43c46a;
+  box-shadow: 0 0 0 3px rgba(67, 196, 106, 0.22);
+}
+
+.participant-item__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.participant-live-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #d92d20;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.participant-live-badge--active {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}

@@ -1,0 +1,6 @@
+@BackNoDiscord_HostAddress = http://localhost:5261
+
+GET {{BackNoDiscord_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

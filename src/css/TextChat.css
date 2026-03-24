@@ -1,0 +1,152 @@
+.textchat-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.messages-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 6px;
+}
+
+.message-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.msg-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.msg-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-author {
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.message-time {
+  margin-left: 8px;
+  color: #8d97ac;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.message-text {
+  margin-top: 4px;
+  color: #dbe2f0;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.message-delete {
+  align-self: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #97a2b8;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.message-delete__icon {
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  -webkit-mask: url("/icons/trash.svg") center / contain no-repeat;
+  mask: url("/icons/trash.svg") center / contain no-repeat;
+}
+
+.message-delete:hover {
+  background: rgba(255, 97, 97, 0.14);
+  color: #ff8f8f;
+}
+
+.input-area {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.input-area textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 140px;
+  resize: none;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 12px 16px;
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.04);
+  font: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.input-area textarea::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.input-area textarea:focus {
+  border-color: rgba(91, 124, 255, 0.42);
+}
+
+.send-button {
+  flex: 0 0 auto;
+  min-width: 132px;
+  min-height: 48px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #5b7cff, #60d4bf);
+  color: #08111f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .message-item {
+    padding: 10px;
+  }
+
+  .input-area {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .send-button {
+    width: 100%;
+  }
+}

@@ -1,94 +1,892 @@
-import '../css/MenuMain.css';
-import '../css/MenuProfile.css'
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import VoiceChannelList from "./VoiceChannelList";
+import TextChat from "./TextChat";
+import ScreenShareButton from "./ScreenShareButton";
+import ScreenShareViewer from "./ScreenShareViewer";
+import "../css/MenuMain.css";
+import "../css/MenuProfile.css";
+import "../css/ListChannels.css";
+import { API_URL } from "../config/runtime";
+import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
+import { DEFAULT_AVATAR, DEFAULT_SERVER_ICON, readFileAsDataUrl, resolveMediaUrl } from "../utils/media";
 
-const MenuMain = () => {
+const SERVERS_STORAGE_KEY = "nd_servers_v2";
+const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
+const DEFAULT_TEXT_CHANNELS = [
+  { id: "1", name: "# general" },
+  { id: "2", name: "# gaming" },
+  { id: "3", name: "# music-chat" },
+  { id: "4", name: "# off-topic" },
+];
+const DEFAULT_VOICE_CHANNELS = [
+  { id: "general_voice", name: "general_voice" },
+  { id: "gaming", name: "gaming" },
+  { id: "music-chat", name: "music-chat" },
+];
+const STREAM_RESOLUTION_OPTIONS = [
+  { value: "720p", label: "HD", description: "1280x720" },
+  { value: "1080p", label: "Full HD", description: "1920x1080" },
+  { value: "1440p", label: "2K", description: "2560x1440" },
+  { value: "2160p", label: "4K", description: "3840x2160" },
+];
+const STREAM_FPS_OPTIONS = [
+  { value: 30, label: "30 FPS" },
+  { value: 60, label: "60 FPS" },
+  { value: 120, label: "120 FPS" },
+];
+const DEFAULT_SERVER_ROLES = [
+  {
+    id: "owner",
+    name: "Owner",
+    color: "#f4c95d",
+    priority: 400,
+    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "invite_members", "mute_members", "deafen_members", "move_members"],
+  },
+  {
+    id: "admin",
+    name: "Admin",
+    color: "#ff8a65",
+    priority: 300,
+    permissions: ["manage_server", "manage_channels", "manage_messages", "invite_members", "mute_members", "deafen_members", "move_members"],
+  },
+  {
+    id: "moderator",
+    name: "Moderator",
+    color: "#5dc7b7",
+    priority: 200,
+    permissions: ["manage_channels", "manage_messages", "mute_members", "deafen_members"],
+  },
+  {
+    id: "member",
+    name: "Member",
+    color: "#7b89a8",
+    priority: 100,
+    permissions: [],
+  },
+];
+const ROLE_PERMISSION_LABELS = {
+  manage_server: "Управление сервером",
+  manage_channels: "Управление каналами",
+  manage_roles: "Управление ролями",
+  manage_messages: "Управление сообщениями",
+  invite_members: "Приглашение участников",
+};
+
+ROLE_PERMISSION_LABELS.mute_members = "Mute members";
+ROLE_PERMISSION_LABELS.deafen_members = "Deafen members";
+ROLE_PERMISSION_LABELS.move_members = "Move members";
+const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+const getDisplayName = (user) =>
+  user?.firstName || user?.first_name || user?.name || user?.email || "User";
+const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+const getCurrentUserId = (user) => String(user?.id || user?.email || "");
+const readSessionUser = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+const createDefaultRoles = () => DEFAULT_SERVER_ROLES.map((role) => ({ ...role, permissions: [...role.permissions] }));
+const createServerMember = (user, roleId = "owner") => ({
+  userId: getCurrentUserId(user),
+  name: getDisplayName(user),
+  avatar: getUserAvatar(user),
+  roleId,
+});
+const normalizeRoles = (roles) => {
+  if (!Array.isArray(roles) || roles.length === 0) {
+    return createDefaultRoles();
+  }
+
+  return roles.map((role, index) => {
+    const fallbackRole = DEFAULT_SERVER_ROLES[index] || DEFAULT_SERVER_ROLES[DEFAULT_SERVER_ROLES.length - 1];
+    return {
+      id: String(role?.id || fallbackRole.id || createId("role")),
+      name: String(role?.name || fallbackRole.name || "Role"),
+      color: String(role?.color || fallbackRole.color || "#7b89a8"),
+      priority: Number(role?.priority ?? fallbackRole.priority ?? 100),
+      permissions: Array.isArray(role?.permissions) ? role.permissions.map(String) : [...(fallbackRole.permissions || [])],
+    };
+  });
+};
+const normalizeMembers = (members, fallbackUser) => {
+  const normalizedMembers = Array.isArray(members)
+    ? members
+        .filter(Boolean)
+        .map((member) => ({
+          userId: String(member?.userId || member?.UserId || ""),
+          name: String(member?.name || member?.Name || member?.email || "User"),
+          avatar: member?.avatar || member?.Avatar || "",
+          roleId: String(member?.roleId || member?.RoleId || "member"),
+        }))
+        .filter((member) => member.userId)
+    : [];
+
+  if (!normalizedMembers.length && fallbackUser) {
+    return [createServerMember(fallbackUser, "owner")];
+  }
+
+  return normalizedMembers;
+};
+const getRolePermissions = (server, roleId) => {
+  const role = server?.roles?.find((item) => item.id === roleId);
+  return Array.isArray(role?.permissions) ? role.permissions : [];
+};
+const getRolePriority = (server, roleId) => {
+  const role = server?.roles?.find((item) => item.id === roleId);
+  return Number(role?.priority ?? 0);
+};
+const hasServerPermission = (server, userId, permission) => {
+  if (!server || !userId) {
+    return false;
+  }
+
+  if (String(server.ownerId || "") === String(userId)) {
+    return true;
+  }
+
+  const member = server.members?.find((item) => String(item.userId) === String(userId));
+  if (!member) {
+    return false;
+  }
+
+  return getRolePermissions(server, member.roleId).includes(permission);
+};
+const canManageTargetMember = (server, actorUserId, targetUserId, permission) => {
+  if (!server || !actorUserId || !targetUserId || String(actorUserId) === String(targetUserId)) {
+    return false;
+  }
+
+  if (String(server.ownerId || "") === String(actorUserId)) {
+    return String(server.ownerId || "") !== String(targetUserId);
+  }
+
+  const actorMember = server.members?.find((item) => String(item.userId) === String(actorUserId));
+  const targetMember = server.members?.find((item) => String(item.userId) === String(targetUserId));
+  if (!actorMember || !targetMember) {
+    return false;
+  }
+
+  const actorPermissions = getRolePermissions(server, actorMember.roleId);
+  if (!actorPermissions.includes(permission)) {
+    return false;
+  }
+
+  return getRolePriority(server, actorMember.roleId) > getRolePriority(server, targetMember.roleId);
+};
+const createDefaultServer = (user) => {
+  const ownerUser = user || readSessionUser();
+  const ownerId = getCurrentUserId(ownerUser) || "local-owner";
+  const ownerMember = ownerUser
+    ? createServerMember(ownerUser, "owner")
+    : { userId: ownerId, name: "Owner", avatar: "", roleId: "owner" };
+
+  return {
+  id: "server-main",
+  name: "Основной сервер",
+  icon: DEFAULT_SERVER_ICON,
+  ownerId,
+  roles: createDefaultRoles(),
+  members: [ownerMember],
+  textChannels: DEFAULT_TEXT_CHANNELS.map((channel) => ({ ...channel })),
+  voiceChannels: DEFAULT_VOICE_CHANNELS.map((channel) => ({ ...channel })),
+  };
+};
+const createServer = (name, user) => {
+  const ownerUser = user || readSessionUser();
+  const ownerId = getCurrentUserId(ownerUser) || createId("owner");
+  const ownerMember = ownerUser
+    ? createServerMember(ownerUser, "owner")
+    : { userId: ownerId, name: "Owner", avatar: "", roleId: "owner" };
+
+  return {
+  id: createId("server"),
+  name: name?.trim() || "Новый сервер",
+  icon: "",
+  ownerId,
+  roles: createDefaultRoles(),
+  members: [ownerMember],
+  textChannels: [{ id: createId("text"), name: "# general" }],
+  voiceChannels: [{ id: createId("voice"), name: "general_voice" }],
+  };
+};
+const normalizeChannels = (channels, type) => {
+  const fallback = type === "text" ? DEFAULT_TEXT_CHANNELS : DEFAULT_VOICE_CHANNELS;
+  if (!Array.isArray(channels) || channels.length === 0) return fallback.map((channel) => ({ ...channel }));
+  return channels.map((channel, index) => ({
+    id: String(channel?.id || fallback[index]?.id || createId(type)),
+    name:
+      String(channel?.name || fallback[index]?.name || (type === "text" ? "# new-channel" : "voice-channel")).trim() ||
+      (type === "text" ? "# new-channel" : "voice-channel"),
+  }));
+};
+const normalizeServers = (value, currentUser) => {
+  if (!Array.isArray(value) || value.length === 0) return [createDefaultServer(currentUser)];
+  return value.map((server, index) => ({
+    id: String(server?.id || (index === 0 ? "server-main" : createId("server"))),
+    name: String(server?.name || `Сервер ${index + 1}`),
+    icon: server?.icon ?? (index === 0 ? DEFAULT_SERVER_ICON : ""),
+    ownerId: String(server?.ownerId || server?.owner_id || getCurrentUserId(currentUser) || createId("owner")),
+    roles: normalizeRoles(server?.roles),
+    members: (() => {
+      const nextOwnerId = String(server?.ownerId || server?.owner_id || getCurrentUserId(currentUser) || createId("owner"));
+      const nextMembers = normalizeMembers(server?.members, currentUser);
+      return nextMembers.some((member) => String(member.userId) === nextOwnerId)
+        ? nextMembers
+        : [
+            ...nextMembers,
+            currentUser && nextOwnerId === getCurrentUserId(currentUser)
+              ? createServerMember(currentUser, "owner")
+              : { userId: nextOwnerId, name: "Owner", avatar: "", roleId: "owner" },
+          ];
+    })(),
+    textChannels: normalizeChannels(server?.textChannels, "text"),
+    voiceChannels: normalizeChannels(server?.voiceChannels, "voice"),
+  }));
+};
+const getUserStorageScope = (user) => String(user?.id || user?.email || "guest");
+const getServersStorageKey = (user) => `${SERVERS_STORAGE_KEY}:${getUserStorageScope(user)}`;
+const getActiveServerStorageKey = (user) => `${ACTIVE_SERVER_STORAGE_KEY}:${getUserStorageScope(user)}`;
+const readStoredServers = (user) => {
+  try {
+    const raw =
+      localStorage.getItem(getServersStorageKey(user)) ||
+      (!user ? localStorage.getItem(SERVERS_STORAGE_KEY) : null);
+    return raw ? normalizeServers(JSON.parse(raw), user) : [createDefaultServer(user)];
+  } catch {
+    return [createDefaultServer(user)];
+  }
+};
+const getChannelDisplayName = (name, type) => (type === "text" && !name.startsWith("#") ? `# ${name}` : name);
+
+export default function MenuMain({ user, setUser, onLogout }) {
+  const [servers, setServers] = useState(() => readStoredServers(user));
+  const [activeServerId, setActiveServerId] = useState(
+    () => localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || "server-main"
+  );
+  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "1");
+  const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
+  const [participantsMap, setParticipantsMap] = useState({});
+  const [openSettings, setOpenSettings] = useState(false);
+  const [micVolume, setMicVolume] = useState(70);
+  const [audioVolume, setAudioVolume] = useState(100);
+  const [showModal, setShowModal] = useState(false);
+  const [resolution, setResolution] = useState("1080p");
+  const [fps, setFps] = useState(60);
+  const [shareStreamAudio, setShareStreamAudio] = useState(false);
+  const [remoteScreenShares, setRemoteScreenShares] = useState([]);
+  const [announcedLiveUserIds, setAnnouncedLiveUserIds] = useState([]);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [isSoundMuted, setIsSoundMuted] = useState(false);
+  const [pingMs, setPingMs] = useState(null);
+  const [selectedStreamUserId, setSelectedStreamUserId] = useState(null);
+  const [speakingUserIds, setSpeakingUserIds] = useState([]);
+
+  const popupRef = useRef(null);
+  const avatarInputRef = useRef(null);
+  const serverIconInputRef = useRef(null);
+  const voiceClientRef = useRef(null);
+  const previousVoiceChannelRef = useRef(null);
+  const previousScreenShareRef = useRef(false);
+  const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
+  const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
+  const currentUserId = useMemo(() => getCurrentUserId(user), [user?.id, user?.email]);
+
+  const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
+  const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
+  const currentVoiceChannelName = useMemo(() => servers.flatMap((server) => server.voiceChannels).find((channel) => channel.id === currentVoiceChannel)?.name || currentVoiceChannel, [currentVoiceChannel, servers]);
+  const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
+  const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
+  const canManageServer = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_server"), [activeServer, currentUserId]);
+  const canManageChannels = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_channels"), [activeServer, currentUserId]);
+  const canManageRoles = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_roles"), [activeServer, currentUserId]);
+  const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
+  const selectedResolutionOption = useMemo(() => STREAM_RESOLUTION_OPTIONS.find((option) => option.value === resolution) || STREAM_RESOLUTION_OPTIONS[1], [resolution]);
+  const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
+  const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
+  const selectedStreamParticipant = useMemo(() => Object.values(participantsMap).flat().find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [participantsMap, selectedStreamUserId]);
+  const selectedStreamDebugInfo = useMemo(() => ({
+    userId: selectedStreamUserId ? String(selectedStreamUserId) : "",
+    liveSelected: selectedStreamUserId ? liveUserIds.some((id) => String(id) === String(selectedStreamUserId)) : false,
+    remoteSharesCount: remoteScreenShares.length,
+    videoTracks: selectedStream?.stream?.getVideoTracks?.().length || 0,
+    audioTracks: selectedStream?.stream?.getAudioTracks?.().length || 0,
+    readyState: selectedStream?.stream?.getVideoTracks?.()[0]?.readyState || "none",
+    updatedAt: selectedStream?.updatedAt ? new Date(selectedStream.updatedAt).toLocaleTimeString() : "",
+    mode: selectedStream?.mode || (selectedStream?.videoSrc ? "mse" : selectedStream?.imageSrc ? "frame" : "none"),
+    hasAudio: Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length),
+  }), [liveUserIds, remoteScreenShares.length, selectedStream, selectedStreamUserId]);
+
+  const playUiTone = (type) => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const context = new AudioContextClass();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const config =
+        type === "join"
+          ? { frequency: 640, duration: 0.08 }
+          : type === "leave"
+            ? { frequency: 420, duration: 0.1 }
+            : { frequency: 720, duration: 0.12 };
+      oscillator.type = "sine";
+      oscillator.frequency.value = config.frequency;
+      gain.gain.value = 0.04;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + config.duration);
+      oscillator.onended = () => context.close().catch(() => {});
+    } catch {
+      // ignore ui sound failures
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    try {
+      const existingScopedValue = localStorage.getItem(serversStorageKey);
+      const legacyValue = localStorage.getItem(SERVERS_STORAGE_KEY);
+      const nextServers = existingScopedValue
+        ? normalizeServers(JSON.parse(existingScopedValue), user)
+        : legacyValue
+          ? normalizeServers(JSON.parse(legacyValue), user)
+          : [createDefaultServer(user)];
+      const nextActiveServerId =
+        localStorage.getItem(activeServerStorageKey) ||
+        (existingScopedValue ? null : localStorage.getItem(ACTIVE_SERVER_STORAGE_KEY)) ||
+        nextServers[0]?.id ||
+        "server-main";
+      const nextActiveServer = nextServers.find((server) => server.id === nextActiveServerId) || nextServers[0];
+
+      if (!existingScopedValue && legacyValue) {
+        localStorage.setItem(serversStorageKey, legacyValue);
+      }
+
+      const legacyActiveServerId = localStorage.getItem(ACTIVE_SERVER_STORAGE_KEY);
+      if (!localStorage.getItem(activeServerStorageKey) && legacyActiveServerId) {
+        localStorage.setItem(activeServerStorageKey, legacyActiveServerId);
+      }
+
+      setServers(nextServers);
+      setActiveServerId(nextActiveServerId);
+      setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "1");
+    } catch (error) {
+      console.error("Ошибка загрузки пользовательских серверов:", error);
+      const fallback = [createDefaultServer(user)];
+      setServers(fallback);
+      setActiveServerId(fallback[0].id);
+      setCurrentTextChannelId(fallback[0]?.textChannels?.[0]?.id || "1");
+    }
+  }, [activeServerStorageKey, serversStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(serversStorageKey, JSON.stringify(servers));
+  }, [servers, serversStorageKey, user]);
+
+  useEffect(() => {
+    if (!user || !activeServerId) return;
+    localStorage.setItem(activeServerStorageKey, activeServerId);
+  }, [activeServerId, activeServerStorageKey, user]);
+  useEffect(() => {
+    if (!servers.length) {
+      const fallback = createDefaultServer(user);
+      setServers([fallback]);
+      setActiveServerId(fallback.id);
+      return;
+    }
+    if (!servers.some((server) => server.id === activeServerId)) setActiveServerId(servers[0].id);
+  }, [servers, activeServerId]);
+  useEffect(() => {
+    if (activeServer?.textChannels?.length && !activeServer.textChannels.some((channel) => channel.id === currentTextChannelId)) {
+      setCurrentTextChannelId(activeServer.textChannels[0].id);
+    }
+  }, [activeServer, currentTextChannelId]);
+  useEffect(() => {
+    if (!selectedStreamUserId) return;
+    const isStillLive = liveUserIds.some((id) => String(id) === String(selectedStreamUserId));
+    if (!isStillLive && !selectedStream) setSelectedStreamUserId(null);
+  }, [liveUserIds, selectedStream, selectedStreamUserId]);
+  useEffect(() => {
+    const handleClick = (event) => {
+      if (popupRef.current && !popupRef.current.contains(event.target)) setOpenSettings(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+  useEffect(() => {
+    let disposed = false;
+    const measurePing = async () => {
+      const startedAt = performance.now();
+      try {
+        await fetch(`${API_URL}/api/ping`, { method: "GET", cache: "no-store" });
+        if (!disposed) setPingMs(Math.max(1, Math.round(performance.now() - startedAt)));
+      } catch {
+        if (!disposed) setPingMs(null);
+      }
+    };
+    measurePing();
+    const intervalId = window.setInterval(measurePing, 15000);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const client = createVoiceRoomClient({
+      onParticipantsMapChanged: setParticipantsMap,
+      onChannelChanged: setCurrentVoiceChannel,
+      onRemoteScreenStreamsChanged: setRemoteScreenShares,
+      onLocalScreenShareChanged: setIsSharingScreen,
+      onLiveUsersChanged: setAnnouncedLiveUserIds,
+      onSpeakingUsersChanged: setSpeakingUserIds,
+    });
+    voiceClientRef.current = client;
+    client.connect(user).catch((error) => console.error("Ошибка подключения к голосовому хабу:", error));
+    return () => {
+      client.disconnect().catch((error) => console.error("Ошибка отключения от голосового хаба:", error));
+      if (voiceClientRef.current === client) voiceClientRef.current = null;
+    };
+  }, [user?.id]);
+  useEffect(() => {
+    if (!user?.id || !voiceClientRef.current) return;
+    voiceClientRef.current.connect(user).catch((error) => console.error("Ошибка обновления пользователя в голосовом хабе:", error));
+  }, [user?.id, user?.firstName, user?.first_name, user?.avatarUrl, user?.avatar]);
+  useEffect(() => { voiceClientRef.current?.setMicrophoneVolume(isMicMuted || isSoundMuted ? 0 : micVolume); }, [micVolume, isMicMuted, isSoundMuted]);
+  useEffect(() => { voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume); }, [audioVolume, isSoundMuted]);
+  useEffect(() => {
+    const previousChannel = previousVoiceChannelRef.current;
+    if (!previousChannel && currentVoiceChannel) {
+      playUiTone("join");
+    } else if (previousChannel && !currentVoiceChannel) {
+      playUiTone("leave");
+    }
+    previousVoiceChannelRef.current = currentVoiceChannel;
+  }, [currentVoiceChannel]);
+  useEffect(() => {
+    if (!previousScreenShareRef.current && isSharingScreen) {
+      playUiTone("share");
+    }
+    previousScreenShareRef.current = isSharingScreen;
+  }, [isSharingScreen]);
+
+  const updateServer = (updater) => setServers((previous) => previous.map((server) => (server.id === activeServerId ? updater(server) : server)));
+  const openSettingsPanel = () => setOpenSettings(true);
+  const handleAddServer = () => {
+    const server = createServer(`Сервер ${servers.length + 1}`);
+    setServers((previous) => [...previous, server]);
+    setActiveServerId(server.id);
+    setCurrentTextChannelId(server.textChannels[0]?.id || "");
+    setOpenSettings(true);
+  };
+  const handleDeleteServer = async (serverId) => {
+    if (!canManageServer) return;
+    const serverToDelete = servers.find((server) => server.id === serverId);
+    if (!serverToDelete) return;
+    if (serverToDelete.voiceChannels.some((channel) => channel.id === currentVoiceChannel)) await leaveVoiceChannel();
+    const nextServers = servers.filter((server) => server.id !== serverId);
+    const fallbackServers = nextServers.length ? nextServers : [createDefaultServer()];
+    const nextActiveId = activeServerId === serverId ? fallbackServers[0].id : activeServerId;
+    const nextActiveServer = fallbackServers.find((server) => server.id === nextActiveId) || fallbackServers[0];
+    setServers(fallbackServers);
+    setActiveServerId(nextActiveId);
+    setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
+    setSelectedStreamUserId(null);
+  };
+  const handleDeleteTextChannel = (channelId) => {
+    if (!canManageChannels) return;
+    if (!activeServer) return;
+    const nextChannels = activeServer.textChannels.filter((channel) => channel.id !== channelId);
+    updateServer((server) => ({ ...server, textChannels: nextChannels }));
+    if (currentTextChannelId === channelId) setCurrentTextChannelId(nextChannels[0]?.id || "");
+  };
+  const handleDeleteVoiceChannel = async (channelId) => {
+    if (!canManageChannels) return;
+    if (!activeServer) return;
+    if (currentVoiceChannel === channelId) await leaveVoiceChannel();
+    updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.filter((channel) => channel.id !== channelId) }));
+  };
+  const addTextChannel = () => {
+    if (!canManageChannels) return;
+    const channel = { id: createId("text"), name: `# channel-${(activeServer?.textChannels.length || 0) + 1}` };
+    updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
+    setCurrentTextChannelId(channel.id);
+    setOpenSettings(true);
+  };
+  const addVoiceChannel = () => {
+    if (!canManageChannels) return;
+    const channel = { id: createId("voice"), name: `voice-${(activeServer?.voiceChannels.length || 0) + 1}` };
+    updateServer((server) => ({ ...server, voiceChannels: [...server.voiceChannels, channel] }));
+    setOpenSettings(true);
+  };
+  const updateActiveServerName = (value) => {
+    if (!canManageServer) return;
+    updateServer((server) => ({ ...server, name: value }));
+  };
+  const updateTextChannelName = (channelId, value) => {
+    if (!canManageChannels) return;
+    updateServer((server) => ({ ...server, textChannels: server.textChannels.map((channel) => channel.id === channelId ? { ...channel, name: value } : channel) }));
+  };
+  const updateVoiceChannelName = (channelId, value) => {
+    if (!canManageChannels) return;
+    updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.map((channel) => channel.id === channelId ? { ...channel, name: value } : channel) }));
+  };
+  const updateMicVolume = (value) => {
+    setMicVolume(value);
+    voiceClientRef.current?.setMicrophoneVolume(isMicMuted || isSoundMuted ? 0 : value);
+  };
+  const updateAudioVolume = (value) => {
+    setAudioVolume(value);
+    voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : value);
+  };
+  const joinVoiceChannel = async (channel) => {
+    if (!voiceClientRef.current || !user?.id || !channel?.id) return;
+    try { await voiceClientRef.current.joinChannel(channel.id, user); } catch (error) { console.error("Ошибка входа в голосовой канал:", error); }
+  };
+  const leaveVoiceChannel = async () => {
+    if (!voiceClientRef.current) return;
+    try { await voiceClientRef.current.leaveChannel(); } catch (error) { console.error("Ошибка выхода из голосового канала:", error); }
+  };
+  const handleLogout = async () => {
+    try { await voiceClientRef.current?.disconnect(); } catch (error) { console.error("Ошибка при отключении перед выходом:", error); }
+    finally {
+      setOpenSettings(false);
+      setShowModal(false);
+      onLogout?.();
+    }
+  };
+  const startScreenShare = async () => {
+    if (!voiceClientRef.current) return;
+    await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
+    setShowModal(false);
+  };
+  const stopScreenShare = async () => {
+    if (!voiceClientRef.current) return;
+    await voiceClientRef.current.stopScreenShare();
+    setShowModal(false);
+  };
+  const handleScreenShareAction = async () => {
+    if (isSharingScreen) {
+      await stopScreenShare();
+      return;
+    }
+
+    setShowModal(true);
+  };
+  const handleWatchStream = (userId) => {
+    const normalizedUserId = String(userId);
+    setSelectedStreamUserId(normalizedUserId);
+    voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
+  };
+  const toggleMicMute = () => setIsMicMuted((previous) => !previous);
+  const toggleSoundMute = () => setIsSoundMuted((previous) => !previous);
+  const handleAvatarChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user?.id) return;
+    const formData = new FormData();
+    formData.append("avatar", file);
+    formData.append("userId", user.id);
+    try {
+      const response = await fetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
+      if (!response.ok) throw new Error("Не удалось загрузить аватар");
+      const data = await response.json();
+      setUser?.((previous) => ({ ...previous, avatarUrl: data.avatarUrl, avatar: data.avatarUrl }));
+    } catch (error) {
+      console.error("Ошибка смены аватара:", error);
+    }
+  };
+  const handleServerIconChange = async (event) => {
+    if (!canManageServer) return;
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !activeServer) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      updateServer((server) => ({ ...server, icon: dataUrl }));
+    } catch (error) {
+      console.error("Ошибка смены иконки сервера:", error);
+    }
+  };
+
+  if (!user) return <div className="menu-loading">Загрузка пользователя...</div>;
+
+  const activeStreamCount = remoteScreenShares.length + (isSharingScreen ? 1 : 0);
+  const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, DEFAULT_AVATAR);
+
   return (
-      <div className="menu__main">
-          <div className='box1'>
-              <img className='btn__server' src='../../image/image.png'></img>
-            <img className='btn__create-serever'  src='../../icons/plus.png'></img>
+    <div className="menu__main">
+      <aside className="sidebar__servers">
+        {servers.map((server) => (
+          <button key={server.id} type="button" className={`btn__server ${server.id === activeServer?.id ? "btn__server--active" : ""}`} onClick={() => { setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); }} title={server.name || "Без названия"}>
+            {server.icon ? <img src={resolveMediaUrl(server.icon, DEFAULT_SERVER_ICON)} alt={server.name || "Без названия"} /> : <span className="btn__server-empty" aria-hidden="true" />}
+          </button>
+        ))}
+        <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={handleAddServer}>+</button>
+        <button type="button" className="logout" aria-label="Выйти" onClick={handleLogout}><img src="/icons/logout.png" alt="logout" /></button>
+      </aside>
+
+      <aside className="sidebar__channels">
+        <div className="channels__top">
+          {activeServer && (
+            <div className="server-summary">
+              {activeServer.icon ? <img className="server-summary__icon" src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)} alt={activeServer.name || "Без названия"} /> : <div className="server-summary__icon server-summary__icon--empty" aria-hidden="true" />}
+              <div className="server-summary__content">
+                <div className="server-summary__name">{activeServer.name || "Без названия"}</div>
+                <div className="server-summary__subtitle">Активный сервер</div>
+              </div>
+            </div>
+          )}
+
+          <div className="text__channel">
+            <h1>Каналы</h1>
+            <div className="channel-heading">
+              <h2>Текстовые каналы</h2>
+              <button type="button" className="channel-add-button" onClick={addTextChannel} disabled={!canManageChannels}>+</button>
+            </div>
+            <ul className="channel-list">
+              {(activeServer?.textChannels || []).map((channel) => (
+                <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""}`}>
+                  <button type="button" className="channel-item__button" onClick={() => setCurrentTextChannelId(channel.id)}>{getChannelDisplayName(channel.name, "text")}</button>
+                  <button type="button" className="channel-edit-button" onClick={openSettingsPanel} aria-label="Настройки канала"><img src="/icons/settings.png" alt="" /></button>
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className='box2'>
-              <div className='text__channel'>
-                  <h1>Channels</h1>
-                  <span>Text channel</span>
-                  <nav>
-                      <ul>
-                          <li># General</li>
-                          <li># Чатек для псыжков</li>
-                      </ul>
-                  </nav>
+
+          <div className="voice__channels">
+            <div className="channel-heading">
+              <h2>Голосовые каналы</h2>
+              <button type="button" className="channel-add-button" onClick={addVoiceChannel} disabled={!canManageChannels}>+</button>
+            </div>
+            <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={participantsMap} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={openSettingsPanel} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} />
+          </div>
+        </div>
+
+        <div className="menu__profile-wrapper">
+          <div className="menu__profile">
+            <div className="profile__top">
+              <div className="profile__monitoring">
+                <div className="wrap__wifi ping-indicator">
+                  <img className="wifi" src="/icons/wifi.png" alt="wifi" />
+                  <div className="wifi-tooltip">{pingMs !== null ? `Пинг: ${pingMs} ms` : "Сервер недоступен"}</div>
+                </div>
+                <div className="wrap__connect"><span className="voice__monitoring">{currentVoiceChannelName ? `Подключено к: ${currentVoiceChannelName}` : "Не подключено"}</span></div>
               </div>
 
-               <div className='voice__channel'>
-                  <span>Voice channel</span>
-                   <nav>
-                      <ul>
-                          <li># General</li>
-                          <li>#Воис для псыжков</li>
-                      </ul>
-                 </nav>
+              <div className="profile__icons">
+                <button type="button" className="wrap__icon" onClick={() => setOpenSettings((previous) => !previous)}><img src="/icons/settings.png" alt="settings" className="icon__settings" /></button>
+                <button type="button" className={`wrap__icon wrap__icon--compact ${isMicMuted || isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleMicMute}><img src="/icons/microphone.png" alt="microphone" className="icon__phone" /></button>
+                <button type="button" className={`wrap__icon ${isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleSoundMute}><img src="/icons/volumespeacker.png" alt="volume" className="icon__volumespeacker" /></button>
+                <button type="button" className={`wrap__icon ${isSharingScreen ? "wrap__icon--danger" : ""}`} onClick={handleScreenShareAction}><img src={isSharingScreen ? "/icons/close.svg" : "/icons/camera.png"} alt={isSharingScreen ? "stop stream" : "start stream"} className="icon__camera" /></button>
               </div>
-              <div className='wrapper__menu-profile'>
-                  <div className='menu__profile'>
-                      <div className='btn__management'>
-                          <div className='grid__box-management'>
-                              <img className='wifi' src='../../icons/wifi.png'></img>
-                          </div>
-                          <div className='grid__box-management'>
-                              <video className='video' autoplay='true' loop muted  playsinline webkit-playsinline x5-playsinline src='../../image/sky-anime.mp4'></video>
-                              <div className='grid__box-management'></div>
-                          </div>
-                          <div className='grid__box-speacker'>
-                              <img className='phone' src='../../icons/phone.png'></img>
-                              <img className='volume' src='../../icons/volumespeacker.png'></img>
-                          </div>
-                          {/* <div className='grid__box-management'>4</div> */}
-                      </div>
-                      <div className='main__profile'>
-                          <div className='wrapper__box-row'>
-                              <div className='box__row-profile'>
-                                  <img src='../../image/avatar.jpg'></img>
-                              </div>
-                              <div className='wrapper__name-box'>
-                                  <div className='box__row-profile'>
-                                      <span>Псыжок</span>
-                                    </div>
-                                  <div className='box__row-profile'>
-                                      <span id='status__profile'>Статус Invisability</span>
-                                  </div>
-                              </div>
-                          </div>
-                          
-                          <div className='box__row-profile'></div>
-                          
-                          <div className='box__row-profile'>
-                              <img src='../../icons/translations.png'></img>
-                              <div className='box__row-profile'>
-                                  <img className='microphone' src='../../icons/microphone.png'></img>
-                              </div>
-                              <div className='box__row-profile'>
-                                  <img className='headphones' src='../../icons/headphones.png'></img>
-                              </div>
-                          </div>
-                      </div>
-                   </div>
+            </div>
+
+            <div className="profile__bottom">
+              <div className="profile__user">
+                <img className={`avatar ${isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" onClick={() => avatarInputRef.current?.click()} />
+                <input type="file" accept="image/*" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
+                <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
+                <div className="profile__names">
+                  <span className="profile__username">{getDisplayName(user)}</span>
+                  <span className="status__profile">Статус: Online</span>
+                </div>
               </div>
-            
+            </div>
           </div>
-          <div className='box3'>
-              <div className='boxwr'>
-                  <h1>Надпись на футболке п3,14зда</h1>
+        </div>
+      </aside>
+
+      <main className="chat__wrapper">
+        <div className="chat__box">
+          {selectedStreamUserId ? (
+            <ScreenShareViewer stream={selectedStream?.stream || null} videoSrc={selectedStream?.videoSrc || ""} imageSrc={selectedStream?.imageSrc || ""} hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)} title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`} subtitle="Просмотр экрана участника" onClose={() => setSelectedStreamUserId(null)} debugInfo={selectedStreamDebugInfo} />
+          ) : (
+            <>
+              <div className="chat__header">
+                <h1>{getChannelDisplayName(currentTextChannel?.name || "# channel", "text")}</h1>
+                <span className="chat__subtitle">Общий чат сервера</span>
               </div>
-              <div className='wrapper__chat'>
-              <img className='btn__plus' width="30px"  src='../../icons/plus.png'></img>
-                  <textarea placeholder='Введите сюда SQL-инъекцию, пж...' className='input__chat'></textarea>
-              </div>
-                  
+              {currentTextChannel && <TextChat channelId={currentTextChannel.id} user={user} />}
+            </>
+          )}
+        </div>
+      </main>
+
+      {openSettings && (
+        <div ref={popupRef} className="settings-popup settings-popup--expanded">
+          <div className="settings-popup__header">
+            <h3>Настройки</h3>
+            <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>x</button>
           </div>
-      </div>
-      
+
+          <div className="settings-section">
+            <div className="settings-section__header">
+              <h4>Roles And Access</h4>
+              <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
+            </div>
+            <div className="settings-list">
+              {(activeServer?.roles || []).map((role) => (
+                <div key={role.id} className="settings-list__row settings-list__row--stacked">
+                  <div className="settings-role-meta">
+                    <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
+                    <span className="settings-role-description">
+                      {(role.permissions || []).length
+                        ? role.permissions.map((permission) => ROLE_PERMISSION_LABELS[permission] || permission).join(", ")
+                        : "Basic access"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="settings-helper">
+              Hierarchy is enforced in the model: owner {">"} admin {">"} moderator {">"} member.
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section__header">
+              <h4>Members</h4>
+              <span className="settings-role-current">{activeServer?.members?.length || 0}</span>
+            </div>
+            <div className="settings-list">
+              {(activeServer?.members || []).map((member) => {
+                const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
+                const canMuteMember = canManageTargetMember(activeServer, currentUserId, member.userId, "mute_members");
+                const canDeafenMember = canManageTargetMember(activeServer, currentUserId, member.userId, "deafen_members");
+                return (
+                  <div key={member.userId} className="settings-list__row settings-list__row--stacked">
+                    <div className="settings-role-meta">
+                      <span className="settings-member-name">{member.name}</span>
+                      <span className="settings-role-description">{memberRole?.name || member.roleId || "Member"}</span>
+                      {(canMuteMember || canDeafenMember) && (
+                        <span className="settings-helper">
+                          {[
+                            canMuteMember ? "mute" : null,
+                            canDeafenMember ? "deafen" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h4>Звук</h4>
+            <label className="settings-field">
+              <span>Громкость микрофона: {micVolume}%</span>
+              <input type="range" min="0" max="100" value={micVolume} onChange={(event) => updateMicVolume(Number(event.target.value))} />
+            </label>
+            <label className="settings-field">
+              <span>Общая громкость: {audioVolume}%</span>
+              <input type="range" min="0" max="100" value={audioVolume} onChange={(event) => updateAudioVolume(Number(event.target.value))} />
+            </label>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section__header">
+              <h4>Сервер</h4>
+              <button type="button" className="settings-inline-button" onClick={() => serverIconInputRef.current?.click()}>Сменить картинку</button>
+            </div>
+            <div className="settings-server-card">
+              {activeServer?.icon ? <img className="settings-server-card__icon" src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)} alt={activeServer?.name || "Без названия"} /> : <div className="settings-server-card__icon settings-server-card__icon--empty" aria-hidden="true" />}
+              <label className="settings-field settings-field--tight">
+                <span>Название сервера</span>
+                <input className="settings-input" type="text" value={activeServer?.name || ""} onChange={(event) => updateActiveServerName(event.target.value)} disabled={!canManageServer} />
+              </label>
+              <div className="settings-server-card__actions">
+                <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteServer(activeServer?.id)}>Удалить сервер</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section__header">
+              <h4>Текстовые каналы</h4>
+              <button type="button" className="settings-inline-button" onClick={addTextChannel}>Добавить</button>
+            </div>
+            <div className="settings-list">
+              {(activeServer?.textChannels || []).map((channel) => (
+                <div key={channel.id} className="settings-list__row">
+                  <input className="settings-input" type="text" value={channel.name} onChange={(event) => updateTextChannelName(channel.id, event.target.value)} />
+                  <div className="settings-list__actions">
+                    <button type="button" className="settings-inline-button" onClick={() => setCurrentTextChannelId(channel.id)}>Открыть</button>
+                    <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteTextChannel(channel.id)}>Удалить</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section__header">
+              <h4>Голосовые каналы</h4>
+              <button type="button" className="settings-inline-button" onClick={addVoiceChannel}>Добавить</button>
+            </div>
+            <div className="settings-list">
+              {(activeServer?.voiceChannels || []).map((channel) => (
+                <div key={channel.id} className="settings-list__row">
+                  <input className="settings-input" type="text" value={channel.name} onChange={(event) => updateVoiceChannelName(channel.id, event.target.value)} />
+                  <div className="settings-list__actions">
+                    <button type="button" className="settings-inline-button" onClick={() => joinVoiceChannel(channel)}>Войти</button>
+                    <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteVoiceChannel(channel.id)}>Удалить</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModal && (
+        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
+          <div className="stream-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="stream-modal__header">
+              <h3>Настройки трансляции</h3>
+              <button type="button" className="stream-modal__close" onClick={() => setShowModal(false)}>x</button>
+            </div>
+            <label className="stream-modal__field">
+              <span>Разрешение</span>
+              <select value={resolution} onChange={(event) => setResolution(event.target.value)}>
+                {STREAM_RESOLUTION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{`${option.label} • ${option.description}`}</option>
+                ))}
+              </select>
+            </label>
+              <label className="stream-modal__field">
+                <span>FPS</span>
+                <select value={fps} onChange={(event) => setFps(Number(event.target.value))}>
+                  {STREAM_FPS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="stream-modal__check">
+                <input type="checkbox" checked={shareStreamAudio} onChange={(event) => setShareStreamAudio(event.target.checked)} />
+                <span>Передавать звук экрана, если система это поддерживает</span>
+              </label>
+              <div className="stream-modal__hint">
+                {`${selectedResolutionOption.label} • ${selectedResolutionOption.description} • ${fps} FPS`}
+              </div>
+            <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isSharingScreen} disabled={!currentVoiceChannel} />
+            <div className="stream-modal__status">{activeStreamCount > 0 ? `Активных трансляций: ${activeStreamCount}` : "Сейчас трансляций нет"}</div>
+            {!currentVoiceChannel && <div className="stream-modal__hint">Сначала подключитесь к голосовому каналу.</div>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-
-export default MenuMain;

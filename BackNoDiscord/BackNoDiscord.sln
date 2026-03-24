@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36623.8
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackNoDiscord", "BackNoDiscord\BackNoDiscord.csproj", "{D120880D-A684-44A3-A675-4F2B0429F994}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решения", "Элементы решения", "{754FC069-D67B-A9D7-50A1-8D1CA196D8F1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{36D591C7-65C7-A0D1-1CBC-10CDE441BDC8}"
+	ProjectSection(SolutionItems) = preProject
+		LiveKitConfig.cs = LiveKitConfig.cs
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D120880D-A684-44A3-A675-4F2B0429F994}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D120880D-A684-44A3-A675-4F2B0429F994}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D120880D-A684-44A3-A675-4F2B0429F994}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D120880D-A684-44A3-A675-4F2B0429F994}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1E7B540E-DED9-49AA-AA65-9A0DA9DB763C}
+	EndGlobalSection
+EndGlobal
