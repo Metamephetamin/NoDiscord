@@ -92,3 +92,14 @@ typings/
 
 # Electron-Forge
 out/
+
+# IDE and .NET build artifacts
+**/.vs/
+**/bin/
+**/obj/
+*.user
+*.rsuser
+*.suo
+*.wsuo
+*.vsidx
+slnx.sqlite
