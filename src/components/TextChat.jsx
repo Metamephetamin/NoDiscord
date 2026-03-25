@@ -115,12 +115,10 @@ export default function TextChat({ serverId, channelId, user }) {
           isJoined = true;
         } catch (joinError) {
           console.error("JoinChannel error:", joinError);
-          setErrorMessage("Не удалось загрузить историю канала. Новые сообщения будут приходить в реальном времени.");
           setMessagesByChannel((prev) => ({ ...prev, [scopedChannelId]: prev[scopedChannelId] || [] }));
         }
       } catch (err) {
         console.error("SignalR connection error:", err);
-        setErrorMessage("Ошибка подключения к чату.");
       }
     };
 
