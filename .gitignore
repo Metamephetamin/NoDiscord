@@ -59,7 +59,11 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.local
+.env.production
+.env.*.local
 .env.test
+!.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -109,3 +113,10 @@ slnx.sqlite
 BackNoDiscord/BackNoDiscord/App_Data/*.json
 BackNoDiscord/BackNoDiscord/wwwroot/chat-files/
 BackNoDiscord/BackNoDiscord/wwwroot/avatars/user-*
+
+# Sensitive config and local secrets
+BackNoDiscord/BackNoDiscord/appsettings.Production.json
+BackNoDiscord/BackNoDiscord/appsettings.Local.json
+src/livekit/livekit-keys.txt
+certs/
+src/livekit/livekit_certs/

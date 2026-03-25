@@ -7,8 +7,20 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured. Use .env, environment variables, or appsettings.");
+}
+
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Jwt:Key is not configured. Use .env, environment variables, or appsettings.");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddCors(options =>
 {
@@ -39,9 +51,6 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        var jwtKey = builder.Configuration["Jwt:Key"]
-                     ?? throw new InvalidOperationException("Jwt:Key is not configured");
-
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
