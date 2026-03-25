@@ -51,7 +51,7 @@ module.exports = {
   ],
   hooks: {
     // Добавляем Fuses только на этапе package
-    async packageAfterCopy({ forgeConfig, buildPath }) {
+    async packageAfterCopy({ buildPath }) {
       const plugin = new FusesPlugin({
         version: FuseVersion.V1,
         [FuseV1Options.RunAsNode]: false,

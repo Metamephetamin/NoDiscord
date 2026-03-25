@@ -108,6 +108,16 @@
   transform: translateY(-1px);
 }
 
+.wrap__icon:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.wrap__icon:disabled:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .wrap__icon--danger {
   background: rgba(217, 45, 32, 0.18);
   box-shadow: inset 0 0 0 1px rgba(255, 110, 96, 0.28);

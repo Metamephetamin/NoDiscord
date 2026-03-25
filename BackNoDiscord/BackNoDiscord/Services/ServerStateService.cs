@@ -24,6 +24,12 @@ public class ServerStateService
     {
         var servers = ReadServers();
         var normalized = NormalizeSnapshot(snapshot, fallbackOwnerUserId);
+
+        if (servers.TryGetValue(normalized.Id, out var existing))
+        {
+            normalized = MergeSnapshots(existing, normalized, fallbackOwnerUserId);
+        }
+
         servers[normalized.Id] = normalized;
         SaveServers(servers);
         return CloneSnapshot(normalized);
@@ -121,6 +127,161 @@ public class ServerStateService
         }
 
         return normalized;
+    }
+
+    private static ServerSnapshot MergeSnapshots(ServerSnapshot existing, ServerSnapshot incoming, string fallbackOwnerUserId)
+    {
+        var merged = NormalizeSnapshot(incoming, fallbackOwnerUserId);
+        var normalizedExisting = NormalizeSnapshot(existing, fallbackOwnerUserId);
+
+        merged.OwnerId = string.IsNullOrWhiteSpace(merged.OwnerId)
+            ? normalizedExisting.OwnerId
+            : merged.OwnerId;
+
+        merged.Roles = MergeRoles(normalizedExisting.Roles, merged.Roles);
+        merged.Members = MergeMembers(normalizedExisting.Members, merged.Members, merged.OwnerId);
+        merged.TextChannels = MergeChannels(normalizedExisting.TextChannels, merged.TextChannels);
+        merged.VoiceChannels = MergeChannels(normalizedExisting.VoiceChannels, merged.VoiceChannels);
+
+        return NormalizeSnapshot(merged, merged.OwnerId);
+    }
+
+    private static List<ServerRoleSnapshot> MergeRoles(List<ServerRoleSnapshot>? existing, List<ServerRoleSnapshot>? incoming)
+    {
+        var result = new Dictionary<string, ServerRoleSnapshot>(StringComparer.Ordinal);
+
+        foreach (var role in existing ?? Enumerable.Empty<ServerRoleSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(role.Id))
+            {
+                result[role.Id] = CloneRole(role);
+            }
+        }
+
+        foreach (var role in incoming ?? Enumerable.Empty<ServerRoleSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(role.Id))
+            {
+                result[role.Id] = CloneRole(role);
+            }
+        }
+
+        return result.Values.ToList();
+    }
+
+    private static List<ServerMemberSnapshot> MergeMembers(
+        List<ServerMemberSnapshot>? existing,
+        List<ServerMemberSnapshot>? incoming,
+        string ownerId)
+    {
+        var result = new Dictionary<string, ServerMemberSnapshot>(StringComparer.Ordinal);
+
+        foreach (var member in existing ?? Enumerable.Empty<ServerMemberSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(member.UserId))
+            {
+                result[member.UserId] = CloneMember(member);
+            }
+        }
+
+        foreach (var member in incoming ?? Enumerable.Empty<ServerMemberSnapshot>())
+        {
+            if (string.IsNullOrWhiteSpace(member.UserId))
+            {
+                continue;
+            }
+
+            if (result.TryGetValue(member.UserId, out var existingMember))
+            {
+                result[member.UserId] = new ServerMemberSnapshot
+                {
+                    UserId = member.UserId,
+                    Name = string.IsNullOrWhiteSpace(member.Name) ? existingMember.Name : member.Name,
+                    Avatar = string.IsNullOrWhiteSpace(member.Avatar) ? existingMember.Avatar : member.Avatar,
+                    RoleId = string.IsNullOrWhiteSpace(member.RoleId) ? existingMember.RoleId : member.RoleId
+                };
+            }
+            else
+            {
+                result[member.UserId] = CloneMember(member);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(ownerId))
+        {
+            if (result.TryGetValue(ownerId, out var ownerMember))
+            {
+                ownerMember.RoleId = "owner";
+                result[ownerId] = ownerMember;
+            }
+            else
+            {
+                result[ownerId] = new ServerMemberSnapshot
+                {
+                    UserId = ownerId,
+                    Name = "Owner",
+                    Avatar = string.Empty,
+                    RoleId = "owner"
+                };
+            }
+        }
+
+        return result.Values.ToList();
+    }
+
+    private static List<ChannelSnapshot> MergeChannels(List<ChannelSnapshot>? existing, List<ChannelSnapshot>? incoming)
+    {
+        var result = new Dictionary<string, ChannelSnapshot>(StringComparer.Ordinal);
+
+        foreach (var channel in existing ?? Enumerable.Empty<ChannelSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(channel.Id))
+            {
+                result[channel.Id] = CloneChannel(channel);
+            }
+        }
+
+        foreach (var channel in incoming ?? Enumerable.Empty<ChannelSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(channel.Id))
+            {
+                result[channel.Id] = CloneChannel(channel);
+            }
+        }
+
+        return result.Values.ToList();
+    }
+
+    private static ServerRoleSnapshot CloneRole(ServerRoleSnapshot role)
+    {
+        return new ServerRoleSnapshot
+        {
+            Id = role.Id,
+            Name = role.Name,
+            Color = role.Color,
+            Priority = role.Priority,
+            Permissions = role.Permissions?.ToList() ?? new List<string>()
+        };
+    }
+
+    private static ServerMemberSnapshot CloneMember(ServerMemberSnapshot member)
+    {
+        return new ServerMemberSnapshot
+        {
+            UserId = member.UserId,
+            Name = member.Name,
+            Avatar = member.Avatar,
+            RoleId = member.RoleId
+        };
+    }
+
+    private static ChannelSnapshot CloneChannel(ChannelSnapshot channel)
+    {
+        return new ChannelSnapshot
+        {
+            Id = channel.Id,
+            Name = channel.Name
+        };
     }
 
     private static ServerSnapshot CloneSnapshot(ServerSnapshot snapshot)

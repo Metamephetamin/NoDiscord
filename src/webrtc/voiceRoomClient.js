@@ -29,6 +29,10 @@ const normalizeParticipant = (participant = {}) => ({
   avatar:
     participant.avatar || participant.Avatar || participant.fromAvatar || participant.FromAvatar || DEFAULT_AVATAR,
   isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
+  isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
+  isDeafened: Boolean(participant.isDeafened || participant.IsDeafened),
+  isMicForced: Boolean(participant.isMicForced || participant.IsMicForced),
+  isDeafenedForced: Boolean(participant.isDeafenedForced || participant.IsDeafenedForced),
 });
 
 const normalizeParticipantsMap = (data) => {
@@ -137,6 +141,7 @@ export function createVoiceRoomClient({
   onLocalScreenShareChanged,
   onLiveUsersChanged,
   onSpeakingUsersChanged,
+  onSelfVoiceStateChanged,
 } = {}) {
   let connection = null;
   let currentUser = null;
@@ -747,6 +752,16 @@ export function createVoiceRoomClient({
         emitParticipants(data);
       });
 
+      connection.on("voice:self-state", (payload) => {
+        onSelfVoiceStateChanged?.({
+          userId: payload?.userId || payload?.UserId || "",
+          isMicMuted: Boolean(payload?.isMicMuted ?? payload?.IsMicMuted),
+          isDeafened: Boolean(payload?.isDeafened ?? payload?.IsDeafened),
+          isMicForced: Boolean(payload?.isMicForced ?? payload?.IsMicForced),
+          isDeafenedForced: Boolean(payload?.isDeafenedForced ?? payload?.IsDeafenedForced),
+        });
+      });
+
       connection.on("voice:screen-share-users", (userIds) => {
         const nextUserIds = Array.isArray(userIds) ? userIds.map(String) : [];
         onLiveUsersChanged?.(nextUserIds);
@@ -1021,6 +1036,22 @@ export function createVoiceRoomClient({
           peerState.audioElement.volume = remoteVolume;
         }
       }
+    },
+
+    async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {
+      if (!connection || connection.state !== signalR.HubConnectionState.Connected || !currentUser?.id) {
+        return;
+      }
+
+      await connection.invoke("UpdateVoiceState", String(currentUser.id), Boolean(isMicMuted), Boolean(isDeafened));
+    },
+
+    async updateParticipantVoiceState(targetUserId, { isMicMuted = false, isDeafened = false } = {}) {
+      if (!targetUserId || !connection || connection.state !== signalR.HubConnectionState.Connected) {
+        return;
+      }
+
+      await connection.invoke("UpdateVoiceState", String(targetUserId), Boolean(isMicMuted), Boolean(isDeafened));
     },
 
     async disconnect() {

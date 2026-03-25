@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
+LoadDotEnv();
+
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -104,7 +106,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "BackNoDiscord v1");
-        c.RoutePrefix = string.Empty;
+        c.RoutePrefix = "swagger";
     });
 }
 
@@ -122,3 +124,45 @@ app.MapHub<VoiceHub>("/voiceHub");
 app.MapControllers();
 
 app.Run();
+
+static void LoadDotEnv()
+{
+    var currentDirectory = Directory.GetCurrentDirectory();
+    var candidatePaths = new[]
+    {
+        Path.Combine(currentDirectory, ".env"),
+        Path.GetFullPath(Path.Combine(currentDirectory, "..", "..", ".env")),
+        Path.GetFullPath(Path.Combine(currentDirectory, "..", "..", "..", ".env"))
+    };
+
+    var envFile = candidatePaths.FirstOrDefault(File.Exists);
+    if (string.IsNullOrWhiteSpace(envFile))
+    {
+        return;
+    }
+
+    foreach (var rawLine in File.ReadAllLines(envFile))
+    {
+        var line = rawLine.Trim();
+        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+        {
+            continue;
+        }
+
+        var separatorIndex = line.IndexOf('=');
+        if (separatorIndex <= 0)
+        {
+            continue;
+        }
+
+        var key = line[..separatorIndex].Trim();
+        var value = line[(separatorIndex + 1)..].Trim().Trim('"');
+
+        if (string.IsNullOrWhiteSpace(key) || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
+        {
+            continue;
+        }
+
+        Environment.SetEnvironmentVariable(key, value);
+    }
+}

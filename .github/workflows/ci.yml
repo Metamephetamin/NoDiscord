@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build:frontend
+
+  backend:
+    name: Backend Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore backend
+        run: dotnet restore BackNoDiscord/BackNoDiscord.sln
+
+      - name: Build backend
+        run: dotnet build BackNoDiscord/BackNoDiscord.sln --configuration Release --no-restore
+
+      - name: Run backend tests (if present)
+        shell: bash
+        run: |
+          mapfile -t test_projects < <(find BackNoDiscord -type f -name "*Tests*.csproj")
+          if [ ${#test_projects[@]} -eq 0 ]; then
+            echo "No backend test projects found. Skipping dotnet test."
+            exit 0
+          fi
+          for project in "${test_projects[@]}"; do
+            echo "Running tests in $project"
+            dotnet test "$project" --configuration Release --no-build --verbosity normal
+          done

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "./VoiceChannelList";
 import TextChat from "./TextChat";
 import ScreenShareButton from "./ScreenShareButton";
@@ -41,21 +41,21 @@ const DEFAULT_SERVER_ROLES = [
     name: "Owner",
     color: "#f4c95d",
     priority: 400,
-    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "invite_members", "mute_members", "deafen_members", "move_members"],
+    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "manage_nicknames", "invite_members", "mute_members", "deafen_members", "move_members"],
   },
   {
     id: "admin",
     name: "Admin",
     color: "#ff8a65",
     priority: 300,
-    permissions: ["manage_server", "manage_channels", "manage_messages", "invite_members", "mute_members", "deafen_members", "move_members"],
+    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "manage_nicknames", "invite_members", "mute_members", "deafen_members", "move_members"],
   },
   {
     id: "moderator",
     name: "Moderator",
     color: "#5dc7b7",
     priority: 200,
-    permissions: ["manage_channels", "manage_messages", "mute_members", "deafen_members"],
+    permissions: ["manage_channels", "manage_messages", "manage_nicknames", "mute_members", "deafen_members"],
   },
   {
     id: "member",
@@ -70,12 +70,13 @@ const ROLE_PERMISSION_LABELS = {
   manage_channels: "Управление каналами",
   manage_roles: "Управление ролями",
   manage_messages: "Управление сообщениями",
+  manage_nicknames: "Управление никами",
   invite_members: "Приглашение участников",
 };
 
-ROLE_PERMISSION_LABELS.mute_members = "Mute members";
-ROLE_PERMISSION_LABELS.deafen_members = "Deafen members";
-ROLE_PERMISSION_LABELS.move_members = "Move members";
+ROLE_PERMISSION_LABELS.mute_members = "Управление микрофоном";
+ROLE_PERMISSION_LABELS.deafen_members = "Отключение звука участникам";
+ROLE_PERMISSION_LABELS.move_members = "Перемещение участников";
 const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
@@ -183,6 +184,26 @@ const canManageTargetMember = (server, actorUserId, targetUserId, permission) =>
 
   return getRolePriority(server, actorMember.roleId) > getRolePriority(server, targetMember.roleId);
 };
+const canAssignRoleToMember = (server, actorUserId, targetUserId, nextRoleId) => {
+  if (!canManageTargetMember(server, actorUserId, targetUserId, "manage_roles")) {
+    return false;
+  }
+
+  if (!nextRoleId || nextRoleId === "owner") {
+    return false;
+  }
+
+  if (String(server?.ownerId || "") === String(actorUserId)) {
+    return true;
+  }
+
+  const actorMember = server?.members?.find((item) => String(item.userId) === String(actorUserId));
+  if (!actorMember) {
+    return false;
+  }
+
+  return getRolePriority(server, actorMember.roleId) > getRolePriority(server, nextRoleId);
+};
 const createDefaultServer = (user) => {
   const ownerUser = user || readSessionUser();
   const ownerId = getCurrentUserId(ownerUser) || "local-owner";
@@ -235,7 +256,7 @@ const normalizeServers = (value, currentUser) => {
   if (!Array.isArray(value) || value.length === 0) return [createDefaultServer(currentUser)];
   return value.map((server, index) => ({
     id: String(
-      !Boolean(server?.isShared) && (!server?.id || server.id === "server-main")
+      !server?.isShared && (!server?.id || server.id === "server-main")
         ? getScopedDefaultServerId(currentUser)
         : server?.id || (index === 0 ? getScopedDefaultServerId(currentUser) : createId("server"))
     ),
@@ -292,6 +313,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isSoundMuted, setIsSoundMuted] = useState(false);
+  const [isMicForced, setIsMicForced] = useState(false);
+  const [isSoundForced, setIsSoundForced] = useState(false);
   const [pingMs, setPingMs] = useState(null);
   const [selectedStreamUserId, setSelectedStreamUserId] = useState(null);
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
@@ -300,6 +323,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
+  const memberRoleMenuRef = useRef(null);
   const avatarInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
   const voiceClientRef = useRef(null);
@@ -335,6 +359,20 @@ export default function MenuMain({ user, setUser, onLogout }) {
     mode: selectedStream?.mode || (selectedStream?.videoSrc ? "mse" : selectedStream?.imageSrc ? "frame" : "none"),
     hasAudio: Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length),
   }), [liveUserIds, remoteScreenShares.length, selectedStream, selectedStreamUserId]);
+  const voiceParticipantByUserId = useMemo(() => {
+    const nextMap = new Map();
+    Object.values(participantsMap || {}).forEach((participants) => {
+      (participants || []).forEach((participant) => {
+        const userId = String(participant?.userId || participant?.UserId || "");
+        if (!userId) {
+          return;
+        }
+
+        nextMap.set(userId, participant);
+      });
+    });
+    return nextMap;
+  }, [participantsMap]);
 
   const playUiTone = (type) => {
     try {
@@ -417,6 +455,11 @@ export default function MenuMain({ user, setUser, onLogout }) {
     return () => window.clearInterval(intervalId);
   }, [activeServer?.id, activeServer?.isShared]);
   useEffect(() => {
+    if (!showServerMembersPanel || !activeServer?.id || !activeServer?.isShared) return;
+
+    refreshServerSnapshot(activeServer.id);
+  }, [showServerMembersPanel, activeServer?.id, activeServer?.isShared]);
+  useEffect(() => {
     if (!servers.length) {
       const fallback = createDefaultServer(user);
       setServers([fallback]);
@@ -437,9 +480,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
   }, [liveUserIds, selectedStream, selectedStreamUserId]);
   useEffect(() => {
     const handleClick = (event) => {
-      if (popupRef.current && !popupRef.current.contains(event.target)) setOpenSettings(false);
-      if (serverMembersRef.current && !serverMembersRef.current.contains(event.target)) setShowServerMembersPanel(false);
-      setMemberRoleMenu(null);
+      const target = event.target;
+      const insidePopup = popupRef.current?.contains(target);
+      const insideServerPanel = serverMembersRef.current?.contains(target);
+      const insideMemberMenu = memberRoleMenuRef.current?.contains(target);
+
+      if (popupRef.current && !insidePopup) setOpenSettings(false);
+      if (serverMembersRef.current && !insideServerPanel && !insideMemberMenu) setShowServerMembersPanel(false);
+      if (!insideMemberMenu) setMemberRoleMenu(null);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -475,6 +523,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
       onLocalScreenShareChanged: setIsSharingScreen,
       onLiveUsersChanged: setAnnouncedLiveUserIds,
       onSpeakingUsersChanged: setSpeakingUserIds,
+      onSelfVoiceStateChanged: ({
+        isMicMuted: nextMicMuted,
+        isDeafened: nextIsDeafened,
+        isMicForced: nextIsMicForced,
+        isDeafenedForced: nextIsSoundForced,
+      }) => {
+        setIsMicMuted(Boolean(nextMicMuted) && !nextIsDeafened);
+        setIsSoundMuted(Boolean(nextIsDeafened));
+        setIsMicForced(Boolean(nextIsMicForced));
+        setIsSoundForced(Boolean(nextIsSoundForced));
+      },
     });
     voiceClientRef.current = client;
     client.connect(user).catch((error) => console.error("Ошибка подключения к голосовому хабу:", error));
@@ -487,8 +546,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!user?.id || !voiceClientRef.current) return;
     voiceClientRef.current.connect(user).catch((error) => console.error("Ошибка обновления пользователя в голосовом хабе:", error));
   }, [user?.id, user?.firstName, user?.first_name, user?.avatarUrl, user?.avatar]);
-  useEffect(() => { voiceClientRef.current?.setMicrophoneVolume(isMicMuted || isSoundMuted ? 0 : micVolume); }, [micVolume, isMicMuted, isSoundMuted]);
-  useEffect(() => { voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume); }, [audioVolume, isSoundMuted]);
+  useEffect(() => {
+    voiceClientRef.current?.setMicrophoneVolume(isMicMuted || isSoundMuted ? 0 : micVolume);
+  }, [micVolume, isMicMuted, isSoundMuted]);
+  useEffect(() => {
+    voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: isMicMuted || isSoundMuted, isDeafened: isSoundMuted }).catch((error) => {
+      console.error("Ошибка обновления состояния микрофона:", error);
+    });
+  }, [isMicMuted, isSoundMuted]);
+  useEffect(() => {
+    voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume);
+  }, [audioVolume, isSoundMuted]);
   useEffect(() => {
     const previousChannel = previousVoiceChannelRef.current;
     if (!previousChannel && currentVoiceChannel) {
@@ -632,15 +700,66 @@ export default function MenuMain({ user, setUser, onLogout }) {
     setAudioVolume(value);
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : value);
   };
+  const openMemberActionsMenu = (event, member) => {
+    const triggerRect = event.currentTarget.getBoundingClientRect();
+    setMemberRoleMenu({
+      memberUserId: member.userId,
+      x: Math.max(12, Math.min(triggerRect.right - 188, window.innerWidth - 232)),
+      y: Math.max(12, Math.min(triggerRect.bottom + 8, window.innerHeight - 320)),
+    });
+  };
   const updateMemberRole = (memberUserId, roleId) => {
-    if (!isServerOwner || !activeServer) return;
-    updateServer((server) => ({
-      ...server,
-      members: server.members.map((member) =>
+    if (!activeServer || !canAssignRoleToMember(activeServer, currentUserId, memberUserId, roleId)) return;
+    const nextServer = {
+      ...activeServer,
+      members: activeServer.members.map((member) =>
         String(member.userId) === String(memberUserId) ? { ...member, roleId } : member
       ),
-    }));
+    };
+    updateServer(() => nextServer);
+    if (nextServer.isShared) {
+      syncServerSnapshot(nextServer);
+    }
     setMemberRoleMenu(null);
+  };
+  const updateMemberNickname = (memberUserId) => {
+    if (!activeServer || !canManageTargetMember(activeServer, currentUserId, memberUserId, "manage_nicknames")) return;
+    const targetMember = activeServer.members.find((member) => String(member.userId) === String(memberUserId));
+    if (!targetMember) return;
+
+    const nextName = window.prompt("Введите новый ник участника", targetMember.name || "");
+    if (typeof nextName !== "string") {
+      return;
+    }
+
+    const trimmedName = nextName.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    const nextServer = {
+      ...activeServer,
+      members: activeServer.members.map((member) =>
+        String(member.userId) === String(memberUserId) ? { ...member, name: trimmedName } : member
+      ),
+    };
+    updateServer(() => nextServer);
+    if (nextServer.isShared) {
+      syncServerSnapshot(nextServer);
+    }
+    setMemberRoleMenu(null);
+  };
+  const updateMemberVoiceState = async (memberUserId, nextState) => {
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    try {
+      await voiceClientRef.current.updateParticipantVoiceState(memberUserId, nextState);
+      setMemberRoleMenu(null);
+    } catch (error) {
+      console.error("Ошибка обновления голосового состояния участника:", error);
+    }
   };
   const markServerAsShared = (serverId) => {
     if (!serverId) return;
@@ -698,8 +817,24 @@ export default function MenuMain({ user, setUser, onLogout }) {
     replaceServerSnapshot(snapshot, { activate: true });
     setOpenSettings(false);
   };
-  const toggleMicMute = () => setIsMicMuted((previous) => !previous);
-  const toggleSoundMute = () => setIsSoundMuted((previous) => !previous);
+  const toggleMicMute = () => {
+    setIsMicMuted((previous) => {
+      if (previous && (isMicForced || isSoundForced)) {
+        return previous;
+      }
+
+      return !previous;
+    });
+  };
+  const toggleSoundMute = () => {
+    setIsSoundMuted((previous) => {
+      if (previous && isSoundForced) {
+        return previous;
+      }
+
+      return !previous;
+    });
+  };
   const handleAvatarChange = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -767,23 +902,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
                   <div className="server-members-panel__list">
                     {(activeServer?.members || []).map((member) => {
                       const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
-                      return (
-                        <div
-                          key={member.userId}
-                          className="server-members-panel__item"
-                          onContextMenu={(event) => {
-                            if (!isServerOwner || String(member.userId) === String(currentUserId)) {
-                              return;
-                            }
+                      const memberVoiceState = voiceParticipantByUserId.get(String(member.userId));
+                      const canRenameMember = canManageTargetMember(activeServer, currentUserId, member.userId, "manage_nicknames");
+                      const canMuteMember = canManageTargetMember(activeServer, currentUserId, member.userId, "mute_members");
+                      const canDeafenMember = canManageTargetMember(activeServer, currentUserId, member.userId, "deafen_members");
+                      const canManageMemberRoles = (activeServer?.roles || []).some((role) =>
+                        canAssignRoleToMember(activeServer, currentUserId, member.userId, role.id)
+                      );
+                      const canOpenMemberMenu = canRenameMember || canMuteMember || canDeafenMember || canManageMemberRoles;
 
-                            event.preventDefault();
-                            setMemberRoleMenu({
-                              memberUserId: member.userId,
-                              x: event.clientX,
-                              y: event.clientY,
-                            });
-                          }}
-                        >
+                      return (
+                        <div key={member.userId} className="server-members-panel__item">
                           <img className="server-members-panel__avatar" src={resolveMediaUrl(member.avatar, DEFAULT_AVATAR)} alt={member.name} />
                           <div className="server-members-panel__meta">
                             <span className="server-members-panel__name">
@@ -791,6 +920,28 @@ export default function MenuMain({ user, setUser, onLogout }) {
                               {member.name}
                             </span>
                             <span className="server-members-panel__role">{memberRole?.name || "Member"}</span>
+                          </div>
+                          <div className="server-members-panel__indicators">
+                            {memberVoiceState?.isMicMuted && (
+                              <span className="server-members-panel__voice-flag" title="Микрофон выключен">
+                                <img src="/icons/microphone.png" alt="" />
+                              </span>
+                            )}
+                            {memberVoiceState?.isDeafened && (
+                              <span className="server-members-panel__voice-flag" title="Не слышит участников">
+                                <img src="/icons/headphones.png" alt="" />
+                              </span>
+                            )}
+                            {canOpenMemberMenu && (
+                              <button
+                                type="button"
+                                className="server-members-panel__gear"
+                                aria-label={`Управление участником ${member.name}`}
+                                onClick={(event) => openMemberActionsMenu(event, member)}
+                              >
+                                <img src="/icons/settings.png" alt="" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -801,18 +952,82 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 </div>
               )}
               {memberRoleMenu && (
-                <div className="member-role-menu" style={{ left: memberRoleMenu.x, top: memberRoleMenu.y }}>
-                  {(activeServer?.roles || []).map((role) => (
-                    <button
-                      key={role.id}
-                      type="button"
-                      className="member-role-menu__item"
-                      onClick={() => updateMemberRole(memberRoleMenu.memberUserId, role.id)}
-                    >
-                      <span className="member-role-menu__dot" style={{ backgroundColor: role.color || "#7b89a8" }} aria-hidden="true" />
-                      {role.name}
-                    </button>
-                  ))}
+                <div ref={memberRoleMenuRef} className="member-role-menu" style={{ left: memberRoleMenu.x, top: memberRoleMenu.y }}>
+                  {(() => {
+                    const targetMember = activeServer?.members?.find((member) => String(member.userId) === String(memberRoleMenu.memberUserId));
+                    const targetVoiceState = voiceParticipantByUserId.get(String(memberRoleMenu.memberUserId));
+                    const canRenameMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "manage_nicknames");
+                    const canMuteMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "mute_members");
+                    const canDeafenMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "deafen_members");
+                    const assignableRoles = (activeServer?.roles || []).filter((role) =>
+                      canAssignRoleToMember(activeServer, currentUserId, memberRoleMenu.memberUserId, role.id)
+                    );
+
+                    return (
+                      <>
+                        {targetMember && (
+                          <div className="member-role-menu__title">{targetMember.name}</div>
+                        )}
+                        {canRenameMember && (
+                          <button
+                            type="button"
+                            className="member-role-menu__item"
+                            onClick={() => updateMemberNickname(memberRoleMenu.memberUserId)}
+                          >
+                            <img src="/icons/pencil.svg" alt="" className="member-role-menu__icon" />
+                            Сменить ник
+                          </button>
+                        )}
+                        {canMuteMember && (
+                          <button
+                            type="button"
+                            className="member-role-menu__item"
+                            onClick={() =>
+                              updateMemberVoiceState(memberRoleMenu.memberUserId, {
+                                isMicMuted: !targetVoiceState?.isMicMuted,
+                                isDeafened: Boolean(targetVoiceState?.isDeafened),
+                              })
+                            }
+                          >
+                            <img src="/icons/microphone.png" alt="" className="member-role-menu__icon" />
+                            {targetVoiceState?.isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+                          </button>
+                        )}
+                        {canDeafenMember && (
+                          <button
+                            type="button"
+                            className="member-role-menu__item"
+                            onClick={() =>
+                              updateMemberVoiceState(memberRoleMenu.memberUserId, {
+                                isMicMuted: targetVoiceState?.isDeafened ? Boolean(targetVoiceState?.isMicMuted) : true,
+                                isDeafened: !targetVoiceState?.isDeafened,
+                              })
+                            }
+                          >
+                            <img src="/icons/headphones.png" alt="" className="member-role-menu__icon" />
+                            {targetVoiceState?.isDeafened ? "Вернуть звук" : "Отключить звук"}
+                          </button>
+                        )}
+                        {assignableRoles.length > 0 && (
+                          <>
+                            <div className="member-role-menu__separator" />
+                            <div className="member-role-menu__subtitle">Роль</div>
+                            {assignableRoles.map((role) => (
+                              <button
+                                key={role.id}
+                                type="button"
+                                className={`member-role-menu__item ${targetMember?.roleId === role.id ? "member-role-menu__item--active" : ""}`}
+                                onClick={() => updateMemberRole(memberRoleMenu.memberUserId, role.id)}
+                              >
+                                <span className="member-role-menu__dot" style={{ backgroundColor: role.color || "#7b89a8" }} aria-hidden="true" />
+                                {role.name}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               </div>
@@ -856,8 +1071,24 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
               <div className="profile__icons">
                 <button type="button" className="wrap__icon" onClick={() => setOpenSettings((previous) => !previous)}><img src="/icons/settings.png" alt="settings" className="icon__settings" /></button>
-                <button type="button" className={`wrap__icon ${isMicMuted || isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleMicMute}><img src="/icons/microphone.png" alt="microphone" className="icon__phone" /></button>
-                <button type="button" className={`wrap__icon ${isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`} onClick={toggleSoundMute}><img src="/icons/volumespeacker.png" alt="volume" className="icon__volumespeacker" /></button>
+                <button
+                  type="button"
+                  className={`wrap__icon ${isMicMuted || isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`}
+                  onClick={toggleMicMute}
+                  disabled={(isMicMuted && (isMicForced || isSoundForced)) || (isSoundMuted && isSoundForced)}
+                  title={(isMicMuted && (isMicForced || isSoundForced)) || (isSoundMuted && isSoundForced) ? "Микрофон отключён администратором" : "Микрофон"}
+                >
+                  <img src="/icons/microphone.png" alt="microphone" className="icon__phone" />
+                </button>
+                <button
+                  type="button"
+                  className={`wrap__icon ${isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`}
+                  onClick={toggleSoundMute}
+                  disabled={isSoundMuted && isSoundForced}
+                  title={isSoundMuted && isSoundForced ? "Звук отключён администратором" : "Звук"}
+                >
+                  <img src="/icons/volumespeacker.png" alt="volume" className="icon__volumespeacker" />
+                </button>
                 <button type="button" className={`wrap__icon ${isSharingScreen ? "wrap__icon--danger" : ""}`} onClick={handleScreenShareAction}><img src={isSharingScreen ? "/icons/close.svg" : "/icons/camera.png"} alt={isSharingScreen ? "stop stream" : "start stream"} className="icon__camera" /></button>
               </div>
             </div>
@@ -901,7 +1132,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
       </main>
 
       {openSettings && (
-        <div ref={popupRef} className="settings-popup settings-popup--expanded">
+        <div className="settings-backdrop" onClick={() => setOpenSettings(false)}>
+        <div ref={popupRef} className="settings-popup settings-popup--expanded" onClick={(event) => event.stopPropagation()}>
           <div className="settings-popup__header">
             <h3>Настройки</h3>
             <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>x</button>
@@ -1036,6 +1268,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {showModal && (
@@ -1077,3 +1310,4 @@ export default function MenuMain({ user, setUser, onLogout }) {
     </div>
   );
 }
+

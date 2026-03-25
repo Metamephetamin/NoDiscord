@@ -81,41 +81,57 @@ export default function TextChat({ serverId, channelId, user }) {
   useEffect(() => {
     if (!scopedChannelId) return;
 
+    let isJoined = false;
+    const handleReceiveMessage = (nextMessage) => {
+      setMessagesByChannel((prev) => {
+        const channelMessages = prev[scopedChannelId] || [];
+        return { ...prev, [scopedChannelId]: [...channelMessages, nextMessage] };
+      });
+    };
+
+    const handleMessageDeleted = (deletedId) => {
+      setMessagesByChannel((prev) => {
+        const channelMessages = prev[scopedChannelId] || [];
+        return {
+          ...prev,
+          [scopedChannelId]: channelMessages.filter((item) => item.id !== deletedId),
+        };
+      });
+    };
+
     const init = async () => {
       try {
+        setErrorMessage("");
         await startChatConnection();
 
-        chatConnection.off("ReceiveMessage");
-        chatConnection.off("MessageDeleted");
+        chatConnection.off("ReceiveMessage", handleReceiveMessage);
+        chatConnection.off("MessageDeleted", handleMessageDeleted);
+        chatConnection.on("ReceiveMessage", handleReceiveMessage);
+        chatConnection.on("MessageDeleted", handleMessageDeleted);
 
-        const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
-        setMessagesByChannel((prev) => ({ ...prev, [scopedChannelId]: initialMessages }));
-
-        chatConnection.on("ReceiveMessage", (nextMessage) => {
-          setMessagesByChannel((prev) => {
-            const channelMessages = prev[scopedChannelId] || [];
-            return { ...prev, [scopedChannelId]: [...channelMessages, nextMessage] };
-          });
-        });
-
-        chatConnection.on("MessageDeleted", (deletedId) => {
-          setMessagesByChannel((prev) => {
-            const channelMessages = prev[scopedChannelId] || [];
-            return {
-              ...prev,
-              [scopedChannelId]: channelMessages.filter((item) => item.id !== deletedId),
-            };
-          });
-        });
+        try {
+          const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
+          setMessagesByChannel((prev) => ({ ...prev, [scopedChannelId]: initialMessages }));
+          isJoined = true;
+        } catch (joinError) {
+          console.error("JoinChannel error:", joinError);
+          setErrorMessage("Не удалось загрузить историю канала. Новые сообщения будут приходить в реальном времени.");
+          setMessagesByChannel((prev) => ({ ...prev, [scopedChannelId]: prev[scopedChannelId] || [] }));
+        }
       } catch (err) {
         console.error("SignalR connection error:", err);
+        setErrorMessage("Ошибка подключения к чату.");
       }
     };
 
     init();
 
     return () => {
-      chatConnection.invoke("LeaveChannel", scopedChannelId).catch(console.error);
+      if (isJoined) {
+        chatConnection.invoke("LeaveChannel", scopedChannelId).catch(console.error);
+      }
+      chatConnection.off("ReceiveMessage", handleReceiveMessage);
+      chatConnection.off("MessageDeleted", handleMessageDeleted);
     };
   }, [scopedChannelId]);
 

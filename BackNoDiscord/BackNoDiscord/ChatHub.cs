@@ -11,11 +11,13 @@ namespace BackNoDiscord
 
         private readonly AppDbContext _context;
         private readonly CryptoService _crypto;
+        private readonly ILogger<ChatHub> _logger;
 
-        public ChatHub(AppDbContext context, CryptoService crypto)
+        public ChatHub(AppDbContext context, CryptoService crypto, ILogger<ChatHub> logger)
         {
             _context = context;
             _crypto = crypto;
+            _logger = logger;
         }
 
         public async Task SendScreenOffer(string targetConnectionId, string sdp)
@@ -98,14 +100,7 @@ namespace BackNoDiscord
                 .ToListAsync();
 
             return lastMessages
-                .Select(message =>
-                {
-                    var rawPayload = !string.IsNullOrWhiteSpace(message.EncryptedContent)
-                        ? _crypto.Decrypt(message.EncryptedContent)
-                        : (message.Content ?? string.Empty);
-
-                    return ToMessageDto(message, DeserializePayload(rawPayload));
-                })
+                .Select(message => ToMessageDto(message, DeserializePayload(GetRawPayload(message))))
                 .ToList();
         }
 
@@ -169,6 +164,28 @@ namespace BackNoDiscord
             catch
             {
                 return new ChatMessagePayload { Message = raw };
+            }
+        }
+
+        private string GetRawPayload(Message message)
+        {
+            if (string.IsNullOrWhiteSpace(message.EncryptedContent))
+            {
+                return message.Content ?? string.Empty;
+            }
+
+            try
+            {
+                return _crypto.Decrypt(message.EncryptedContent);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to decrypt chat message {MessageId} in channel {ChannelId}. Falling back to plain content.",
+                    message.Id,
+                    message.ChannelId);
+                return message.Content ?? string.Empty;
             }
         }
     }

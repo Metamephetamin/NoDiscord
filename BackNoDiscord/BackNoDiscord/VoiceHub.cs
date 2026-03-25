@@ -34,6 +34,18 @@ public class VoiceHub : Hub
 
         await Clients.Caller.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+
+        if (_channels.TryGetParticipant(userId, out var participant))
+        {
+            await Clients.Caller.SendAsync("voice:self-state", new VoiceStatePayload
+            {
+                UserId = participant.UserId,
+                IsMicMuted = participant.IsMicMuted,
+                IsDeafened = participant.IsDeafened,
+                IsMicForced = participant.IsMicForced,
+                IsDeafenedForced = participant.IsDeafenedForced,
+            });
+        }
     }
 
     public async Task<JoinChannelResponse> JoinChannel(string channelName, string userId, string name, string avatar)
@@ -68,6 +80,17 @@ public class VoiceHub : Hub
         await Groups.AddToGroupAsync(Context.ConnectionId, channelName);
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        if (_channels.TryGetParticipant(userId, out var updatedParticipant))
+        {
+            await Clients.Caller.SendAsync("voice:self-state", new VoiceStatePayload
+            {
+                UserId = updatedParticipant.UserId,
+                IsMicMuted = updatedParticipant.IsMicMuted,
+                IsDeafened = updatedParticipant.IsDeafened,
+                IsMicForced = updatedParticipant.IsMicForced,
+                IsDeafenedForced = updatedParticipant.IsDeafenedForced,
+            });
+        }
 
         return new JoinChannelResponse
         {
@@ -99,6 +122,41 @@ public class VoiceHub : Hub
         _channels.SetScreenShareState(userId, isSharing);
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+    }
+
+    public async Task UpdateVoiceState(string targetUserId, bool isMicMuted, bool isDeafened)
+    {
+        if (string.IsNullOrWhiteSpace(targetUserId) ||
+            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var actor))
+        {
+            return;
+        }
+
+        var isSelfUpdate = string.Equals(actor.UserId, targetUserId, StringComparison.Ordinal);
+        var updatedParticipant = _channels.SetVoiceState(
+            targetUserId,
+            isMicMuted,
+            isDeafened,
+            applyForceLocks: !isSelfUpdate,
+            respectForceLocks: isSelfUpdate);
+        if (updatedParticipant is null)
+        {
+            return;
+        }
+
+        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+
+        if (_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+        {
+            await Clients.Client(targetConnectionId).SendAsync("voice:self-state", new VoiceStatePayload
+            {
+                UserId = updatedParticipant.UserId,
+                IsMicMuted = updatedParticipant.IsMicMuted,
+                IsDeafened = updatedParticipant.IsDeafened,
+                IsMicForced = updatedParticipant.IsMicForced,
+                IsDeafenedForced = updatedParticipant.IsDeafenedForced,
+            });
+        }
     }
 
     public async Task RequestScreenShareOffer(string targetUserId)
@@ -263,6 +321,15 @@ public class IceCandidatePayload
 {
     public string FromUserId { get; set; } = string.Empty;
     public string Candidate { get; set; } = string.Empty;
+}
+
+public class VoiceStatePayload
+{
+    public string UserId { get; set; } = string.Empty;
+    public bool IsMicMuted { get; set; }
+    public bool IsDeafened { get; set; }
+    public bool IsMicForced { get; set; }
+    public bool IsDeafenedForced { get; set; }
 }
 
 public class ScreenShareFramePayload

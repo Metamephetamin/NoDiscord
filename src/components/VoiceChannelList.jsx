@@ -1,4 +1,3 @@
-import React from "react";
 import "../css/ListChannels.css";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
@@ -25,15 +24,20 @@ const VoiceChannelList = ({
       return [String(member.userId), role?.color || "#7b89a8"];
     })
   );
+  const memberNameByUserId = new Map(
+    (serverMembers || []).map((member) => [String(member.userId), member.name || "Unknown"])
+  );
 
   const normalizeParticipant = (participant = {}) => {
     const userId = participant.userId || participant.UserId || "";
 
     return {
       userId,
-      name: participant.name || participant.Name || "Unknown",
+      name: memberNameByUserId.get(String(userId)) || participant.name || participant.Name || "Unknown",
       avatar: participant.avatar || participant.Avatar || DEFAULT_AVATAR,
-      isScreenSharing: participant.isScreenSharing || participant.IsScreenSharing || false,
+      isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
+      isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
+      isDeafened: Boolean(participant.isDeafened || participant.IsDeafened),
       roleColor: roleColorByUserId.get(String(userId)) || "#7b89a8",
     };
   };
@@ -93,6 +97,18 @@ const VoiceChannelList = ({
                       style={{ backgroundColor: participant.roleColor }}
                       aria-hidden="true"
                     />
+                    <div className="participant-item__voice-flags">
+                      {participant.isMicMuted && (
+                        <span className="participant-item__voice-flag" title="Микрофон выключен">
+                          <img src="/icons/microphone.png" alt="" />
+                        </span>
+                      )}
+                      {participant.isDeafened && (
+                        <span className="participant-item__voice-flag" title="Не слышит канал">
+                          <img src="/icons/headphones.png" alt="" />
+                        </span>
+                      )}
+                    </div>
                     {(liveUsers.has(participant.userId) || participant.isScreenSharing) && (
                       <button
                         type="button"

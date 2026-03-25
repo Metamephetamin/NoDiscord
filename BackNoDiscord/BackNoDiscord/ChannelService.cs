@@ -49,16 +49,17 @@ namespace BackNoDiscord
         {
             lock (_syncRoot)
             {
-                _participantsByUserId[participant.UserId] = CloneParticipant(participant);
+                var mergedParticipant = MergeWithExistingState(participant);
+                _participantsByUserId[mergedParticipant.UserId] = CloneParticipant(mergedParticipant);
 
-                if (_userIdToConnection.TryGetValue(participant.UserId, out var previousConnectionId) &&
+                if (_userIdToConnection.TryGetValue(mergedParticipant.UserId, out var previousConnectionId) &&
                     !string.Equals(previousConnectionId, connectionId, StringComparison.Ordinal))
                 {
                     _connectionToUserId.TryRemove(previousConnectionId, out _);
                 }
 
-                _connectionToUserId[connectionId] = participant.UserId;
-                _userIdToConnection[participant.UserId] = connectionId;
+                _connectionToUserId[connectionId] = mergedParticipant.UserId;
+                _userIdToConnection[mergedParticipant.UserId] = connectionId;
             }
         }
 
@@ -66,14 +67,16 @@ namespace BackNoDiscord
         {
             lock (_syncRoot)
             {
+                var mergedParticipant = MergeWithExistingState(participant);
+
                 if (connectionId is not null)
                 {
-                    RegisterConnection(connectionId, participant);
+                    RegisterConnection(connectionId, mergedParticipant);
                 }
 
                 foreach (var channel in _channels.Values)
                 {
-                    channel.RemoveAll(user => user.UserId == participant.UserId);
+                    channel.RemoveAll(user => user.UserId == mergedParticipant.UserId);
                 }
 
                 if (!_channels.ContainsKey(channelName))
@@ -81,9 +84,9 @@ namespace BackNoDiscord
                     _channels[channelName] = new List<Participant>();
                 }
 
-                _channels[channelName].Add(CloneParticipant(participant));
-                _participantsByUserId[participant.UserId] = CloneParticipant(participant);
-                _userChannels[participant.UserId] = channelName;
+                _channels[channelName].Add(CloneParticipant(mergedParticipant));
+                _participantsByUserId[mergedParticipant.UserId] = CloneParticipant(mergedParticipant);
+                _userChannels[mergedParticipant.UserId] = channelName;
             }
         }
 
@@ -160,6 +163,88 @@ namespace BackNoDiscord
             }
         }
 
+        public Participant? SetVoiceState(
+            string userId,
+            bool? isMicMuted = null,
+            bool? isDeafened = null,
+            bool applyForceLocks = false,
+            bool respectForceLocks = false)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return null;
+            }
+
+            lock (_syncRoot)
+            {
+                if (!_participantsByUserId.TryGetValue(userId, out var participant))
+                {
+                    return null;
+                }
+
+                if (isMicMuted.HasValue)
+                {
+                    var canUnmute = !respectForceLocks || !participant.IsMicForced || isMicMuted.Value;
+                    if (canUnmute)
+                    {
+                        participant.IsMicMuted = isMicMuted.Value;
+                    }
+
+                    if (applyForceLocks)
+                    {
+                        participant.IsMicForced = isMicMuted.Value;
+                    }
+                    else if (!participant.IsMicMuted)
+                    {
+                        participant.IsMicForced = false;
+                    }
+                }
+
+                if (isDeafened.HasValue)
+                {
+                    var canUndeafen = !respectForceLocks || !participant.IsDeafenedForced || isDeafened.Value;
+                    if (canUndeafen)
+                    {
+                        participant.IsDeafened = isDeafened.Value;
+                    }
+
+                    if (applyForceLocks)
+                    {
+                        participant.IsDeafenedForced = isDeafened.Value;
+                    }
+                    else if (!participant.IsDeafened)
+                    {
+                        participant.IsDeafenedForced = false;
+                    }
+                }
+
+                _participantsByUserId[userId] = CloneParticipant(participant);
+
+                foreach (var channel in _channels.Values)
+                {
+                    var existing = channel.FirstOrDefault(item => item.UserId == userId);
+                    if (existing is null)
+                    {
+                        continue;
+                    }
+
+                    if (isMicMuted.HasValue)
+                    {
+                        existing.IsMicMuted = participant.IsMicMuted;
+                        existing.IsMicForced = participant.IsMicForced;
+                    }
+
+                    if (isDeafened.HasValue)
+                    {
+                        existing.IsDeafened = participant.IsDeafened;
+                        existing.IsDeafenedForced = participant.IsDeafenedForced;
+                    }
+                }
+
+                return CloneParticipant(participant);
+            }
+        }
+
         public List<string> GetScreenSharingUserIds()
         {
             return _screenSharingUsers.Keys.ToList();
@@ -211,7 +296,31 @@ namespace BackNoDiscord
                 UserId = participant.UserId,
                 Name = participant.Name,
                 Avatar = participant.Avatar,
-                IsScreenSharing = participant.IsScreenSharing
+                IsScreenSharing = participant.IsScreenSharing,
+                IsMicMuted = participant.IsMicMuted,
+                IsDeafened = participant.IsDeafened,
+                IsMicForced = participant.IsMicForced,
+                IsDeafenedForced = participant.IsDeafenedForced,
+            };
+        }
+
+        private Participant MergeWithExistingState(Participant participant)
+        {
+            if (!_participantsByUserId.TryGetValue(participant.UserId, out var existing))
+            {
+                return CloneParticipant(participant);
+            }
+
+            return new Participant
+            {
+                UserId = participant.UserId,
+                Name = string.IsNullOrWhiteSpace(participant.Name) ? existing.Name : participant.Name,
+                Avatar = string.IsNullOrWhiteSpace(participant.Avatar) ? existing.Avatar : participant.Avatar,
+                IsScreenSharing = participant.IsScreenSharing || existing.IsScreenSharing,
+                IsMicMuted = participant.IsMicMuted || existing.IsMicMuted,
+                IsDeafened = participant.IsDeafened || existing.IsDeafened,
+                IsMicForced = participant.IsMicForced || existing.IsMicForced,
+                IsDeafenedForced = participant.IsDeafenedForced || existing.IsDeafenedForced,
             };
         }
     }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { API_BASE_URL } from "../config/runtime";
 
 const getDisplayName = (user) =>

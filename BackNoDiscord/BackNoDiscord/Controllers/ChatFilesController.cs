@@ -2,6 +2,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BackNoDiscord.Controllers
 {
+    public class UploadChatFileRequest
+    {
+        public IFormFile? File { get; set; }
+        public string UserId { get; set; } = string.Empty;
+    }
+
     [ApiController]
     [Route("api/chat-files")]
     public class ChatFilesController : ControllerBase
@@ -10,8 +16,11 @@ namespace BackNoDiscord.Controllers
 
         [HttpPost("upload")]
         [RequestSizeLimit(MaxFileSizeBytes)]
-        public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string userId)
+        public async Task<IActionResult> Upload([FromForm] UploadChatFileRequest request)
         {
+            var file = request.File;
+            var userId = request.UserId;
+
             if (file == null || file.Length == 0)
             {
                 return BadRequest(new { message = "File is required" });

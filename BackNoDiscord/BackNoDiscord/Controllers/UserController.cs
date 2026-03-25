@@ -2,14 +2,23 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BackNoDiscord.Controllers
 {
+    public class UploadAvatarRequest
+    {
+        public IFormFile? Avatar { get; set; }
+        public string UserId { get; set; } = string.Empty;
+    }
+
     [ApiController]
     [Route("api/user")]
     public class UserController : ControllerBase
     {
         [HttpPost("upload-avatar")]
         [RequestSizeLimit(10_000_000)]
-        public async Task<IActionResult> UploadAvatar([FromForm] IFormFile avatar, [FromForm] string userId)
+        public async Task<IActionResult> UploadAvatar([FromForm] UploadAvatarRequest request)
         {
+            var avatar = request.Avatar;
+            var userId = request.UserId;
+
             if (avatar == null || avatar.Length == 0)
             {
                 return BadRequest(new { message = "Avatar file is required" });
