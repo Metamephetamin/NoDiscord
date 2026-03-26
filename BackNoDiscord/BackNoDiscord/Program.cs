@@ -1,4 +1,5 @@
 using BackNoDiscord;
+using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,11 @@ var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
     throw new InvalidOperationException("Jwt:Key is not configured. Use .env, environment variables, or appsettings.");
+}
+
+if (jwtKey.Length < 32)
+{
+    throw new InvalidOperationException("Jwt:Key must be at least 32 characters long.");
 }
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -91,7 +97,8 @@ builder.Services.AddSingleton<ServerStateService>();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {
-    options.MaximumReceiveMessageSize = 24 * 1024 * 1024;
+    options.MaximumReceiveMessageSize = 4 * 1024 * 1024;
+    options.EnableDetailedErrors = false;
 })
 .AddMessagePackProtocol();
 builder.Services.AddEndpointsApiExplorer();
@@ -119,8 +126,8 @@ app.UseAuthorization();
 app.MapGet("/api/ping", () => Results.Ok(new { status = "ok" }))
    .RequireCors("AllowFrontend");
 
-app.MapHub<ChatHub>("/chatHub");
-app.MapHub<VoiceHub>("/voiceHub");
+app.MapHub<ChatHub>("/chatHub").RequireAuthorization();
+app.MapHub<VoiceHub>("/voiceHub").RequireAuthorization();
 app.MapControllers();
 
 app.Run();

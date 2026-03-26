@@ -5,6 +5,7 @@ namespace BackNoDiscord.Services
 {
     public class CryptoService
     {
+        private const string VersionPrefix = "v2:";
         private readonly byte[] _key;
 
         public CryptoService(IConfiguration configuration)
@@ -16,6 +17,11 @@ namespace BackNoDiscord.Services
                 throw new InvalidOperationException("Crypto:Key is not configured. Set it via .env, environment variables, or appsettings.");
             }
 
+            if (keyString.Length < 32)
+            {
+                throw new InvalidOperationException("Crypto:Key must be at least 32 characters long.");
+            }
+
             using var sha = SHA256.Create();
             _key = sha.ComputeHash(Encoding.UTF8.GetBytes(keyString));
         }
@@ -25,19 +31,20 @@ namespace BackNoDiscord.Services
             if (string.IsNullOrWhiteSpace(plainText))
                 return string.Empty;
 
-            using var aes = Aes.Create();
-            aes.Key = _key;
-            aes.GenerateIV();
-
-            using var encryptor = aes.CreateEncryptor(aes.Key, aes.IV);
             var plainBytes = Encoding.UTF8.GetBytes(plainText);
-            var encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+            var nonce = RandomNumberGenerator.GetBytes(12);
+            var tag = new byte[16];
+            var cipherBytes = new byte[plainBytes.Length];
 
-            var result = new byte[aes.IV.Length + encryptedBytes.Length];
-            Buffer.BlockCopy(aes.IV, 0, result, 0, aes.IV.Length);
-            Buffer.BlockCopy(encryptedBytes, 0, result, aes.IV.Length, encryptedBytes.Length);
+            using var aes = new AesGcm(_key, 16);
+            aes.Encrypt(nonce, plainBytes, cipherBytes, tag);
 
-            return Convert.ToBase64String(result);
+            var result = new byte[nonce.Length + tag.Length + cipherBytes.Length];
+            Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
+            Buffer.BlockCopy(tag, 0, result, nonce.Length, tag.Length);
+            Buffer.BlockCopy(cipherBytes, 0, result, nonce.Length + tag.Length, cipherBytes.Length);
+
+            return $"{VersionPrefix}{Convert.ToBase64String(result)}";
         }
 
         public string Decrypt(string cipherText)
@@ -45,6 +52,26 @@ namespace BackNoDiscord.Services
             if (string.IsNullOrWhiteSpace(cipherText))
                 return string.Empty;
 
+            return cipherText.StartsWith(VersionPrefix, StringComparison.Ordinal)
+                ? DecryptV2(cipherText[VersionPrefix.Length..])
+                : DecryptLegacy(cipherText);
+        }
+
+        private string DecryptV2(string cipherText)
+        {
+            var fullCipher = Convert.FromBase64String(cipherText);
+            var nonce = fullCipher[..12];
+            var tag = fullCipher[12..28];
+            var cipher = fullCipher[28..];
+            var plainBytes = new byte[cipher.Length];
+
+            using var aes = new AesGcm(_key, 16);
+            aes.Decrypt(nonce, cipher, tag, plainBytes);
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+
+        private string DecryptLegacy(string cipherText)
+        {
             var fullCipher = Convert.FromBase64String(cipherText);
 
             using var aes = Aes.Create();

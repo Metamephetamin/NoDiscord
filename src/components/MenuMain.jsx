@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "./VoiceChannelList";
 import TextChat from "./TextChat";
 import ScreenShareButton from "./ScreenShareButton";
@@ -8,6 +8,7 @@ import "../css/MenuMain.css";
 import "../css/MenuProfile.css";
 import "../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../config/runtime";
+import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
 import { DEFAULT_AVATAR, DEFAULT_SERVER_ICON, readFileAsDataUrl, resolveMediaUrl } from "../utils/media";
 
@@ -82,12 +83,21 @@ const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
 const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 const getCurrentUserId = (user) => String(user?.id || user?.email || "");
+const getScopedVoiceChannelId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const getUserStorageScope = (user) => String(user?.id || user?.email || "guest");
+const isReservedDefaultServerId = (serverId) => /^server-main(?:-|$)/.test(String(serverId || ""));
 const getScopedDefaultServerId = (user) =>
   `server-main-${getUserStorageScope(user)
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "") || "guest"}`;
+const isPersonalDefaultServer = (server, user) => {
+  if (!server) {
+    return false;
+  }
+
+  return String(server.id || "") === getScopedDefaultServerId(user) || (!server.isShared && isReservedDefaultServerId(server.id));
+};
 const readSessionUser = () => {
   try {
     const raw = localStorage.getItem("user");
@@ -215,6 +225,7 @@ const createDefaultServer = (user) => {
   id: getScopedDefaultServerId(ownerUser),
   name: "Основной сервер",
   icon: DEFAULT_SERVER_ICON,
+  isDefault: true,
   isShared: false,
   ownerId,
   roles: createDefaultRoles(),
@@ -234,6 +245,7 @@ const createServer = (name, user) => {
   id: createId("server"),
   name: name?.trim() || "Новый сервер",
   icon: "",
+  isDefault: false,
   isShared: false,
   ownerId,
   roles: createDefaultRoles(),
@@ -255,14 +267,15 @@ const normalizeChannels = (channels, type) => {
 const normalizeServers = (value, currentUser) => {
   if (!Array.isArray(value) || value.length === 0) return [createDefaultServer(currentUser)];
   return value.map((server, index) => ({
+    isDefault: isPersonalDefaultServer(server, currentUser),
     id: String(
-      !server?.isShared && (!server?.id || server.id === "server-main")
+      isPersonalDefaultServer(server, currentUser) || (!server?.isShared && (!server?.id || server.id === "server-main"))
         ? getScopedDefaultServerId(currentUser)
         : server?.id || (index === 0 ? getScopedDefaultServerId(currentUser) : createId("server"))
     ),
     name: String(server?.name || `Сервер ${index + 1}`),
     icon: server?.icon ?? (index === 0 ? DEFAULT_SERVER_ICON : ""),
-    isShared: Boolean(server?.isShared),
+    isShared: isPersonalDefaultServer(server, currentUser) ? false : Boolean(server?.isShared),
     ownerId: String(server?.ownerId || server?.owner_id || getCurrentUserId(currentUser) || createId("owner")),
     roles: normalizeRoles(server?.roles),
     members: (() => {
@@ -292,6 +305,12 @@ const readStoredServers = (user) => {
   }
 };
 const getChannelDisplayName = (name, type) => (type === "text" && !name.startsWith("#") ? `# ${name}` : name);
+const UI_SOUND_PATHS = {
+  join: "/sounds/join.mp3",
+  leave: "/sounds/leave.mp3",
+  share: "/sounds/share.mp3",
+};
+const uiSoundCache = new Map();
 
 export default function MenuMain({ user, setUser, onLogout }) {
   const [servers, setServers] = useState(() => readStoredServers(user));
@@ -320,6 +339,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
   const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
   const [memberRoleMenu, setMemberRoleMenu] = useState(null);
+  const [rolesExpanded, setRolesExpanded] = useState(false);
+  const [channelRenameState, setChannelRenameState] = useState(null);
 
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
@@ -335,9 +356,40 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
   const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
-  const currentVoiceChannelName = useMemo(() => servers.flatMap((server) => server.voiceChannels).find((channel) => channel.id === currentVoiceChannel)?.name || currentVoiceChannel, [currentVoiceChannel, servers]);
+  const activeVoiceParticipantsMap = useMemo(() => {
+    if (!activeServer?.id) {
+      return {};
+    }
+
+    const hasScopedVoiceChannels = Object.keys(participantsMap || {}).some((channelId) => channelId.includes("::"));
+    if (!hasScopedVoiceChannels) {
+      return participantsMap || {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(participantsMap || {}).flatMap(([channelId, participants]) => {
+        const prefix = `${activeServer.id}::`;
+        if (!channelId.startsWith(prefix)) {
+          return [];
+        }
+
+        return [[channelId.slice(prefix.length), participants]];
+      })
+    );
+  }, [activeServer?.id, participantsMap]);
+  const currentVoiceChannelName = useMemo(() => {
+    const scopedVoiceChannels = servers.flatMap((server) =>
+      (server.voiceChannels || []).map((channel) => ({
+        runtimeId: getScopedVoiceChannelId(server.id, channel.id),
+        name: channel.name,
+      }))
+    );
+
+    return scopedVoiceChannels.find((channel) => channel.runtimeId === currentVoiceChannel)?.name || currentVoiceChannel;
+  }, [currentVoiceChannel, servers]);
   const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
   const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
+  const isDefaultServer = useMemo(() => isPersonalDefaultServer(activeServer, user), [activeServer, user]);
   const isServerOwner = useMemo(() => String(activeServer?.ownerId || "") === String(currentUserId), [activeServer?.ownerId, currentUserId]);
   const canManageServer = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_server"), [activeServer, currentUserId]);
   const canManageChannels = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_channels"), [activeServer, currentUserId]);
@@ -361,7 +413,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   }), [liveUserIds, remoteScreenShares.length, selectedStream, selectedStreamUserId]);
   const voiceParticipantByUserId = useMemo(() => {
     const nextMap = new Map();
-    Object.values(participantsMap || {}).forEach((participants) => {
+    Object.values(activeVoiceParticipantsMap || {}).forEach((participants) => {
       (participants || []).forEach((participant) => {
         const userId = String(participant?.userId || participant?.UserId || "");
         if (!userId) {
@@ -372,29 +424,24 @@ export default function MenuMain({ user, setUser, onLogout }) {
       });
     });
     return nextMap;
-  }, [participantsMap]);
+  }, [activeVoiceParticipantsMap]);
 
   const playUiTone = (type) => {
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      const context = new AudioContextClass();
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const config =
-        type === "join"
-          ? { frequency: 640, duration: 0.08 }
-          : type === "leave"
-            ? { frequency: 420, duration: 0.1 }
-            : { frequency: 720, duration: 0.12 };
-      oscillator.type = "sine";
-      oscillator.frequency.value = config.frequency;
-      gain.gain.value = 0.04;
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start();
-      oscillator.stop(context.currentTime + config.duration);
-      oscillator.onended = () => context.close().catch(() => {});
+      const soundPath = UI_SOUND_PATHS[type];
+      if (!soundPath) return;
+
+      const previous = uiSoundCache.get(type);
+      if (previous) {
+        previous.pause();
+        previous.currentTime = 0;
+      }
+
+      const audio = new Audio(soundPath);
+      audio.volume = 0.45;
+      audio.preload = "auto";
+      uiSoundCache.set(type, audio);
+      audio.play().catch(() => {});
     } catch {
       // ignore ui sound failures
     }
@@ -436,16 +483,16 @@ export default function MenuMain({ user, setUser, onLogout }) {
     localStorage.setItem(activeServerStorageKey, activeServerId);
   }, [activeServerId, activeServerStorageKey, user]);
   useEffect(() => {
-    if (!activeServer?.isShared || !currentUserId) return;
+    if (!activeServer?.isShared || isDefaultServer || !currentUserId || !canManageServer) return;
 
     const timeoutId = window.setTimeout(() => {
       syncServerSnapshot(activeServer);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeServer, currentUserId]);
+  }, [activeServer, canManageServer, currentUserId, isDefaultServer]);
   useEffect(() => {
-    if (!activeServer?.id || !activeServer?.isShared) return;
+    if (!activeServer?.id || !activeServer?.isShared || isDefaultServer) return;
 
     refreshServerSnapshot(activeServer.id);
     const intervalId = window.setInterval(() => {
@@ -453,12 +500,12 @@ export default function MenuMain({ user, setUser, onLogout }) {
     }, 5000);
 
     return () => window.clearInterval(intervalId);
-  }, [activeServer?.id, activeServer?.isShared]);
+  }, [activeServer?.id, activeServer?.isShared, isDefaultServer]);
   useEffect(() => {
-    if (!showServerMembersPanel || !activeServer?.id || !activeServer?.isShared) return;
+    if (!showServerMembersPanel || !activeServer?.id || !activeServer?.isShared || isDefaultServer) return;
 
     refreshServerSnapshot(activeServer.id);
-  }, [showServerMembersPanel, activeServer?.id, activeServer?.isShared]);
+  }, [showServerMembersPanel, activeServer?.id, activeServer?.isShared, isDefaultServer]);
   useEffect(() => {
     if (!servers.length) {
       const fallback = createDefaultServer(user);
@@ -473,6 +520,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
       setCurrentTextChannelId(activeServer.textChannels[0].id);
     }
   }, [activeServer, currentTextChannelId]);
+  useEffect(() => {
+    cancelChannelRename();
+  }, [activeServerId]);
   useEffect(() => {
     if (!selectedStreamUserId) return;
     const isStillLive = liveUserIds.some((id) => String(id) === String(selectedStreamUserId));
@@ -598,10 +648,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
   };
   const updateServer = (updater) => setServers((previous) => previous.map((server) => (server.id === activeServerId ? updater(server) : server)));
   const syncServerSnapshot = async (serverSnapshot) => {
-    if (!serverSnapshot || !currentUserId) return;
+    if (!serverSnapshot || !currentUserId || !canManageServer) return;
 
     try {
-      await fetch(`${API_BASE_URL}/server-invites/server-sync`, {
+      const response = await authFetch(`${API_BASE_URL}/server-invites/server-sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -609,6 +659,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
           serverSnapshot,
         }),
       });
+
+      if (response.status === 403) {
+        return;
+      }
     } catch (error) {
       console.error("Ошибка синхронизации сервера:", error);
     }
@@ -617,22 +671,52 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!serverId) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/server-invites/server/${serverId}`, {
+      const response = await authFetch(`${API_BASE_URL}/server-invites/server/${serverId}`, {
         method: "GET",
         cache: "no-store",
       });
 
-      if (!response.ok) {
+      const snapshot = await parseApiResponse(response);
+      if (!response.ok || !snapshot) {
         return;
       }
 
-      const snapshot = await response.json();
       replaceServerSnapshot(snapshot);
     } catch (error) {
       console.error("Ошибка обновления сервера:", error);
     }
   };
   const openSettingsPanel = () => setOpenSettings(true);
+  const startChannelRename = (type, channel) => {
+    if (!canManageChannels || !channel?.id) return;
+
+    setChannelRenameState({
+      type,
+      channelId: channel.id,
+      value: channel.name || "",
+    });
+  };
+  const cancelChannelRename = () => setChannelRenameState(null);
+  const updateChannelRenameValue = (value) => {
+    setChannelRenameState((previous) => (previous ? { ...previous, value } : previous));
+  };
+  const submitChannelRename = () => {
+    if (!channelRenameState?.channelId) return;
+
+    const nextName = channelRenameState.value.trim();
+    if (!nextName) {
+      cancelChannelRename();
+      return;
+    }
+
+    if (channelRenameState.type === "voice") {
+      updateVoiceChannelName(channelRenameState.channelId, nextName);
+    } else {
+      updateTextChannelName(channelRenameState.channelId, nextName);
+    }
+
+    cancelChannelRename();
+  };
   const handleAddServer = () => {
     const server = createServer(`Сервер ${servers.length + 1}`, user);
     setServers((previous) => [...previous, server]);
@@ -644,7 +728,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!canManageServer) return;
     const serverToDelete = servers.find((server) => server.id === serverId);
     if (!serverToDelete) return;
-    if (serverToDelete.voiceChannels.some((channel) => channel.id === currentVoiceChannel)) await leaveVoiceChannel();
+    if (serverToDelete.voiceChannels.some((channel) => getScopedVoiceChannelId(serverToDelete.id, channel.id) === currentVoiceChannel)) await leaveVoiceChannel();
     const nextServers = servers.filter((server) => server.id !== serverId);
     const fallbackServers = nextServers.length ? nextServers : [createDefaultServer(user)];
     const nextActiveId = activeServerId === serverId ? fallbackServers[0].id : activeServerId;
@@ -664,7 +748,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const handleDeleteVoiceChannel = async (channelId) => {
     if (!canManageChannels) return;
     if (!activeServer) return;
-    if (currentVoiceChannel === channelId) await leaveVoiceChannel();
+    if (currentVoiceChannel === getScopedVoiceChannelId(activeServer.id, channelId)) await leaveVoiceChannel();
     updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.filter((channel) => channel.id !== channelId) }));
   };
   const addTextChannel = () => {
@@ -765,7 +849,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!serverId) return;
     setServers((previous) =>
       previous.map((server) =>
-        server.id === serverId ? { ...server, isShared: true } : server
+        server.id === serverId && !isPersonalDefaultServer(server, user) ? { ...server, isShared: true } : server
       )
     );
   };
@@ -841,11 +925,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!file || !user?.id) return;
     const formData = new FormData();
     formData.append("avatar", file);
-    formData.append("userId", user.id);
     try {
-      const response = await fetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
-      if (!response.ok) throw new Error("Не удалось загрузить аватар");
-      const data = await response.json();
+      const response = await authFetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
+      const data = await parseApiResponse(response);
+      if (!response.ok) throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить аватар."));
       setUser?.((previous) => ({ ...previous, avatarUrl: data.avatarUrl, avatar: data.avatarUrl }));
     } catch (error) {
       console.error("Ошибка смены аватара:", error);
@@ -948,7 +1031,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                     })}
                   </div>
 
-                  <ServerInvitesPanel activeServer={activeServer} user={user} canInvite={canInviteMembers} onImportServer={handleImportServer} onServerShared={markServerAsShared} />
+                  <ServerInvitesPanel activeServer={activeServer} user={user} canInvite={canInviteMembers && !isDefaultServer} onImportServer={handleImportServer} onServerShared={markServerAsShared} />
                 </div>
               )}
               {memberRoleMenu && (
@@ -1040,12 +1123,48 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <button type="button" className="channel-add-button" onClick={addTextChannel} disabled={!canManageChannels}>+</button>
             </div>
             <ul className="channel-list">
-              {(activeServer?.textChannels || []).map((channel) => (
-                <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""}`}>
-                  <button type="button" className="channel-item__button" onClick={() => setCurrentTextChannelId(channel.id)}>{getChannelDisplayName(channel.name, "text")}</button>
-                  <button type="button" className="channel-edit-button" onClick={openSettingsPanel} aria-label="Настройки канала"><img src="/icons/settings.png" alt="" /></button>
-                </li>
-              ))}
+              {(activeServer?.textChannels || []).map((channel) => {
+                const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
+
+                return (
+                  <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
+                    {isEditing ? (
+                      <input
+                        className="channel-inline-input"
+                        type="text"
+                        value={channelRenameState.value}
+                        autoFocus
+                        onChange={(event) => updateChannelRenameValue(event.target.value)}
+                        onBlur={submitChannelRename}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            submitChannelRename();
+                          }
+
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelChannelRename();
+                          }
+                        }}
+                      />
+                    ) : (
+                      <button type="button" className="channel-item__button" onClick={() => setCurrentTextChannelId(channel.id)}>
+                        {getChannelDisplayName(channel.name, "text")}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="channel-edit-button"
+                      onClick={() => startChannelRename("text", channel)}
+                      aria-label="Переименовать канал"
+                      disabled={!canManageChannels}
+                    >
+                      <img src="/icons/settings.png" alt="" />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
@@ -1054,7 +1173,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <h2>Голосовые каналы</h2>
               <button type="button" className="channel-add-button" onClick={addVoiceChannel} disabled={!canManageChannels}>+</button>
             </div>
-            <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={participantsMap} serverMembers={activeServer?.members || []} serverRoles={activeServer?.roles || []} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={openSettingsPanel} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} />
+            <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={activeVoiceParticipantsMap} serverId={activeServer?.id || ""} serverMembers={activeServer?.members || []} serverRoles={activeServer?.roles || []} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={startChannelRename} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""} editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""} onRenameValueChange={updateChannelRenameValue} onRenameSubmit={submitChannelRename} onRenameCancel={cancelChannelRename} />
           </div>
         </div>
 
@@ -1089,7 +1208,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 >
                   <img src="/icons/volumespeacker.png" alt="volume" className="icon__volumespeacker" />
                 </button>
-                <button type="button" className={`wrap__icon ${isSharingScreen ? "wrap__icon--danger" : ""}`} onClick={handleScreenShareAction}><img src={isSharingScreen ? "/icons/close.svg" : "/icons/camera.png"} alt={isSharingScreen ? "stop stream" : "start stream"} className="icon__camera" /></button>
+                <button type="button" className={`wrap__icon ${isSharingScreen ? "wrap__icon--danger" : ""}`} onClick={handleScreenShareAction}><img src={isSharingScreen ? "/icons/close.svg" : "/icons/monitor.svg"} alt={isSharingScreen ? "stop stream" : "start stream"} className="icon__camera" /></button>
               </div>
             </div>
 
@@ -1142,22 +1261,29 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <div className="settings-section">
             <div className="settings-section__header">
               <h4>Роли и доступ</h4>
-              <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
+              <div className="settings-section__actions">
+                <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
+                <button type="button" className="settings-inline-button" onClick={() => setRolesExpanded((previous) => !previous)}>
+                  {rolesExpanded ? "Свернуть" : "Развернуть"}
+                </button>
+              </div>
             </div>
-            <div className="settings-list">
-              {(activeServer?.roles || []).map((role) => (
-                <div key={role.id} className="settings-list__row settings-list__row--stacked">
-                  <div className="settings-role-meta">
-                    <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
-                    <span className="settings-role-description">
-                      {(role.permissions || []).length
-                        ? role.permissions.map((permission) => ROLE_PERMISSION_LABELS[permission] || permission).join(", ")
-                        : "Базовый доступ"}
-                    </span>
+            {rolesExpanded && (
+              <div className="settings-list">
+                {(activeServer?.roles || []).map((role) => (
+                  <div key={role.id} className="settings-list__row settings-list__row--stacked">
+                    <div className="settings-role-meta">
+                      <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
+                      <span className="settings-role-description">
+                        {(role.permissions || []).length
+                          ? role.permissions.map((permission) => ROLE_PERMISSION_LABELS[permission] || permission).join(", ")
+                          : "Базовый доступ"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
             <div className="settings-helper">
               Иерархия ролей: owner {">"} admin {">"} moderator {">"} member.
             </div>
@@ -1166,7 +1292,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <ServerInvitesPanel
             activeServer={activeServer}
             user={user}
-            canInvite={canInviteMembers}
+            canInvite={canInviteMembers && !isDefaultServer}
             onImportServer={handleImportServer}
             onServerShared={markServerAsShared}
           />
@@ -1193,7 +1319,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                             canDeafenMember ? "deafen" : null,
                           ]
                             .filter(Boolean)
-                            .join(" • ")}
+                            .join(" | ")}
                         </span>
                       )}
                     </div>
@@ -1232,41 +1358,6 @@ export default function MenuMain({ user, setUser, onLogout }) {
             </div>
           </div>
 
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <h4>Текстовые каналы</h4>
-              <button type="button" className="settings-inline-button" onClick={addTextChannel}>Добавить</button>
-            </div>
-            <div className="settings-list">
-              {(activeServer?.textChannels || []).map((channel) => (
-                <div key={channel.id} className="settings-list__row">
-                  <input className="settings-input" type="text" value={channel.name} onChange={(event) => updateTextChannelName(channel.id, event.target.value)} />
-                  <div className="settings-list__actions">
-                    <button type="button" className="settings-inline-button" onClick={() => setCurrentTextChannelId(channel.id)}>Открыть</button>
-                    <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteTextChannel(channel.id)}>Удалить</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <h4>Голосовые каналы</h4>
-              <button type="button" className="settings-inline-button" onClick={addVoiceChannel}>Добавить</button>
-            </div>
-            <div className="settings-list">
-              {(activeServer?.voiceChannels || []).map((channel) => (
-                <div key={channel.id} className="settings-list__row">
-                  <input className="settings-input" type="text" value={channel.name} onChange={(event) => updateVoiceChannelName(channel.id, event.target.value)} />
-                  <div className="settings-list__actions">
-                    <button type="button" className="settings-inline-button" onClick={() => joinVoiceChannel(channel)}>Войти</button>
-                    <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteVoiceChannel(channel.id)}>Удалить</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
         </div>
       )}
@@ -1282,7 +1373,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <span>Разрешение</span>
               <select value={resolution} onChange={(event) => setResolution(event.target.value)}>
                 {STREAM_RESOLUTION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{`${option.label} • ${option.description}`}</option>
+                  <option key={option.value} value={option.value}>{`${option.label} | ${option.description}`}</option>
                 ))}
               </select>
             </label>
@@ -1299,7 +1390,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <span>Передавать звук экрана, если система это поддерживает</span>
             </label>
             <div className="stream-modal__hint">
-              {`${selectedResolutionOption.label} • ${selectedResolutionOption.description} • ${fps} FPS`}
+              {`${selectedResolutionOption.label} | ${selectedResolutionOption.description} | ${fps} FPS`}
             </div>
             <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isSharingScreen} disabled={!currentVoiceChannel} />
             <div className="stream-modal__status">{activeStreamCount > 0 ? `Активных трансляций: ${activeStreamCount}` : "Сейчас трансляций нет"}</div>
@@ -1310,4 +1401,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
     </div>
   );
 }
+
+
+
 

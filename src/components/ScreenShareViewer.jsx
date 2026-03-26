@@ -16,21 +16,20 @@ export default function ScreenShareViewer({
       return;
     }
 
-    videoRef.current.srcObject = stream || null;
-    videoRef.current.src = stream ? "" : videoSrc || "";
-    videoRef.current.muted = true;
+    const mediaElement = videoRef.current;
+    mediaElement.srcObject = stream || null;
+    mediaElement.src = stream ? "" : videoSrc || "";
+    mediaElement.muted = true;
 
     if (stream) {
-      videoRef.current.play().catch((error) => console.error("Ошибка запуска просмотра трансляции:", error));
+      mediaElement.play().catch((error) => console.error("Ошибка запуска просмотра трансляции:", error));
     } else if (videoSrc) {
-      videoRef.current.play().catch((error) => console.error("Ошибка запуска видео трансляции:", error));
+      mediaElement.play().catch((error) => console.error("Ошибка запуска видео трансляции:", error));
     }
 
     return () => {
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = "";
-      }
+      mediaElement.srcObject = null;
+      mediaElement.src = "";
     };
   }, [stream, videoSrc]);
 
@@ -48,18 +47,18 @@ export default function ScreenShareViewer({
       const liveEdge = mediaElement.buffered.end(mediaElement.buffered.length - 1);
       const lag = liveEdge - mediaElement.currentTime;
 
-      if (lag > 1.8) {
-        mediaElement.currentTime = Math.max(0, liveEdge - 0.18);
+      if (lag > 1.2) {
+        mediaElement.currentTime = Math.max(0, liveEdge - 0.12);
         mediaElement.playbackRate = 1;
         return;
       }
 
-      if (lag > 0.9) {
-        mediaElement.playbackRate = 1.08;
+      if (lag > 0.55) {
+        mediaElement.playbackRate = 1.06;
         return;
       }
 
-      if (lag > 0.45) {
+      if (lag > 0.25) {
         mediaElement.playbackRate = 1.03;
         return;
       }
@@ -67,7 +66,7 @@ export default function ScreenShareViewer({
       mediaElement.playbackRate = 1;
     };
 
-    const intervalId = window.setInterval(syncToLiveEdge, 350);
+    const intervalId = window.setInterval(syncToLiveEdge, 250);
     syncToLiveEdge();
 
     return () => {
@@ -106,9 +105,7 @@ export default function ScreenShareViewer({
       <div className="stream-viewer__body">
         {hasVideo ? (
           <>
-            {stream ? (
-              <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline />
-            ) : videoSrc ? (
+            {stream || videoSrc ? (
               <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline />
             ) : (
               <img src={imageSrc} alt={title} className="stream-viewer__image" />

@@ -1,14 +1,28 @@
 using BackNoDiscord;
+using BackNoDiscord.Security;
+using BackNoDiscord.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using YourApp.Models;
 
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class VoiceHub : Hub
 {
-    private readonly ChannelService _channels;
+    private const int MaxChannelNameLength = 160;
+    private const int MaxMimeTypeLength = 64;
+    private const int MaxSdpLength = 128_000;
+    private const int MaxIceCandidateLength = 8_000;
+    private const int MaxScreenFrameBytes = 512 * 1024;
+    private const int MaxScreenChunkBytes = 3 * 1024 * 1024;
 
-    public VoiceHub(ChannelService channels)
+    private readonly ChannelService _channels;
+    private readonly ServerStateService _serverState;
+
+    public VoiceHub(ChannelService channels, ServerStateService serverState)
     {
         _channels = channels;
+        _serverState = serverState;
     }
 
     public override async Task OnConnectedAsync()
@@ -20,67 +34,17 @@ public class VoiceHub : Hub
 
     public async Task Register(string userId, string name, string avatar)
     {
-        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(name))
+        if (!TryBuildCurrentParticipant(avatar, out var participant))
         {
             return;
         }
 
-        _channels.RegisterConnection(Context.ConnectionId, new Participant
-        {
-            UserId = userId,
-            Name = name,
-            Avatar = avatar ?? string.Empty
-        });
+        _channels.RegisterConnection(Context.ConnectionId, participant);
 
         await Clients.Caller.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
 
-        if (_channels.TryGetParticipant(userId, out var participant))
-        {
-            await Clients.Caller.SendAsync("voice:self-state", new VoiceStatePayload
-            {
-                UserId = participant.UserId,
-                IsMicMuted = participant.IsMicMuted,
-                IsDeafened = participant.IsDeafened,
-                IsMicForced = participant.IsMicForced,
-                IsDeafenedForced = participant.IsDeafenedForced,
-            });
-        }
-    }
-
-    public async Task<JoinChannelResponse> JoinChannel(string channelName, string userId, string name, string avatar)
-    {
-        if (string.IsNullOrWhiteSpace(channelName) ||
-            string.IsNullOrWhiteSpace(userId) ||
-            string.IsNullOrWhiteSpace(name))
-        {
-            throw new HubException("channelName, userId and name are required");
-        }
-
-        var previousChannel = _channels.GetChannelForUser(userId);
-        if (!string.IsNullOrWhiteSpace(previousChannel))
-        {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, previousChannel);
-        }
-
-        var participant = new Participant
-        {
-            UserId = userId,
-            Name = name,
-            Avatar = avatar ?? string.Empty
-        };
-
-        var existingParticipants = _channels
-            .GetParticipantsInChannel(channelName)
-            .Where(item => !string.Equals(item.UserId, userId, StringComparison.Ordinal))
-            .ToList();
-
-        _channels.SetUserChannel(channelName, participant, Context.ConnectionId);
-
-        await Groups.AddToGroupAsync(Context.ConnectionId, channelName);
-        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
-        await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
-        if (_channels.TryGetParticipant(userId, out var updatedParticipant))
+        if (_channels.TryGetParticipant(participant.UserId, out var updatedParticipant))
         {
             await Clients.Caller.SendAsync("voice:self-state", new VoiceStatePayload
             {
@@ -88,38 +52,86 @@ public class VoiceHub : Hub
                 IsMicMuted = updatedParticipant.IsMicMuted,
                 IsDeafened = updatedParticipant.IsDeafened,
                 IsMicForced = updatedParticipant.IsMicForced,
-                IsDeafenedForced = updatedParticipant.IsDeafenedForced,
+                IsDeafenedForced = updatedParticipant.IsDeafenedForced
+            });
+        }
+    }
+
+    public async Task<JoinChannelResponse> JoinChannel(string channelName, string userId, string name, string avatar)
+    {
+        if (!TryBuildCurrentParticipant(avatar, out var participant))
+        {
+            throw new HubException("Unauthorized");
+        }
+
+        var normalizedChannelName = UploadPolicies.TrimToLength(channelName, MaxChannelNameLength);
+        if (string.IsNullOrWhiteSpace(normalizedChannelName))
+        {
+            throw new HubException("channelName is required");
+        }
+
+        var previousChannel = _channels.GetChannelForUser(participant.UserId);
+        if (!string.IsNullOrWhiteSpace(previousChannel))
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, previousChannel);
+        }
+
+        var existingParticipants = _channels
+            .GetParticipantsInChannel(normalizedChannelName)
+            .Where(item => !string.Equals(item.UserId, participant.UserId, StringComparison.Ordinal))
+            .ToList();
+
+        _channels.SetUserChannel(normalizedChannelName, participant, Context.ConnectionId);
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, normalizedChannelName);
+        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+
+        if (_channels.TryGetParticipant(participant.UserId, out var updatedParticipant))
+        {
+            await Clients.Caller.SendAsync("voice:self-state", new VoiceStatePayload
+            {
+                UserId = updatedParticipant.UserId,
+                IsMicMuted = updatedParticipant.IsMicMuted,
+                IsDeafened = updatedParticipant.IsDeafened,
+                IsMicForced = updatedParticipant.IsMicForced,
+                IsDeafenedForced = updatedParticipant.IsDeafenedForced
             });
         }
 
         return new JoinChannelResponse
         {
-            Channel = channelName,
+            Channel = normalizedChannelName,
             Participants = existingParticipants
         };
     }
 
     public async Task LeaveChannel(string userId)
     {
-        if (string.IsNullOrWhiteSpace(userId))
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
             return;
         }
 
-        var currentChannel = _channels.GetChannelForUser(userId);
+        var currentChannel = _channels.GetChannelForUser(currentUser.UserId);
         if (!string.IsNullOrWhiteSpace(currentChannel))
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, currentChannel);
         }
 
-        _channels.RemoveUser(userId);
+        _channels.RemoveUser(currentUser.UserId);
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
     }
 
     public async Task UpdateScreenShareStatus(string userId, bool isSharing)
     {
-        _channels.SetScreenShareState(userId, isSharing);
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+        {
+            return;
+        }
+
+        _channels.SetScreenShareState(currentUser.UserId, isSharing);
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
     }
@@ -133,12 +145,34 @@ public class VoiceHub : Hub
         }
 
         var isSelfUpdate = string.Equals(actor.UserId, targetUserId, StringComparison.Ordinal);
+        if (!isSelfUpdate)
+        {
+            var actorChannel = _channels.GetChannelForUser(actor.UserId);
+            if (string.IsNullOrWhiteSpace(actorChannel))
+            {
+                return;
+            }
+
+            var serverSnapshot = ResolveServerSnapshot(actorChannel);
+            if (serverSnapshot is null)
+            {
+                return;
+            }
+
+            var permission = isDeafened ? "deafen_members" : "mute_members";
+            if (!ServerPermissionEvaluator.CanManageVoiceState(serverSnapshot, actor.UserId, targetUserId, permission))
+            {
+                return;
+            }
+        }
+
         var updatedParticipant = _channels.SetVoiceState(
             targetUserId,
             isMicMuted,
             isDeafened,
             applyForceLocks: !isSelfUpdate,
             respectForceLocks: isSelfUpdate);
+
         if (updatedParticipant is null)
         {
             return;
@@ -154,7 +188,7 @@ public class VoiceHub : Hub
                 IsMicMuted = updatedParticipant.IsMicMuted,
                 IsDeafened = updatedParticipant.IsDeafened,
                 IsMicForced = updatedParticipant.IsMicForced,
-                IsDeafenedForced = updatedParticipant.IsDeafenedForced,
+                IsDeafenedForced = updatedParticipant.IsDeafenedForced
             });
         }
     }
@@ -165,7 +199,8 @@ public class VoiceHub : Hub
             !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
             !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var requester) ||
             !_channels.TryGetParticipant(targetUserId, out var targetParticipant) ||
-            !targetParticipant.IsScreenSharing)
+            !targetParticipant.IsScreenSharing ||
+            !AreUsersInSameChannel(requester.UserId, targetUserId))
         {
             return;
         }
@@ -174,24 +209,23 @@ public class VoiceHub : Hub
         {
             FromUserId = requester.UserId,
             FromName = requester.Name,
-            FromAvatar = requester.Avatar,
+            FromAvatar = requester.Avatar
         });
     }
 
     public async Task SendScreenShareFrame(string userId, byte[] frameBytes, string mimeType, int width, int height)
     {
-        if (string.IsNullOrWhiteSpace(userId) ||
-            frameBytes is null ||
+        if (frameBytes is null ||
             frameBytes.Length == 0 ||
+            frameBytes.Length > MaxScreenFrameBytes ||
             !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender) ||
-            !string.Equals(sender.UserId, userId, StringComparison.Ordinal) ||
-            !_channels.TryGetParticipant(userId, out var participant) ||
+            !_channels.TryGetParticipant(sender.UserId, out var participant) ||
             !participant.IsScreenSharing)
         {
             return;
         }
 
-        var channelName = _channels.GetChannelForUser(userId);
+        var channelName = _channels.GetChannelForUser(sender.UserId);
         if (string.IsNullOrWhiteSpace(channelName))
         {
             return;
@@ -203,7 +237,7 @@ public class VoiceHub : Hub
             FromName = sender.Name,
             FromAvatar = sender.Avatar,
             FrameBytes = frameBytes,
-            MimeType = string.IsNullOrWhiteSpace(mimeType) ? "image/webp" : mimeType,
+            MimeType = NormalizeMimeType(mimeType, "image/webp"),
             Width = width,
             Height = height
         });
@@ -211,18 +245,17 @@ public class VoiceHub : Hub
 
     public async Task SendScreenShareChunk(string userId, byte[] chunkBytes, string mimeType, bool hasAudio = false)
     {
-        if (string.IsNullOrWhiteSpace(userId) ||
-            chunkBytes is null ||
+        if (chunkBytes is null ||
             chunkBytes.Length == 0 ||
+            chunkBytes.Length > MaxScreenChunkBytes ||
             !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender) ||
-            !string.Equals(sender.UserId, userId, StringComparison.Ordinal) ||
-            !_channels.TryGetParticipant(userId, out var participant) ||
+            !_channels.TryGetParticipant(sender.UserId, out var participant) ||
             !participant.IsScreenSharing)
         {
             return;
         }
 
-        var channelName = _channels.GetChannelForUser(userId);
+        var channelName = _channels.GetChannelForUser(sender.UserId);
         if (string.IsNullOrWhiteSpace(channelName))
         {
             return;
@@ -234,15 +267,18 @@ public class VoiceHub : Hub
             FromName = sender.Name,
             FromAvatar = sender.Avatar,
             ChunkBytes = chunkBytes,
-            MimeType = string.IsNullOrWhiteSpace(mimeType) ? "video/webm" : mimeType,
+            MimeType = NormalizeMimeType(mimeType, "video/webm"),
             HasAudio = hasAudio
         });
     }
 
     public async Task SendOffer(string targetUserId, string sdp)
     {
-        if (!_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
-            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender))
+        if (string.IsNullOrWhiteSpace(sdp) ||
+            sdp.Length > MaxSdpLength ||
+            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
+            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender) ||
+            !AreUsersInSameChannel(sender.UserId, targetUserId))
         {
             return;
         }
@@ -258,8 +294,11 @@ public class VoiceHub : Hub
 
     public async Task SendAnswer(string targetUserId, string sdp)
     {
-        if (!_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
-            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender))
+        if (string.IsNullOrWhiteSpace(sdp) ||
+            sdp.Length > MaxSdpLength ||
+            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
+            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender) ||
+            !AreUsersInSameChannel(sender.UserId, targetUserId))
         {
             return;
         }
@@ -275,8 +314,11 @@ public class VoiceHub : Hub
 
     public async Task SendIceCandidate(string targetUserId, string candidate)
     {
-        if (!_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
-            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender))
+        if (string.IsNullOrWhiteSpace(candidate) ||
+            candidate.Length > MaxIceCandidateLength ||
+            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId) ||
+            !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var sender) ||
+            !AreUsersInSameChannel(sender.UserId, targetUserId))
         {
             return;
         }
@@ -300,6 +342,57 @@ public class VoiceHub : Hub
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
         await base.OnDisconnectedAsync(exception);
+    }
+
+    private bool TryBuildCurrentParticipant(string avatar, out Participant participant)
+    {
+        participant = new Participant();
+
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+        {
+            return false;
+        }
+
+        participant = new Participant
+        {
+            UserId = currentUser.UserId,
+            Name = currentUser.DisplayName,
+            Avatar = UploadPolicies.SanitizeRelativeAssetUrl(avatar, "/avatars/")
+        };
+
+        return true;
+    }
+
+    private bool AreUsersInSameChannel(string firstUserId, string secondUserId)
+    {
+        var firstChannel = _channels.GetChannelForUser(firstUserId);
+        var secondChannel = _channels.GetChannelForUser(secondUserId);
+
+        return !string.IsNullOrWhiteSpace(firstChannel) &&
+               string.Equals(firstChannel, secondChannel, StringComparison.Ordinal);
+    }
+
+    private ServerSnapshot? ResolveServerSnapshot(string channelName)
+    {
+        if (string.IsNullOrWhiteSpace(channelName))
+        {
+            return null;
+        }
+
+        var separatorIndex = channelName.IndexOf("::", StringComparison.Ordinal);
+        if (separatorIndex <= 0)
+        {
+            return null;
+        }
+
+        var serverId = channelName[..separatorIndex];
+        return _serverState.GetSnapshot(serverId);
+    }
+
+    private static string NormalizeMimeType(string mimeType, string fallback)
+    {
+        var sanitized = UploadPolicies.TrimToLength(mimeType, MaxMimeTypeLength);
+        return string.IsNullOrWhiteSpace(sanitized) ? fallback : sanitized;
     }
 }
 

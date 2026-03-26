@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/TextChat.css";
 import { API_URL } from "../config/runtime";
+import { authFetch } from "../utils/auth";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
-const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 32 * 1024 * 1024;
 
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
 const getScopedChatChannelId = (serverId, channelId) =>
@@ -48,7 +49,9 @@ export default function TextChat({ serverId, channelId, user }) {
 
   useEffect(() => {
     const textarea = textareaRef.current;
-    if (!textarea) return;
+    if (!textarea) {
+      return;
+    }
 
     const minHeight = 48;
     const maxHeight = 140;
@@ -59,8 +62,8 @@ export default function TextChat({ serverId, channelId, user }) {
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [message]);
 
-  function formatTimestamp(ts) {
-    const date = new Date(ts);
+  function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
     const now = new Date();
     const isToday =
       date.getDate() === now.getDate() &&
@@ -73,27 +76,35 @@ export default function TextChat({ serverId, channelId, user }) {
     const hours = date.getHours().toString().padStart(2, "0");
     const minutes = date.getMinutes().toString().padStart(2, "0");
 
-    if (isToday) return `Сегодня в ${hours}:${minutes}`;
-    if (isYesterday) return `Вчера в ${hours}:${minutes}`;
+    if (isToday) {
+      return `Сегодня в ${hours}:${minutes}`;
+    }
+
+    if (isYesterday) {
+      return `Вчера в ${hours}:${minutes}`;
+    }
+
     return `${date.getDate()}.${(date.getMonth() + 1).toString().padStart(2, "0")}.${date.getFullYear()} в ${hours}:${minutes}`;
   }
 
   useEffect(() => {
-    if (!scopedChannelId) return;
+    if (!scopedChannelId) {
+      return undefined;
+    }
 
     let isJoined = false;
     const handleReceiveMessage = (nextMessage) => {
-      setMessagesByChannel((prev) => {
-        const channelMessages = prev[scopedChannelId] || [];
-        return { ...prev, [scopedChannelId]: [...channelMessages, nextMessage] };
+      setMessagesByChannel((previous) => {
+        const channelMessages = previous[scopedChannelId] || [];
+        return { ...previous, [scopedChannelId]: [...channelMessages, nextMessage] };
       });
     };
 
     const handleMessageDeleted = (deletedId) => {
-      setMessagesByChannel((prev) => {
-        const channelMessages = prev[scopedChannelId] || [];
+      setMessagesByChannel((previous) => {
+        const channelMessages = previous[scopedChannelId] || [];
         return {
-          ...prev,
+          ...previous,
           [scopedChannelId]: channelMessages.filter((item) => item.id !== deletedId),
         };
       });
@@ -111,14 +122,15 @@ export default function TextChat({ serverId, channelId, user }) {
 
         try {
           const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
-          setMessagesByChannel((prev) => ({ ...prev, [scopedChannelId]: initialMessages }));
+          setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: initialMessages }));
           isJoined = true;
         } catch (joinError) {
           console.error("JoinChannel error:", joinError);
-          setMessagesByChannel((prev) => ({ ...prev, [scopedChannelId]: prev[scopedChannelId] || [] }));
+          setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: previous[scopedChannelId] || [] }));
         }
       } catch (err) {
         console.error("SignalR connection error:", err);
+        setErrorMessage(err.message || "Не удалось подключить чат.");
       }
     };
 
@@ -128,6 +140,7 @@ export default function TextChat({ serverId, channelId, user }) {
       if (isJoined) {
         chatConnection.invoke("LeaveChannel", scopedChannelId).catch(console.error);
       }
+
       chatConnection.off("ReceiveMessage", handleReceiveMessage);
       chatConnection.off("MessageDeleted", handleMessageDeleted);
     };
@@ -136,9 +149,8 @@ export default function TextChat({ serverId, channelId, user }) {
   const uploadAttachment = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("userId", String(user?.id || user?.email || "guest"));
 
-    const response = await fetch(`${API_URL}/api/chat-files/upload`, {
+    const response = await authFetch(`${API_URL}/api/chat-files/upload`, {
       method: "POST",
       body: formData,
     });
@@ -162,7 +174,9 @@ export default function TextChat({ serverId, channelId, user }) {
   };
 
   const send = async () => {
-    if (!message.trim() && !selectedFile) return;
+    if (!message.trim() && !selectedFile) {
+      return;
+    }
 
     const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 
@@ -206,7 +220,7 @@ export default function TextChat({ serverId, channelId, user }) {
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setErrorMessage("Файл должен быть не больше 100 МБ.");
+      setErrorMessage("Файл должен быть не больше 32 МБ.");
       return;
     }
 
@@ -269,7 +283,7 @@ export default function TextChat({ serverId, channelId, user }) {
             )}
           </div>
         ))}
-        <div ref={messagesEndRef}></div>
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="input-area">
@@ -292,11 +306,11 @@ export default function TextChat({ serverId, channelId, user }) {
             <textarea
               ref={textareaRef}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(event) => setMessage(event.target.value)}
               placeholder="Введите сообщение..."
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
                   send();
                 }
               }}

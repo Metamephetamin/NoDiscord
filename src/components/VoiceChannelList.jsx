@@ -1,15 +1,32 @@
 import "../css/ListChannels.css";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
+const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
+
+const getVoiceDisplayName = (name) => {
+  const normalized = String(name || "").trim();
+  if (!normalized) {
+    return "Unknown";
+  }
+
+  return normalized.split(/\s+/)[0] || normalized;
+};
+
 const VoiceChannelList = ({
   channels,
   activeChannelId,
   participantsMap,
+  serverId = "",
   serverMembers = [],
   serverRoles = [],
   onJoinChannel,
   onLeaveChannel,
   onRenameChannel,
+  editingChannelId = "",
+  editingChannelValue = "",
+  onRenameValueChange,
+  onRenameSubmit,
+  onRenameCancel,
   liveUserIds = [],
   speakingUserIds = [],
   watchedStreamUserId = null,
@@ -33,7 +50,7 @@ const VoiceChannelList = ({
 
     return {
       userId,
-      name: memberNameByUserId.get(String(userId)) || participant.name || participant.Name || "Unknown",
+      name: getVoiceDisplayName(memberNameByUserId.get(String(userId)) || participant.name || participant.Name || "Unknown"),
       avatar: participant.avatar || participant.Avatar || DEFAULT_AVATAR,
       isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
       isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
@@ -45,36 +62,52 @@ const VoiceChannelList = ({
   return (
     <ul className="voice-channel-list">
       {channels.map((channel) => {
+        const runtimeId = getChannelRuntimeId(serverId, channel.id);
         const participants = (participantsMap?.[channel.id] || []).map(normalizeParticipant);
-        const isActive = activeChannelId === channel.id;
+        const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
+        const isEditing = editingChannelId === channel.id;
 
         return (
-          <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""}`}>
+          <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""}`}>
             <div className="voice-channel__row">
-              <button
-                type="button"
-                className="voice-channel__button"
-                onClick={() => onJoinChannel?.(channel)}
-              >
-                <span className="voice-channel__title">{channel.name}</span>
-              </button>
+              {isEditing ? (
+                <input
+                  className="channel-inline-input"
+                  type="text"
+                  value={editingChannelValue}
+                  autoFocus
+                  onChange={(event) => onRenameValueChange?.(event.target.value)}
+                  onBlur={() => onRenameSubmit?.()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      onRenameSubmit?.();
+                    }
+
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      onRenameCancel?.();
+                    }
+                  }}
+                />
+              ) : (
+                <button type="button" className="voice-channel__button" onClick={() => onJoinChannel?.(channel)}>
+                  <span className="voice-channel__title">{channel.name}</span>
+                </button>
+              )}
 
               <button
                 type="button"
                 className="channel-edit-button"
-                onClick={() => onRenameChannel?.(channel.id)}
+                onClick={() => onRenameChannel?.("voice", channel)}
                 disabled={!canManageChannels}
-                aria-label="Настройки канала"
+                aria-label="Переименовать канал"
               >
                 <img src="/icons/settings.png" alt="" />
               </button>
 
               {isActive && (
-                <button
-                  type="button"
-                  className="voice-channel__leave"
-                  onClick={() => onLeaveChannel?.()}
-                >
+                <button type="button" className="voice-channel__leave" onClick={() => onLeaveChannel?.()}>
                   Выйти
                 </button>
               )}
@@ -87,10 +120,7 @@ const VoiceChannelList = ({
                     key={participant.userId}
                     className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}
                   >
-                    <img
-                      src={resolveMediaUrl(participant.avatar, DEFAULT_AVATAR)}
-                      alt={participant.name}
-                    />
+                    <img src={resolveMediaUrl(participant.avatar, DEFAULT_AVATAR)} alt={participant.name} />
                     <span className="participant-item__name">{participant.name}</span>
                     <span
                       className="participant-item__role-dot"

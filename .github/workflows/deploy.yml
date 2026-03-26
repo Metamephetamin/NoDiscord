@@ -33,8 +33,23 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Lint frontend
+        run: npm run lint:ci
+
+      - name: Check encoding
+        run: npm run check:encoding
+
       - name: Build frontend
         run: npm run build:frontend
+
+      - name: Restore backend
+        run: dotnet restore BackNoDiscord/BackNoDiscord.sln
+
+      - name: Build backend solution
+        run: dotnet build BackNoDiscord/BackNoDiscord.sln --configuration Release --no-restore
+
+      - name: Run backend tests
+        run: dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --no-build --verbosity normal
 
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --output ./artifacts/backend

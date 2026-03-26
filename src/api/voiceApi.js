@@ -1,12 +1,12 @@
 import { API_BASE_URL } from "../config/runtime";
+import { authFetch } from "../utils/auth";
 
 export const joinVoiceChannel = async (data) => {
-  const response = await fetch(`${API_BASE_URL}/voice/join`, {
+  const response = await authFetch(`${API_BASE_URL}/voice/join`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -16,12 +16,11 @@ export const joinVoiceChannel = async (data) => {
 };
 
 export const leaveVoiceChannel = async (userId) => {
-  const response = await fetch(`${API_BASE_URL}/voice/leave`, {
+  const response = await authFetch(`${API_BASE_URL}/voice/leave`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    credentials: "include",
     body: JSON.stringify({ userId }),
   });
 

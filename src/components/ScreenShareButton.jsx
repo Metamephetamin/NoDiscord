@@ -10,7 +10,9 @@ export default function ScreenShareButton({
   const [isStopping, setIsStopping] = useState(false);
 
   const startScreenShare = async () => {
-    if (!onStart) return;
+    if (!onStart) {
+      return;
+    }
 
     setIsStarting(true);
 
@@ -24,7 +26,9 @@ export default function ScreenShareButton({
   };
 
   const stopScreenShare = async () => {
-    if (!onStop) return;
+    if (!onStop) {
+      return;
+    }
 
     setIsStopping(true);
 

@@ -1,10 +1,14 @@
+using BackNoDiscord.Security;
 using BackNoDiscord.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BackNoDiscord.Controllers;
 
 [ApiController]
 [Route("api/server-invites")]
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ServerInvitesController : ControllerBase
 {
     private readonly ServerInviteService _invites;
@@ -19,13 +23,30 @@ public class ServerInvitesController : ControllerBase
     [HttpPost("create")]
     public IActionResult CreateInvite([FromBody] CreateServerInviteRequest request)
     {
-        if (request?.ServerSnapshot is null || string.IsNullOrWhiteSpace(request.OwnerUserId))
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
-            return BadRequest(new { message = "Owner user id and server snapshot are required." });
+            return Unauthorized();
         }
 
-        var syncedSnapshot = _serverState.UpsertSnapshot(request.ServerSnapshot, request.OwnerUserId);
-        var result = _invites.CreateInvite(request.OwnerUserId, syncedSnapshot);
+        if (request?.ServerSnapshot is null)
+        {
+            return BadRequest(new { message = "Server snapshot is required." });
+        }
+
+        if (IsReservedPersonalServer(request.ServerSnapshot.Id))
+        {
+            return BadRequest(new { message = "Default personal servers cannot be shared." });
+        }
+
+        var existingSnapshot = _serverState.GetSnapshot(request.ServerSnapshot.Id);
+        if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
+        {
+            return Forbid();
+        }
+
+        var syncedSnapshot = _serverState.UpsertSnapshot(request.ServerSnapshot, currentUser.UserId);
+        var result = _invites.CreateInvite(currentUser.UserId, syncedSnapshot);
+
         return Ok(new
         {
             result.InviteCode,
@@ -37,17 +58,26 @@ public class ServerInvitesController : ControllerBase
     [HttpPost("redeem")]
     public IActionResult RedeemInvite([FromBody] RedeemServerInviteRequest request)
     {
-        if (request is null ||
-            string.IsNullOrWhiteSpace(request.InviteCode) ||
-            string.IsNullOrWhiteSpace(request.UserId))
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
-            return BadRequest(new { message = "Invite code and user id are required." });
+            return Unauthorized();
         }
+
+        if (request is null || string.IsNullOrWhiteSpace(request.InviteCode))
+        {
+            return BadRequest(new { message = "Invite code is required." });
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(request.Name)
+            ? currentUser.DisplayName
+            : UploadPolicies.TrimToLength(request.Name, 80);
+        var avatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(request.Avatar, "/avatars/");
 
         try
         {
-            var result = _invites.RedeemInvite(request.InviteCode, request.UserId, request.Name ?? "User", request.Avatar ?? string.Empty);
-            var syncedSnapshot = _serverState.AddMember(result.Snapshot.Id, request.UserId, request.Name ?? "User", request.Avatar ?? string.Empty);
+            var result = _invites.RedeemInvite(request.InviteCode, currentUser.UserId, displayName, avatarUrl);
+            var syncedSnapshot = _serverState.AddMember(result.Snapshot.Id, currentUser.UserId, displayName, avatarUrl);
+
             return Ok(new
             {
                 result.InviteCode,
@@ -67,7 +97,17 @@ public class ServerInvitesController : ControllerBase
     [HttpGet("server/{serverId}")]
     public IActionResult GetServerSnapshot([FromRoute] string serverId)
     {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
         var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is not null && !ServerPermissionEvaluator.CanReadServer(snapshot, currentUser.UserId))
+        {
+            return Forbid();
+        }
+
         return snapshot is null
             ? NotFound(new { message = "Server snapshot not found." })
             : Ok(snapshot);
@@ -76,13 +116,35 @@ public class ServerInvitesController : ControllerBase
     [HttpPost("server-sync")]
     public IActionResult SyncServerSnapshot([FromBody] SyncServerSnapshotRequest request)
     {
-        if (request?.ServerSnapshot is null || string.IsNullOrWhiteSpace(request.ActorUserId))
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
-            return BadRequest(new { message = "Actor user id and server snapshot are required." });
+            return Unauthorized();
         }
 
-        var snapshot = _serverState.UpsertSnapshot(request.ServerSnapshot, request.ActorUserId);
+        if (request?.ServerSnapshot is null)
+        {
+            return BadRequest(new { message = "Server snapshot is required." });
+        }
+
+        if (IsReservedPersonalServer(request.ServerSnapshot.Id))
+        {
+            return BadRequest(new { message = "Default personal servers cannot be synced as shared servers." });
+        }
+
+        var existingSnapshot = _serverState.GetSnapshot(request.ServerSnapshot.Id);
+        if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
+        {
+            return Forbid();
+        }
+
+        var snapshot = _serverState.UpsertSnapshot(request.ServerSnapshot, currentUser.UserId);
         return Ok(snapshot);
+    }
+
+    private static bool IsReservedPersonalServer(string? serverId)
+    {
+        return !string.IsNullOrWhiteSpace(serverId)
+               && serverId.StartsWith("server-main", StringComparison.OrdinalIgnoreCase);
     }
 }
 

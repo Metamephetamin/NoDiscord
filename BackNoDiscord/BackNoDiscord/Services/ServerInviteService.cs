@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace BackNoDiscord.Services;
@@ -134,12 +135,11 @@ public class ServerInviteService
     private static string GenerateUniqueCode(List<ServerInviteRecord> invites)
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        var random = new Random();
 
         while (true)
         {
             var code = new string(Enumerable.Range(0, 8)
-                .Select(_ => alphabet[random.Next(alphabet.Length)])
+                .Select(_ => alphabet[RandomNumberGenerator.GetInt32(alphabet.Length)])
                 .ToArray());
 
             if (!invites.Any(item => string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase)))

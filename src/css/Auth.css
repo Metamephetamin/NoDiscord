@@ -206,11 +206,36 @@
   min-height: 48px;
   border: 0;
   border-radius: 16px;
-  background: linear-gradient(135deg, #5b7cff, #60d4bf);
-  color: #08111f;
+  background: linear-gradient(135deg, #6f2cff 0%, #b13ef6 46%, #ff4db8 100%);
+  color: #ffffff;
   font-size: 15px;
   font-weight: 800;
   cursor: pointer;
+  box-shadow: 0 16px 32px rgba(128, 43, 255, 0.28);
+}
+
+.auth-mode-button {
+  min-height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(111, 44, 255, 0.96) 0%, rgba(177, 62, 246, 0.94) 52%, rgba(255, 77, 184, 0.96) 100%);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(128, 43, 255, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.auth-mode-button:hover:not(:disabled),
+.auth-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 20px 38px rgba(160, 52, 255, 0.28);
+  filter: brightness(1.04);
+}
+
+.auth-mode-button--active {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.24), 0 20px 38px rgba(160, 52, 255, 0.3);
 }
 
 .auth-submit:disabled {

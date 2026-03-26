@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import Auth from "./components/Auth";
 import MenuMain from "./components/MenuMain";
+import { API_BASE_URL } from "./config/runtime";
 import "./index.css";
+import {
+  AUTH_UNAUTHORIZED_EVENT,
+  buildAuthHeaders,
+  clearStoredSession,
+  getStoredToken,
+  getStoredUser,
+  parseApiResponse,
+  storeSession,
+} from "./utils/auth";
 
 export default function Renderer() {
   const [user, setUser] = useState(null);
@@ -9,55 +19,99 @@ export default function Renderer() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const savedToken = localStorage.getItem("token");
-      const savedUser = localStorage.getItem("user");
+    let disposed = false;
 
-      if (savedToken && savedUser) {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
+    const resetSession = () => {
+      clearStoredSession();
+
+      if (!disposed) {
+        setUser(null);
+        setToken(null);
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Failed to restore session from localStorage", error);
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-    } finally {
-      setLoading(false);
-    }
+    };
+
+    const restoreSession = async () => {
+      const savedToken = getStoredToken();
+      const savedUser = getStoredUser();
+
+      if (!savedToken || !savedUser) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          method: "GET",
+          headers: buildAuthHeaders(),
+        });
+        const data = await parseApiResponse(response);
+
+        if (!response.ok || !data?.id) {
+          resetSession();
+          return;
+        }
+
+        const nextUser = {
+          ...savedUser,
+          id: data.id,
+          firstName: data.first_name || savedUser.firstName || "",
+          lastName: data.last_name || savedUser.lastName || "",
+          email: data.email || savedUser.email || "",
+        };
+
+        if (!disposed) {
+          setUser(nextUser);
+          setToken(savedToken);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Failed to restore session from localStorage", error);
+        resetSession();
+      }
+    };
+
+    const handleUnauthorized = () => {
+      resetSession();
+    };
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    restoreSession();
+
+    return () => {
+      disposed = true;
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
   }, []);
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
+    if (token && user) {
+      storeSession(user, token);
     } else {
-      localStorage.removeItem("user");
+      clearStoredSession();
     }
-  }, [user]);
-
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem("token", token);
-    } else {
-      localStorage.removeItem("token");
-    }
-  }, [token]);
+  }, [token, user]);
 
   const handleAuthSuccess = (nextUser, nextToken) => {
     setUser(nextUser);
     setToken(nextToken);
-    localStorage.setItem("user", JSON.stringify(nextUser));
-    localStorage.setItem("token", nextToken);
+    storeSession(nextUser, nextToken);
   };
 
   const handleLogout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    clearStoredSession();
   };
 
   if (loading) {
-    return <div>Загрузка...</div>;
+    return (
+      <div className="app-loader">
+        <div className="app-loader__orb" />
+        <div className="app-loader__title">Загрузка</div>
+        <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
+      </div>
+    );
   }
 
   return token && user ? (

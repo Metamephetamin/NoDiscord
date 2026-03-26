@@ -68,7 +68,7 @@ public class AuthController : ControllerBase
             return ValidationProblem(ModelState);
 
         var normalizedEmail = dto.email.Trim().ToLowerInvariant();
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.email == normalizedEmail);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.email == normalizedEmail);
 
         if (user == null)
             return BadRequest(new { message = "Invalid email or password" });
@@ -76,6 +76,13 @@ public class AuthController : ControllerBase
         var result = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);
         if (result == PasswordVerificationResult.Failed)
             return BadRequest(new { message = "Invalid email or password" });
+
+        if (result == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.password_hash = _passwordHasher.HashPassword(user, dto.password);
+            _context.Users.Update(user);
+            await _context.SaveChangesAsync();
+        }
 
         var token = GenerateJwtToken(user);
 
@@ -99,7 +106,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.id == userId);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.id == userId);
         if (user == null)
             return Unauthorized();
 

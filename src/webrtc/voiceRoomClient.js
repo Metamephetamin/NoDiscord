@@ -1,6 +1,7 @@
 import * as signalR from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { VOICE_HUB_URL } from "../config/runtime";
+import { getStoredToken, isUnauthorizedError, notifyUnauthorizedSession } from "../utils/auth";
 
 const DEFAULT_AVATAR = "/image/avatar.jpg";
 const RTC_CONFIGURATION = {
@@ -12,10 +13,10 @@ const SCREEN_RECORDER_MIME_TYPES = [
   "video/webm",
 ];
 const SCREEN_SHARE_PRESETS = {
-  "720p": { width: 1280, height: 720, bitrate30: 8_000_000 },
-  "1080p": { width: 1920, height: 1080, bitrate30: 14_000_000 },
-  "1440p": { width: 2560, height: 1440, bitrate30: 22_000_000 },
-  "2160p": { width: 3840, height: 2160, bitrate30: 34_000_000 },
+  "720p": { width: 1280, height: 720, bitrate30: 3_500_000 },
+  "1080p": { width: 1920, height: 1080, bitrate30: 6_500_000 },
+  "1440p": { width: 2560, height: 1440, bitrate30: 10_000_000 },
+  "2160p": { width: 3840, height: 2160, bitrate30: 16_000_000 },
 };
 
 const getDisplayName = (user) =>
@@ -51,14 +52,14 @@ const normalizeParticipantsMap = (data) => {
 const getScreenSharePreset = (resolution = "1080p", fps = 60) => {
   const preset = SCREEN_SHARE_PRESETS[resolution] || SCREEN_SHARE_PRESETS["1080p"];
   const normalizedFps = Math.max(15, Math.min(Number(fps) || 30, 120));
-  const fpsScale = normalizedFps >= 120 ? 2.6 : normalizedFps >= 60 ? 1.65 : 1;
+  const fpsScale = normalizedFps >= 120 ? 1.9 : normalizedFps >= 60 ? 1.35 : 1;
 
   return {
     width: preset.width,
     height: preset.height,
     fps: normalizedFps,
     videoBitsPerSecond: Math.round(preset.bitrate30 * fpsScale),
-    chunkTimeslice: normalizedFps >= 120 ? 70 : normalizedFps >= 60 ? 85 : 110,
+    chunkTimeslice: normalizedFps >= 120 ? 70 : normalizedFps >= 60 ? 90 : 120,
   };
 };
 
@@ -69,6 +70,28 @@ const getResolutionConstraints = (resolution, fps) => {
     height: { ideal: preset.height },
     frameRate: { ideal: preset.fps },
   };
+};
+
+const tuneDisplayStream = async (stream, resolution, fps) => {
+  const track = stream?.getVideoTracks?.()?.[0];
+  if (!track) {
+    return stream;
+  }
+
+  track.contentHint = "detail";
+
+  const constraints = getResolutionConstraints(resolution, fps);
+  try {
+    await track.applyConstraints({
+      width: constraints.width,
+      height: constraints.height,
+      frameRate: { ideal: constraints.frameRate?.ideal, max: constraints.frameRate?.ideal || fps },
+    });
+  } catch {
+    // ignore optional tuning failures
+  }
+
+  return stream;
 };
 
 const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
@@ -86,7 +109,7 @@ const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
 
   const constraints = getResolutionConstraints(resolution, fps);
 
-  return navigator.mediaDevices.getUserMedia({
+  const stream = await navigator.mediaDevices.getUserMedia({
     audio: withAudio
       ? {
           mandatory: {
@@ -107,6 +130,8 @@ const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
       },
     },
   });
+
+  return tuneDisplayStream(stream, resolution, fps);
 };
 
 const getSupportedScreenMimeType = () =>
@@ -144,6 +169,7 @@ export function createVoiceRoomClient({
   onSelfVoiceStateChanged,
 } = {}) {
   let connection = null;
+  let connectPromise = null;
   let currentUser = null;
   let currentChannel = null;
   let localMicSourceStream = null;
@@ -267,8 +293,8 @@ export function createVoiceRoomClient({
   };
 
   const appendChunkToSession = (session, chunkBytes) => {
-    if (session.queue.length > 90) {
-      session.queue.splice(0, session.queue.length - 45);
+    if (session.queue.length > 24) {
+      session.queue.splice(0, session.queue.length - 12);
     }
 
     if (!session.sourceBuffer || session.sourceBuffer.updating || session.mediaSource.readyState !== "open") {
@@ -322,9 +348,9 @@ export function createVoiceRoomClient({
             if (session.sourceBuffer.buffered.length) {
               const start = session.sourceBuffer.buffered.start(0);
               const end = session.sourceBuffer.buffered.end(session.sourceBuffer.buffered.length - 1);
-              if (end - start > 18 && !session.sourceBuffer.updating) {
+              if (end - start > 6 && !session.sourceBuffer.updating) {
                 try {
-                  session.sourceBuffer.remove(start, Math.max(start, end - 8));
+                  session.sourceBuffer.remove(start, Math.max(start, end - 2.5));
                 } catch {
                   // ignore buffered prune failures
                 }
@@ -688,13 +714,18 @@ export function createVoiceRoomClient({
       isSendingScreenChunk = true;
       try {
         const chunkBytes = new Uint8Array(await event.data.arrayBuffer());
-          await connection.invoke(
-            "SendScreenShareChunk",
-            String(currentUser.id),
-            chunkBytes,
-            screenMediaRecorder?.mimeType || mimeType,
-            (localScreenStream?.getAudioTracks?.().length || 0) > 0
-          );
+        if (chunkBytes.byteLength > 3_000_000) {
+          console.warn("Chunk skipped because it exceeded the safe size limit");
+          return;
+        }
+
+        await connection.invoke(
+          "SendScreenShareChunk",
+          String(currentUser.id),
+          chunkBytes,
+          screenMediaRecorder?.mimeType || mimeType,
+          (localScreenStream?.getAudioTracks?.().length || 0) > 0
+        );
       } catch (error) {
         console.error("Ошибка отправки видеочанка трансляции:", error);
       } finally {
@@ -741,11 +772,17 @@ export function createVoiceRoomClient({
   const ensureConnection = async (user) => {
     currentUser = user;
 
+    if (!getStoredToken()) {
+      throw new Error("Сессия не найдена. Войдите в аккаунт.");
+    }
+
     if (!connection) {
       connection = new signalR.HubConnectionBuilder()
-        .withUrl(VOICE_HUB_URL, { withCredentials: true })
+        .withUrl(VOICE_HUB_URL, {
+          accessTokenFactory: () => getStoredToken(),
+        })
         .withHubProtocol(new MessagePackHubProtocol())
-        .withAutomaticReconnect()
+        .withAutomaticReconnect([0, 1000, 3000, 5000])
         .build();
 
       connection.on("voice:update", (data) => {
@@ -886,6 +923,7 @@ export function createVoiceRoomClient({
       });
 
       connection.onclose(() => {
+        connectPromise = null;
         cleanupPeers();
         stopScreenRecorder();
         localScreenStream?.getTracks().forEach((track) => {
@@ -904,7 +942,24 @@ export function createVoiceRoomClient({
     }
 
     if (connection.state === signalR.HubConnectionState.Disconnected) {
-      await connection.start();
+      if (!connectPromise) {
+        connectPromise = (async () => {
+          try {
+            await connection.start();
+          } catch (error) {
+            if (isUnauthorizedError(error)) {
+              notifyUnauthorizedSession("voice_signalr_401");
+              throw new Error("Сессия истекла. Войдите снова.");
+            }
+
+            throw error;
+          } finally {
+            connectPromise = null;
+          }
+        })();
+      }
+
+      await connectPromise;
     }
 
     await registerCurrentUser(user);
@@ -972,10 +1027,14 @@ export function createVoiceRoomClient({
       try {
         localScreenStream =
           (await getElectronDisplayStream(resolution, fps, shareAudio)) ||
-          (await navigator.mediaDevices.getDisplayMedia({
-            video: getResolutionConstraints(resolution, fps),
-            audio: shareAudio,
-          }));
+          (await tuneDisplayStream(
+            await navigator.mediaDevices.getDisplayMedia({
+              video: getResolutionConstraints(resolution, fps),
+              audio: shareAudio,
+            }),
+            resolution,
+            fps
+          ));
       } catch (error) {
         if (!shareAudio) {
           throw error;
@@ -984,10 +1043,14 @@ export function createVoiceRoomClient({
         console.warn("Не удалось захватить звук экрана, запускаю трансляцию без звука.", error);
         localScreenStream =
           (await getElectronDisplayStream(resolution, fps, false)) ||
-          (await navigator.mediaDevices.getDisplayMedia({
-            video: getResolutionConstraints(resolution, fps),
-            audio: false,
-          }));
+          (await tuneDisplayStream(
+            await navigator.mediaDevices.getDisplayMedia({
+              video: getResolutionConstraints(resolution, fps),
+              audio: false,
+            }),
+            resolution,
+            fps
+          ));
       }
 
       const screenTrack = localScreenStream.getVideoTracks()[0];

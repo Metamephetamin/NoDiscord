@@ -14,7 +14,8 @@
     "publish": "electron-forge publish",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "lint:ci": "eslint . --quiet"
+    "lint:ci": "eslint . --quiet",
+    "check:encoding": "node ./scripts/check-encoding.mjs"
   },
   "keywords": [],
   "author": {

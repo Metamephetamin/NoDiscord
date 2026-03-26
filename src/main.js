@@ -1,13 +1,9 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, session } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, session, shell } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
 if (started) {
   app.quit();
-}
-
-if (MAIN_WINDOW_VITE_DEV_SERVER_URL?.startsWith("https://")) {
-  app.commandLine.appendSwitch("ignore-certificate-errors");
 }
 
 const createWindow = () => {
@@ -16,12 +12,31 @@ const createWindow = () => {
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url).catch(() => {});
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const expectedUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL;
+    const isRendererNavigation = expectedUrl ? url.startsWith(expectedUrl) : url.startsWith("file://");
+
+    if (!isRendererNavigation) {
+      event.preventDefault();
+    }
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools({ mode: "detach" });
     return;
   }
 

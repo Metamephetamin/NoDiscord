@@ -22,6 +22,11 @@
   border-color: rgba(91, 124, 255, 0.28);
 }
 
+.list__items--editing {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 .voice-channel__row {
   display: flex;
   align-items: center;
@@ -41,6 +46,8 @@
   color: #eef2ff;
   cursor: pointer;
   text-align: left;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .voice-channel__title {
@@ -49,6 +56,8 @@
   white-space: nowrap;
   font-size: 16px;
   font-weight: 600;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .voice-channel__count {
@@ -88,6 +97,10 @@
   color: #d8def0;
   font-size: 12px;
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition: opacity 0.14s ease, transform 0.14s ease, background-color 0.15s ease;
 }
 
 .channel-edit-button img {
@@ -99,6 +112,31 @@
 .channel-edit-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.list__items:hover .channel-edit-button,
+.list__items--active .channel-edit-button,
+.list__items--editing .channel-edit-button,
+.channel-item:hover .channel-edit-button,
+.channel-item.active-channel .channel-edit-button,
+.channel-item--editing .channel-edit-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.channel-inline-input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  outline: none;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .participant-list {
@@ -136,6 +174,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .participant-item__role-dot {
