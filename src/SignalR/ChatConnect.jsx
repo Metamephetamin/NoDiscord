@@ -6,6 +6,7 @@ const chatConnection = new signalR.HubConnectionBuilder()
   .withUrl(CHAT_HUB_URL, {
     accessTokenFactory: () => getStoredToken(),
   })
+  .configureLogging(signalR.LogLevel.Error)
   .withAutomaticReconnect([0, 2000, 5000, 10000])
   .build();
 
@@ -14,7 +15,8 @@ let startPromise = null;
 
 export const startChatConnection = async () => {
   if (!getStoredToken()) {
-    throw new Error("Сессия не найдена. Войдите в аккаунт.");
+    notifyUnauthorizedSession("missing_chat_session");
+    return null;
   }
 
   if (chatConnection.state === signalR.HubConnectionState.Connected) {
@@ -36,7 +38,6 @@ export const startChatConnection = async () => {
   startPromise = (async () => {
     try {
       await chatConnection.start();
-      console.log("SignalR connected");
       isConnected = true;
       return chatConnection;
     } catch (error) {
@@ -45,7 +46,7 @@ export const startChatConnection = async () => {
 
       if (isUnauthorizedError(error)) {
         notifyUnauthorizedSession("chat_signalr_401");
-        throw new Error("Сессия истекла. Войдите снова.");
+        return null;
       }
 
       if (chatConnection.state === signalR.HubConnectionState.Disconnected) {

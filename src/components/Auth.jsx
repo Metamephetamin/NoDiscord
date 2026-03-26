@@ -54,6 +54,14 @@ function mapAuthUser(data) {
   };
 }
 
+function mapAuthSession(data) {
+  return {
+    accessToken: data?.token || "",
+    refreshToken: data?.refreshToken || "",
+    accessTokenExpiresAt: data?.accessTokenExpiresAt || "",
+  };
+}
+
 async function submitAuthRequest(endpoint, payload, fallbackMessage) {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method: "POST",
@@ -137,7 +145,7 @@ export default function Auth({ onAuthSuccess }) {
 
     try {
       const data = await submitAuthRequest("/auth/login", payload, "Не удалось войти в аккаунт.");
-      onAuthSuccess(mapAuthUser(data), data.token);
+      onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
       setMessage(error.message || "Не удалось войти в аккаунт.");
       setIsSubmitting(false);
@@ -183,7 +191,7 @@ export default function Auth({ onAuthSuccess }) {
     try {
       const data = await submitAuthRequest("/auth/register", payload, "Не удалось создать аккаунт.");
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
-      onAuthSuccess(mapAuthUser(data), data.token);
+      onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
       setMessage(error.message || "Не удалось создать аккаунт.");
       setIsSubmitting(false);
@@ -208,11 +216,14 @@ export default function Auth({ onAuthSuccess }) {
         </div>
         <div className="auth-brand__copy">
           <span className="auth-brand__name">MAX</span>
-          <h1 className="auth-brand__title">Связь без лишнего шума</h1>
+          <h1 className="auth-brand__title">- за нами светлое будущее</h1>
         </div>
       </div>
 
-      <form className="auth-card auth-card--wide" onSubmit={mode === "login" ? handleLogin : handleRegister}>
+      <form
+        className={`auth-card auth-card--wide ${mode === "login" ? "auth-card--login" : ""}`}
+        onSubmit={mode === "login" ? handleLogin : handleRegister}
+      >
         <div className="auth-card__main">
           <div className="auth-card__heading">
             <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
@@ -221,25 +232,6 @@ export default function Auth({ onAuthSuccess }) {
                 ? "Войдите в аккаунт, чтобы снова получить доступ к серверам, чату и приглашениям."
                 : "Создайте аккаунт. Дополнительные поля можно заполнить сразу или оставить на потом."}
             </p>
-          </div>
-
-          <div className="auth-grid auth-grid--double">
-            <button
-              type="button"
-              className={`auth-mode-button ${mode === "login" ? "auth-mode-button--active" : ""}`}
-              onClick={() => switchMode("login")}
-              disabled={mode === "login" || isSubmitting}
-            >
-              Войти
-            </button>
-            <button
-              type="button"
-              className={`auth-mode-button ${mode === "register" ? "auth-mode-button--active" : ""}`}
-              onClick={() => switchMode("register")}
-              disabled={mode === "register" || isSubmitting}
-            >
-              Зарегистрироваться
-            </button>
           </div>
 
           {mode === "login" ? (
@@ -316,8 +308,18 @@ export default function Auth({ onAuthSuccess }) {
                     value={registerForm.passportNumber}
                     onChange={handleRegisterFieldChange("passportNumber")}
                   />
-                  <input className="auth-input" placeholder="СНИЛС" value={registerForm.snils} onChange={handleRegisterFieldChange("snils")} />
-                  <input className="auth-input" placeholder="ИНН" value={registerForm.inn} onChange={handleRegisterFieldChange("inn")} />
+                  <input
+                    className="auth-input"
+                    placeholder="СНИЛС"
+                    value={registerForm.snils}
+                    onChange={handleRegisterFieldChange("snils")}
+                  />
+                  <input
+                    className="auth-input"
+                    placeholder="ИНН"
+                    value={registerForm.inn}
+                    onChange={handleRegisterFieldChange("inn")}
+                  />
                   <input
                     className="auth-input"
                     type="date"
@@ -378,76 +380,73 @@ export default function Auth({ onAuthSuccess }) {
                 : "Зарегистрироваться"}
           </button>
 
+          <button
+            type="button"
+            className="auth-switch-link"
+            onClick={() => switchMode(mode === "login" ? "register" : "login")}
+            disabled={isSubmitting}
+          >
+            {mode === "login" ? "Нет аккаунта ?" : "Уже есть аккаунт ?"}
+          </button>
+
           {message && <p className="auth-message">{message}</p>}
         </div>
 
         <aside className="auth-card__side">
-          {mode === "login" ? (
-            <>
-              <div className="auth-side__title">Что изменилось</div>
-              <p className="auth-side__subtitle">
-                Защита backend стала строже: чат, приглашения и загрузки теперь требуют корректный токен. Если сессия устарела,
-                приложение попросит войти заново вместо бесконечных 401 и падений в интерфейсе.
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="auth-side__title">Платежная карта</div>
-              <p className="auth-side__subtitle">
-                Эти поля необязательны. Карта обновляется во время ввода, а при переходе к CVC разворачивается.
-              </p>
+          <div className="auth-side__title">Платежная карта</div>
+          <p className="auth-side__subtitle">
+            Эти поля необязательны. Карта обновляется во время ввода, а при переходе к CVC разворачивается.
+          </p>
 
-              <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
-                <div className="bank-card__face bank-card__face--front">
-                  <div className="bank-card__brand">MAX PAY</div>
-                  <div className="bank-card__number">{displayedCardNumber}</div>
-                  <div className="bank-card__meta">
-                    <div>
-                      <span className="bank-card__label">Держатель</span>
-                      <span className="bank-card__value">{cardHolderName}</span>
-                    </div>
-                    <div>
-                      <span className="bank-card__label">Срок</span>
-                      <span className="bank-card__value">{displayedCardExpiry}</span>
-                    </div>
-                  </div>
+          <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
+            <div className="bank-card__face bank-card__face--front">
+              <div className="bank-card__brand">MAX PAY</div>
+              <div className="bank-card__number">{displayedCardNumber}</div>
+              <div className="bank-card__meta">
+                <div>
+                  <span className="bank-card__label">Держатель</span>
+                  <span className="bank-card__value">{cardHolderName}</span>
                 </div>
-
-                <div className="bank-card__face bank-card__face--back">
-                  <div className="bank-card__stripe" />
-                  <div className="bank-card__cvc-box">
-                    <span className="bank-card__label">CVC</span>
-                    <span className="bank-card__cvc">{displayedCardCvc}</span>
-                  </div>
+                <div>
+                  <span className="bank-card__label">Срок</span>
+                  <span className="bank-card__value">{displayedCardExpiry}</span>
                 </div>
               </div>
+            </div>
 
-              <div className="auth-grid auth-grid--double auth-grid--card">
-                <input
-                  className="auth-input"
-                  placeholder="Номер карты"
-                  value={registerForm.cardNumber}
-                  onChange={handleRegisterFieldChange("cardNumber")}
-                  onFocus={() => setIsCardFlipped(false)}
-                />
-                <input
-                  className="auth-input"
-                  placeholder="Срок действия"
-                  value={registerForm.cardExpiry}
-                  onChange={handleRegisterFieldChange("cardExpiry")}
-                  onFocus={() => setIsCardFlipped(false)}
-                />
-                <input
-                  className="auth-input auth-input--compact"
-                  placeholder="CVC"
-                  value={registerForm.cardCvc}
-                  onChange={handleRegisterFieldChange("cardCvc")}
-                  onFocus={() => setIsCardFlipped(true)}
-                  onBlur={() => setIsCardFlipped(false)}
-                />
+            <div className="bank-card__face bank-card__face--back">
+              <div className="bank-card__stripe" />
+              <div className="bank-card__cvc-box">
+                <span className="bank-card__label">CVC</span>
+                <span className="bank-card__cvc">{displayedCardCvc}</span>
               </div>
-            </>
-          )}
+            </div>
+          </div>
+
+          <div className="auth-grid auth-grid--double auth-grid--card">
+            <input
+              className="auth-input"
+              placeholder="Номер карты"
+              value={registerForm.cardNumber}
+              onChange={handleRegisterFieldChange("cardNumber")}
+              onFocus={() => setIsCardFlipped(false)}
+            />
+            <input
+              className="auth-input"
+              placeholder="Срок действия"
+              value={registerForm.cardExpiry}
+              onChange={handleRegisterFieldChange("cardExpiry")}
+              onFocus={() => setIsCardFlipped(false)}
+            />
+            <input
+              className="auth-input auth-input--compact"
+              placeholder="CVC"
+              value={registerForm.cardCvc}
+              onChange={handleRegisterFieldChange("cardCvc")}
+              onFocus={() => setIsCardFlipped(true)}
+              onBlur={() => setIsCardFlipped(false)}
+            />
+          </div>
         </aside>
       </form>
     </div>

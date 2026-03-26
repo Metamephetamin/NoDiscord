@@ -1,12 +1,15 @@
 import * as signalR from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
-import { VOICE_HUB_URL } from "../config/runtime";
+import { VOICE_HUB_URL, VOICE_RTC_CONFIGURATION } from "../config/runtime";
 import { getStoredToken, isUnauthorizedError, notifyUnauthorizedSession } from "../utils/auth";
 
 const DEFAULT_AVATAR = "/image/avatar.jpg";
 const RTC_CONFIGURATION = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  ...VOICE_RTC_CONFIGURATION,
+  iceServers: (VOICE_RTC_CONFIGURATION.iceServers || []).map((server) => ({ ...server })),
 };
+const NOISE_SUPPRESSION_MODE_TRANSPARENT = "transparent";
+const NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const SCREEN_RECORDER_MIME_TYPES = [
   "video/webm;codecs=vp9",
   "video/webm;codecs=vp8",
@@ -177,10 +180,12 @@ export function createVoiceRoomClient({
   let audioContext = null;
   let gainNode = null;
   let destinationNode = null;
+  let localOutputAnalyser = null;
   let localSpeakingMeter = null;
   let localSpeakingTimeout = null;
   let micVolume = 0.7;
   let remoteVolume = 0.7;
+  let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_TRANSPARENT;
   let localScreenStream = null;
   let screenShareResolution = "720p";
   let screenShareFps = 30;
@@ -207,6 +212,83 @@ export function createVoiceRoomClient({
 
   const emitLocalScreenState = () => {
     onLocalScreenShareChanged?.(Boolean(localScreenStream));
+  };
+
+  const getMicConstraints = (mode = noiseSuppressionMode) => ({
+    echoCancellation: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    noiseSuppression: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    channelCount: 1,
+    sampleRate: 48_000,
+  });
+
+  const startLocalSpeakingDetection = (analyser) => {
+    if (!analyser || !currentUser?.id) {
+      return;
+    }
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    localSpeakingMeter = window.setInterval(() => {
+      analyser.getByteFrequencyData(data);
+      const average = data.reduce((sum, value) => sum + value, 0) / Math.max(1, data.length);
+      const isSpeaking = average > 18;
+
+      if (isSpeaking) {
+        speakingUsers.add(String(currentUser.id));
+        emitSpeakingUsers();
+        window.clearTimeout(localSpeakingTimeout);
+        localSpeakingTimeout = window.setTimeout(() => {
+          speakingUsers.delete(String(currentUser.id));
+          emitSpeakingUsers();
+        }, 320);
+      }
+    }, 120);
+  };
+
+  const buildNoiseIsolationChain = (sourceNode) => {
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = "highpass";
+    highPassFilter.frequency.value = 120;
+    highPassFilter.Q.value = 0.82;
+
+    const voicePresenceFilter = audioContext.createBiquadFilter();
+    voicePresenceFilter.type = "peaking";
+    voicePresenceFilter.frequency.value = 2200;
+    voicePresenceFilter.Q.value = 1.15;
+    voicePresenceFilter.gain.value = 3.2;
+
+    const lowPassFilter = audioContext.createBiquadFilter();
+    lowPassFilter.type = "lowpass";
+    lowPassFilter.frequency.value = 7200;
+    lowPassFilter.Q.value = 0.7;
+
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.value = -28;
+    compressor.knee.value = 24;
+    compressor.ratio.value = 12;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.17;
+
+    sourceNode.connect(highPassFilter);
+    highPassFilter.connect(voicePresenceFilter);
+    voicePresenceFilter.connect(lowPassFilter);
+    lowPassFilter.connect(compressor);
+
+    return compressor;
+  };
+
+  const connectLocalAudioGraph = (sourceNode) => {
+    const inputNode =
+      noiseSuppressionMode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
+        ? buildNoiseIsolationChain(sourceNode)
+        : sourceNode;
+
+    inputNode.connect(gainNode);
+    gainNode.connect(destinationNode);
+
+    localOutputAnalyser = audioContext.createAnalyser();
+    localOutputAnalyser.fftSize = 256;
+    gainNode.connect(localOutputAnalyser);
   };
 
   const createHiddenAudioElement = (stream) => {
@@ -412,6 +494,7 @@ export function createVoiceRoomClient({
     localMicSourceStream?.getTracks().forEach((track) => track.stop());
     localMicSourceStream = null;
     localAudioStream = null;
+    localOutputAnalyser = null;
 
     if (audioContext) {
       audioContext.close().catch(() => {});
@@ -430,40 +513,49 @@ export function createVoiceRoomClient({
       return localAudioStream;
     }
 
-    localMicSourceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localMicSourceStream = await navigator.mediaDevices.getUserMedia({
+      audio: getMicConstraints(),
+    });
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioContextClass();
     const sourceNode = audioContext.createMediaStreamSource(localMicSourceStream);
     gainNode = audioContext.createGain();
     destinationNode = audioContext.createMediaStreamDestination();
     gainNode.gain.value = micVolume;
-    sourceNode.connect(gainNode);
-    gainNode.connect(destinationNode);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    gainNode.connect(analyser);
+    connectLocalAudioGraph(sourceNode);
     localAudioStream = destinationNode.stream;
 
-    if (currentUser?.id) {
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      localSpeakingMeter = window.setInterval(() => {
-        analyser.getByteFrequencyData(data);
-        const average = data.reduce((sum, value) => sum + value, 0) / Math.max(1, data.length);
-        const isSpeaking = average > 18;
-
-        if (isSpeaking) {
-          speakingUsers.add(String(currentUser.id));
-          emitSpeakingUsers();
-          window.clearTimeout(localSpeakingTimeout);
-          localSpeakingTimeout = window.setTimeout(() => {
-            speakingUsers.delete(String(currentUser.id));
-            emitSpeakingUsers();
-          }, 320);
-        }
-      }, 120);
-    }
+    startLocalSpeakingDetection(localOutputAnalyser);
 
     return localAudioStream;
+  };
+
+  const rebuildLocalAudioPipeline = async () => {
+    const hadMicTrack = Boolean(localMicSourceStream || localAudioStream);
+    stopLocalMic();
+
+    if (!hadMicTrack) {
+      return null;
+    }
+
+    const nextStream = await ensureAudioPipeline();
+    const nextTrack = nextStream?.getAudioTracks?.()?.[0] || null;
+
+    if (!nextTrack) {
+      return nextStream;
+    }
+
+    await Promise.all(
+      Array.from(peers.values()).map(async (peerState) => {
+        if (peerState.audioSender) {
+          await peerState.audioSender.replaceTrack(nextTrack);
+        } else {
+          peerState.audioSender = peerState.pc.addTrack(nextTrack, nextStream);
+        }
+      })
+    );
+
+    return nextStream;
   };
 
   const flushPendingIceCandidates = async (peerState) => {
@@ -781,6 +873,7 @@ export function createVoiceRoomClient({
         .withUrl(VOICE_HUB_URL, {
           accessTokenFactory: () => getStoredToken(),
         })
+        .configureLogging(signalR.LogLevel.Error)
         .withHubProtocol(new MessagePackHubProtocol())
         .withAutomaticReconnect([0, 1000, 3000, 5000])
         .build();
@@ -1099,6 +1192,20 @@ export function createVoiceRoomClient({
           peerState.audioElement.volume = remoteVolume;
         }
       }
+    },
+
+    async setNoiseSuppressionMode(mode) {
+      const nextMode =
+        mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
+          ? NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
+          : NOISE_SUPPRESSION_MODE_TRANSPARENT;
+
+      if (noiseSuppressionMode === nextMode) {
+        return;
+      }
+
+      noiseSuppressionMode = nextMode;
+      await rebuildLocalAudioPipeline();
     },
 
     async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {

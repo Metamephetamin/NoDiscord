@@ -70,6 +70,11 @@ public class VoiceHub : Hub
             throw new HubException("channelName is required");
         }
 
+        if (!TryAuthorizeChannelAccess(normalizedChannelName, participant.UserId))
+        {
+            throw new HubException("Forbidden");
+        }
+
         var previousChannel = _channels.GetChannelForUser(participant.UserId);
         if (!string.IsNullOrWhiteSpace(previousChannel))
         {
@@ -374,19 +379,24 @@ public class VoiceHub : Hub
 
     private ServerSnapshot? ResolveServerSnapshot(string channelName)
     {
-        if (string.IsNullOrWhiteSpace(channelName))
+        if (!ServerChannelAuthorization.TryGetServerIdFromVoiceChannelName(channelName, out var serverId))
         {
             return null;
         }
 
-        var separatorIndex = channelName.IndexOf("::", StringComparison.Ordinal);
-        if (separatorIndex <= 0)
-        {
-            return null;
-        }
-
-        var serverId = channelName[..separatorIndex];
         return _serverState.GetSnapshot(serverId);
+    }
+
+    private bool TryAuthorizeChannelAccess(string channelName, string userId)
+    {
+        if (!ServerChannelAuthorization.TryGetServerIdFromVoiceChannelName(channelName, out var serverId))
+        {
+            return false;
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        var currentUser = new AuthenticatedUser(userId, string.Empty, string.Empty, string.Empty);
+        return ServerChannelAuthorization.CanAccessServer(serverId, currentUser, snapshot);
     }
 
     private static string NormalizeMimeType(string mimeType, string fallback)

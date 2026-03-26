@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -8,17 +9,14 @@ public class ServerInviteService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = false
     };
 
-    private readonly string _storagePath;
-    private readonly object _syncRoot = new();
+    private readonly AppDbContext _context;
 
-    public ServerInviteService(IWebHostEnvironment environment)
+    public ServerInviteService(AppDbContext context)
     {
-        var dataDirectory = Path.Combine(environment.ContentRootPath, "App_Data");
-        Directory.CreateDirectory(dataDirectory);
-        _storagePath = Path.Combine(dataDirectory, "server-invites.json");
+        _context = context;
     }
 
     public ServerInviteCreateResult CreateInvite(string ownerUserId, ServerSnapshot snapshot)
@@ -28,19 +26,19 @@ public class ServerInviteService
             throw new InvalidOperationException("Owner user id is required.");
         }
 
-        var invites = ReadInvites();
         var normalizedSnapshot = NormalizeSnapshot(snapshot, ownerUserId);
-        var invite = new ServerInviteRecord
+        var invite = new ServerInviteRecordEntity
         {
-            Code = GenerateUniqueCode(invites),
+            Code = GenerateUniqueCode(),
             OwnerUserId = ownerUserId,
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
-            Snapshot = normalizedSnapshot,
+            SnapshotJson = SerializeSnapshot(normalizedSnapshot),
+            RedeemedUserIdsJson = "[]"
         };
 
-        invites.Add(invite);
-        SaveInvites(invites);
+        _context.ServerInvites.Add(invite);
+        _context.SaveChanges();
 
         return new ServerInviteCreateResult
         {
@@ -61,9 +59,8 @@ public class ServerInviteService
             throw new InvalidOperationException("User id is required.");
         }
 
-        var invites = ReadInvites();
-        var invite = invites.FirstOrDefault(item =>
-            string.Equals(item.Code, inviteCode.Trim(), StringComparison.OrdinalIgnoreCase));
+        var normalizedCode = inviteCode.Trim().ToUpperInvariant();
+        var invite = _context.ServerInvites.FirstOrDefault(item => item.Code == normalizedCode);
 
         if (invite is null)
         {
@@ -75,12 +72,13 @@ public class ServerInviteService
             throw new InvalidOperationException("Invite has expired.");
         }
 
-        if (invite.RedeemedUserIds.Contains(userId, StringComparer.Ordinal))
+        var redeemedUserIds = DeserializeRedeemedUserIds(invite.RedeemedUserIdsJson);
+        if (redeemedUserIds.Contains(userId, StringComparer.Ordinal))
         {
             throw new InvalidOperationException("Invite has already been used by this user.");
         }
 
-        var snapshot = CloneSnapshot(invite.Snapshot);
+        var snapshot = CloneSnapshot(DeserializeSnapshot(invite.SnapshotJson));
         snapshot.Members ??= new List<ServerMemberSnapshot>();
 
         if (!snapshot.Members.Any(member => string.Equals(member.UserId, userId, StringComparison.Ordinal)))
@@ -94,8 +92,9 @@ public class ServerInviteService
             });
         }
 
-        invite.RedeemedUserIds.Add(userId);
-        SaveInvites(invites);
+        redeemedUserIds.Add(userId);
+        invite.RedeemedUserIdsJson = SerializeRedeemedUserIds(redeemedUserIds);
+        _context.SaveChanges();
 
         return new ServerInviteRedeemResult
         {
@@ -104,35 +103,7 @@ public class ServerInviteService
         };
     }
 
-    private List<ServerInviteRecord> ReadInvites()
-    {
-        lock (_syncRoot)
-        {
-            if (!File.Exists(_storagePath))
-            {
-                return new List<ServerInviteRecord>();
-            }
-
-            var json = File.ReadAllText(_storagePath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return new List<ServerInviteRecord>();
-            }
-
-            return JsonSerializer.Deserialize<List<ServerInviteRecord>>(json, JsonOptions) ?? new List<ServerInviteRecord>();
-        }
-    }
-
-    private void SaveInvites(List<ServerInviteRecord> invites)
-    {
-        lock (_syncRoot)
-        {
-            var json = JsonSerializer.Serialize(invites, JsonOptions);
-            File.WriteAllText(_storagePath, json);
-        }
-    }
-
-    private static string GenerateUniqueCode(List<ServerInviteRecord> invites)
+    private string GenerateUniqueCode()
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -142,7 +113,7 @@ public class ServerInviteService
                 .Select(_ => alphabet[RandomNumberGenerator.GetInt32(alphabet.Length)])
                 .ToArray());
 
-            if (!invites.Any(item => string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase)))
+            if (!_context.ServerInvites.Any(item => item.Code == code))
             {
                 return code;
             }
@@ -177,19 +148,38 @@ public class ServerInviteService
 
     private static ServerSnapshot CloneSnapshot(ServerSnapshot snapshot)
     {
-        var json = JsonSerializer.Serialize(snapshot, JsonOptions);
-        return JsonSerializer.Deserialize<ServerSnapshot>(json, JsonOptions) ?? new ServerSnapshot();
+        return DeserializeSnapshot(SerializeSnapshot(snapshot));
     }
-}
 
-public class ServerInviteRecord
-{
-    public string Code { get; set; } = string.Empty;
-    public string OwnerUserId { get; set; } = string.Empty;
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset ExpiresAt { get; set; }
-    public ServerSnapshot Snapshot { get; set; } = new();
-    public List<string> RedeemedUserIds { get; set; } = new();
+    private static ServerSnapshot DeserializeSnapshot(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return new ServerSnapshot();
+        }
+
+        return JsonSerializer.Deserialize<ServerSnapshot>(rawValue, JsonOptions) ?? new ServerSnapshot();
+    }
+
+    private static string SerializeSnapshot(ServerSnapshot snapshot)
+    {
+        return JsonSerializer.Serialize(snapshot, JsonOptions);
+    }
+
+    private static List<string> DeserializeRedeemedUserIds(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return new List<string>();
+        }
+
+        return JsonSerializer.Deserialize<List<string>>(rawValue, JsonOptions) ?? new List<string>();
+    }
+
+    private static string SerializeRedeemedUserIds(List<string> redeemedUserIds)
+    {
+        return JsonSerializer.Serialize(redeemedUserIds, JsonOptions);
+    }
 }
 
 public class ServerInviteCreateResult

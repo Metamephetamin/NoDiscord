@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace BackNoDiscord.Services;
@@ -7,31 +8,42 @@ public class ServerStateService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = false
     };
 
-    private readonly string _storagePath;
-    private readonly object _syncRoot = new();
+    private readonly AppDbContext _context;
 
-    public ServerStateService(IWebHostEnvironment environment)
+    public ServerStateService(AppDbContext context)
     {
-        var dataDirectory = Path.Combine(environment.ContentRootPath, "App_Data");
-        Directory.CreateDirectory(dataDirectory);
-        _storagePath = Path.Combine(dataDirectory, "shared-servers.json");
+        _context = context;
     }
 
     public ServerSnapshot UpsertSnapshot(ServerSnapshot snapshot, string fallbackOwnerUserId)
     {
-        var servers = ReadServers();
         var normalized = NormalizeSnapshot(snapshot, fallbackOwnerUserId);
+        var existing = _context.SharedServerSnapshots.FirstOrDefault(item => item.ServerId == normalized.Id);
 
-        if (servers.TryGetValue(normalized.Id, out var existing))
+        if (existing is not null)
         {
-            normalized = MergeSnapshots(existing, normalized, fallbackOwnerUserId);
+            var existingSnapshot = DeserializeSnapshot(existing.SnapshotJson);
+            normalized = MergeSnapshots(existingSnapshot, normalized, fallbackOwnerUserId);
+            existing.OwnerUserId = normalized.OwnerId;
+            existing.SnapshotJson = SerializeSnapshot(normalized);
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            _context.SharedServerSnapshots.Add(new SharedServerSnapshotRecord
+            {
+                ServerId = normalized.Id,
+                OwnerUserId = normalized.OwnerId,
+                SnapshotJson = SerializeSnapshot(normalized),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
         }
 
-        servers[normalized.Id] = normalized;
-        SaveServers(servers);
+        _context.SaveChanges();
         return CloneSnapshot(normalized);
     }
 
@@ -42,20 +54,22 @@ public class ServerStateService
             return null;
         }
 
-        var servers = ReadServers();
-        return servers.TryGetValue(serverId.Trim(), out var snapshot)
-            ? CloneSnapshot(snapshot)
-            : null;
+        var record = _context.SharedServerSnapshots
+            .AsNoTracking()
+            .FirstOrDefault(item => item.ServerId == serverId.Trim());
+
+        return record is null ? null : CloneSnapshot(DeserializeSnapshot(record.SnapshotJson));
     }
 
     public ServerSnapshot AddMember(string serverId, string userId, string name, string avatar)
     {
-        var servers = ReadServers();
-        if (!servers.TryGetValue(serverId, out var snapshot))
+        var record = _context.SharedServerSnapshots.FirstOrDefault(item => item.ServerId == serverId);
+        if (record is null)
         {
             throw new KeyNotFoundException("Server snapshot not found.");
         }
 
+        var snapshot = DeserializeSnapshot(record.SnapshotJson);
         snapshot.Members ??= new List<ServerMemberSnapshot>();
 
         if (!snapshot.Members.Any(member => string.Equals(member.UserId, userId, StringComparison.Ordinal)))
@@ -69,38 +83,13 @@ public class ServerStateService
             });
         }
 
-        servers[serverId] = snapshot;
-        SaveServers(servers);
-        return CloneSnapshot(snapshot);
-    }
+        var normalized = NormalizeSnapshot(snapshot, snapshot.OwnerId);
+        record.OwnerUserId = normalized.OwnerId;
+        record.SnapshotJson = SerializeSnapshot(normalized);
+        record.UpdatedAt = DateTimeOffset.UtcNow;
+        _context.SaveChanges();
 
-    private Dictionary<string, ServerSnapshot> ReadServers()
-    {
-        lock (_syncRoot)
-        {
-            if (!File.Exists(_storagePath))
-            {
-                return new Dictionary<string, ServerSnapshot>(StringComparer.Ordinal);
-            }
-
-            var json = File.ReadAllText(_storagePath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return new Dictionary<string, ServerSnapshot>(StringComparer.Ordinal);
-            }
-
-            return JsonSerializer.Deserialize<Dictionary<string, ServerSnapshot>>(json, JsonOptions)
-                ?? new Dictionary<string, ServerSnapshot>(StringComparer.Ordinal);
-        }
-    }
-
-    private void SaveServers(Dictionary<string, ServerSnapshot> servers)
-    {
-        lock (_syncRoot)
-        {
-            var json = JsonSerializer.Serialize(servers, JsonOptions);
-            File.WriteAllText(_storagePath, json);
-        }
+        return CloneSnapshot(normalized);
     }
 
     private static ServerSnapshot NormalizeSnapshot(ServerSnapshot snapshot, string ownerUserId)
@@ -286,7 +275,21 @@ public class ServerStateService
 
     private static ServerSnapshot CloneSnapshot(ServerSnapshot snapshot)
     {
-        var json = JsonSerializer.Serialize(snapshot, JsonOptions);
-        return JsonSerializer.Deserialize<ServerSnapshot>(json, JsonOptions) ?? new ServerSnapshot();
+        return DeserializeSnapshot(SerializeSnapshot(snapshot));
+    }
+
+    private static ServerSnapshot DeserializeSnapshot(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return new ServerSnapshot();
+        }
+
+        return JsonSerializer.Deserialize<ServerSnapshot>(rawValue, JsonOptions) ?? new ServerSnapshot();
+    }
+
+    private static string SerializeSnapshot(ServerSnapshot snapshot)
+    {
+        return JsonSerializer.Serialize(snapshot, JsonOptions);
     }
 }

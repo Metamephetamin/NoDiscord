@@ -1,10 +1,12 @@
 using BackNoDiscord;
+using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
 
 LoadDotEnv();
 
@@ -90,21 +92,42 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var path = context.Request.Path.Value ?? "/auth";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{path}:{remoteIp}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+});
 builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<CryptoService>();
-builder.Services.AddSingleton<ServerInviteService>();
-builder.Services.AddSingleton<ServerStateService>();
+builder.Services.AddScoped<ServerInviteService>();
+builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 4 * 1024 * 1024;
-    options.EnableDetailedErrors = false;
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
 })
 .AddMessagePackProtocol();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+await DatabaseSchemaInitializer.InitializeAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
 {
@@ -120,6 +143,7 @@ if (app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

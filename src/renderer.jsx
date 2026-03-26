@@ -5,10 +5,12 @@ import { API_BASE_URL } from "./config/runtime";
 import "./index.css";
 import {
   AUTH_UNAUTHORIZED_EVENT,
-  buildAuthHeaders,
   clearStoredSession,
+  getStoredAccessTokenExpiresAt,
+  getStoredRefreshToken,
   getStoredToken,
-  getStoredUser,
+  hydrateStoredSession,
+  authFetch,
   parseApiResponse,
   storeSession,
 } from "./utils/auth";
@@ -17,33 +19,38 @@ export default function Renderer() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
 
   useEffect(() => {
     let disposed = false;
 
     const resetSession = () => {
-      clearStoredSession();
+      void clearStoredSession();
 
       if (!disposed) {
         setUser(null);
         setToken(null);
+        setSessionHydrated(true);
         setLoading(false);
       }
     };
 
     const restoreSession = async () => {
-      const savedToken = getStoredToken();
-      const savedUser = getStoredUser();
+      const savedSession = await hydrateStoredSession();
+      const savedToken = savedSession.accessToken;
+      const savedUser = savedSession.user;
 
       if (!savedToken || !savedUser) {
-        setLoading(false);
+        if (!disposed) {
+          setSessionHydrated(true);
+          setLoading(false);
+        }
         return;
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        const response = await authFetch(`${API_BASE_URL}/auth/me`, {
           method: "GET",
-          headers: buildAuthHeaders(),
         });
         const data = await parseApiResponse(response);
 
@@ -62,11 +69,18 @@ export default function Renderer() {
 
         if (!disposed) {
           setUser(nextUser);
-          setToken(savedToken);
+          setToken(getStoredToken() || savedToken);
+          setSessionHydrated(true);
           setLoading(false);
         }
+
+        await storeSession(nextUser, {
+          accessToken: getStoredToken() || savedToken,
+          refreshToken: getStoredRefreshToken(),
+          accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+        });
       } catch (error) {
-        console.error("Failed to restore session from localStorage", error);
+        console.error("Failed to restore secure session", error);
         resetSession();
       }
     };
@@ -85,23 +99,36 @@ export default function Renderer() {
   }, []);
 
   useEffect(() => {
-    if (token && user) {
-      storeSession(user, token);
-    } else {
-      clearStoredSession();
+    if (!sessionHydrated) {
+      return;
     }
-  }, [token, user]);
 
-  const handleAuthSuccess = (nextUser, nextToken) => {
+    if (token && user) {
+      void storeSession(user, {
+        accessToken: token,
+        refreshToken: getStoredRefreshToken(),
+        accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+      });
+    } else {
+      void clearStoredSession();
+    }
+  }, [sessionHydrated, token, user]);
+
+  const handleAuthSuccess = (nextUser, nextSession) => {
+    const accessToken =
+      nextSession && typeof nextSession === "object" ? nextSession.accessToken || nextSession.token || "" : nextSession;
+
     setUser(nextUser);
-    setToken(nextToken);
-    storeSession(nextUser, nextToken);
+    setToken(accessToken);
+    setSessionHydrated(true);
+    void storeSession(nextUser, nextSession);
   };
 
   const handleLogout = () => {
     setUser(null);
     setToken(null);
-    clearStoredSession();
+    setSessionHydrated(true);
+    void clearStoredSession();
   };
 
   if (loading) {

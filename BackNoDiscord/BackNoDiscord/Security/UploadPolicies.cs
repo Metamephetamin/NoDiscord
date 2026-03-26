@@ -107,6 +107,12 @@ public static class UploadPolicies
             return false;
         }
 
+        if (!HasExpectedFileSignature(file, extension))
+        {
+            error = "Avatar content does not match the selected file type.";
+            return false;
+        }
+
         return true;
     }
 
@@ -119,6 +125,12 @@ public static class UploadPolicies
         if (!AllowedChatExtensions.Contains(extension))
         {
             error = "This file type is not allowed.";
+            return false;
+        }
+
+        if (!HasExpectedFileSignature(file, extension))
+        {
+            error = "File content does not match the selected file type.";
             return false;
         }
 
@@ -141,5 +153,85 @@ public static class UploadPolicies
         return ContentTypeProvider.TryGetContentType($"file{extension}", out var contentType)
             ? contentType
             : "application/octet-stream";
+    }
+
+    private static bool HasExpectedFileSignature(IFormFile file, string extension)
+    {
+        using var stream = file.OpenReadStream();
+        Span<byte> buffer = stackalloc byte[512];
+        var bytesRead = stream.Read(buffer);
+        var header = buffer[..bytesRead];
+
+        return extension switch
+        {
+            ".jpg" or ".jpeg" => StartsWith(header, 0xFF, 0xD8, 0xFF),
+            ".png" => StartsWith(header, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A),
+            ".webp" => StartsWithAscii(header, "RIFF") && HasAsciiAt(header, 8, "WEBP"),
+            ".gif" => StartsWithAscii(header, "GIF87a") || StartsWithAscii(header, "GIF89a"),
+            ".bmp" => StartsWithAscii(header, "BM"),
+            ".pdf" => StartsWithAscii(header, "%PDF"),
+            ".zip" => StartsWith(header, 0x50, 0x4B, 0x03, 0x04) || StartsWith(header, 0x50, 0x4B, 0x05, 0x06) || StartsWith(header, 0x50, 0x4B, 0x07, 0x08),
+            ".rar" => StartsWith(header, 0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00) || StartsWith(header, 0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00),
+            ".7z" => StartsWith(header, 0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C),
+            ".mp3" => StartsWithAscii(header, "ID3") || StartsWith(header, 0xFF, 0xFB) || StartsWith(header, 0xFF, 0xF3) || StartsWith(header, 0xFF, 0xF2),
+            ".wav" => StartsWithAscii(header, "RIFF") && HasAsciiAt(header, 8, "WAVE"),
+            ".ogg" => StartsWithAscii(header, "OggS"),
+            ".mp4" => HasAsciiAt(header, 4, "ftyp"),
+            ".webm" => StartsWith(header, 0x1A, 0x45, 0xDF, 0xA3),
+            ".txt" or ".md" => LooksLikeText(header),
+            _ => false
+        };
+    }
+
+    private static bool StartsWith(ReadOnlySpan<byte> buffer, params byte[] signature)
+    {
+        return buffer.Length >= signature.Length && buffer[..signature.Length].SequenceEqual(signature);
+    }
+
+    private static bool StartsWithAscii(ReadOnlySpan<byte> buffer, string signature)
+    {
+        return HasAsciiAt(buffer, 0, signature);
+    }
+
+    private static bool HasAsciiAt(ReadOnlySpan<byte> buffer, int offset, string signature)
+    {
+        if (buffer.Length < offset + signature.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < signature.Length; index++)
+        {
+            if (buffer[offset + index] != signature[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool LooksLikeText(ReadOnlySpan<byte> buffer)
+    {
+        if (buffer.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var value in buffer)
+        {
+            if (value == 0)
+            {
+                return false;
+            }
+
+            var isAllowedControl = value is 0x09 or 0x0A or 0x0D;
+            if (!isAllowedControl && value < 0x20)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

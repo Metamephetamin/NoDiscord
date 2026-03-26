@@ -1,10 +1,59 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session, shell } from "electron";
+import fs from "node:fs/promises";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
 if (started) {
   app.quit();
 }
+
+const SESSION_STORE_FILE_NAME = "session.secure.json";
+
+const getSessionStorePath = () => path.join(app.getPath("userData"), SESSION_STORE_FILE_NAME);
+
+const readSecureSession = async () => {
+  try {
+    const raw = await fs.readFile(getSessionStorePath(), "utf8");
+    if (!raw.trim()) {
+      return null;
+    }
+
+    const payload = JSON.parse(raw);
+    if (payload?.encrypted && safeStorage.isEncryptionAvailable()) {
+      const decrypted = safeStorage.decryptString(Buffer.from(payload.encrypted, "base64"));
+      return JSON.parse(decrypted);
+    }
+
+    return payload?.plain ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const writeSecureSession = async (sessionValue) => {
+  const directory = path.dirname(getSessionStorePath());
+  await fs.mkdir(directory, { recursive: true });
+
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(JSON.stringify(sessionValue));
+    await fs.writeFile(
+      getSessionStorePath(),
+      JSON.stringify({ encrypted: encrypted.toString("base64") }),
+      "utf8"
+    );
+    return;
+  }
+
+  await fs.writeFile(getSessionStorePath(), JSON.stringify({ plain: sessionValue }), "utf8");
+};
+
+const clearSecureSession = async () => {
+  try {
+    await fs.unlink(getSessionStorePath());
+  } catch {
+    // ignore missing secure store
+  }
+};
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -44,6 +93,16 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  ipcMain.handle("secure-session:get", async () => readSecureSession());
+  ipcMain.handle("secure-session:set", async (_event, sessionValue) => {
+    await writeSecureSession(sessionValue ?? null);
+    return true;
+  });
+  ipcMain.handle("secure-session:clear", async () => {
+    await clearSecureSession();
+    return true;
+  });
+
   ipcMain.handle("desktop-capturer:get-sources", async () => {
     const sources = await desktopCapturer.getSources({
       types: ["screen", "window"],

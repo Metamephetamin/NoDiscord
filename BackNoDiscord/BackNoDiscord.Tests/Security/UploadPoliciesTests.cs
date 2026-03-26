@@ -8,8 +8,10 @@ public class UploadPoliciesTests
     [Fact]
     public void TryValidateAvatar_AcceptsAllowedImage()
     {
-        using var stream = new MemoryStream([1, 2, 3]);
-        IFormFile file = new FormFile(stream, 0, stream.Length, "avatar", "avatar.png")
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00 };
+        using var stream = new MemoryStream(bytes);
+        stream.Position = 0;
+        IFormFile file = new FormFile(stream, 0, bytes.Length, "avatar", "avatar.png")
         {
             Headers = new HeaderDictionary(),
             ContentType = "image/png"

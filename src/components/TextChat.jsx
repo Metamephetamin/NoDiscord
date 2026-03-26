@@ -32,16 +32,60 @@ function isImageAttachment(messageItem) {
   return Boolean(messageItem?.attachmentContentType?.startsWith("image/"));
 }
 
-export default function TextChat({ serverId, channelId, user }) {
+function formatTimestamp(timestamp) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+  const isYesterday =
+    date.getDate() === now.getDate() - 1 &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+
+  if (isToday) {
+    return `Сегодня в ${hours}:${minutes}`;
+  }
+
+  if (isYesterday) {
+    return `Вчера в ${hours}:${minutes}`;
+  }
+
+  return `${date.getDate()}.${(date.getMonth() + 1).toString().padStart(2, "0")}.${date.getFullYear()} в ${hours}:${minutes}`;
+}
+
+function getChatErrorMessage(error, fallbackMessage) {
+  const rawMessage = String(error?.message || "").trim();
+  if (!rawMessage) {
+    return fallbackMessage;
+  }
+
+  if (rawMessage.includes("Forbidden")) {
+    return "Нет доступа к этому чату.";
+  }
+
+  if (rawMessage.includes("Unauthorized")) {
+    return "Сессия недействительна. Войдите снова.";
+  }
+
+  return rawMessage;
+}
+
+export default function TextChat({ serverId, channelId, user, resolvedChannelId = "" }) {
   const [message, setMessage] = useState("");
   const [messagesByChannel, setMessagesByChannel] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isChannelReady, setIsChannelReady] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
-  const scopedChannelId = getScopedChatChannelId(serverId, channelId);
+  const joinedChannelRef = useRef("");
+  const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -62,38 +106,36 @@ export default function TextChat({ serverId, channelId, user }) {
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [message]);
 
-  function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday =
-      date.getDate() === now.getDate() &&
-      date.getMonth() === now.getMonth() &&
-      date.getFullYear() === now.getFullYear();
-    const isYesterday =
-      date.getDate() === now.getDate() - 1 &&
-      date.getMonth() === now.getMonth() &&
-      date.getFullYear() === now.getFullYear();
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-
-    if (isToday) {
-      return `Сегодня в ${hours}:${minutes}`;
+  const ensureChannelJoined = async () => {
+    const connection = await startChatConnection();
+    if (!connection) {
+      throw new Error("Сессия недействительна. Войдите снова.");
     }
 
-    if (isYesterday) {
-      return `Вчера в ${hours}:${minutes}`;
+    if (joinedChannelRef.current === scopedChannelId) {
+      return;
     }
 
-    return `${date.getDate()}.${(date.getMonth() + 1).toString().padStart(2, "0")}.${date.getFullYear()} в ${hours}:${minutes}`;
-  }
+    const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
+    joinedChannelRef.current = scopedChannelId;
+    setIsChannelReady(true);
+    setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: initialMessages }));
+  };
 
   useEffect(() => {
     if (!scopedChannelId) {
+      setIsChannelReady(false);
+      joinedChannelRef.current = "";
       return undefined;
     }
 
-    let isJoined = false;
+    let isMounted = true;
+
     const handleReceiveMessage = (nextMessage) => {
+      if (String(nextMessage?.channelId || scopedChannelId) !== String(scopedChannelId)) {
+        return;
+      }
+
       setMessagesByChannel((previous) => {
         const channelMessages = previous[scopedChannelId] || [];
         return { ...previous, [scopedChannelId]: [...channelMessages, nextMessage] };
@@ -113,32 +155,35 @@ export default function TextChat({ serverId, channelId, user }) {
     const init = async () => {
       try {
         setErrorMessage("");
-        await startChatConnection();
+        setIsChannelReady(false);
 
         chatConnection.off("ReceiveMessage", handleReceiveMessage);
         chatConnection.off("MessageDeleted", handleMessageDeleted);
         chatConnection.on("ReceiveMessage", handleReceiveMessage);
         chatConnection.on("MessageDeleted", handleMessageDeleted);
 
-        try {
-          const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
-          setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: initialMessages }));
-          isJoined = true;
-        } catch (joinError) {
-          console.error("JoinChannel error:", joinError);
-          setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: previous[scopedChannelId] || [] }));
+        await ensureChannelJoined();
+      } catch (error) {
+        console.error("SignalR chat init error:", error);
+        if (!isMounted) {
+          return;
         }
-      } catch (err) {
-        console.error("SignalR connection error:", err);
-        setErrorMessage(err.message || "Не удалось подключить чат.");
+
+        joinedChannelRef.current = "";
+        setIsChannelReady(false);
+        setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: previous[scopedChannelId] || [] }));
+        setErrorMessage(getChatErrorMessage(error, "Не удалось подключить чат."));
       }
     };
 
     init();
 
     return () => {
-      if (isJoined) {
-        chatConnection.invoke("LeaveChannel", scopedChannelId).catch(console.error);
+      isMounted = false;
+
+      if (joinedChannelRef.current === scopedChannelId) {
+        chatConnection.invoke("LeaveChannel", scopedChannelId).catch(() => {});
+        joinedChannelRef.current = "";
       }
 
       chatConnection.off("ReceiveMessage", handleReceiveMessage);
@@ -174,7 +219,7 @@ export default function TextChat({ serverId, channelId, user }) {
   };
 
   const send = async () => {
-    if (!message.trim() && !selectedFile) {
+    if ((!message.trim() && !selectedFile) || !scopedChannelId) {
       return;
     }
 
@@ -182,8 +227,9 @@ export default function TextChat({ serverId, channelId, user }) {
 
     try {
       setErrorMessage("");
-      let attachment = null;
+      await ensureChannelJoined();
 
+      let attachment = null;
       if (selectedFile) {
         setUploadingFile(true);
         attachment = await uploadAttachment(selectedFile);
@@ -203,9 +249,12 @@ export default function TextChat({ serverId, channelId, user }) {
 
       setMessage("");
       setSelectedFile(null);
-    } catch (err) {
-      console.error("SendMessage error:", err);
-      setErrorMessage(err.message || "Не удалось отправить сообщение");
+      setIsChannelReady(true);
+    } catch (error) {
+      console.error("SendMessage error:", error);
+      joinedChannelRef.current = "";
+      setIsChannelReady(false);
+      setErrorMessage(getChatErrorMessage(error, "Не удалось отправить сообщение."));
     } finally {
       setUploadingFile(false);
     }
@@ -229,7 +278,7 @@ export default function TextChat({ serverId, channelId, user }) {
   };
 
   const messages = messagesByChannel[scopedChannelId] || [];
-  const currentUserName = getUserName(user).toLowerCase();
+  const currentUserId = String(user?.id || "");
 
   return (
     <div className="textchat-container">
@@ -270,7 +319,8 @@ export default function TextChat({ serverId, channelId, user }) {
               ) : null}
             </div>
 
-            {messageItem.username?.toLowerCase() === currentUserName && (
+            {(String(messageItem.authorUserId || "") === currentUserId ||
+              (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase())) && (
               <button
                 type="button"
                 className="message-delete"
@@ -315,13 +365,16 @@ export default function TextChat({ serverId, channelId, user }) {
                 }
               }}
             />
-            <button type="button" className="send-button" onClick={send} disabled={uploadingFile}>
+            <button type="button" className="send-button" onClick={send} disabled={uploadingFile || !scopedChannelId}>
               {uploadingFile ? "Загрузка..." : "Отправить"}
             </button>
           </div>
         </div>
       </div>
 
+      {!isChannelReady && scopedChannelId ? (
+        <div className="chat-error">Чат переподключается. Если это личка, попробуйте отправить ещё раз через секунду.</div>
+      ) : null}
       {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
     </div>
   );

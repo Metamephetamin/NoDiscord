@@ -16,53 +16,19 @@ public class ChatHub : Hub
     private const int MaxMessageLength = 4000;
     private const int MaxAttachmentUrlLength = 260;
     private const int MaxAttachmentContentTypeLength = 120;
-    private const int MaxSignalPayloadLength = 128_000;
+    private const string DirectMessageChannelPrefix = "dm:";
 
     private readonly AppDbContext _context;
     private readonly CryptoService _crypto;
     private readonly ILogger<ChatHub> _logger;
+    private readonly ServerStateService _serverState;
 
-    public ChatHub(AppDbContext context, CryptoService crypto, ILogger<ChatHub> logger)
+    public ChatHub(AppDbContext context, CryptoService crypto, ILogger<ChatHub> logger, ServerStateService serverState)
     {
         _context = context;
         _crypto = crypto;
         _logger = logger;
-    }
-
-    public async Task SendScreenOffer(string targetConnectionId, string sdp)
-    {
-        if (string.IsNullOrWhiteSpace(targetConnectionId) ||
-            string.IsNullOrWhiteSpace(sdp) ||
-            sdp.Length > MaxSignalPayloadLength)
-        {
-            return;
-        }
-
-        await Clients.Client(targetConnectionId).SendAsync("ReceiveScreenOffer", Context.ConnectionId, sdp);
-    }
-
-    public async Task SendScreenAnswer(string targetConnectionId, string sdp)
-    {
-        if (string.IsNullOrWhiteSpace(targetConnectionId) ||
-            string.IsNullOrWhiteSpace(sdp) ||
-            sdp.Length > MaxSignalPayloadLength)
-        {
-            return;
-        }
-
-        await Clients.Client(targetConnectionId).SendAsync("ReceiveScreenAnswer", Context.ConnectionId, sdp);
-    }
-
-    public async Task SendIceCandidate(string targetConnectionId, string candidate)
-    {
-        if (string.IsNullOrWhiteSpace(targetConnectionId) ||
-            string.IsNullOrWhiteSpace(candidate) ||
-            candidate.Length > 8000)
-        {
-            return;
-        }
-
-        await Clients.Client(targetConnectionId).SendAsync("ReceiveIceCandidate", Context.ConnectionId, candidate);
+        _serverState = serverState;
     }
 
     public async Task SendMessage(
@@ -84,6 +50,11 @@ public class ChatHub : Hub
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             throw new HubException("channelId is required");
+        }
+
+        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        {
+            throw new HubException("Forbidden");
         }
 
         var payload = new ChatMessagePayload
@@ -115,7 +86,7 @@ public class ChatHub : Hub
         {
             ChannelId = normalizedChannelId,
             Username = currentUser.DisplayName,
-            Content = serializedPayload,
+            Content = null,
             EncryptedContent = encrypted,
             PhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(photoUrl, "/avatars/"),
             Timestamp = DateTime.UtcNow,
@@ -130,7 +101,7 @@ public class ChatHub : Hub
 
     public async Task<List<MessageDto>> JoinChannel(string channelId)
     {
-        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out _))
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
             throw new HubException("Unauthorized");
         }
@@ -139,6 +110,11 @@ public class ChatHub : Hub
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             throw new HubException("channelId is required");
+        }
+
+        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        {
+            throw new HubException("Forbidden");
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, normalizedChannelId);
@@ -208,6 +184,8 @@ public class ChatHub : Hub
         return new MessageDto
         {
             Id = message.Id,
+            ChannelId = message.ChannelId,
+            AuthorUserId = payload.AuthorUserId,
             Username = message.Username,
             Message = payload.Message,
             PhotoUrl = message.PhotoUrl,
@@ -267,11 +245,73 @@ public class ChatHub : Hub
             return message.Content ?? string.Empty;
         }
     }
+
+    private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
+    {
+        if (TryGetDirectMessageParticipantIds(channelId, out var firstUserId, out var secondUserId))
+        {
+            return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
+        }
+
+        if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))
+        {
+            return false;
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        return ServerChannelAuthorization.CanAccessServer(serverId, currentUser, snapshot);
+    }
+
+    private bool CanAccessDirectChannel(string currentUserId, int firstUserId, int secondUserId)
+    {
+        if (!int.TryParse(currentUserId, out var actorUserId))
+        {
+            return false;
+        }
+
+        if (actorUserId != firstUserId && actorUserId != secondUserId)
+        {
+            return false;
+        }
+
+        var lowId = Math.Min(firstUserId, secondUserId);
+        var highId = Math.Max(firstUserId, secondUserId);
+
+        return _context.Friendships
+            .AsNoTracking()
+            .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
+    }
+
+    private static bool TryGetDirectMessageParticipantIds(string channelId, out int firstUserId, out int secondUserId)
+    {
+        firstUserId = 0;
+        secondUserId = 0;
+
+        var normalizedChannelId = channelId?.Trim() ?? string.Empty;
+        if (!normalizedChannelId.StartsWith(DirectMessageChannelPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var parts = normalizedChannelId.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 3)
+        {
+            return false;
+        }
+
+        return int.TryParse(parts[1], out firstUserId) &&
+               int.TryParse(parts[2], out secondUserId) &&
+               firstUserId > 0 &&
+               secondUserId > 0 &&
+               firstUserId != secondUserId;
+    }
 }
 
 public class MessageDto
 {
     public int Id { get; set; }
+    public string ChannelId { get; set; } = string.Empty;
+    public string AuthorUserId { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string? PhotoUrl { get; set; }
