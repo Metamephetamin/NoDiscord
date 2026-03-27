@@ -129,12 +129,12 @@ const VoiceChannelList = ({
                     />
                     <div className="participant-item__voice-flags">
                       {participant.isMicMuted && (
-                        <span className="participant-item__voice-flag" title="Микрофон выключен">
+                        <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Микрофон выключен">
                           <img src="/icons/microphone.png" alt="" />
                         </span>
                       )}
                       {participant.isDeafened && (
-                        <span className="participant-item__voice-flag" title="Не слышит канал">
+                        <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Не слышит канал">
                           <img src="/icons/headphones.png" alt="" />
                         </span>
                       )}

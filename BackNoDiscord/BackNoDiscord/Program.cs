@@ -3,6 +3,7 @@ using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -31,6 +32,11 @@ if (jwtKey.Length < 32)
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
+});
 
 builder.Services.AddCors(options =>
 {

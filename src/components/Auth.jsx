@@ -227,11 +227,7 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-card__main">
           <div className="auth-card__heading">
             <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
-            <p className="auth-subtitle">
-              {mode === "login"
-                ? "Войдите в аккаунт, чтобы снова получить доступ к серверам, чату и приглашениям."
-                : "Создайте аккаунт. Дополнительные поля можно заполнить сразу или оставить на потом."}
-            </p>
+            <p className="auth-subtitle"></p>
           </div>
 
           {mode === "login" ? (
@@ -394,10 +390,6 @@ export default function Auth({ onAuthSuccess }) {
 
         <aside className="auth-card__side">
           <div className="auth-side__title">Платежная карта</div>
-          <p className="auth-side__subtitle">
-            Эти поля необязательны. Карта обновляется во время ввода, а при переходе к CVC разворачивается.
-          </p>
-
           <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
             <div className="bank-card__face bank-card__face--front">
               <div className="bank-card__brand">MAX PAY</div>
@@ -418,6 +410,7 @@ export default function Auth({ onAuthSuccess }) {
               <div className="bank-card__stripe" />
               <div className="bank-card__cvc-box">
                 <span className="bank-card__label">CVC</span>
+                <span>Мы временно спишем </span>
                 <span className="bank-card__cvc">{displayedCardCvc}</span>
               </div>
             </div>

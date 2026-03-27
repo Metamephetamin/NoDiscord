@@ -94,7 +94,15 @@ public class ChatHub : Hub
         };
 
         _context.Messages.Add(msg);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Failed to persist chat message for channel {ChannelId}", normalizedChannelId);
+            throw new HubException("Не удалось сохранить сообщение. Перезапустите backend, чтобы он обновил схему базы данных.");
+        }
 
         await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
     }

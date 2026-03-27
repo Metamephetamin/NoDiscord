@@ -15,7 +15,7 @@ public class UploadChatFileRequest
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ChatFilesController : ControllerBase
 {
-    private const long MaxFileSizeBytes = 32L * 1024 * 1024;
+    private const long MaxFileSizeBytes = 100L * 1024 * 1024;
 
     [HttpPost("upload")]
     [RequestSizeLimit(MaxFileSizeBytes)]
@@ -34,7 +34,7 @@ public class ChatFilesController : ControllerBase
 
         if (file.Length > MaxFileSizeBytes)
         {
-            return BadRequest(new { message = "File size must be less than or equal to 32 MB" });
+            return BadRequest(new { message = "File size must be less than or equal to 100 MB" });
         }
 
         if (!UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error))

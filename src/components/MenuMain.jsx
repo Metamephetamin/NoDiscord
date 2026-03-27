@@ -17,6 +17,9 @@ const SERVERS_STORAGE_KEY = "nd_servers_v2";
 const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
 const NOISE_SUPPRESSION_STORAGE_KEY = "nd_noise_suppression_mode";
 const DIRECT_NOTIFICATIONS_STORAGE_KEY = "nd_direct_notifications";
+const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
+const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
+const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "# general" },
   { id: "2", name: "# gaming" },
@@ -112,7 +115,14 @@ const getScopedPrivateServerId = (serverId, user) => {
 };
 const getNoiseSuppressionStorageKey = (user) => `${NOISE_SUPPRESSION_STORAGE_KEY}:${getUserStorageScope(user)}`;
 const getDirectNotificationsStorageKey = (user) => `${DIRECT_NOTIFICATIONS_STORAGE_KEY}:${getUserStorageScope(user)}`;
+const getAudioInputDeviceStorageKey = (user) => `${AUDIO_INPUT_DEVICE_STORAGE_KEY}:${getUserStorageScope(user)}`;
+const getAudioOutputDeviceStorageKey = (user) => `${AUDIO_OUTPUT_DEVICE_STORAGE_KEY}:${getUserStorageScope(user)}`;
+const getVideoInputDeviceStorageKey = (user) => `${VIDEO_INPUT_DEVICE_STORAGE_KEY}:${getUserStorageScope(user)}`;
 const createDirectToastId = () => `dm-toast-${Math.random().toString(36).slice(2, 10)}`;
+const getMeterActiveBars = (level, total) => {
+  const normalizedLevel = Math.max(0, Math.min(1, Number(level) || 0));
+  return Math.max(0, Math.min(total, Math.round(normalizedLevel * total)));
+};
 const isPersonalDefaultServer = (server, user) => {
   if (!server) {
     return false;
@@ -287,7 +297,7 @@ const normalizeChannels = (channels, type) => {
   }));
 };
 const normalizeServers = (value, currentUser) => {
-  if (!Array.isArray(value) || value.length === 0) return [createDefaultServer(currentUser)];
+  if (!Array.isArray(value) || value.length === 0) return [];
   return value.map((server, index) => ({
     isDefault: isPersonalDefaultServer(server, currentUser),
     id: String(
@@ -323,9 +333,9 @@ const getActiveServerStorageKey = (user) => `${ACTIVE_SERVER_STORAGE_KEY}:${getU
 const readStoredServers = (user) => {
   try {
     const raw = localStorage.getItem(getServersStorageKey(user));
-    return raw ? normalizeServers(JSON.parse(raw), user) : [createDefaultServer(user)];
+    return raw ? normalizeServers(JSON.parse(raw), user) : [];
   } catch {
-    return [createDefaultServer(user)];
+    return [];
   }
 };
 const getChannelDisplayName = (name, type) => (type === "text" && !name.startsWith("#") ? `# ${name}` : name);
@@ -350,28 +360,47 @@ const UI_SOUND_PATHS = {
   leave: "/sounds/leave.mp3",
   share: "/sounds/share.mp3",
 };
+const FRIENDS_SIDEBAR_ITEMS = [
+  { id: "friends", label: "Друзья", icon: "👥" },
+  { id: "discover", label: "Магазин", icon: "◻" },
+  { id: "tasks", label: "Задания", icon: "◎" },
+];
+const SETTINGS_NAV_ITEMS = [
+  { id: "notifications", label: "Уведомления", section: "Пользователь" },
+  { id: "voice_video", label: "Голос и видео", section: "Приложение" },
+  { id: "server", label: "Сервер", section: "Текущий сервер" },
+  { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
+];
 const uiSoundCache = new Map();
 
 export default function MenuMain({ user, setUser, onLogout }) {
   const [servers, setServers] = useState(() => readStoredServers(user));
   const [activeServerId, setActiveServerId] = useState(
-    () => localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || "server-main"
+    () => localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
   );
-  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "1");
+  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "");
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [participantsMap, setParticipantsMap] = useState({});
   const [openSettings, setOpenSettings] = useState(false);
   const [micVolume, setMicVolume] = useState(70);
   const [audioVolume, setAudioVolume] = useState(100);
+  const [audioInputDevices, setAudioInputDevices] = useState([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState([]);
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("");
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState("");
+  const [outputSelectionSupported, setOutputSelectionSupported] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
   const [noiseSuppressionMode, setNoiseSuppressionMode] = useState("transparent");
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
   const [resolution, setResolution] = useState("1080p");
   const [fps, setFps] = useState(60);
   const [shareStreamAudio, setShareStreamAudio] = useState(false);
   const [remoteScreenShares, setRemoteScreenShares] = useState([]);
   const [announcedLiveUserIds, setAnnouncedLiveUserIds] = useState([]);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [localLiveShareMode, setLocalLiveShareMode] = useState("");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [isMicForced, setIsMicForced] = useState(false);
@@ -390,22 +419,41 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [activeDirectFriendId, setActiveDirectFriendId] = useState("");
   const [directNotificationsEnabled, setDirectNotificationsEnabled] = useState(true);
   const [directMessageToasts, setDirectMessageToasts] = useState([]);
+  const [workspaceMode, setWorkspaceMode] = useState("servers");
+  const [friendsPageSection, setFriendsPageSection] = useState("add");
+  const [settingsTab, setSettingsTab] = useState("voice_video");
+  const [autoInputSensitivity, setAutoInputSensitivity] = useState(true);
+  const [showMicMenu, setShowMicMenu] = useState(false);
+  const [showSoundMenu, setShowSoundMenu] = useState(false);
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState("");
+  const [cameraError, setCameraError] = useState("");
+  const [hasCameraPreview, setHasCameraPreview] = useState(false);
 
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
   const memberRoleMenuRef = useRef(null);
   const noiseMenuRef = useRef(null);
+  const micMenuRef = useRef(null);
+  const soundMenuRef = useRef(null);
   const avatarInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
+  const cameraPreviewRef = useRef(null);
+  const cameraStreamRef = useRef(null);
   const voiceClientRef = useRef(null);
   const previousVoiceChannelRef = useRef(null);
   const previousScreenShareRef = useRef(false);
   const joinedDirectChannelsRef = useRef(new Set());
   const directToastTimeoutsRef = useRef(new Map());
+  const appliedInputDeviceRef = useRef("");
+  const appliedOutputDeviceRef = useRef("");
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
   const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
   const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
   const directNotificationsStorageKey = useMemo(() => getDirectNotificationsStorageKey(user), [user?.id, user?.email]);
+  const audioInputDeviceStorageKey = useMemo(() => getAudioInputDeviceStorageKey(user), [user?.id, user?.email]);
+  const audioOutputDeviceStorageKey = useMemo(() => getAudioOutputDeviceStorageKey(user), [user?.id, user?.email]);
+  const videoInputDeviceStorageKey = useMemo(() => getVideoInputDeviceStorageKey(user), [user?.id, user?.email]);
   const currentUserId = useMemo(() => getCurrentUserId(user), [user?.id, user?.email]);
 
   const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
@@ -473,6 +521,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const selectedResolutionOption = useMemo(() => STREAM_RESOLUTION_OPTIONS.find((option) => option.value === resolution) || STREAM_RESOLUTION_OPTIONS[1], [resolution]);
   const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
+  const isScreenShareActive = isSharingScreen && localLiveShareMode === "screen";
+  const isCameraShareActive = isSharingScreen && localLiveShareMode === "camera";
   const selectedStreamParticipant = useMemo(() => Object.values(participantsMap).flat().find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [participantsMap, selectedStreamUserId]);
   const selectedStreamDebugInfo = useMemo(() => ({
     userId: selectedStreamUserId ? String(selectedStreamUserId) : "",
@@ -499,6 +549,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
     });
     return nextMap;
   }, [activeVoiceParticipantsMap]);
+  const activeContacts = useMemo(
+    () => friends.filter((friend) => voiceParticipantByUserId.has(String(friend.id))),
+    [friends, voiceParticipantByUserId]
+  );
 
   const playUiTone = (type) => {
     try {
@@ -597,6 +651,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
   const openDirectChat = (friendId) => {
     setActiveDirectFriendId(String(friendId || ""));
+    setWorkspaceMode("friends");
+    setFriendsPageSection("friends");
     setSelectedStreamUserId(null);
   };
 
@@ -630,22 +686,21 @@ export default function MenuMain({ user, setUser, onLogout }) {
       const existingScopedValue = localStorage.getItem(serversStorageKey);
       const nextServers = existingScopedValue
         ? normalizeServers(JSON.parse(existingScopedValue), user)
-        : [createDefaultServer(user)];
-      const nextActiveServerId =
-        localStorage.getItem(activeServerStorageKey) ||
-        nextServers[0]?.id ||
-        "server-main";
+        : [];
+      const persistedActiveServerId = localStorage.getItem(activeServerStorageKey) || "";
+      const nextActiveServerId = nextServers.some((server) => server.id === persistedActiveServerId)
+        ? persistedActiveServerId
+        : nextServers[0]?.id || "";
       const nextActiveServer = nextServers.find((server) => server.id === nextActiveServerId) || nextServers[0];
 
       setServers(nextServers);
       setActiveServerId(nextActiveServerId);
-      setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "1");
+      setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
     } catch (error) {
       console.error("Ошибка загрузки пользовательских серверов:", error);
-      const fallback = [createDefaultServer(user)];
-      setServers(fallback);
-      setActiveServerId(fallback[0].id);
-      setCurrentTextChannelId(fallback[0]?.textChannels?.[0]?.id || "1");
+      setServers([]);
+      setActiveServerId("");
+      setCurrentTextChannelId("");
     }
   }, [activeServerStorageKey, serversStorageKey, user]);
 
@@ -736,7 +791,101 @@ export default function MenuMain({ user, setUser, onLogout }) {
   }, [directNotificationsEnabled]);
 
   useEffect(() => {
-    if (!user || !activeServerId) return;
+    if (!user) {
+      setAudioInputDevices([]);
+      setAudioOutputDevices([]);
+      setSelectedInputDeviceId("");
+      setSelectedOutputDeviceId("");
+      setOutputSelectionSupported(false);
+      setMicLevel(0);
+      setCameraDevices([]);
+      setSelectedVideoDeviceId("");
+      setCameraError("");
+      setHasCameraPreview(false);
+      appliedInputDeviceRef.current = "";
+      appliedOutputDeviceRef.current = "";
+      return;
+    }
+
+    try {
+      setSelectedInputDeviceId(localStorage.getItem(audioInputDeviceStorageKey) || "");
+    } catch {
+      setSelectedInputDeviceId("");
+    }
+
+    try {
+      setSelectedOutputDeviceId(localStorage.getItem(audioOutputDeviceStorageKey) || "");
+    } catch {
+      setSelectedOutputDeviceId("");
+    }
+  }, [audioInputDeviceStorageKey, audioOutputDeviceStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      if (selectedInputDeviceId) {
+        localStorage.setItem(audioInputDeviceStorageKey, selectedInputDeviceId);
+      } else {
+        localStorage.removeItem(audioInputDeviceStorageKey);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, [audioInputDeviceStorageKey, selectedInputDeviceId, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      if (selectedOutputDeviceId) {
+        localStorage.setItem(audioOutputDeviceStorageKey, selectedOutputDeviceId);
+      } else {
+        localStorage.removeItem(audioOutputDeviceStorageKey);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, [audioOutputDeviceStorageKey, selectedOutputDeviceId, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      setSelectedVideoDeviceId(localStorage.getItem(videoInputDeviceStorageKey) || "");
+    } catch {
+      setSelectedVideoDeviceId("");
+    }
+  }, [videoInputDeviceStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      if (selectedVideoDeviceId) {
+        localStorage.setItem(videoInputDeviceStorageKey, selectedVideoDeviceId);
+      } else {
+        localStorage.removeItem(videoInputDeviceStorageKey);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, [selectedVideoDeviceId, user, videoInputDeviceStorageKey]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!activeServerId) {
+      localStorage.removeItem(activeServerStorageKey);
+      return;
+    }
     localStorage.setItem(activeServerStorageKey, activeServerId);
   }, [activeServerId, activeServerStorageKey, user]);
 
@@ -856,9 +1005,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
   }, [showServerMembersPanel, activeServer?.id, activeServer?.isShared, isDefaultServer]);
   useEffect(() => {
     if (!servers.length) {
-      const fallback = createDefaultServer(user);
-      setServers([fallback]);
-      setActiveServerId(fallback.id);
+      setActiveServerId("");
+      setCurrentTextChannelId("");
       return;
     }
     if (!servers.some((server) => server.id === activeServerId)) setActiveServerId(servers[0].id);
@@ -883,11 +1031,15 @@ export default function MenuMain({ user, setUser, onLogout }) {
       const insideServerPanel = serverMembersRef.current?.contains(target);
       const insideMemberMenu = memberRoleMenuRef.current?.contains(target);
       const insideNoiseMenu = noiseMenuRef.current?.contains(target);
+      const insideMicMenu = micMenuRef.current?.contains(target);
+      const insideSoundMenu = soundMenuRef.current?.contains(target);
 
       if (popupRef.current && !insidePopup) setOpenSettings(false);
       if (serverMembersRef.current && !insideServerPanel && !insideMemberMenu) setShowServerMembersPanel(false);
       if (!insideMemberMenu) setMemberRoleMenu(null);
       if (!insideNoiseMenu) setShowNoiseMenu(false);
+      if (!insideMicMenu) setShowMicMenu(false);
+      if (!insideSoundMenu) setShowSoundMenu(false);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -921,6 +1073,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       onChannelChanged: setCurrentVoiceChannel,
       onRemoteScreenStreamsChanged: setRemoteScreenShares,
       onLocalScreenShareChanged: setIsSharingScreen,
+      onLocalLiveShareChanged: ({ mode }) => setLocalLiveShareMode(mode || ""),
       onLiveUsersChanged: setAnnouncedLiveUserIds,
       onSpeakingUsersChanged: setSpeakingUserIds,
       onSelfVoiceStateChanged: ({
@@ -934,8 +1087,34 @@ export default function MenuMain({ user, setUser, onLogout }) {
         setIsMicForced(Boolean(nextIsMicForced));
         setIsSoundForced(Boolean(nextIsSoundForced));
       },
+      onMicLevelChanged: setMicLevel,
+      onAudioDevicesChanged: ({
+        inputs,
+        outputs,
+        selectedInputDeviceId: nextInputDeviceId,
+        selectedOutputDeviceId: nextOutputDeviceId,
+        outputSelectionSupported: nextOutputSelectionSupported,
+      }) => {
+        setAudioInputDevices(Array.isArray(inputs) ? inputs : []);
+        setAudioOutputDevices(Array.isArray(outputs) ? outputs : []);
+        setSelectedInputDeviceId(nextInputDeviceId || "");
+        setSelectedOutputDeviceId(nextOutputDeviceId || "");
+        setOutputSelectionSupported(Boolean(nextOutputSelectionSupported));
+      },
     });
     voiceClientRef.current = client;
+    if (selectedInputDeviceId) {
+      appliedInputDeviceRef.current = selectedInputDeviceId;
+      client.setInputDevice(selectedInputDeviceId).catch((error) => {
+        console.error("Ошибка применения устройства ввода:", error);
+      });
+    }
+    if (selectedOutputDeviceId) {
+      appliedOutputDeviceRef.current = selectedOutputDeviceId;
+      client.setOutputDevice(selectedOutputDeviceId).catch((error) => {
+        console.error("Ошибка применения устройства вывода:", error);
+      });
+    }
     client.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
       console.error("Ошибка применения стартового режима шумоподавления:", error);
     });
@@ -950,8 +1129,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
     voiceClientRef.current.connect(user).catch((error) => logVoiceHubError("Ошибка обновления пользователя в голосовом хабе:", error));
   }, [user?.id, user?.firstName, user?.first_name, user?.avatarUrl, user?.avatar]);
   useEffect(() => {
-    voiceClientRef.current?.setMicrophoneVolume(isMicMuted || isSoundMuted ? 0 : micVolume);
-  }, [micVolume, isMicMuted, isSoundMuted]);
+    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : micVolume) : micVolume;
+    voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
+  }, [currentVoiceChannel, micVolume, isMicMuted, isSoundMuted]);
   useEffect(() => {
     voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: isMicMuted || isSoundMuted, isDeafened: isSoundMuted }).catch((error) => {
       console.error("Ошибка обновления состояния микрофона:", error);
@@ -967,6 +1147,81 @@ export default function MenuMain({ user, setUser, onLogout }) {
       console.error("Ошибка переключения режима шумоподавления:", error);
     });
   }, [noiseSuppressionMode]);
+  useEffect(() => {
+    if (!voiceClientRef.current || !selectedInputDeviceId) {
+      return;
+    }
+
+    if (appliedInputDeviceRef.current === selectedInputDeviceId) {
+      return;
+    }
+
+    appliedInputDeviceRef.current = selectedInputDeviceId;
+    voiceClientRef.current.setInputDevice(selectedInputDeviceId).catch((error) => {
+      console.error("Ошибка переключения устройства ввода:", error);
+    });
+  }, [selectedInputDeviceId]);
+  useEffect(() => {
+    if (!voiceClientRef.current || !selectedOutputDeviceId) {
+      return;
+    }
+
+    if (appliedOutputDeviceRef.current === selectedOutputDeviceId) {
+      return;
+    }
+
+    appliedOutputDeviceRef.current = selectedOutputDeviceId;
+    voiceClientRef.current.setOutputDevice(selectedOutputDeviceId).catch((error) => {
+      console.error("Ошибка переключения устройства вывода:", error);
+    });
+  }, [selectedOutputDeviceId]);
+  useEffect(() => {
+    if (!voiceClientRef.current || !user?.id) {
+      return;
+    }
+
+    const shouldPreviewMicrophone = showMicMenu || (openSettings && settingsTab === "voice_video");
+    const shouldLoadAudioDevices = shouldPreviewMicrophone || showSoundMenu;
+
+    if (!shouldLoadAudioDevices) {
+      voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
+        console.error("Ошибка остановки предпросмотра микрофона:", error);
+      });
+      return;
+    }
+
+    if (shouldPreviewMicrophone) {
+      voiceClientRef.current.ensureMicrophonePreview().catch((error) => {
+        console.error("Ошибка запуска предпросмотра микрофона:", error);
+      });
+      return;
+    }
+
+    voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
+      console.error("Ошибка остановки предпросмотра микрофона:", error);
+    });
+    voiceClientRef.current.getAudioDevices().catch((error) => {
+      console.error("Ошибка обновления списка аудио-устройств:", error);
+    });
+  }, [openSettings, settingsTab, showMicMenu, showSoundMenu, user?.id]);
+  useEffect(() => {
+    if (!showCameraModal) {
+      stopCameraPreview();
+      return;
+    }
+
+    if (isCameraShareActive) {
+      stopCameraPreview();
+      return;
+    }
+
+    startCameraPreview(selectedVideoDeviceId).catch((error) => {
+      console.error("Ошибка обновления предпросмотра камеры:", error);
+    });
+  }, [isCameraShareActive, selectedVideoDeviceId, showCameraModal]);
+  useEffect(() => () => {
+    stopCameraPreview();
+  }, []);
   useEffect(() => {
     const previousChannel = previousVoiceChannelRef.current;
     if (!previousChannel && currentVoiceChannel) {
@@ -1046,7 +1301,12 @@ export default function MenuMain({ user, setUser, onLogout }) {
       console.error("Ошибка обновления сервера:", error);
     }
   };
-  const openSettingsPanel = () => setOpenSettings(true);
+  const openSettingsPanel = (tab = "voice_video") => {
+    setSettingsTab(tab);
+    setOpenSettings(true);
+    setShowMicMenu(false);
+    setShowSoundMenu(false);
+  };
   const startChannelRename = (type, channel) => {
     if (!canManageChannels || !channel?.id) return;
 
@@ -1090,10 +1350,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!serverToDelete) return;
     if (serverToDelete.voiceChannels.some((channel) => getScopedVoiceChannelId(serverToDelete.id, channel.id) === currentVoiceChannel)) await leaveVoiceChannel();
     const nextServers = servers.filter((server) => server.id !== serverId);
-    const fallbackServers = nextServers.length ? nextServers : [createDefaultServer(user)];
-    const nextActiveId = activeServerId === serverId ? fallbackServers[0].id : activeServerId;
-    const nextActiveServer = fallbackServers.find((server) => server.id === nextActiveId) || fallbackServers[0];
-    setServers(fallbackServers);
+    const nextActiveId = activeServerId === serverId ? nextServers[0]?.id || "" : activeServerId;
+    const nextActiveServer = nextServers.find((server) => server.id === nextActiveId) || nextServers[0] || null;
+    setServers(nextServers);
     setActiveServerId(nextActiveId);
     setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
     setSelectedStreamUserId(null);
@@ -1138,11 +1397,18 @@ export default function MenuMain({ user, setUser, onLogout }) {
   };
   const updateMicVolume = (value) => {
     setMicVolume(value);
-    voiceClientRef.current?.setMicrophoneVolume(isMicMuted || isSoundMuted ? 0 : value);
+    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : value) : value;
+    voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
   };
   const updateAudioVolume = (value) => {
     setAudioVolume(value);
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : value);
+  };
+  const handleInputDeviceChange = (deviceId) => {
+    setSelectedInputDeviceId(deviceId || "");
+  };
+  const handleOutputDeviceChange = (deviceId) => {
+    setSelectedOutputDeviceId(deviceId || "");
   };
   const handleNoiseSuppressionModeChange = (mode) => {
     setNoiseSuppressionMode(mode === "voice_isolation" ? "voice_isolation" : "transparent");
@@ -1218,8 +1484,12 @@ export default function MenuMain({ user, setUser, onLogout }) {
     );
   };
   const joinVoiceChannel = async (channel) => {
-    if (!voiceClientRef.current || !user?.id || !channel?.id) return;
-    try { await voiceClientRef.current.joinChannel(channel.id, user); } catch (error) { console.error("Ошибка входа в голосовой канал:", error); }
+    if (!voiceClientRef.current || !user?.id || !channel?.id || !activeServer?.id) return;
+    try {
+      await voiceClientRef.current.joinChannel(getScopedVoiceChannelId(activeServer.id, channel.id), user);
+    } catch (error) {
+      console.error("Ошибка входа в голосовой канал:", error);
+    }
   };
   const leaveVoiceChannel = async () => {
     if (!voiceClientRef.current) return;
@@ -1230,6 +1500,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
     finally {
       setOpenSettings(false);
       setShowModal(false);
+      setShowCameraModal(false);
+      stopCameraPreview();
       onLogout?.();
     }
   };
@@ -1244,12 +1516,149 @@ export default function MenuMain({ user, setUser, onLogout }) {
     setShowModal(false);
   };
   const handleScreenShareAction = async () => {
-    if (isSharingScreen) {
+    if (isScreenShareActive) {
       await stopScreenShare();
       return;
     }
 
+    setShowCameraModal(false);
     setShowModal(true);
+  };
+  const startCameraShare = async () => {
+    if (!voiceClientRef.current) return;
+
+    setCameraError("");
+    stopCameraPreview();
+
+    try {
+      await voiceClientRef.current.startCameraShare({
+        deviceId: selectedVideoDeviceId,
+        resolution,
+        fps,
+      });
+      setShowCameraModal(false);
+    } catch (error) {
+      setCameraError(error?.message || "Не удалось запустить трансляцию камеры.");
+      startCameraPreview(selectedVideoDeviceId).catch(() => {});
+    }
+  };
+  const stopCameraShare = async () => {
+    if (!voiceClientRef.current) return;
+
+    setCameraError("");
+    try {
+      await voiceClientRef.current.stopScreenShare();
+      setShowCameraModal(false);
+      stopCameraPreview();
+    } catch (error) {
+      setCameraError(error?.message || "Не удалось остановить трансляцию камеры.");
+    }
+  };
+  const stopCameraPreview = () => {
+    cameraStreamRef.current?.getTracks?.().forEach((track) => {
+      try {
+        track.stop();
+      } catch {
+        // ignore camera shutdown failures
+      }
+    });
+    cameraStreamRef.current = null;
+
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = null;
+    }
+
+    setHasCameraPreview(false);
+  };
+  const loadCameraDevices = async (preferredDeviceId = "") => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setCameraDevices([]);
+      return [];
+    }
+
+    const devices = (await navigator.mediaDevices.enumerateDevices())
+      .filter((device) => device.kind === "videoinput")
+      .map((device, index) => ({
+        id: device.deviceId || `camera-${index + 1}`,
+        label: String(device.label || "").trim() || `Камера ${index + 1}`,
+      }));
+
+    setCameraDevices(devices);
+
+    const nextDeviceId =
+      devices.find((device) => device.id === preferredDeviceId)?.id ||
+      devices.find((device) => device.id === selectedVideoDeviceId)?.id ||
+      devices[0]?.id ||
+      "";
+
+    if (nextDeviceId && nextDeviceId !== selectedVideoDeviceId) {
+      setSelectedVideoDeviceId(nextDeviceId);
+    }
+
+    return devices;
+  };
+  const startCameraPreview = async (deviceId = selectedVideoDeviceId) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Эта система не дала приложению доступ к видеоустройствам.");
+      return;
+    }
+
+    stopCameraPreview();
+    setCameraError("");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId && !String(deviceId).startsWith("camera-")
+          ? {
+              deviceId: { exact: deviceId },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            }
+          : {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+        audio: false,
+      });
+
+      cameraStreamRef.current = stream;
+
+      if (cameraPreviewRef.current) {
+        cameraPreviewRef.current.srcObject = stream;
+        cameraPreviewRef.current.muted = true;
+        cameraPreviewRef.current.play().catch(() => {});
+      }
+      setHasCameraPreview(true);
+
+      const devices = await loadCameraDevices(deviceId);
+      const activeTrack = stream.getVideoTracks?.()[0];
+      const activeDeviceId = activeTrack?.getSettings?.().deviceId || deviceId || devices[0]?.id || "";
+
+      if (activeDeviceId && activeDeviceId !== selectedVideoDeviceId) {
+        setSelectedVideoDeviceId(activeDeviceId);
+      }
+
+      if (!devices.length) {
+        setCameraError("Камеры не найдены. Подключите веб-камеру или виртуальную камеру вроде Camo.");
+        setHasCameraPreview(false);
+      }
+    } catch (error) {
+      await loadCameraDevices(deviceId).catch(() => {});
+      setCameraError("Не удалось открыть камеру. Проверьте доступ к ней и выбранное устройство.");
+      setHasCameraPreview(false);
+      console.error("Ошибка запуска камеры:", error);
+    }
+  };
+  const openCameraModal = () => {
+    setCameraError("");
+    setShowModal(false);
+    setShowNoiseMenu(false);
+    setShowCameraModal(true);
+  };
+  const closeCameraModal = () => {
+    setShowCameraModal(false);
+    setCameraError("");
+    stopCameraPreview();
   };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
@@ -1315,534 +1724,919 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
   const activeStreamCount = remoteScreenShares.length + (isSharingScreen ? 1 : 0);
   const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, DEFAULT_AVATAR);
+  const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
+    if (!sections[item.section]) {
+      sections[item.section] = [];
+    }
+
+    sections[item.section].push(item);
+    return sections;
+  }, {});
+  const deviceInputLabel =
+    audioInputDevices.find((device) => device.id === selectedInputDeviceId)?.label ||
+    audioInputDevices[0]?.label ||
+    "Системный микрофон";
+  const deviceOutputLabel =
+    audioOutputDevices.find((device) => device.id === selectedOutputDeviceId)?.label ||
+    audioOutputDevices[0]?.label ||
+    "Системный вывод";
+  const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
+  const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
+  const outputSelectionAvailable = outputSelectionSupported && audioOutputDevices.length > 0;
+  const noiseProfileOptions = [
+    {
+      id: "voice_isolation",
+      title: "Изоляция голоса",
+      description: "Только ваш голос: фон режется сильнее и речь выходит вперед.",
+    },
+    {
+      id: "transparent",
+      title: "Студия",
+      description: "Чистый естественный звук с минимальной обработкой.",
+    },
+  ];
+  const activeNoiseProfile =
+    noiseProfileOptions.find((option) => option.id === noiseSuppressionMode) || noiseProfileOptions[0];
+
+  const renderVoiceSettingsPanel = () => (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Голос и видео</h2>
+          <p>Настройте микрофон, вывод и профиль обработки так, как в вашем макете.</p>
+        </div>
+      </div>
+
+      <section className="voice-settings-card">
+        <div className="voice-settings-card__title">Голос</div>
+        <div className="voice-settings-grid">
+          <label className="voice-settings-field">
+            <span>Микрофон</span>
+            <select
+              className="voice-settings-select voice-settings-select--native"
+              value={selectedInputDeviceId}
+              onChange={(event) => handleInputDeviceChange(event.target.value)}
+            >
+              {audioInputDevices.length > 0 ? (
+                audioInputDevices.map((device) => (
+                  <option key={device.id} value={device.id}>
+                    {device.label}
+                  </option>
+                ))
+              ) : (
+                <option value="">Системный микрофон</option>
+              )}
+            </select>
+            <span className="voice-settings-caption">Выбранное устройство ввода будет использоваться в звонке и при проверке.</span>
+          </label>
+          <label className="voice-settings-field">
+            <span>Динамик</span>
+            <select
+              className="voice-settings-select voice-settings-select--native"
+              value={selectedOutputDeviceId}
+              onChange={(event) => handleOutputDeviceChange(event.target.value)}
+              disabled={!outputSelectionAvailable}
+            >
+              {audioOutputDevices.length > 0 ? (
+                audioOutputDevices.map((device) => (
+                  <option key={device.id} value={device.id}>
+                    {device.label}
+                  </option>
+                ))
+              ) : (
+                <option value="">Системный вывод</option>
+              )}
+            </select>
+            <span className="voice-settings-caption">
+              {outputSelectionAvailable
+                ? "Выход звука можно переключать прямо отсюда."
+                : "Эта система пока не дает приложению переключать устройство вывода напрямую."}
+            </span>
+          </label>
+          <label className="voice-settings-field">
+            <span>Громкость микрофона</span>
+            <input type="range" min="0" max="100" value={micVolume} onChange={(event) => updateMicVolume(Number(event.target.value))} />
+          </label>
+          <label className="voice-settings-field">
+            <span>Громкость динамика</span>
+            <input type="range" min="0" max="100" value={audioVolume} onChange={(event) => updateAudioVolume(Number(event.target.value))} />
+          </label>
+        </div>
+
+        <div className="voice-settings-meter">
+          <button type="button" className="voice-settings-meter__button">Проверка микрофона</button>
+          <div className="voice-settings-meter__bars" aria-hidden="true">
+            {Array.from({ length: 48 }).map((_, index) => (
+              <span key={index} className={index < activeMicSettingsBars ? "is-active" : ""} />
+            ))}
+          </div>
+        </div>
+
+        <div className="voice-settings-help">
+          Нужна помощь? Здесь собраны все быстрые настройки голоса, чтобы не вылезать из звонка.
+        </div>
+      </section>
+
+      <section className="voice-settings-card">
+        <div className="voice-settings-card__title">Профиль ввода</div>
+        <div className="voice-profile-list">
+          {noiseProfileOptions.map((option) => (
+            <label key={option.id} className="voice-profile-option">
+              <input
+                type="radio"
+                name="noiseProfile"
+                checked={noiseSuppressionMode === option.id}
+                onChange={() => handleNoiseSuppressionModeChange(option.id)}
+              />
+              <span className="voice-profile-option__copy">
+                <strong>{option.title}</strong>
+                <span>{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <div className="voice-toggle-row">
+          <div>
+            <strong>Автоматически определять чувствительность ввода</strong>
+            <span>Система сама подстраивает порог срабатывания микрофона под текущий шум.</span>
+          </div>
+          <button
+            type="button"
+            className={`voice-switch ${autoInputSensitivity ? "voice-switch--active" : ""}`}
+            onClick={() => setAutoInputSensitivity((previous) => !previous)}
+            aria-pressed={autoInputSensitivity}
+          >
+            <span />
+          </button>
+        </div>
+
+        <div className="voice-settings-field voice-settings-field--stacked">
+          <span>Шумоподавление</span>
+          <select
+            className="voice-settings-select voice-settings-select--native voice-settings-select--compact"
+            value={noiseSuppressionMode}
+            onChange={(event) => handleNoiseSuppressionModeChange(event.target.value)}
+          >
+            {noiseProfileOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.title}
+              </option>
+            ))}
+          </select>
+          <span className="voice-settings-caption">{activeNoiseProfile.description}</span>
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderNotificationsSettings = () => (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Уведомления</h2>
+          <p>Тонкая настройка того, как приложение будет тревожить вас в личных чатах.</p>
+        </div>
+      </div>
+
+      <section className="voice-settings-card">
+        <div className="voice-toggle-row">
+          <div>
+            <strong>Личные чаты</strong>
+            <span>Показывать всплывающие уведомления, когда личный чат не открыт.</span>
+          </div>
+          <button
+            type="button"
+            className={`voice-switch ${directNotificationsEnabled ? "voice-switch--active" : ""}`}
+            onClick={() => setDirectNotificationsEnabled((previous) => !previous)}
+            aria-pressed={directNotificationsEnabled}
+          >
+            <span />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderServerSettings = () => (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Сервер</h2>
+          <p>Быстрые настройки сервера без отдельного всплывающего окна на каждое действие.</p>
+        </div>
+      </div>
+
+      <section className="voice-settings-card">
+        <div className="settings-server-card settings-server-card--shell">
+          {activeServer?.icon ? (
+            <img
+              className="settings-server-card__icon"
+              src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)}
+              alt={activeServer?.name || "Без названия"}
+            />
+          ) : (
+            <div className="settings-server-card__icon settings-server-card__icon--empty" aria-hidden="true" />
+          )}
+          <label className="voice-settings-field voice-settings-field--stacked voice-settings-field--grow">
+            <span>Название сервера</span>
+            <input className="settings-input" type="text" value={activeServer?.name || ""} onChange={(event) => updateActiveServerName(event.target.value)} disabled={!canManageServer} />
+          </label>
+        </div>
+        <div className="settings-shell__actions">
+          <button type="button" className="settings-inline-button" onClick={() => serverIconInputRef.current?.click()}>Сменить картинку</button>
+          <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteServer(activeServer?.id)} disabled={!canManageServer}>Удалить сервер</button>
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderRolesSettings = () => (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Роли и участники</h2>
+          <p>Иерархия ролей, участники сервера и быстрый обзор прав без длинных полотен текста.</p>
+        </div>
+      </div>
+
+      <section className="voice-settings-card">
+        <div className="settings-section__header">
+          <h4>Роли</h4>
+          <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
+        </div>
+        <div className="settings-list">
+          {(activeServer?.roles || []).map((role) => (
+            <div key={role.id} className="settings-list__row settings-list__row--stacked">
+              <div className="settings-role-meta">
+                <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
+                <span className="settings-role-description">
+                  {(role.permissions || []).length
+                    ? role.permissions.map((permission) => ROLE_PERMISSION_LABELS[permission] || permission).join(", ")
+                    : "Базовый доступ"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="voice-settings-card">
+        <div className="settings-section__header">
+          <h4>Участники</h4>
+          <span className="settings-role-current">{activeServer?.members?.length || 0}</span>
+        </div>
+        <div className="settings-list">
+          {(activeServer?.members || []).map((member) => {
+            const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
+            return (
+              <div key={member.userId} className="settings-list__row settings-list__row--stacked">
+                <div className="settings-role-meta">
+                  <span className="settings-member-name">{member.name}</span>
+                  <span className="settings-role-description">{memberRole?.name || member.roleId || "Member"}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderSettingsContent = () => {
+    switch (settingsTab) {
+      case "notifications":
+        return renderNotificationsSettings();
+      case "server":
+        return renderServerSettings();
+      case "roles":
+        return renderRolesSettings();
+      case "voice_video":
+      default:
+        return renderVoiceSettingsPanel();
+    }
+  };
+  const renderMicMenuPanel = () => (
+    <div className="device-menu__panel">
+      <div className="device-menu__group">
+        <label className="device-menu__field">
+          <span className="device-menu__label">Устройство ввода</span>
+          <select
+            className="device-menu__select"
+            value={selectedInputDeviceId}
+            onChange={(event) => handleInputDeviceChange(event.target.value)}
+          >
+            {audioInputDevices.length > 0 ? (
+              audioInputDevices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.label}
+                </option>
+              ))
+            ) : (
+              <option value="">Системный микрофон</option>
+            )}
+          </select>
+          <span className="device-menu__value">{deviceInputLabel}</span>
+        </label>
+        <label className="device-menu__field">
+          <span className="device-menu__label">Профиль ввода</span>
+          <select
+            className="device-menu__select"
+            value={noiseSuppressionMode}
+            onChange={(event) => handleNoiseSuppressionModeChange(event.target.value)}
+          >
+            {noiseProfileOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.title}
+              </option>
+            ))}
+          </select>
+          <span className="device-menu__value">{activeNoiseProfile.description}</span>
+        </label>
+      </div>
+      <div className="device-menu__slider">
+        <span>Громкость микрофона</span>
+        <input type="range" min="0" max="100" value={micVolume} onChange={(event) => updateMicVolume(Number(event.target.value))} />
+        <div className="device-menu__meter" aria-hidden="true">
+          {Array.from({ length: 24 }).map((_, index) => (
+            <span key={index} className={index < activeMicMenuBars ? "is-active" : ""} />
+          ))}
+        </div>
+      </div>
+      <button type="button" className="device-menu__settings" onClick={() => openSettingsPanel("voice_video")}>
+        <span>Настройки голоса</span>
+        <img src="/icons/settings.png" alt="" />
+      </button>
+    </div>
+  );
+  const renderSoundMenuPanel = () => (
+    <div className="device-menu__panel">
+      <div className="device-menu__group">
+        <label className="device-menu__field">
+          <span className="device-menu__label">Устройство вывода</span>
+          <select
+            className="device-menu__select"
+            value={selectedOutputDeviceId}
+            onChange={(event) => handleOutputDeviceChange(event.target.value)}
+            disabled={!outputSelectionAvailable}
+          >
+            {audioOutputDevices.length > 0 ? (
+              audioOutputDevices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.label}
+                </option>
+              ))
+            ) : (
+              <option value="">Системный вывод</option>
+            )}
+          </select>
+          <span className="device-menu__value">
+            {outputSelectionAvailable ? deviceOutputLabel : "Переключение вывода недоступно в этой среде"}
+          </span>
+        </label>
+      </div>
+      <div className="device-menu__slider">
+        <span>Громкость звука</span>
+        <input type="range" min="0" max="100" value={audioVolume} onChange={(event) => updateAudioVolume(Number(event.target.value))} />
+      </div>
+      <button type="button" className="device-menu__settings" onClick={() => openSettingsPanel("voice_video")}>
+        <span>Настройки голоса</span>
+        <img src="/icons/settings.png" alt="" />
+      </button>
+    </div>
+  );
+  const renderProfilePanel = () => (
+    <div className="menu__profile-wrapper">
+      <div className="menu__profile menu__profile--discordish">
+        {currentVoiceChannelName ? (
+          <div className="profile__connection-card">
+            <div className="profile__connection-copy">
+              <span className="profile__connection-state">Подключено к</span>
+              <span className="profile__connection-subtitle">{`${currentVoiceChannelName} / ${activeServer?.name || "Сервер"}`}</span>
+            </div>
+            <div className="profile__connection-icons">
+              <span className="profile__waveform profile__waveform--live" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="profile__quick-actions">
+          <button type="button" className="profile__quick-button profile__quick-button--settings" onClick={() => openSettingsPanel("voice_video")}>
+            <span className="profile__quick-glyph profile__quick-glyph--settings" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`profile__quick-button ${isScreenShareActive ? "profile__quick-button--active" : ""}`}
+            onClick={handleScreenShareAction}
+          >
+            <span
+              className={`profile__quick-glyph ${isScreenShareActive ? "profile__quick-glyph--close" : "profile__quick-glyph--monitor"}`}
+              aria-hidden="true"
+            />
+          </button>
+          <button
+            type="button"
+            className={`profile__quick-button ${isCameraShareActive ? "profile__quick-button--active" : ""}`}
+            onClick={openCameraModal}
+          >
+            <span className="profile__quick-glyph profile__quick-glyph--camera" aria-hidden="true" />
+          </button>
+          <button type="button" className="profile__quick-button profile__quick-button--active noise-toggle--active" onClick={() => setShowNoiseMenu((previous) => !previous)}>
+            <span className="noise-toggle__bars" aria-hidden="true">
+              <span className="noise-toggle__bar noise-toggle__bar--1" />
+              <span className="noise-toggle__bar noise-toggle__bar--2" />
+              <span className="noise-toggle__bar noise-toggle__bar--3" />
+            </span>
+          </button>
+          {showNoiseMenu && (
+            <div className="noise-menu__panel noise-menu__panel--bottom">
+              <button
+                type="button"
+                className={`noise-menu__option ${noiseSuppressionMode === "transparent" ? "noise-menu__option--active" : ""}`}
+                onClick={() => handleNoiseSuppressionModeChange("transparent")}
+              >
+                <span className="noise-menu__title">Прозрачный</span>
+                <span className="noise-menu__description">Обычный режим без шумодава</span>
+              </button>
+              <button
+                type="button"
+                className={`noise-menu__option ${noiseSuppressionMode === "voice_isolation" ? "noise-menu__option--active" : ""}`}
+                onClick={() => handleNoiseSuppressionModeChange("voice_isolation")}
+              >
+                <span className="noise-menu__title">Изоляция голоса</span>
+                <span className="noise-menu__description">Подавляет фон и вытягивает речь вперед</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="profile__identity-row">
+          <div className="profile__identity">
+            <img className={`avatar ${isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" onClick={() => avatarInputRef.current?.click()} />
+            <input type="file" accept="image/*" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
+            <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
+            <div className="profile__names">
+              <span className="profile__username">{getDisplayName(user)}</span>
+              <div className="status__profile">
+                <span>{currentVoiceChannelName ? "В голосовом чате" : currentServerRole?.name || "Member"}</span>
+                <span className="status__role-dot" style={{ backgroundColor: currentVoiceChannelName ? "#3ba55d" : currentServerRole?.color || "#7b89a8" }} aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+
+          <div className="profile__identity-controls">
+            <div className="device-menu" ref={micMenuRef}>
+              <button type="button" className={`profile__mini-icon ${isMicMuted ? "profile__mini-icon--slashed" : ""}`} onClick={toggleMicMute}>
+                <img src="/icons/microphone.png" alt="" />
+              </button>
+              <button type="button" className="profile__mini-arrow" onClick={() => setShowMicMenu((previous) => !previous)}>▾</button>
+              {showMicMenu && renderMicMenuPanel()}
+            </div>
+
+            <div className="device-menu" ref={soundMenuRef}>
+              <button type="button" className={`profile__mini-icon ${isSoundMuted ? "profile__mini-icon--slashed" : ""}`} onClick={toggleSoundMute}>
+                <img src="/icons/headphones.png" alt="" />
+              </button>
+              <button type="button" className="profile__mini-arrow" onClick={() => setShowSoundMenu((previous) => !previous)}>▾</button>
+              {showSoundMenu && renderSoundMenuPanel()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  const renderFriendsSidebar = () => (
+    <aside className="sidebar__channels sidebar__channels--friends">
+      <div className="channels__top">
+        <input className="friends-search-input" type="text" placeholder="Найти или начать беседу" />
+
+        <div className="friends-nav">
+          {FRIENDS_SIDEBAR_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`friends-nav__item ${item.id === "friends" ? "friends-nav__item--active" : ""}`}
+              onClick={() => setFriendsPageSection(item.id === "friends" ? "add" : "friends")}
+            >
+              <span className="friends-nav__icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="friends-directs">
+          <div className="friends-directs__header">
+            <span>Личные сообщения</span>
+            <button type="button" onClick={() => setFriendsPageSection("add")}>+</button>
+          </div>
+          <div className="friends-directs__list">
+            {friends.length ? (
+              friends.map((friend) => (
+                <button
+                  key={friend.id}
+                  type="button"
+                  className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""}`}
+                  onClick={() => openDirectChat(friend.id)}
+                >
+                  <img src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)} alt={getDisplayName(friend)} />
+                  <span>{getDisplayName(friend)}</span>
+                </button>
+              ))
+            ) : (
+              Array.from({ length: 8 }).map((_, index) => (
+                <div key={index} className="friends-directs__skeleton" aria-hidden="true" />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {renderProfilePanel()}
+    </aside>
+  );
+  const renderServersSidebar = () => (
+    <aside className="sidebar__channels sidebar__channels--servers">
+      <div className="channels__top">
+        {activeServer ? (
+          <div className="server-summary-wrap" ref={serverMembersRef}>
+            <button type="button" className="server-summary server-summary--discordish" onClick={() => setShowServerMembersPanel((previous) => !previous)}>
+              <div className="server-summary__content">
+                <div className="server-summary__name">{activeServer.name || "Server"}</div>
+                <div className="server-summary__subtitle">Сервер</div>
+              </div>
+              <span className="server-summary__caret">▾</span>
+            </button>
+
+            {showServerMembersPanel && (
+              <div className="server-members-panel">
+                <div className="server-members-panel__header">
+                  <h3>Участники сервера</h3>
+                  <span>{activeServer?.members?.length || 0}</span>
+                </div>
+                <div className="server-members-panel__list">
+                  {(activeServer?.members || []).map((member) => {
+                    const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
+                    const memberVoiceState = voiceParticipantByUserId.get(String(member.userId));
+                    const canRenameMember = canManageTargetMember(activeServer, currentUserId, member.userId, "manage_nicknames");
+                    const canMuteMember = canManageTargetMember(activeServer, currentUserId, member.userId, "mute_members");
+                    const canDeafenMember = canManageTargetMember(activeServer, currentUserId, member.userId, "deafen_members");
+                    const canManageMemberRoles = (activeServer?.roles || []).some((role) =>
+                      canAssignRoleToMember(activeServer, currentUserId, member.userId, role.id)
+                    );
+                    const canOpenMemberMenu = canRenameMember || canMuteMember || canDeafenMember || canManageMemberRoles;
+
+                    return (
+                      <div key={member.userId} className="server-members-panel__item">
+                        <img className="server-members-panel__avatar" src={resolveMediaUrl(member.avatar, DEFAULT_AVATAR)} alt={member.name} />
+                        <div className="server-members-panel__meta">
+                          <span className="server-members-panel__name">
+                            <span className="server-members-panel__role-dot" style={{ backgroundColor: memberRole?.color || "#7b89a8" }} aria-hidden="true" />
+                            {member.name}
+                          </span>
+                          <span className="server-members-panel__role">{memberRole?.name || "Member"}</span>
+                        </div>
+                        <div className="server-members-panel__indicators">
+                          {memberVoiceState?.isMicMuted && (
+                            <span className="server-members-panel__voice-flag server-members-panel__voice-flag--slashed" title="Микрофон выключен">
+                              <img src="/icons/microphone.png" alt="" />
+                            </span>
+                          )}
+                          {memberVoiceState?.isDeafened && (
+                            <span className="server-members-panel__voice-flag server-members-panel__voice-flag--slashed" title="Не слышит участников">
+                              <img src="/icons/headphones.png" alt="" />
+                            </span>
+                          )}
+                          {canOpenMemberMenu && (
+                            <button
+                              type="button"
+                              className="server-members-panel__gear"
+                              aria-label={`Управление участником ${member.name}`}
+                              onClick={(event) => openMemberActionsMenu(event, member)}
+                            >
+                              <img src="/icons/settings.png" alt="" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <ServerInvitesPanel activeServer={activeServer} user={user} canInvite={canInviteMembers && !isDefaultServer} onImportServer={handleImportServer} onServerShared={markServerAsShared} />
+              </div>
+            )}
+            {memberRoleMenu && (
+              <div ref={memberRoleMenuRef} className="member-role-menu" style={{ left: memberRoleMenu.x, top: memberRoleMenu.y }}>
+                {(() => {
+                  const targetMember = activeServer?.members?.find((member) => String(member.userId) === String(memberRoleMenu.memberUserId));
+                  const targetVoiceState = voiceParticipantByUserId.get(String(memberRoleMenu.memberUserId));
+                  const canRenameMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "manage_nicknames");
+                  const canMuteMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "mute_members");
+                  const canDeafenMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "deafen_members");
+                  const assignableRoles = (activeServer?.roles || []).filter((role) =>
+                    canAssignRoleToMember(activeServer, currentUserId, memberRoleMenu.memberUserId, role.id)
+                  );
+
+                  return (
+                    <>
+                      {targetMember && (
+                        <div className="member-role-menu__title">{targetMember.name}</div>
+                      )}
+                      {canRenameMember && (
+                        <button type="button" className="member-role-menu__item" onClick={() => updateMemberNickname(memberRoleMenu.memberUserId)}>
+                          <img src="/icons/pencil.svg" alt="" className="member-role-menu__icon" />
+                          Сменить ник
+                        </button>
+                      )}
+                      {canMuteMember && (
+                        <button
+                          type="button"
+                          className="member-role-menu__item"
+                          onClick={() =>
+                            updateMemberVoiceState(memberRoleMenu.memberUserId, {
+                              isMicMuted: !targetVoiceState?.isMicMuted,
+                              isDeafened: Boolean(targetVoiceState?.isDeafened),
+                            })
+                          }
+                        >
+                          <img src="/icons/microphone.png" alt="" className="member-role-menu__icon" />
+                          {targetVoiceState?.isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+                        </button>
+                      )}
+                      {canDeafenMember && (
+                        <button
+                          type="button"
+                          className="member-role-menu__item"
+                          onClick={() =>
+                            updateMemberVoiceState(memberRoleMenu.memberUserId, {
+                              isMicMuted: targetVoiceState?.isDeafened ? Boolean(targetVoiceState?.isMicMuted) : true,
+                              isDeafened: !targetVoiceState?.isDeafened,
+                            })
+                          }
+                        >
+                          <img src="/icons/headphones.png" alt="" className="member-role-menu__icon" />
+                          {targetVoiceState?.isDeafened ? "Вернуть звук" : "Отключить звук"}
+                        </button>
+                      )}
+                      {assignableRoles.length > 0 && (
+                        <>
+                          <div className="member-role-menu__separator" />
+                          <div className="member-role-menu__subtitle">Роль</div>
+                          {assignableRoles.map((role) => (
+                            <button
+                              key={role.id}
+                              type="button"
+                              className={`member-role-menu__item ${targetMember?.roleId === role.id ? "member-role-menu__item--active" : ""}`}
+                              onClick={() => updateMemberRole(memberRoleMenu.memberUserId, role.id)}
+                            >
+                              <span className="member-role-menu__dot" style={{ backgroundColor: role.color || "#7b89a8" }} aria-hidden="true" />
+                              {role.name}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="servers-empty-sidebar">
+            <h3>Серверов пока нет</h3>
+            <p>Создайте первый сервер, и здесь появятся каналы, участники и настройки.</p>
+            <button type="button" className="servers-empty-sidebar__button" onClick={handleAddServer}>Создать сервер</button>
+          </div>
+        )}
+
+        {activeServer && (
+          <>
+            <div className="server-panel__section">
+              <div className="server-panel__header">
+                <span>Текстовые каналы</span>
+                <button type="button" onClick={addTextChannel} disabled={!canManageChannels}>+</button>
+              </div>
+              <ul className="channel-list">
+                {(activeServer?.textChannels || []).map((channel) => {
+                  const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
+                  return (
+                    <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
+                      {isEditing ? (
+                        <input
+                          className="channel-inline-input"
+                          type="text"
+                          value={channelRenameState.value}
+                          autoFocus
+                          onChange={(event) => updateChannelRenameValue(event.target.value)}
+                          onBlur={submitChannelRename}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              submitChannelRename();
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              cancelChannelRename();
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button type="button" className="channel-item__button" onClick={() => { setWorkspaceMode("servers"); setCurrentTextChannelId(channel.id); setActiveDirectFriendId(""); }}>
+                          {getChannelDisplayName(channel.name, "text")}
+                        </button>
+                      )}
+                      <button type="button" className="channel-edit-button" onClick={() => startChannelRename("text", channel)} aria-label="Переименовать канал" disabled={!canManageChannels}>
+                        <img src="/icons/settings.png" alt="" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <div className="server-panel__section">
+              <div className="server-panel__header">
+                <span>Голосовые каналы</span>
+                <button type="button" onClick={addVoiceChannel} disabled={!canManageChannels}>+</button>
+              </div>
+              <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={activeVoiceParticipantsMap} serverId={activeServer?.id || ""} serverMembers={activeServer?.members || []} serverRoles={activeServer?.roles || []} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={startChannelRename} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""} editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""} onRenameValueChange={updateChannelRenameValue} onRenameSubmit={submitChannelRename} onRenameCancel={cancelChannelRename} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {renderProfilePanel()}
+    </aside>
+  );
+  const renderFriendsMain = () => (
+    <main className="chat__wrapper chat__wrapper--friends">
+      <div className="friends-layout">
+        <section className="friends-main">
+          <div className="friends-main__toolbar">
+            <div className="friends-main__tabs">
+              <button type="button" className={`friends-main__tab ${!activeDirectFriendId ? "friends-main__tab--active" : ""}`} onClick={() => { setActiveDirectFriendId(""); setFriendsPageSection("friends"); }}>
+                Друзья
+              </button>
+              <button type="button" className={`friends-main__tab ${friendsPageSection === "add" && !activeDirectFriendId ? "friends-main__tab--accent" : ""}`} onClick={() => { setActiveDirectFriendId(""); setFriendsPageSection("add"); }}>
+                Добавить в друзья
+              </button>
+            </div>
+          </div>
+
+          {currentDirectFriend ? (
+            <div className="friends-main__chat">
+              <div className="chat__header chat__header--friends">
+                <h1>{getDisplayName(currentDirectFriend)}</h1>
+                <span className="chat__subtitle">Личный чат между двумя пользователями</span>
+              </div>
+              <TextChat resolvedChannelId={currentDirectChannelId} user={user} />
+            </div>
+          ) : (
+            <div className="friends-main__content">
+              <div className="friends-hero">
+                <h1>Добавить в друзья</h1>
+                <p>Вы можете добавить друзей по email или открыть личный чат с уже добавленными контактами.</p>
+                <form className="friends-hero__form" onSubmit={handleAddFriend}>
+                  <input type="email" placeholder="Введите email друга" value={friendEmail} onChange={(event) => setFriendEmail(event.target.value)} />
+                  <button type="submit" disabled={isAddingFriend}>{isAddingFriend ? "Отправляем..." : "Отправить запрос дружбы"}</button>
+                </form>
+                {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
+              </div>
+
+              <div className="friends-discovery">
+                <h2>Где ещё можно завести друзей</h2>
+                <p>Если пока не с кем переписываться, можно открыть свои серверы или пригласить туда новых людей.</p>
+                <button type="button" className="friends-discovery__card" onClick={() => setWorkspaceMode("servers")}>
+                  <span className="friends-discovery__icon">◉</span>
+                  <span>Исследуйте доступные серверы</span>
+                  <span className="friends-discovery__arrow">›</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <aside className="friends-contacts">
+          <h3>Активные контакты</h3>
+          {activeContacts.length ? (
+            <div className="friends-contacts__list">
+              {activeContacts.map((friend) => (
+                <button key={friend.id} type="button" className="friends-contacts__item" onClick={() => openDirectChat(friend.id)}>
+                  <img src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)} alt={getDisplayName(friend)} />
+                  <span>{getDisplayName(friend)}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="friends-contacts__empty">
+              <strong>Пока что тут тихо...</strong>
+              <span>Когда друзья зайдут в голосовой чат или начнут активничать, они появятся здесь.</span>
+            </div>
+          )}
+        </aside>
+      </div>
+    </main>
+  );
+  const renderServerMain = () => (
+    <main className="chat__wrapper chat__wrapper--servers">
+      <div className="chat__box chat__box--servers">
+        {activeServer ? (
+          <div className="chat__topbar">
+            <div className="chat__topbar-title">
+              <span>#</span>
+              <strong>{getChannelDisplayName(currentTextChannel?.name || "# channel", "text")}</strong>
+            </div>
+            <div className="chat__topbar-actions">
+              <button type="button" className="chat__topbar-icon" onClick={() => setShowServerMembersPanel((previous) => !previous)}>👥</button>
+              <button type="button" className="chat__topbar-icon" onClick={() => openSettingsPanel("server")}>⚙</button>
+              <input className="chat__topbar-search" type="text" placeholder={`Искать «${activeServer?.name || "сервер"}»`} />
+            </div>
+          </div>
+        ) : null}
+
+        {!activeServer ? (
+          <div className="server-empty-state">
+            <div className="server-empty-state__badge">Серверы</div>
+            <h1>У вас пока нет серверов</h1>
+            <p>После регистрации список пустой. Создайте свой первый сервер вручную, и здесь появятся каналы и чат.</p>
+            <button type="button" className="server-empty-state__button" onClick={handleAddServer}>Создать первый сервер</button>
+          </div>
+        ) : selectedStreamUserId ? (
+          <ScreenShareViewer stream={selectedStream?.stream || null} videoSrc={selectedStream?.videoSrc || ""} imageSrc={selectedStream?.imageSrc || ""} hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)} title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`} subtitle="Просмотр видеопотока участника" onClose={() => setSelectedStreamUserId(null)} debugInfo={selectedStreamDebugInfo} />
+        ) : (
+          <>
+            {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} />}
+          </>
+        )}
+      </div>
+    </main>
+  );
 
   return (
     <div className="menu__main">
       <aside className="sidebar__servers">
-        {servers.map((server) => (
-          <button key={server.id} type="button" className={`btn__server ${server.id === activeServer?.id ? "btn__server--active" : ""}`} onClick={() => { setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }} title={server.name || "Без названия"}>
+        <button type="button" className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`} onClick={() => setWorkspaceMode("friends")} title="Друзья">
+          <img src="/icons/sms.svg" alt="" />
+          <span>Друзья</span>
+        </button>
+        <button type="button" className={`workspace-logo ${workspaceMode === "servers" ? "workspace-logo--active" : ""}`} title="MAX" onClick={() => setWorkspaceMode("servers")}>
+          <span className="workspace-logo__mark" aria-hidden="true">MAX</span>
+        </button>
+        {workspaceMode === "servers" && servers.map((server) => (
+          <button key={server.id} type="button" className={`btn__server ${server.id === activeServer?.id ? "btn__server--active" : ""}`} onClick={() => { setWorkspaceMode("servers"); setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }} title={server.name || "Без названия"}>
             {server.icon ? <img src={resolveMediaUrl(server.icon, DEFAULT_SERVER_ICON)} alt={server.name || "Без названия"} /> : <span className="btn__server-empty" aria-hidden="true" />}
           </button>
         ))}
         <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={handleAddServer}>+</button>
         <button type="button" className="logout" aria-label="Выйти" onClick={handleLogout}><img src="/icons/logout.png" alt="logout" /></button>
       </aside>
-
-      <aside className="sidebar__channels">
-        <div className="channels__top">
-          {activeServer && (
-            <div className="server-summary-wrap" ref={serverMembersRef}>
-              <button type="button" className="server-summary" onClick={() => setShowServerMembersPanel((previous) => !previous)}>
-                {activeServer.icon ? <img className="server-summary__icon" src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)} alt={activeServer.name || "Server"} /> : <div className="server-summary__icon server-summary__icon--empty" aria-hidden="true" />}
-                <div className="server-summary__content">
-                  <div className="server-summary__name">{activeServer.name || "Server"}</div>
-                  <div className="server-summary__subtitle">Активный сервер</div>
-                </div>
-              </button>
-
-              {showServerMembersPanel && (
-                <div className="server-members-panel">
-                  <div className="server-members-panel__header">
-                    <h3>Участники сервера</h3>
-                    <span>{activeServer?.members?.length || 0}</span>
-                  </div>
-                  <div className="server-members-panel__list">
-                    {(activeServer?.members || []).map((member) => {
-                      const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
-                      const memberVoiceState = voiceParticipantByUserId.get(String(member.userId));
-                      const canRenameMember = canManageTargetMember(activeServer, currentUserId, member.userId, "manage_nicknames");
-                      const canMuteMember = canManageTargetMember(activeServer, currentUserId, member.userId, "mute_members");
-                      const canDeafenMember = canManageTargetMember(activeServer, currentUserId, member.userId, "deafen_members");
-                      const canManageMemberRoles = (activeServer?.roles || []).some((role) =>
-                        canAssignRoleToMember(activeServer, currentUserId, member.userId, role.id)
-                      );
-                      const canOpenMemberMenu = canRenameMember || canMuteMember || canDeafenMember || canManageMemberRoles;
-
-                      return (
-                        <div key={member.userId} className="server-members-panel__item">
-                          <img className="server-members-panel__avatar" src={resolveMediaUrl(member.avatar, DEFAULT_AVATAR)} alt={member.name} />
-                          <div className="server-members-panel__meta">
-                            <span className="server-members-panel__name">
-                              <span className="server-members-panel__role-dot" style={{ backgroundColor: memberRole?.color || "#7b89a8" }} aria-hidden="true" />
-                              {member.name}
-                            </span>
-                            <span className="server-members-panel__role">{memberRole?.name || "Member"}</span>
-                          </div>
-                          <div className="server-members-panel__indicators">
-                            {memberVoiceState?.isMicMuted && (
-                              <span className="server-members-panel__voice-flag" title="Микрофон выключен">
-                                <img src="/icons/microphone.png" alt="" />
-                              </span>
-                            )}
-                            {memberVoiceState?.isDeafened && (
-                              <span className="server-members-panel__voice-flag" title="Не слышит участников">
-                                <img src="/icons/headphones.png" alt="" />
-                              </span>
-                            )}
-                            {canOpenMemberMenu && (
-                              <button
-                                type="button"
-                                className="server-members-panel__gear"
-                                aria-label={`Управление участником ${member.name}`}
-                                onClick={(event) => openMemberActionsMenu(event, member)}
-                              >
-                                <img src="/icons/settings.png" alt="" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <ServerInvitesPanel activeServer={activeServer} user={user} canInvite={canInviteMembers && !isDefaultServer} onImportServer={handleImportServer} onServerShared={markServerAsShared} />
-                </div>
-              )}
-              {memberRoleMenu && (
-                <div ref={memberRoleMenuRef} className="member-role-menu" style={{ left: memberRoleMenu.x, top: memberRoleMenu.y }}>
-                  {(() => {
-                    const targetMember = activeServer?.members?.find((member) => String(member.userId) === String(memberRoleMenu.memberUserId));
-                    const targetVoiceState = voiceParticipantByUserId.get(String(memberRoleMenu.memberUserId));
-                    const canRenameMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "manage_nicknames");
-                    const canMuteMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "mute_members");
-                    const canDeafenMember = canManageTargetMember(activeServer, currentUserId, memberRoleMenu.memberUserId, "deafen_members");
-                    const assignableRoles = (activeServer?.roles || []).filter((role) =>
-                      canAssignRoleToMember(activeServer, currentUserId, memberRoleMenu.memberUserId, role.id)
-                    );
-
-                    return (
-                      <>
-                        {targetMember && (
-                          <div className="member-role-menu__title">{targetMember.name}</div>
-                        )}
-                        {canRenameMember && (
-                          <button
-                            type="button"
-                            className="member-role-menu__item"
-                            onClick={() => updateMemberNickname(memberRoleMenu.memberUserId)}
-                          >
-                            <img src="/icons/pencil.svg" alt="" className="member-role-menu__icon" />
-                            Сменить ник
-                          </button>
-                        )}
-                        {canMuteMember && (
-                          <button
-                            type="button"
-                            className="member-role-menu__item"
-                            onClick={() =>
-                              updateMemberVoiceState(memberRoleMenu.memberUserId, {
-                                isMicMuted: !targetVoiceState?.isMicMuted,
-                                isDeafened: Boolean(targetVoiceState?.isDeafened),
-                              })
-                            }
-                          >
-                            <img src="/icons/microphone.png" alt="" className="member-role-menu__icon" />
-                            {targetVoiceState?.isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
-                          </button>
-                        )}
-                        {canDeafenMember && (
-                          <button
-                            type="button"
-                            className="member-role-menu__item"
-                            onClick={() =>
-                              updateMemberVoiceState(memberRoleMenu.memberUserId, {
-                                isMicMuted: targetVoiceState?.isDeafened ? Boolean(targetVoiceState?.isMicMuted) : true,
-                                isDeafened: !targetVoiceState?.isDeafened,
-                              })
-                            }
-                          >
-                            <img src="/icons/headphones.png" alt="" className="member-role-menu__icon" />
-                            {targetVoiceState?.isDeafened ? "Вернуть звук" : "Отключить звук"}
-                          </button>
-                        )}
-                        {assignableRoles.length > 0 && (
-                          <>
-                            <div className="member-role-menu__separator" />
-                            <div className="member-role-menu__subtitle">Роль</div>
-                            {assignableRoles.map((role) => (
-                              <button
-                                key={role.id}
-                                type="button"
-                                className={`member-role-menu__item ${targetMember?.roleId === role.id ? "member-role-menu__item--active" : ""}`}
-                                onClick={() => updateMemberRole(memberRoleMenu.memberUserId, role.id)}
-                              >
-                                <span className="member-role-menu__dot" style={{ backgroundColor: role.color || "#7b89a8" }} aria-hidden="true" />
-                                {role.name}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-              </div>
-          )}
-
-          <div className="friends-panel">
-            <div className="channel-heading">
-              <h2>Друзья</h2>
-              <span className="friends-panel__count">{friends.length}</span>
-            </div>
-
-            <form className="friends-panel__form" onSubmit={handleAddFriend}>
-              <input
-                className="friends-panel__input"
-                type="email"
-                placeholder="Email друга"
-                value={friendEmail}
-                onChange={(event) => setFriendEmail(event.target.value)}
-              />
-              <button type="submit" className="friends-panel__add" disabled={isAddingFriend}>
-                {isAddingFriend ? "..." : "+"}
-              </button>
-            </form>
-
-            {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
-
-            <div className="friends-panel__list">
-              {friends.length ? (
-                friends.map((friend) => {
-                  const isDirectActive = String(activeDirectFriendId) === String(friend.id);
-                  return (
-                    <div key={friend.id} className={`friends-panel__item ${isDirectActive ? "friends-panel__item--active" : ""}`}>
-                      <button type="button" className="friends-panel__main" onClick={() => openDirectChat(friend.id)}>
-                        <img
-                          className="friends-panel__avatar"
-                          src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)}
-                          alt={getDisplayName(friend)}
-                        />
-                        <span className="friends-panel__meta">
-                          <span className="friends-panel__name">{getDisplayName(friend)}</span>
-                          <span className="friends-panel__email">{friend.email}</span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="friends-panel__chat"
-                        onClick={() => openDirectChat(friend.id)}
-                        aria-label={`Личный чат с ${getDisplayName(friend)}`}
-                        title="Личный чат"
-                      >
-                        <img src="/icons/sms.svg" alt="" />
-                      </button>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="friends-panel__empty">Добавьте первого друга по email.</div>
-              )}
-            </div>
-          </div>
-
-          <div className="text__channel">
-            <h1>Каналы</h1>
-            <div className="channel-heading">
-              <h2>Текстовые каналы</h2>
-              <button type="button" className="channel-add-button" onClick={addTextChannel} disabled={!canManageChannels}>+</button>
-            </div>
-            <ul className="channel-list">
-              {(activeServer?.textChannels || []).map((channel) => {
-                const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
-
-                return (
-                  <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
-                    {isEditing ? (
-                      <input
-                        className="channel-inline-input"
-                        type="text"
-                        value={channelRenameState.value}
-                        autoFocus
-                        onChange={(event) => updateChannelRenameValue(event.target.value)}
-                        onBlur={submitChannelRename}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            submitChannelRename();
-                          }
-
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            cancelChannelRename();
-                          }
-                        }}
-                      />
-                    ) : (
-                      <button type="button" className="channel-item__button" onClick={() => { setCurrentTextChannelId(channel.id); setActiveDirectFriendId(""); }}>
-                        {getChannelDisplayName(channel.name, "text")}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="channel-edit-button"
-                      onClick={() => startChannelRename("text", channel)}
-                      aria-label="Переименовать канал"
-                      disabled={!canManageChannels}
-                    >
-                      <img src="/icons/settings.png" alt="" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          <div className="voice__channels">
-            <div className="channel-heading">
-              <h2>Голосовые каналы</h2>
-              <button type="button" className="channel-add-button" onClick={addVoiceChannel} disabled={!canManageChannels}>+</button>
-            </div>
-            <VoiceChannelList channels={activeServer?.voiceChannels || []} activeChannelId={currentVoiceChannel} participantsMap={activeVoiceParticipantsMap} serverId={activeServer?.id || ""} serverMembers={activeServer?.members || []} serverRoles={activeServer?.roles || []} onJoinChannel={joinVoiceChannel} onLeaveChannel={leaveVoiceChannel} onRenameChannel={startChannelRename} liveUserIds={liveUserIds} speakingUserIds={speakingUserIds} watchedStreamUserId={selectedStreamUserId} onWatchStream={handleWatchStream} canManageChannels={canManageChannels} editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""} editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""} onRenameValueChange={updateChannelRenameValue} onRenameSubmit={submitChannelRename} onRenameCancel={cancelChannelRename} />
-          </div>
-        </div>
-
-        <div className="menu__profile-wrapper">
-          <div className="menu__profile">
-            <div className="profile__top">
-              <div className="profile__monitoring">
-                <div className="wrap__wifi ping-indicator">
-                  <img className="wifi" src="/icons/wifi.png" alt="wifi" />
-                  <div className="wifi-tooltip">{pingMs !== null ? `Пинг: ${pingMs} ms` : "Сервер недоступен"}</div>
-                </div>
-                <div className="wrap__connect"><span className="voice__monitoring">{currentVoiceChannelName ? `Подключено к: ${currentVoiceChannelName}` : "Не подключено"}</span></div>
-              </div>
-
-              <div className="profile__icons">
-                <button type="button" className="wrap__icon" onClick={() => setOpenSettings((previous) => !previous)}><img src="/icons/settings.png" alt="settings" className="icon__settings" /></button>
-                <button
-                  type="button"
-                  className={`wrap__icon ${isMicMuted || isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`}
-                  onClick={toggleMicMute}
-                  disabled={(isMicMuted && (isMicForced || isSoundForced)) || (isSoundMuted && isSoundForced)}
-                  title={(isMicMuted && (isMicForced || isSoundForced)) || (isSoundMuted && isSoundForced) ? "Микрофон отключён администратором" : "Микрофон"}
-                >
-                  <img src="/icons/microphone.png" alt="microphone" className="icon__phone" />
-                </button>
-                <button
-                  type="button"
-                  className={`wrap__icon ${isSoundMuted ? "wrap__icon--danger wrap__icon--slashed" : ""}`}
-                  onClick={toggleSoundMute}
-                  disabled={isSoundMuted && isSoundForced}
-                  title={isSoundMuted && isSoundForced ? "Звук отключён администратором" : "Звук"}
-                >
-                  <img src="/icons/volumespeacker.png" alt="volume" className="icon__volumespeacker" />
-                </button>
-                <button type="button" className={`wrap__icon ${isSharingScreen ? "wrap__icon--danger" : ""}`} onClick={handleScreenShareAction}><img src={isSharingScreen ? "/icons/close.svg" : "/icons/monitor.svg"} alt={isSharingScreen ? "stop stream" : "start stream"} className="icon__camera" /></button>
-              </div>
-            </div>
-
-            <div className="profile__bottom">
-              <div className="profile__user">
-                <img className={`avatar ${isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" onClick={() => avatarInputRef.current?.click()} />
-                <input type="file" accept="image/*" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
-                <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
-                <div className="profile__names">
-                  <span className="profile__username">{getDisplayName(user)}</span>
-                  <div className="status__profile">
-                    <span>{currentServerRole?.name || "Member"}</span>
-                    <span
-                      className="status__role-dot"
-                      style={{ backgroundColor: currentServerRole?.color || "#7b89a8" }}
-                      aria-hidden="true"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="profile__bottom-actions">
-                <div className="noise-menu noise-menu--profile" ref={noiseMenuRef}>
-                  <button
-                    type="button"
-                    className={`wrap__icon noise-toggle ${noiseSuppressionMode === "voice_isolation" ? "noise-toggle--active" : ""}`}
-                    onClick={() => setShowNoiseMenu((previous) => !previous)}
-                    title={noiseSuppressionMode === "voice_isolation" ? "Изоляция голоса" : "Прозрачный режим"}
-                    aria-label="Шумоподавление"
-                    aria-expanded={showNoiseMenu}
-                  >
-                    <span className="noise-toggle__bars" aria-hidden="true">
-                      <span className="noise-toggle__bar noise-toggle__bar--1" />
-                      <span className="noise-toggle__bar noise-toggle__bar--2" />
-                      <span className="noise-toggle__bar noise-toggle__bar--3" />
-                    </span>
-                  </button>
-                  {showNoiseMenu && (
-                    <div className="noise-menu__panel">
-                      <button
-                        type="button"
-                        className={`noise-menu__option ${noiseSuppressionMode === "transparent" ? "noise-menu__option--active" : ""}`}
-                        onClick={() => handleNoiseSuppressionModeChange("transparent")}
-                      >
-                        <span className="noise-menu__title">Прозрачный</span>
-                        <span className="noise-menu__description">Обычный режим без шумодава</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`noise-menu__option ${noiseSuppressionMode === "voice_isolation" ? "noise-menu__option--active" : ""}`}
-                        onClick={() => handleNoiseSuppressionModeChange("voice_isolation")}
-                      >
-                        <span className="noise-menu__title">Изоляция голоса</span>
-                        <span className="noise-menu__description">Подавляет фон и вытягивает речь вперед</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <main className="chat__wrapper">
-        <div className="chat__box">
-          {selectedStreamUserId ? (
-            <ScreenShareViewer stream={selectedStream?.stream || null} videoSrc={selectedStream?.videoSrc || ""} imageSrc={selectedStream?.imageSrc || ""} hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)} title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`} subtitle="Просмотр экрана участника" onClose={() => setSelectedStreamUserId(null)} debugInfo={selectedStreamDebugInfo} />
-          ) : currentDirectFriend ? (
-            <>
-              <div className="chat__header">
-                <h1>{getDisplayName(currentDirectFriend)}</h1>
-                <span className="chat__subtitle">Личный чат между двумя пользователями</span>
-              </div>
-              <TextChat resolvedChannelId={currentDirectChannelId} user={user} />
-            </>
-          ) : (
-            <>
-              <div className="chat__header">
-                <h1>{getChannelDisplayName(currentTextChannel?.name || "# channel", "text")}</h1>
-                <span className="chat__subtitle">Общий чат сервера</span>
-              </div>
-              {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} />}
-            </>
-          )}
-        </div>
-      </main>
+      {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
+      {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}
 
       {openSettings && (
         <div className="settings-backdrop" onClick={() => setOpenSettings(false)}>
-        <div ref={popupRef} className="settings-popup settings-popup--expanded" onClick={(event) => event.stopPropagation()}>
-          <div className="settings-popup__header">
-            <h3>Настройки</h3>
-            <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>x</button>
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <h4>Роли и доступ</h4>
-              <div className="settings-section__actions">
-                <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
-                <button type="button" className="settings-inline-button" onClick={() => setRolesExpanded((previous) => !previous)}>
-                  {rolesExpanded ? "Свернуть" : "Развернуть"}
-                </button>
+          <div ref={popupRef} className="settings-popup settings-popup--shell" onClick={(event) => event.stopPropagation()}>
+            <aside className="settings-shell__sidebar">
+              <div className="settings-shell__profile">
+                <img src={avatarSrc} alt={getDisplayName(user)} />
+                <div>
+                  <strong>{getDisplayName(user)}</strong>
+                  <span>Редактировать профиль...</span>
+                </div>
               </div>
-            </div>
-            {rolesExpanded && (
-              <div className="settings-list">
-                {(activeServer?.roles || []).map((role) => (
-                  <div key={role.id} className="settings-list__row settings-list__row--stacked">
-                    <div className="settings-role-meta">
-                      <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
-                      <span className="settings-role-description">
-                        {(role.permissions || []).length
-                          ? role.permissions.map((permission) => ROLE_PERMISSION_LABELS[permission] || permission).join(", ")
-                          : "Базовый доступ"}
-                      </span>
-                    </div>
+              <input className="settings-shell__search" type="text" placeholder="Поиск" />
+
+              {Object.entries(settingsNavSections).map(([section, items]) => (
+                <div key={section} className="settings-shell__nav-group">
+                  <span className="settings-shell__nav-label">{section}</span>
+                  <div className="settings-shell__nav-list">
+                    {items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`settings-shell__nav-item ${settingsTab === item.id ? "settings-shell__nav-item--active" : ""}`}
+                        onClick={() => setSettingsTab(item.id)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
-                ))}
+                </div>
+              ))}
+            </aside>
+
+            <div className="settings-shell__main">
+              <div className="settings-shell__closebar">
+                <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>×</button>
               </div>
-            )}
-            <div className="settings-helper">
-              Иерархия ролей: owner {">"} admin {">"} moderator {">"} member.
+              {renderSettingsContent()}
             </div>
           </div>
-
-          <ServerInvitesPanel
-            activeServer={activeServer}
-            user={user}
-            canInvite={canInviteMembers && !isDefaultServer}
-            onImportServer={handleImportServer}
-            onServerShared={markServerAsShared}
-          />
-
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <h4>Участники</h4>
-              <span className="settings-role-current">{activeServer?.members?.length || 0}</span>
-            </div>
-            <div className="settings-list">
-              {(activeServer?.members || []).map((member) => {
-                const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
-                const canMuteMember = canManageTargetMember(activeServer, currentUserId, member.userId, "mute_members");
-                const canDeafenMember = canManageTargetMember(activeServer, currentUserId, member.userId, "deafen_members");
-                return (
-                  <div key={member.userId} className="settings-list__row settings-list__row--stacked">
-                    <div className="settings-role-meta">
-                      <span className="settings-member-name">{member.name}</span>
-                      <span className="settings-role-description">{memberRole?.name || member.roleId || "Member"}</span>
-                      {(canMuteMember || canDeafenMember) && (
-                        <span className="settings-helper">
-                          {[
-                            canMuteMember ? "mute" : null,
-                            canDeafenMember ? "deafen" : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" | ")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <h4>Звук</h4>
-            <label className="settings-field">
-              <span>Громкость микрофона: {micVolume}%</span>
-              <input type="range" min="0" max="100" value={micVolume} onChange={(event) => updateMicVolume(Number(event.target.value))} />
-            </label>
-            <label className="settings-field">
-              <span>Общая громкость: {audioVolume}%</span>
-              <input type="range" min="0" max="100" value={audioVolume} onChange={(event) => updateAudioVolume(Number(event.target.value))} />
-            </label>
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <h4>Уведомления</h4>
-              <span className="settings-role-current">{directNotificationsEnabled ? "Вкл" : "Выкл"}</span>
-            </div>
-            <label className="settings-checkbox">
-              <input
-                type="checkbox"
-                checked={directNotificationsEnabled}
-                onChange={(event) => setDirectNotificationsEnabled(event.target.checked)}
-              />
-              <span>Личные чаты</span>
-            </label>
-            <div className="settings-helper">
-              Уведомления показываются только для новых сообщений в личных чатах, которые сейчас не открыты.
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-section__header">
-              <h4>Сервер</h4>
-              <button type="button" className="settings-inline-button" onClick={() => serverIconInputRef.current?.click()}>Сменить картинку</button>
-            </div>
-            <div className="settings-server-card">
-              {activeServer?.icon ? <img className="settings-server-card__icon" src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)} alt={activeServer?.name || "Без названия"} /> : <div className="settings-server-card__icon settings-server-card__icon--empty" aria-hidden="true" />}
-              <label className="settings-field settings-field--tight">
-                <span>Название сервера</span>
-                <input className="settings-input" type="text" value={activeServer?.name || ""} onChange={(event) => updateActiveServerName(event.target.value)} disabled={!canManageServer} />
-              </label>
-              <div className="settings-server-card__actions">
-                <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteServer(activeServer?.id)}>Удалить сервер</button>
-              </div>
-            </div>
-          </div>
-
-        </div>
         </div>
       )}
 
@@ -1876,9 +2670,81 @@ export default function MenuMain({ user, setUser, onLogout }) {
             <div className="stream-modal__hint">
               {`${selectedResolutionOption.label} | ${selectedResolutionOption.description} | ${fps} FPS`}
             </div>
-            <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isSharingScreen} disabled={!currentVoiceChannel} />
+            <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isScreenShareActive} disabled={!currentVoiceChannel} />
             <div className="stream-modal__status">{activeStreamCount > 0 ? `Активных трансляций: ${activeStreamCount}` : "Сейчас трансляций нет"}</div>
             {!currentVoiceChannel && <div className="stream-modal__hint">Сначала подключитесь к голосовому каналу.</div>}
+            {isCameraShareActive ? <div className="stream-modal__hint">Сейчас у вас уже идет трансляция камеры. Запуск экрана заменит ее.</div> : null}
+          </div>
+        </div>
+      )}
+
+      {showCameraModal && (
+        <div className="modal-backdrop" onClick={closeCameraModal}>
+          <div className="camera-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="camera-modal__header">
+              <div>
+                <h3>Камера</h3>
+                <p>Выберите веб-камеру или виртуальную камеру. Если установлен Camo, он появится здесь как обычное устройство.</p>
+              </div>
+              <button type="button" className="stream-modal__close" onClick={closeCameraModal}>
+                x
+              </button>
+            </div>
+
+            <label className="camera-modal__field">
+              <span>Устройство камеры</span>
+              <select value={selectedVideoDeviceId} onChange={(event) => setSelectedVideoDeviceId(event.target.value)}>
+                {cameraDevices.length > 0 ? (
+                  cameraDevices.map((device) => (
+                    <option key={device.id} value={device.id}>
+                      {device.label}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">Камера не найдена</option>
+                )}
+              </select>
+            </label>
+
+            <div className="camera-modal__preview">
+              <video ref={cameraPreviewRef} className="camera-modal__video" autoPlay playsInline muted />
+              {!hasCameraPreview && (
+                <div className="camera-modal__placeholder">
+                  <span>
+                    {isCameraShareActive
+                      ? "Камера уже транслируется в голосовой канал. Здесь можно выбрать другое устройство или остановить эфир."
+                      : "Предпросмотр появится здесь после выбора камеры."}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {cameraError ? <div className="camera-modal__error">{cameraError}</div> : null}
+
+            <div className="camera-modal__actions">
+              <button type="button" className="stream-modal__action" onClick={() => startCameraPreview(selectedVideoDeviceId)}>
+                Обновить предпросмотр
+              </button>
+              <button
+                type="button"
+                className={`stream-modal__action ${isCameraShareActive ? "stream-modal__action--danger" : ""}`}
+                onClick={isCameraShareActive ? stopCameraShare : startCameraShare}
+                disabled={!currentVoiceChannel || (!hasCameraPreview && !isCameraShareActive)}
+              >
+                {isCameraShareActive ? "Остановить трансляцию камеры" : "Начать трансляцию камеры"}
+              </button>
+            </div>
+
+            <div className="stream-modal__status">
+              {isCameraShareActive
+                ? "Камера уже идет в эфир и видна участникам голосового канала."
+                : currentVoiceChannel
+                  ? "После запуска камера появится в голосовом канале как обычная LIVE-трансляция."
+                  : "Сначала подключитесь к голосовому каналу."}
+            </div>
+            {isScreenShareActive ? (
+              <div className="stream-modal__hint">Запуск камеры заменит текущую трансляцию экрана.</div>
+            ) : null}
           </div>
         </div>
       )}

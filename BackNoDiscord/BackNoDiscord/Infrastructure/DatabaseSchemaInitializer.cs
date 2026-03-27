@@ -56,6 +56,15 @@ public static class DatabaseSchemaInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS ix_friendships_user_low_id_user_high_id ON friendships (user_low_id, user_high_id);
             CREATE INDEX IF NOT EXISTS ix_friendships_created_at ON friendships (created_at);
 
+            ALTER TABLE IF EXISTS chatmessages
+                ADD COLUMN IF NOT EXISTS message_encrypted text NULL;
+            ALTER TABLE IF EXISTS chatmessages
+                ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false;
+            ALTER TABLE IF EXISTS chatmessages
+                ALTER COLUMN message DROP NOT NULL;
+            ALTER TABLE IF EXISTS chatmessages
+                ALTER COLUMN photourl DROP NOT NULL;
+
             CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_timestamp ON chatmessages (channelid, timestamp);
             CREATE INDEX IF NOT EXISTS ix_chatmessages_timestamp ON chatmessages (timestamp);
             """);

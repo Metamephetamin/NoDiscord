@@ -5,7 +5,7 @@ import { API_URL } from "../config/runtime";
 import { authFetch } from "../utils/auth";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
-const MAX_FILE_SIZE_BYTES = 32 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
 const getScopedChatChannelId = (serverId, channelId) =>
@@ -32,6 +32,10 @@ function isImageAttachment(messageItem) {
   return Boolean(messageItem?.attachmentContentType?.startsWith("image/"));
 }
 
+function isVideoAttachment(messageItem) {
+  return Boolean(messageItem?.attachmentContentType?.startsWith("video/"));
+}
+
 function formatTimestamp(timestamp) {
   const date = new Date(timestamp);
   const now = new Date();
@@ -39,10 +43,12 @@ function formatTimestamp(timestamp) {
     date.getDate() === now.getDate() &&
     date.getMonth() === now.getMonth() &&
     date.getFullYear() === now.getFullYear();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
   const isYesterday =
-    date.getDate() === now.getDate() - 1 &&
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear();
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
   const hours = date.getHours().toString().padStart(2, "0");
   const minutes = date.getMinutes().toString().padStart(2, "0");
 
@@ -269,7 +275,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setErrorMessage("Файл должен быть не больше 32 МБ.");
+      setErrorMessage("Файл должен быть не больше 100 МБ.");
       return;
     }
 
@@ -283,56 +289,59 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   return (
     <div className="textchat-container">
       <div className="messages-list">
-        {messages.map((messageItem) => (
-          <div key={messageItem.id} className="message-item">
-            <img src={resolveMediaUrl(messageItem.photoUrl, DEFAULT_AVATAR)} alt="avatar" className="msg-avatar" />
+        {messages.map((messageItem) => {
+          const attachmentUrl = messageItem.attachmentUrl
+            ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)
+            : "";
 
-            <div className="msg-content">
-              <div className="message-author">
-                {messageItem.username}
-                <span className="message-time">{formatTimestamp(messageItem.timestamp)}</span>
+          return (
+            <div key={messageItem.id} className="message-item">
+              <img src={resolveMediaUrl(messageItem.photoUrl, DEFAULT_AVATAR)} alt="avatar" className="msg-avatar" />
+
+              <div className="msg-content">
+                <div className="message-author">
+                  {messageItem.username}
+                  <span className="message-time">{formatTimestamp(messageItem.timestamp)}</span>
+                </div>
+
+                {messageItem.message ? <div className="message-text">{messageItem.message}</div> : null}
+
+                {attachmentUrl ? (
+                  isImageAttachment(messageItem) ? (
+                    <a className="message-media" href={attachmentUrl} target="_blank" rel="noreferrer">
+                      <img className="message-media__image" src={attachmentUrl} alt={messageItem.attachmentName || "image"} />
+                    </a>
+                  ) : isVideoAttachment(messageItem) ? (
+                    <div className="message-media message-media--video">
+                      <video className="message-media__video" src={attachmentUrl} controls preload="metadata" playsInline />
+                    </div>
+                  ) : (
+                    <a className="message-attachment" href={attachmentUrl} target="_blank" rel="noreferrer">
+                      <span className="message-attachment__icon" aria-hidden="true" />
+                      <span className="message-attachment__meta">
+                        <span className="message-attachment__name">{messageItem.attachmentName || "Файл"}</span>
+                        <span className="message-attachment__size">{formatFileSize(messageItem.attachmentSize)}</span>
+                      </span>
+                    </a>
+                  )
+                ) : null}
               </div>
 
-              {messageItem.message ? <div className="message-text">{messageItem.message}</div> : null}
-
-              {messageItem.attachmentUrl ? (
-                <a
-                  className="message-attachment"
-                  href={resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)}
-                  target="_blank"
-                  rel="noreferrer"
+              {(String(messageItem.authorUserId || "") === currentUserId ||
+                (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase())) && (
+                <button
+                  type="button"
+                  className="message-delete"
+                  onClick={() => chatConnection.invoke("DeleteMessage", messageItem.id).catch(console.error)}
+                  aria-label="Удалить сообщение"
+                  title="Удалить сообщение"
                 >
-                  {isImageAttachment(messageItem) ? (
-                    <img
-                      className="message-attachment__preview"
-                      src={resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)}
-                      alt={messageItem.attachmentName || "attachment"}
-                    />
-                  ) : (
-                    <span className="message-attachment__icon" aria-hidden="true" />
-                  )}
-                  <span className="message-attachment__meta">
-                    <span className="message-attachment__name">{messageItem.attachmentName || "Файл"}</span>
-                    <span className="message-attachment__size">{formatFileSize(messageItem.attachmentSize)}</span>
-                  </span>
-                </a>
-              ) : null}
+                  <span className="message-delete__icon" aria-hidden="true" />
+                </button>
+              )}
             </div>
-
-            {(String(messageItem.authorUserId || "") === currentUserId ||
-              (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase())) && (
-              <button
-                type="button"
-                className="message-delete"
-                onClick={() => chatConnection.invoke("DeleteMessage", messageItem.id).catch(console.error)}
-                aria-label="Удалить сообщение"
-                title="Удалить сообщение"
-              >
-                <span className="message-delete__icon" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
@@ -343,7 +352,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               <span className="chat-file-pill__name">{selectedFile.name}</span>
               <span className="chat-file-pill__size">{formatFileSize(selectedFile.size)}</span>
               <button type="button" className="chat-file-pill__remove" onClick={() => setSelectedFile(null)}>
-                ×
+                x
               </button>
             </div>
           ) : null}

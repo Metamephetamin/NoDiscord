@@ -75,6 +75,16 @@ const getResolutionConstraints = (resolution, fps) => {
   };
 };
 
+const getCameraConstraints = (deviceId, resolution, fps) => {
+  const preset = getScreenSharePreset(resolution, fps);
+  return {
+    ...(deviceId && !String(deviceId).startsWith("camera-") ? { deviceId: { exact: deviceId } } : {}),
+    width: { ideal: preset.width },
+    height: { ideal: preset.height },
+    frameRate: { ideal: preset.fps, max: preset.fps },
+  };
+};
+
 const tuneDisplayStream = async (stream, resolution, fps) => {
   const track = stream?.getVideoTracks?.()?.[0];
   if (!track) {
@@ -167,9 +177,12 @@ export function createVoiceRoomClient({
   onChannelChanged,
   onRemoteScreenStreamsChanged,
   onLocalScreenShareChanged,
+  onLocalLiveShareChanged,
   onLiveUsersChanged,
   onSpeakingUsersChanged,
   onSelfVoiceStateChanged,
+  onMicLevelChanged,
+  onAudioDevicesChanged,
 } = {}) {
   let connection = null;
   let connectPromise = null;
@@ -187,10 +200,14 @@ export function createVoiceRoomClient({
   let remoteVolume = 0.7;
   let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_TRANSPARENT;
   let localScreenStream = null;
+  let localLiveShareMode = null;
   let screenShareResolution = "720p";
   let screenShareFps = 30;
   let screenMediaRecorder = null;
   let isSendingScreenChunk = false;
+  let selectedInputDeviceId = "";
+  let selectedOutputDeviceId = "";
+  let hasDeviceChangeListener = false;
 
   const peers = new Map();
   const queuedIceCandidatesByUser = new Map();
@@ -211,10 +228,84 @@ export function createVoiceRoomClient({
   };
 
   const emitLocalScreenState = () => {
-    onLocalScreenShareChanged?.(Boolean(localScreenStream));
+    const isActive = Boolean(localScreenStream);
+    onLocalScreenShareChanged?.(isActive);
+    onLocalLiveShareChanged?.({
+      isActive,
+      mode: isActive ? localLiveShareMode || "screen" : "",
+    });
+  };
+
+  const getOutputSelectionSupported = () =>
+    typeof HTMLMediaElement !== "undefined" &&
+    typeof HTMLMediaElement.prototype.setSinkId === "function";
+
+  const normalizeDeviceLabel = (device, index, fallback) => {
+    const label = String(device?.label || "").trim();
+    if (label) {
+      return label;
+    }
+
+    return `${fallback} ${index + 1}`;
+  };
+
+  const emitAudioDevices = async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      const emptyState = {
+        inputs: [],
+        outputs: [],
+        selectedInputDeviceId,
+        selectedOutputDeviceId,
+        outputSelectionSupported: false,
+      };
+      onAudioDevicesChanged?.(emptyState);
+      return emptyState;
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices
+      .filter((device) => device.kind === "audioinput")
+      .map((device, index) => ({
+        id: device.deviceId || (index === 0 ? "default" : `input-${index}`),
+        label: normalizeDeviceLabel(device, index, "Микрофон"),
+        groupId: device.groupId || "",
+      }));
+    const outputs = devices
+      .filter((device) => device.kind === "audiooutput")
+      .map((device, index) => ({
+        id: device.deviceId || (index === 0 ? "default" : `output-${index}`),
+        label: normalizeDeviceLabel(device, index, "Динамик"),
+        groupId: device.groupId || "",
+      }));
+
+    if (!inputs.some((device) => device.id === selectedInputDeviceId)) {
+      selectedInputDeviceId = inputs[0]?.id || "";
+    }
+
+    if (!outputs.some((device) => device.id === selectedOutputDeviceId)) {
+      selectedOutputDeviceId = outputs[0]?.id || "";
+    }
+
+    const payload = {
+      inputs,
+      outputs,
+      selectedInputDeviceId,
+      selectedOutputDeviceId,
+      outputSelectionSupported: getOutputSelectionSupported(),
+    };
+    onAudioDevicesChanged?.(payload);
+    return payload;
+  };
+
+  const handleDeviceChange = () => {
+    emitAudioDevices().catch(() => {});
   };
 
   const getMicConstraints = (mode = noiseSuppressionMode) => ({
+    deviceId:
+      selectedInputDeviceId && selectedInputDeviceId !== "default"
+        ? { exact: selectedInputDeviceId }
+        : undefined,
     echoCancellation: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     noiseSuppression: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
@@ -227,11 +318,20 @@ export function createVoiceRoomClient({
       return;
     }
 
-    const data = new Uint8Array(analyser.frequencyBinCount);
+    const data = new Uint8Array(analyser.fftSize);
     localSpeakingMeter = window.setInterval(() => {
-      analyser.getByteFrequencyData(data);
-      const average = data.reduce((sum, value) => sum + value, 0) / Math.max(1, data.length);
-      const isSpeaking = average > 18;
+      analyser.getByteTimeDomainData(data);
+      let sumSquares = 0;
+      for (const value of data) {
+        const centered = (value - 128) / 128;
+        sumSquares += centered * centered;
+      }
+
+      const rms = Math.sqrt(sumSquares / Math.max(1, data.length));
+      const normalizedLevel = Math.max(0, Math.min(1, rms * 8));
+      const isSpeaking = rms > 0.022;
+
+      onMicLevelChanged?.(normalizedLevel);
 
       if (isSpeaking) {
         speakingUsers.add(String(currentUser.id));
@@ -291,6 +391,18 @@ export function createVoiceRoomClient({
     gainNode.connect(localOutputAnalyser);
   };
 
+  const applyOutputDeviceToElement = async (element) => {
+    if (!element || !selectedOutputDeviceId || selectedOutputDeviceId === "default" || !getOutputSelectionSupported()) {
+      return;
+    }
+
+    try {
+      await element.setSinkId(selectedOutputDeviceId);
+    } catch {
+      // ignore sink selection failures on unsupported platforms
+    }
+  };
+
   const createHiddenAudioElement = (stream) => {
     const element = document.createElement("audio");
     element.autoplay = true;
@@ -299,6 +411,7 @@ export function createVoiceRoomClient({
     element.srcObject = stream;
     element.style.display = "none";
     document.body.appendChild(element);
+    applyOutputDeviceToElement(element).catch(() => {});
     return element;
   };
 
@@ -495,6 +608,7 @@ export function createVoiceRoomClient({
     localMicSourceStream = null;
     localAudioStream = null;
     localOutputAnalyser = null;
+    onMicLevelChanged?.(0);
 
     if (audioContext) {
       audioContext.close().catch(() => {});
@@ -516,6 +630,7 @@ export function createVoiceRoomClient({
     localMicSourceStream = await navigator.mediaDevices.getUserMedia({
       audio: getMicConstraints(),
     });
+    await emitAudioDevices().catch(() => {});
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioContextClass();
     const sourceNode = audioContext.createMediaStreamSource(localMicSourceStream);
@@ -838,6 +953,11 @@ export function createVoiceRoomClient({
     }
 
     currentUser = user;
+
+    if (!hasDeviceChangeListener && navigator.mediaDevices?.addEventListener) {
+      navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+      hasDeviceChangeListener = true;
+    }
     await connection.invoke("Register", String(user.id), getDisplayName(user), getAvatar(user));
   };
 
@@ -845,6 +965,7 @@ export function createVoiceRoomClient({
     stopScreenRecorder();
 
     if (!localScreenStream) {
+      localLiveShareMode = null;
       emitLocalScreenState();
       return;
     }
@@ -854,6 +975,7 @@ export function createVoiceRoomClient({
       track.stop();
     });
     localScreenStream = null;
+    localLiveShareMode = null;
 
     emitLocalScreenState();
     if (connection && connection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
@@ -1027,6 +1149,7 @@ export function createVoiceRoomClient({
           }
         });
         localScreenStream = null;
+        localLiveShareMode = null;
         currentChannel = null;
         clearRemoteScreens();
         emitLocalScreenState();
@@ -1056,6 +1179,7 @@ export function createVoiceRoomClient({
     }
 
     await registerCurrentUser(user);
+    await emitAudioDevices().catch(() => {});
   };
 
   return {
@@ -1111,7 +1235,11 @@ export function createVoiceRoomClient({
       }
 
       if (localScreenStream) {
-        return;
+        if (localLiveShareMode === "screen") {
+          return;
+        }
+
+        await stopScreenShareInternal();
       }
 
       screenShareResolution = resolution;
@@ -1146,6 +1274,7 @@ export function createVoiceRoomClient({
           ));
       }
 
+      localLiveShareMode = "screen";
       const screenTrack = localScreenStream.getVideoTracks()[0];
       if (screenTrack) {
         screenTrack.onended = () => {
@@ -1153,6 +1282,46 @@ export function createVoiceRoomClient({
         };
       }
 
+      emitLocalScreenState();
+      if (currentUser?.id) {
+        await connection.invoke("UpdateScreenShareStatus", String(currentUser.id), true);
+      }
+      await startScreenBroadcasting();
+    },
+
+    async startCameraShare({ deviceId = "", resolution = "720p", fps = 30 } = {}) {
+      if (!currentChannel) {
+        throw new Error("Сначала подключитесь к голосовому каналу");
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Эта система не дала доступ к камере");
+      }
+
+      if (localScreenStream) {
+        if (localLiveShareMode === "camera") {
+          return;
+        }
+
+        await stopScreenShareInternal();
+      }
+
+      screenShareResolution = resolution;
+      screenShareFps = fps;
+      localScreenStream = await navigator.mediaDevices.getUserMedia({
+        video: getCameraConstraints(deviceId, resolution, fps),
+        audio: false,
+      });
+
+      const cameraTrack = localScreenStream.getVideoTracks()[0];
+      if (cameraTrack) {
+        cameraTrack.contentHint = "motion";
+        cameraTrack.onended = () => {
+          stopScreenShareInternal().catch((error) => console.error("Ошибка остановки трансляции камеры:", error));
+        };
+      }
+
+      localLiveShareMode = "camera";
       emitLocalScreenState();
       if (currentUser?.id) {
         await connection.invoke("UpdateScreenShareStatus", String(currentUser.id), true);
@@ -1191,6 +1360,54 @@ export function createVoiceRoomClient({
         if (peerState.audioElement) {
           peerState.audioElement.volume = remoteVolume;
         }
+      }
+    },
+
+    async getAudioDevices({ ensurePermission = false } = {}) {
+      if (ensurePermission && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const previewStream = await navigator.mediaDevices.getUserMedia({
+            audio: getMicConstraints(),
+          });
+          previewStream.getTracks().forEach((track) => track.stop());
+        } catch {
+          // ignore permission or device access failures
+        }
+      }
+
+      return emitAudioDevices();
+    },
+
+    async setInputDevice(deviceId) {
+      selectedInputDeviceId = deviceId || "";
+      await emitAudioDevices().catch(() => {});
+
+      if (localMicSourceStream || localAudioStream) {
+        await rebuildLocalAudioPipeline();
+      }
+    },
+
+    async setOutputDevice(deviceId) {
+      selectedOutputDeviceId = deviceId || "";
+      await emitAudioDevices().catch(() => {});
+
+      await Promise.all(
+        Array.from(peers.values()).map(async (peerState) => {
+          if (peerState.audioElement) {
+            await applyOutputDeviceToElement(peerState.audioElement);
+          }
+        })
+      );
+    },
+
+    async ensureMicrophonePreview() {
+      await ensureAudioPipeline();
+      await emitAudioDevices().catch(() => {});
+    },
+
+    async releaseMicrophonePreview() {
+      if (!currentChannel) {
+        stopLocalMic();
       }
     },
 
@@ -1238,6 +1455,11 @@ export function createVoiceRoomClient({
         } catch {
           // ignore stop errors during shutdown
         }
+      }
+
+      if (hasDeviceChangeListener && navigator.mediaDevices?.removeEventListener) {
+        navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+        hasDeviceChangeListener = false;
       }
     },
   };

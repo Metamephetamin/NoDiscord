@@ -41,6 +41,8 @@
   color: #f8fafc;
   font-size: 14px;
   font-weight: 700;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .message-time {
@@ -48,6 +50,8 @@
   color: #8d97ac;
   font-size: 12px;
   font-weight: 400;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .message-text {
@@ -56,6 +60,8 @@
   font-size: 14px;
   line-height: 1.5;
   word-break: break-word;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .message-attachment {
@@ -71,6 +77,36 @@
   background: rgba(255, 255, 255, 0.05);
   color: #e9efff;
   text-decoration: none;
+}
+
+.message-media {
+  margin-top: 10px;
+  display: block;
+  width: fit-content;
+  max-width: min(100%, 460px);
+  border-radius: 18px;
+  overflow: hidden;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.message-media--video {
+  padding: 0;
+}
+
+.message-media__image,
+.message-media__video {
+  display: block;
+  width: 100%;
+  max-width: min(100%, 460px);
+  max-height: 420px;
+  object-fit: cover;
+  background: #080a0f;
+}
+
+.message-media__video {
+  border-radius: 18px;
 }
 
 .message-attachment__preview {
@@ -103,11 +139,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .message-attachment__size {
   color: #98a3bc;
   font-size: 12px;
+  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .message-delete {
@@ -140,9 +180,10 @@
 }
 
 .input-area {
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding: 14px 2px 2px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
 }
 
 .input-area__editor {
@@ -153,44 +194,50 @@
 
 .input-area__controls {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .attach-button {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
+  align-self: center;
   border: 0;
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .attach-button img {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   object-fit: contain;
 }
 
 .input-area textarea {
   flex: 1;
-  min-height: 48px;
+  min-height: 44px;
   max-height: 140px;
   resize: none;
   overflow-y: hidden;
   scrollbar-width: none;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 13px 16px;
+  border-radius: 14px;
+  padding: 11px 16px;
   color: #f8fafc;
   background: rgba(255, 255, 255, 0.04);
   font: inherit;
+  line-height: 1.4;
   outline: none;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .input-area textarea::-webkit-scrollbar {
@@ -204,15 +251,17 @@
 
 .send-button {
   flex: 0 0 auto;
-  min-width: 148px;
-  height: 48px;
-  padding: 0 22px;
+  align-self: center;
+  min-width: 140px;
+  height: 44px;
+  padding: 0 20px;
   border: 0;
-  border-radius: 16px;
+  border-radius: 14px;
   background: linear-gradient(135deg, #7c52ff, #4b8dff);
   color: #f7f8ff;
   font-weight: 700;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .send-button:disabled {
