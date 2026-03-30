@@ -53,7 +53,7 @@
   justify-content: center;
   width: 100%;
   max-width: calc(100vw - 48px);
-  margin-bottom: 8px;
+
 }
 
 .auth-brand__badge {
@@ -124,7 +124,7 @@
   padding: 26px;
   border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.62);
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(216, 216, 216, 0.548);
   box-shadow: 0 24px 60px rgba(4, 13, 27, 0.22);
   backdrop-filter: blur(12px);
 }
@@ -148,7 +148,8 @@
 .auth-card__heading h2 {
   margin: 0;
   color: #172133;
-  font-size: 28px;
+  font-size: 30px;
+  font-weight: 800;
 }
 
 .auth-subtitle {
@@ -193,7 +194,7 @@
   padding: 0 14px;
   border: 1px solid rgba(121, 137, 173, 0.24);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.884);
   color: #172133;
   font-size: 15px;
   outline: none;
@@ -302,6 +303,28 @@
 .auth-submit:disabled {
   opacity: 0.72;
   cursor: wait;
+}
+
+.auth-submit--secondary {
+  min-height: 44px;
+  margin-top: 0;
+  font-size: 14px;
+}
+
+.auth-phone-verify {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-grid--verify {
+  align-items: center;
+}
+
+.auth-hint {
+  color: #4a5973;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .auth-switch-link {

@@ -6,6 +6,63 @@
   overflow: hidden;
 }
 
+.message-search-panel {
+  margin: 12px 0 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.message-search-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.message-search-panel__header strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.message-search-panel__header span,
+.message-search-panel__item small,
+.message-search-panel__empty {
+  color: #96a2ba;
+  font-size: 12px;
+}
+
+.message-search-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-search-panel__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef2ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-search-panel__item strong {
+  font-size: 13px;
+}
+
+.message-search-panel__item span {
+  color: #d6deef;
+  font-size: 13px;
+}
+
 .messages-list {
   flex: 1;
   min-height: 0;
@@ -23,6 +80,12 @@
   padding: 12px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message-item--highlighted {
+  background: rgba(94, 86, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(118, 108, 255, 0.28);
 }
 
 .msg-avatar {
@@ -38,6 +101,10 @@
 }
 
 .message-author {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   color: #f8fafc;
   font-size: 14px;
   font-weight: 700;
@@ -45,13 +112,40 @@
   font-style: normal;
 }
 
+.message-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .message-time {
-  margin-left: 8px;
   color: #8d97ac;
   font-size: 12px;
   font-weight: 400;
   font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
   font-style: normal;
+}
+
+.message-read-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #7f8799;
+}
+
+.message-read-status--read {
+  color: #54a7ff;
+}
+
+.message-read-status__check {
+  width: 7px;
+  height: 11px;
+  display: inline-block;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.96;
 }
 
 .message-text {

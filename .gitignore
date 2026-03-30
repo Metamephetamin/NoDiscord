@@ -114,6 +114,7 @@ slnx.sqlite
 BackNoDiscord/BackNoDiscord/App_Data/*.json
 BackNoDiscord/BackNoDiscord/wwwroot/chat-files/
 BackNoDiscord/BackNoDiscord/wwwroot/avatars/user-*
+public/video/GoldenDustGlow2.mp4
 
 # Sensitive config and local secrets
 BackNoDiscord/BackNoDiscord/appsettings.Production.json

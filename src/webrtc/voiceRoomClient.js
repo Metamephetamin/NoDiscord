@@ -10,6 +10,7 @@ const RTC_CONFIGURATION = {
 };
 const NOISE_SUPPRESSION_MODE_TRANSPARENT = "transparent";
 const NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
+const PREFERRED_AUDIO_SAMPLE_RATE = 48_000;
 const SCREEN_RECORDER_MIME_TYPES = [
   "video/webm;codecs=vp9",
   "video/webm;codecs=vp8",
@@ -170,6 +171,26 @@ const normalizeBinaryChunk = (value) => {
   }
 
   return null;
+};
+
+const createPreferredAudioContext = () => {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  try {
+    return new AudioContextClass({
+      sampleRate: PREFERRED_AUDIO_SAMPLE_RATE,
+      latencyHint: "interactive",
+    });
+  } catch {
+    try {
+      return new AudioContextClass();
+    } catch {
+      return null;
+    }
+  }
 };
 
 export function createVoiceRoomClient({
@@ -416,13 +437,15 @@ export function createVoiceRoomClient({
   };
 
   const setupSpeakingDetection = (peerState, stream) => {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass || !stream) {
+    if (!stream) {
       return;
     }
 
     try {
-      const context = new AudioContextClass();
+      const context = createPreferredAudioContext();
+      if (!context) {
+        return;
+      }
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 256;
@@ -631,8 +654,10 @@ export function createVoiceRoomClient({
       audio: getMicConstraints(),
     });
     await emitAudioDevices().catch(() => {});
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextClass();
+    audioContext = createPreferredAudioContext();
+    if (!audioContext) {
+      throw new Error("Не удалось инициализировать аудиоконтекст.");
+    }
     const sourceNode = audioContext.createMediaStreamSource(localMicSourceStream);
     gainNode = audioContext.createGain();
     destinationNode = audioContext.createMediaStreamDestination();

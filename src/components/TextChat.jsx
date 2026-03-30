@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/TextChat.css";
 import { API_URL } from "../config/runtime";
@@ -6,10 +6,12 @@ import { authFetch } from "../utils/auth";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+const MESSAGE_SEND_COOLDOWN_MS = 1500;
 
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
+const isDirectMessageChannelId = (channelId) => String(channelId || "").startsWith("dm:");
 
 function formatFileSize(size) {
   if (!size) {
@@ -80,18 +82,23 @@ function getChatErrorMessage(error, fallbackMessage) {
   return rawMessage;
 }
 
-export default function TextChat({ serverId, channelId, user, resolvedChannelId = "" }) {
+export default function TextChat({ serverId, channelId, user, resolvedChannelId = "", searchQuery = "" }) {
   const [message, setMessage] = useState("");
   const [messagesByChannel, setMessagesByChannel] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const joinedChannelRef = useRef("");
+  const messageRefs = useRef(new Map());
+  const lastSendAtRef = useRef(0);
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
+  const currentUserId = String(user?.id || "");
+  const isDirectChat = isDirectMessageChannelId(scopedChannelId);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -126,6 +133,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     joinedChannelRef.current = scopedChannelId;
     setIsChannelReady(true);
     setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: initialMessages }));
+
+    if (isDirectChat) {
+      chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
+    }
   };
 
   useEffect(() => {
@@ -146,6 +157,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         const channelMessages = previous[scopedChannelId] || [];
         return { ...previous, [scopedChannelId]: [...channelMessages, nextMessage] };
       });
+
+      if (isDirectChat && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
+        chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
+      }
     };
 
     const handleMessageDeleted = (deletedId) => {
@@ -158,6 +173,34 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       });
     };
 
+    const handleMessagesRead = (payload) => {
+      if (String(payload?.channelId || "") !== String(scopedChannelId)) {
+        return;
+      }
+
+      const readMessageIds = new Set((payload?.messageIds || []).map((messageId) => String(messageId)));
+      if (readMessageIds.size === 0) {
+        return;
+      }
+
+      setMessagesByChannel((previous) => {
+        const channelMessages = previous[scopedChannelId] || [];
+        return {
+          ...previous,
+          [scopedChannelId]: channelMessages.map((messageItem) =>
+            readMessageIds.has(String(messageItem.id))
+              ? {
+                  ...messageItem,
+                  isRead: true,
+                  readAt: payload?.readAt || messageItem.readAt || null,
+                  readByUserId: payload?.readerUserId || messageItem.readByUserId || null,
+                }
+              : messageItem
+          ),
+        };
+      });
+    };
+
     const init = async () => {
       try {
         setErrorMessage("");
@@ -165,8 +208,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
         chatConnection.off("ReceiveMessage", handleReceiveMessage);
         chatConnection.off("MessageDeleted", handleMessageDeleted);
+        chatConnection.off("MessagesRead", handleMessagesRead);
         chatConnection.on("ReceiveMessage", handleReceiveMessage);
         chatConnection.on("MessageDeleted", handleMessageDeleted);
+        chatConnection.on("MessagesRead", handleMessagesRead);
 
         await ensureChannelJoined();
       } catch (error) {
@@ -194,8 +239,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
       chatConnection.off("ReceiveMessage", handleReceiveMessage);
       chatConnection.off("MessageDeleted", handleMessageDeleted);
+      chatConnection.off("MessagesRead", handleMessagesRead);
     };
-  }, [scopedChannelId]);
+  }, [currentUserId, isDirectChat, scopedChannelId]);
 
   const uploadAttachment = async (file) => {
     const formData = new FormData();
@@ -229,6 +275,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       return;
     }
 
+    const now = Date.now();
+    const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
+    if (cooldownLeft > 0) {
+      setErrorMessage("Подождите 1.5 секунды перед следующим сообщением.");
+      return;
+    }
+
     const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 
     try {
@@ -253,6 +306,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         attachment?.contentType || selectedFile?.type || null
       );
 
+      lastSendAtRef.current = Date.now();
       setMessage("");
       setSelectedFile(null);
       setIsChannelReady(true);
@@ -284,24 +338,102 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   };
 
   const messages = messagesByChannel[scopedChannelId] || [];
-  const currentUserId = String(user?.id || "");
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const searchResults = useMemo(() => {
+    if (normalizedSearchQuery.length < 2) {
+      return [];
+    }
+
+    return messages
+      .filter((messageItem) => {
+        const messageText = String(messageItem.message || "").toLowerCase();
+        const attachmentName = String(messageItem.attachmentName || "").toLowerCase();
+        return messageText.includes(normalizedSearchQuery) || attachmentName.includes(normalizedSearchQuery);
+      })
+      .map((messageItem) => ({
+        id: messageItem.id,
+        username: messageItem.username,
+        timestamp: messageItem.timestamp,
+        preview: String(messageItem.message || messageItem.attachmentName || "").trim(),
+      }));
+  }, [messages, normalizedSearchQuery]);
+
+  const scrollToMessage = (messageId) => {
+    const element = messageRefs.current.get(messageId);
+    if (!element) {
+      return;
+    }
+
+    setHighlightedMessageId(String(messageId));
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === String(messageId) ? "" : current));
+    }, 2200);
+  };
 
   return (
     <div className="textchat-container">
+      {normalizedSearchQuery.length >= 2 ? (
+        <div className="message-search-panel">
+          <div className="message-search-panel__header">
+            <strong>Результаты поиска</strong>
+            <span>{searchResults.length ? `${searchResults.length} найдено` : "Совпадений нет"}</span>
+          </div>
+          {searchResults.length ? (
+            <div className="message-search-panel__list">
+              {searchResults.slice(0, 8).map((result) => (
+                <button key={result.id} type="button" className="message-search-panel__item" onClick={() => scrollToMessage(result.id)}>
+                  <strong>{result.username || "User"}</strong>
+                  <span>{result.preview || "Сообщение без текста"}</span>
+                  <small>{formatTimestamp(result.timestamp)}</small>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="message-search-panel__empty">В текущем канале ничего не найдено.</div>
+          )}
+        </div>
+      ) : null}
+
       <div className="messages-list">
         {messages.map((messageItem) => {
           const attachmentUrl = messageItem.attachmentUrl
             ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)
             : "";
+          const isOwnMessage =
+            String(messageItem.authorUserId || "") === currentUserId ||
+            (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase());
 
           return (
-            <div key={messageItem.id} className="message-item">
+            <div
+              key={messageItem.id}
+              ref={(node) => {
+                if (node) {
+                  messageRefs.current.set(messageItem.id, node);
+                } else {
+                  messageRefs.current.delete(messageItem.id);
+                }
+              }}
+              className={`message-item ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
+            >
               <img src={resolveMediaUrl(messageItem.photoUrl, DEFAULT_AVATAR)} alt="avatar" className="msg-avatar" />
 
               <div className="msg-content">
                 <div className="message-author">
-                  {messageItem.username}
-                  <span className="message-time">{formatTimestamp(messageItem.timestamp)}</span>
+                  <span>{messageItem.username}</span>
+                  <span className="message-meta">
+                    <span className="message-time">{formatTimestamp(messageItem.timestamp)}</span>
+                    {isDirectChat && isOwnMessage ? (
+                      <span
+                        className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}
+                        title={messageItem.isRead ? "Сообщение прочитано" : "Сообщение доставлено"}
+                        aria-label={messageItem.isRead ? "Сообщение прочитано" : "Сообщение доставлено"}
+                      >
+                        <span className="message-read-status__check" />
+                        <span className="message-read-status__check" />
+                      </span>
+                    ) : null}
+                  </span>
                 </div>
 
                 {messageItem.message ? <div className="message-text">{messageItem.message}</div> : null}
@@ -327,8 +459,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 ) : null}
               </div>
 
-              {(String(messageItem.authorUserId || "") === currentUserId ||
-                (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase())) && (
+              {isOwnMessage && (
                 <button
                   type="button"
                   className="message-delete"

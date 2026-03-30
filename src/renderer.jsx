@@ -65,6 +65,12 @@ export default function Renderer() {
           firstName: data.first_name || savedUser.firstName || "",
           lastName: data.last_name || savedUser.lastName || "",
           email: data.email || savedUser.email || "",
+          phoneNumber: data.phone_number || savedUser.phoneNumber || "",
+          isPhoneVerified: Boolean(
+            data.is_phone_verified ?? savedUser.isPhoneVerified ?? savedUser.phone_verified ?? false
+          ),
+          avatarUrl: data.avatar_url || savedUser.avatarUrl || savedUser.avatar || "",
+          avatar: data.avatar_url || savedUser.avatar || savedUser.avatarUrl || "",
         };
 
         if (!disposed) {

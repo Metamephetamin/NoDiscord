@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text.Json;
+using BackNoDiscord.Security;
 
 namespace BackNoDiscord.Services;
 
@@ -78,7 +79,7 @@ public class ServerInviteService
             throw new InvalidOperationException("Invite has already been used by this user.");
         }
 
-        var snapshot = CloneSnapshot(DeserializeSnapshot(invite.SnapshotJson));
+        var snapshot = NormalizeSnapshot(CloneSnapshot(DeserializeSnapshot(invite.SnapshotJson)), invite.OwnerUserId);
         snapshot.Members ??= new List<ServerMemberSnapshot>();
 
         if (!snapshot.Members.Any(member => string.Equals(member.UserId, userId, StringComparison.Ordinal)))
@@ -123,9 +124,12 @@ public class ServerInviteService
     private static ServerSnapshot NormalizeSnapshot(ServerSnapshot snapshot, string ownerUserId)
     {
         var normalized = CloneSnapshot(snapshot);
-        normalized.Id = string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim();
+        normalized.Id = ServerChannelAuthorization.NormalizeSharedServerId(
+            string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim(),
+            string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim());
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name.Trim();
         normalized.Icon ??= string.Empty;
+        normalized.IsShared = true;
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();
         normalized.Roles ??= new List<ServerRoleSnapshot>();
         normalized.Members ??= new List<ServerMemberSnapshot>();
@@ -199,6 +203,7 @@ public class ServerSnapshot
     public string Id { get; set; } = "server";
     public string Name { get; set; } = "Server";
     public string Icon { get; set; } = string.Empty;
+    public bool IsShared { get; set; }
     public string OwnerId { get; set; } = string.Empty;
     public List<ServerRoleSnapshot> Roles { get; set; } = new();
     public List<ServerMemberSnapshot> Members { get; set; } = new();

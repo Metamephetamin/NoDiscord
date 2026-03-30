@@ -351,6 +351,12 @@ export async function refreshAccessToken() {
             firstName: data.first_name || sessionCache.user?.firstName || "",
             lastName: data.last_name || sessionCache.user?.lastName || "",
             email: data.email || sessionCache.user?.email || "",
+            phoneNumber: data.phone_number || sessionCache.user?.phoneNumber || "",
+            isPhoneVerified: Boolean(
+              data.is_phone_verified ?? sessionCache.user?.isPhoneVerified ?? sessionCache.user?.phone_verified ?? false
+            ),
+            avatarUrl: data.avatar_url || sessionCache.user?.avatarUrl || sessionCache.user?.avatar || "",
+            avatar: data.avatar_url || sessionCache.user?.avatar || sessionCache.user?.avatarUrl || "",
           }
         : sessionCache.user;
 

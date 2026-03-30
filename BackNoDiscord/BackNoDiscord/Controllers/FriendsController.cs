@@ -63,6 +63,53 @@ public class FriendsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchFriends([FromQuery] string? q)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var query = q?.Trim();
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return Ok(Array.Empty<object>());
+        }
+
+        var normalizedQuery = query.ToLowerInvariant();
+        var existingFriendIds = await _context.Friendships
+            .AsNoTracking()
+            .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
+            .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
+            .Distinct()
+            .ToListAsync();
+
+        var result = await _context.Users
+            .AsNoTracking()
+            .Where(item => item.id != currentUserId && !existingFriendIds.Contains(item.id))
+            .Where(item =>
+                item.email.ToLower().Contains(normalizedQuery) ||
+                item.first_name.ToLower().Contains(normalizedQuery) ||
+                item.last_name.ToLower().Contains(normalizedQuery) ||
+                (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery))
+            .OrderBy(item => item.first_name)
+            .ThenBy(item => item.last_name)
+            .Take(12)
+            .Select(item => new
+            {
+                id = item.id,
+                first_name = item.first_name,
+                last_name = item.last_name,
+                email = item.email,
+                directChannelId = BuildDirectChannelId(currentUserId, item.id)
+            })
+            .ToListAsync();
+
+        return Ok(result);
+    }
+
     [HttpPost("add")]
     public async Task<IActionResult> AddFriend([FromBody] AddFriendRequest request)
     {
@@ -73,12 +120,15 @@ public class FriendsController : ControllerBase
         }
 
         var email = request?.Email?.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(email))
+        if (string.IsNullOrWhiteSpace(email) && request?.UserId is null)
         {
-            return BadRequest(new { message = "Email друга обязателен." });
+            return BadRequest(new { message = "Нужно выбрать пользователя для добавления." });
         }
 
-        var friend = await _context.Users.AsNoTracking().FirstOrDefaultAsync(item => item.email == email);
+        var friend = request?.UserId is int userId
+            ? await _context.Users.AsNoTracking().FirstOrDefaultAsync(item => item.id == userId)
+            : await _context.Users.AsNoTracking().FirstOrDefaultAsync(item => item.email == email);
+
         if (friend is null)
         {
             return NotFound(new { message = "Пользователь не найден." });
@@ -128,4 +178,5 @@ public class FriendsController : ControllerBase
 public class AddFriendRequest
 {
     public string Email { get; set; } = string.Empty;
+    public int? UserId { get; set; }
 }

@@ -27,6 +27,12 @@ public class Message
     [Column("timestamp")]
     public DateTime Timestamp { get; set; }
 
+    [Column("read_at")]
+    public DateTime? ReadAt { get; set; }
+
+    [Column("read_by_user_id")]
+    public string? ReadByUserId { get; set; }
+
     [Column("is_deleted")]
     public bool IsDeleted { get; set; }
 }
@@ -46,8 +52,51 @@ public class User
     [Column("email")]
     public string email { get; set; } = null!;
 
+    [Column("phone_number")]
+    public string? phone_number { get; set; }
+
+    [Column("is_phone_verified")]
+    public bool is_phone_verified { get; set; }
+
+    [Column("avatar_url")]
+    public string? avatar_url { get; set; }
+
     [Column("password_hash")]
     public string password_hash { get; set; } = null!;
+}
+
+[Table("phone_verification_codes")]
+public class PhoneVerificationCodeRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("phone_number")]
+    public string PhoneNumber { get; set; } = string.Empty;
+
+    [Column("verification_token_hash")]
+    public string VerificationTokenHash { get; set; } = string.Empty;
+
+    [Column("code_hash")]
+    public string CodeHash { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("expires_at")]
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    [Column("last_sent_at")]
+    public DateTimeOffset LastSentAt { get; set; }
+
+    [Column("attempt_count")]
+    public int AttemptCount { get; set; }
+
+    [Column("verified_at")]
+    public DateTimeOffset? VerifiedAt { get; set; }
+
+    [Column("consumed_at")]
+    public DateTimeOffset? ConsumedAt { get; set; }
 }
 
 [Table("refresh_tokens")]
@@ -152,6 +201,7 @@ public class AppDbContext : DbContext
     public DbSet<SharedServerSnapshotRecord> SharedServerSnapshots => Set<SharedServerSnapshotRecord>();
     public DbSet<ServerInviteRecordEntity> ServerInvites => Set<ServerInviteRecordEntity>();
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
+    public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -170,10 +220,25 @@ public class AppDbContext : DbContext
             entity.ToTable("users");
             entity.HasKey(x => x.id);
             entity.HasIndex(x => x.email).IsUnique();
+            entity.HasIndex(x => x.phone_number).IsUnique();
             entity.Property(x => x.first_name).IsRequired();
             entity.Property(x => x.last_name).IsRequired();
             entity.Property(x => x.email).IsRequired();
+            entity.Property(x => x.phone_number).IsRequired(false);
+            entity.Property(x => x.is_phone_verified).HasDefaultValue(false);
+            entity.Property(x => x.avatar_url).IsRequired(false);
             entity.Property(x => x.password_hash).IsRequired();
+        });
+
+        modelBuilder.Entity<PhoneVerificationCodeRecord>(entity =>
+        {
+            entity.ToTable("phone_verification_codes");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PhoneNumber, x.CreatedAt });
+            entity.HasIndex(x => x.VerificationTokenHash).IsUnique();
+            entity.Property(x => x.PhoneNumber).IsRequired();
+            entity.Property(x => x.VerificationTokenHash).IsRequired();
+            entity.Property(x => x.CodeHash).IsRequired();
         });
 
         modelBuilder.Entity<RefreshTokenRecord>(entity =>

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using BackNoDiscord.Security;
 
 namespace BackNoDiscord.Services;
 
@@ -21,7 +22,7 @@ public class ServerStateService
     public ServerSnapshot UpsertSnapshot(ServerSnapshot snapshot, string fallbackOwnerUserId)
     {
         var normalized = NormalizeSnapshot(snapshot, fallbackOwnerUserId);
-        var existing = _context.SharedServerSnapshots.FirstOrDefault(item => item.ServerId == normalized.Id);
+        var existing = FindSnapshotRecordByServerId(normalized.Id);
 
         if (existing is not null)
         {
@@ -54,16 +55,16 @@ public class ServerStateService
             return null;
         }
 
-        var record = _context.SharedServerSnapshots
-            .AsNoTracking()
-            .FirstOrDefault(item => item.ServerId == serverId.Trim());
+        var record = FindSnapshotRecordByServerId(serverId.Trim(), asNoTracking: true);
 
-        return record is null ? null : CloneSnapshot(DeserializeSnapshot(record.SnapshotJson));
+        return record is null
+            ? null
+            : CloneSnapshot(NormalizeSnapshot(DeserializeSnapshot(record.SnapshotJson), record.OwnerUserId));
     }
 
     public ServerSnapshot AddMember(string serverId, string userId, string name, string avatar)
     {
-        var record = _context.SharedServerSnapshots.FirstOrDefault(item => item.ServerId == serverId);
+        var record = FindSnapshotRecordByServerId(serverId);
         if (record is null)
         {
             throw new KeyNotFoundException("Server snapshot not found.");
@@ -92,12 +93,37 @@ public class ServerStateService
         return CloneSnapshot(normalized);
     }
 
+    private SharedServerSnapshotRecord? FindSnapshotRecordByServerId(string serverId, bool asNoTracking = false)
+    {
+        var query = asNoTracking
+            ? _context.SharedServerSnapshots.AsNoTracking()
+            : _context.SharedServerSnapshots;
+
+        var normalizedServerId = serverId.Trim();
+        var directRecord = query.FirstOrDefault(item => item.ServerId == normalizedServerId);
+        if (directRecord is not null)
+        {
+            return directRecord;
+        }
+
+        return query
+            .AsEnumerable()
+            .FirstOrDefault(item =>
+                string.Equals(
+                    ServerChannelAuthorization.NormalizeSharedServerId(item.ServerId, item.OwnerUserId),
+                    normalizedServerId,
+                    StringComparison.Ordinal));
+    }
+
     private static ServerSnapshot NormalizeSnapshot(ServerSnapshot snapshot, string ownerUserId)
     {
         var normalized = CloneSnapshot(snapshot);
-        normalized.Id = string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim();
+        normalized.Id = ServerChannelAuthorization.NormalizeSharedServerId(
+            string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim(),
+            string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim());
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name.Trim();
         normalized.Icon ??= string.Empty;
+        normalized.IsShared = true;
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();
         normalized.Roles ??= new List<ServerRoleSnapshot>();
         normalized.Members ??= new List<ServerMemberSnapshot>();

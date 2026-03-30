@@ -49,6 +49,7 @@ builder.Services.AddCors(options =>
                       return true;
                   }
 
+
                   return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
                          && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
                              || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase));
@@ -112,6 +113,32 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 8,
                 Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+    options.AddPolicy("phone-send", context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"phone-send:{remoteIp}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 4,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+    options.AddPolicy("phone-verify", context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"phone-verify:{remoteIp}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 12,
+                Window = TimeSpan.FromMinutes(5),
                 QueueLimit = 0,
                 AutoReplenishment = true
             });

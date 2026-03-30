@@ -63,7 +63,7 @@ const VoiceChannelList = ({
     <ul className="voice-channel-list">
       {channels.map((channel) => {
         const runtimeId = getChannelRuntimeId(serverId, channel.id);
-        const participants = (participantsMap?.[channel.id] || []).map(normalizeParticipant);
+        const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
 
@@ -135,7 +135,7 @@ const VoiceChannelList = ({
                       )}
                       {participant.isDeafened && (
                         <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Не слышит канал">
-                          <img src="/icons/headphones.png" alt="" />
+                          <img src="/icons/headphones-simple.svg" alt="" />
                         </span>
                       )}
                     </div>

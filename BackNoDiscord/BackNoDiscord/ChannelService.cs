@@ -16,10 +16,6 @@ namespace BackNoDiscord
         public ChannelService()
         {
             _channels = new ConcurrentDictionary<string, List<Participant>>();
-            _channels.TryAdd("general_voice", new List<Participant>());
-            _channels.TryAdd("gaming", new List<Participant>());
-            _channels.TryAdd("music-chat", new List<Participant>());
-            _channels.TryAdd("off-topic", new List<Participant>());
         }
 
         public Dictionary<string, List<Participant>> GetAllChannels()
@@ -60,6 +56,17 @@ namespace BackNoDiscord
 
                 _connectionToUserId[connectionId] = mergedParticipant.UserId;
                 _userIdToConnection[mergedParticipant.UserId] = connectionId;
+
+                if (_userChannels.TryGetValue(mergedParticipant.UserId, out var existingChannelName))
+                {
+                    if (!_channels.ContainsKey(existingChannelName))
+                    {
+                        _channels[existingChannelName] = new List<Participant>();
+                    }
+
+                    _channels[existingChannelName].RemoveAll(user => user.UserId == mergedParticipant.UserId);
+                    _channels[existingChannelName].Add(CloneParticipant(mergedParticipant));
+                }
             }
         }
 

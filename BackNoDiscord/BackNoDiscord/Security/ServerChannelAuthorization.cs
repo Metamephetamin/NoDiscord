@@ -9,6 +9,31 @@ public static class ServerChannelAuthorization
     private const string PersonalServerPrefix = "server-main-";
     private const string PrivateServerPrefix = "server-";
 
+    public static string NormalizeSharedServerId(string? serverId, string? ownerUserId)
+    {
+        var normalizedServerId = (serverId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedServerId))
+        {
+            return "server";
+        }
+
+        if (normalizedServerId.StartsWith(PersonalServerPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedServerId;
+        }
+
+        var ownerScopePrefix = $"{PrivateServerPrefix}{SanitizeUserScope(ownerUserId ?? string.Empty)}-";
+        if (!normalizedServerId.StartsWith(ownerScopePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedServerId;
+        }
+
+        var suffix = normalizedServerId[ownerScopePrefix.Length..].Trim();
+        return string.IsNullOrWhiteSpace(suffix)
+            ? normalizedServerId
+            : $"{PrivateServerPrefix}{suffix}";
+    }
+
     public static bool TryGetServerIdFromChatChannelId(string? channelId, out string serverId)
     {
         serverId = string.Empty;

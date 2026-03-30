@@ -3,27 +3,19 @@ import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
+const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
 const initialRegisterForm = {
   firstName: "",
   lastName: "",
   email: "",
-  password: "",
-  passportSeries: "",
-  passportNumber: "",
-  snils: "",
-  inn: "",
-  residence: "",
-  birthDate: "",
   phone: "",
-  foreignPassportSeries: "",
-  foreignPassportNumber: "",
+  password: "",
   cardNumber: "",
   cardExpiry: "",
   cardCvc: "",
 };
-
 const initialLoginForm = {
-  email: "",
+  identifier: "",
   password: "",
 };
 
@@ -43,7 +35,34 @@ const formatCardExpiry = (value) => {
   return `${digits.slice(0, 2)}/${digits.slice(2)}`;
 };
 
-const formatPhone = (value) => value.replace(/[^\d+\-()\s]/g, "").slice(0, 22);
+const formatPhoneInput = (value) => value.replace(/[^\d+\-()\s]/g, "").slice(0, 22);
+
+function normalizeRussianPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) {
+    return "";
+  }
+
+  if (digits.length === 11 && digits[0] === "8") {
+    return `+7${digits.slice(1)}`;
+  }
+
+  if (digits.length === 11 && digits[0] === "7") {
+    return `+${digits}`;
+  }
+
+  return "";
+}
+
+function isSupportedEmail(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  const separatorIndex = normalized.lastIndexOf("@");
+  if (separatorIndex <= 0 || separatorIndex === normalized.length - 1) {
+    return false;
+  }
+
+  return SUPPORTED_EMAIL_DOMAINS.includes(normalized.slice(separatorIndex + 1));
+}
 
 function mapAuthUser(data) {
   return {
@@ -51,6 +70,10 @@ function mapAuthUser(data) {
     firstName: data?.first_name || "",
     lastName: data?.last_name || "",
     email: data?.email || "",
+    phoneNumber: data?.phone_number || "",
+    isPhoneVerified: Boolean(data?.is_phone_verified),
+    avatarUrl: data?.avatar_url || data?.avatarUrl || "",
+    avatar: data?.avatar_url || data?.avatarUrl || "",
   };
 }
 
@@ -81,11 +104,19 @@ export default function Auth({ onAuthSuccess }) {
   const [mode, setMode] = useState("login");
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
   const [loginForm, setLoginForm] = useState(initialLoginForm);
-  const [passportScanFile, setPassportScanFile] = useState(null);
-  const [facePhotoFile, setFacePhotoFile] = useState(null);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRequestingPhoneCode, setIsRequestingPhoneCode] = useState(false);
+  const [isVerifyingPhoneCode, setIsVerifyingPhoneCode] = useState(false);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
+  const [phoneVerificationCode, setPhoneVerificationCode] = useState("");
+  const [phoneVerificationToken, setPhoneVerificationToken] = useState("");
+  const [phoneVerificationStatus, setPhoneVerificationStatus] = useState({
+    verified: false,
+    deliveryMode: "",
+    debugCode: "",
+    resendAvailableAt: "",
+  });
 
   const cardHolderName = useMemo(() => {
     const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
@@ -107,6 +138,25 @@ export default function Auth({ onAuthSuccess }) {
     return digits || "000";
   }, [registerForm.cardCvc]);
 
+  const normalizedRegisterPhone = useMemo(() => normalizeRussianPhone(registerForm.phone), [registerForm.phone]);
+  const canRequestPhoneCode = Boolean(normalizedRegisterPhone) && !isSubmitting && !isRequestingPhoneCode;
+  const canVerifyPhoneCode =
+    Boolean(phoneVerificationToken) &&
+    phoneVerificationCode.trim().length === 6 &&
+    !phoneVerificationStatus.verified &&
+    !isVerifyingPhoneCode;
+
+  const resetPhoneVerification = () => {
+    setPhoneVerificationCode("");
+    setPhoneVerificationToken("");
+    setPhoneVerificationStatus({
+      verified: false,
+      deliveryMode: "",
+      debugCode: "",
+      resendAvailableAt: "",
+    });
+  };
+
   const handleRegisterFieldChange = (field) => (event) => {
     let nextValue = event.target.value;
 
@@ -117,10 +167,14 @@ export default function Auth({ onAuthSuccess }) {
     } else if (field === "cardCvc") {
       nextValue = nextValue.replace(/\D/g, "").slice(0, 3);
     } else if (field === "phone") {
-      nextValue = formatPhone(nextValue);
+      nextValue = formatPhoneInput(nextValue);
     }
 
     setRegisterForm((previous) => ({ ...previous, [field]: nextValue }));
+
+    if (field === "phone") {
+      resetPhoneVerification();
+    }
   };
 
   const handleLoginFieldChange = (field) => (event) => {
@@ -132,12 +186,22 @@ export default function Auth({ onAuthSuccess }) {
     setMessage("");
 
     const payload = {
-      email: loginForm.email.trim(),
+      identifier: loginForm.identifier.trim(),
       password: loginForm.password,
     };
 
-    if (!payload.email || !payload.password) {
-      setMessage("Введите email и пароль.");
+    if (!payload.identifier || !payload.password) {
+      setMessage("Введите email или номер телефона и пароль.");
+      return;
+    }
+
+    if (payload.identifier.includes("@") && !isSupportedEmail(payload.identifier)) {
+      setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
+      return;
+    }
+
+    if (!payload.identifier.includes("@") && !normalizeRussianPhone(payload.identifier)) {
+      setMessage("Введите российский номер телефона в формате +7XXXXXXXXXX.");
       return;
     }
 
@@ -152,6 +216,73 @@ export default function Auth({ onAuthSuccess }) {
     }
   };
 
+  const handleRequestPhoneCode = async () => {
+    setMessage("");
+
+    if (!normalizedRegisterPhone) {
+      setMessage("Введите российский номер телефона в формате +7XXXXXXXXXX.");
+      return;
+    }
+
+    setIsRequestingPhoneCode(true);
+    try {
+      const data = await submitAuthRequest(
+        "/auth/request-phone-verification",
+        { phone: normalizedRegisterPhone },
+        "Не удалось отправить код подтверждения."
+      );
+
+      setPhoneVerificationToken(data?.verificationToken || "");
+      setPhoneVerificationStatus({
+        verified: false,
+        deliveryMode: data?.deliveryMode || "mock",
+        debugCode: data?.debugCode || "",
+        resendAvailableAt: data?.resendAvailableAt || "",
+      });
+      setMessage(
+        data?.debugCode
+          ? `Код подтверждения отправлен. Тестовый код: ${data.debugCode}`
+          : "Код подтверждения отправлен на номер телефона."
+      );
+    } catch (error) {
+      setMessage(error.message || "Не удалось отправить код подтверждения.");
+    } finally {
+      setIsRequestingPhoneCode(false);
+    }
+  };
+
+  const handleVerifyPhoneCode = async () => {
+    setMessage("");
+
+    if (!normalizedRegisterPhone || !phoneVerificationToken) {
+      setMessage("Сначала запросите код подтверждения.");
+      return;
+    }
+
+    setIsVerifyingPhoneCode(true);
+    try {
+      await submitAuthRequest(
+        "/auth/verify-phone-code",
+        {
+          phone: normalizedRegisterPhone,
+          verificationToken: phoneVerificationToken,
+          code: phoneVerificationCode.trim(),
+        },
+        "Не удалось подтвердить номер телефона."
+      );
+
+      setPhoneVerificationStatus((previous) => ({
+        ...previous,
+        verified: true,
+      }));
+      setMessage("Номер телефона подтвержден.");
+    } catch (error) {
+      setMessage(error.message || "Не удалось подтвердить номер телефона.");
+    } finally {
+      setIsVerifyingPhoneCode(false);
+    }
+  };
+
   const handleRegister = async (event) => {
     event.preventDefault();
     setMessage("");
@@ -159,25 +290,19 @@ export default function Auth({ onAuthSuccess }) {
     const payload = {
       first_name: registerForm.firstName.trim(),
       last_name: registerForm.lastName.trim(),
-      email: registerForm.email.trim(),
+      email: registerForm.email.trim().toLowerCase(),
       password: registerForm.password,
-      passport_series: registerForm.passportSeries.trim(),
-      passport_number: registerForm.passportNumber.trim(),
-      snils: registerForm.snils.trim(),
-      inn: registerForm.inn.trim(),
-      residence: registerForm.residence.trim(),
-      birth_date: registerForm.birthDate || "",
-      phone: registerForm.phone.trim(),
-      foreign_passport_series: registerForm.foreignPassportSeries.trim(),
-      foreign_passport_number: registerForm.foreignPassportNumber.trim(),
-      card_number: registerForm.cardNumber.replace(/\s/g, ""),
-      card_expiry: registerForm.cardExpiry.trim(),
-      passport_scan_name: passportScanFile?.name || "",
-      face_photo_name: facePhotoFile?.name || "",
+      phone: normalizedRegisterPhone,
+      phone_verification_token: phoneVerificationToken,
     };
 
-    if (!payload.first_name || !payload.last_name || !payload.email) {
+    if (!payload.first_name || !payload.last_name || !payload.email || !payload.phone) {
       setMessage("Заполните обязательные поля.");
+      return;
+    }
+
+    if (!isSupportedEmail(payload.email)) {
+      setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
       return;
     }
 
@@ -186,11 +311,15 @@ export default function Auth({ onAuthSuccess }) {
       return;
     }
 
+    if (!phoneVerificationStatus.verified || !phoneVerificationToken) {
+      setMessage("Сначала подтвердите номер телефона кодом.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const data = await submitAuthRequest("/auth/register", payload, "Не удалось создать аккаунт.");
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
       setMessage(error.message || "Не удалось создать аккаунт.");
@@ -202,12 +331,14 @@ export default function Auth({ onAuthSuccess }) {
     setMode(nextMode);
     setMessage("");
     setIsSubmitting(false);
+    setIsRequestingPhoneCode(false);
+    setIsVerifyingPhoneCode(false);
   };
 
   return (
     <div className="auth-page">
       <video className="auth-video-bg" autoPlay muted loop playsInline>
-        <source src="/image/grad.mp4" type="video/mp4" />
+        <source src="/video/GoldenDustGlow2.mp4" type="video/mp4" />
       </video>
 
       <div className="auth-brand">
@@ -235,10 +366,10 @@ export default function Auth({ onAuthSuccess }) {
               <div className="auth-section__title">Данные для входа</div>
               <input
                 className="auth-input"
-                placeholder="Email"
-                type="email"
-                value={loginForm.email}
-                onChange={handleLoginFieldChange("email")}
+                placeholder="Email или телефон"
+                type="text"
+                value={loginForm.identifier}
+                onChange={handleLoginFieldChange("identifier")}
                 required
               />
               <input
@@ -280,6 +411,49 @@ export default function Auth({ onAuthSuccess }) {
                 />
                 <input
                   className="auth-input"
+                  placeholder="Номер телефона"
+                  type="tel"
+                  value={registerForm.phone}
+                  onChange={handleRegisterFieldChange("phone")}
+                  required
+                />
+
+                <div className="auth-phone-verify">
+                  <button
+                    className="auth-submit auth-submit--secondary"
+                    type="button"
+                    onClick={handleRequestPhoneCode}
+                    disabled={!canRequestPhoneCode}
+                  >
+                    {isRequestingPhoneCode ? "Отправляем код..." : "Получить код"}
+                  </button>
+
+                  <div className="auth-grid auth-grid--double auth-grid--verify">
+                    <input
+                      className="auth-input"
+                      placeholder="Код из SMS"
+                      value={phoneVerificationCode}
+                      onChange={(event) => setPhoneVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    />
+                    <button
+                      className="auth-submit auth-submit--secondary"
+                      type="button"
+                      onClick={handleVerifyPhoneCode}
+                      disabled={!canVerifyPhoneCode}
+                    >
+                      {isVerifyingPhoneCode ? "Проверяем..." : phoneVerificationStatus.verified ? "Номер подтвержден" : "Подтвердить"}
+                    </button>
+                  </div>
+
+                  {phoneVerificationStatus.resendAvailableAt ? (
+                    <div className="auth-hint">
+                      Повторная отправка будет доступна позже. Режим доставки: {phoneVerificationStatus.deliveryMode || "mock"}.
+                    </div>
+                  ) : null}
+                </div>
+
+                <input
+                  className="auth-input"
                   placeholder="Пароль"
                   type="password"
                   value={registerForm.password}
@@ -287,81 +461,6 @@ export default function Auth({ onAuthSuccess }) {
                   minLength={6}
                   required
                 />
-              </div>
-
-              <div className="auth-section">
-                <div className="auth-section__title">Дополнительные данные</div>
-                <div className="auth-grid auth-grid--triple">
-                  <input
-                    className="auth-input"
-                    placeholder="Серия паспорта"
-                    value={registerForm.passportSeries}
-                    onChange={handleRegisterFieldChange("passportSeries")}
-                  />
-                  <input
-                    className="auth-input"
-                    placeholder="Номер паспорта"
-                    value={registerForm.passportNumber}
-                    onChange={handleRegisterFieldChange("passportNumber")}
-                  />
-                  <input
-                    className="auth-input"
-                    placeholder="СНИЛС"
-                    value={registerForm.snils}
-                    onChange={handleRegisterFieldChange("snils")}
-                  />
-                  <input
-                    className="auth-input"
-                    placeholder="ИНН"
-                    value={registerForm.inn}
-                    onChange={handleRegisterFieldChange("inn")}
-                  />
-                  <input
-                    className="auth-input"
-                    type="date"
-                    placeholder="Дата рождения"
-                    value={registerForm.birthDate}
-                    onChange={handleRegisterFieldChange("birthDate")}
-                  />
-                  <input
-                    className="auth-input"
-                    placeholder="Номер телефона"
-                    value={registerForm.phone}
-                    onChange={handleRegisterFieldChange("phone")}
-                  />
-                </div>
-                <input
-                  className="auth-input"
-                  placeholder="Место жительства"
-                  value={registerForm.residence}
-                  onChange={handleRegisterFieldChange("residence")}
-                />
-                <div className="auth-grid auth-grid--double">
-                  <input
-                    className="auth-input"
-                    placeholder="Серия загранпаспорта"
-                    value={registerForm.foreignPassportSeries}
-                    onChange={handleRegisterFieldChange("foreignPassportSeries")}
-                  />
-                  <input
-                    className="auth-input"
-                    placeholder="Номер загранпаспорта"
-                    value={registerForm.foreignPassportNumber}
-                    onChange={handleRegisterFieldChange("foreignPassportNumber")}
-                  />
-                </div>
-                <div className="auth-grid auth-grid--double">
-                  <label className="auth-file">
-                    <span className="auth-file__label">Скан паспорта</span>
-                    <input type="file" accept="image/*,.pdf" onChange={(event) => setPassportScanFile(event.target.files?.[0] || null)} />
-                    <span className="auth-file__value">{passportScanFile?.name || "Выбрать файл"}</span>
-                  </label>
-                  <label className="auth-file">
-                    <span className="auth-file__label">Фото лица</span>
-                    <input type="file" accept="image/*" onChange={(event) => setFacePhotoFile(event.target.files?.[0] || null)} />
-                    <span className="auth-file__value">{facePhotoFile?.name || "Выбрать файл"}</span>
-                  </label>
-                </div>
               </div>
             </>
           )}
@@ -410,7 +509,7 @@ export default function Auth({ onAuthSuccess }) {
               <div className="bank-card__stripe" />
               <div className="bank-card__cvc-box">
                 <span className="bank-card__label">CVC</span>
-                <span>Мы временно спишем </span>
+                <span>Показываем только визуальный макет</span>
                 <span className="bank-card__cvc">{displayedCardCvc}</span>
               </div>
             </div>

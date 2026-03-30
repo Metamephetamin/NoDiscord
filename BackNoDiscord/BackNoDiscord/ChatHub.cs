@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace BackNoDiscord;
@@ -17,6 +18,8 @@ public class ChatHub : Hub
     private const int MaxAttachmentUrlLength = 260;
     private const int MaxAttachmentContentTypeLength = 120;
     private const string DirectMessageChannelPrefix = "dm:";
+    private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromSeconds(1.5);
+    private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
 
     private readonly AppDbContext _context;
     private readonly CryptoService _crypto;
@@ -55,6 +58,12 @@ public class ChatHub : Hub
         if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
         {
             throw new HubException("Forbidden");
+        }
+
+        if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
+            && DateTime.UtcNow - lastMessageSentAtUtc < MessageSendCooldown)
+        {
+            throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
         }
 
         var payload = new ChatMessagePayload
@@ -105,6 +114,7 @@ public class ChatHub : Hub
         }
 
         await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
+        LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
     }
 
     public async Task<List<MessageDto>> JoinChannel(string channelId)
@@ -126,6 +136,7 @@ public class ChatHub : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, normalizedChannelId);
+        await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
 
         var lastMessages = await _context.Messages.AsNoTracking()
             .Where(message => message.ChannelId == normalizedChannelId && !message.IsDeleted)
@@ -137,6 +148,27 @@ public class ChatHub : Hub
         return lastMessages
             .Select(message => ToMessageDto(message, DeserializePayload(GetRawPayload(message))))
             .ToList();
+    }
+
+    public async Task MarkChannelRead(string channelId)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+        {
+            throw new HubException("Unauthorized");
+        }
+
+        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            throw new HubException("channelId is required");
+        }
+
+        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        {
+            throw new HubException("Forbidden");
+        }
+
+        await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
     }
 
     public async Task LeaveChannel(string channelId)
@@ -201,7 +233,10 @@ public class ChatHub : Hub
             AttachmentName = payload.AttachmentName,
             AttachmentSize = payload.AttachmentSize,
             AttachmentContentType = payload.AttachmentContentType,
-            Timestamp = message.Timestamp
+            Timestamp = message.Timestamp,
+            IsRead = message.ReadAt.HasValue,
+            ReadAt = message.ReadAt,
+            ReadByUserId = message.ReadByUserId
         };
     }
 
@@ -290,6 +325,55 @@ public class ChatHub : Hub
             .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
     }
 
+    private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)
+    {
+        if (!TryGetDirectMessageParticipantIds(channelId, out _, out _))
+        {
+            return;
+        }
+
+        var unreadMessages = await _context.Messages
+            .Where(message => message.ChannelId == channelId && !message.IsDeleted && message.ReadAt == null)
+            .OrderBy(message => message.Timestamp)
+            .ToListAsync();
+
+        if (unreadMessages.Count == 0)
+        {
+            return;
+        }
+
+        var readAtUtc = DateTime.UtcNow;
+        var readMessageIds = new List<int>();
+
+        foreach (var unreadMessage in unreadMessages)
+        {
+            var payload = DeserializePayload(GetRawPayload(unreadMessage));
+            if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            unreadMessage.ReadAt = readAtUtc;
+            unreadMessage.ReadByUserId = currentUser.UserId;
+            readMessageIds.Add(unreadMessage.Id);
+        }
+
+        if (readMessageIds.Count == 0)
+        {
+            return;
+        }
+
+        await _context.SaveChangesAsync();
+
+        await Clients.Group(channelId).SendAsync("MessagesRead", new MessageReadReceiptDto
+        {
+            ChannelId = channelId,
+            ReaderUserId = currentUser.UserId,
+            MessageIds = readMessageIds,
+            ReadAt = readAtUtc
+        });
+    }
+
     private static bool TryGetDirectMessageParticipantIds(string channelId, out int firstUserId, out int secondUserId)
     {
         firstUserId = 0;
@@ -328,6 +412,17 @@ public class MessageDto
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
     public DateTime Timestamp { get; set; }
+    public bool IsRead { get; set; }
+    public DateTime? ReadAt { get; set; }
+    public string? ReadByUserId { get; set; }
+}
+
+public class MessageReadReceiptDto
+{
+    public string ChannelId { get; set; } = string.Empty;
+    public string ReaderUserId { get; set; } = string.Empty;
+    public List<int> MessageIds { get; set; } = [];
+    public DateTime ReadAt { get; set; }
 }
 
 public class ChatMessagePayload
