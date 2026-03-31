@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 
 namespace BackNoDiscord.Controllers;
 
@@ -12,10 +13,12 @@ namespace BackNoDiscord.Controllers;
 public class FriendsController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IHubContext<ChatHub> _chatHubContext;
 
-    public FriendsController(AppDbContext context)
+    public FriendsController(AppDbContext context, IHubContext<ChatHub> chatHubContext)
     {
         _context = context;
+        _chatHubContext = chatHubContext;
     }
 
     [HttpGet]
@@ -56,6 +59,7 @@ public class FriendsController : ControllerBase
                     first_name = friend.first_name,
                     last_name = friend.last_name,
                     email = friend.email,
+                    avatar_url = friend.avatar_url ?? string.Empty,
                     directChannelId = BuildDirectChannelId(currentUserId, friend.id)
                 };
             });
@@ -90,7 +94,7 @@ public class FriendsController : ControllerBase
             .AsNoTracking()
             .Where(item => item.id != currentUserId && !existingFriendIds.Contains(item.id))
             .Where(item =>
-                item.email.ToLower().Contains(normalizedQuery) ||
+                (item.email ?? string.Empty).ToLower().Contains(normalizedQuery) ||
                 item.first_name.ToLower().Contains(normalizedQuery) ||
                 item.last_name.ToLower().Contains(normalizedQuery) ||
                 (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery))
@@ -103,6 +107,7 @@ public class FriendsController : ControllerBase
                 first_name = item.first_name,
                 last_name = item.last_name,
                 email = item.email,
+                avatar_url = item.avatar_url ?? string.Empty,
                 directChannelId = BuildDirectChannelId(currentUserId, item.id)
             })
             .ToListAsync();
@@ -153,12 +158,15 @@ public class FriendsController : ControllerBase
             await _context.SaveChangesAsync();
         }
 
+        await BroadcastFriendListUpdatedAsync(currentUserId, friend.id);
+
         return Ok(new
         {
             id = friend.id,
             first_name = friend.first_name,
             last_name = friend.last_name,
             email = friend.email,
+            avatar_url = friend.avatar_url ?? string.Empty,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id)
         });
     }
@@ -172,6 +180,20 @@ public class FriendsController : ControllerBase
     {
         var (lowId, highId) = NormalizePair(firstUserId, secondUserId);
         return $"dm:{lowId}:{highId}";
+    }
+
+    private async Task BroadcastFriendListUpdatedAsync(int firstUserId, int secondUserId)
+    {
+        var directChannelId = BuildDirectChannelId(firstUserId, secondUserId);
+        var payload = new
+        {
+            firstUserId,
+            secondUserId,
+            directChannelId
+        };
+
+        await _chatHubContext.Clients.Users(firstUserId.ToString(), secondUserId.ToString())
+            .SendAsync("FriendListUpdated", payload);
     }
 }
 

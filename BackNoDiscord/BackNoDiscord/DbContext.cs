@@ -50,7 +50,10 @@ public class User
     public string last_name { get; set; } = null!;
 
     [Column("email")]
-    public string email { get; set; } = null!;
+    public string? email { get; set; }
+
+    [Column("is_email_verified")]
+    public bool is_email_verified { get; set; }
 
     [Column("phone_number")]
     public string? phone_number { get; set; }
@@ -63,6 +66,43 @@ public class User
 
     [Column("password_hash")]
     public string password_hash { get; set; } = null!;
+}
+
+[Table("email_verification_codes")]
+public class EmailVerificationCodeRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("user_id")]
+    public int UserId { get; set; }
+
+    [Column("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [Column("verification_token_hash")]
+    public string VerificationTokenHash { get; set; } = string.Empty;
+
+    [Column("code_hash")]
+    public string CodeHash { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("expires_at")]
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    [Column("last_sent_at")]
+    public DateTimeOffset LastSentAt { get; set; }
+
+    [Column("attempt_count")]
+    public int AttemptCount { get; set; }
+
+    [Column("verified_at")]
+    public DateTimeOffset? VerifiedAt { get; set; }
+
+    [Column("consumed_at")]
+    public DateTimeOffset? ConsumedAt { get; set; }
 }
 
 [Table("phone_verification_codes")]
@@ -202,6 +242,7 @@ public class AppDbContext : DbContext
     public DbSet<ServerInviteRecordEntity> ServerInvites => Set<ServerInviteRecordEntity>();
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
+    public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -223,11 +264,24 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.phone_number).IsUnique();
             entity.Property(x => x.first_name).IsRequired();
             entity.Property(x => x.last_name).IsRequired();
-            entity.Property(x => x.email).IsRequired();
+            entity.Property(x => x.email).IsRequired(false);
+            entity.Property(x => x.is_email_verified).HasDefaultValue(true);
             entity.Property(x => x.phone_number).IsRequired(false);
             entity.Property(x => x.is_phone_verified).HasDefaultValue(false);
             entity.Property(x => x.avatar_url).IsRequired(false);
             entity.Property(x => x.password_hash).IsRequired();
+        });
+
+        modelBuilder.Entity<EmailVerificationCodeRecord>(entity =>
+        {
+            entity.ToTable("email_verification_codes");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.Email);
+            entity.HasIndex(x => x.VerificationTokenHash).IsUnique();
+            entity.Property(x => x.Email).IsRequired();
+            entity.Property(x => x.VerificationTokenHash).IsRequired();
+            entity.Property(x => x.CodeHash).IsRequired();
         });
 
         modelBuilder.Entity<PhoneVerificationCodeRecord>(entity =>

@@ -8,6 +8,7 @@ if (started) {
 }
 
 const SESSION_STORE_FILE_NAME = "session.secure.json";
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
 const getSessionStorePath = () => path.join(app.getPath("userData"), SESSION_STORE_FILE_NAME);
 
@@ -55,6 +56,15 @@ const clearSecureSession = async () => {
   }
 };
 
+const isSafeExternalUrl = (value) => {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol);
+  } catch {
+    return false;
+  }
+};
+
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200,
@@ -70,7 +80,9 @@ const createWindow = () => {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url).catch(() => {});
+    if (isSafeExternalUrl(url)) {
+      shell.openExternal(url).catch(() => {});
+    }
     return { action: "deny" };
   });
 
@@ -83,6 +95,10 @@ const createWindow = () => {
     }
   });
 
+  mainWindow.webContents.on("will-attach-webview", (event) => {
+    event.preventDefault();
+  });
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
@@ -93,6 +109,16 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowedPermissions = new Set(["media", "display-capture"]);
+    callback(allowedPermissions.has(permission));
+  });
+
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowedPermissions = new Set(["media", "display-capture"]);
+    return allowedPermissions.has(permission);
+  });
+
   ipcMain.handle("secure-session:get", async () => readSecureSession());
   ipcMain.handle("secure-session:set", async (_event, sessionValue) => {
     await writeSecureSession(sessionValue ?? null);

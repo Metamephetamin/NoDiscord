@@ -351,6 +351,7 @@ export async function refreshAccessToken() {
             firstName: data.first_name || sessionCache.user?.firstName || "",
             lastName: data.last_name || sessionCache.user?.lastName || "",
             email: data.email || sessionCache.user?.email || "",
+            isEmailVerified: Boolean(data.is_email_verified ?? sessionCache.user?.isEmailVerified ?? true),
             phoneNumber: data.phone_number || sessionCache.user?.phoneNumber || "",
             isPhoneVerified: Boolean(
               data.is_phone_verified ?? sessionCache.user?.isPhoneVerified ?? sessionCache.user?.phone_verified ?? false

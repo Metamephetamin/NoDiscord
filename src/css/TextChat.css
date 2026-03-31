@@ -4,6 +4,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .message-search-panel {
@@ -67,10 +68,33 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding-top: 44px;
   padding-right: 6px;
+}
+
+.messages-floating-date {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  min-width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 21, 30, 0.86);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  color: #dfe5f5;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .message-item {
@@ -81,11 +105,31 @@
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  animation: messageFloatIn 0.22s ease-out;
+  transform-origin: center bottom;
 }
 
 .message-item--highlighted {
   background: rgba(94, 86, 255, 0.12);
   box-shadow: 0 0 0 1px rgba(118, 108, 255, 0.28);
+}
+
+.message-item--dm {
+  width: fit-content;
+  max-width: min(100%, 72%);
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 10px;
+}
+
+.message-item--dm-own {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.message-item--dm-incoming {
+  margin-right: auto;
 }
 
 .msg-avatar {
@@ -100,6 +144,25 @@
   min-width: 0;
 }
 
+.msg-content--dm {
+  display: inline-flex;
+  flex-direction: column;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  align-self: flex-start;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+.msg-content--dm-own {
+  background: linear-gradient(180deg, rgba(104, 100, 255, 0.2), rgba(255, 111, 182, 0.13));
+  border-color: rgba(148, 133, 255, 0.18);
+}
+
 .message-author {
   display: flex;
   align-items: center;
@@ -108,7 +171,7 @@
   color: #f8fafc;
   font-size: 14px;
   font-weight: 700;
-  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-heading);
   font-style: normal;
 }
 
@@ -119,18 +182,61 @@
   flex: 0 0 auto;
 }
 
+.message-footer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.message-footer--own {
+  align-self: flex-end;
+}
+
 .message-time {
   color: #8d97ac;
   font-size: 12px;
   font-weight: 400;
-  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   font-style: normal;
+}
+
+.message-item--dm-own .message-author {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.message-item--dm-own .message-time {
+  color: #cdd6f4;
+}
+
+.message-item--dm-own .message-text {
+  color: #f6f8ff;
+}
+
+.message-item--dm-own .message-attachment,
+.message-item--dm-own .message-media {
+  margin-left: auto;
+}
+
+.message-item--dm .msg-avatar {
+  align-self: flex-end;
+}
+
+.message-item--dm.message-item--highlighted {
+  background: transparent;
+  box-shadow: none;
+}
+
+.message-item--dm.message-item--highlighted .msg-content--dm {
+  box-shadow: 0 0 0 1px rgba(118, 108, 255, 0.28), 0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
 .message-read-status {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   color: #7f8799;
 }
 
@@ -148,13 +254,17 @@
   opacity: 0.96;
 }
 
+.message-read-status__check + .message-read-status__check {
+  margin-left: -2px;
+}
+
 .message-text {
   margin-top: 4px;
   color: #dbe2f0;
   font-size: 14px;
   line-height: 1.5;
   word-break: break-word;
-  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   font-style: normal;
 }
 
@@ -233,14 +343,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-heading);
   font-style: normal;
 }
 
 .message-attachment__size {
   color: #98a3bc;
   font-size: 12px;
-  font-family: "Ubuntu", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   font-style: normal;
 }
 
@@ -271,6 +381,22 @@
 .message-delete:hover {
   background: rgba(255, 97, 97, 0.14);
   color: #ff8f8f;
+}
+
+.message-item--dm .message-delete {
+  align-self: flex-end;
+  margin-bottom: 8px;
+}
+
+@keyframes messageFloatIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .input-area {

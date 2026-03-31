@@ -1,9 +1,8 @@
-@font-face {
-  font-family: "NunitoLocal";
-  src: url("./fonts/Nunito-Italic-VariableFont_wght.ttf") format("truetype");
-  font-weight: 200 900;
-  font-style: normal;
-  font-display: swap;
+@import url("https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=Rubik:ital,wght@0,300..900;1,300..900&display=swap");
+
+:root {
+  --font-body: "Comfortaa", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-heading: "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
 }
 
 *,
@@ -19,10 +18,47 @@ body,
   min-height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 body {
-  font-family: "NunitoLocal", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   background: #0f1115;
   color: #f8fafc;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.heading-font,
+.auth-brand__name,
+.auth-brand__title,
+.auth-card__heading h2,
+.auth-section__title,
+.auth-side__title,
+.app-loader__title,
+.chat__topbar-title,
+.chat__topbar-title strong,
+.text__channel h1,
+.text__channel h2,
+.voice__channels h2,
+.friends-panel__name,
+.server-members-panel__header h3,
+.server-members-panel__name,
+.voice-channel__title,
+.settings-channel-name {
+  font-family: var(--font-heading);
+  font-style: normal;
 }
 
 .app-loader {
@@ -71,4 +107,34 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+input,
+textarea,
+select {
+  outline: none;
+  box-shadow: none;
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: inherit;
+  transition: background-color 9999s ease-in-out 0s;
+  box-shadow: inset 0 0 0 1000px transparent;
 }

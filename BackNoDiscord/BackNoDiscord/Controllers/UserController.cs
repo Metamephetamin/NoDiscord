@@ -1,4 +1,5 @@
 using BackNoDiscord.Security;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,10 +27,12 @@ public class UserController : ControllerBase
     private const long MaxAvatarSizeBytes = 5_000_000;
     private const int MaxProfileNameLength = 60;
     private readonly AppDbContext _dbContext;
+    private readonly IHubContext<ChatHub> _chatHubContext;
 
-    public UserController(AppDbContext dbContext)
+    public UserController(AppDbContext dbContext, IHubContext<ChatHub> chatHubContext)
     {
         _dbContext = dbContext;
+        _chatHubContext = chatHubContext;
     }
 
     [HttpPut("profile")]
@@ -62,6 +65,8 @@ public class UserController : ControllerBase
         user.first_name = firstName;
         user.last_name = lastName;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await BroadcastProfileUpdatedAsync(user, cancellationToken);
 
         return Ok(new
         {
@@ -120,7 +125,32 @@ public class UserController : ControllerBase
         user.avatar_url = avatarUrl;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        await BroadcastProfileUpdatedAsync(user, cancellationToken);
+
         return Ok(new { avatarUrl, avatar_url = avatarUrl });
+    }
+
+    private async Task BroadcastProfileUpdatedAsync(User user, CancellationToken cancellationToken)
+    {
+        var recipientIds = await _dbContext.Friendships
+            .AsNoTracking()
+            .Where(item => item.UserLowId == user.id || item.UserHighId == user.id)
+            .Select(item => item.UserLowId == user.id ? item.UserHighId : item.UserLowId)
+            .ToListAsync(cancellationToken);
+
+        recipientIds.Add(user.id);
+
+        var payload = new
+        {
+            userId = user.id,
+            first_name = user.first_name,
+            last_name = user.last_name,
+            email = user.email ?? string.Empty,
+            avatar_url = user.avatar_url ?? string.Empty
+        };
+
+        await _chatHubContext.Clients.Users(recipientIds.Distinct().Select(id => id.ToString()))
+            .SendAsync("ProfileUpdated", payload, cancellationToken);
     }
 
     private static string NormalizeProfileName(string? value, string fieldName, out string error)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/TextChat.css";
 import { API_URL } from "../config/runtime";
@@ -36,6 +36,42 @@ function isImageAttachment(messageItem) {
 
 function isVideoAttachment(messageItem) {
   return Boolean(messageItem?.attachmentContentType?.startsWith("video/"));
+}
+
+function formatTime(timestamp) {
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function formatDayLabel(timestamp) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  if (isToday) {
+    return "Сегодня";
+  }
+
+  if (isYesterday) {
+    return "Вчера";
+  }
+
+  return date.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: now.getFullYear() === date.getFullYear() ? undefined : "numeric",
+  });
 }
 
 function formatTimestamp(timestamp) {
@@ -90,19 +126,101 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
+  const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const messagesEndRef = useRef(null);
+  const messagesListRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const joinedChannelRef = useRef("");
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
+  const previousChannelIdRef = useRef("");
+  const forceScrollToBottomRef = useRef(false);
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
+  const messages = messagesByChannel[scopedChannelId] || [];
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messagesByChannel, scopedChannelId]);
+    if (!isDirectChat) {
+      setFloatingDateLabel("");
+      return;
+    }
+
+    const updateFloatingDate = () => {
+      const list = messagesListRef.current;
+      if (!list || messages.length === 0) {
+        setFloatingDateLabel("");
+        return;
+      }
+
+      const scrollTop = list.scrollTop;
+      const probeLine = scrollTop + 24;
+      let nextVisibleMessage = messages[0];
+
+      for (const messageItem of messages) {
+        const node = messageRefs.current.get(messageItem.id);
+        if (!node) {
+          continue;
+        }
+
+        const nodeBottom = node.offsetTop + node.offsetHeight;
+        if (nodeBottom >= probeLine) {
+          nextVisibleMessage = messageItem;
+          break;
+        }
+      }
+
+      const nextLabel = nextVisibleMessage?.timestamp ? formatDayLabel(nextVisibleMessage.timestamp) : "";
+      setFloatingDateLabel((current) => (current === nextLabel ? current : nextLabel));
+    };
+
+    updateFloatingDate();
+    const list = messagesListRef.current;
+    if (!list) {
+      return undefined;
+    }
+
+    list.addEventListener("scroll", updateFloatingDate, { passive: true });
+    window.addEventListener("resize", updateFloatingDate);
+
+    return () => {
+      list.removeEventListener("scroll", updateFloatingDate);
+      window.removeEventListener("resize", updateFloatingDate);
+    };
+  }, [isDirectChat, messages, scopedChannelId]);
+
+  useEffect(() => {
+    const list = messagesListRef.current;
+    const end = messagesEndRef.current;
+    if (!list || !end) {
+      previousChannelIdRef.current = scopedChannelId;
+      return;
+    }
+
+    const channelChanged = previousChannelIdRef.current !== scopedChannelId;
+    previousChannelIdRef.current = scopedChannelId;
+
+    if (channelChanged) {
+      forceScrollToBottomRef.current = false;
+      end.scrollIntoView({ behavior: "auto", block: "end" });
+      return;
+    }
+
+    if (forceScrollToBottomRef.current) {
+      forceScrollToBottomRef.current = false;
+      end.scrollIntoView({ behavior: "smooth", block: "end" });
+      return;
+    }
+
+    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    const shouldStickToBottom = distanceFromBottom < 96;
+    if (!shouldStickToBottom) {
+      return;
+    }
+
+    end.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, scopedChannelId]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -243,6 +361,45 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     };
   }, [currentUserId, isDirectChat, scopedChannelId]);
 
+  useEffect(() => {
+    const handleProfileUpdated = (payload) => {
+      const updatedUserId = String(payload?.userId || "");
+      if (!updatedUserId) {
+        return;
+      }
+
+      const nextFirstName = String(payload?.first_name || payload?.firstName || "").trim();
+      const nextLastName = String(payload?.last_name || payload?.lastName || "").trim();
+      const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
+      const nextUsername = `${nextFirstName} ${nextLastName}`.trim();
+
+      setMessagesByChannel((previous) =>
+        Object.fromEntries(
+          Object.entries(previous || {}).map(([channelKey, channelMessages]) => [
+            channelKey,
+            Array.isArray(channelMessages)
+              ? channelMessages.map((messageItem) =>
+                  String(messageItem?.authorUserId || "") === updatedUserId
+                    ? {
+                        ...messageItem,
+                        username: nextUsername || messageItem.username || "User",
+                        photoUrl: nextAvatar || messageItem.photoUrl || DEFAULT_AVATAR,
+                      }
+                    : messageItem
+                )
+              : channelMessages,
+          ])
+        )
+      );
+    };
+
+    chatConnection.on("ProfileUpdated", handleProfileUpdated);
+
+    return () => {
+      chatConnection.off("ProfileUpdated", handleProfileUpdated);
+    };
+  }, []);
+
   const uploadAttachment = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -306,6 +463,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         attachment?.contentType || selectedFile?.type || null
       );
 
+      forceScrollToBottomRef.current = true;
       lastSendAtRef.current = Date.now();
       setMessage("");
       setSelectedFile(null);
@@ -337,7 +495,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     setSelectedFile(file);
   };
 
-  const messages = messagesByChannel[scopedChannelId] || [];
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchResults = useMemo(() => {
     if (normalizedSearchQuery.length < 2) {
@@ -395,7 +552,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         </div>
       ) : null}
 
-      <div className="messages-list">
+      {isDirectChat && floatingDateLabel ? <div className="messages-floating-date">{floatingDateLabel}</div> : null}
+
+      <div ref={messagesListRef} className="messages-list">
         {messages.map((messageItem) => {
           const attachmentUrl = messageItem.attachmentUrl
             ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)
@@ -414,27 +573,21 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                   messageRefs.current.delete(messageItem.id);
                 }
               }}
-              className={`message-item ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
+              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
             >
               <img src={resolveMediaUrl(messageItem.photoUrl, DEFAULT_AVATAR)} alt="avatar" className="msg-avatar" />
 
-              <div className="msg-content">
-                <div className="message-author">
-                  <span>{messageItem.username}</span>
-                  <span className="message-meta">
-                    <span className="message-time">{formatTimestamp(messageItem.timestamp)}</span>
-                    {isDirectChat && isOwnMessage ? (
-                      <span
-                        className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}
-                        title={messageItem.isRead ? "Сообщение прочитано" : "Сообщение доставлено"}
-                        aria-label={messageItem.isRead ? "Сообщение прочитано" : "Сообщение доставлено"}
-                      >
-                        <span className="message-read-status__check" />
-                        <span className="message-read-status__check" />
+              <div className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""}`}>
+                {!isDirectChat || !isOwnMessage ? (
+                  <div className="message-author">
+                    <span>{messageItem.username}</span>
+                    {!isDirectChat ? (
+                      <span className="message-meta">
+                        <span className="message-time">{formatTimestamp(messageItem.timestamp)}</span>
                       </span>
                     ) : null}
-                  </span>
-                </div>
+                  </div>
+                ) : null}
 
                 {messageItem.message ? <div className="message-text">{messageItem.message}</div> : null}
 
@@ -456,6 +609,18 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       </span>
                     </a>
                   )
+                ) : null}
+
+                {isDirectChat ? (
+                  <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
+                    <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                    {isOwnMessage ? (
+                      <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
+                        <span className="message-read-status__check" />
+                        <span className="message-read-status__check" />
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 
@@ -519,3 +684,4 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     </div>
   );
 }
+

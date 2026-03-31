@@ -39,8 +39,14 @@ export default function ScreenShareViewer({
     }
 
     const mediaElement = videoRef.current;
+    let intervalId = 0;
     const syncToLiveEdge = () => {
-      if (!mediaElement || mediaElement.seeking || !mediaElement.buffered.length) {
+      if (
+        !mediaElement ||
+        mediaElement.seeking ||
+        mediaElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+        !mediaElement.buffered.length
+      ) {
         return;
       }
 
@@ -66,11 +72,39 @@ export default function ScreenShareViewer({
       mediaElement.playbackRate = 1;
     };
 
-    const intervalId = window.setInterval(syncToLiveEdge, 250);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (intervalId) {
+          window.clearInterval(intervalId);
+          intervalId = 0;
+        }
+        return;
+      }
+
+      syncToLiveEdge();
+      if (!intervalId) {
+        intervalId = window.setInterval(syncToLiveEdge, 900);
+      }
+    };
+
+    mediaElement.addEventListener("loadedmetadata", syncToLiveEdge);
+    mediaElement.addEventListener("progress", syncToLiveEdge);
+    mediaElement.addEventListener("timeupdate", syncToLiveEdge);
+    mediaElement.addEventListener("playing", syncToLiveEdge);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     syncToLiveEdge();
+    handleVisibilityChange();
 
     return () => {
-      window.clearInterval(intervalId);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      mediaElement.removeEventListener("loadedmetadata", syncToLiveEdge);
+      mediaElement.removeEventListener("progress", syncToLiveEdge);
+      mediaElement.removeEventListener("timeupdate", syncToLiveEdge);
+      mediaElement.removeEventListener("playing", syncToLiveEdge);
       if (mediaElement) {
         mediaElement.playbackRate = 1;
       }

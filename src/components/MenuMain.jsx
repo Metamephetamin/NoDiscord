@@ -458,6 +458,7 @@ const normalizeFriend = (friend) => ({
   name:
     `${String(friend?.first_name || friend?.firstName || "").trim()} ${String(friend?.last_name || friend?.lastName || "").trim()}`.trim(),
   email: String(friend?.email || ""),
+  avatar: String(friend?.avatar_url || friend?.avatarUrl || friend?.avatar || ""),
   directChannelId: String(friend?.directChannelId || ""),
 });
 const UI_SOUND_PATHS = {
@@ -554,6 +555,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [cameraError, setCameraError] = useState("");
   const [hasCameraPreview, setHasCameraPreview] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
+  const [chatSyncTick, setChatSyncTick] = useState(0);
   const [profileDraft, setProfileDraft] = useState({
     firstName: user?.first_name || user?.firstName || "",
     lastName: user?.last_name || user?.lastName || "",
@@ -576,6 +578,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const previousVoiceChannelRef = useRef(null);
   const previousScreenShareRef = useRef(false);
   const joinedDirectChannelsRef = useRef(new Set());
+  const joinedServerNotificationChannelsRef = useRef(new Set());
+  const hasBoundChatReconnectHandlerRef = useRef(false);
+  const userSessionActiveRef = useRef(false);
+  const refreshFriendsRef = useRef(() => {});
   const directToastTimeoutsRef = useRef(new Map());
   const serverToastTimeoutsRef = useRef(new Map());
   const appliedInputDeviceRef = useRef("");
@@ -943,6 +949,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
     }
   };
 
+  refreshFriendsRef.current = () => {
+    loadFriends().catch(() => {});
+  };
+
   const searchFriendCandidates = async (query) => {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length < 2) {
@@ -1209,6 +1219,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       setCustomNotificationSoundName("");
       setNotificationSoundError("");
       joinedDirectChannelsRef.current.clear();
+      joinedServerNotificationChannelsRef.current.clear();
       directToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
       directToastTimeoutsRef.current.clear();
       serverToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -1218,6 +1229,188 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
     loadFriends().catch(() => {});
   }, [user?.id, user?.email]);
+
+  useEffect(() => {
+    userSessionActiveRef.current = Boolean(user);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const handleFriendListUpdated = () => {
+      refreshFriendsRef.current();
+    };
+
+    const handleWindowFocus = () => {
+      refreshFriendsRef.current();
+    };
+
+    chatConnection.on("FriendListUpdated", handleFriendListUpdated);
+    window.addEventListener("focus", handleWindowFocus);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      refreshFriendsRef.current();
+    }, 30000);
+
+    return () => {
+      chatConnection.off("FriendListUpdated", handleFriendListUpdated);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [user?.id, user?.email]);
+
+  useEffect(() => {
+    if (hasBoundChatReconnectHandlerRef.current) {
+      return;
+    }
+
+    hasBoundChatReconnectHandlerRef.current = true;
+    chatConnection.onreconnected(() => {
+      if (!userSessionActiveRef.current) {
+        return;
+      }
+
+      joinedDirectChannelsRef.current.clear();
+      joinedServerNotificationChannelsRef.current.clear();
+      setChatSyncTick((previous) => previous + 1);
+      refreshFriendsRef.current();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const handleProfileUpdated = (payload) => {
+      const updatedUserId = String(payload?.userId || "");
+      if (!updatedUserId) {
+        return;
+      }
+
+      const nextFirstName = String(payload?.first_name || payload?.firstName || "").trim();
+      const nextLastName = String(payload?.last_name || payload?.lastName || "").trim();
+      const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
+      const nextEmail = String(payload?.email || "").trim();
+      const nextDisplayName = `${nextFirstName} ${nextLastName}`.trim();
+
+      setFriends((previous) =>
+        previous.map((friend) =>
+          String(friend.id) === updatedUserId
+            ? {
+                ...friend,
+                firstName: nextFirstName || friend.firstName || "",
+                lastName: nextLastName || friend.lastName || "",
+                name: nextDisplayName || friend.name || "",
+                email: nextEmail || friend.email || "",
+                avatar: nextAvatar || friend.avatar || "",
+              }
+            : friend
+        )
+      );
+
+      setFriendLookupResults((previous) =>
+        previous.map((friend) =>
+          String(friend.id) === updatedUserId
+            ? {
+                ...friend,
+                firstName: nextFirstName || friend.firstName || "",
+                lastName: nextLastName || friend.lastName || "",
+                name: nextDisplayName || friend.name || "",
+                email: nextEmail || friend.email || "",
+                avatar: nextAvatar || friend.avatar || "",
+              }
+            : friend
+        )
+      );
+
+      setDirectMessageToasts((previous) =>
+        previous.map((toast) =>
+          String(toast?.friend?.id || "") === updatedUserId
+            ? {
+                ...toast,
+                friend: {
+                  ...toast.friend,
+                  firstName: nextFirstName || toast.friend?.firstName || "",
+                  lastName: nextLastName || toast.friend?.lastName || "",
+                  name: nextDisplayName || toast.friend?.name || "",
+                  email: nextEmail || toast.friend?.email || "",
+                  avatar: nextAvatar || toast.friend?.avatar || "",
+                },
+              }
+            : toast
+        )
+      );
+
+      setServers((previous) =>
+        previous.map((server) => ({
+          ...server,
+          members: Array.isArray(server?.members)
+            ? server.members.map((member) =>
+                String(member?.userId || "") === updatedUserId
+                  ? {
+                      ...member,
+                      name: nextDisplayName || member.name || "",
+                      avatar: nextAvatar || member.avatar || "",
+                    }
+                  : member
+              )
+            : server.members,
+        }))
+      );
+
+      setParticipantsMap((previous) =>
+        Object.fromEntries(
+          Object.entries(previous || {}).map(([channelKey, participants]) => [
+            channelKey,
+            Array.isArray(participants)
+              ? participants.map((participant) =>
+                  String(participant?.userId || participant?.UserId || "") === updatedUserId
+                    ? {
+                        ...participant,
+                        name: nextDisplayName || participant.name || participant.Name || "",
+                        avatar: nextAvatar || participant.avatar || participant.Avatar || "",
+                      }
+                    : participant
+                )
+              : participants,
+          ])
+        )
+      );
+
+      if (updatedUserId === currentUserId && user) {
+        const nextUser = {
+          ...user,
+          first_name: nextFirstName || user.first_name || user.firstName || "",
+          firstName: nextFirstName || user.firstName || user.first_name || "",
+          last_name: nextLastName || user.last_name || user.lastName || "",
+          lastName: nextLastName || user.lastName || user.last_name || "",
+          email: nextEmail || user.email || "",
+          avatarUrl: nextAvatar || user.avatarUrl || user.avatar || "",
+          avatar: nextAvatar || user.avatar || user.avatarUrl || "",
+        };
+
+        setUser?.(nextUser);
+        void storeSession(nextUser, {
+          accessToken: getStoredToken(),
+          refreshToken: getStoredRefreshToken(),
+          accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+        });
+      }
+    };
+
+    chatConnection.on("ProfileUpdated", handleProfileUpdated);
+
+    return () => {
+      chatConnection.off("ProfileUpdated", handleProfileUpdated);
+    };
+  }, [currentUserId, setUser, user]);
 
   useEffect(() => () => {
     directToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -1629,7 +1822,61 @@ export default function MenuMain({ user, setUser, onLogout }) {
     };
 
     syncDirectChannels().catch(() => {});
-  }, [friends, currentUserId, user]);
+  }, [chatSyncTick, friends, currentUserId, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const desiredChannelIds = new Set(
+      (servers || []).flatMap((server) =>
+        (server.textChannels || [])
+          .map((channel) => getScopedChatChannelId(server.id, channel.id))
+          .filter(Boolean)
+      )
+    );
+
+    let isDisposed = false;
+
+    const syncServerNotificationChannels = async () => {
+      const connection = await startChatConnection();
+      if (!connection || isDisposed) {
+        return;
+      }
+
+      const joinedChannels = joinedServerNotificationChannelsRef.current;
+
+      for (const channelId of Array.from(joinedChannels)) {
+        if (desiredChannelIds.has(channelId)) {
+          continue;
+        }
+
+        try {
+          await chatConnection.invoke("LeaveChannel", channelId);
+        } catch {
+          // ignore cleanup failures
+        }
+
+        joinedChannels.delete(channelId);
+      }
+
+      for (const channelId of Array.from(desiredChannelIds)) {
+        try {
+          await chatConnection.invoke("JoinChannel", channelId);
+          joinedChannels.add(channelId);
+        } catch {
+          // ignore join failures for notification-only subscriptions
+        }
+      }
+    };
+
+    syncServerNotificationChannels().catch(() => {});
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [chatSyncTick, servers, user]);
 
   useEffect(() => {
     if (!user || !currentUserId) {
@@ -1775,15 +2022,21 @@ export default function MenuMain({ user, setUser, onLogout }) {
     });
   }, [user?.email, user?.first_name, user?.firstName, user?.last_name, user?.lastName]);
   useEffect(() => {
-    if (!activeServer?.id || !activeServer?.isShared || isDefaultServer) return;
+    if (!activeServer?.id || !activeServer?.isShared || isDefaultServer || workspaceMode !== "servers") return;
 
-    refreshServerSnapshot(activeServer.id);
-    const intervalId = window.setInterval(() => {
+    if (document.visibilityState !== "hidden") {
       refreshServerSnapshot(activeServer.id);
-    }, 5000);
+    }
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      refreshServerSnapshot(activeServer.id);
+    }, 10000);
 
     return () => window.clearInterval(intervalId);
-  }, [activeServer?.id, activeServer?.isShared, isDefaultServer]);
+  }, [activeServer?.id, activeServer?.isShared, isDefaultServer, workspaceMode]);
   useEffect(() => {
     if (!showServerMembersPanel || !activeServer?.id || !activeServer?.isShared || isDefaultServer) return;
 
@@ -1839,6 +2092,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
   useEffect(() => {
     let disposed = false;
     const measurePing = async () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
       const startedAt = performance.now();
       try {
         await fetch(`${API_URL}/api/ping`, { method: "GET", cache: "no-store" });
@@ -3301,13 +3558,21 @@ export default function MenuMain({ user, setUser, onLogout }) {
         ) : null}
 
         <div className="profile__quick-actions">
-          <button type="button" className="profile__quick-button profile__quick-button--settings" onClick={() => openSettingsPanel("voice_video")}>
+          <button
+            type="button"
+            className="profile__quick-button ui-tooltip-anchor"
+            onClick={() => openSettingsPanel("voice_video")}
+            aria-label="Голос и видео"
+            data-tooltip="Голос и видео"
+          >
             <span className="profile__quick-glyph profile__quick-glyph--settings" aria-hidden="true" />
           </button>
           <button
             type="button"
-            className={`profile__quick-button ${isScreenShareActive ? "profile__quick-button--active" : ""}`}
+            className={`profile__quick-button ui-tooltip-anchor ${isScreenShareActive ? "profile__quick-button--active" : ""}`}
             onClick={handleScreenShareAction}
+            aria-label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
+            data-tooltip={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
           >
             <span
               className={`profile__quick-glyph ${isScreenShareActive ? "profile__quick-glyph--close" : "profile__quick-glyph--monitor"}`}
@@ -3316,38 +3581,27 @@ export default function MenuMain({ user, setUser, onLogout }) {
           </button>
           <button
             type="button"
-            className={`profile__quick-button ${isCameraShareActive ? "profile__quick-button--active" : ""}`}
+            className={`profile__quick-button ui-tooltip-anchor ${isCameraShareActive ? "profile__quick-button--active" : ""}`}
             onClick={openCameraModal}
+            aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
+            data-tooltip={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
           >
             <span className="profile__quick-glyph profile__quick-glyph--camera" aria-hidden="true" />
           </button>
-          <button type="button" className="profile__quick-button profile__quick-button--active noise-toggle--active" onClick={() => setShowNoiseMenu((previous) => !previous)}>
-            <span className="noise-toggle__bars" aria-hidden="true">
-              <span className="noise-toggle__bar noise-toggle__bar--1" />
-              <span className="noise-toggle__bar noise-toggle__bar--2" />
-              <span className="noise-toggle__bar noise-toggle__bar--3" />
-            </span>
+          <button
+            type="button"
+            className={`profile__quick-button ui-tooltip-anchor ${currentVoiceChannel ? "profile__quick-button--danger" : ""}`}
+            onClick={() => {
+              if (currentVoiceChannel) {
+                leaveVoiceChannel();
+              }
+            }}
+            disabled={!currentVoiceChannel}
+            aria-label={currentVoiceChannel ? "Отключиться от голосового канала" : "Сначала подключитесь к голосовому каналу"}
+            data-tooltip={currentVoiceChannel ? "Отключиться" : "Сначала подключитесь"}
+          >
+            <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
           </button>
-          {showNoiseMenu && (
-            <div className="noise-menu__panel noise-menu__panel--bottom">
-              <button
-                type="button"
-                className={`noise-menu__option ${noiseSuppressionMode === "transparent" ? "noise-menu__option--active" : ""}`}
-                onClick={() => handleNoiseSuppressionModeChange("transparent")}
-              >
-                <span className="noise-menu__title">Прозрачный</span>
-                <span className="noise-menu__description">Обычный режим без шумодава</span>
-              </button>
-              <button
-                type="button"
-                className={`noise-menu__option ${noiseSuppressionMode === "voice_isolation" ? "noise-menu__option--active" : ""}`}
-                onClick={() => handleNoiseSuppressionModeChange("voice_isolation")}
-              >
-                <span className="noise-menu__title">Изоляция голоса</span>
-                <span className="noise-menu__description">Подавляет фон и вытягивает речь вперед</span>
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="profile__identity-row">
@@ -3366,18 +3620,46 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
           <div className="profile__identity-controls">
             <div className="device-menu" ref={micMenuRef}>
-              <button type="button" className={`profile__mini-icon ${isMicMuted ? "profile__mini-icon--slashed" : ""}`} onClick={toggleMicMute}>
+              <button
+                type="button"
+                className={`profile__mini-icon ui-tooltip-anchor ${isMicMuted ? "profile__mini-icon--slashed" : ""}`}
+                onClick={toggleMicMute}
+                aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+                data-tooltip={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+              >
                 <img src="/icons/microphone.png" alt="" />
               </button>
-              <button type="button" className="profile__mini-arrow" onClick={() => setShowMicMenu((previous) => !previous)}>▾</button>
+              <button
+                type="button"
+                className="profile__mini-arrow ui-tooltip-anchor"
+                onClick={() => setShowMicMenu((previous) => !previous)}
+                aria-label="Настройки микрофона"
+                data-tooltip="Настройки микрофона"
+              >
+                ▾
+              </button>
               {showMicMenu && renderMicMenuPanel()}
             </div>
 
             <div className="device-menu" ref={soundMenuRef}>
-              <button type="button" className={`profile__mini-icon ${isSoundMuted ? "profile__mini-icon--slashed" : ""}`} onClick={toggleSoundMute}>
+              <button
+                type="button"
+                className={`profile__mini-icon ui-tooltip-anchor ${isSoundMuted ? "profile__mini-icon--slashed" : ""}`}
+                onClick={toggleSoundMute}
+                aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
+                data-tooltip={isSoundMuted ? "Включить звук" : "Выключить звук"}
+              >
                 <img src="/icons/headphones-simple.svg" alt="" />
               </button>
-              <button type="button" className="profile__mini-arrow" onClick={() => setShowSoundMenu((previous) => !previous)}>▾</button>
+              <button
+                type="button"
+                className="profile__mini-arrow ui-tooltip-anchor"
+                onClick={() => setShowSoundMenu((previous) => !previous)}
+                aria-label="Настройки звука"
+                data-tooltip="Настройки звука"
+              >
+                ▾
+              </button>
               {showSoundMenu && renderSoundMenuPanel()}
             </div>
           </div>
@@ -3762,10 +4044,22 @@ export default function MenuMain({ user, setUser, onLogout }) {
               </div>
             </div>
             <div className="chat__topbar-actions">
-              <button type="button" className="chat__topbar-icon" onClick={() => openSettingsPanel("roles")} title="Участники и роли">
+              <button
+                type="button"
+                className="chat__topbar-icon ui-tooltip-anchor"
+                onClick={() => openSettingsPanel("roles")}
+                aria-label="Участники и роли"
+                data-tooltip="Участники и роли"
+              >
                 <img src="/icons/users.svg" alt="" />
               </button>
-              <button type="button" className="chat__topbar-icon" onClick={() => openSettingsPanel("server")} title="Настройки сервера">
+              <button
+                type="button"
+                className="chat__topbar-icon ui-tooltip-anchor"
+                onClick={() => openSettingsPanel("server")}
+                aria-label="Настройки сервера"
+                data-tooltip="Настройки сервера"
+              >
                 <img src="/icons/settings.png" alt="" />
               </button>
               <label className="chat__topbar-search-wrap">
@@ -3803,17 +4097,50 @@ export default function MenuMain({ user, setUser, onLogout }) {
   return (
     <div className="menu__main">
       <aside className="sidebar__servers">
-        <button type="button" className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`} onClick={() => setWorkspaceMode("friends")} title="Друзья">
+        <button
+          type="button"
+          className={`workspace-switch ui-tooltip-anchor ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`}
+          onClick={() => setWorkspaceMode("friends")}
+          aria-label="Друзья"
+          data-tooltip="Друзья"
+          data-tooltip-side="right"
+        >
           <img src="/icons/sms.svg" alt="" />
           <span>Друзья</span>
         </button>
         {servers.map((server) => (
-          <button key={server.id} type="button" className={`btn__server ${server.id === activeServer?.id ? "btn__server--active" : ""}`} onClick={() => { setWorkspaceMode("servers"); setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }} title={server.name || "Без названия"}>
+          <button
+            key={server.id}
+            type="button"
+            className={`btn__server ui-tooltip-anchor ${server.id === activeServer?.id ? "btn__server--active" : ""}`}
+            onClick={() => { setWorkspaceMode("servers"); setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }}
+            aria-label={server.name || "Без названия"}
+            data-tooltip={server.name || "Без названия"}
+            data-tooltip-side="right"
+          >
             {server.icon ? <img src={resolveMediaUrl(server.icon, DEFAULT_SERVER_ICON)} alt={server.name || "Без названия"} /> : <span className="btn__server-empty" aria-hidden="true" />}
           </button>
         ))}
-        <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={handleAddServer}>+</button>
-        <button type="button" className="logout" aria-label="Выйти" onClick={handleLogout}><img src="/icons/logout.png" alt="logout" /></button>
+        <button
+          type="button"
+          className="btn__create-server ui-tooltip-anchor"
+          aria-label="Создать сервер"
+          data-tooltip="Создать сервер"
+          data-tooltip-side="right"
+          onClick={handleAddServer}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="logout ui-tooltip-anchor"
+          aria-label="Выйти"
+          data-tooltip="Выйти"
+          data-tooltip-side="right"
+          onClick={handleLogout}
+        >
+          <img src="/icons/logout.png" alt="logout" />
+        </button>
       </aside>
       {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
       {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}

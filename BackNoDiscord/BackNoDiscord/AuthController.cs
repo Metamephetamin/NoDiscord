@@ -1,4 +1,4 @@
-using BackNoDiscord.Security;
+﻿using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
@@ -21,7 +21,10 @@ public class AuthController : ControllerBase
 {
     private static readonly TimeSpan PhoneVerificationLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan PhoneVerificationResendCooldown = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
     private const int MaxPhoneVerificationAttempts = 5;
+    private const int MaxEmailVerificationAttempts = 5;
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _config;
@@ -62,7 +65,7 @@ public class AuthController : ControllerBase
             var waitSeconds = Math.Max(1, (int)Math.Ceiling((latestActive.LastSentAt + PhoneVerificationResendCooldown - now).TotalSeconds));
             return StatusCode(StatusCodes.Status429TooManyRequests, new
             {
-                message = $"Повторно отправить код можно через {waitSeconds} сек."
+                message = $"РџРѕРІС‚РѕСЂРЅРѕ РѕС‚РїСЂР°РІРёС‚СЊ РєРѕРґ РјРѕР¶РЅРѕ С‡РµСЂРµР· {waitSeconds} СЃРµРє."
             });
         }
 
@@ -97,7 +100,14 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
 
         var deliveryMode = GetSmsDeliveryMode();
-        _logger.LogInformation("Phone verification code for {PhoneNumber}: {VerificationCode}", normalizedPhone, verificationCode);
+        if (string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Phone verification code for {PhoneNumber}: {VerificationCode}", normalizedPhone, verificationCode);
+        }
+        else
+        {
+            _logger.LogInformation("Phone verification code generated for {PhoneNumber} using {DeliveryMode} delivery.", normalizedPhone, deliveryMode);
+        }
 
         return Ok(new
         {
@@ -128,7 +138,7 @@ public class AuthController : ControllerBase
         var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
         if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
         {
-            return BadRequest(new { message = "Введите корректный шестизначный код." });
+            return BadRequest(new { message = "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ С€РµСЃС‚РёР·РЅР°С‡РЅС‹Р№ РєРѕРґ." });
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -142,19 +152,19 @@ public class AuthController : ControllerBase
 
         if (record == null)
         {
-            return BadRequest(new { message = "Сессия подтверждения номера не найдена. Запросите код заново." });
+            return BadRequest(new { message = "РЎРµСЃСЃРёСЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РЅРѕРјРµСЂР° РЅРµ РЅР°Р№РґРµРЅР°. Р—Р°РїСЂРѕСЃРёС‚Рµ РєРѕРґ Р·Р°РЅРѕРІРѕ." });
         }
 
         if (record.ExpiresAt <= now)
         {
             record.ConsumedAt = now;
             await _context.SaveChangesAsync();
-            return BadRequest(new { message = "Срок действия кода истёк. Запросите новый код." });
+            return BadRequest(new { message = "РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ РєРѕРґР° РёСЃС‚С‘Рє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
         }
 
         if (record.AttemptCount >= MaxPhoneVerificationAttempts)
         {
-            return BadRequest(new { message = "Лимит попыток исчерпан. Запросите новый код." });
+            return BadRequest(new { message = "Р›РёРјРёС‚ РїРѕРїС‹С‚РѕРє РёСЃС‡РµСЂРїР°РЅ. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
         }
 
         if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
@@ -166,7 +176,7 @@ public class AuthController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
-            return BadRequest(new { message = "Неверный код подтверждения." });
+            return BadRequest(new { message = "РќРµРІРµСЂРЅС‹Р№ РєРѕРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ." });
         }
 
         record.VerifiedAt = now;
@@ -180,7 +190,119 @@ public class AuthController : ControllerBase
         });
     }
 
-    [HttpPost("register")]
+    [HttpPost("resend-email-verification")]
+    [EnableRateLimiting("email-send")]
+    public async Task<IActionResult> ResendEmailVerification([FromBody] ResendEmailVerificationDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (!AuthInputPolicies.TryNormalizeEmail(dto.email, out var normalizedEmail, out var emailError))
+        {
+            return BadRequest(new { message = emailError });
+        }
+
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        if (user == null)
+        {
+            return BadRequest(new { message = "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРѕР№ РїРѕС‡С‚РѕР№ РЅРµ РЅР°Р№РґРµРЅ." });
+        }
+
+        if (user.is_email_verified)
+        {
+            return BadRequest(new { message = "РџРѕС‡С‚Р° СѓР¶Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅР°." });
+        }
+
+        var payload = await CreateEmailVerificationAsync(user);
+        return Ok(payload);
+    }
+
+    [HttpPost("verify-email-code")]
+    [EnableRateLimiting("email-verify")]
+    public async Task<IActionResult> VerifyEmailCode([FromBody] VerifyEmailCodeDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (!AuthInputPolicies.TryNormalizeEmail(dto.email, out var normalizedEmail, out var emailError))
+        {
+            return BadRequest(new { message = emailError });
+        }
+
+        var verificationToken = (dto.verificationToken ?? string.Empty).Trim();
+        var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
+        {
+            return BadRequest(new { message = "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ С€РµСЃС‚РёР·РЅР°С‡РЅС‹Р№ РєРѕРґ." });
+        }
+
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        if (user == null)
+        {
+            return BadRequest(new { message = "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРѕР№ РїРѕС‡С‚РѕР№ РЅРµ РЅР°Р№РґРµРЅ." });
+        }
+
+        if (user.is_email_verified)
+        {
+            await RevokeActiveRefreshTokensAsync(user.id);
+            var existingSession = await IssueAuthSessionAsync(user);
+            return Ok(BuildAuthResponse(user, existingSession));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.EmailVerificationCodes
+            .Where(item =>
+                item.UserId == user.id &&
+                item.Email == normalizedEmail &&
+                item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
+                !item.ConsumedAt.HasValue)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (record == null)
+        {
+            return BadRequest(new { message = "РЎРµСЃСЃРёСЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РїРѕС‡С‚С‹ РЅРµ РЅР°Р№РґРµРЅР°. Р—Р°РїСЂРѕСЃРёС‚Рµ РєРѕРґ Р·Р°РЅРѕРІРѕ." });
+        }
+
+        if (record.ExpiresAt <= now)
+        {
+            record.ConsumedAt = now;
+            await _context.SaveChangesAsync();
+            return BadRequest(new { message = "РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ РєРѕРґР° РёСЃС‚С‘Рє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
+        }
+
+        if (record.AttemptCount >= MaxEmailVerificationAttempts)
+        {
+            return BadRequest(new { message = "Р›РёРјРёС‚ РїРѕРїС‹С‚РѕРє РёСЃС‡РµСЂРїР°РЅ. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
+        }
+
+        if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
+        {
+            record.AttemptCount += 1;
+            if (record.AttemptCount >= MaxEmailVerificationAttempts)
+            {
+                record.ConsumedAt = now;
+            }
+
+            await _context.SaveChangesAsync();
+            return BadRequest(new { message = "РќРµРІРµСЂРЅС‹Р№ РєРѕРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ." });
+        }
+
+        record.VerifiedAt = now;
+        record.ConsumedAt = now;
+        user.is_email_verified = true;
+        await _context.SaveChangesAsync();
+
+        await RevokeActiveRefreshTokensAsync(user.id);
+        var authSession = await IssueAuthSessionAsync(user);
+        return Ok(BuildAuthResponse(user, authSession));
+    }
+
+        [HttpPost("register")]
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
@@ -189,58 +311,90 @@ public class AuthController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        if (!AuthInputPolicies.TryNormalizeProfileName(dto.first_name, "Имя", out var firstName, out var firstNameError))
+        if (!AuthInputPolicies.TryNormalizeProfileName(dto.first_name, "РРјСЏ", out var firstName, out var firstNameError))
         {
             return BadRequest(new { message = firstNameError });
         }
 
-        if (!AuthInputPolicies.TryNormalizeProfileName(dto.last_name, "Фамилия", out var lastName, out var lastNameError))
+        if (!AuthInputPolicies.TryNormalizeProfileName(dto.last_name, "Р¤Р°РјРёР»РёСЏ", out var lastName, out var lastNameError))
         {
             return BadRequest(new { message = lastNameError });
         }
 
-        if (!AuthInputPolicies.TryNormalizeEmail(dto.email, out var normalizedEmail, out var emailError))
+        var rawEmail = (dto.email ?? string.Empty).Trim();
+        var rawPhone = (dto.phone ?? string.Empty).Trim();
+        var hasEmail = !string.IsNullOrWhiteSpace(rawEmail);
+        var hasPhone = !string.IsNullOrWhiteSpace(rawPhone);
+
+        if (!hasEmail && !hasPhone)
         {
-            return BadRequest(new { message = emailError });
+            return BadRequest(new { message = "Введите email или номер телефона." });
         }
 
-        if (!AuthInputPolicies.TryNormalizeRussianPhone(dto.phone, out var normalizedPhone, out var phoneError))
+        if (hasEmail && hasPhone)
         {
-            return BadRequest(new { message = phoneError });
+            return BadRequest(new { message = "Укажите только один способ регистрации: email или телефон." });
+        }
+
+        string? normalizedEmail = null;
+        string? normalizedPhone = null;
+
+        if (hasEmail)
+        {
+            if (!AuthInputPolicies.TryNormalizeEmail(rawEmail, out var emailValue, out var emailError))
+            {
+                return BadRequest(new { message = emailError });
+            }
+
+            normalizedEmail = emailValue;
+        }
+
+        if (hasPhone)
+        {
+            if (!AuthInputPolicies.TryNormalizeRussianPhone(rawPhone, out var phoneValue, out var phoneError))
+            {
+                return BadRequest(new { message = phoneError });
+            }
+
+            normalizedPhone = phoneValue;
         }
 
         if (dto.password.Trim().Length < 6)
         {
-            return BadRequest(new { message = "Пароль должен быть не короче 6 символов." });
+            return BadRequest(new { message = "РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РєРѕСЂРѕС‡Рµ 6 СЃРёРјРІРѕР»РѕРІ." });
         }
 
-        if (await _context.Users.AnyAsync(u => u.email == normalizedEmail))
+        if (!string.IsNullOrWhiteSpace(normalizedEmail) && await _context.Users.AnyAsync(u => u.email == normalizedEmail))
         {
             return BadRequest(new { message = "Email already exists" });
         }
 
-        if (await _context.Users.AnyAsync(u => u.phone_number == normalizedPhone))
+        if (!string.IsNullOrWhiteSpace(normalizedPhone) && await _context.Users.AnyAsync(u => u.phone_number == normalizedPhone))
         {
             return BadRequest(new { message = "Этот номер уже используется." });
         }
 
-        var verificationToken = (dto.phone_verification_token ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(verificationToken))
+        PhoneVerificationCodeRecord? phoneVerification = null;
+        if (!string.IsNullOrWhiteSpace(normalizedPhone))
         {
-            return BadRequest(new { message = "Сначала подтвердите номер телефона." });
-        }
+            var verificationToken = (dto.phone_verification_token ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(verificationToken))
+            {
+                return BadRequest(new { message = "РЎРЅР°С‡Р°Р»Р° РїРѕРґС‚РІРµСЂРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°." });
+            }
 
-        var phoneVerification = await _context.PhoneVerificationCodes
-            .Where(item =>
-                item.PhoneNumber == normalizedPhone &&
-                item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
-                !item.ConsumedAt.HasValue)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync();
+            phoneVerification = await _context.PhoneVerificationCodes
+                .Where(item =>
+                    item.PhoneNumber == normalizedPhone &&
+                    item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
+                    !item.ConsumedAt.HasValue)
+                .OrderByDescending(item => item.CreatedAt)
+                .FirstOrDefaultAsync();
 
-        if (phoneVerification == null || !phoneVerification.VerifiedAt.HasValue || phoneVerification.ExpiresAt <= DateTimeOffset.UtcNow)
-        {
-            return BadRequest(new { message = "Номер телефона не подтвержден." });
+            if (phoneVerification == null || !phoneVerification.VerifiedAt.HasValue || phoneVerification.ExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                return BadRequest(new { message = "РќРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅ." });
+            }
         }
 
         var user = new User
@@ -248,15 +402,31 @@ public class AuthController : ControllerBase
             first_name = firstName,
             last_name = lastName,
             email = normalizedEmail,
+            is_email_verified = string.IsNullOrWhiteSpace(normalizedEmail),
             phone_number = normalizedPhone,
-            is_phone_verified = true
+            is_phone_verified = !string.IsNullOrWhiteSpace(normalizedPhone)
         };
 
         user.password_hash = _passwordHasher.HashPassword(user, dto.password);
 
         _context.Users.Add(user);
-        phoneVerification.ConsumedAt = DateTimeOffset.UtcNow;
+        if (phoneVerification != null)
+        {
+            phoneVerification.ConsumedAt = DateTimeOffset.UtcNow;
+        }
+
         await _context.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            var emailVerification = await CreateEmailVerificationAsync(user);
+            return Ok(new
+            {
+                pendingEmailVerification = true,
+                user = BuildUserPayload(user),
+                verification = emailVerification
+            });
+        }
 
         await RevokeActiveRefreshTokensAsync(user.id);
         var authSession = await IssueAuthSessionAsync(user);
@@ -275,7 +445,7 @@ public class AuthController : ControllerBase
         var identifier = (dto.identifier ?? dto.email ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(identifier))
         {
-            return BadRequest(new { message = "Введите email или номер телефона." });
+            return BadRequest(new { message = "Р’РІРµРґРёС‚Рµ email РёР»Рё РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°." });
         }
 
         User? user;
@@ -301,6 +471,11 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return BadRequest(new { message = "Invalid email/phone or password" });
+        }
+
+        if (!string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
+        {
+            return BadRequest(new { message = "РЎРЅР°С‡Р°Р»Р° РїРѕРґС‚РІРµСЂРґРёС‚Рµ email." });
         }
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);
@@ -450,7 +625,8 @@ public class AuthController : ControllerBase
             user.id,
             user.first_name,
             user.last_name,
-            user.email,
+            email = user.email ?? string.Empty,
+            user.is_email_verified,
             user.phone_number,
             user.is_phone_verified,
             avatar_url = user.avatar_url ?? string.Empty,
@@ -468,10 +644,85 @@ public class AuthController : ControllerBase
             id = user.id,
             first_name = user.first_name,
             last_name = user.last_name,
-            email = user.email,
+            email = user.email ?? string.Empty,
+            is_email_verified = user.is_email_verified,
             phone_number = user.phone_number ?? string.Empty,
             is_phone_verified = user.is_phone_verified,
             avatar_url = user.avatar_url ?? string.Empty
+        };
+    }
+
+    private async Task<object> CreateEmailVerificationAsync(User user)
+    {
+        if (string.IsNullOrWhiteSpace(user.email))
+        {
+            throw new InvalidOperationException("Email verification requested for user without email.");
+        }
+
+        var userEmail = user.email;
+        var now = DateTimeOffset.UtcNow;
+        var latestActive = await _context.EmailVerificationCodes
+            .Where(item => item.UserId == user.id && !item.ConsumedAt.HasValue)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (latestActive != null &&
+            latestActive.LastSentAt + EmailVerificationResendCooldown > now)
+        {
+            return new
+            {
+                email = userEmail,
+                verificationToken = string.Empty,
+                expiresAt = latestActive.ExpiresAt.ToString("O"),
+                resendAvailableAt = latestActive.LastSentAt.Add(EmailVerificationResendCooldown).ToString("O"),
+                deliveryMode = GetEmailDeliveryMode(),
+                debugCode = (string?)null
+            };
+        }
+
+        var verificationCode = GenerateEmailVerificationCode();
+        var verificationToken = GenerateVerificationToken();
+        var activeCodes = await _context.EmailVerificationCodes
+            .Where(item => item.UserId == user.id && !item.ConsumedAt.HasValue)
+            .ToListAsync();
+
+        foreach (var activeCode in activeCodes)
+        {
+            activeCode.ConsumedAt = now;
+        }
+
+        _context.EmailVerificationCodes.Add(new EmailVerificationCodeRecord
+        {
+            UserId = user.id,
+            Email = userEmail,
+            VerificationTokenHash = AuthInputPolicies.HashSecret(verificationToken),
+            CodeHash = AuthInputPolicies.HashSecret(verificationCode),
+            CreatedAt = now,
+            ExpiresAt = now.Add(EmailVerificationLifetime),
+            LastSentAt = now,
+            AttemptCount = 0
+        });
+
+        await _context.SaveChangesAsync();
+
+        var deliveryMode = GetEmailDeliveryMode();
+        if (string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Email verification code for {Email}: {VerificationCode}", userEmail, verificationCode);
+        }
+        else
+        {
+            _logger.LogInformation("Email verification code generated for {Email} using {DeliveryMode} delivery.", userEmail, deliveryMode);
+        }
+
+        return new
+        {
+            email = userEmail,
+            verificationToken,
+            expiresAt = now.Add(EmailVerificationLifetime).ToString("O"),
+            resendAvailableAt = now.Add(EmailVerificationResendCooldown).ToString("O"),
+            deliveryMode,
+            debugCode = string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase) ? verificationCode : null
         };
     }
 
@@ -486,11 +737,15 @@ public class AuthController : ControllerBase
         {
             new(JwtRegisteredClaimNames.Sub, user.id.ToString()),
             new(ClaimTypes.NameIdentifier, user.id.ToString()),
-            new(JwtRegisteredClaimNames.Email, user.email),
-            new(ClaimTypes.Email, user.email),
             new("first_name", user.first_name),
             new("last_name", user.last_name)
         };
+
+        if (!string.IsNullOrWhiteSpace(user.email))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.email));
+            claims.Add(new Claim(ClaimTypes.Email, user.email));
+        }
 
         if (!string.IsNullOrWhiteSpace(user.phone_number))
         {
@@ -527,6 +782,11 @@ public class AuthController : ControllerBase
         return string.IsNullOrWhiteSpace(_config["Sms:Mode"]) ? "mock" : _config["Sms:Mode"]!.Trim().ToLowerInvariant();
     }
 
+    private string GetEmailDeliveryMode()
+    {
+        return string.IsNullOrWhiteSpace(_config["Email:Mode"]) ? "mock" : _config["Email:Mode"]!.Trim().ToLowerInvariant();
+    }
+
     private static string GenerateRefreshToken()
     {
         return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
@@ -538,6 +798,11 @@ public class AuthController : ControllerBase
     }
 
     private static string GeneratePhoneVerificationCode()
+    {
+        return RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+    }
+
+    private static string GenerateEmailVerificationCode()
     {
         return RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
     }
@@ -556,14 +821,11 @@ public class RegisterDto
     [Required]
     public string last_name { get; set; } = string.Empty;
 
-    [Required]
-    public string email { get; set; } = string.Empty;
+    public string? email { get; set; }
 
-    [Required]
-    public string phone { get; set; } = string.Empty;
+    public string? phone { get; set; }
 
-    [Required]
-    public string phone_verification_token { get; set; } = string.Empty;
+    public string? phone_verification_token { get; set; }
 
     [Required]
     [MinLength(6)]
@@ -582,14 +844,31 @@ public class LoginDto
 
 public class PhoneVerificationRequestDto
 {
-    [Required]
-    public string phone { get; set; } = string.Empty;
+    public string? phone { get; set; }
 }
 
 public class VerifyPhoneCodeDto
 {
     [Required]
-    public string phone { get; set; } = string.Empty;
+    public string? phone { get; set; }
+
+    [Required]
+    public string verificationToken { get; set; } = string.Empty;
+
+    [Required]
+    public string code { get; set; } = string.Empty;
+}
+
+public class ResendEmailVerificationDto
+{
+    [Required]
+    public string? email { get; set; }
+}
+
+public class VerifyEmailCodeDto
+{
+    [Required]
+    public string? email { get; set; }
 
     [Required]
     public string verificationToken { get; set; } = string.Empty;
@@ -611,3 +890,5 @@ public class AuthSessionResult
     public DateTimeOffset AccessTokenExpiresAt { get; set; }
     public DateTimeOffset RefreshTokenExpiresAt { get; set; }
 }
+
+

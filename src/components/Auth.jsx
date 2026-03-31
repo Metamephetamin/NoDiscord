@@ -4,19 +4,36 @@ import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
+
 const initialRegisterForm = {
   firstName: "",
   lastName: "",
-  email: "",
-  phone: "",
+  contact: "",
   password: "",
   cardNumber: "",
   cardExpiry: "",
   cardCvc: "",
 };
+
 const initialLoginForm = {
   identifier: "",
   password: "",
+};
+
+const initialPhoneVerificationStatus = {
+  verified: false,
+  deliveryMode: "",
+  debugCode: "",
+  resendAvailableAt: "",
+};
+
+const initialEmailVerificationModal = {
+  open: false,
+  email: "",
+  verificationToken: "",
+  deliveryMode: "",
+  debugCode: "",
+  resendAvailableAt: "",
 };
 
 const formatCardNumber = (value) =>
@@ -36,6 +53,16 @@ const formatCardExpiry = (value) => {
 };
 
 const formatPhoneInput = (value) => value.replace(/[^\d+\-()\s]/g, "").slice(0, 22);
+
+function normalizeContactInput(value) {
+  const candidate = String(value || "");
+
+  if (candidate.includes("@") || /[a-zA-Zа-яА-Я]/.test(candidate)) {
+    return candidate.trimStart().slice(0, 120);
+  }
+
+  return formatPhoneInput(candidate);
+}
 
 function normalizeRussianPhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
@@ -64,12 +91,31 @@ function isSupportedEmail(value) {
   return SUPPORTED_EMAIL_DOMAINS.includes(normalized.slice(separatorIndex + 1));
 }
 
+function detectContactKind(value) {
+  const candidate = String(value || "").trim();
+  if (!candidate) {
+    return "";
+  }
+
+  if (candidate.includes("@")) {
+    return "email";
+  }
+
+  const digits = candidate.replace(/\D/g, "");
+  if (digits.length > 0) {
+    return "phone";
+  }
+
+  return "";
+}
+
 function mapAuthUser(data) {
   return {
     id: data?.id,
     firstName: data?.first_name || "",
     lastName: data?.last_name || "",
     email: data?.email || "",
+    isEmailVerified: Boolean(data?.is_email_verified),
     phoneNumber: data?.phone_number || "",
     isPhoneVerified: Boolean(data?.is_phone_verified),
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
@@ -111,12 +157,11 @@ export default function Auth({ onAuthSuccess }) {
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [phoneVerificationCode, setPhoneVerificationCode] = useState("");
   const [phoneVerificationToken, setPhoneVerificationToken] = useState("");
-  const [phoneVerificationStatus, setPhoneVerificationStatus] = useState({
-    verified: false,
-    deliveryMode: "",
-    debugCode: "",
-    resendAvailableAt: "",
-  });
+  const [phoneVerificationStatus, setPhoneVerificationStatus] = useState(initialPhoneVerificationStatus);
+  const [emailVerificationCode, setEmailVerificationCode] = useState("");
+  const [emailVerificationModal, setEmailVerificationModal] = useState(initialEmailVerificationModal);
+  const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
+  const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
 
   const cardHolderName = useMemo(() => {
     const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
@@ -138,9 +183,20 @@ export default function Auth({ onAuthSuccess }) {
     return digits || "000";
   }, [registerForm.cardCvc]);
 
-  const normalizedRegisterPhone = useMemo(() => normalizeRussianPhone(registerForm.phone), [registerForm.phone]);
-  const canRequestPhoneCode = Boolean(normalizedRegisterPhone) && !isSubmitting && !isRequestingPhoneCode;
+  const registerContactKind = useMemo(() => detectContactKind(registerForm.contact), [registerForm.contact]);
+  const normalizedRegisterPhone = useMemo(
+    () => (registerContactKind === "phone" ? normalizeRussianPhone(registerForm.contact) : ""),
+    [registerContactKind, registerForm.contact]
+  );
+  const normalizedRegisterEmail = useMemo(
+    () => (registerContactKind === "email" ? registerForm.contact.trim().toLowerCase() : ""),
+    [registerContactKind, registerForm.contact]
+  );
+
+  const canRequestPhoneCode =
+    registerContactKind === "phone" && Boolean(normalizedRegisterPhone) && !isSubmitting && !isRequestingPhoneCode;
   const canVerifyPhoneCode =
+    registerContactKind === "phone" &&
     Boolean(phoneVerificationToken) &&
     phoneVerificationCode.trim().length === 6 &&
     !phoneVerificationStatus.verified &&
@@ -149,12 +205,12 @@ export default function Auth({ onAuthSuccess }) {
   const resetPhoneVerification = () => {
     setPhoneVerificationCode("");
     setPhoneVerificationToken("");
-    setPhoneVerificationStatus({
-      verified: false,
-      deliveryMode: "",
-      debugCode: "",
-      resendAvailableAt: "",
-    });
+    setPhoneVerificationStatus(initialPhoneVerificationStatus);
+  };
+
+  const resetEmailVerificationModal = () => {
+    setEmailVerificationCode("");
+    setEmailVerificationModal(initialEmailVerificationModal);
   };
 
   const handleRegisterFieldChange = (field) => (event) => {
@@ -166,13 +222,13 @@ export default function Auth({ onAuthSuccess }) {
       nextValue = formatCardExpiry(nextValue);
     } else if (field === "cardCvc") {
       nextValue = nextValue.replace(/\D/g, "").slice(0, 3);
-    } else if (field === "phone") {
-      nextValue = formatPhoneInput(nextValue);
+    } else if (field === "contact") {
+      nextValue = normalizeContactInput(nextValue);
     }
 
     setRegisterForm((previous) => ({ ...previous, [field]: nextValue }));
 
-    if (field === "phone") {
+    if (field === "contact") {
       resetPhoneVerification();
     }
   };
@@ -225,6 +281,7 @@ export default function Auth({ onAuthSuccess }) {
     }
 
     setIsRequestingPhoneCode(true);
+
     try {
       const data = await submitAuthRequest(
         "/auth/request-phone-verification",
@@ -239,9 +296,10 @@ export default function Auth({ onAuthSuccess }) {
         debugCode: data?.debugCode || "",
         resendAvailableAt: data?.resendAvailableAt || "",
       });
+
       setMessage(
         data?.debugCode
-          ? `Код подтверждения отправлен. Тестовый код: ${data.debugCode}`
+          ? `Код подтверждения получен. Тестовый код: ${data.debugCode}`
           : "Код подтверждения отправлен на номер телефона."
       );
     } catch (error) {
@@ -260,6 +318,7 @@ export default function Auth({ onAuthSuccess }) {
     }
 
     setIsVerifyingPhoneCode(true);
+
     try {
       await submitAuthRequest(
         "/auth/verify-phone-code",
@@ -271,11 +330,8 @@ export default function Auth({ onAuthSuccess }) {
         "Не удалось подтвердить номер телефона."
       );
 
-      setPhoneVerificationStatus((previous) => ({
-        ...previous,
-        verified: true,
-      }));
-      setMessage("Номер телефона подтвержден.");
+      setPhoneVerificationStatus((previous) => ({ ...previous, verified: true }));
+      setMessage("Номер телефона подтверждён.");
     } catch (error) {
       setMessage(error.message || "Не удалось подтвердить номер телефона.");
     } finally {
@@ -290,19 +346,38 @@ export default function Auth({ onAuthSuccess }) {
     const payload = {
       first_name: registerForm.firstName.trim(),
       last_name: registerForm.lastName.trim(),
-      email: registerForm.email.trim().toLowerCase(),
       password: registerForm.password,
-      phone: normalizedRegisterPhone,
-      phone_verification_token: phoneVerificationToken,
+      ...(registerContactKind === "email" ? { email: normalizedRegisterEmail } : {}),
+      ...(registerContactKind === "phone"
+        ? {
+            phone: normalizedRegisterPhone,
+            phone_verification_token: phoneVerificationToken,
+          }
+        : {}),
     };
 
-    if (!payload.first_name || !payload.last_name || !payload.email || !payload.phone) {
+    if (!payload.first_name || !payload.last_name || !registerForm.contact.trim()) {
       setMessage("Заполните обязательные поля.");
       return;
     }
 
-    if (!isSupportedEmail(payload.email)) {
-      setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
+    if (registerContactKind === "email") {
+      if (!isSupportedEmail(payload.email)) {
+        setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
+        return;
+      }
+    } else if (registerContactKind === "phone") {
+      if (!normalizedRegisterPhone) {
+        setMessage("Введите российский номер телефона в формате +7XXXXXXXXXX.");
+        return;
+      }
+
+      if (!phoneVerificationStatus.verified || !phoneVerificationToken) {
+        setMessage("Сначала подтвердите номер телефона кодом.");
+        return;
+      }
+    } else {
+      setMessage("Введите email или номер телефона.");
       return;
     }
 
@@ -311,19 +386,114 @@ export default function Auth({ onAuthSuccess }) {
       return;
     }
 
-    if (!phoneVerificationStatus.verified || !phoneVerificationToken) {
-      setMessage("Сначала подтвердите номер телефона кодом.");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
       const data = await submitAuthRequest("/auth/register", payload, "Не удалось создать аккаунт.");
-      onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
+
+      if (data?.token) {
+        onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
+        return;
+      }
+
+      const verification = data?.verification || {};
+      const deliveryMode = verification?.deliveryMode || "mock";
+      const debugCode = verification?.debugCode || "";
+
+      setEmailVerificationCode("");
+      setEmailVerificationModal({
+        open: true,
+        email: verification?.email || payload.email,
+        verificationToken: verification?.verificationToken || "",
+        deliveryMode,
+        debugCode,
+        resendAvailableAt: verification?.resendAvailableAt || "",
+      });
+
+      setMessage(
+        deliveryMode === "mock"
+          ? `Аккаунт создан. В этой сборке письмо не отправляется: используйте тестовый код ${debugCode || "из окна подтверждения"}.`
+          : "Аккаунт создан. Подтвердите почту кодом из письма."
+      );
+      setIsSubmitting(false);
     } catch (error) {
       setMessage(error.message || "Не удалось создать аккаунт.");
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResendEmailCode = async () => {
+    if (!emailVerificationModal.email) {
+      setMessage("Сначала зарегистрируйтесь заново.");
+      return;
+    }
+
+    setIsResendingEmailCode(true);
+    setMessage("");
+
+    try {
+      const data = await submitAuthRequest(
+        "/auth/resend-email-verification",
+        { email: emailVerificationModal.email },
+        "Не удалось повторно отправить код на почту."
+      );
+
+      const deliveryMode = data?.deliveryMode || emailVerificationModal.deliveryMode || "mock";
+      const debugCode = data?.debugCode || "";
+
+      setEmailVerificationModal((previous) => ({
+        ...previous,
+        open: true,
+        verificationToken: data?.verificationToken || previous.verificationToken,
+        deliveryMode,
+        debugCode,
+        resendAvailableAt: data?.resendAvailableAt || "",
+      }));
+
+      setMessage(
+        deliveryMode === "mock"
+          ? `Письмо в этой сборке не отправляется. Новый тестовый код: ${debugCode || "смотрите окно подтверждения"}.`
+          : "Код подтверждения повторно отправлен на почту."
+      );
+    } catch (error) {
+      setMessage(error.message || "Не удалось повторно отправить код на почту.");
+    } finally {
+      setIsResendingEmailCode(false);
+    }
+  };
+
+  const handleVerifyEmailCode = async (event) => {
+    event.preventDefault();
+
+    if (!emailVerificationModal.email || !emailVerificationModal.verificationToken) {
+      setMessage("Сессия подтверждения почты не найдена. Зарегистрируйтесь снова.");
+      return;
+    }
+
+    if (emailVerificationCode.trim().length !== 6) {
+      setMessage("Введите шестизначный код из письма.");
+      return;
+    }
+
+    setIsVerifyingEmailCode(true);
+    setMessage("");
+
+    try {
+      const data = await submitAuthRequest(
+        "/auth/verify-email-code",
+        {
+          email: emailVerificationModal.email,
+          verificationToken: emailVerificationModal.verificationToken,
+          code: emailVerificationCode.trim(),
+        },
+        "Не удалось подтвердить почту."
+      );
+      resetEmailVerificationModal();
+      onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
+    } catch (error) {
+      setMessage(error.message || "Не удалось подтвердить почту.");
+    } finally {
+      setIsVerifyingEmailCode(false);
     }
   };
 
@@ -333,11 +503,24 @@ export default function Auth({ onAuthSuccess }) {
     setIsSubmitting(false);
     setIsRequestingPhoneCode(false);
     setIsVerifyingPhoneCode(false);
+    setIsResendingEmailCode(false);
+    setIsVerifyingEmailCode(false);
+    resetEmailVerificationModal();
   };
 
   return (
     <div className="auth-page">
-      <video className="auth-video-bg" autoPlay muted loop playsInline>
+      <video
+        className="auth-video-bg"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        disablePictureInPicture
+        disableRemotePlayback
+        aria-hidden="true"
+      >
         <source src="/video/GoldenDustGlow2.mp4" type="video/mp4" />
       </video>
 
@@ -347,7 +530,7 @@ export default function Auth({ onAuthSuccess }) {
         </div>
         <div className="auth-brand__copy">
           <span className="auth-brand__name">MAX</span>
-          <h1 className="auth-brand__title">- за нами светлое будущее</h1>
+          <h1 className="auth-brand__title">- имум возможностей для жизни</h1>
         </div>
       </div>
 
@@ -358,7 +541,6 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-card__main">
           <div className="auth-card__heading">
             <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
-            <p className="auth-subtitle"></p>
           </div>
 
           {mode === "login" ? (
@@ -382,42 +564,34 @@ export default function Auth({ onAuthSuccess }) {
               />
             </div>
           ) : (
-            <>
-              <div className="auth-section">
-                <div className="auth-section__title">Обязательные данные</div>
-                <div className="auth-grid auth-grid--double">
-                  <input
-                    className="auth-input"
-                    placeholder="Имя"
-                    value={registerForm.firstName}
-                    onChange={handleRegisterFieldChange("firstName")}
-                    required
-                  />
-                  <input
-                    className="auth-input"
-                    placeholder="Фамилия"
-                    value={registerForm.lastName}
-                    onChange={handleRegisterFieldChange("lastName")}
-                    required
-                  />
-                </div>
+            <div className="auth-section">
+              <div className="auth-section__title">Основные данные</div>
+              <div className="auth-grid auth-grid--double">
                 <input
                   className="auth-input"
-                  placeholder="Email"
-                  type="email"
-                  value={registerForm.email}
-                  onChange={handleRegisterFieldChange("email")}
+                  placeholder="Имя"
+                  value={registerForm.firstName}
+                  onChange={handleRegisterFieldChange("firstName")}
                   required
                 />
                 <input
                   className="auth-input"
-                  placeholder="Номер телефона"
-                  type="tel"
-                  value={registerForm.phone}
-                  onChange={handleRegisterFieldChange("phone")}
+                  placeholder="Фамилия"
+                  value={registerForm.lastName}
+                  onChange={handleRegisterFieldChange("lastName")}
                   required
                 />
+              </div>
 
+              <input
+                className="auth-input"
+                placeholder="Email или телефон"
+                type="text"
+                value={registerForm.contact}
+                onChange={handleRegisterFieldChange("contact")}
+                required
+              />
+              {registerContactKind === "phone" ? (
                 <div className="auth-phone-verify">
                   <button
                     className="auth-submit auth-submit--secondary"
@@ -441,35 +615,33 @@ export default function Auth({ onAuthSuccess }) {
                       onClick={handleVerifyPhoneCode}
                       disabled={!canVerifyPhoneCode}
                     >
-                      {isVerifyingPhoneCode ? "Проверяем..." : phoneVerificationStatus.verified ? "Номер подтвержден" : "Подтвердить"}
+                      {isVerifyingPhoneCode ? "Проверяем..." : phoneVerificationStatus.verified ? "Номер подтверждён" : "Подтвердить"}
                     </button>
                   </div>
 
-                  {phoneVerificationStatus.resendAvailableAt ? (
-                    <div className="auth-hint">
-                      Повторная отправка будет доступна позже. Режим доставки: {phoneVerificationStatus.deliveryMode || "mock"}.
-                    </div>
+                  {phoneVerificationStatus.deliveryMode === "mock" && phoneVerificationStatus.debugCode ? (
+                    <div className="auth-hint">Тестовый код: {phoneVerificationStatus.debugCode}</div>
                   ) : null}
                 </div>
+              ) : null}
 
-                <input
-                  className="auth-input"
-                  placeholder="Пароль"
-                  type="password"
-                  value={registerForm.password}
-                  onChange={handleRegisterFieldChange("password")}
-                  minLength={6}
-                  required
-                />
-              </div>
-            </>
+              <input
+                className="auth-input"
+                placeholder="Пароль"
+                type="password"
+                value={registerForm.password}
+                onChange={handleRegisterFieldChange("password")}
+                minLength={6}
+                required
+              />
+            </div>
           )}
 
           <button className="auth-submit" type="submit" disabled={isSubmitting}>
             {isSubmitting
               ? mode === "login"
                 ? "Входим..."
-                : "Создаем аккаунт..."
+                : "Создаём аккаунт..."
               : mode === "login"
                 ? "Войти"
                 : "Зарегистрироваться"}
@@ -484,11 +656,11 @@ export default function Auth({ onAuthSuccess }) {
             {mode === "login" ? "Нет аккаунта ?" : "Уже есть аккаунт ?"}
           </button>
 
-          {message && <p className="auth-message">{message}</p>}
+          {message ? <p className="auth-message">{message}</p> : null}
         </div>
 
         <aside className="auth-card__side">
-          <div className="auth-side__title">Платежная карта</div>
+          <div className="auth-side__title">Платёжная карта</div>
           <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
             <div className="bank-card__face bank-card__face--front">
               <div className="bank-card__brand">MAX PAY</div>
@@ -541,6 +713,48 @@ export default function Auth({ onAuthSuccess }) {
           </div>
         </aside>
       </form>
+
+      {emailVerificationModal.open ? (
+        <div className="auth-verify-modal__backdrop">
+          <form className="auth-verify-modal" onSubmit={handleVerifyEmailCode}>
+            <div className="auth-verify-modal__header">
+              <h3>Подтвердите почту</h3>
+              <button type="button" className="auth-verify-modal__close" onClick={resetEmailVerificationModal}>
+                ×
+              </button>
+            </div>
+            <p className="auth-verify-modal__text">
+              {emailVerificationModal.deliveryMode === "mock" ? (
+                <>
+                  Для <strong>{emailVerificationModal.email}</strong> письмо в этой сборке не отправляется. Введите тестовый код из окна ниже.
+                </>
+              ) : (
+                <>
+                  Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы завершить регистрацию.
+                </>
+              )}
+            </p>
+            <input
+              className="auth-input"
+              placeholder="Код из письма"
+              value={emailVerificationCode}
+              onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              autoFocus
+            />
+            {emailVerificationModal.debugCode ? (
+              <div className="auth-hint">Тестовый код: {emailVerificationModal.debugCode}</div>
+            ) : null}
+            <div className="auth-verify-modal__actions">
+              <button className="auth-submit auth-submit--secondary" type="button" onClick={handleResendEmailCode} disabled={isResendingEmailCode}>
+                {isResendingEmailCode ? "Отправляем..." : "Отправить код снова"}
+              </button>
+              <button className="auth-submit" type="submit" disabled={isVerifyingEmailCode}>
+                {isVerifyingEmailCode ? "Проверяем..." : "Подтвердить"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

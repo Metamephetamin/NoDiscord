@@ -4,6 +4,8 @@ const DEFAULT_VOICE_RTC_CONFIGURATION = {
   iceTransportPolicy: "all",
   bundlePolicy: "max-bundle",
   rtcpMuxPolicy: "require",
+  usesRelayOnly: false,
+  hasTurnRelay: false,
 };
 
 const electronRuntime =

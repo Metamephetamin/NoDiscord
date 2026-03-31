@@ -65,6 +65,7 @@ export default function Renderer() {
           firstName: data.first_name || savedUser.firstName || "",
           lastName: data.last_name || savedUser.lastName || "",
           email: data.email || savedUser.email || "",
+          isEmailVerified: Boolean(data.is_email_verified ?? savedUser.isEmailVerified ?? true),
           phoneNumber: data.phone_number || savedUser.phoneNumber || "",
           isPhoneVerified: Boolean(
             data.is_phone_verified ?? savedUser.isPhoneVerified ?? savedUser.phone_verified ?? false

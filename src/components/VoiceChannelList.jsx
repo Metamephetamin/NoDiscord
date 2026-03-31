@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import "../css/ListChannels.css";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
@@ -33,16 +34,21 @@ const VoiceChannelList = ({
   onWatchStream,
   canManageChannels = true,
 }) => {
-  const liveUsers = new Set(liveUserIds);
-  const speakingUsers = new Set(speakingUserIds);
-  const roleColorByUserId = new Map(
-    (serverMembers || []).map((member) => {
-      const role = (serverRoles || []).find((item) => item.id === member.roleId);
-      return [String(member.userId), role?.color || "#7b89a8"];
-    })
+  const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
+  const speakingUsers = useMemo(() => new Set(speakingUserIds), [speakingUserIds]);
+  const roleColorByUserId = useMemo(
+    () =>
+      new Map(
+        (serverMembers || []).map((member) => {
+          const role = (serverRoles || []).find((item) => item.id === member.roleId);
+          return [String(member.userId), role?.color || "#7b89a8"];
+        })
+      ),
+    [serverMembers, serverRoles]
   );
-  const memberNameByUserId = new Map(
-    (serverMembers || []).map((member) => [String(member.userId), member.name || "Unknown"])
+  const memberNameByUserId = useMemo(
+    () => new Map((serverMembers || []).map((member) => [String(member.userId), member.name || "Unknown"])),
+    [serverMembers]
   );
 
   const normalizeParticipant = (participant = {}) => {
@@ -161,4 +167,4 @@ const VoiceChannelList = ({
   );
 };
 
-export default VoiceChannelList;
+export default memo(VoiceChannelList);

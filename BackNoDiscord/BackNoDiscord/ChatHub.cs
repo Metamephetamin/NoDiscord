@@ -208,9 +208,9 @@ public class ChatHub : Hub
                 throw new HubException("You can delete only your own messages.");
             }
         }
-        else if (!string.Equals(msg.Username, currentUser.DisplayName, StringComparison.Ordinal))
+        else
         {
-            throw new HubException("You can delete only your own messages.");
+            throw new HubException("Legacy messages without a trusted author id cannot be deleted securely.");
         }
 
         msg.IsDeleted = true;

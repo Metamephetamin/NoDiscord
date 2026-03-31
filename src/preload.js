@@ -42,6 +42,19 @@ function parseJsonIceServers(rawValue) {
   }
 }
 
+function normalizeIceServerUrls(urls) {
+  const list = Array.isArray(urls) ? urls : [urls];
+  return list
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function hasTurnRelayServer(iceServers) {
+  return iceServers.some((server) =>
+    normalizeIceServerUrls(server?.urls).some((url) => url.startsWith("turn:") || url.startsWith("turns:"))
+  );
+}
+
 function buildVoiceRuntimeConfig() {
   const jsonConfiguredIceServers = parseJsonIceServers(process.env.ND_ICE_SERVERS_JSON);
 
@@ -61,14 +74,27 @@ function buildVoiceRuntimeConfig() {
             : null,
         ].filter(Boolean);
 
+  const normalizedIceServers = normalizeIceServers(envConfiguredIceServers);
+  const configuredIceTransportPolicy = process.env.ND_ICE_TRANSPORT_POLICY?.trim().toLowerCase();
+  const hasTurnRelay = hasTurnRelayServer(normalizedIceServers);
+  const resolvedIceTransportPolicy =
+    configuredIceTransportPolicy === "relay"
+      ? "relay"
+      : configuredIceTransportPolicy === "all"
+        ? "all"
+        : hasTurnRelay
+          ? "relay"
+          : "all";
+
   return {
     apiUrl: process.env.ND_API_URL?.trim() || process.env.VITE_API_URL?.trim() || "http://localhost:7031",
     voiceRtcConfig: {
-      iceServers: normalizeIceServers(envConfiguredIceServers),
-      iceTransportPolicy:
-        process.env.ND_ICE_TRANSPORT_POLICY?.trim().toLowerCase() === "relay" ? "relay" : "all",
+      iceServers: normalizedIceServers,
+      iceTransportPolicy: resolvedIceTransportPolicy,
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
+      usesRelayOnly: resolvedIceTransportPolicy === "relay",
+      hasTurnRelay,
     },
   };
 }
