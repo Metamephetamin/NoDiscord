@@ -1,0 +1,19 @@
+stages:
+  - test
+
+frontend-ci:
+  stage: test
+  image: node:20
+  script:
+    - npm ci
+    - npm run lint:ci
+    - npm run check:encoding
+    - npm run build:frontend
+
+backend-ci:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  script:
+    - dotnet restore BackNoDiscord/BackNoDiscord.sln
+    - dotnet build BackNoDiscord/BackNoDiscord.sln --configuration Release --no-restore
+    - dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --no-build --verbosity normal
