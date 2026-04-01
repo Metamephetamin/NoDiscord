@@ -1,13 +1,17 @@
 .menu__profile-wrapper {
-  margin-top: 18px;
+  align-self: stretch;
+  width: calc(100% + 105px);
+  margin: 18px -32px -10px -16px;
+  pointer-events: none;
 }
 
 .menu__profile {
   width: 100%;
-  padding: 14px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  pointer-events: none;
 }
 
 .profile__top {
@@ -304,8 +308,8 @@
 }
 
 .avatar--speaking {
-  border-color: #43c46a;
-  box-shadow: 0 0 0 4px rgba(67, 196, 106, 0.2);
+  border-color: #8ef1a3;
+  box-shadow: none;
 }
 
 .profile__names {

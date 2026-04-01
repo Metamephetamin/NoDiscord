@@ -5,9 +5,9 @@
 }
 
 .list__items {
-  padding: 10px 12px;
+  padding: 10px 10px;
   margin-bottom: 8px;
-  border-radius: 16px;
+  border-radius: 13px;
   background: transparent;
   border: 1px solid transparent;
   transition: background-color 0.15s ease, border-color 0.15s ease;

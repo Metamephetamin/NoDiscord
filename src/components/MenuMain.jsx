@@ -176,6 +176,22 @@ const getMeterActiveBars = (level, total) => {
   const normalizedLevel = Math.max(0, Math.min(1, Number(level) || 0));
   return Math.max(0, Math.min(total, Math.round(normalizedLevel * total)));
 };
+const getPingTone = (pingMs) => {
+  const normalizedPing = Number(pingMs);
+  if (!Number.isFinite(normalizedPing) || normalizedPing <= 0) {
+    return "unknown";
+  }
+
+  if (normalizedPing <= 70) {
+    return "good";
+  }
+
+  if (normalizedPing <= 150) {
+    return "medium";
+  }
+
+  return "poor";
+};
 const isPersonalDefaultServer = (server, user) => {
   if (!server) {
     return false;
@@ -2805,6 +2821,25 @@ export default function MenuMain({ user, setUser, onLogout }) {
       return !previous;
     });
   };
+  const suppressTooltipOnClick = (event) => {
+    const target = event?.currentTarget;
+    if (!target?.dataset) {
+      return;
+    }
+
+    target.dataset.tooltipSuppressed = "true";
+    if (typeof target.blur === "function") {
+      target.blur();
+    }
+  };
+  const restoreTooltipOnLeave = (event) => {
+    const target = event?.currentTarget;
+    if (!target?.dataset) {
+      return;
+    }
+
+    delete target.dataset.tooltipSuppressed;
+  };
   const handleAvatarChange = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -2959,6 +2994,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
   ];
   const activeNoiseProfile =
     noiseProfileOptions.find((option) => option.id === noiseSuppressionMode) || noiseProfileOptions[0];
+  const pingTone = getPingTone(pingMs);
+  const pingTooltip = Number.isFinite(Number(pingMs)) && Number(pingMs) > 0 ? `Пинг: ${pingMs} мс` : "Пинг недоступен";
 
   const renderPersonalProfileSettings = () => (
     <div className="settings-shell__content">
@@ -2999,6 +3036,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
           <div className="settings-shell__actions">
             <button type="submit" className="settings-inline-button">Сохранить профиль</button>
+            <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={handleLogout}>
+              Выйти из аккаунта
+            </button>
           </div>
         </form>
       </section>
@@ -3539,95 +3579,107 @@ export default function MenuMain({ user, setUser, onLogout }) {
   );
   const renderProfilePanel = () => (
     <div className="menu__profile-wrapper">
-      <div className="menu__profile menu__profile--discordish">
-        {currentVoiceChannelName ? (
-          <div className="profile__connection-card">
-            <div className="profile__connection-copy">
-              <span className="profile__connection-state">Подключено к</span>
-              <span className="profile__connection-subtitle">{`${currentVoiceChannelName} / ${activeServer?.name || "Сервер"}`}</span>
-            </div>
-            <div className="profile__connection-icons">
-              <span className="profile__waveform profile__waveform--live" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
+      <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
+        {currentVoiceChannel ? (
+          <div className="profile__voice-stack">
+            <div className="profile__connection-card">
+              <span
+                className={`profile__ping-indicator ui-tooltip-anchor profile__ping-indicator--${pingTone}`}
+                aria-label={pingTooltip}
+                data-tooltip={pingTooltip}
+              >
+                <span className="profile__ping-icon" aria-hidden="true" />
               </span>
+              <div className="profile__connection-copy">
+                <span className="profile__connection-line">
+                  <span className="profile__connection-label">Подключено к</span>{" "}
+                  <span className="profile__connection-channel">{currentVoiceChannelName}</span>
+                </span>
+              </div>
+              <div className="profile__connection-icons">
+                <span className="profile__waveform profile__waveform--live" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </div>
+            </div>
+
+            <div className="profile__quick-actions">
+              <button
+                type="button"
+                className="profile__quick-button ui-tooltip-anchor"
+                onClick={() => openSettingsPanel("voice_video")}
+                aria-label="Голос и видео"
+                data-tooltip="Голос и видео"
+              >
+                <span className="profile__quick-glyph profile__quick-glyph--settings" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`profile__quick-button ui-tooltip-anchor ${isScreenShareActive ? "profile__quick-button--active" : ""}`}
+                onClick={handleScreenShareAction}
+                aria-label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
+                data-tooltip={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
+              >
+                <span
+                  className={`profile__quick-glyph ${isScreenShareActive ? "profile__quick-glyph--close" : "profile__quick-glyph--monitor"}`}
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                type="button"
+                className={`profile__quick-button ui-tooltip-anchor ${isCameraShareActive ? "profile__quick-button--active" : ""}`}
+                onClick={openCameraModal}
+                aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
+                data-tooltip={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
+              >
+                <span className="profile__quick-glyph profile__quick-glyph--camera" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="profile__quick-button profile__quick-button--danger ui-tooltip-anchor"
+                onClick={leaveVoiceChannel}
+                aria-label="Отключиться от голосового канала"
+                data-tooltip="Отключиться"
+              >
+                <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
+              </button>
             </div>
           </div>
         ) : null}
 
-        <div className="profile__quick-actions">
-          <button
-            type="button"
-            className="profile__quick-button ui-tooltip-anchor"
-            onClick={() => openSettingsPanel("voice_video")}
-            aria-label="Голос и видео"
-            data-tooltip="Голос и видео"
-          >
-            <span className="profile__quick-glyph profile__quick-glyph--settings" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`profile__quick-button ui-tooltip-anchor ${isScreenShareActive ? "profile__quick-button--active" : ""}`}
-            onClick={handleScreenShareAction}
-            aria-label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
-            data-tooltip={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
-          >
-            <span
-              className={`profile__quick-glyph ${isScreenShareActive ? "profile__quick-glyph--close" : "profile__quick-glyph--monitor"}`}
-              aria-hidden="true"
-            />
-          </button>
-          <button
-            type="button"
-            className={`profile__quick-button ui-tooltip-anchor ${isCameraShareActive ? "profile__quick-button--active" : ""}`}
-            onClick={openCameraModal}
-            aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
-            data-tooltip={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
-          >
-            <span className="profile__quick-glyph profile__quick-glyph--camera" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`profile__quick-button ui-tooltip-anchor ${currentVoiceChannel ? "profile__quick-button--danger" : ""}`}
-            onClick={() => {
-              if (currentVoiceChannel) {
-                leaveVoiceChannel();
-              }
-            }}
-            disabled={!currentVoiceChannel}
-            aria-label={currentVoiceChannel ? "Отключиться от голосового канала" : "Сначала подключитесь к голосовому каналу"}
-            data-tooltip={currentVoiceChannel ? "Отключиться" : "Сначала подключитесь"}
-          >
-            <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
-          </button>
-        </div>
-
         <div className="profile__identity-row">
-          <div className="profile__identity">
-            <img className={`avatar ${isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" onClick={() => avatarInputRef.current?.click()} />
+          <button type="button" className="profile__identity" onClick={() => openSettingsPanel("personal_profile")}>
+            <img className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" />
             <input type="file" accept="image/*" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
             <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
             <div className="profile__names">
               <span className="profile__username">{getDisplayName(user)}</span>
               <div className="status__profile">
-                <span>{currentVoiceChannelName ? "В голосовом чате" : currentServerRole?.name || "Member"}</span>
-                <span className="status__role-dot" style={{ backgroundColor: currentVoiceChannelName ? "#3ba55d" : currentServerRole?.color || "#7b89a8" }} aria-hidden="true" />
+                <span className="status__role-dot" style={{ backgroundColor: "#3ba55d" }} aria-hidden="true" />
+                <span>{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
               </div>
             </div>
-          </div>
+          </button>
 
           <div className="profile__identity-controls">
             <div className="device-menu" ref={micMenuRef}>
               <button
                 type="button"
-                className={`profile__mini-icon ui-tooltip-anchor ${isMicMuted ? "profile__mini-icon--slashed" : ""}`}
-                onClick={toggleMicMute}
+                className={`profile__mini-icon profile__mini-icon--with-tooltip ${isMicMuted || isSoundMuted ? "profile__mini-icon--slashed" : ""}`}
+                onClick={(event) => {
+                  suppressTooltipOnClick(event);
+                  toggleMicMute();
+                }}
+                onMouseLeave={restoreTooltipOnLeave}
                 aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
-                data-tooltip={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
               >
-                <img src="/icons/microphone.png" alt="" />
+                <span className="profile__mini-glyph profile__mini-glyph--mic" aria-hidden="true" />
+                <span className="profile__button-tooltip" aria-hidden="true">
+                  {isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+                </span>
               </button>
               <button
                 type="button"
@@ -3636,7 +3688,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 aria-label="Настройки микрофона"
                 data-tooltip="Настройки микрофона"
               >
-                ▾
+                <span className="profile__mini-chevron" aria-hidden="true" />
               </button>
               {showMicMenu && renderMicMenuPanel()}
             </div>
@@ -3644,12 +3696,18 @@ export default function MenuMain({ user, setUser, onLogout }) {
             <div className="device-menu" ref={soundMenuRef}>
               <button
                 type="button"
-                className={`profile__mini-icon ui-tooltip-anchor ${isSoundMuted ? "profile__mini-icon--slashed" : ""}`}
-                onClick={toggleSoundMute}
+                className={`profile__mini-icon profile__mini-icon--with-tooltip ${isSoundMuted ? "profile__mini-icon--slashed" : ""}`}
+                onClick={(event) => {
+                  suppressTooltipOnClick(event);
+                  toggleSoundMute();
+                }}
+                onMouseLeave={restoreTooltipOnLeave}
                 aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
-                data-tooltip={isSoundMuted ? "Включить звук" : "Выключить звук"}
               >
-                <img src="/icons/headphones-simple.svg" alt="" />
+                <span className="profile__mini-glyph profile__mini-glyph--headphones" aria-hidden="true" />
+                <span className="profile__button-tooltip" aria-hidden="true">
+                  {isSoundMuted ? "Включить звук" : "Выключить звук"}
+                </span>
               </button>
               <button
                 type="button"
@@ -3658,10 +3716,19 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 aria-label="Настройки звука"
                 data-tooltip="Настройки звука"
               >
-                ▾
+                <span className="profile__mini-chevron" aria-hidden="true" />
               </button>
               {showSoundMenu && renderSoundMenuPanel()}
             </div>
+            <button
+              type="button"
+              className="profile__mini-icon ui-tooltip-anchor"
+              onClick={() => openSettingsPanel("voice_video")}
+              aria-label="Голос и видео"
+              data-tooltip="Голос и видео"
+            >
+              <span className="profile__mini-glyph profile__mini-glyph--settings" aria-hidden="true" />
+            </button>
           </div>
         </div>
       </div>
@@ -4130,16 +4197,6 @@ export default function MenuMain({ user, setUser, onLogout }) {
           onClick={handleAddServer}
         >
           +
-        </button>
-        <button
-          type="button"
-          className="logout ui-tooltip-anchor"
-          aria-label="Выйти"
-          data-tooltip="Выйти"
-          data-tooltip-side="right"
-          onClick={handleLogout}
-        >
-          <img src="/icons/logout.png" alt="logout" />
         </button>
       </aside>
       {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}

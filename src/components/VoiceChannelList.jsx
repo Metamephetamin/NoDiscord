@@ -111,12 +111,6 @@ const VoiceChannelList = ({
               >
                 <img src="/icons/settings.png" alt="" />
               </button>
-
-              {isActive && (
-                <button type="button" className="voice-channel__leave" onClick={() => onLeaveChannel?.()}>
-                  Выйти
-                </button>
-              )}
             </div>
 
             {participants.length > 0 && (

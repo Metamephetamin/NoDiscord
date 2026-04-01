@@ -122,6 +122,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const [message, setMessage] = useState("");
   const [messagesByChannel, setMessagesByChannel] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
@@ -130,7 +131,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const messagesEndRef = useRef(null);
   const messagesListRef = useRef(null);
   const textareaRef = useRef(null);
-  const fileInputRef = useRef(null);
   const joinedChannelRef = useRef("");
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
@@ -236,6 +236,23 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     textarea.style.height = `${nextHeight}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [message]);
+
+  useEffect(() => {
+    if (!mediaPreview) {
+      return undefined;
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setMediaPreview(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [mediaPreview]);
 
   const ensureChannelJoined = async () => {
     const connection = await startChatConnection();
@@ -528,6 +545,18 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }, 2200);
   };
 
+  const openMediaPreview = (type, url, name) => {
+    if (!url) {
+      return;
+    }
+
+    setMediaPreview({
+      type,
+      url,
+      name: name || (type === "image" ? "Изображение" : "Видео"),
+    });
+  };
+
   return (
     <div className="textchat-container">
       {normalizedSearchQuery.length >= 2 ? (
@@ -593,13 +622,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
                 {attachmentUrl ? (
                   isImageAttachment(messageItem) ? (
-                    <a className="message-media" href={attachmentUrl} target="_blank" rel="noreferrer">
+                    <button
+                      type="button"
+                      className="message-media message-media--button"
+                      onClick={() => openMediaPreview("image", attachmentUrl, messageItem.attachmentName)}
+                      aria-label={`Открыть изображение ${messageItem.attachmentName || ""}`.trim()}
+                    >
                       <img className="message-media__image" src={attachmentUrl} alt={messageItem.attachmentName || "image"} />
-                    </a>
+                    </button>
                   ) : isVideoAttachment(messageItem) ? (
-                    <div className="message-media message-media--video">
-                      <video className="message-media__video" src={attachmentUrl} controls preload="metadata" playsInline />
-                    </div>
+                    <button
+                      type="button"
+                      className="message-media message-media--video message-media--button"
+                      onClick={() => openMediaPreview("video", attachmentUrl, messageItem.attachmentName)}
+                      aria-label={`Открыть видео ${messageItem.attachmentName || ""}`.trim()}
+                    >
+                      <video className="message-media__video" src={attachmentUrl} preload="metadata" playsInline muted />
+                      <span className="message-media__play" aria-hidden="true" />
+                    </button>
                   ) : (
                     <a className="message-attachment" href={attachmentUrl} target="_blank" rel="noreferrer">
                       <span className="message-attachment__icon" aria-hidden="true" />
@@ -654,25 +694,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           ) : null}
 
           <div className="input-area__controls">
-            <button type="button" className="attach-button" onClick={() => fileInputRef.current?.click()}>
-              <img src="/icons/plus.png" alt="" aria-hidden="true" />
-            </button>
-            <input ref={fileInputRef} type="file" className="hidden-input" onChange={handleFileChange} />
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder="Введите сообщение..."
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  send();
-                }
-              }}
-            />
-            <button type="button" className="send-button" onClick={send} disabled={uploadingFile || !scopedChannelId}>
-              {uploadingFile ? "Загрузка..." : "Отправить"}
-            </button>
+            <div className="message-composer">
+              <label className="attach-button" aria-label="Добавить файл" title="Добавить файл">
+                <input type="file" className="attach-button__input" onChange={handleFileChange} />
+                <span className="attach-button__icon" aria-hidden="true" />
+              </label>
+              <textarea
+                ref={textareaRef}
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder="Введите сообщение..."
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    send();
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -681,6 +720,29 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         <div className="chat-error">Чат переподключается. Если это личка, попробуйте отправить ещё раз через секунду.</div>
       ) : null}
       {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
+
+      {mediaPreview ? (
+        <div className="media-preview" onClick={() => setMediaPreview(null)} role="presentation">
+          <div className="media-preview__dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={mediaPreview.name}>
+            <button
+              type="button"
+              className="media-preview__close"
+              onClick={() => setMediaPreview(null)}
+              aria-label="Закрыть предпросмотр"
+            >
+              <span className="media-preview__close-icon" aria-hidden="true" />
+            </button>
+            <div className="media-preview__content">
+              {mediaPreview.type === "image" ? (
+                <img className="media-preview__image" src={mediaPreview.url} alt={mediaPreview.name} />
+              ) : (
+                <video className="media-preview__video" src={mediaPreview.url} controls autoPlay playsInline />
+              )}
+            </div>
+            <div className="media-preview__caption">{mediaPreview.name}</div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
