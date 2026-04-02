@@ -17,6 +17,9 @@ public class ChatHub : Hub
     private const int MaxMessageLength = 4000;
     private const int MaxAttachmentUrlLength = 260;
     private const int MaxAttachmentContentTypeLength = 120;
+    private const int MaxReactionKeyLength = 32;
+    private const int MaxReactionGlyphLength = 16;
+    private const int MaxForwardBatchSize = 30;
     private const string DirectMessageChannelPrefix = "dm:";
     private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
@@ -117,6 +120,104 @@ public class ChatHub : Hub
         LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
     }
 
+    public async Task ForwardMessages(string channelId, string photoUrl, List<ForwardMessageInput>? items)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+        {
+            throw new HubException("Unauthorized");
+        }
+
+        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            throw new HubException("channelId is required");
+        }
+
+        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        {
+            throw new HubException("Forbidden");
+        }
+
+        var sourceItems = items ?? [];
+        if (sourceItems.Count == 0)
+        {
+            throw new HubException("messages are required");
+        }
+
+        if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
+            && DateTime.UtcNow - lastMessageSentAtUtc < MessageSendCooldown)
+        {
+            throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
+        }
+
+        var authorPhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(photoUrl, "/avatars/");
+        var timestampBase = DateTime.UtcNow;
+        var forwardedMessages = new List<(Message Entity, ChatMessagePayload Payload)>();
+
+        foreach (var item in sourceItems.Take(MaxForwardBatchSize))
+        {
+            var payload = new ChatMessagePayload
+            {
+                AuthorUserId = currentUser.UserId,
+                Message = UploadPolicies.TrimToLength(item.Message, MaxMessageLength),
+                ForwardedFromUserId = UploadPolicies.TrimToLength(item.ForwardedFromUserId, 64),
+                ForwardedFromUsername = UploadPolicies.TrimToLength(item.ForwardedFromUsername, 160),
+                AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(item.AttachmentUrl, "/chat-files/"),
+                AttachmentName = string.IsNullOrWhiteSpace(item.AttachmentUrl)
+                    ? null
+                    : UploadPolicies.SanitizeDisplayFileName(item.AttachmentName),
+                AttachmentSize = item.AttachmentSize,
+                AttachmentContentType = UploadPolicies.TrimToLength(item.AttachmentContentType, MaxAttachmentContentTypeLength)
+            };
+
+            if (string.IsNullOrWhiteSpace(payload.Message) && string.IsNullOrWhiteSpace(payload.AttachmentUrl))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(payload.AttachmentUrl) && payload.AttachmentUrl.Length > MaxAttachmentUrlLength)
+            {
+                throw new HubException("attachmentUrl is too long");
+            }
+
+            var entity = new Message
+            {
+                ChannelId = normalizedChannelId,
+                Username = currentUser.DisplayName,
+                Content = null,
+                EncryptedContent = _crypto.Encrypt(SerializePayload(payload)),
+                PhotoUrl = authorPhotoUrl,
+                Timestamp = timestampBase.AddMilliseconds(forwardedMessages.Count),
+                IsDeleted = false
+            };
+
+            _context.Messages.Add(entity);
+            forwardedMessages.Add((entity, payload));
+        }
+
+        if (forwardedMessages.Count == 0)
+        {
+            throw new HubException("messages are required");
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Failed to forward chat messages for channel {ChannelId}", normalizedChannelId);
+            throw new HubException("Не удалось переслать сообщения.");
+        }
+
+        foreach (var forwardedMessage in forwardedMessages)
+        {
+            await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(forwardedMessage.Entity, forwardedMessage.Payload));
+        }
+
+        LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+    }
+
     public async Task<List<MessageDto>> JoinChannel(string channelId)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
@@ -145,8 +246,13 @@ public class ChatHub : Hub
             .OrderBy(message => message.Timestamp)
             .ToListAsync();
 
+        var reactionsByMessageId = await BuildReactionMapAsync(lastMessages.Select(message => message.Id));
+
         return lastMessages
-            .Select(message => ToMessageDto(message, DeserializePayload(GetRawPayload(message))))
+            .Select(message => ToMessageDto(
+                message,
+                DeserializePayload(GetRawPayload(message)),
+                reactionsByMessageId.TryGetValue(message.Id, out var reactions) ? reactions : []))
             .ToList();
     }
 
@@ -219,7 +325,67 @@ public class ChatHub : Hub
         await Clients.Group(msg.ChannelId).SendAsync("MessageDeleted", messageId);
     }
 
-    private static MessageDto ToMessageDto(Message message, ChatMessagePayload payload)
+    public async Task ToggleReaction(int messageId, string reactionKey, string reactionGlyph)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+        {
+            throw new HubException("Unauthorized");
+        }
+
+        var message = await _context.Messages
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == messageId && !item.IsDeleted);
+
+        if (message == null)
+        {
+            throw new HubException("Message not found.");
+        }
+
+        if (!TryAuthorizeChannelAccess(message.ChannelId, currentUser))
+        {
+            throw new HubException("Forbidden");
+        }
+
+        var normalizedReactionKey = UploadPolicies.TrimToLength(reactionKey, MaxReactionKeyLength);
+        var normalizedReactionGlyph = UploadPolicies.TrimToLength(reactionGlyph, MaxReactionGlyphLength);
+        if (string.IsNullOrWhiteSpace(normalizedReactionKey) || string.IsNullOrWhiteSpace(normalizedReactionGlyph))
+        {
+            throw new HubException("Reaction is required.");
+        }
+
+        var existingReaction = await _context.MessageReactions.FirstOrDefaultAsync(item =>
+            item.MessageId == messageId
+            && item.ReactorUserId == currentUser.UserId
+            && item.ReactionKey == normalizedReactionKey);
+
+        if (existingReaction != null)
+        {
+            _context.MessageReactions.Remove(existingReaction);
+        }
+        else
+        {
+            _context.MessageReactions.Add(new MessageReactionRecord
+            {
+                MessageId = messageId,
+                ChannelId = message.ChannelId,
+                ReactorUserId = currentUser.UserId,
+                ReactionKey = normalizedReactionKey,
+                ReactionGlyph = normalizedReactionGlyph,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        var reactionsByMessageId = await BuildReactionMapAsync([messageId]);
+        await Clients.Group(message.ChannelId).SendAsync("MessageReactionsUpdated", new MessageReactionsUpdatedDto
+        {
+            MessageId = messageId,
+            Reactions = reactionsByMessageId.TryGetValue(messageId, out var reactions) ? reactions : []
+        });
+    }
+
+    private static MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)
     {
         return new MessageDto
         {
@@ -228,6 +394,8 @@ public class ChatHub : Hub
             AuthorUserId = payload.AuthorUserId,
             Username = message.Username,
             Message = payload.Message,
+            ForwardedFromUserId = payload.ForwardedFromUserId,
+            ForwardedFromUsername = payload.ForwardedFromUsername,
             PhotoUrl = message.PhotoUrl,
             AttachmentUrl = payload.AttachmentUrl,
             AttachmentName = payload.AttachmentName,
@@ -236,7 +404,8 @@ public class ChatHub : Hub
             Timestamp = message.Timestamp,
             IsRead = message.ReadAt.HasValue,
             ReadAt = message.ReadAt,
-            ReadByUserId = message.ReadByUserId
+            ReadByUserId = message.ReadByUserId,
+            Reactions = reactions ?? []
         };
     }
 
@@ -287,6 +456,96 @@ public class ChatHub : Hub
                 message.ChannelId);
             return message.Content ?? string.Empty;
         }
+    }
+
+    private async Task<Dictionary<int, List<MessageReactionDto>>> BuildReactionMapAsync(IEnumerable<int> messageIds)
+    {
+        var normalizedMessageIds = messageIds
+            .Distinct()
+            .Where(messageId => messageId > 0)
+            .ToArray();
+
+        if (normalizedMessageIds.Length == 0)
+        {
+            return [];
+        }
+
+        var rawReactions = await _context.MessageReactions
+            .AsNoTracking()
+            .Where(item => normalizedMessageIds.Contains(item.MessageId))
+            .OrderBy(item => item.CreatedAt)
+            .ToListAsync();
+
+        var reactorUserIds = rawReactions
+            .Select(item => item.ReactorUserId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var reactorNumericIds = reactorUserIds
+            .Select(userId => int.TryParse(userId, out var parsedUserId) ? parsedUserId : 0)
+            .Where(userId => userId > 0)
+            .Distinct()
+            .ToArray();
+
+        var reactorUsers = reactorNumericIds.Length == 0
+            ? []
+            : await _context.Users
+                .AsNoTracking()
+                .Where(user => reactorNumericIds.Contains(user.id))
+                .ToListAsync();
+
+        var reactorLookup = reactorUsers.ToDictionary(
+            user => user.id.ToString(),
+            user =>
+            {
+                var displayName = $"{user.first_name} {user.last_name}".Trim();
+                return new MessageReactionUserDto
+                {
+                    UserId = user.id.ToString(),
+                    DisplayName = string.IsNullOrWhiteSpace(displayName) ? (user.email ?? "User") : displayName,
+                    AvatarUrl = user.avatar_url
+                };
+            },
+            StringComparer.Ordinal);
+
+        return rawReactions
+            .GroupBy(item => item.MessageId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .GroupBy(item => new { item.ReactionKey, item.ReactionGlyph })
+                    .Select(reactionGroup => new MessageReactionDto
+                    {
+                        Key = reactionGroup.Key.ReactionKey,
+                        Glyph = reactionGroup.Key.ReactionGlyph,
+                        Count = reactionGroup.Count(),
+                        ReactorUserIds = reactionGroup
+                            .Select(item => item.ReactorUserId)
+                            .Where(item => !string.IsNullOrWhiteSpace(item))
+                            .Distinct()
+                            .ToList(),
+                        Users = reactionGroup
+                            .Select(item =>
+                            {
+                                if (reactorLookup.TryGetValue(item.ReactorUserId, out var user))
+                                {
+                                    return user;
+                                }
+
+                                return new MessageReactionUserDto
+                                {
+                                    UserId = item.ReactorUserId,
+                                    DisplayName = item.ReactorUserId,
+                                    AvatarUrl = null
+                                };
+                            })
+                            .GroupBy(user => user.UserId, StringComparer.Ordinal)
+                            .Select(userGroup => userGroup.First())
+                            .ToList()
+                    })
+                    .OrderByDescending(item => item.Count)
+                    .ThenBy(item => item.Key, StringComparer.Ordinal)
+                    .ToList());
     }
 
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
@@ -406,6 +665,8 @@ public class MessageDto
     public string AuthorUserId { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public string? ForwardedFromUserId { get; set; }
+    public string? ForwardedFromUsername { get; set; }
     public string? PhotoUrl { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
@@ -415,6 +676,7 @@ public class MessageDto
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public string? ReadByUserId { get; set; }
+    public List<MessageReactionDto> Reactions { get; set; } = [];
 }
 
 public class MessageReadReceiptDto
@@ -425,10 +687,45 @@ public class MessageReadReceiptDto
     public DateTime ReadAt { get; set; }
 }
 
+public class MessageReactionDto
+{
+    public string Key { get; set; } = string.Empty;
+    public string Glyph { get; set; } = string.Empty;
+    public int Count { get; set; }
+    public List<string> ReactorUserIds { get; set; } = [];
+    public List<MessageReactionUserDto> Users { get; set; } = [];
+}
+
+public class MessageReactionUserDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
+}
+
+public class MessageReactionsUpdatedDto
+{
+    public int MessageId { get; set; }
+    public List<MessageReactionDto> Reactions { get; set; } = [];
+}
+
 public class ChatMessagePayload
 {
     public string AuthorUserId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public string? ForwardedFromUserId { get; set; }
+    public string? ForwardedFromUsername { get; set; }
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentName { get; set; }
+    public long? AttachmentSize { get; set; }
+    public string? AttachmentContentType { get; set; }
+}
+
+public class ForwardMessageInput
+{
+    public string Message { get; set; } = string.Empty;
+    public string? ForwardedFromUserId { get; set; }
+    public string? ForwardedFromUsername { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }

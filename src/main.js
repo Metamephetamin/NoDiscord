@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, safeStorage, session, shell } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import started from "electron-squirrel-startup";
@@ -9,6 +9,7 @@ if (started) {
 
 const SESSION_STORE_FILE_NAME = "session.secure.json";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 
 const getSessionStorePath = () => path.join(app.getPath("userData"), SESSION_STORE_FILE_NAME);
 
@@ -63,6 +64,16 @@ const isSafeExternalUrl = (value) => {
   } catch {
     return false;
   }
+};
+
+const sanitizeDownloadFileName = (value) => {
+  const normalized = Array.from(String(value || "").trim())
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return !('<>:"/\\|?*'.includes(character) || code < 32);
+    })
+    .join("");
+  return normalized || DOWNLOAD_FILE_NAME_FALLBACK;
 };
 
 const createWindow = () => {
@@ -143,6 +154,46 @@ app.whenReady().then(() => {
       thumbnail: source.thumbnail.isEmpty() ? "" : source.thumbnail.toDataURL(),
       appIcon: source.appIcon?.isEmpty?.() ? "" : source.appIcon?.toDataURL?.() || "",
     }));
+  });
+
+  ipcMain.handle("downloads:save-file", async (_event, payload) => {
+    const fileName = sanitizeDownloadFileName(payload?.defaultFileName);
+    const targetPath = path.join(app.getPath("downloads"), fileName);
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: "Сохранить файл",
+      defaultPath: targetPath,
+      buttonLabel: "Скачать",
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true, filePath: "" };
+    }
+
+    const bytes = payload?.bytes;
+    let buffer = null;
+
+    if (bytes instanceof Uint8Array) {
+      buffer = Buffer.from(bytes);
+    } else if (ArrayBuffer.isView(bytes)) {
+      buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    } else if (bytes instanceof ArrayBuffer) {
+      buffer = Buffer.from(new Uint8Array(bytes));
+    } else if (Array.isArray(bytes)) {
+      buffer = Buffer.from(bytes);
+    } else if (bytes && typeof bytes === "object") {
+      const numericValues = Object.values(bytes)
+        .filter((value) => Number.isInteger(value) && value >= 0 && value <= 255);
+      if (numericValues.length) {
+        buffer = Buffer.from(numericValues);
+      }
+    }
+
+    if (!buffer) {
+      throw new Error("No file bytes provided for download.");
+    }
+
+    await fs.writeFile(filePath, buffer);
+    return { canceled: false, filePath };
   });
 
   if (typeof session.defaultSession.setDisplayMediaRequestHandler === "function") {

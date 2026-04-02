@@ -172,6 +172,8 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<CryptoService>();
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSender>();
 builder.Services.AddScoped<ServerInviteService>();
 builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddControllers();

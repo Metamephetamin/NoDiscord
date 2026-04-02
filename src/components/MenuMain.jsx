@@ -108,8 +108,13 @@ ROLE_PERMISSION_LABELS.mute_members = "Управление микрофоном
 ROLE_PERMISSION_LABELS.deafen_members = "Отключение звука участникам";
 ROLE_PERMISSION_LABELS.move_members = "Перемещение участников";
 const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-const getDisplayName = (user) =>
-  user?.firstName || user?.first_name || user?.name || user?.email || "User";
+const getDisplayName = (user) => {
+  const firstName = String(user?.firstName || user?.first_name || "").trim();
+  const lastName = String(user?.lastName || user?.last_name || "").trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  return fullName || user?.name || user?.email || "User";
+};
 const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 const getCurrentUserId = (user) => String(user?.id || user?.email || "");
 const getScopedChatChannelId = (serverId, channelId) =>
@@ -3578,10 +3583,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
     </div>
   );
   const renderProfilePanel = () => (
-    <div className="menu__profile-wrapper">
-      <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
-        {currentVoiceChannel ? (
-          <div className="profile__voice-stack">
+    <div className={`menu__profile-wrapper ${currentVoiceChannel ? "menu__profile-wrapper--voice-connected" : ""}`}>
+      {currentVoiceChannel ? (
+        <div className="profile__voice-stack">
             <div className="profile__connection-card">
               <span
                 className={`profile__ping-indicator ui-tooltip-anchor profile__ping-indicator--${pingTone}`}
@@ -3647,9 +3651,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
               </button>
             </div>
-          </div>
-        ) : null}
+        </div>
+      ) : null}
 
+      <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
         <div className="profile__identity-row">
           <button type="button" className="profile__identity" onClick={() => openSettingsPanel("personal_profile")}>
             <img className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" />
@@ -3981,7 +3986,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 <h1>{getDisplayName(currentDirectFriend)}</h1>
                 <span className="chat__subtitle">Личный чат между двумя пользователями</span>
               </div>
-              <TextChat resolvedChannelId={currentDirectChannelId} user={user} />
+              <TextChat resolvedChannelId={currentDirectChannelId} user={user} directTargets={friends} />
             </div>
           ) : friendsPageSection === "friends" ? (
             <div className="friends-main__content">
@@ -4111,24 +4116,6 @@ export default function MenuMain({ user, setUser, onLogout }) {
               </div>
             </div>
             <div className="chat__topbar-actions">
-              <button
-                type="button"
-                className="chat__topbar-icon ui-tooltip-anchor"
-                onClick={() => openSettingsPanel("roles")}
-                aria-label="Участники и роли"
-                data-tooltip="Участники и роли"
-              >
-                <img src="/icons/users.svg" alt="" />
-              </button>
-              <button
-                type="button"
-                className="chat__topbar-icon ui-tooltip-anchor"
-                onClick={() => openSettingsPanel("server")}
-                aria-label="Настройки сервера"
-                data-tooltip="Настройки сервера"
-              >
-                <img src="/icons/settings.png" alt="" />
-              </button>
               <label className="chat__topbar-search-wrap">
                 <img src="/icons/search.svg" alt="" />
                 <input
@@ -4154,7 +4141,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <ScreenShareViewer stream={selectedStream?.stream || null} videoSrc={selectedStream?.videoSrc || ""} imageSrc={selectedStream?.imageSrc || ""} hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)} title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`} subtitle="Просмотр видеопотока участника" onClose={() => setSelectedStreamUserId(null)} debugInfo={selectedStreamDebugInfo} />
         ) : (
           <>
-            {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} searchQuery={channelSearchQuery} />}
+            {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} searchQuery={channelSearchQuery} directTargets={friends} />}
           </>
         )}
       </div>
@@ -4166,11 +4153,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
       <aside className="sidebar__servers">
         <button
           type="button"
-          className={`workspace-switch ui-tooltip-anchor ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`}
+          className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`}
           onClick={() => setWorkspaceMode("friends")}
           aria-label="Друзья"
-          data-tooltip="Друзья"
-          data-tooltip-side="right"
         >
           <img src="/icons/sms.svg" alt="" />
           <span>Друзья</span>
@@ -4179,21 +4164,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <button
             key={server.id}
             type="button"
-            className={`btn__server ui-tooltip-anchor ${server.id === activeServer?.id ? "btn__server--active" : ""}`}
+            className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
             onClick={() => { setWorkspaceMode("servers"); setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }}
             aria-label={server.name || "Без названия"}
-            data-tooltip={server.name || "Без названия"}
-            data-tooltip-side="right"
           >
             {server.icon ? <img src={resolveMediaUrl(server.icon, DEFAULT_SERVER_ICON)} alt={server.name || "Без названия"} /> : <span className="btn__server-empty" aria-hidden="true" />}
           </button>
         ))}
         <button
           type="button"
-          className="btn__create-server ui-tooltip-anchor"
+          className="btn__create-server"
           aria-label="Создать сервер"
-          data-tooltip="Создать сервер"
-          data-tooltip-side="right"
           onClick={handleAddServer}
         >
           +

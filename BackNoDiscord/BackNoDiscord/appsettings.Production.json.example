@@ -10,6 +10,18 @@
   "Crypto": {
     "Key": "REPLACE_WITH_A_SEPARATE_LONG_RANDOM_SECRET_AT_LEAST_32_CHARACTERS"
   },
+  "Email": {
+    "Mode": "smtp",
+    "FromAddress": "no-reply@your-domain.example",
+    "FromName": "MAX",
+    "Smtp": {
+      "Host": "smtp.your-provider.example",
+      "Port": 587,
+      "Username": "smtp-user",
+      "Password": "smtp-password",
+      "EnableSsl": true
+    }
+  },
   "Logging": {
     "LogLevel": {
       "Default": "Information",

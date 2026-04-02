@@ -2,6 +2,9 @@
   align-self: stretch;
   width: calc(100% + 105px);
   margin: 18px -32px -10px -16px;
+  position: relative;
+  z-index: 90;
+  overflow: visible;
   pointer-events: none;
 }
 
@@ -11,7 +14,10 @@
   border-radius: 0;
   background: transparent;
   border: 0;
-  pointer-events: none;
+  position: relative;
+  z-index: 75;
+  overflow: visible;
+  pointer-events: auto;
 }
 
 .profile__top {
@@ -114,7 +120,6 @@
 
 .wrap__icon:hover {
   background: rgba(255, 255, 255, 0.11);
-  transform: translateY(-1px);
 }
 
 .wrap__icon:disabled {
@@ -214,7 +219,6 @@
 
 .noise-menu__option:hover {
   background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-1px);
 }
 
 .noise-menu__option--active {
@@ -302,6 +306,7 @@
   height: 42px;
   border-radius: 50%;
   object-fit: cover;
+  object-position: center 24%;
   border: 2px solid rgba(255, 255, 255, 0.14);
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;

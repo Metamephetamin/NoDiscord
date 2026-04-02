@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
+const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 
 const initialRegisterForm = {
   firstName: "",
@@ -36,6 +37,8 @@ const initialEmailVerificationModal = {
   resendAvailableAt: "",
 };
 
+const sloganWords = ["жизни", "связи", "работы", "роста"];
+
 const formatCardNumber = (value) =>
   value
     .replace(/\D/g, "")
@@ -54,10 +57,33 @@ const formatCardExpiry = (value) => {
 
 const formatPhoneInput = (value) => value.replace(/[^\d+\-()\s]/g, "").slice(0, 22);
 
+function getRemainingSeconds(availableAt) {
+  if (!availableAt) {
+    return 0;
+  }
+
+  const targetTime = new Date(availableAt).getTime();
+  if (!Number.isFinite(targetTime)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+}
+
+function formatCooldown(seconds) {
+  if (seconds <= 0) {
+    return "";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
 function normalizeContactInput(value) {
   const candidate = String(value || "");
 
-  if (candidate.includes("@") || /[a-zA-Zа-яА-Я]/.test(candidate)) {
+  if (candidate.includes("@") || /[a-zA-Z\u0400-\u04FF]/.test(candidate)) {
     return candidate.trimStart().slice(0, 120);
   }
 
@@ -160,8 +186,10 @@ export default function Auth({ onAuthSuccess }) {
   const [phoneVerificationStatus, setPhoneVerificationStatus] = useState(initialPhoneVerificationStatus);
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [emailVerificationModal, setEmailVerificationModal] = useState(initialEmailVerificationModal);
+  const [emailResendSecondsLeft, setEmailResendSecondsLeft] = useState(0);
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
+  const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
 
   const cardHolderName = useMemo(() => {
     const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
@@ -201,6 +229,10 @@ export default function Auth({ onAuthSuccess }) {
     phoneVerificationCode.trim().length === 6 &&
     !phoneVerificationStatus.verified &&
     !isVerifyingPhoneCode;
+  const canResendEmailCode =
+    Boolean(emailVerificationModal.email) &&
+    emailResendSecondsLeft === 0 &&
+    !isResendingEmailCode;
 
   const resetPhoneVerification = () => {
     setPhoneVerificationCode("");
@@ -210,8 +242,32 @@ export default function Auth({ onAuthSuccess }) {
 
   const resetEmailVerificationModal = () => {
     setEmailVerificationCode("");
+    setEmailResendSecondsLeft(0);
     setEmailVerificationModal(initialEmailVerificationModal);
   };
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveSloganWordIndex((previous) => previous + 1);
+    }, 2200);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (!emailVerificationModal.open) {
+      setEmailResendSecondsLeft(0);
+      return undefined;
+    }
+
+    const updateCountdown = () => {
+      setEmailResendSecondsLeft(getRemainingSeconds(emailVerificationModal.resendAvailableAt));
+    };
+
+    updateCountdown();
+    const intervalId = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [emailVerificationModal.open, emailVerificationModal.resendAvailableAt]);
 
   const handleRegisterFieldChange = (field) => (event) => {
     let nextValue = event.target.value;
@@ -389,7 +445,7 @@ export default function Auth({ onAuthSuccess }) {
     setIsSubmitting(true);
 
     try {
-      const data = await submitAuthRequest("/auth/register", payload, "Не удалось создать аккаунт.");
+      const data = await submitAuthRequest("/auth/register", payload, "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442.");
 
       if (data?.token) {
         onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
@@ -397,34 +453,37 @@ export default function Auth({ onAuthSuccess }) {
       }
 
       const verification = data?.verification || {};
-      const deliveryMode = verification?.deliveryMode || "mock";
-      const debugCode = verification?.debugCode || "";
 
       setEmailVerificationCode("");
       setEmailVerificationModal({
         open: true,
         email: verification?.email || payload.email,
         verificationToken: verification?.verificationToken || "",
-        deliveryMode,
-        debugCode,
+        deliveryMode: verification?.deliveryMode || "mock",
+        debugCode: verification?.debugCode || "",
         resendAvailableAt: verification?.resendAvailableAt || "",
       });
 
       setMessage(
-        deliveryMode === "mock"
-          ? `Аккаунт создан. В этой сборке письмо не отправляется: используйте тестовый код ${debugCode || "из окна подтверждения"}.`
-          : "Аккаунт создан. Подтвердите почту кодом из письма."
+        verification?.debugCode
+          ? `Аккаунт создан. Тестовый email-код: ${verification.debugCode}`
+          : "Аккаунт создан. Мы отправили код подтверждения на почту."
       );
       setIsSubmitting(false);
     } catch (error) {
-      setMessage(error.message || "Не удалось создать аккаунт.");
+      setMessage(error.message || "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442.");
       setIsSubmitting(false);
     }
   };
 
   const handleResendEmailCode = async () => {
     if (!emailVerificationModal.email) {
-      setMessage("Сначала зарегистрируйтесь заново.");
+      setMessage("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u0439\u0442\u0435\u0441\u044c \u0437\u0430\u043d\u043e\u0432\u043e.");
+      return;
+    }
+
+    if (emailResendSecondsLeft > 0) {
+      setMessage(`Повторно отправить код можно через ${formatCooldown(emailResendSecondsLeft)}.`);
       return;
     }
 
@@ -435,28 +494,23 @@ export default function Auth({ onAuthSuccess }) {
       const data = await submitAuthRequest(
         "/auth/resend-email-verification",
         { email: emailVerificationModal.email },
-        "Не удалось повторно отправить код на почту."
+        "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u0434 \u043d\u0430 \u043f\u043e\u0447\u0442\u0443."
       );
 
-      const deliveryMode = data?.deliveryMode || emailVerificationModal.deliveryMode || "mock";
-      const debugCode = data?.debugCode || "";
+      const nextResendAvailableAt = data?.resendAvailableAt || "";
 
       setEmailVerificationModal((previous) => ({
         ...previous,
         open: true,
         verificationToken: data?.verificationToken || previous.verificationToken,
-        deliveryMode,
-        debugCode,
-        resendAvailableAt: data?.resendAvailableAt || "",
+        deliveryMode: data?.deliveryMode || previous.deliveryMode || "mock",
+        debugCode: data?.debugCode || "",
+        resendAvailableAt: nextResendAvailableAt,
       }));
 
-      setMessage(
-        deliveryMode === "mock"
-          ? `Письмо в этой сборке не отправляется. Новый тестовый код: ${debugCode || "смотрите окно подтверждения"}.`
-          : "Код подтверждения повторно отправлен на почту."
-      );
+      setMessage(data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "Код подтверждения повторно отправлен на почту.");
     } catch (error) {
-      setMessage(error.message || "Не удалось повторно отправить код на почту.");
+      setMessage(error.message || "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u0434 \u043d\u0430 \u043f\u043e\u0447\u0442\u0443.");
     } finally {
       setIsResendingEmailCode(false);
     }
@@ -466,12 +520,12 @@ export default function Auth({ onAuthSuccess }) {
     event.preventDefault();
 
     if (!emailVerificationModal.email || !emailVerificationModal.verificationToken) {
-      setMessage("Сессия подтверждения почты не найдена. Зарегистрируйтесь снова.");
+      setMessage("\u0421\u0435\u0441\u0441\u0438\u044f \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f \u043f\u043e\u0447\u0442\u044b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430. \u0417\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u0439\u0442\u0435\u0441\u044c \u0441\u043d\u043e\u0432\u0430.");
       return;
     }
 
     if (emailVerificationCode.trim().length !== 6) {
-      setMessage("Введите шестизначный код из письма.");
+      setMessage("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0448\u0435\u0441\u0442\u0438\u0437\u043d\u0430\u0447\u043d\u044b\u0439 \u043a\u043e\u0434 \u0438\u0437 \u043f\u0438\u0441\u044c\u043c\u0430.");
       return;
     }
 
@@ -486,12 +540,12 @@ export default function Auth({ onAuthSuccess }) {
           verificationToken: emailVerificationModal.verificationToken,
           code: emailVerificationCode.trim(),
         },
-        "Не удалось подтвердить почту."
+        "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043f\u043e\u0447\u0442\u0443."
       );
       resetEmailVerificationModal();
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
-      setMessage(error.message || "Не удалось подтвердить почту.");
+      setMessage(error.message || "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043f\u043e\u0447\u0442\u0443.");
     } finally {
       setIsVerifyingEmailCode(false);
     }
@@ -530,7 +584,27 @@ export default function Auth({ onAuthSuccess }) {
         </div>
         <div className="auth-brand__copy">
           <span className="auth-brand__name">MAX</span>
-          <h1 className="auth-brand__title">- имум возможностей для жизни</h1>
+          <h1 className="auth-brand__title">
+            <span className="auth-brand__title-static">- симум возможностей для</span>
+            <span className="auth-brand__title-rotator" aria-live="polite">
+              <span
+                className="auth-brand__title-prism"
+                style={{
+                  "--active-slogan-word-index": activeSloganWordIndex,
+                }}
+              >
+                {sloganWords.map((word, index) => (
+                  <span
+                    key={word}
+                    className="auth-brand__title-face"
+                    style={{ "--face-index": index }}
+                  >
+                    {word}
+                  </span>
+                ))}
+              </span>
+            </span>
+          </h1>
         </div>
       </div>
 
@@ -653,7 +727,7 @@ export default function Auth({ onAuthSuccess }) {
             onClick={() => switchMode(mode === "login" ? "register" : "login")}
             disabled={isSubmitting}
           >
-            {mode === "login" ? "Нет аккаунта ?" : "Уже есть аккаунт ?"}
+            {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт?"}
           </button>
 
           {message ? <p className="auth-message">{message}</p> : null}
@@ -718,38 +792,33 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-verify-modal__backdrop">
           <form className="auth-verify-modal" onSubmit={handleVerifyEmailCode}>
             <div className="auth-verify-modal__header">
-              <h3>Подтвердите почту</h3>
+              <h3>\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043f\u043e\u0447\u0442\u0443</h3>
               <button type="button" className="auth-verify-modal__close" onClick={resetEmailVerificationModal}>
                 ×
               </button>
             </div>
             <p className="auth-verify-modal__text">
-              {emailVerificationModal.deliveryMode === "mock" ? (
-                <>
-                  Для <strong>{emailVerificationModal.email}</strong> письмо в этой сборке не отправляется. Введите тестовый код из окна ниже.
-                </>
-              ) : (
-                <>
-                  Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы завершить регистрацию.
-                </>
-              )}
+              Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы завершить регистрацию. Если письма нет, проверьте папку со спамом.
             </p>
+            {emailVerificationModal.deliveryMode === "mock" && emailVerificationModal.debugCode ? (
+              <div className="auth-hint">Тестовый код: {emailVerificationModal.debugCode}</div>
+            ) : null}
             <input
               className="auth-input"
-              placeholder="Код из письма"
+              placeholder="\u041a\u043e\u0434 \u0438\u0437 \u043f\u0438\u0441\u044c\u043c\u0430"
               value={emailVerificationCode}
               onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
               autoFocus
             />
-            {emailVerificationModal.debugCode ? (
-              <div className="auth-hint">Тестовый код: {emailVerificationModal.debugCode}</div>
+            {emailResendSecondsLeft > 0 ? (
+              <div className="auth-hint">Повторная отправка будет доступна через {formatCooldown(emailResendSecondsLeft)}.</div>
             ) : null}
             <div className="auth-verify-modal__actions">
-              <button className="auth-submit auth-submit--secondary" type="button" onClick={handleResendEmailCode} disabled={isResendingEmailCode}>
-                {isResendingEmailCode ? "Отправляем..." : "Отправить код снова"}
+              <button className="auth-submit auth-submit--secondary" type="button" onClick={handleResendEmailCode} disabled={!canResendEmailCode}>
+                {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? `Повторить через ${formatCooldown(emailResendSecondsLeft)}` : "Отправить код снова"}
               </button>
               <button className="auth-submit" type="submit" disabled={isVerifyingEmailCode}>
-                {isVerifyingEmailCode ? "Проверяем..." : "Подтвердить"}
+                {isVerifyingEmailCode ? "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u043c..." : "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c"}
               </button>
             </div>
           </form>

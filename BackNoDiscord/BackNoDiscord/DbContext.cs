@@ -229,6 +229,31 @@ public class FriendshipRecord
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+[Table("message_reactions")]
+public class MessageReactionRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("message_id")]
+    public int MessageId { get; set; }
+
+    [Column("channel_id")]
+    public string ChannelId { get; set; } = string.Empty;
+
+    [Column("reactor_user_id")]
+    public string ReactorUserId { get; set; } = string.Empty;
+
+    [Column("reaction_key")]
+    public string ReactionKey { get; set; } = string.Empty;
+
+    [Column("reaction_glyph")]
+    public string ReactionGlyph { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
@@ -243,6 +268,7 @@ public class AppDbContext : DbContext
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
+    public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -254,6 +280,19 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.ChannelId, x.Timestamp });
             entity.HasIndex(x => x.Timestamp);
+        });
+
+        modelBuilder.Entity<MessageReactionRecord>(entity =>
+        {
+            entity.ToTable("message_reactions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.MessageId, x.ReactionKey });
+            entity.HasIndex(x => new { x.ChannelId, x.CreatedAt });
+            entity.HasIndex(x => new { x.MessageId, x.ReactorUserId, x.ReactionKey }).IsUnique();
+            entity.Property(x => x.ChannelId).IsRequired();
+            entity.Property(x => x.ReactorUserId).IsRequired();
+            entity.Property(x => x.ReactionKey).IsRequired();
+            entity.Property(x => x.ReactionGlyph).IsRequired();
         });
 
         modelBuilder.Entity<User>(entity =>

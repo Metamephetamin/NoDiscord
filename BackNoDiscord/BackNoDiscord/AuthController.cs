@@ -1,5 +1,6 @@
 ﻿using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -28,13 +29,15 @@ public class AuthController : ControllerBase
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _config;
+    private readonly IEmailVerificationSender _emailVerificationSender;
     private readonly PasswordHasher<User> _passwordHasher;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AppDbContext context, IConfiguration config, ILogger<AuthController> logger)
+    public AuthController(AppDbContext context, IConfiguration config, IEmailVerificationSender emailVerificationSender, ILogger<AuthController> logger)
     {
         _context = context;
         _config = config;
+        _emailVerificationSender = emailVerificationSender;
         _logger = logger;
         _passwordHasher = new PasswordHasher<User>();
     }
@@ -215,8 +218,27 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "РџРѕС‡С‚Р° СѓР¶Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅР°." });
         }
 
-        var payload = await CreateEmailVerificationAsync(user);
-        return Ok(payload);
+        try
+        {
+            var payload = await CreateEmailVerificationAsync(user);
+            if (payload.IsRateLimited)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    message = "Повторно отправить код можно через 60 секунд.",
+                    resendAvailableAt = payload.ResendAvailableAt
+                });
+            }
+
+            return Ok(payload.ToResponse());
+        }
+        catch (EmailDeliveryException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Не удалось отправить письмо с кодом подтверждения. Попробуйте немного позже."
+            });
+        }
     }
 
     [HttpPost("verify-email-code")]
@@ -402,7 +424,8 @@ public class AuthController : ControllerBase
             first_name = firstName,
             last_name = lastName,
             email = normalizedEmail,
-            is_email_verified = string.IsNullOrWhiteSpace(normalizedEmail),
+            // Email verification is temporarily disabled until SMTP is stabilized.
+            is_email_verified = true,
             phone_number = normalizedPhone,
             is_phone_verified = !string.IsNullOrWhiteSpace(normalizedPhone)
         };
@@ -417,16 +440,39 @@ public class AuthController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        if (!string.IsNullOrWhiteSpace(normalizedEmail))
-        {
-            var emailVerification = await CreateEmailVerificationAsync(user);
-            return Ok(new
-            {
-                pendingEmailVerification = true,
-                user = BuildUserPayload(user),
-                verification = emailVerification
-            });
-        }
+        // Temporarily disabled email verification flow.
+        // if (!string.IsNullOrWhiteSpace(normalizedEmail))
+        // {
+        //     try
+        //     {
+        //         var emailVerification = await CreateEmailVerificationAsync(user);
+        //         return Ok(new
+        //         {
+        //             pendingEmailVerification = true,
+        //             user = BuildUserPayload(user),
+        //             verification = emailVerification.ToResponse()
+        //         });
+        //     }
+        //     catch (EmailDeliveryException)
+        //     {
+        //         var createdUser = await _context.Users.FirstOrDefaultAsync(item => item.id == user.id);
+        //         if (createdUser != null)
+        //         {
+        //             var pendingCodes = await _context.EmailVerificationCodes
+        //                 .Where(item => item.UserId == createdUser.id)
+        //                 .ToListAsync();
+        //
+        //             _context.EmailVerificationCodes.RemoveRange(pendingCodes);
+        //             _context.Users.Remove(createdUser);
+        //             await _context.SaveChangesAsync();
+        //         }
+        //
+        //         return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+        //         {
+        //             message = "Не удалось отправить письмо с кодом подтверждения. Попробуйте зарегистрироваться ещё раз чуть позже."
+        //         });
+        //     }
+        // }
 
         await RevokeActiveRefreshTokensAsync(user.id);
         var authSession = await IssueAuthSessionAsync(user);
@@ -473,10 +519,11 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Invalid email/phone or password" });
         }
 
-        if (!string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
-        {
-            return BadRequest(new { message = "РЎРЅР°С‡Р°Р»Р° РїРѕРґС‚РІРµСЂРґРёС‚Рµ email." });
-        }
+        // Temporarily disabled email verification check.
+        // if (!string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
+        // {
+        //     return BadRequest(new { message = "РЎРЅР°С‡Р°Р»Р° РїРѕРґС‚РІРµСЂРґРёС‚Рµ email." });
+        // }
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);
         if (result == PasswordVerificationResult.Failed)
@@ -652,7 +699,7 @@ public class AuthController : ControllerBase
         };
     }
 
-    private async Task<object> CreateEmailVerificationAsync(User user)
+    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user)
     {
         if (string.IsNullOrWhiteSpace(user.email))
         {
@@ -669,19 +716,18 @@ public class AuthController : ControllerBase
         if (latestActive != null &&
             latestActive.LastSentAt + EmailVerificationResendCooldown > now)
         {
-            return new
-            {
-                email = userEmail,
-                verificationToken = string.Empty,
-                expiresAt = latestActive.ExpiresAt.ToString("O"),
-                resendAvailableAt = latestActive.LastSentAt.Add(EmailVerificationResendCooldown).ToString("O"),
-                deliveryMode = GetEmailDeliveryMode(),
-                debugCode = (string?)null
-            };
+            return EmailVerificationResult.RateLimited(
+                userEmail,
+                latestActive.ExpiresAt,
+                latestActive.LastSentAt.Add(EmailVerificationResendCooldown));
         }
 
         var verificationCode = GenerateEmailVerificationCode();
         var verificationToken = GenerateVerificationToken();
+        var expiresAt = now.Add(EmailVerificationLifetime);
+        var resendAvailableAt = now.Add(EmailVerificationResendCooldown);
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
         var activeCodes = await _context.EmailVerificationCodes
             .Where(item => item.UserId == user.id && !item.ConsumedAt.HasValue)
             .ToListAsync();
@@ -698,32 +744,23 @@ public class AuthController : ControllerBase
             VerificationTokenHash = AuthInputPolicies.HashSecret(verificationToken),
             CodeHash = AuthInputPolicies.HashSecret(verificationCode),
             CreatedAt = now,
-            ExpiresAt = now.Add(EmailVerificationLifetime),
+            ExpiresAt = expiresAt,
             LastSentAt = now,
             AttemptCount = 0
         });
 
         await _context.SaveChangesAsync();
+        await _emailVerificationSender.SendVerificationCodeAsync(userEmail, verificationCode, expiresAt);
+        await transaction.CommitAsync();
 
         var deliveryMode = GetEmailDeliveryMode();
-        if (string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("Email verification code for {Email}: {VerificationCode}", userEmail, verificationCode);
-        }
-        else
-        {
-            _logger.LogInformation("Email verification code generated for {Email} using {DeliveryMode} delivery.", userEmail, deliveryMode);
-        }
-
-        return new
-        {
-            email = userEmail,
+        return EmailVerificationResult.Success(
+            userEmail,
             verificationToken,
-            expiresAt = now.Add(EmailVerificationLifetime).ToString("O"),
-            resendAvailableAt = now.Add(EmailVerificationResendCooldown).ToString("O"),
+            expiresAt,
+            resendAvailableAt,
             deliveryMode,
-            debugCode = string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase) ? verificationCode : null
-        };
+            string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase) ? verificationCode : null);
     }
 
     private string GenerateJwtToken(User user, DateTime expiresAtUtc)
@@ -889,6 +926,56 @@ public class AuthSessionResult
     public string RefreshToken { get; set; } = string.Empty;
     public DateTimeOffset AccessTokenExpiresAt { get; set; }
     public DateTimeOffset RefreshTokenExpiresAt { get; set; }
+}
+
+public sealed class EmailVerificationResult
+{
+    public required string Email { get; init; }
+    public string VerificationToken { get; init; } = string.Empty;
+    public required DateTimeOffset ExpiresAt { get; init; }
+    public required DateTimeOffset ResendAvailableAt { get; init; }
+    public string DeliveryMode { get; init; } = "mock";
+    public string? DebugCode { get; init; }
+    public bool IsRateLimited { get; init; }
+
+    public object ToResponse()
+    {
+        return new
+        {
+            email = Email,
+            verificationToken = VerificationToken,
+            expiresAt = ExpiresAt.ToString("O"),
+            resendAvailableAt = ResendAvailableAt.ToString("O"),
+            deliveryMode = DeliveryMode,
+            debugCode = DebugCode
+        };
+    }
+
+    public static EmailVerificationResult Success(string email, string verificationToken, DateTimeOffset expiresAt, DateTimeOffset resendAvailableAt, string deliveryMode, string? debugCode)
+    {
+        return new EmailVerificationResult
+        {
+            Email = email,
+            VerificationToken = verificationToken,
+            ExpiresAt = expiresAt,
+            ResendAvailableAt = resendAvailableAt,
+            DeliveryMode = deliveryMode,
+            DebugCode = debugCode,
+            IsRateLimited = false
+        };
+    }
+
+    public static EmailVerificationResult RateLimited(string email, DateTimeOffset expiresAt, DateTimeOffset resendAvailableAt)
+    {
+        return new EmailVerificationResult
+        {
+            Email = email,
+            ExpiresAt = expiresAt,
+            ResendAvailableAt = resendAvailableAt,
+            DeliveryMode = "mock",
+            IsRateLimited = true
+        };
+    }
 }
 
 

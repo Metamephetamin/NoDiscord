@@ -117,4 +117,10 @@ contextBridge.exposeInMainWorld("electronSecureSession", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronDownloads", {
+  async saveFile(payload) {
+    return ipcRenderer.invoke("downloads:save-file", payload);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronRuntime", buildVoiceRuntimeConfig());

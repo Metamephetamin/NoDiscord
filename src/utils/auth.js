@@ -293,6 +293,9 @@ export function getApiErrorMessage(response, data, fallbackMessage) {
   }
 
   if (response?.status === 429) {
+    if (data && typeof data === "object" && typeof data.message === "string" && data.message.trim()) {
+      return data.message.trim();
+    }
     return "Слишком много попыток. Подождите немного и попробуйте снова.";
   }
 
