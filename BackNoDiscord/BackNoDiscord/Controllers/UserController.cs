@@ -24,7 +24,7 @@ public class UpdateProfileRequest
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class UserController : ControllerBase
 {
-    private const long MaxAvatarSizeBytes = 5_000_000;
+    private const long MaxAvatarSizeBytes = 50L * 1024 * 1024;
     private const int MaxProfileNameLength = 60;
     private readonly AppDbContext _dbContext;
     private readonly IHubContext<ChatHub> _chatHubContext;
@@ -96,7 +96,7 @@ public class UserController : ControllerBase
 
         if (avatar.Length > MaxAvatarSizeBytes)
         {
-            return BadRequest(new { message = "Avatar size must be less than or equal to 5 MB" });
+            return BadRequest(new { message = "Avatar size must be less than or equal to 50 MB" });
         }
 
         if (!UploadPolicies.TryValidateAvatar(avatar, out var extension, out _, out var error))

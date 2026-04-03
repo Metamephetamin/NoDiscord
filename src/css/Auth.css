@@ -557,6 +557,15 @@
   cursor: wait;
 }
 
+.auth-beta-note {
+  align-self: center;
+  margin-top: -2px;
+  color: rgba(215, 220, 229, 0.82);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
 @keyframes authVerifyFadeIn {
   from {
     opacity: 0;

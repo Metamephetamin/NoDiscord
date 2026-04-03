@@ -19,8 +19,10 @@ public class ChatHub : Hub
     private const int MaxAttachmentContentTypeLength = 120;
     private const int MaxReactionKeyLength = 32;
     private const int MaxReactionGlyphLength = 16;
+    private const int MaxMentionHandleLength = 80;
+    private const int MaxMentionDisplayNameLength = 160;
+    private const int MaxMentionsPerMessage = 24;
     private const int MaxForwardBatchSize = 30;
-    private const string DirectMessageChannelPrefix = "dm:";
     private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
 
@@ -47,7 +49,8 @@ public class ChatHub : Hub
         long? attachmentSize = null,
         string? attachmentContentType = null,
         ChatMessageEncryptionEnvelope? encryption = null,
-        ChatAttachmentEncryptionEnvelope? attachmentEncryption = null)
+        ChatAttachmentEncryptionEnvelope? attachmentEncryption = null,
+        List<ChatMentionInput>? mentions = null)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -82,7 +85,8 @@ public class ChatHub : Hub
                 ? null
                 : UploadPolicies.SanitizeDisplayFileName(attachmentName),
             AttachmentSize = attachmentSize,
-            AttachmentContentType = UploadPolicies.TrimToLength(attachmentContentType, MaxAttachmentContentTypeLength)
+            AttachmentContentType = UploadPolicies.TrimToLength(attachmentContentType, MaxAttachmentContentTypeLength),
+            Mentions = NormalizeMentions(normalizedChannelId, mentions)
         };
 
         if (string.IsNullOrWhiteSpace(payload.Message) &&
@@ -168,14 +172,15 @@ public class ChatHub : Hub
                 Message = UploadPolicies.TrimToLength(item.Message, MaxMessageLength),
                 ForwardedFromUserId = UploadPolicies.TrimToLength(item.ForwardedFromUserId, 64),
                 ForwardedFromUsername = UploadPolicies.TrimToLength(item.ForwardedFromUsername, 160),
-                AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(item.AttachmentEncryption),
-                AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(item.AttachmentUrl, "/chat-files/"),
-                AttachmentName = string.IsNullOrWhiteSpace(item.AttachmentUrl)
-                    ? null
-                    : UploadPolicies.SanitizeDisplayFileName(item.AttachmentName),
-                AttachmentSize = item.AttachmentSize,
-                AttachmentContentType = UploadPolicies.TrimToLength(item.AttachmentContentType, MaxAttachmentContentTypeLength)
-            };
+            AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(item.AttachmentEncryption),
+            AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(item.AttachmentUrl, "/chat-files/"),
+            AttachmentName = string.IsNullOrWhiteSpace(item.AttachmentUrl)
+                ? null
+                : UploadPolicies.SanitizeDisplayFileName(item.AttachmentName),
+            AttachmentSize = item.AttachmentSize,
+            AttachmentContentType = UploadPolicies.TrimToLength(item.AttachmentContentType, MaxAttachmentContentTypeLength),
+            Mentions = []
+        };
 
             if (string.IsNullOrWhiteSpace(payload.Message) && string.IsNullOrWhiteSpace(payload.AttachmentUrl))
             {
@@ -410,6 +415,14 @@ public class ChatHub : Hub
             AttachmentName = payload.AttachmentName,
             AttachmentSize = payload.AttachmentSize,
             AttachmentContentType = payload.AttachmentContentType,
+            Mentions = payload.Mentions
+                .Select(mention => new MessageMentionDto
+                {
+                    UserId = mention.UserId,
+                    Handle = mention.Handle,
+                    DisplayName = mention.DisplayName
+                })
+                .ToList(),
             Timestamp = message.Timestamp,
             IsRead = message.ReadAt.HasValue,
             ReadAt = message.ReadAt,
@@ -652,7 +665,7 @@ public class ChatHub : Hub
 
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
     {
-        if (TryGetDirectMessageParticipantIds(channelId, out var firstUserId, out var secondUserId))
+        if (DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out _))
         {
             return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
         }
@@ -678,6 +691,11 @@ public class ChatHub : Hub
             return false;
         }
 
+        if (firstUserId == secondUserId)
+        {
+            return actorUserId == firstUserId;
+        }
+
         var lowId = Math.Min(firstUserId, secondUserId);
         var highId = Math.Max(firstUserId, secondUserId);
 
@@ -688,7 +706,7 @@ public class ChatHub : Hub
 
     private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)
     {
-        if (!TryGetDirectMessageParticipantIds(channelId, out _, out _))
+        if (!DirectMessageChannels.TryParse(channelId, out _, out _, out _))
         {
             return;
         }
@@ -735,28 +753,58 @@ public class ChatHub : Hub
         });
     }
 
-    private static bool TryGetDirectMessageParticipantIds(string channelId, out int firstUserId, out int secondUserId)
+    private List<ChatMentionPayload> NormalizeMentions(string channelId, List<ChatMentionInput>? mentions)
     {
-        firstUserId = 0;
-        secondUserId = 0;
-
-        var normalizedChannelId = channelId?.Trim() ?? string.Empty;
-        if (!normalizedChannelId.StartsWith(DirectMessageChannelPrefix, StringComparison.OrdinalIgnoreCase))
+        if (mentions is null || mentions.Count == 0)
         {
-            return false;
+            return [];
         }
 
-        var parts = normalizedChannelId.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length != 3)
+        if (DirectMessageChannels.TryParse(channelId, out _, out _, out _))
         {
-            return false;
+            return [];
         }
 
-        return int.TryParse(parts[1], out firstUserId) &&
-               int.TryParse(parts[2], out secondUserId) &&
-               firstUserId > 0 &&
-               secondUserId > 0 &&
-               firstUserId != secondUserId;
+        if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))
+        {
+            return [];
+        }
+
+        var memberLookup = (_serverState.GetSnapshot(serverId)?.Members ?? [])
+            .Where(member => !string.IsNullOrWhiteSpace(member.UserId))
+            .GroupBy(member => member.UserId.Trim(), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => UploadPolicies.TrimToLength(group.First().Name, MaxMentionDisplayNameLength),
+                StringComparer.Ordinal);
+
+        return mentions
+            .Take(MaxMentionsPerMessage)
+            .Select(item =>
+            {
+                var userId = UploadPolicies.TrimToLength(item?.UserId, 64);
+                var handle = NormalizeMentionHandle(item?.Handle);
+
+                return string.IsNullOrWhiteSpace(userId) || !memberLookup.TryGetValue(userId, out var memberName)
+                    ? null
+                    : new ChatMentionPayload
+                    {
+                        UserId = userId,
+                        Handle = handle,
+                        DisplayName = string.IsNullOrWhiteSpace(memberName) ? "User" : memberName
+                    };
+            })
+            .Where(item => item is not null)
+            .GroupBy(item => item!.UserId, StringComparer.Ordinal)
+            .Select(group => group.First()!)
+            .ToList();
+    }
+
+    private static string NormalizeMentionHandle(string? value)
+    {
+        var normalized = UploadPolicies.TrimToLength(value, MaxMentionHandleLength).Trim();
+        normalized = normalized.TrimStart('@');
+        return string.IsNullOrWhiteSpace(normalized) ? string.Empty : normalized;
     }
 }
 
@@ -776,6 +824,7 @@ public class MessageDto
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public List<MessageMentionDto> Mentions { get; set; } = [];
     public DateTime Timestamp { get; set; }
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
@@ -807,6 +856,13 @@ public class MessageReactionUserDto
     public string? AvatarUrl { get; set; }
 }
 
+public class MessageMentionDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Handle { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+}
+
 public class MessageReactionsUpdatedDto
 {
     public int MessageId { get; set; }
@@ -825,6 +881,7 @@ public class ChatMessagePayload
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public List<ChatMentionPayload> Mentions { get; set; } = [];
 }
 
 public class ChatMessageEncryptionEnvelope
@@ -870,4 +927,17 @@ public class ForwardMessageInput
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+}
+
+public class ChatMentionInput
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Handle { get; set; } = string.Empty;
+}
+
+public class ChatMentionPayload
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Handle { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
 }

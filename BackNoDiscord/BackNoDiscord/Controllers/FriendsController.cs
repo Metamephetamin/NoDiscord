@@ -178,8 +178,7 @@ public class FriendsController : ControllerBase
 
     private static string BuildDirectChannelId(int firstUserId, int secondUserId)
     {
-        var (lowId, highId) = NormalizePair(firstUserId, secondUserId);
-        return $"dm:{lowId}:{highId}";
+        return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
     }
 
     private async Task BroadcastFriendListUpdatedAsync(int firstUserId, int secondUserId)

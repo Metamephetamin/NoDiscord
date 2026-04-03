@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import AnimatedAvatar from "./AnimatedAvatar";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/TextChat.css";
 import { API_URL } from "../config/runtime";
@@ -10,6 +11,10 @@ import {
   prepareOutgoingTextEncryption,
 } from "../e2ee/chatEncryption";
 import { authFetch, getStoredToken } from "../utils/auth";
+import { clearChatDraft, readChatDraft, writeChatDraft } from "../utils/chatDrafts";
+import { isDirectMessageChannelId } from "../utils/directMessageChannels";
+import { resolveDirectMessageSoundPath } from "../utils/directMessageSounds";
+import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
@@ -37,7 +42,6 @@ const MESSAGE_REACTION_OPTIONS = [
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
-const isDirectMessageChannelId = (channelId) => String(channelId || "").startsWith("dm:");
 
 function formatFileSize(size) {
   if (!size) {
@@ -385,7 +389,7 @@ function normalizeReactions(reactions) {
     : [];
 }
 
-export default function TextChat({ serverId, channelId, user, resolvedChannelId = "", searchQuery = "", directTargets = [] }) {
+export default function TextChat({ serverId, channelId, user, resolvedChannelId = "", searchQuery = "", directTargets = [], serverMembers = [] }) {
   const [message, setMessage] = useState("");
   const [messagesByChannel, setMessagesByChannel] = useState({});
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -455,7 +459,36 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       attachmentEncryption: messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null,
       encryptionState: decrypted.encryptionState,
       reactions: normalizeReactions(messageItem?.reactions),
+      mentions: Array.isArray(messageItem?.mentions)
+        ? messageItem.mentions
+          .map((mention) => ({
+            userId: String(mention?.userId || ""),
+            handle: String(mention?.handle || ""),
+            displayName: String(mention?.displayName || mention?.handle || "User"),
+          }))
+          .filter((mention) => mention.userId && mention.handle)
+        : [],
     };
+  };
+
+  const playDirectMessageSound = (type) => {
+    if (!isDirectChat) {
+      return;
+    }
+
+    const soundPath = resolveDirectMessageSoundPath(user, type);
+    if (!soundPath) {
+      return;
+    }
+
+    try {
+      const audio = new Audio(soundPath);
+      audio.volume = type === "send" ? 0.34 : 0.4;
+      audio.preload = "auto";
+      audio.play().catch(() => {});
+    } catch {
+      // ignore DM sound failures
+    }
   };
 
   useEffect(() => {
@@ -728,6 +761,23 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     writePinnedMessages(pinnedStorageKey, pinnedMessages);
   }, [pinnedMessages, pinnedStorageKey]);
 
+  useEffect(() => {
+    if (!user || !scopedChannelId) {
+      setMessage("");
+      return;
+    }
+
+    setMessage(readChatDraft(user, scopedChannelId));
+  }, [scopedChannelId, user]);
+
+  useEffect(() => {
+    if (!user || !scopedChannelId) {
+      return;
+    }
+
+    writeChatDraft(user, scopedChannelId, message);
+  }, [message, scopedChannelId, user]);
+
   const ensureChannelJoined = async () => {
     const connection = await startChatConnection();
     if (!connection) {
@@ -777,6 +827,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         });
 
         if (isDirectChat && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
+          playDirectMessageSound("receive");
           chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
         }
       })();
@@ -983,6 +1034,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+    const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers) : [];
 
     try {
       setErrorMessage("");
@@ -1015,6 +1067,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       const payload = attachments.length
         ? attachments.map((attachment, index) => ({
             message: index === 0 ? messageText : "",
+            mentions: index === 0 ? outgoingMentions : [],
             attachmentUrl: attachment.fileUrl || "",
             attachmentName: attachment.fileName || "",
             attachmentSize: attachment.size || null,
@@ -1024,6 +1077,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         : [
             {
               message: messageText,
+              mentions: outgoingMentions,
               attachmentUrl: "",
               attachmentName: "",
               attachmentSize: null,
@@ -1037,8 +1091,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       forceScrollToBottomRef.current = true;
       lastSendAtRef.current = Date.now();
       setMessage("");
+      clearChatDraft(user, scopedChannelId);
       setSelectedFiles([]);
       setIsChannelReady(true);
+      if (isDirectChat) {
+        playDirectMessageSound("send");
+      }
     } catch (error) {
       console.error("SendMessage error:", error);
       joinedChannelRef.current = "";
@@ -1493,6 +1551,22 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
   };
 
+  const renderMessageText = (text, mentions) => (
+    segmentMessageTextByMentions(text, mentions).map((segment, index) => (
+      segment.isMention ? (
+        <span
+          key={`mention-${index}-${segment.userId}`}
+          className={`message-text__mention ${String(segment.userId || "") === currentUserId ? "message-text__mention--self" : ""}`}
+          title={segment.displayName || segment.text}
+        >
+          {segment.text}
+        </span>
+      ) : (
+        <span key={`text-${index}`}>{segment.text}</span>
+      )
+    ))
+  );
+
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
     const normalizedPayload = Array.isArray(payload)
       ? payload.filter((item) => String(item?.message || "").trim() || String(item?.attachmentUrl || "").trim())
@@ -1538,7 +1612,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         item.attachmentSize || null,
         item.attachmentContentType || null,
         preparedTextPayload.encryption || null,
-        item.attachmentEncryption || null
+        item.attachmentEncryption || null,
+        Array.isArray(item.mentions) ? item.mentions : []
       );
 
       if (index < normalizedPayload.length - 1) {
@@ -1733,6 +1808,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             const isResolvedVideoAttachment = String(attachmentContentType).startsWith("video/");
             const reactions = normalizeReactions(messageItem.reactions);
             const messageText = String(messageItem.message || "");
+            const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
             const isOwnMessage =
               String(messageItem.authorUserId || "") === currentUserId ||
               (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase());
@@ -1773,7 +1849,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     <span className="message-select-toggle__mark" aria-hidden="true" />
                   </button>
                 ) : null}
-                <img src={resolveMediaUrl(messageItem.photoUrl, DEFAULT_AVATAR)} alt="avatar" className="msg-avatar" />
+                <AnimatedAvatar src={messageItem.photoUrl} alt="avatar" className="msg-avatar" />
 
                 <div className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""}`}>
                   {!isDirectChat ? (
@@ -1795,7 +1871,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                   {messageText ? (
                     useInlineFooter ? (
                       <div className="message-text-row">
-                        <div className="message-text">{messageText}</div>
+                        <div className="message-text">{renderMessageText(messageText, messageMentions)}</div>
                         <div className={`message-footer message-footer--inline ${isOwnMessage ? "message-footer--own" : ""}`}>
                           <span className="message-time">{formatTime(messageItem.timestamp)}</span>
                           {isOwnMessage ? (
@@ -1807,7 +1883,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                         </div>
                       </div>
                     ) : (
-                      <div className="message-text">{messageText}</div>
+                      <div className="message-text">{renderMessageText(messageText, messageMentions)}</div>
                     )
                   ) : null}
 
@@ -1920,10 +1996,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                                   <span className="message-reaction__count">{reaction.count}</span>
                                   <span className="message-reaction__avatars" aria-hidden="true">
                                     {reaction.users.slice(0, 2).map((reactor) => (
-                                      <img
+                                      <AnimatedAvatar
                                         key={`${reaction.key}-${reactor.userId}`}
                                         className="message-reaction__avatar"
-                                        src={resolveMediaUrl(reactor.avatarUrl, DEFAULT_AVATAR)}
+                                        src={reactor.avatarUrl}
                                         alt={reactor.displayName}
                                       />
                                     ))}
@@ -2148,7 +2224,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       className={`forward-modal__target ${isSelectedTarget ? "forward-modal__target--active" : ""}`}
                       onClick={() => toggleForwardTarget(target.id)}
                     >
-                      <img src={resolveMediaUrl(target.avatar || "", DEFAULT_AVATAR)} alt={getTargetDisplayName(target)} />
+                      <AnimatedAvatar className="forward-modal__target-avatar" src={target.avatar || ""} alt={getTargetDisplayName(target)} />
                       <span className="forward-modal__target-copy">
                         <strong>{getTargetDisplayName(target)}</strong>
                         <small>{target.email || "Без email"}</small>

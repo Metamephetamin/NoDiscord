@@ -151,7 +151,7 @@
   font-size: 13px;
 }
 
-.participant-item img {
+.participant-item__avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;

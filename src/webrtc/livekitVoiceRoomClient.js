@@ -1,6 +1,15 @@
 import * as signalR from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
-import { ExternalE2EEKeyProvider, Room, RoomEvent, Track, isE2EESupported } from "livekit-client";
+import {
+  AudioPresets,
+  ExternalE2EEKeyProvider,
+  Room,
+  RoomEvent,
+  ScreenSharePresets,
+  Track,
+  VideoPreset,
+  isE2EESupported,
+} from "livekit-client";
 import { API_BASE_URL, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION } from "../config/runtime";
 import { ensureDailySharedChannelKey, ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
 import { createVoiceChannelPassphrase, unwrapVoiceChannelPassphrase, wrapVoiceChannelPassphrase } from "../e2ee/voiceEncryption";
@@ -35,6 +44,139 @@ const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
 const AUDIO_SAMPLE_RATE = 48_000;
+const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
+const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
+const VIDEO_ENCODING_PRIORITY = "high";
+const CAMERA_VIDEO_QUALITY_TARGETS = {
+  "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000, 120: 6_200_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000, 120: 10_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 7_500_000, 60: 11_500_000, 120: 16_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000, 120: 30_000_000 } },
+};
+const SCREEN_SHARE_QUALITY_TARGETS = {
+  "720p": { width: 1280, height: 720, bitrate: { 30: 3_500_000, 60: 5_500_000, 120: 8_000_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 6_000_000, 60: 9_500_000, 120: 14_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 9_500_000, 60: 14_500_000, 120: 21_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 16_000_000, 60: 24_000_000, 120: 34_000_000 } },
+};
+
+function normalizePublishFps(value, fallback = 30) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  return Math.max(15, Math.min(Math.round(numericValue), 120));
+}
+
+function resolveBitrate(targets, fps) {
+  if (fps >= 120) {
+    return targets[120];
+  }
+
+  if (fps >= 60) {
+    return targets[60];
+  }
+
+  return targets[30];
+}
+
+function createVideoPresetForQuality({ width, height, maxBitrate, maxFramerate }) {
+  return new VideoPreset(width, height, maxBitrate, maxFramerate, VIDEO_ENCODING_PRIORITY);
+}
+
+function buildVideoEncodingOptions({ width, height, bitrate, fps }) {
+  return {
+    maxBitrate: bitrate,
+    maxFramerate: fps,
+    priority: VIDEO_ENCODING_PRIORITY,
+    width,
+    height,
+  };
+}
+
+function getCameraPublishOptions(resolution = "720p", fps = 30) {
+  const normalizedResolution = CAMERA_VIDEO_QUALITY_TARGETS[resolution] ? resolution : "720p";
+  const normalizedFps = normalizePublishFps(fps, 30);
+  const target = CAMERA_VIDEO_QUALITY_TARGETS[normalizedResolution];
+  const maxBitrate = resolveBitrate(target.bitrate, normalizedFps);
+  const videoEncoding = buildVideoEncodingOptions({
+    width: target.width,
+    height: target.height,
+    bitrate: maxBitrate,
+    fps: normalizedFps,
+  });
+
+  const lowLayer = createVideoPresetForQuality({
+    width: 320,
+    height: Math.max(180, Math.round((320 / target.width) * target.height)),
+    maxBitrate: 180_000,
+    maxFramerate: Math.min(24, normalizedFps),
+  });
+  const mediumLayer = createVideoPresetForQuality({
+    width: 640,
+    height: Math.max(360, Math.round((640 / target.width) * target.height)),
+    maxBitrate: Math.max(500_000, Math.round(maxBitrate * 0.28)),
+    maxFramerate: Math.min(30, normalizedFps),
+  });
+
+  return {
+    simulcast: true,
+    degradationPreference: "maintain-resolution",
+    videoEncoding,
+    videoSimulcastLayers: [lowLayer, mediumLayer],
+  };
+}
+
+function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
+  const normalizedResolution = SCREEN_SHARE_QUALITY_TARGETS[resolution] ? resolution : "1080p";
+  const normalizedFps = normalizePublishFps(fps, 60);
+  const target = SCREEN_SHARE_QUALITY_TARGETS[normalizedResolution];
+  const maxBitrate = resolveBitrate(target.bitrate, normalizedFps);
+  const screenShareEncoding = buildVideoEncodingOptions({
+    width: target.width,
+    height: target.height,
+    bitrate: maxBitrate,
+    fps: normalizedFps,
+  });
+
+  const lowLayer = ScreenSharePresets.h360fps15;
+  const mediumLayer =
+    normalizedResolution === "720p"
+      ? ScreenSharePresets.h720fps15
+      : createVideoPresetForQuality({
+          width: 1280,
+          height: 720,
+          maxBitrate: Math.max(1_200_000, Math.round(maxBitrate * 0.32)),
+          maxFramerate: Math.min(30, normalizedFps),
+        });
+
+  return {
+    simulcast: true,
+    degradationPreference: "maintain-resolution",
+    screenShareEncoding,
+    screenShareSimulcastLayers:
+      normalizedResolution === "720p" ? [lowLayer] : [lowLayer, mediumLayer],
+  };
+}
+
+function getMicrophonePublishOptions() {
+  return {
+    audioPreset: HIGH_QUALITY_MIC_AUDIO_PRESET,
+    dtx: false,
+    red: true,
+    forceStereo: false,
+  };
+}
+
+function getScreenShareAudioPublishOptions() {
+  return {
+    audioPreset: HIGH_QUALITY_SCREEN_AUDIO_PRESET,
+    dtx: false,
+    red: true,
+    forceStereo: true,
+  };
+}
 
 function bytesToBase64(value) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
@@ -292,6 +434,10 @@ export function createVoiceRoomClient({
     localMicSourceStream = await navigator.mediaDevices.getUserMedia({
       audio: getMicConstraints(),
     });
+    const [capturedMicTrack] = localMicSourceStream.getAudioTracks();
+    if (capturedMicTrack) {
+      capturedMicTrack.contentHint = "speech";
+    }
     await emitAudioDevices().catch(() => {});
 
     audioContext = createPreferredAudioContext();
@@ -693,6 +839,7 @@ export function createVoiceRoomClient({
     micPublication = await room.localParticipant.publishTrack(nextTrack, {
       source: Track.Source.Microphone,
       name: MICROPHONE_TRACK_NAME,
+      ...getMicrophonePublishOptions(),
     });
     await applyPublishedAudioState();
   };
@@ -714,6 +861,7 @@ export function createVoiceRoomClient({
       micPublication = await room.localParticipant.publishTrack(nextTrack, {
         source: Track.Source.Microphone,
         name: MICROPHONE_TRACK_NAME,
+        ...getMicrophonePublishOptions(),
       });
     }
 
@@ -1154,16 +1302,20 @@ export function createVoiceRoomClient({
         stopScreenShareInternal().catch((error) => console.error("Failed to stop screen share:", error));
       };
 
+      const screenSharePublishOptions = getScreenSharePublishOptions(resolution, fps);
       localShareVideoPublication = await room.localParticipant.publishTrack(videoTrack, {
         source: Track.Source.ScreenShare,
         name: SCREEN_VIDEO_TRACK_NAME,
+        ...screenSharePublishOptions,
       });
 
       const [audioTrack] = localScreenStream.getAudioTracks();
       if (audioTrack) {
+        audioTrack.contentHint = "music";
         localShareAudioPublication = await room.localParticipant.publishTrack(audioTrack, {
           source: Track.Source.ScreenShareAudio,
           name: SCREEN_AUDIO_TRACK_NAME,
+          ...getScreenShareAudioPublishOptions(),
         });
       }
 
@@ -1204,9 +1356,11 @@ export function createVoiceRoomClient({
         stopScreenShareInternal().catch((error) => console.error("Failed to stop camera share:", error));
       };
 
+      const cameraPublishOptions = getCameraPublishOptions(resolution, fps);
       localShareVideoPublication = await room.localParticipant.publishTrack(cameraTrack, {
         source: Track.Source.Camera,
         name: CAMERA_TRACK_NAME,
+        ...cameraPublishOptions,
       });
 
       localLiveShareMode = "camera";

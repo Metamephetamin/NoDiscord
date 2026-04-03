@@ -504,12 +504,19 @@ async function unwrapFileKeyWithSharedKey(sharedKeyRaw, attachmentEncryption) {
 async function readRemoteAttachmentCipherBytes(attachmentUrl) {
   const resolvedUrl = resolveApiAssetUrl(attachmentUrl);
   if (window?.electronDownloads?.fetchBytes) {
-    const token = getStoredToken();
-    const result = await window.electronDownloads.fetchBytes({
-      url: resolvedUrl,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    return new Uint8Array(result?.bytes || []);
+    try {
+      const token = getStoredToken();
+      const result = await window.electronDownloads.fetchBytes({
+        url: resolvedUrl,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return new Uint8Array(result?.bytes || []);
+    } catch (error) {
+      const message = String(error?.message || error || "");
+      if (!message.includes("downloads:fetch-bytes")) {
+        throw error;
+      }
+    }
   }
 
   const response = await authFetch(resolvedUrl);
@@ -677,12 +684,14 @@ export async function prepareOutgoingAttachmentEncryption({ channelId, user, fil
 
   const sharedKey = await ensureDailySharedChannelKey({ channelId, user, scope: TEXT_SCOPE });
   const fileKeyRaw = randomBytes(32);
+  // Preserve the exact original attachment bytes. Do not transcode or recompress here.
   const fileBytes = new Uint8Array(await file.arrayBuffer());
   const encryptedFile = await encryptWithAesGcm(fileKeyRaw, fileBytes);
   const metadataPayload = {
     name: String(file.name || "file"),
     contentType: String(file.type || "application/octet-stream"),
     size: Number(file.size || fileBytes.byteLength || 0),
+    lastModified: Number(file.lastModified || 0),
   };
   const encryptedMetadata = await encryptWithAesGcm(fileKeyRaw, textEncoder.encode(JSON.stringify(metadataPayload)));
   const wrappedFileKey = await wrapFileKeyWithSharedKey(sharedKey.rawKey, fileKeyRaw);
@@ -736,5 +745,6 @@ export async function decryptIncomingAttachment(messageItem, user, { channelId =
     name: String(metadata?.name || "file"),
     contentType,
     size: Number(metadata?.size || blob.size || 0),
+    lastModified: Number(metadata?.lastModified || 0),
   };
 }

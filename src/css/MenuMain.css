@@ -942,7 +942,7 @@
   color: #ffffff;
 }
 
-.friends-directs__item img {
+.friends-directs__avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -950,11 +950,32 @@
   flex: 0 0 auto;
 }
 
+.friends-directs__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .friends-directs__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.friends-directs__draft,
+.channel-item__draft {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 195, 92, 0.12);
+  color: #ffc35c;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .sidebar-unread-badge {
@@ -1240,7 +1261,7 @@
   min-width: 0;
 }
 
-.friends-results__identity img {
+.friends-results__avatar {
   width: 42px;
   height: 42px;
   border-radius: 50%;
@@ -1311,7 +1332,7 @@
   text-align: left;
 }
 
-.friends-contacts__item img {
+.friends-contacts__avatar {
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -2368,7 +2389,7 @@
   margin-bottom: 18px;
 }
 
-.settings-shell__profile img {
+.settings-shell__profile-avatar {
   width: 60px;
   height: 60px;
   border-radius: 50%;
@@ -2821,6 +2842,12 @@
   box-shadow: 0 20px 44px rgba(0, 0, 0, 0.36);
 }
 
+.voice-settings-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .profile-settings-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3266,7 +3293,7 @@
   padding: 20px;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  background: linear-gradient(180deg, rgba(25, 29, 41, 0.98), rgba(15, 18, 26, 0.98));
+  background: #12151d;
   color: #f8fafc;
   box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45);
   animation: uiModalIn 0.22s ease-out;
@@ -3422,9 +3449,22 @@
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #0b0d12;
   color: #ffffff;
+  color-scheme: dark;
   padding: 10px 12px;
+}
+
+.stream-modal__field select option {
+  background: #050608;
+  color: #f3f6ff;
+}
+
+.stream-modal__field select:focus,
+.stream-modal__field input:focus {
+  border-color: rgba(95, 117, 157, 0.85);
+  box-shadow: 0 0 0 3px rgba(45, 58, 82, 0.38);
+  outline: none;
 }
 
 .stream-modal__check {
@@ -3448,7 +3488,7 @@
   padding: 12px 14px;
   border: 0;
   border-radius: 14px;
-  background: linear-gradient(135deg, #050505 0%, #575757 58%, #dadada 100%);
+  background: #2e3b52;
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
@@ -3457,7 +3497,7 @@
 
 .stream-modal__action:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
 }
 
 .stream-modal__action--danger {
@@ -3475,10 +3515,6 @@
   margin-top: 12px;
   font-size: 13px;
   color: #c8d0e2;
-}
-
-.stream-modal__hint {
-  color: #ffcb80;
 }
 
 .camera-modal {
@@ -3839,5 +3875,9 @@
   .channel-heading {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .voice-settings-field-grid {
+    grid-template-columns: 1fr;
   }
 }

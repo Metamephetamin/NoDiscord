@@ -14,7 +14,6 @@ namespace BackNoDiscord.Controllers;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class E2eeController : ControllerBase
 {
-    private const string DirectMessageChannelPrefix = "dm:";
     private const string TextScope = "text";
     private const string VoiceScope = "voice";
     private readonly AppDbContext _context;
@@ -446,14 +445,16 @@ public class E2eeController : ControllerBase
             return ResolveVoiceChannelParticipantUserIds(channelId, currentUser);
         }
 
-        if (TryGetDirectMessageParticipantIds(channelId, out var firstUserId, out var secondUserId))
+        if (DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out var isSelfChannel))
         {
             if (!CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId))
             {
                 return [];
             }
 
-            return [firstUserId.ToString(), secondUserId.ToString()];
+            return isSelfChannel
+                ? [firstUserId.ToString()]
+                : [firstUserId.ToString(), secondUserId.ToString()];
         }
 
         if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))
@@ -534,6 +535,11 @@ public class E2eeController : ControllerBase
             return false;
         }
 
+        if (firstUserId == secondUserId)
+        {
+            return actorUserId == firstUserId;
+        }
+
         var lowId = Math.Min(firstUserId, secondUserId);
         var highId = Math.Max(firstUserId, secondUserId);
 
@@ -542,27 +548,4 @@ public class E2eeController : ControllerBase
             .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
     }
 
-    private static bool TryGetDirectMessageParticipantIds(string channelId, out int firstUserId, out int secondUserId)
-    {
-        firstUserId = 0;
-        secondUserId = 0;
-
-        var normalizedChannelId = channelId?.Trim() ?? string.Empty;
-        if (!normalizedChannelId.StartsWith(DirectMessageChannelPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var parts = normalizedChannelId.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length != 3)
-        {
-            return false;
-        }
-
-        return int.TryParse(parts[1], out firstUserId) &&
-               int.TryParse(parts[2], out secondUserId) &&
-               firstUserId > 0 &&
-               secondUserId > 0 &&
-               firstUserId != secondUserId;
-    }
 }

@@ -735,6 +735,8 @@ export default function Auth({ onAuthSuccess }) {
             {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт?"}
           </button>
 
+          {mode === "register" ? <div className="auth-beta-note">Beta 0.1</div> : null}
+
           {message ? <p className="auth-message">{message}</p> : null}
         </div>
 

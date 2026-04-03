@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.StaticFiles;
+using System.Buffers.Binary;
 
 namespace BackNoDiscord.Security;
 
@@ -12,8 +13,12 @@ public static class UploadPolicies
         ".jpg",
         ".jpeg",
         ".png",
-        ".webp"
+        ".webp",
+        ".gif",
+        ".mp4"
     };
+
+    private const double MaxAnimatedAvatarDurationSeconds = 15;
 
     private static readonly HashSet<string> AllowedChatExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -97,20 +102,35 @@ public static class UploadPolicies
 
         if (!AllowedAvatarExtensions.Contains(extension))
         {
-            error = "Only JPG, PNG, and WEBP avatars are allowed.";
+            error = "Only JPG, PNG, WEBP, GIF, and MP4 avatars are allowed.";
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(file.ContentType) &&
-            !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && !IsAllowedAvatarContentType(extension, file.ContentType))
         {
-            error = "Avatar must be an image.";
+            error = extension == ".mp4" ? "Avatar must be an MP4 video." : "Avatar must be an image.";
             return false;
         }
 
         if (!HasExpectedFileSignature(file, extension))
         {
             error = "Avatar content does not match the selected file type.";
+            return false;
+        }
+
+        var durationSeconds = 0d;
+        if (extension == ".gif" || extension == ".mp4")
+        {
+            if (!TryGetAnimatedAvatarDurationSeconds(file, extension, out durationSeconds))
+            {
+                error = "Could not determine animated avatar duration.";
+                return false;
+            }
+        }
+
+        if ((extension == ".gif" || extension == ".mp4") && durationSeconds > MaxAnimatedAvatarDurationSeconds)
+        {
+            error = "Animated avatar duration must be less than or equal to 15 seconds.";
             return false;
         }
 
@@ -183,6 +203,177 @@ public static class UploadPolicies
             ".bin" => true,
             _ => false
         };
+    }
+
+    private static bool IsAllowedAvatarContentType(string extension, string contentType)
+    {
+        if (extension == ".mp4")
+        {
+            return string.Equals(contentType, "video/mp4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetAnimatedAvatarDurationSeconds(IFormFile file, string extension, out double durationSeconds)
+    {
+        durationSeconds = 0;
+
+        using var stream = file.OpenReadStream();
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        var bytes = memoryStream.ToArray();
+
+        return extension switch
+        {
+            ".gif" => TryReadGifDuration(bytes, out durationSeconds),
+            ".mp4" => TryReadMp4Duration(bytes, out durationSeconds),
+            _ => false
+        };
+    }
+
+    private static bool TryReadGifDuration(byte[] bytes, out double durationSeconds)
+    {
+        durationSeconds = 0;
+        if (bytes.Length < 14 || !StartsWithAscii(bytes, "GIF87a") && !StartsWithAscii(bytes, "GIF89a"))
+        {
+            return false;
+        }
+
+        var durationCentiseconds = 0;
+        for (var index = 0; index < bytes.Length - 7; index++)
+        {
+            if (bytes[index] == 0x21 &&
+                bytes[index + 1] == 0xF9 &&
+                bytes[index + 2] == 0x04)
+            {
+                durationCentiseconds += bytes[index + 4] | (bytes[index + 5] << 8);
+            }
+        }
+
+        durationSeconds = durationCentiseconds / 100d;
+        return durationCentiseconds > 0;
+    }
+
+    private static bool TryReadMp4Duration(byte[] bytes, out double durationSeconds)
+    {
+        durationSeconds = 0;
+        return TryReadMp4Duration(bytes, 0, bytes.Length, out durationSeconds);
+    }
+
+    private static bool TryReadMp4Duration(byte[] bytes, int start, int length, out double durationSeconds)
+    {
+        durationSeconds = 0;
+        var end = start + length;
+        var offset = start;
+
+        while (offset + 8 <= end)
+        {
+            var atomSize = ReadMp4AtomSize(bytes, offset, end, out var headerSize);
+            if (atomSize <= 0 || offset + atomSize > end)
+            {
+                return false;
+            }
+
+            var atomType = GetAscii(bytes, offset + 4, 4);
+            if (atomType == "moov")
+            {
+                if (TryReadMp4Duration(bytes, offset + headerSize, atomSize - headerSize, out durationSeconds))
+                {
+                    return true;
+                }
+            }
+            else if (atomType == "mvhd")
+            {
+                return TryReadMovieHeaderDuration(bytes, offset + headerSize, atomSize - headerSize, out durationSeconds);
+            }
+
+            offset += atomSize;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadMovieHeaderDuration(byte[] bytes, int offset, int length, out double durationSeconds)
+    {
+        durationSeconds = 0;
+        if (length < 20 || offset + length > bytes.Length)
+        {
+            return false;
+        }
+
+        var version = bytes[offset];
+        if (version == 0)
+        {
+            if (length < 20)
+            {
+                return false;
+            }
+
+            var timescale = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset + 12, 4));
+            var duration = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset + 16, 4));
+            if (timescale == 0 || duration == 0)
+            {
+                return false;
+            }
+
+            durationSeconds = duration / (double)timescale;
+            return true;
+        }
+
+        if (version == 1)
+        {
+            if (length < 32)
+            {
+                return false;
+            }
+
+            var timescale = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset + 20, 4));
+            var duration = BinaryPrimitives.ReadUInt64BigEndian(bytes.AsSpan(offset + 24, 8));
+            if (timescale == 0 || duration == 0)
+            {
+                return false;
+            }
+
+            durationSeconds = duration / (double)timescale;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static int ReadMp4AtomSize(byte[] bytes, int offset, int end, out int headerSize)
+    {
+        headerSize = 8;
+        if (offset + 8 > end)
+        {
+            return 0;
+        }
+
+        var size = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset, 4));
+        if (size == 1)
+        {
+            if (offset + 16 > end)
+            {
+                return 0;
+            }
+
+            headerSize = 16;
+            var extendedSize = BinaryPrimitives.ReadUInt64BigEndian(bytes.AsSpan(offset + 8, 8));
+            return extendedSize > int.MaxValue ? 0 : (int)extendedSize;
+        }
+
+        return size == 0 ? end - offset : (int)size;
+    }
+
+    private static string GetAscii(byte[] bytes, int offset, int count)
+    {
+        if (offset < 0 || count <= 0 || offset + count > bytes.Length)
+        {
+            return string.Empty;
+        }
+
+        return System.Text.Encoding.ASCII.GetString(bytes, offset, count);
     }
 
     private static bool StartsWith(ReadOnlySpan<byte> buffer, params byte[] signature)

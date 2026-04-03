@@ -4,12 +4,16 @@ import TextChat from "./TextChat";
 import ScreenShareButton from "./ScreenShareButton";
 import ScreenShareViewer from "./ScreenShareViewer";
 import ServerInvitesPanel from "./ServerInvitesPanel";
+import AnimatedAvatar from "./AnimatedAvatar";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/MenuMain.css";
 import "../css/MenuProfile.css";
 import "../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
+import {
+  validateAvatarFile,
+} from "../utils/avatarMedia";
 import {
   authFetch,
   getApiErrorMessage,
@@ -20,6 +24,15 @@ import {
   parseApiResponse,
   storeSession,
 } from "../utils/auth";
+import { getChatDraftUpdatedEventName, hasChatDraft } from "../utils/chatDrafts";
+import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
+import {
+  getDirectMessageReceiveSoundStorageKey,
+  getDirectMessageSendSoundStorageKey,
+  getDirectMessageSoundEnabledStorageKey,
+  getDirectMessageSoundOptions,
+} from "../utils/directMessageSounds";
+import { isUserMentioned } from "../utils/messageMentions";
 import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
 import { DEFAULT_AVATAR, DEFAULT_SERVER_ICON, readFileAsDataUrl, resolveMediaUrl } from "../utils/media";
 
@@ -36,9 +49,6 @@ const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 const MAX_PROFILE_NAME_LENGTH = 60;
-const MAX_AVATAR_SIZE_BYTES = 5_000_000;
-const ALLOWED_AVATAR_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
-const ALLOWED_AVATAR_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "# general" },
   { id: "2", name: "# gaming" },
@@ -51,10 +61,9 @@ const DEFAULT_VOICE_CHANNELS = [
   { id: "music-chat", name: "music-chat" },
 ];
 const STREAM_RESOLUTION_OPTIONS = [
-  { value: "720p", label: "HD", description: "1280x720" },
-  { value: "1080p", label: "Full HD", description: "1920x1080" },
-  { value: "1440p", label: "2K", description: "2560x1440" },
-  { value: "2160p", label: "4K", description: "3840x2160" },
+  { value: "720p", label: "720p" },
+  { value: "1080p", label: "1080p" },
+  { value: "1440p", label: "1440p" },
 ];
 const STREAM_FPS_OPTIONS = [
   { value: 30, label: "30 FPS" },
@@ -62,9 +71,9 @@ const STREAM_FPS_OPTIONS = [
   { value: 120, label: "120 FPS" },
 ];
 const NOTIFICATION_SOUND_OPTIONS = [
-  { id: "soft", label: "Мягкий", path: "/sounds/join.mp3" },
-  { id: "pulse", label: "Пульс", path: "/sounds/share.mp3" },
-  { id: "minimal", label: "Минимал", path: "/sounds/leave.mp3" },
+  { id: "soft", label: "Мягкий", path: "/sounds/notification-soft.ogg" },
+  { id: "pulse", label: "Пульс", path: "/sounds/notification-pulse.ogg" },
+  { id: "minimal", label: "Минимал", path: "/sounds/notification-minimal.ogg" },
 ];
 const DEFAULT_SERVER_ROLES = [
   {
@@ -110,6 +119,10 @@ ROLE_PERMISSION_LABELS.deafen_members = "Отключение звука уча�
 ROLE_PERMISSION_LABELS.move_members = "Перемещение участников";
 const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const getDisplayName = (user) => {
+  if (user?.isSelf) {
+    return "С собой";
+  }
+
   const firstName = String(user?.firstName || user?.first_name || "").trim();
   const lastName = String(user?.lastName || user?.last_name || "").trim();
   const fullName = `${firstName} ${lastName}`.trim();
@@ -122,11 +135,6 @@ const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
 const getScopedVoiceChannelId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const isValidProfileName = (value) => /^[\p{L}\p{M}\s'-]+$/u.test(value);
-const getAvatarFileExtension = (fileName) => {
-  const normalizedName = String(fileName || "").toLowerCase().trim();
-  const dotIndex = normalizedName.lastIndexOf(".");
-  return dotIndex >= 0 ? normalizedName.slice(dotIndex) : "";
-};
 const getUserStorageScope = (user) => String(user?.id || user?.email || "guest");
 const sanitizeScopeFragment = (value) =>
   String(value || "")
@@ -435,13 +443,6 @@ const readStoredServers = (user) => {
   }
 };
 const getChannelDisplayName = (name, type) => (type === "text" && !name.startsWith("#") ? `# ${name}` : name);
-const getDirectMessageChannelId = (firstUserId, secondUserId) => {
-  const [lowId, highId] = [String(firstUserId || ""), String(secondUserId || "")]
-    .filter(Boolean)
-    .sort((left, right) => Number(left) - Number(right));
-
-  return lowId && highId ? `dm:${lowId}:${highId}` : "";
-};
 const parseServerChatChannelId = (channelId) => {
   const normalizedChannelId = String(channelId || "").trim();
   const match = /^server:(.+?)::channel:(.+)$/.exec(normalizedChannelId);
@@ -482,11 +483,12 @@ const normalizeFriend = (friend) => ({
   email: String(friend?.email || ""),
   avatar: String(friend?.avatar_url || friend?.avatarUrl || friend?.avatar || ""),
   directChannelId: String(friend?.directChannelId || ""),
+  isSelf: Boolean(friend?.isSelf),
 });
 const UI_SOUND_PATHS = {
-  join: "/sounds/join.mp3",
-  leave: "/sounds/leave.mp3",
-  share: "/sounds/share.mp3",
+  join: "/sounds/discord-voice-join.mp3",
+  leave: "/sounds/discord-voice-leave.mp3",
+  share: "/sounds/ui-share.ogg",
 };
 const FRIENDS_SIDEBAR_ITEMS = [
   { id: "friends", label: "Друзья", icon: "👥" },
@@ -565,6 +567,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [customNotificationSoundData, setCustomNotificationSoundData] = useState("");
   const [customNotificationSoundName, setCustomNotificationSoundName] = useState("");
   const [notificationSoundError, setNotificationSoundError] = useState("");
+  const [directMessageSoundEnabled, setDirectMessageSoundEnabled] = useState(true);
+  const [directMessageSendSoundId, setDirectMessageSendSoundId] = useState(getDirectMessageSoundOptions("send")[0]?.id || "classic");
+  const [directMessageReceiveSoundId, setDirectMessageReceiveSoundId] = useState(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
+  const [chatDraftPresence, setChatDraftPresence] = useState({});
   const [workspaceMode, setWorkspaceMode] = useState("servers");
   const [friendsPageSection, setFriendsPageSection] = useState("friends");
   const [friendsSidebarQuery, setFriendsSidebarQuery] = useState("");
@@ -613,6 +619,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
   const directNotificationsStorageKey = useMemo(() => getDirectNotificationsStorageKey(user), [user?.id, user?.email]);
   const serverNotificationsStorageKey = useMemo(() => getServerNotificationsStorageKey(user), [user?.id, user?.email]);
+  const directMessageSoundEnabledStorageKey = useMemo(() => getDirectMessageSoundEnabledStorageKey(user), [user?.id, user?.email]);
+  const directMessageSendSoundStorageKey = useMemo(() => getDirectMessageSendSoundStorageKey(user), [user?.id, user?.email]);
+  const directMessageReceiveSoundStorageKey = useMemo(() => getDirectMessageReceiveSoundStorageKey(user), [user?.id, user?.email]);
   const notificationSoundEnabledStorageKey = useMemo(() => getNotificationSoundEnabledStorageKey(user), [user?.id, user?.email]);
   const notificationSoundStorageKey = useMemo(() => getNotificationSoundStorageKey(user), [user?.id, user?.email]);
   const notificationSoundCustomDataStorageKey = useMemo(() => getNotificationSoundCustomDataStorageKey(user), [user?.id, user?.email]);
@@ -675,12 +684,31 @@ export default function MenuMain({ user, setUser, onLogout }) {
   }, [currentVoiceChannel, servers]);
   const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
   const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
+  const selfDirectEntry = useMemo(() => {
+    if (!user || !currentUserId) {
+      return null;
+    }
+
+    return normalizeFriend({
+      id: currentUserId,
+      first_name: user?.first_name || user?.firstName || "",
+      last_name: user?.last_name || user?.lastName || "",
+      email: user?.email || "",
+      avatar_url: user?.avatarUrl || user?.avatar || "",
+      directChannelId: buildDirectMessageChannelId(currentUserId, currentUserId),
+      isSelf: true,
+    });
+  }, [currentUserId, user]);
+  const directConversationTargets = useMemo(
+    () => [selfDirectEntry, ...friends].filter(Boolean),
+    [friends, selfDirectEntry]
+  );
   const currentDirectFriend = useMemo(
-    () => friends.find((friend) => String(friend.id) === String(activeDirectFriendId)) || null,
-    [friends, activeDirectFriendId]
+    () => directConversationTargets.find((friend) => String(friend.id) === String(activeDirectFriendId)) || null,
+    [directConversationTargets, activeDirectFriendId]
   );
   const currentDirectChannelId = useMemo(
-    () => currentDirectFriend?.directChannelId || getDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
+    () => currentDirectFriend?.directChannelId || buildDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
     [currentDirectFriend?.directChannelId, currentDirectFriend?.id, currentUserId]
   );
   const serverChannelLookup = useMemo(() => {
@@ -701,14 +729,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const directChannelFriendMap = useMemo(
     () =>
       new Map(
-        friends
+        directConversationTargets
           .map((friend) => {
-            const channelId = friend.directChannelId || getDirectMessageChannelId(currentUserId, friend.id);
+            const channelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
             return channelId ? [channelId, friend] : null;
           })
           .filter(Boolean)
       ),
-    [friends, currentUserId]
+    [currentUserId, directConversationTargets]
   );
   const isDefaultServer = useMemo(() => isPersonalDefaultServer(activeServer, user), [activeServer, user]);
   const isServerOwner = useMemo(() => String(activeServer?.ownerId || "") === String(currentUserId), [activeServer?.ownerId, currentUserId]);
@@ -717,7 +745,6 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const canManageRoles = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_roles"), [activeServer, currentUserId]);
   const canInviteMembers = useMemo(() => hasServerPermission(activeServer, currentUserId, "invite_members"), [activeServer, currentUserId]);
   const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
-  const selectedResolutionOption = useMemo(() => STREAM_RESOLUTION_OPTIONS.find((option) => option.value === resolution) || STREAM_RESOLUTION_OPTIONS[1], [resolution]);
   const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
   const isScreenShareActive = isSharingScreen && localLiveShareMode === "screen";
@@ -755,15 +782,15 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const filteredFriends = useMemo(() => {
     const query = friendsSidebarQuery.trim().toLowerCase();
     if (!query) {
-      return friends;
+      return directConversationTargets;
     }
 
-    return friends.filter((friend) => {
+    return directConversationTargets.filter((friend) => {
       const displayName = getDisplayName(friend).toLowerCase();
       const email = String(friend.email || "").toLowerCase();
       return displayName.includes(query) || email.includes(query);
     });
-  }, [friends, friendsSidebarQuery]);
+  }, [directConversationTargets, friendsSidebarQuery]);
   const notificationSoundOptions = useMemo(() => {
     if (!customNotificationSoundData && notificationSoundId !== "custom") {
       return NOTIFICATION_SOUND_OPTIONS;
@@ -782,6 +809,25 @@ export default function MenuMain({ user, setUser, onLogout }) {
     () => notificationSoundOptions.find((option) => option.id === notificationSoundId) || notificationSoundOptions[0],
     [notificationSoundId, notificationSoundOptions]
   );
+  const directMessageReceiveSoundPath = useMemo(
+    () => getDirectMessageSoundOptions("receive").find((option) => option.id === directMessageReceiveSoundId)?.path || "",
+    [directMessageReceiveSoundId]
+  );
+
+  const playSoundPath = (soundPath, volume = 0.42) => {
+    if (!soundPath) {
+      return;
+    }
+
+    try {
+      const audio = new Audio(soundPath);
+      audio.volume = volume;
+      audio.preload = "auto";
+      audio.play().catch(() => {});
+    } catch {
+      // ignore sound failures
+    }
+  };
 
   const playUiTone = (type) => {
     try {
@@ -808,14 +854,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
       return;
     }
 
-    try {
-      const audio = new Audio(activeNotificationSound.path);
-      audio.volume = 0.42;
-      audio.preload = "auto";
-      audio.play().catch(() => {});
-    } catch {
-      // ignore notification sound failures
+    playSoundPath(activeNotificationSound.path);
+  };
+  const playDirectMessageReceiveSound = () => {
+    if (!directMessageSoundEnabled || !directMessageReceiveSoundPath) {
+      return;
     }
+
+    playSoundPath(directMessageReceiveSoundPath, 0.4);
   };
   const incrementDirectUnread = (channelId) => {
     if (!channelId) {
@@ -1113,7 +1159,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   };
 
   const pushDirectToast = (toast) => {
-    playNotificationSound();
+    playDirectMessageReceiveSound();
     setDirectMessageToasts((previous) => {
       const sameChannelToasts = previous.filter((item) => item.channelId === toast.channelId);
       const groupedCount = sameChannelToasts.reduce((sum, item) => sum + Number(item.count || 1), 0);
@@ -1533,6 +1579,56 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
   useEffect(() => {
     if (!user) {
+      setDirectMessageSoundEnabled(true);
+      return;
+    }
+
+    try {
+      const storedSetting = localStorage.getItem(directMessageSoundEnabledStorageKey);
+      setDirectMessageSoundEnabled(storedSetting !== "false");
+    } catch {
+      setDirectMessageSoundEnabled(true);
+    }
+  }, [directMessageSoundEnabledStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setDirectMessageSendSoundId(getDirectMessageSoundOptions("send")[0]?.id || "classic");
+      return;
+    }
+
+    try {
+      const storedSoundId = localStorage.getItem(directMessageSendSoundStorageKey);
+      setDirectMessageSendSoundId(
+        getDirectMessageSoundOptions("send").some((option) => option.id === storedSoundId)
+          ? storedSoundId
+          : getDirectMessageSoundOptions("send")[0]?.id || "classic"
+      );
+    } catch {
+      setDirectMessageSendSoundId(getDirectMessageSoundOptions("send")[0]?.id || "classic");
+    }
+  }, [directMessageSendSoundStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setDirectMessageReceiveSoundId(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
+      return;
+    }
+
+    try {
+      const storedSoundId = localStorage.getItem(directMessageReceiveSoundStorageKey);
+      setDirectMessageReceiveSoundId(
+        getDirectMessageSoundOptions("receive").some((option) => option.id === storedSoundId)
+          ? storedSoundId
+          : getDirectMessageSoundOptions("receive")[0]?.id || "classic"
+      );
+    } catch {
+      setDirectMessageReceiveSoundId(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
+    }
+  }, [directMessageReceiveSoundStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
       setNotificationSoundId(NOTIFICATION_SOUND_OPTIONS[0].id);
       return;
     }
@@ -1617,6 +1713,42 @@ export default function MenuMain({ user, setUser, onLogout }) {
     }
 
     try {
+      localStorage.setItem(directMessageSoundEnabledStorageKey, String(directMessageSoundEnabled));
+    } catch {
+      // ignore storage failures
+    }
+  }, [directMessageSoundEnabled, directMessageSoundEnabledStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(directMessageSendSoundStorageKey, directMessageSendSoundId);
+    } catch {
+      // ignore storage failures
+    }
+  }, [directMessageSendSoundId, directMessageSendSoundStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(directMessageReceiveSoundStorageKey, directMessageReceiveSoundId);
+    } catch {
+      // ignore storage failures
+    }
+  }, [directMessageReceiveSoundId, directMessageReceiveSoundStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
       localStorage.setItem(notificationSoundStorageKey, notificationSoundId);
     } catch {
       // ignore storage failures
@@ -1660,6 +1792,45 @@ export default function MenuMain({ user, setUser, onLogout }) {
       setNotificationSoundId(NOTIFICATION_SOUND_OPTIONS[0].id);
     }
   }, [customNotificationSoundData, notificationSoundId, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setChatDraftPresence({});
+      return undefined;
+    }
+
+    const refreshDraftPresence = () => {
+      const nextPresence = {};
+
+      directConversationTargets.forEach((target) => {
+        const channelId = String(target?.directChannelId || buildDirectMessageChannelId(currentUserId, target?.id));
+        if (channelId) {
+          nextPresence[channelId] = hasChatDraft(user, channelId);
+        }
+      });
+
+      (servers || []).forEach((server) => {
+        (server.textChannels || []).forEach((channel) => {
+          const scopedChannelId = getScopedChatChannelId(server.id, channel.id);
+          nextPresence[scopedChannelId] = hasChatDraft(user, scopedChannelId);
+        });
+      });
+
+      setChatDraftPresence(nextPresence);
+    };
+
+    const handleStorage = () => refreshDraftPresence();
+    const handleDraftUpdated = () => refreshDraftPresence();
+
+    refreshDraftPresence();
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(getChatDraftUpdatedEventName(), handleDraftUpdated);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(getChatDraftUpdatedEventName(), handleDraftUpdated);
+    };
+  }, [currentUserId, directConversationTargets, servers, user]);
 
   useEffect(() => {
     if (directNotificationsEnabled) {
@@ -1802,8 +1973,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
     }
 
     const desiredChannelIds = new Set(
-      friends
-        .map((friend) => friend.directChannelId || getDirectMessageChannelId(currentUserId, friend.id))
+      directConversationTargets
+        .map((friend) => friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id))
         .filter(Boolean)
     );
 
@@ -1844,7 +2015,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
     };
 
     syncDirectChannels().catch(() => {});
-  }, [chatSyncTick, friends, currentUserId, user]);
+  }, [chatSyncTick, currentUserId, directConversationTargets, user]);
 
   useEffect(() => {
     if (!user) {
@@ -1997,6 +2168,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
         return;
       }
 
+      const currentUserMentioned = isUserMentioned(messageItem?.mentions, currentUserId);
       pushServerToast({
         id: createServerToastId(),
         channelKey: scopedChannelId,
@@ -2006,7 +2178,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
         channelId: channelInfo.channelId,
         channelName: channelInfo.channelName,
         authorName: String(messageItem?.username || "User"),
-        preview: getServerMessagePreview(messageItem),
+        preview: currentUserMentioned
+          ? `Вас упомянули в ${channelInfo.channelName}`
+          : getServerMessagePreview(messageItem),
       });
     };
 
@@ -2858,14 +3032,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
     event.target.value = "";
     if (!file || !user?.id) return;
 
-    const fileExtension = getAvatarFileExtension(file.name);
-    if (!ALLOWED_AVATAR_EXTENSIONS.includes(fileExtension) || (file.type && !ALLOWED_AVATAR_MIME_TYPES.includes(file.type))) {
-      setProfileStatus("Для аватара разрешены только JPG, PNG и WEBP.");
-      return;
-    }
-
-    if (file.size > MAX_AVATAR_SIZE_BYTES) {
-      setProfileStatus("Аватар должен быть не больше 5 МБ.");
+    const avatarValidationError = await validateAvatarFile(file);
+    if (avatarValidationError) {
+      setProfileStatus(avatarValidationError);
       return;
     }
 
@@ -2972,7 +3141,6 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
   if (!user) return <div className="menu-loading">Загрузка пользователя...</div>;
 
-  const activeStreamCount = remoteScreenShares.length + (isSharingScreen ? 1 : 0);
   const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, DEFAULT_AVATAR);
   const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
     if (!sections[item.section]) {
@@ -3023,7 +3191,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
         <form className="profile-settings-form" onSubmit={handleProfileSave}>
           <div className="profile-settings-form__hero">
             <div className="profile-settings-form__avatar-wrap">
-              <img className="profile-settings-form__avatar" src={avatarSrc} alt={getDisplayName(user)} />
+              <AnimatedAvatar className="profile-settings-form__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
               <button type="button" className="settings-inline-button" onClick={() => avatarInputRef.current?.click()}>
                 Сменить аватар
               </button>
@@ -3232,6 +3400,55 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
         <div className="voice-toggle-row">
           <div>
+            <strong>Звуки личных сообщений</strong>
+            <span>Отдельные send/receive звуки для DM в стиле iMessage, без замены серверных уведомлений.</span>
+          </div>
+          <button
+            type="button"
+            className={`voice-switch ${directMessageSoundEnabled ? "voice-switch--active" : ""}`}
+            onClick={() => setDirectMessageSoundEnabled((previous) => !previous)}
+            aria-pressed={directMessageSoundEnabled}
+          >
+            <span />
+          </button>
+        </div>
+
+        <div className="voice-settings-field-grid">
+          <label className="voice-settings-field voice-settings-field--stacked">
+            <span>Отправка в DM</span>
+            <select
+              className="voice-settings-select voice-settings-select--native voice-settings-select--compact"
+              value={directMessageSendSoundId}
+              onChange={(event) => setDirectMessageSendSoundId(event.target.value)}
+              disabled={!directMessageSoundEnabled}
+            >
+              {getDirectMessageSoundOptions("send").map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="voice-settings-field voice-settings-field--stacked">
+            <span>Получение в DM</span>
+            <select
+              className="voice-settings-select voice-settings-select--native voice-settings-select--compact"
+              value={directMessageReceiveSoundId}
+              onChange={(event) => setDirectMessageReceiveSoundId(event.target.value)}
+              disabled={!directMessageSoundEnabled}
+            >
+              {getDirectMessageSoundOptions("receive").map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="voice-toggle-row">
+          <div>
             <strong>Звук уведомлений</strong>
             <span>Оставить визуальные тосты, но включать или выключать их звуковой сигнал отдельно.</span>
           </div>
@@ -3368,7 +3585,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
                 return (
                   <div key={member.userId} className="server-members-panel__item server-members-panel__item--settings">
-                    <img className="server-members-panel__avatar" src={resolveMediaUrl(member.avatar, DEFAULT_AVATAR)} alt={member.name} />
+                    <AnimatedAvatar className="server-members-panel__avatar" src={member.avatar} alt={member.name} />
                     <div className="server-members-panel__meta">
                       <span className="server-members-panel__name">
                         <span className="server-members-panel__role-dot" style={{ backgroundColor: memberRole?.color || "#7b89a8" }} aria-hidden="true" />
@@ -3665,8 +3882,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
       <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
         <div className="profile__identity-row">
           <button type="button" className="profile__identity" onClick={() => openSettingsPanel("personal_profile")}>
-            <img className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={avatarSrc} alt="avatar" />
-            <input type="file" accept="image/*" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
+            <AnimatedAvatar className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={user?.avatarUrl || user?.avatar} alt="avatar" />
+            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
             <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
             <div className="profile__names">
               <span className="profile__username">{getDisplayName(user)}</span>
@@ -3790,8 +4007,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
             {filteredFriends.length ? (
               filteredFriends.map((friend) => (
                 (() => {
-                  const directChannelId = friend.directChannelId || getDirectMessageChannelId(currentUserId, friend.id);
+                  const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
                   const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
+                  const hasDraft = Boolean(chatDraftPresence[directChannelId]);
                   return (
                 <button
                   key={friend.id}
@@ -3799,8 +4017,11 @@ export default function MenuMain({ user, setUser, onLogout }) {
                   className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""}`}
                   onClick={() => openDirectChat(friend.id)}
                 >
-                  <img src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)} alt={getDisplayName(friend)} />
-                  <span className="friends-directs__name">{getDisplayName(friend)}</span>
+                  <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
+                  <span className="friends-directs__meta">
+                    <span className="friends-directs__name">{getDisplayName(friend)}</span>
+                    {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
+                  </span>
                   {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
                 </button>
                   );
@@ -3922,7 +4143,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <ul className="channel-list">
                 {(activeServer?.textChannels || []).map((channel) => {
                   const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
-                  const unreadCount = Number(serverUnreadCounts[getScopedChatChannelId(activeServer?.id || "", channel.id)] || 0);
+                  const scopedChannelId = getScopedChatChannelId(activeServer?.id || "", channel.id);
+                  const unreadCount = Number(serverUnreadCounts[scopedChannelId] || 0);
+                  const hasDraft = Boolean(chatDraftPresence[scopedChannelId]);
                   return (
                     <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
                       {isEditing ? (
@@ -3947,6 +4170,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                       ) : (
                         <button type="button" className="channel-item__button" onClick={() => { setWorkspaceMode("servers"); setCurrentTextChannelId(channel.id); setActiveDirectFriendId(""); }}>
                           <span className="channel-item__label">{getChannelDisplayName(channel.name, "text")}</span>
+                          {hasDraft ? <span className="channel-item__draft">Черновик</span> : null}
                           {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
                         </button>
                       )}
@@ -3994,7 +4218,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                 <h1>{getDisplayName(currentDirectFriend)}</h1>
                 <span className="chat__subtitle">Личный чат между двумя пользователями</span>
               </div>
-              <TextChat resolvedChannelId={currentDirectChannelId} user={user} directTargets={friends} />
+              <TextChat resolvedChannelId={currentDirectChannelId} user={user} directTargets={directConversationTargets} />
             </div>
           ) : friendsPageSection === "friends" ? (
             <div className="friends-main__content">
@@ -4006,7 +4230,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                     {friends.map((friend) => (
                       <div key={friend.id} className="friends-results__item">
                         <div className="friends-results__identity">
-                          <img src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)} alt={getDisplayName(friend)} />
+                          <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
                           <div className="friends-results__meta">
                             <strong>{getDisplayName(friend)}</strong>
                             <span>{friend.email || "Без email"}</span>
@@ -4060,7 +4284,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                   {friendLookupResults.map((friend) => (
                     <div key={friend.id} className="friends-results__item">
                       <div className="friends-results__identity">
-                        <img src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)} alt={getDisplayName(friend)} />
+                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
                         <div className="friends-results__meta">
                           <strong>{getDisplayName(friend)}</strong>
                           <span>{friend.email || "Без email"}</span>
@@ -4096,7 +4320,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
             <div className="friends-contacts__list">
               {activeContacts.map((friend) => (
                 <button key={friend.id} type="button" className="friends-contacts__item" onClick={() => openDirectChat(friend.id)}>
-                  <img src={resolveMediaUrl(friend.avatar || "", DEFAULT_AVATAR)} alt={getDisplayName(friend)} />
+                  <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
                   <span>{getDisplayName(friend)}</span>
                 </button>
               ))}
@@ -4149,7 +4373,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <ScreenShareViewer stream={selectedStream?.stream || null} videoSrc={selectedStream?.videoSrc || ""} imageSrc={selectedStream?.imageSrc || ""} hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)} title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`} subtitle="Просмотр видеопотока участника" onClose={() => setSelectedStreamUserId(null)} debugInfo={selectedStreamDebugInfo} />
         ) : (
           <>
-            {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} searchQuery={channelSearchQuery} directTargets={friends} />}
+            {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} searchQuery={channelSearchQuery} directTargets={directConversationTargets} serverMembers={activeServer?.members || []} />}
           </>
         )}
       </div>
@@ -4196,7 +4420,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <div ref={popupRef} className="settings-popup settings-popup--shell" onClick={(event) => event.stopPropagation()}>
             <aside className="settings-shell__sidebar">
               <div className="settings-shell__profile">
-                <img src={avatarSrc} alt={getDisplayName(user)} />
+                <AnimatedAvatar className="settings-shell__profile-avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
                 <div>
                   <strong>{getDisplayName(user)}</strong>
                   <button type="button" className="settings-shell__profile-link" onClick={() => setSettingsTab("personal_profile")}>
@@ -4302,7 +4526,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <span>Разрешение</span>
               <select value={resolution} onChange={(event) => setResolution(event.target.value)}>
                 {STREAM_RESOLUTION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{`${option.label} | ${option.description}`}</option>
+                  <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </label>
@@ -4318,11 +4542,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
               <input type="checkbox" checked={shareStreamAudio} onChange={(event) => setShareStreamAudio(event.target.checked)} />
               <span>Передавать звук экрана, если система это поддерживает</span>
             </label>
-            <div className="stream-modal__hint">
-              {`${selectedResolutionOption.label} | ${selectedResolutionOption.description} | ${fps} FPS`}
-            </div>
             <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isScreenShareActive} disabled={!currentVoiceChannel} />
-            <div className="stream-modal__status">{activeStreamCount > 0 ? `Активных трансляций: ${activeStreamCount}` : "Сейчас трансляций нет"}</div>
             {!currentVoiceChannel && <div className="stream-modal__hint">Сначала подключитесь к голосовому каналу.</div>}
             {isCameraShareActive ? <div className="stream-modal__hint">Сейчас у вас уже идет трансляция камеры. Запуск экрана заменит ее.</div> : null}
           </div>
@@ -4412,11 +4632,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                   dismissDirectToast(toast.id);
                 }}
               >
-                <img
-                  className="direct-toast__avatar"
-                  src={resolveMediaUrl(getUserAvatar(toast.friend), DEFAULT_AVATAR)}
-                  alt={getDisplayName(toast.friend)}
-                />
+                <AnimatedAvatar className="direct-toast__avatar" src={getUserAvatar(toast.friend)} alt={getDisplayName(toast.friend)} />
                 <span className="direct-toast__content">
                   <span className="direct-toast__title">{getDisplayName(toast.friend)}</span>
                   {toast.grouped ? <span className="direct-toast__subtitle">{`${toast.count} новых сообщений`}</span> : null}

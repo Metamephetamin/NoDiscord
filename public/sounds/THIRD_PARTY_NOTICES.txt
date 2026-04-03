@@ -1,0 +1,18 @@
+Default DM sounds and notification/UI sounds in this folder were derived from:
+
+Kenney - Interface Sounds 1.0
+Source: https://kenney.nl/assets/interface-sounds
+License: CC0 1.0
+License summary: free for personal and commercial use.
+
+Selected mappings in this project:
+- dm-send-classic.ogg <- select_006.ogg
+- dm-send-soft.ogg <- click_005.ogg
+- dm-receive-classic.ogg <- glass_004.ogg
+- dm-receive-soft.ogg <- confirmation_002.ogg
+- notification-soft.ogg <- confirmation_003.ogg
+- notification-pulse.ogg <- glass_005.ogg
+- notification-minimal.ogg <- click_004.ogg
+- ui-join.ogg <- open_003.ogg
+- ui-leave.ogg <- close_002.ogg
+- ui-share.ogg <- switch_004.ogg

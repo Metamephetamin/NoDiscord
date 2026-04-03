@@ -500,6 +500,21 @@
   font-style: normal;
 }
 
+.message-text__mention {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(129, 178, 255, 0.16);
+  color: #bfe0ff;
+  font-weight: 700;
+}
+
+.message-text__mention--self {
+  background: rgba(255, 200, 92, 0.18);
+  color: #ffd278;
+}
+
 .message-text-row {
   margin-top: 4px;
   display: inline-flex;
@@ -1048,7 +1063,7 @@
   box-shadow: 0 0 0 1px rgba(134, 129, 255, 0.26);
 }
 
-.forward-modal__target img {
+.forward-modal__target-avatar {
   width: 44px;
   height: 44px;
   border-radius: 50%;

@@ -26,6 +26,35 @@ public class UploadPoliciesTests
     }
 
     [Fact]
+    public void TryValidateAvatar_AcceptsAnimatedGifWithinDurationLimit()
+    {
+        var bytes = new byte[]
+        {
+            0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
+            0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+            0x21, 0xF9, 0x04, 0x00, 0x0A, 0x00, 0x00, 0x00,
+            0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+            0x02, 0x02, 0x44, 0x01, 0x00,
+            0x3B
+        };
+
+        using var stream = new MemoryStream(bytes);
+        IFormFile file = new FormFile(stream, 0, bytes.Length, "avatar", "avatar.gif")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/gif"
+        };
+
+        var success = UploadPolicies.TryValidateAvatar(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(".gif", extension);
+        Assert.Equal("image/gif", contentType);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
     public void TryValidateChatFile_RejectsDisallowedExtension()
     {
         using var stream = new MemoryStream([1, 2, 3]);

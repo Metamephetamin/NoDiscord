@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import "../css/ListChannels.css";
-import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
+import AnimatedAvatar from "./AnimatedAvatar";
+import { DEFAULT_AVATAR } from "../utils/media";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 
@@ -120,7 +121,7 @@ const VoiceChannelList = ({
                     key={participant.userId}
                     className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}
                   >
-                    <img src={resolveMediaUrl(participant.avatar, DEFAULT_AVATAR)} alt={participant.name} />
+                    <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} />
                     <span className="participant-item__name">{participant.name}</span>
                     <span
                       className="participant-item__role-dot"
