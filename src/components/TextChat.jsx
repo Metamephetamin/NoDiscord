@@ -1,30 +1,37 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/TextChat.css";
 import { API_URL } from "../config/runtime";
-import { authFetch } from "../utils/auth";
+import {
+  decryptIncomingAttachment,
+  decryptIncomingMessageText,
+  ensureE2eeDeviceIdentity,
+  prepareOutgoingAttachmentEncryption,
+  prepareOutgoingTextEncryption,
+} from "../e2ee/chatEncryption";
+import { authFetch, getStoredToken } from "../utils/auth";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MESSAGE_SEND_COOLDOWN_MS = 1500;
 const COMPAT_FORWARD_DELAY_MS = 1600;
 const MESSAGE_REACTION_OPTIONS = [
-  { key: "star", glyph: "⭐", label: "Звезда" },
-  { key: "note", glyph: "✍️", label: "Заметка" },
-  { key: "idea", glyph: "💡", label: "Идея" },
-  { key: "date", glyph: "📅", label: "План" },
-  { key: "fire", glyph: "🔥", label: "Огонь" },
-  { key: "zap", glyph: "⚡", label: "Импульс" },
-  { key: "party", glyph: "🎉", label: "Праздник" },
-  { key: "heart", glyph: "❤️", label: "Сердце" },
-  { key: "eyes", glyph: "👀", label: "Смотрю" },
-  { key: "laugh", glyph: "😂", label: "Смешно" },
-  { key: "wow", glyph: "😮", label: "Удивление" },
-  { key: "cool", glyph: "😎", label: "Круто" },
-  { key: "rocket", glyph: "🚀", label: "Ракета" },
-  { key: "check", glyph: "✅", label: "Готово" },
-  { key: "chat", glyph: "💬", label: "Обсудить" },
-  { key: "music", glyph: "🎧", label: "Вайб" },
+  { key: "star", glyph: "\u2B50", label: "\u0417\u0432\u0435\u0437\u0434\u0430" },
+  { key: "note", glyph: "\u270D\uFE0F", label: "\u0417\u0430\u043C\u0435\u0442\u043A\u0430" },
+  { key: "idea", glyph: "\uD83D\uDCA1", label: "\u0418\u0434\u0435\u044F" },
+  { key: "date", glyph: "\uD83D\uDCC5", label: "\u041F\u043B\u0430\u043D" },
+  { key: "fire", glyph: "\uD83D\uDD25", label: "\u041E\u0433\u043E\u043D\u044C" },
+  { key: "zap", glyph: "\u26A1", label: "\u0418\u043C\u043F\u0443\u043B\u044C\u0441" },
+  { key: "party", glyph: "\uD83C\uDF89", label: "\u041F\u0440\u0430\u0437\u0434\u043D\u0438\u043A" },
+  { key: "heart", glyph: "\u2764\uFE0F", label: "\u0421\u0435\u0440\u0434\u0446\u0435" },
+  { key: "eyes", glyph: "\uD83D\uDC40", label: "\u0421\u043C\u043E\u0442\u0440\u044E" },
+  { key: "laugh", glyph: "\uD83D\uDE02", label: "\u0421\u043C\u0435\u0448\u043D\u043E" },
+  { key: "wow", glyph: "\uD83D\uDE2E", label: "\u0423\u0434\u0438\u0432\u043B\u0435\u043D\u0438\u0435" },
+  { key: "cool", glyph: "\uD83D\uDE0E", label: "\u041A\u0440\u0443\u0442\u043E" },
+  { key: "rocket", glyph: "\uD83D\uDE80", label: "\u0420\u0430\u043A\u0435\u0442\u0430" },
+  { key: "check", glyph: "\u2705", label: "\u0413\u043E\u0442\u043E\u0432\u043E" },
+  { key: "chat", glyph: "\uD83D\uDCAC", label: "\u041E\u0431\u0441\u0443\u0434\u0438\u0442\u044C" },
+  { key: "music", glyph: "\uD83C\uDFA7", label: "\u0412\u0430\u0439\u0431" },
 ];
 
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
@@ -220,7 +227,7 @@ function getMessagePreview(messageItem) {
     return "Видео";
   }
 
-  return String(messageItem?.attachmentName || "Файл").trim() || "Сообщение";
+  return String(messageItem?.attachmentName || "Файл").trim() || "Вложение";
 }
 
 function createPinnedSnapshot(messageItem) {
@@ -313,7 +320,7 @@ function getChatErrorMessage(error, fallbackMessage) {
   }
 
   if (rawMessage.includes("Method does not exist")) {
-    return "Backend ещё не перезапущен после обновления. Перезапустите сервер и повторите действие.";
+    return "Backend ещё не поддерживает новую возможность. Перезапустите сервер и повторите действие.";
   }
 
   if (rawMessage.includes("Forbidden")) {
@@ -331,6 +338,16 @@ function sleep(delayMs) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, delayMs);
   });
+}
+
+function revokeAttachmentObjectUrl(entry) {
+  if (entry?.objectUrl) {
+    try {
+      URL.revokeObjectURL(entry.objectUrl);
+    } catch {
+      // ignore object URL cleanup failures
+    }
+  }
 }
 
 function isMissingHubMethodError(error, methodName) {
@@ -379,10 +396,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
-  const [reactionPickerMessageId, setReactionPickerMessageId] = useState("");
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
+  const [decryptedAttachmentsByMessageId, setDecryptedAttachmentsByMessageId] = useState({});
   const [forwardModal, setForwardModal] = useState({
     open: false,
     messageIds: [],
@@ -394,13 +411,15 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const messagesListRef = useRef(null);
   const textareaRef = useRef(null);
   const contextMenuRef = useRef(null);
-  const inlineReactionPickerRef = useRef(null);
   const mediaPreviewVideoRef = useRef(null);
   const joinedChannelRef = useRef("");
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
   const previousChannelIdRef = useRef("");
   const forceScrollToBottomRef = useRef(false);
+  const pendingInitialScrollChannelRef = useRef("");
+  const decryptingAttachmentIdsRef = useRef(new Set());
+  const decryptedAttachmentsRef = useRef({});
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
@@ -426,6 +445,99 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       .filter((messageItem) => messageIds.has(String(messageItem.id)))
       .sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
   }, [forwardModal.messageIds, messages]);
+
+  const normalizeIncomingMessage = async (messageItem) => {
+    const decrypted = await decryptIncomingMessageText(messageItem, user, { channelId: scopedChannelId });
+    return {
+      ...messageItem,
+      message: decrypted.text,
+      encryption: messageItem?.encryption || messageItem?.Encryption || null,
+      attachmentEncryption: messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null,
+      encryptionState: decrypted.encryptionState,
+      reactions: normalizeReactions(messageItem?.reactions),
+    };
+  };
+
+  useEffect(() => {
+    if (!user?.id) {
+      return undefined;
+    }
+
+    ensureE2eeDeviceIdentity(user).catch((error) => {
+      console.warn("Failed to initialize local E2EE identity:", error);
+    });
+
+    return undefined;
+  }, [user?.id]);
+
+  useEffect(() => {
+    decryptedAttachmentsRef.current = decryptedAttachmentsByMessageId;
+  }, [decryptedAttachmentsByMessageId]);
+
+  useEffect(() => {
+    setDecryptedAttachmentsByMessageId((previous) => {
+      Object.values(previous || {}).forEach(revokeAttachmentObjectUrl);
+      return {};
+    });
+    decryptingAttachmentIdsRef.current.clear();
+  }, [scopedChannelId]);
+
+  useEffect(() => () => {
+    Object.values(decryptedAttachmentsRef.current || {}).forEach(revokeAttachmentObjectUrl);
+  }, []);
+
+  useEffect(() => {
+    if (!messages.length || !user?.id) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const encryptedMessages = messages.filter((messageItem) =>
+      messageItem?.attachmentEncryption && String(messageItem?.attachmentUrl || "").trim());
+
+    encryptedMessages.forEach((messageItem) => {
+      const normalizedMessageId = String(messageItem.id || "");
+      if (!normalizedMessageId
+        || decryptedAttachmentsByMessageId[normalizedMessageId]
+        || decryptingAttachmentIdsRef.current.has(normalizedMessageId)) {
+        return;
+      }
+
+      decryptingAttachmentIdsRef.current.add(normalizedMessageId);
+
+      void (async () => {
+        try {
+          const decryptedAttachment = await decryptIncomingAttachment(messageItem, user, { channelId: scopedChannelId });
+          if (cancelled || !decryptedAttachment) {
+            if (decryptedAttachment?.objectUrl) {
+              revokeAttachmentObjectUrl(decryptedAttachment);
+            }
+            return;
+          }
+
+          setDecryptedAttachmentsByMessageId((previous) => {
+            const existingEntry = previous[normalizedMessageId];
+            if (existingEntry) {
+              revokeAttachmentObjectUrl(existingEntry);
+            }
+
+            return {
+              ...previous,
+              [normalizedMessageId]: decryptedAttachment,
+            };
+          });
+        } catch (error) {
+          console.warn("Failed to decrypt attachment:", error?.message || error);
+        } finally {
+          decryptingAttachmentIdsRef.current.delete(normalizedMessageId);
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [decryptedAttachmentsByMessageId, messages, scopedChannelId, user]);
 
   useEffect(() => {
     const updateFloatingDate = () => {
@@ -471,7 +583,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     };
   }, [messages, scopedChannelId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const list = messagesListRef.current;
     const end = messagesEndRef.current;
     if (!list || !end) {
@@ -484,7 +596,18 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
     if (channelChanged) {
       forceScrollToBottomRef.current = false;
-      end.scrollIntoView({ behavior: "auto", block: "end" });
+      pendingInitialScrollChannelRef.current = scopedChannelId;
+      list.scrollTop = list.scrollHeight;
+      return;
+    }
+
+    if (pendingInitialScrollChannelRef.current === scopedChannelId) {
+      if (messages.length === 0) {
+        return;
+      }
+
+      pendingInitialScrollChannelRef.current = "";
+      list.scrollTop = list.scrollHeight;
       return;
     }
 
@@ -589,34 +712,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   }, [messageContextMenu]);
 
   useEffect(() => {
-    if (!reactionPickerMessageId) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      if (inlineReactionPickerRef.current?.contains(event.target)) {
-        return;
-      }
-
-      setReactionPickerMessageId("");
-    };
-
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setReactionPickerMessageId("");
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [reactionPickerMessageId]);
-
-  useEffect(() => {
     setPinnedMessages(readPinnedMessages(pinnedStorageKey));
     setSelectionMode(false);
     setSelectedMessageIds([]);
@@ -644,16 +739,14 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
+    const normalizedInitialMessages = Array.isArray(initialMessages)
+      ? await Promise.all(initialMessages.map((messageItem) => normalizeIncomingMessage(messageItem)))
+      : [];
     joinedChannelRef.current = scopedChannelId;
     setIsChannelReady(true);
     setMessagesByChannel((previous) => ({
       ...previous,
-      [scopedChannelId]: Array.isArray(initialMessages)
-        ? initialMessages.map((messageItem) => ({
-            ...messageItem,
-            reactions: normalizeReactions(messageItem?.reactions),
-          }))
-        : [],
+      [scopedChannelId]: normalizedInitialMessages,
     }));
 
     if (isDirectChat) {
@@ -675,19 +768,18 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         return;
       }
 
-      const normalizedMessage = {
-        ...nextMessage,
-        reactions: normalizeReactions(nextMessage?.reactions),
-      };
+      void (async () => {
+        const normalizedMessage = await normalizeIncomingMessage(nextMessage);
 
-      setMessagesByChannel((previous) => {
-        const channelMessages = previous[scopedChannelId] || [];
-        return { ...previous, [scopedChannelId]: [...channelMessages, normalizedMessage] };
-      });
+        setMessagesByChannel((previous) => {
+          const channelMessages = previous[scopedChannelId] || [];
+          return { ...previous, [scopedChannelId]: [...channelMessages, normalizedMessage] };
+        });
 
-      if (isDirectChat && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
-        chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
-      }
+        if (isDirectChat && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
+          chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
+        }
+      })();
     };
 
     const handleMessageDeleted = (deletedId) => {
@@ -845,9 +937,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     };
   }, []);
 
-  const uploadAttachment = async (file) => {
+  const uploadAttachment = async ({ blob, fileName = "" }) => {
+    const uploadFile = blob instanceof File
+      ? blob
+      : new File([blob], fileName || "attachment.bin", { type: blob?.type || "application/octet-stream" });
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", uploadFile);
 
     const response = await authFetch(`${API_URL}/api/chat-files/upload`, {
       method: "POST",
@@ -883,7 +978,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     const now = Date.now();
     const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
     if (cooldownLeft > 0) {
-      setErrorMessage("Подождите 1.5 секунды перед следующим сообщением.");
+      setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
       return;
     }
 
@@ -896,14 +991,23 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       let attachments = [];
       if (filesToSend.length) {
         setUploadingFile(true);
-        for (const fileItem of filesToSend) {
-          // Preserve user-selected order so previews and server timestamps stay predictable.
-          const uploaded = await uploadAttachment(fileItem);
+        for (let index = 0; index < filesToSend.length; index += 1) {
+          const fileItem = filesToSend[index];
+          const encryptedAttachment = await prepareOutgoingAttachmentEncryption({
+            channelId: scopedChannelId,
+            user,
+            file: fileItem,
+          });
+          const uploaded = await uploadAttachment({
+            blob: encryptedAttachment.uploadBlob,
+            fileName: `attachment-${Date.now()}-${index}.bin`,
+          });
           attachments.push({
             fileUrl: uploaded?.fileUrl || null,
-            fileName: uploaded?.fileName || fileItem.name || null,
-            size: uploaded?.size || fileItem.size || null,
-            contentType: uploaded?.contentType || fileItem.type || null,
+            fileName: uploaded?.fileName || "attachment.bin",
+            size: uploaded?.size || encryptedAttachment.uploadBlob.size || null,
+            contentType: uploaded?.contentType || "application/octet-stream",
+            attachmentEncryption: encryptedAttachment.attachmentEncryption,
           });
         }
       }
@@ -915,6 +1019,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             attachmentName: attachment.fileName || "",
             attachmentSize: attachment.size || null,
             attachmentContentType: attachment.contentType || "",
+            attachmentEncryption: attachment.attachmentEncryption || null,
           }))
         : [
             {
@@ -923,6 +1028,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               attachmentName: "",
               attachmentSize: null,
               attachmentContentType: "",
+              attachmentEncryption: null,
             },
           ];
 
@@ -964,17 +1070,95 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     if (!validFiles.length) {
-      setErrorMessage("Каждый файл должен быть не больше 100 МБ.");
+      setErrorMessage("Размер файла не должен быть больше 100 МБ.");
       return;
     }
 
     if (hasOversizedFile) {
-      setErrorMessage("Некоторые файлы пропущены: каждый файл должен быть не больше 100 МБ.");
+      setErrorMessage("Некоторые файлы пропущены: размер файла не должен быть больше 100 МБ.");
     } else {
       setErrorMessage("");
     }
 
     setSelectedFiles((previous) => [...previous, ...validFiles]);
+  };
+
+  const buildForwardPayloadForTargetChannel = async (targetChannelId, sourceMessages) => {
+    const payload = [];
+
+    for (const messageItem of sourceMessages.slice(0, MAX_FORWARD_BATCH_SIZE)) {
+      let attachmentPayload = {
+        attachmentUrl: String(messageItem.attachmentUrl || ""),
+        attachmentName: String(messageItem.attachmentName || ""),
+        attachmentSize: messageItem.attachmentSize || null,
+        attachmentContentType: String(messageItem.attachmentContentType || ""),
+        attachmentEncryption: messageItem.attachmentEncryption || null,
+      };
+
+      if (messageItem.attachmentUrl) {
+        let forwardFile = null;
+
+        if (messageItem.attachmentEncryption) {
+          const cachedAttachment = decryptedAttachmentsByMessageId[String(messageItem.id)];
+          const decryptedAttachment = cachedAttachment || await decryptIncomingAttachment(messageItem, user, { channelId: scopedChannelId });
+          if (!decryptedAttachment?.blob) {
+            throw new Error("Не удалось подготовить вложение для пересылки.");
+          }
+
+          forwardFile = new File([decryptedAttachment.blob], decryptedAttachment.name || "file", {
+            type: decryptedAttachment.contentType || "application/octet-stream",
+          });
+
+          if (!cachedAttachment && decryptedAttachment?.objectUrl) {
+            revokeAttachmentObjectUrl(decryptedAttachment);
+          }
+        } else {
+          const sourceUrl = resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl);
+          const response = shouldUseAuthenticatedDownload(sourceUrl)
+            ? await authFetch(sourceUrl)
+            : await fetch(sourceUrl);
+          if (!response.ok) {
+            throw new Error("Не удалось загрузить файл для пересылки.");
+          }
+
+          const blob = await response.blob();
+          forwardFile = new File([blob], messageItem.attachmentName || "file", {
+            type: messageItem.attachmentContentType || blob.type || "application/octet-stream",
+          });
+        }
+
+        const encryptedAttachment = await prepareOutgoingAttachmentEncryption({
+          channelId: targetChannelId,
+          user,
+          file: forwardFile,
+        });
+        const uploaded = await uploadAttachment({
+          blob: encryptedAttachment.uploadBlob,
+          fileName: `attachment-forward-${Date.now()}-${messageItem.id}.bin`,
+        });
+
+        attachmentPayload = {
+          attachmentUrl: uploaded?.fileUrl || "",
+          attachmentName: uploaded?.fileName || "attachment.bin",
+          attachmentSize: uploaded?.size || encryptedAttachment.uploadBlob.size || null,
+          attachmentContentType: uploaded?.contentType || "application/octet-stream",
+          attachmentEncryption: encryptedAttachment.attachmentEncryption,
+        };
+      }
+
+      if (!String(messageItem.message || "").trim() && !attachmentPayload.attachmentUrl) {
+        continue;
+      }
+
+      payload.push({
+        message: String(messageItem.message || ""),
+        forwardedFromUserId: String(messageItem.authorUserId || ""),
+        forwardedFromUsername: String(messageItem.username || ""),
+        ...attachmentPayload,
+      });
+    }
+
+    return payload;
   };
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -1092,7 +1276,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     });
   };
 
-  const openMediaPreview = (type, url, name, contentType = "") => {
+  const openMediaPreview = (type, url, name, contentType = "", messageId = "", attachmentEncryption = null, sourceUrl = "") => {
     if (!url) {
       return;
     }
@@ -1102,13 +1286,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       url,
       name: name || (type === "image" ? "Изображение" : "Видео"),
       contentType,
+      messageId: String(messageId || ""),
+      attachmentEncryption,
+      sourceUrl: sourceUrl || url,
     });
   };
 
   const openMessageContextMenu = (event, messageItem, isOwnMessage) => {
     event.preventDefault();
 
-    const attachmentKind = getAttachmentKind(messageItem);
+    const decryptedAttachment = decryptedAttachmentsByMessageId[String(messageItem?.id || "")];
+    const resolvedAttachmentContentType = decryptedAttachment?.contentType || messageItem?.attachmentContentType || "";
+    const attachmentKind = resolvedAttachmentContentType.startsWith("image/")
+      ? "image"
+      : resolvedAttachmentContentType.startsWith("video/")
+        ? "video"
+        : messageItem?.attachmentUrl
+          ? "file"
+          : "";
     const hasAttachment = Boolean(messageItem?.attachmentUrl);
     const hasText = Boolean(String(messageItem?.message || messageItem?.attachmentName || "").trim());
     const enabledActionCount = 6 + (hasAttachment ? 1 : 0);
@@ -1125,11 +1320,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       x: Math.max(padding, nextX),
       y: Math.max(padding, nextY),
       messageId: messageItem.id,
-      text: String(messageItem.message || messageItem.attachmentName || "").trim(),
+      text: String(messageItem.message || decryptedAttachment?.name || messageItem.attachmentName || "").trim(),
       attachmentKind,
-      attachmentUrl: messageItem?.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : "",
-      attachmentName: messageItem?.attachmentName || "",
-      attachmentContentType: messageItem?.attachmentContentType || "",
+      attachmentUrl: decryptedAttachment?.objectUrl || (messageItem?.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : ""),
+      attachmentSourceUrl: messageItem?.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : "",
+      attachmentName: decryptedAttachment?.name || messageItem?.attachmentName || "",
+      attachmentContentType: resolvedAttachmentContentType,
+      attachmentEncryption: messageItem?.attachmentEncryption || null,
       hasAttachment,
       hasText,
       isPinned: pinnedMessageIdSet.has(String(messageItem.id)),
@@ -1146,7 +1343,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       await navigator.clipboard.writeText(messageContextMenu.text);
       setErrorMessage("");
     } catch {
-      setErrorMessage("Не удалось скопировать текст сообщения.");
+      setErrorMessage("Не удалось скопировать текст в буфер обмена.");
     } finally {
       setMessageContextMenu(null);
     }
@@ -1175,24 +1372,71 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
     try {
       setErrorMessage("");
-
-      const requestUrl = attachment.attachmentUrl;
-      const response = shouldUseAuthenticatedDownload(requestUrl)
-        ? await authFetch(requestUrl)
-        : await fetch(requestUrl);
-
-      if (!response.ok) {
-        throw new Error("Не удалось загрузить файл для скачивания.");
-      }
-
-      const resolvedContentType = response.headers.get("content-type") || attachment.attachmentContentType || "";
-      const fileName = buildDownloadFileName({
+      const sourceAttachmentUrl = attachment.attachmentSourceUrl || attachment.attachmentUrl;
+      let resolvedContentType = attachment.attachmentContentType || "";
+      let fileName = buildDownloadFileName({
         type: attachment.attachmentKind,
-        url: requestUrl,
+        url: sourceAttachmentUrl,
         name: attachment.attachmentName,
         contentType: resolvedContentType,
       });
-      const fileBytes = new Uint8Array(await response.arrayBuffer());
+      let fileBytes = null;
+
+      if (attachment?.attachmentEncryption) {
+        const cachedAttachment = decryptedAttachmentsByMessageId[String(attachment?.messageId || "")];
+        const decryptedAttachment = cachedAttachment || await decryptIncomingAttachment(attachment, user, { channelId: scopedChannelId });
+        if (!decryptedAttachment?.blob) {
+          throw new Error("Не удалось расшифровать файл.");
+        }
+
+        if (!cachedAttachment && decryptedAttachment?.objectUrl) {
+          revokeAttachmentObjectUrl(decryptedAttachment);
+        }
+
+        resolvedContentType = decryptedAttachment.contentType || resolvedContentType;
+        fileName = buildDownloadFileName({
+          type: attachment.attachmentKind,
+          url: sourceAttachmentUrl,
+          name: decryptedAttachment.name || attachment.attachmentName,
+          contentType: resolvedContentType,
+        });
+        fileBytes = new Uint8Array(await decryptedAttachment.blob.arrayBuffer());
+      } else {
+        const requestUrl = sourceAttachmentUrl;
+
+        if (window?.electronDownloads?.fetchAndSave) {
+          const headers = shouldUseAuthenticatedDownload(requestUrl) && getStoredToken()
+            ? { Authorization: `Bearer ${getStoredToken()}` }
+            : {};
+          const result = await window.electronDownloads.fetchAndSave({
+            url: requestUrl,
+            defaultFileName: fileName,
+            headers,
+          });
+
+          if (!result?.canceled) {
+            setMessageContextMenu(null);
+          }
+          return;
+        }
+
+        const response = shouldUseAuthenticatedDownload(requestUrl)
+          ? await authFetch(requestUrl)
+          : await fetch(requestUrl);
+
+        if (!response.ok) {
+          throw new Error("Не удалось загрузить файл для скачивания.");
+        }
+
+        resolvedContentType = response.headers.get("content-type") || attachment.attachmentContentType || "";
+        fileName = buildDownloadFileName({
+          type: attachment.attachmentKind,
+          url: requestUrl,
+          name: attachment.attachmentName,
+          contentType: resolvedContentType,
+        });
+        fileBytes = new Uint8Array(await response.arrayBuffer());
+      }
 
       if (window?.electronDownloads?.saveFile) {
         const result = await window.electronDownloads.saveFile({
@@ -1224,10 +1468,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       setErrorMessage("");
       await chatConnection.invoke("ToggleReaction", messageId, reactionOption.key, reactionOption.glyph);
       setMessageContextMenu(null);
-      setReactionPickerMessageId("");
     } catch (error) {
       console.error("ToggleReaction error:", error);
-      setErrorMessage(getChatErrorMessage(error, "Не удалось добавить реакцию."));
+      setErrorMessage(getChatErrorMessage(error, "Не удалось поставить реакцию."));
     }
   };
 
@@ -1259,7 +1502,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       throw new Error("Нет данных для отправки.");
     }
 
-    if (allowBatch && normalizedPayload.length > 1) {
+    const containsTextPayload = normalizedPayload.some((item) => String(item?.message || "").trim());
+
+    if (allowBatch && normalizedPayload.length > 1 && !containsTextPayload) {
       try {
         await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, normalizedPayload);
         return;
@@ -1272,17 +1517,28 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
     for (let index = 0; index < normalizedPayload.length; index += 1) {
       const item = normalizedPayload[index];
+      const preparedTextPayload = await prepareOutgoingTextEncryption({
+        channelId: targetChannelId,
+        user,
+        text: String(item.message || ""),
+      });
+
+      if (preparedTextPayload.reason) {
+        console.warn("E2EE fallback:", preparedTextPayload.reason);
+      }
 
       await chatConnection.invoke(
         "SendMessage",
         targetChannelId,
         getUserName(user),
-        String(item.message || ""),
+        preparedTextPayload.message,
         avatar,
         item.attachmentUrl || null,
         item.attachmentName || null,
         item.attachmentSize || null,
-        item.attachmentContentType || null
+        item.attachmentContentType || null,
+        preparedTextPayload.encryption || null,
+        item.attachmentEncryption || null
       );
 
       if (index < normalizedPayload.length - 1) {
@@ -1293,7 +1549,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   const handleForwardSubmit = async () => {
     if (!forwardModal.targetIds.length) {
-      setErrorMessage("Выберите хотя бы одного получателя.");
+      setErrorMessage("Выберите хотя бы один чат получателя.");
       return;
     }
 
@@ -1312,22 +1568,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       }
 
       const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
-      const payload = forwardableMessages
-        .slice(0, MAX_FORWARD_BATCH_SIZE)
-        .map((messageItem) => ({
-          message: String(messageItem.message || ""),
-          forwardedFromUserId: String(messageItem.authorUserId || ""),
-          forwardedFromUsername: String(messageItem.username || ""),
-          attachmentUrl: String(messageItem.attachmentUrl || ""),
-          attachmentName: String(messageItem.attachmentName || ""),
-          attachmentSize: messageItem.attachmentSize || null,
-          attachmentContentType: String(messageItem.attachmentContentType || ""),
-        }))
-        .filter((messageItem) => messageItem.message.trim() || messageItem.attachmentUrl);
-
-      if (!payload.length) {
-        throw new Error("Нет данных для пересылки.");
-      }
 
       const targetChannels = directTargets
         .filter((target) => forwardModal.targetIds.some((targetId) => String(target.id) === String(targetId)))
@@ -1338,11 +1578,16 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         .filter((target) => target.channelId);
 
       if (!targetChannels.length) {
-        throw new Error("Не удалось определить канал получателя.");
+        throw new Error("Не удалось определить чаты получателей.");
       }
 
       for (const target of targetChannels) {
-        await sendMessagesCompat(target.channelId, avatar, payload);
+        const payload = await buildForwardPayloadForTargetChannel(target.channelId, forwardableMessages);
+        if (!payload.length) {
+          throw new Error("Нет данных для пересылки.");
+        }
+
+        await sendMessagesCompat(target.channelId, avatar, payload, { allowBatch: false });
       }
 
       if (selectionMode) {
@@ -1358,7 +1603,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   };
 
   const contextMenuActions = [
-    { id: "reply", label: "Ответить", icon: "↩", disabled: true, hidden: false, onClick: () => {} },
+    { id: "reply", label: "Ответить", icon: "?", disabled: true, hidden: false, onClick: () => {} },
     {
       id: "pin",
       label: messageContextMenu?.isPinned ? "Открепить" : "Закрепить",
@@ -1375,15 +1620,15 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     {
       id: "download",
       label: getDownloadLabel(messageContextMenu?.attachmentKind),
-      icon: "↓",
+      icon: "v",
       disabled: !messageContextMenu?.hasAttachment,
       hidden: !messageContextMenu?.hasAttachment,
       onClick: () => handleDownloadAttachment(),
     },
-    { id: "copy", label: "Копировать текст", icon: "⎘", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
-    { id: "forward", label: "Переслать", icon: "↪", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
+    { id: "copy", label: "Копировать текст", icon: "?", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
+    { id: "forward", label: "Переслать", icon: "?", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
     { id: "delete", label: "Удалить", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
-    { id: "select", label: "Выбрать", icon: "✓", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
+    { id: "select", label: "Выбрать", icon: "?", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
   ].filter((action) => !action.hidden);
 
   return (
@@ -1391,8 +1636,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       {normalizedSearchQuery.length >= 2 ? (
         <div className="message-search-panel">
           <div className="message-search-panel__header">
-            <strong>Результаты поиска</strong>
-            <span>{searchResults.length ? `${searchResults.length} найдено` : "Совпадений нет"}</span>
+            <strong>Найденные сообщения</strong>
+            <span>{searchResults.length ? `${searchResults.length} совпадений` : "Совпадений нет"}</span>
           </div>
           {searchResults.length ? (
             <div className="message-search-panel__list">
@@ -1405,7 +1650,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               ))}
             </div>
           ) : (
-            <div className="message-search-panel__empty">В текущем канале ничего не найдено.</div>
+            <div className="message-search-panel__empty">В текущем чате ничего не найдено.</div>
           )}
         </div>
       ) : null}
@@ -1438,7 +1683,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                   }}
                   aria-label="Открепить сообщение"
                 >
-                  ×
+                  ?
                 </button>
               </div>
             ))}
@@ -1450,7 +1695,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         <div className="chat-selection-bar">
           <div className="chat-selection-bar__copy">
             <strong>{selectedMessageIds.length || 0}</strong>
-            <span>сообщений выбрано</span>
+            <span>Выбрано сообщений</span>
           </div>
           <div className="chat-selection-bar__actions">
             <button
@@ -1473,9 +1718,19 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
         <div ref={messagesListRef} className="messages-list">
           {messages.map((messageItem) => {
-            const attachmentUrl = messageItem.attachmentUrl
-              ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)
-              : "";
+            const attachmentView = decryptedAttachmentsByMessageId[String(messageItem.id)] || null;
+            const attachmentUrl = attachmentView?.objectUrl || (
+              messageItem.attachmentEncryption
+                ? ""
+                : messageItem.attachmentUrl
+                  ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)
+                  : ""
+            );
+            const attachmentName = attachmentView?.name || messageItem.attachmentName || "";
+            const attachmentContentType = attachmentView?.contentType || messageItem.attachmentContentType || "";
+            const attachmentSize = attachmentView?.size || messageItem.attachmentSize || null;
+            const isResolvedImageAttachment = String(attachmentContentType).startsWith("image/");
+            const isResolvedVideoAttachment = String(attachmentContentType).startsWith("video/");
             const reactions = normalizeReactions(messageItem.reactions);
             const messageText = String(messageItem.message || "");
             const isOwnMessage =
@@ -1485,6 +1740,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             const useInlineFooter = isDirectChat
               && Boolean(messageText.trim())
               && !attachmentUrl
+              && !messageItem.attachmentEncryption
               && !reactions.length
               && !messageItem.forwardedFromUsername
               && !messageText.includes("\n")
@@ -1556,7 +1812,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                   ) : null}
 
                   {attachmentUrl ? (
-                    isImageAttachment(messageItem) ? (
+                    isResolvedImageAttachment ? (
                       <button
                         type="button"
                         className="message-media message-media--button"
@@ -1568,13 +1824,21 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                             return;
                           }
 
-                          openMediaPreview("image", attachmentUrl, messageItem.attachmentName, messageItem.attachmentContentType);
+                          openMediaPreview(
+                            "image",
+                            attachmentUrl,
+                            attachmentName,
+                            attachmentContentType,
+                            messageItem.id,
+                            messageItem.attachmentEncryption,
+                            messageItem.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : attachmentUrl
+                          );
                         }}
-                        aria-label={`Открыть изображение ${messageItem.attachmentName || ""}`.trim()}
+                        aria-label={`Открыть изображение ${attachmentName || ""}`.trim()}
                       >
-                        <img className="message-media__image" src={attachmentUrl} alt={messageItem.attachmentName || "image"} />
+                        <img className="message-media__image" src={attachmentUrl} alt={attachmentName || "image"} />
                       </button>
-                    ) : isVideoAttachment(messageItem) ? (
+                    ) : isResolvedVideoAttachment ? (
                       <button
                         type="button"
                         className="message-media message-media--video message-media--button"
@@ -1586,9 +1850,17 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                             return;
                           }
 
-                          openMediaPreview("video", attachmentUrl, messageItem.attachmentName, messageItem.attachmentContentType);
+                          openMediaPreview(
+                            "video",
+                            attachmentUrl,
+                            attachmentName,
+                            attachmentContentType,
+                            messageItem.id,
+                            messageItem.attachmentEncryption,
+                            messageItem.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : attachmentUrl
+                          );
                         }}
-                        aria-label={`Открыть видео ${messageItem.attachmentName || ""}`.trim()}
+                        aria-label={`Открыть видео ${attachmentName || ""}`.trim()}
                       >
                         <video className="message-media__video" src={attachmentUrl} preload="metadata" playsInline muted />
                         <span className="message-media__play" aria-hidden="true" />
@@ -1611,11 +1883,19 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       >
                         <span className="message-attachment__icon" aria-hidden="true" />
                         <span className="message-attachment__meta">
-                          <span className="message-attachment__name">{messageItem.attachmentName || "Файл"}</span>
-                          <span className="message-attachment__size">{formatFileSize(messageItem.attachmentSize)}</span>
+                          <span className="message-attachment__name">{attachmentName || "Файл"}</span>
+                          <span className="message-attachment__size">{formatFileSize(attachmentSize)}</span>
                         </span>
                       </a>
                     )
+                  ) : messageItem.attachmentEncryption ? (
+                    <div className="message-attachment message-attachment--pending">
+                      <span className="message-attachment__icon" aria-hidden="true" />
+                      <span className="message-attachment__meta">
+                        <span className="message-attachment__name">Зашифрованный файл</span>
+                        <span className="message-attachment__size">Расшифровывается автоматически</span>
+                      </span>
+                    </div>
                   ) : null}
 
                   {((isDirectChat && !useInlineFooter) || reactions.length) ? (
@@ -1653,43 +1933,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                             })}
                           </div>
 
-                          <button
-                            type="button"
-                            className={`message-reactions__more ${reactionPickerMessageId === String(messageItem.id) ? "message-reactions__more--active" : ""}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setReactionPickerMessageId((current) => (current === String(messageItem.id) ? "" : String(messageItem.id)));
-                            }}
-                            aria-label="Открыть список реакций"
-                          >
-                            <span className="message-reactions__more-icon" aria-hidden="true">⌄</span>
-                          </button>
-
-                          {reactionPickerMessageId === String(messageItem.id) ? (
-                            <div ref={inlineReactionPickerRef} className="message-inline-reaction-picker">
-                              {MESSAGE_REACTION_OPTIONS.map((reactionOption) => {
-                                const isActive = reactions.some((reaction) =>
-                                  reaction.key === reactionOption.key
-                                  && reaction.reactorUserIds.some((userId) => String(userId) === currentUserId));
-
-                                return (
-                                  <button
-                                    key={`${messageItem.id}-${reactionOption.key}`}
-                                    type="button"
-                                    className={`message-inline-reaction-picker__item ${isActive ? "message-inline-reaction-picker__item--active" : ""}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleToggleReaction(messageItem.id, reactionOption);
-                                    }}
-                                    aria-label={reactionOption.label}
-                                    title={reactionOption.label}
-                                  >
-                                    <span aria-hidden="true">{reactionOption.glyph}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : null}
                         </div>
                       ) : (
                         <span />
@@ -1739,7 +1982,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
           <div className="input-area__controls">
             <div className="message-composer">
-              <label className="attach-button" aria-label="Добавить файл" title="Добавить файл">
+              <label className="attach-button" aria-label="Прикрепить файл" title="Прикрепить файл">
                 <input type="file" className="attach-button__input" onChange={handleFileChange} disabled={uploadingFile} multiple />
                 <span className="attach-button__icon" aria-hidden="true" />
               </label>
@@ -1748,7 +1991,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 value={message}
                 disabled={uploadingFile}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder={uploadingFile ? "Загружаем вложение..." : "Введите сообщение..."}
+                placeholder={uploadingFile ? "Загружаем вложения..." : "Введите сообщение..."}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -1762,7 +2005,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       </div>
 
       {!isChannelReady && scopedChannelId ? (
-        <div className="chat-error">Чат переподключается. Если это личка, попробуйте отправить ещё раз через секунду.</div>
+        <div className="chat-error">Чат инициализируется. Если это не пройдёт, попробуйте переподключиться или ещё раз открыть диалог.</div>
       ) : null}
       {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
 
@@ -1782,8 +2025,11 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     handleDownloadAttachment({
                       attachmentKind: mediaPreview.type,
                       attachmentUrl: mediaPreview.url,
+                      attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
                       attachmentName: mediaPreview.name,
                       attachmentContentType: mediaPreview.contentType || "",
+                      attachmentEncryption: mediaPreview.attachmentEncryption || null,
+                      messageId: mediaPreview.messageId || "",
                     })
                   }
                 >
@@ -1876,10 +2122,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             <div className="forward-modal__header">
               <div>
                 <h3>Переслать сообщения</h3>
-                <p>{forwardableMessages.length} {forwardableMessages.length === 1 ? "сообщение" : "сообщений"} будет отправлено выбранным друзьям</p>
+                <p>{forwardableMessages.length} {forwardableMessages.length === 1 ? "сообщение" : "сообщения"} можно переслать выбранным друзьям</p>
               </div>
               <button type="button" className="forward-modal__close" onClick={closeForwardModal} aria-label="Закрыть">
-                ×
+                ?
               </button>
             </div>
 
@@ -1888,7 +2134,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               type="text"
               value={forwardModal.query}
               onChange={(event) => setForwardModal((previous) => ({ ...previous, query: event.target.value }))}
-              placeholder="Найти друга"
+              placeholder="Поиск друзей"
             />
 
             <div className="forward-modal__list">
@@ -1905,7 +2151,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       <img src={resolveMediaUrl(target.avatar || "", DEFAULT_AVATAR)} alt={getTargetDisplayName(target)} />
                       <span className="forward-modal__target-copy">
                         <strong>{getTargetDisplayName(target)}</strong>
-                        <small>{target.email || "Личный чат"}</small>
+                        <small>{target.email || "Без email"}</small>
                       </span>
                     </button>
                   );
@@ -1920,7 +2166,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 Отмена
               </button>
               <button type="button" className="forward-modal__button" onClick={handleForwardSubmit} disabled={!forwardModal.targetIds.length || !forwardableMessages.length || forwardModal.submitting}>
-                {forwardModal.submitting ? "Пересылаем..." : "Переслать"}
+                {forwardModal.submitting ? "Отправляем..." : "Переслать"}
               </button>
             </div>
           </div>
@@ -1929,4 +2175,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     </div>
   );
 }
+
+
 

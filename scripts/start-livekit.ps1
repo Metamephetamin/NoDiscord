@@ -4,6 +4,7 @@ $projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $keysFile = Join-Path $projectRoot "src\livekit\livekit-keys.txt"
 $bundledBinary = Join-Path $projectRoot "src\livekit\livekit-server.exe"
 $envFile = Join-Path $projectRoot ".env"
+$configFile = Join-Path $projectRoot "src\livekit\config.local.yaml"
 
 function Import-DotEnv {
     param([string]$Path)
@@ -42,7 +43,7 @@ if ($livekitCommand) {
 } elseif (Test-Path $bundledBinary) {
     $livekitExecutable = $bundledBinary
 } else {
-    Write-Error "livekit-server не найден. Установите его в PATH или положите livekit-server.exe в src\livekit\."
+    Write-Error "livekit-server not found. Install it into PATH or place livekit-server.exe in src\\livekit\\."
 }
 
 if (-not $env:LIVEKIT_KEYS) {
@@ -50,9 +51,13 @@ if (-not $env:LIVEKIT_KEYS) {
         $keyPair = (Get-Content $keysFile | Select-Object -First 1).Trim()
         $env:LIVEKIT_KEYS = ($keyPair -replace ":\s+", ": ")
     } else {
-        Write-Error "LIVEKIT_KEYS не задан. Укажите его в .env или переменных окружения."
+        Write-Error "LIVEKIT_KEYS is missing. Set it in .env or in the process environment."
     }
 }
 
-Write-Host "Starting LiveKit without Docker on ws://127.0.0.1:7880"
-& $livekitExecutable "--dev" "--bind" "0.0.0.0"
+if (-not (Test-Path $configFile)) {
+    Write-Error "LiveKit config file not found: $configFile"
+}
+
+Write-Host "Starting LiveKit with config $configFile on ws://127.0.0.1:7880"
+& $livekitExecutable "--config" "$configFile"

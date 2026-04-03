@@ -7,6 +7,8 @@
   "scripts": {
     "start": "electron-forge start",
     "start:backend": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-backend.ps1",
+    "start:livekit": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-livekit.ps1",
+    "start:livekit:docker": "docker compose --env-file .env -f src/livekit/docker-compose.yml up -d --force-recreate",
     "build": "npm run build:frontend",
     "build:frontend": "vite build --config vite.renderer.config.mjs",
     "package": "electron-forge package",
@@ -49,6 +51,7 @@
     "axios": "^1.13.1",
     "electron-squirrel-startup": "^1.0.1",
     "howler": "^2.2.4",
+    "livekit-client": "^2.18.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-player": "^3.4.0",

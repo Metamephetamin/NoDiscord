@@ -89,14 +89,92 @@
 }
 
 .auth-brand__name {
-  color: #ffffff;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 3.45ch;
+  width: 3.45ch;
   font-size: clamp(40px, 4.5vw, 72px);
-  font-weight: 400;
   line-height: 0.92;
   letter-spacing: 0.05em;
+  text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow: 0 18px 44px rgba(9, 18, 34, 0.34);
+  contain: layout paint;
+}
+
+.auth-brand__name-base,
+.auth-brand__name-overlay {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: inherit;
+  white-space: inherit;
+}
+
+.auth-brand__name-base {
+  position: relative;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow:
+    0 18px 44px rgba(9, 18, 34, 0.34),
+    0 0 14px rgba(255, 255, 255, 0.2);
+}
+
+.auth-brand__name-overlay {
+  pointer-events: none;
+  font-family: var(--font-slogan);
+  font-weight: 400;
+  color: #ffffff;
+  opacity: 0;
+  mix-blend-mode: screen;
+  text-shadow:
+    0 18px 44px rgba(9, 18, 34, 0.34),
+    0 0 14px rgba(255, 255, 255, 0.18);
+}
+
+.auth-brand__name-overlay--glitch {
+  animation: authMaxGlitchCore 4.8s steps(2, end) infinite;
+}
+
+.auth-brand__name-overlay--glitch::before,
+.auth-brand__name-overlay--glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: inherit;
+  white-space: inherit;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.auth-brand__name-overlay--glitch::before {
+  color: rgba(255, 64, 145, 0.92);
+  transform: translate(0.032em, -0.016em);
+  clip-path: polygon(0 2%, 100% 0, 100% 39%, 0 46%);
+  text-shadow: -0.03em 0 0 rgba(255, 72, 154, 0.95);
+  opacity: 0;
+  animation: authMaxGlitchTop 4.8s steps(2, end) infinite;
+}
+
+.auth-brand__name-overlay--glitch::after {
+  color: rgba(74, 199, 255, 0.94);
+  transform: translate(-0.036em, 0.024em);
+  clip-path: polygon(0 54%, 100% 48%, 100% 100%, 0 96%);
+  text-shadow: 0.03em 0 0 rgba(74, 199, 255, 0.95);
+  opacity: 0;
+  animation: authMaxGlitchBottom 4.8s steps(2, end) infinite;
 }
 
 .auth-brand__title {
@@ -106,8 +184,10 @@
   align-items: center;
   gap: 0.24em;
   font-size: clamp(34px, 4.1vw, 68px);
-  font-weight: 400;
+  font-family: var(--font-heading);
+  font-weight: 700;
   line-height: 0.94;
+  letter-spacing: 0.015em;
   max-width: none;
   white-space: nowrap;
   text-shadow: 0 16px 40px rgba(9, 18, 34, 0.28);
@@ -158,12 +238,8 @@
 }
 
 .auth-brand__title::before {
-  content: "— за нами светлое будущее";
-  display: block;
-  color: #ffffff;
-  font-size: clamp(34px, 4.1vw, 68px);
-  font-weight: 800;
-  line-height: 0.96;
+  content: '';
+  display: none;
 }
 
 .auth-card {
@@ -203,7 +279,10 @@
   margin: 0;
   color: #172133;
   font-size: 30px;
-  font-weight: 800;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .auth-subtitle {
@@ -499,7 +578,7 @@
 }
 
 .auth-brand__title::before {
-  content: none;
+  content: '';
   display: none;
 }
 
@@ -679,6 +758,124 @@
   }
 }
 
+@keyframes authMaxGlitchCore {
+  0%,
+  72%,
+  100% {
+    font-family: var(--font-heading);
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+    filter: none;
+  }
+
+  76% {
+    font-family: var(--font-slogan);
+    opacity: 0.92;
+    transform: translate3d(-0.008em, 0.004em, 0);
+    filter: saturate(1.08);
+  }
+
+  78% {
+    font-family: var(--font-slogan);
+    opacity: 1;
+    transform: translate3d(0.012em, -0.005em, 0);
+    filter: contrast(1.08);
+  }
+
+  80% {
+    font-family: var(--font-slogan);
+    opacity: 0.94;
+    transform: translate3d(-0.014em, 0.008em, 0);
+    filter: saturate(1.12);
+  }
+
+  84% {
+    font-family: var(--font-slogan);
+    opacity: 0.7;
+    transform: translate3d(0.01em, -0.004em, 0);
+  }
+
+  86% {
+    font-family: var(--font-slogan);
+    opacity: 0.52;
+    transform: translate3d(-0.014em, 0.008em, 0);
+  }
+
+  88% {
+    font-family: var(--font-slogan);
+    opacity: 0.28;
+    transform: translate3d(0.012em, -0.008em, 0);
+  }
+}
+
+@keyframes authMaxGlitchTop {
+  0%,
+  72%,
+  100% {
+    transform: translate(0.032em, -0.016em);
+    opacity: 0;
+  }
+
+  76% {
+    transform: translate(-0.042em, 0.022em);
+    opacity: 0.76;
+  }
+
+  78% {
+    transform: translate(0.048em, -0.028em);
+    opacity: 0.92;
+  }
+
+  80% {
+    transform: translate(-0.03em, 0.018em);
+    opacity: 0.64;
+  }
+
+  84% {
+    transform: translate(0.026em, -0.014em);
+    opacity: 0.48;
+  }
+
+  88% {
+    transform: translate(-0.018em, 0.01em);
+    opacity: 0.3;
+  }
+}
+
+@keyframes authMaxGlitchBottom {
+  0%,
+  72%,
+  100% {
+    transform: translate(-0.036em, 0.024em);
+    opacity: 0;
+  }
+
+  76% {
+    transform: translate(0.04em, -0.018em);
+    opacity: 0.78;
+  }
+
+  78% {
+    transform: translate(-0.05em, 0.03em);
+    opacity: 0.92;
+  }
+
+  80% {
+    transform: translate(0.034em, -0.02em);
+    opacity: 0.66;
+  }
+
+  84% {
+    transform: translate(-0.024em, 0.016em);
+    opacity: 0.46;
+  }
+
+  88% {
+    transform: translate(0.016em, -0.01em);
+    opacity: 0.28;
+  }
+}
+
 @media (max-width: 1120px) {
   .auth-page {
     --auth-card-shift-x: 2px;
@@ -729,8 +926,9 @@
   }
 
   .auth-brand__title::before {
-    font-size: clamp(28px, 8vw, 48px);
-  }
+  content: '';
+  display: none;
+}
 
   .auth-grid--triple {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -776,8 +974,9 @@
   }
 
   .auth-brand__title::before {
-    font-size: clamp(22px, 7vw, 34px);
-  }
+  content: '';
+  display: none;
+}
 
   .auth-card {
     gap: 18px;

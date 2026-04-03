@@ -26,6 +26,7 @@ public static class UploadPolicies
         ".pdf",
         ".txt",
         ".md",
+        ".bin",
         ".zip",
         ".rar",
         ".7z",
@@ -179,6 +180,7 @@ public static class UploadPolicies
             ".mp4" => HasAsciiAt(header, 4, "ftyp"),
             ".webm" => StartsWith(header, 0x1A, 0x45, 0xDF, 0xA3),
             ".txt" or ".md" => LooksLikeText(header),
+            ".bin" => true,
             _ => false
         };
     }

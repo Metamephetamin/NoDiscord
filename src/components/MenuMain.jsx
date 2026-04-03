@@ -9,6 +9,7 @@ import "../css/MenuMain.css";
 import "../css/MenuProfile.css";
 import "../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../config/runtime";
+import { ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
 import {
   authFetch,
   getApiErrorMessage,
@@ -2133,6 +2134,13 @@ export default function MenuMain({ user, setUser, onLogout }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    ensureE2eeDeviceIdentity(user).catch((error) => {
+      console.warn("Failed to initialize local E2EE identity:", error);
+    });
+    return undefined;
+  }, [user?.id]);
   useEffect(() => {
     if (!user?.id) return undefined;
     const client = createVoiceRoomClient({

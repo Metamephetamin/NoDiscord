@@ -8,10 +8,12 @@ if (started) {
 }
 
 const SESSION_STORE_FILE_NAME = "session.secure.json";
+const SECURE_KEY_VALUE_STORE_FILE_NAME = "secure-store.json";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 
 const getSessionStorePath = () => path.join(app.getPath("userData"), SESSION_STORE_FILE_NAME);
+const getSecureKeyValueStorePath = () => path.join(app.getPath("userData"), SECURE_KEY_VALUE_STORE_FILE_NAME);
 
 const readSecureSession = async () => {
   try {
@@ -56,6 +58,49 @@ const clearSecureSession = async () => {
     // ignore missing secure store
   }
 };
+
+const readSecureObjectFile = async (targetPath) => {
+  try {
+    const raw = await fs.readFile(targetPath, "utf8");
+    if (!raw.trim()) {
+      return {};
+    }
+
+    const payload = JSON.parse(raw);
+    if (payload?.encrypted && safeStorage.isEncryptionAvailable()) {
+      const decrypted = safeStorage.decryptString(Buffer.from(payload.encrypted, "base64"));
+      const parsed = JSON.parse(decrypted);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    }
+
+    const plain = payload?.plain;
+    return plain && typeof plain === "object" && !Array.isArray(plain) ? plain : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeSecureObjectFile = async (targetPath, value) => {
+  const directory = path.dirname(targetPath);
+  await fs.mkdir(directory, { recursive: true });
+  const normalizedValue = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(JSON.stringify(normalizedValue));
+    await fs.writeFile(
+      targetPath,
+      JSON.stringify({ encrypted: encrypted.toString("base64") }),
+      "utf8"
+    );
+    return;
+  }
+
+  await fs.writeFile(targetPath, JSON.stringify({ plain: normalizedValue }), "utf8");
+};
+
+const readSecureKeyValueStore = async () => readSecureObjectFile(getSecureKeyValueStorePath());
+
+const writeSecureKeyValueStore = async (value) => writeSecureObjectFile(getSecureKeyValueStorePath(), value);
 
 const isSafeExternalUrl = (value) => {
   try {
@@ -139,6 +184,37 @@ app.whenReady().then(() => {
     await clearSecureSession();
     return true;
   });
+  ipcMain.handle("secure-store:get", async (_event, key) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) {
+      return null;
+    }
+
+    const secureStore = await readSecureKeyValueStore();
+    return secureStore[normalizedKey] ?? null;
+  });
+  ipcMain.handle("secure-store:set", async (_event, key, value) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) {
+      return false;
+    }
+
+    const secureStore = await readSecureKeyValueStore();
+    secureStore[normalizedKey] = value ?? null;
+    await writeSecureKeyValueStore(secureStore);
+    return true;
+  });
+  ipcMain.handle("secure-store:remove", async (_event, key) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) {
+      return false;
+    }
+
+    const secureStore = await readSecureKeyValueStore();
+    delete secureStore[normalizedKey];
+    await writeSecureKeyValueStore(secureStore);
+    return true;
+  });
 
   ipcMain.handle("desktop-capturer:get-sources", async () => {
     const sources = await desktopCapturer.getSources({
@@ -194,6 +270,71 @@ app.whenReady().then(() => {
 
     await fs.writeFile(filePath, buffer);
     return { canceled: false, filePath };
+  });
+  ipcMain.handle("downloads:fetch-and-save", async (_event, payload) => {
+    const sourceUrl = String(payload?.url || "").trim();
+    if (!sourceUrl) {
+      throw new Error("No download URL provided.");
+    }
+
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(payload?.headers || {})) {
+      const normalizedKey = String(key || "").trim();
+      const normalizedValue = String(value || "").trim();
+      if (normalizedKey && normalizedValue) {
+        headers.set(normalizedKey, normalizedValue);
+      }
+    }
+
+    const response = await fetch(sourceUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Download request failed with status ${response.status}.`);
+    }
+
+    const fileName = sanitizeDownloadFileName(payload?.defaultFileName);
+    const targetPath = path.join(app.getPath("downloads"), fileName);
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: "РЎРѕС…СЂР°РЅРёС‚СЊ С„Р°Р№Р»",
+      defaultPath: targetPath,
+      buttonLabel: "РЎРєР°С‡Р°С‚СЊ",
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true, filePath: "" };
+    }
+
+    const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+    await fs.writeFile(filePath, buffer);
+    return {
+      canceled: false,
+      filePath,
+      contentType: response.headers.get("content-type") || "",
+    };
+  });
+  ipcMain.handle("downloads:fetch-bytes", async (_event, payload) => {
+    const sourceUrl = String(payload?.url || "").trim();
+    if (!sourceUrl) {
+      throw new Error("No download URL provided.");
+    }
+
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(payload?.headers || {})) {
+      const normalizedKey = String(key || "").trim();
+      const normalizedValue = String(value || "").trim();
+      if (normalizedKey && normalizedValue) {
+        headers.set(normalizedKey, normalizedValue);
+      }
+    }
+
+    const response = await fetch(sourceUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Download request failed with status ${response.status}.`);
+    }
+
+    return {
+      contentType: response.headers.get("content-type") || "",
+      bytes: Array.from(new Uint8Array(await response.arrayBuffer())),
+    };
   });
 
   if (typeof session.defaultSession.setDisplayMediaRequestHandler === "function") {

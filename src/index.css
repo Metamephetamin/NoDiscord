@@ -149,13 +149,13 @@ h6,
 }
 
 .auth-brand__title {
-  font-family: var(--font-slogan);
-  font-weight: 400;
+  font-family: var(--font-heading);
+  font-weight: 700;
 }
 
 .auth-brand__name {
-  font-family: var(--font-slogan);
-  font-weight: 400;
+  font-family: var(--font-heading);
+  font-weight: 700;
 }
 
 .app-loader {

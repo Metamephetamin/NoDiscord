@@ -45,7 +45,9 @@ public class ChatHub : Hub
         string? attachmentUrl = null,
         string? attachmentName = null,
         long? attachmentSize = null,
-        string? attachmentContentType = null)
+        string? attachmentContentType = null,
+        ChatMessageEncryptionEnvelope? encryption = null,
+        ChatAttachmentEncryptionEnvelope? attachmentEncryption = null)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -73,6 +75,8 @@ public class ChatHub : Hub
         {
             AuthorUserId = currentUser.UserId,
             Message = UploadPolicies.TrimToLength(message, MaxMessageLength),
+            Encryption = NormalizeEncryptionEnvelope(encryption),
+            AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(attachmentEncryption),
             AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(attachmentUrl, "/chat-files/"),
             AttachmentName = string.IsNullOrWhiteSpace(attachmentUrl)
                 ? null
@@ -81,7 +85,9 @@ public class ChatHub : Hub
             AttachmentContentType = UploadPolicies.TrimToLength(attachmentContentType, MaxAttachmentContentTypeLength)
         };
 
-        if (string.IsNullOrWhiteSpace(payload.Message) && string.IsNullOrWhiteSpace(payload.AttachmentUrl))
+        if (string.IsNullOrWhiteSpace(payload.Message) &&
+            payload.Encryption is null &&
+            string.IsNullOrWhiteSpace(payload.AttachmentUrl))
         {
             throw new HubException("message or attachment is required");
         }
@@ -162,6 +168,7 @@ public class ChatHub : Hub
                 Message = UploadPolicies.TrimToLength(item.Message, MaxMessageLength),
                 ForwardedFromUserId = UploadPolicies.TrimToLength(item.ForwardedFromUserId, 64),
                 ForwardedFromUsername = UploadPolicies.TrimToLength(item.ForwardedFromUsername, 160),
+                AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(item.AttachmentEncryption),
                 AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(item.AttachmentUrl, "/chat-files/"),
                 AttachmentName = string.IsNullOrWhiteSpace(item.AttachmentUrl)
                     ? null
@@ -394,9 +401,11 @@ public class ChatHub : Hub
             AuthorUserId = payload.AuthorUserId,
             Username = message.Username,
             Message = payload.Message,
+            Encryption = payload.Encryption,
             ForwardedFromUserId = payload.ForwardedFromUserId,
             ForwardedFromUsername = payload.ForwardedFromUsername,
             PhotoUrl = message.PhotoUrl,
+            AttachmentEncryption = payload.AttachmentEncryption,
             AttachmentUrl = payload.AttachmentUrl,
             AttachmentName = payload.AttachmentName,
             AttachmentSize = payload.AttachmentSize,
@@ -412,6 +421,99 @@ public class ChatHub : Hub
     private static string SerializePayload(ChatMessagePayload payload)
     {
         return $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
+    }
+
+    private static ChatMessageEncryptionEnvelope? NormalizeEncryptionEnvelope(ChatMessageEncryptionEnvelope? encryption)
+    {
+        if (encryption is null)
+        {
+            return null;
+        }
+
+        var version = UploadPolicies.TrimToLength(encryption.Version, 24);
+        var algorithm = UploadPolicies.TrimToLength(encryption.Algorithm, 32);
+        var curve = UploadPolicies.TrimToLength(encryption.Curve, 32);
+        var senderFingerprint = UploadPolicies.TrimToLength(encryption.SenderFingerprint, 128);
+        var senderPublicKeyJwk = UploadPolicies.TrimToLength(encryption.SenderPublicKeyJwk, 4096);
+        var iv = UploadPolicies.TrimToLength(encryption.Iv, 256);
+        var ciphertext = UploadPolicies.TrimToLength(encryption.Ciphertext, 32768);
+        var recipients = (encryption.Recipients ?? [])
+            .Select(item => new ChatMessageEncryptionRecipient
+            {
+                UserId = UploadPolicies.TrimToLength(item.UserId, 64),
+                KeyFingerprint = UploadPolicies.TrimToLength(item.KeyFingerprint, 128),
+                WrapIv = UploadPolicies.TrimToLength(item.WrapIv, 256),
+                WrappedKey = UploadPolicies.TrimToLength(item.WrappedKey, 2048)
+            })
+            .Where(item =>
+                !string.IsNullOrWhiteSpace(item.UserId) &&
+                !string.IsNullOrWhiteSpace(item.WrapIv) &&
+                !string.IsNullOrWhiteSpace(item.WrappedKey))
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(version) ||
+            string.IsNullOrWhiteSpace(algorithm) ||
+            string.IsNullOrWhiteSpace(iv) ||
+            string.IsNullOrWhiteSpace(ciphertext) ||
+            (string.IsNullOrWhiteSpace(senderPublicKeyJwk) && string.IsNullOrWhiteSpace(UploadPolicies.TrimToLength(encryption.SharedKeyId, 256))) ||
+            (recipients.Count == 0 && string.IsNullOrWhiteSpace(UploadPolicies.TrimToLength(encryption.SharedKeyId, 256))))
+        {
+            return null;
+        }
+
+        return new ChatMessageEncryptionEnvelope
+        {
+            Version = version,
+            Algorithm = algorithm,
+            Curve = curve,
+            SenderFingerprint = senderFingerprint,
+            SenderPublicKeyJwk = senderPublicKeyJwk,
+            SharedKeyId = UploadPolicies.TrimToLength(encryption.SharedKeyId, 256),
+            Iv = iv,
+            Ciphertext = ciphertext,
+            Recipients = recipients
+        };
+    }
+
+    private static ChatAttachmentEncryptionEnvelope? NormalizeAttachmentEncryptionEnvelope(ChatAttachmentEncryptionEnvelope? encryption)
+    {
+        if (encryption is null)
+        {
+            return null;
+        }
+
+        var version = UploadPolicies.TrimToLength(encryption.Version, 24);
+        var algorithm = UploadPolicies.TrimToLength(encryption.Algorithm, 32);
+        var sharedKeyId = UploadPolicies.TrimToLength(encryption.SharedKeyId, 256);
+        var keyWrapIv = UploadPolicies.TrimToLength(encryption.KeyWrapIv, 256);
+        var wrappedFileKey = UploadPolicies.TrimToLength(encryption.WrappedFileKey, 2048);
+        var fileIv = UploadPolicies.TrimToLength(encryption.FileIv, 256);
+        var metadataIv = UploadPolicies.TrimToLength(encryption.MetadataIv, 256);
+        var metadataCiphertext = UploadPolicies.TrimToLength(encryption.MetadataCiphertext, 4096);
+
+        if (string.IsNullOrWhiteSpace(version) ||
+            string.IsNullOrWhiteSpace(algorithm) ||
+            string.IsNullOrWhiteSpace(sharedKeyId) ||
+            string.IsNullOrWhiteSpace(keyWrapIv) ||
+            string.IsNullOrWhiteSpace(wrappedFileKey) ||
+            string.IsNullOrWhiteSpace(fileIv) ||
+            string.IsNullOrWhiteSpace(metadataIv) ||
+            string.IsNullOrWhiteSpace(metadataCiphertext))
+        {
+            return null;
+        }
+
+        return new ChatAttachmentEncryptionEnvelope
+        {
+            Version = version,
+            Algorithm = algorithm,
+            SharedKeyId = sharedKeyId,
+            KeyWrapIv = keyWrapIv,
+            WrappedFileKey = wrappedFileKey,
+            FileIv = fileIv,
+            MetadataIv = metadataIv,
+            MetadataCiphertext = metadataCiphertext
+        };
     }
 
     private static ChatMessagePayload DeserializePayload(string raw)
@@ -665,6 +767,8 @@ public class MessageDto
     public string AuthorUserId { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public ChatMessageEncryptionEnvelope? Encryption { get; set; }
+    public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? ForwardedFromUserId { get; set; }
     public string? ForwardedFromUsername { get; set; }
     public string? PhotoUrl { get; set; }
@@ -713,6 +817,8 @@ public class ChatMessagePayload
 {
     public string AuthorUserId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public ChatMessageEncryptionEnvelope? Encryption { get; set; }
+    public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? ForwardedFromUserId { get; set; }
     public string? ForwardedFromUsername { get; set; }
     public string? AttachmentUrl { get; set; }
@@ -721,11 +827,45 @@ public class ChatMessagePayload
     public string? AttachmentContentType { get; set; }
 }
 
+public class ChatMessageEncryptionEnvelope
+{
+    public string Version { get; set; } = string.Empty;
+    public string Algorithm { get; set; } = string.Empty;
+    public string Curve { get; set; } = string.Empty;
+    public string SenderFingerprint { get; set; } = string.Empty;
+    public string SenderPublicKeyJwk { get; set; } = string.Empty;
+    public string SharedKeyId { get; set; } = string.Empty;
+    public string Iv { get; set; } = string.Empty;
+    public string Ciphertext { get; set; } = string.Empty;
+    public List<ChatMessageEncryptionRecipient> Recipients { get; set; } = [];
+}
+
+public class ChatAttachmentEncryptionEnvelope
+{
+    public string Version { get; set; } = string.Empty;
+    public string Algorithm { get; set; } = string.Empty;
+    public string SharedKeyId { get; set; } = string.Empty;
+    public string KeyWrapIv { get; set; } = string.Empty;
+    public string WrappedFileKey { get; set; } = string.Empty;
+    public string FileIv { get; set; } = string.Empty;
+    public string MetadataIv { get; set; } = string.Empty;
+    public string MetadataCiphertext { get; set; } = string.Empty;
+}
+
+public class ChatMessageEncryptionRecipient
+{
+    public string UserId { get; set; } = string.Empty;
+    public string KeyFingerprint { get; set; } = string.Empty;
+    public string WrapIv { get; set; } = string.Empty;
+    public string WrappedKey { get; set; } = string.Empty;
+}
+
 public class ForwardMessageInput
 {
     public string Message { get; set; } = string.Empty;
     public string? ForwardedFromUserId { get; set; }
     public string? ForwardedFromUsername { get; set; }
+    public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }

@@ -28,13 +28,21 @@ public class VoiceController : ControllerBase
         public string UserId { get; set; } = string.Empty;
     }
 
+    public class LiveKitSessionDto
+    {
+        public string Channel { get; set; } = string.Empty;
+        public string? Avatar { get; set; }
+    }
+
     private readonly ChannelService _channels;
     private readonly IHubContext<VoiceHub> _hub;
+    private readonly ILiveKitTokenService _liveKitTokenService;
 
-    public VoiceController(ChannelService channels, IHubContext<VoiceHub> hub)
+    public VoiceController(ChannelService channels, IHubContext<VoiceHub> hub, ILiveKitTokenService liveKitTokenService)
     {
         _channels = channels;
         _hub = hub;
+        _liveKitTokenService = liveKitTokenService;
     }
 
     [HttpPost("join")]
@@ -93,5 +101,58 @@ public class VoiceController : ControllerBase
 
         await _hub.Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         return Ok();
+    }
+
+    [HttpPost("livekit-session")]
+    public IActionResult CreateLiveKitSession([FromBody] LiveKitSessionDto dto)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        if (!TryAuthorizeChannel(dto.Channel, currentUser, out var normalizedChannel))
+        {
+            return Forbid();
+        }
+
+        var avatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(dto.Avatar, "/avatars/");
+        var session = _liveKitTokenService.CreateVoiceSession(normalizedChannel, currentUser, avatarUrl);
+
+        return Ok(new
+        {
+            roomName = session.RoomName,
+            serverUrl = session.ServerUrl,
+            participantToken = session.ParticipantToken,
+            participantIdentity = session.ParticipantIdentity,
+            participantName = session.ParticipantName,
+            metadata = session.MetadataJson,
+            expiresAt = session.ExpiresAtUtc
+        });
+    }
+
+    private bool TryAuthorizeChannel(string? rawChannelName, AuthenticatedUser currentUser, out string normalizedChannel)
+    {
+        normalizedChannel = UploadPolicies.TrimToLength(rawChannelName, 160);
+        if (string.IsNullOrWhiteSpace(normalizedChannel))
+        {
+            return false;
+        }
+
+        if (!ServerChannelAuthorization.TryGetServerIdFromVoiceChannelName(normalizedChannel, out var serverId))
+        {
+            return false;
+        }
+
+        var currentUserSnapshot = new AuthenticatedUser(
+            currentUser.UserId,
+            currentUser.Email,
+            currentUser.FirstName,
+            currentUser.LastName);
+        var serverSnapshot = HttpContext.RequestServices
+            .GetRequiredService<ServerStateService>()
+            .GetSnapshot(serverId);
+
+        return ServerChannelAuthorization.CanAccessServer(serverId, currentUserSnapshot, serverSnapshot);
     }
 }

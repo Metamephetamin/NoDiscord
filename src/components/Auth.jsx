@@ -583,7 +583,12 @@ export default function Auth({ onAuthSuccess }) {
           <img className="auth-brand__logo" src="/image/image.png" alt="MAX" />
         </div>
         <div className="auth-brand__copy">
-          <span className="auth-brand__name">MAX</span>
+          <span className="auth-brand__name">
+            <span className="auth-brand__name-base">MAX</span>
+            <span className="auth-brand__name-overlay auth-brand__name-overlay--glitch" data-text="MAX" aria-hidden="true">
+              MAX
+            </span>
+          </span>
           <h1 className="auth-brand__title">
             <span className="auth-brand__title-static">- симум возможностей для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">

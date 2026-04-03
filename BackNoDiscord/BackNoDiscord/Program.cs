@@ -38,22 +38,23 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
 });
 
+static bool IsAllowedFrontendOrigin(string? origin)
+{
+    if (string.IsNullOrWhiteSpace(origin) || origin == "null")
+    {
+        return true;
+    }
+
+    return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+           && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase));
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin =>
-              {
-                  if (string.IsNullOrWhiteSpace(origin) || origin == "null")
-                  {
-                      return true;
-                  }
-
-
-                  return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
-                         && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                             || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase));
-              })
+        policy.SetIsOriginAllowed(origin => IsAllowedFrontendOrigin(origin))
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -172,6 +173,7 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<CryptoService>();
+builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSender>();
 builder.Services.AddScoped<ServerInviteService>();
@@ -216,7 +218,29 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        if (!context.Context.Request.Path.StartsWithSegments("/chat-files"))
+        {
+            return;
+        }
+
+        var origin = context.Context.Request.Headers.Origin.ToString();
+        if (!IsAllowedFrontendOrigin(origin))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(origin))
+        {
+            context.Context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+            context.Context.Response.Headers["Vary"] = "Origin";
+            context.Context.Response.Headers["Access-Control-Allow-Credentials"] = "true";
+        }
+    }
+});
 app.UseRouting();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
