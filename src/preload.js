@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
+const DEFAULT_PACKAGED_API_URL = "https://api.85.198.68.187.sslip.io";
+const DEFAULT_PACKAGED_LIVEKIT_URL = "wss://live.85.198.68.187.sslip.io";
+
+function isPackagedRuntime() {
+  return process.defaultApp !== true;
+}
+
 function normalizeIceServers(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -85,9 +93,12 @@ function buildVoiceRuntimeConfig() {
         : hasTurnRelay
           ? "relay"
           : "all";
+  const defaultApiUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_API_URL : DEFAULT_LOCAL_API_URL;
+  const defaultLiveKitUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_LIVEKIT_URL : "";
 
   return {
-    apiUrl: process.env.ND_API_URL?.trim() || process.env.VITE_API_URL?.trim() || "http://localhost:7031",
+    apiUrl: process.env.ND_API_URL?.trim() || process.env.VITE_API_URL?.trim() || defaultApiUrl,
+    liveKitUrl: process.env.ND_LIVEKIT_URL?.trim() || defaultLiveKitUrl,
     voiceRtcConfig: {
       iceServers: normalizedIceServers,
       iceTransportPolicy: resolvedIceTransportPolicy,
