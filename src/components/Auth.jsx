@@ -379,7 +379,7 @@ export default function Auth({ onAuthSuccess }) {
 
     if (!payload.identifier.includes("@") && !normalizeRussianPhone(payload.identifier)) {
       setLoginErrors({
-        identifier: "Введите российский номер телефона в формате +7XXXXXXXXXX.",
+        identifier: "Введите номер телефона в формате +79891112233.",
         password: "",
       });
       return;

@@ -10,7 +10,7 @@ import "../css/MenuMain.css";
 import "../css/MenuProfile.css";
 import "../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../config/runtime";
-import { ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
+import { decryptIncomingMessageText, ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
 import {
   validateAvatarFile,
   validateServerIconFile,
@@ -64,10 +64,10 @@ const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 const MAX_PROFILE_NAME_LENGTH = 32;
 const DEFAULT_TEXT_CHANNELS = [
-  { id: "1", name: "# general" },
-  { id: "2", name: "# gaming" },
-  { id: "3", name: "# music-chat" },
-  { id: "4", name: "# off-topic" },
+  { id: "1", name: "general" },
+  { id: "2", name: "gaming" },
+  { id: "3", name: "music-chat" },
+  { id: "4", name: "off-topic" },
 ];
 const DEFAULT_VOICE_CHANNELS = [
   { id: "general_voice", name: "general_voice" },
@@ -184,6 +184,12 @@ const getScopedPrivateServerId = (serverId, user) => {
     .replace(/^server-?/i, "");
   const suffix = sanitizeScopeFragment(rawSuffix);
   return `server-${scope}-${suffix}`;
+};
+const normalizeTextChannelName = (value, fallback = "new-channel") => {
+  const normalizedValue = String(value || "")
+    .replace(/^#+\s*/, "")
+    .trim();
+  return normalizedValue || fallback;
 };
 const getCanonicalSharedServerId = (serverId, ownerUserId) => {
   const normalizedServerId = String(serverId || "").trim();
@@ -396,7 +402,7 @@ const createServer = (name, user, options = {}) => {
   ownerId,
   roles: createDefaultRoles(),
   members: [ownerMember],
-  textChannels: [{ id: createId("text"), name: "# general" }],
+  textChannels: [{ id: createId("text"), name: "general" }],
   voiceChannels: [{ id: createId("voice"), name: "general_voice" }],
   };
 };
@@ -406,8 +412,9 @@ const normalizeChannels = (channels, type) => {
   return channels.map((channel, index) => ({
     id: String(channel?.id || fallback[index]?.id || createId(type)),
     name:
-      String(channel?.name || fallback[index]?.name || (type === "text" ? "# new-channel" : "voice-channel")).trim() ||
-      (type === "text" ? "# new-channel" : "voice-channel"),
+      type === "text"
+        ? normalizeTextChannelName(channel?.name || fallback[index]?.name || "new-channel")
+        : String(channel?.name || fallback[index]?.name || "voice-channel").trim() || "voice-channel",
   }));
 };
 const normalizeServers = (value, currentUser) => {
@@ -479,7 +486,8 @@ const mergePersistedServers = (localServers, remoteServers, currentUser) => {
   });
   return Array.from(mergedById.values());
 };
-const getChannelDisplayName = (name, type) => (type === "text" && !name.startsWith("#") ? `# ${name}` : name);
+const getChannelDisplayName = (name, type) =>
+  type === "text" ? normalizeTextChannelName(name, "channel") : String(name || "").trim();
 const parseServerChatChannelId = (channelId) => {
   const normalizedChannelId = String(channelId || "").trim();
   const match = /^server:(.+?)::channel:(.+)$/.exec(normalizedChannelId);
@@ -492,10 +500,31 @@ const parseServerChatChannelId = (channelId) => {
     channelId: match[2],
   };
 };
+const trimNotificationPreview = (value, limit = 180) => {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  return text.length > limit ? `${text.slice(0, limit - 3).trimEnd()}...` : text;
+};
+
 const getIncomingMessagePreview = (messageItem, fallbackText = "Новое сообщение") => {
-  const text = String(messageItem?.message || "").trim();
-  if (text) {
-    return text.length > 180 ? `${text.slice(0, 177).trimEnd()}...` : text;
+  const textCandidates = [
+    messageItem?.message,
+    messageItem?.text,
+    messageItem?.preview,
+    messageItem?.Preview,
+    messageItem?.plainText,
+    messageItem?.PlainText,
+    messageItem?.decryptedText,
+    messageItem?.content,
+  ];
+  const resolvedText = textCandidates
+    .map((value) => trimNotificationPreview(value))
+    .find((value) => value && value !== "[Encrypted message unavailable]");
+  if (resolvedText) {
+    return resolvedText;
   }
 
   if (messageItem?.voiceMessage || messageItem?.VoiceMessage) {
@@ -514,6 +543,27 @@ const getIncomingMessagePreview = (messageItem, fallbackText = "Новое со�
   }
 
   return fallbackText;
+};
+
+const resolveIncomingMessagePreview = async (
+  messageItem,
+  user,
+  { fallbackText = "Новое сообщение", channelId = "", scope = "text" } = {}
+) => {
+  const preview = getIncomingMessagePreview(messageItem, "");
+  if (preview) {
+    return preview;
+  }
+
+  if (messageItem?.encryption || messageItem?.Encryption) {
+    const decrypted = await decryptIncomingMessageText(messageItem, user, { channelId, scope });
+    const decryptedPreview = trimNotificationPreview(decrypted?.text);
+    if (decryptedPreview && decryptedPreview !== "[Encrypted message unavailable]") {
+      return decryptedPreview;
+    }
+  }
+
+  return getIncomingMessagePreview(messageItem, fallbackText);
 };
 const normalizeFriend = (friend) => ({
   id: String(friend?.id || ""),
@@ -773,7 +823,7 @@ export default function MenuMain({
           serverId: server.id,
           serverName: server.name || "Сервер",
           channelId: channel.id,
-          channelName: channel.name || "# channel",
+          channelName: normalizeTextChannelName(channel.name, "channel"),
         });
       });
     });
@@ -2190,7 +2240,7 @@ export default function MenuMain({
       return undefined;
     }
 
-    const handleReceiveDirectMessage = (messageItem) => {
+    const handleReceiveDirectMessage = async (messageItem) => {
       const channelId = String(messageItem?.channelId || "");
       if (!channelId.startsWith("dm:")) {
         return;
@@ -2216,7 +2266,11 @@ export default function MenuMain({
         return;
       }
 
-      const preview = getIncomingMessagePreview(messageItem, "Новое сообщение в личном чате");
+      const preview = await resolveIncomingMessagePreview(messageItem, user, {
+        fallbackText: "Новое сообщение",
+        channelId,
+        scope: "direct",
+      });
       pushDirectToast({
         id: createDirectToastId(),
         channelId,
@@ -2237,7 +2291,7 @@ export default function MenuMain({
       return undefined;
     }
 
-    const handleReceiveServerMessage = (messageItem) => {
+    const handleReceiveServerMessage = async (messageItem) => {
       const scopedChannelId = String(messageItem?.channelId || "");
       const parsedChannel = parseServerChatChannelId(scopedChannelId);
       if (!parsedChannel) {
@@ -2258,7 +2312,7 @@ export default function MenuMain({
               serverId: fallbackServer.id,
               serverName: fallbackServer.name || "Сервер",
               channelId: fallbackChannel.id,
-              channelName: fallbackChannel.name || "# channel",
+              channelName: normalizeTextChannelName(fallbackChannel.name, "channel"),
             }
           : null
       );
@@ -2283,7 +2337,11 @@ export default function MenuMain({
       }
 
       const currentUserMentioned = isUserMentioned(messageItem?.mentions, currentUserId);
-      const messagePreview = getIncomingMessagePreview(messageItem, "Новое сообщение");
+      const messagePreview = await resolveIncomingMessagePreview(messageItem, user, {
+        fallbackText: "Новое сообщение",
+        channelId: scopedChannelId,
+        scope: "text",
+      });
       pushServerToast({
         id: createServerToastId(),
         channelKey: scopedChannelId,
@@ -2377,6 +2435,9 @@ export default function MenuMain({
     const isStillLive = liveUserIds.some((id) => String(id) === String(selectedStreamUserId));
     if (!isStillLive && !selectedStream) setSelectedStreamUserId(null);
   }, [liveUserIds, selectedStream, selectedStreamUserId]);
+  useEffect(() => {
+    voiceClientRef.current?.setFocusedRemoteShareUser(selectedStreamUserId || "");
+  }, [selectedStreamUserId]);
   useEffect(() => {
     const handleClick = (event) => {
       const target = event.target;
@@ -2787,7 +2848,7 @@ export default function MenuMain({
   };
   const addTextChannel = () => {
     if (!canManageChannels || !activeServer) return;
-    const channel = { id: createId("text"), name: "# новый-канал" };
+    const channel = { id: createId("text"), name: "новый-канал" };
     updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
     setCurrentTextChannelId(channel.id);
     setChannelRenameState({
@@ -2812,7 +2873,12 @@ export default function MenuMain({
   };
   const updateTextChannelName = (channelId, value) => {
     if (!canManageChannels) return;
-    updateServer((server) => ({ ...server, textChannels: server.textChannels.map((channel) => channel.id === channelId ? { ...channel, name: value } : channel) }));
+    updateServer((server) => ({
+      ...server,
+      textChannels: server.textChannels.map((channel) =>
+        channel.id === channelId ? { ...channel, name: normalizeTextChannelName(value) } : channel
+      ),
+    }));
   };
   const updateVoiceChannelName = (channelId, value) => {
     if (!canManageChannels) return;
@@ -4611,9 +4677,8 @@ export default function MenuMain({
         {activeServer ? (
           <div className="chat__topbar">
             <div className="chat__topbar-title">
-              <span className="chat__topbar-symbol">#</span>
               <div className="chat__topbar-copy">
-                <strong>{getChannelDisplayName(currentTextChannel?.name || "# channel", "text")}</strong>
+                <strong>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</strong>
                 <span>Текстовый канал сервера</span>
               </div>
             </div>
@@ -4625,7 +4690,7 @@ export default function MenuMain({
                   type="text"
                   value={channelSearchQuery}
                   onChange={(event) => setChannelSearchQuery(event.target.value)}
-                  placeholder={`Искать в #${getChannelDisplayName(currentTextChannel?.name || "канал", "text")}`}
+                  placeholder={`Искать в ${getChannelDisplayName(currentTextChannel?.name || "канал", "text")}`}
                 />
               </label>
             </div>

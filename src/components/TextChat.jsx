@@ -16,7 +16,12 @@ import { copyTextToClipboard } from "../utils/clipboard";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../utils/chatDrafts";
 import { isDirectMessageChannelId } from "../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../utils/directMessageSounds";
-import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
+import {
+  extractMentionsFromText,
+  getMentionHandleForMember,
+  normalizeMentionAlias,
+  segmentMessageTextByMentions,
+} from "../utils/messageMentions";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 import {
   buildVoiceWaveform,
@@ -41,26 +46,75 @@ const VOICE_HIGH_SHELF_FREQUENCY_HZ = 5600;
 const VOICE_HIGH_SHELF_GAIN_DB = 2.4;
 const ENABLE_VOICE_MESSAGE_BUTTON = true; // flip to false to hide the simple voice-message record button
 const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
+const COMPOSER_EMOJI_OPTIONS = [
+  { key: "grinning", glyph: "😀", label: "Улыбка" },
+  { key: "smile", glyph: "😄", label: "Радость" },
+  { key: "beaming", glyph: "😁", label: "Счастье" },
+  { key: "laugh", glyph: "😂", label: "Смех" },
+  { key: "rofl", glyph: "🤣", label: "Ржу" },
+  { key: "wink", glyph: "😉", label: "Подмигивание" },
+  { key: "heart_eyes", glyph: "😍", label: "Влюблён" },
+  { key: "cool", glyph: "😎", label: "Круто" },
+  { key: "thinking", glyph: "🤔", label: "Думаю" },
+  { key: "pleading", glyph: "🥺", label: "Пожалуйста" },
+  { key: "party", glyph: "🥳", label: "Праздник" },
+  { key: "fire", glyph: "🔥", label: "Огонь" },
+  { key: "cry", glyph: "😭", label: "Плачу" },
+  { key: "angry", glyph: "😡", label: "Злость" },
+  { key: "heart", glyph: "❤️", label: "Любовь" },
+  { key: "thumbs_up", glyph: "👍", label: "Нравится" },
+];
 const MESSAGE_REACTION_OPTIONS = [
-  { key: "star", glyph: "\u2B50", label: "\u0417\u0432\u0435\u0437\u0434\u0430" },
-  { key: "note", glyph: "\u270D\uFE0F", label: "\u0417\u0430\u043C\u0435\u0442\u043A\u0430" },
-  { key: "idea", glyph: "\uD83D\uDCA1", label: "\u0418\u0434\u0435\u044F" },
-  { key: "date", glyph: "\uD83D\uDCC5", label: "\u041F\u043B\u0430\u043D" },
-  { key: "fire", glyph: "\uD83D\uDD25", label: "\u041E\u0433\u043E\u043D\u044C" },
-  { key: "zap", glyph: "\u26A1", label: "\u0418\u043C\u043F\u0443\u043B\u044C\u0441" },
-  { key: "party", glyph: "\uD83C\uDF89", label: "\u041F\u0440\u0430\u0437\u0434\u043D\u0438\u043A" },
-  { key: "heart", glyph: "\u2764\uFE0F", label: "\u0421\u0435\u0440\u0434\u0446\u0435" },
-  { key: "eyes", glyph: "\uD83D\uDC40", label: "\u0421\u043C\u043E\u0442\u0440\u044E" },
-  { key: "laugh", glyph: "\uD83D\uDE02", label: "\u0421\u043C\u0435\u0448\u043D\u043E" },
-  { key: "wow", glyph: "\uD83D\uDE2E", label: "\u0423\u0434\u0438\u0432\u043B\u0435\u043D\u0438\u0435" },
-  { key: "cool", glyph: "\uD83D\uDE0E", label: "\u041A\u0440\u0443\u0442\u043E" },
-  { key: "rocket", glyph: "\uD83D\uDE80", label: "\u0420\u0430\u043A\u0435\u0442\u0430" },
-  { key: "check", glyph: "\u2705", label: "\u0413\u043E\u0442\u043E\u0432\u043E" },
-  { key: "chat", glyph: "\uD83D\uDCAC", label: "\u041E\u0431\u0441\u0443\u0434\u0438\u0442\u044C" },
-  { key: "music", glyph: "\uD83C\uDFA7", label: "\u0412\u0430\u0439\u0431" },
+  { key: "grinning", glyph: "😀", label: "Улыбка" },
+  { key: "smile", glyph: "😄", label: "Радость" },
+  { key: "beaming", glyph: "😁", label: "Сияю" },
+  { key: "laugh", glyph: "😂", label: "Смешно" },
+  { key: "rofl", glyph: "🤣", label: "Очень смешно" },
+  { key: "heart_eyes", glyph: "😍", label: "Влюблён" },
+  { key: "wink", glyph: "😉", label: "Подмигиваю" },
+  { key: "cool", glyph: "😎", label: "Круто" },
+  { key: "thinking", glyph: "🤔", label: "Думаю" },
+  { key: "wow", glyph: "😮", label: "Удивление" },
+  { key: "pleading", glyph: "🥺", label: "Пожалуйста" },
+  { key: "cry", glyph: "😭", label: "Плачу" },
+  { key: "angry", glyph: "😡", label: "Злюсь" },
+  { key: "mind_blown", glyph: "🤯", label: "Разрыв" },
+  { key: "party", glyph: "🥳", label: "Праздник" },
+  { key: "fire", glyph: "🔥", label: "Огонь" },
 ];
 const PRIMARY_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(0, 8);
 const STICKER_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(8);
+
+function getMentionQueryContext(text, caretPosition) {
+  const normalizedText = String(text || "");
+  const caret = Math.max(0, Math.min(Number(caretPosition) || 0, normalizedText.length));
+  const beforeCaret = normalizedText.slice(0, caret);
+  const triggerIndex = beforeCaret.lastIndexOf("@");
+  if (triggerIndex < 0) {
+    return null;
+  }
+
+  const precedingCharacter = triggerIndex > 0 ? beforeCaret[triggerIndex - 1] : "";
+  if (precedingCharacter && /[\p{L}\p{N}_.-]/u.test(precedingCharacter)) {
+    return null;
+  }
+
+  const betweenTriggerAndCaret = normalizedText.slice(triggerIndex + 1, caret);
+  if (/\s/.test(betweenTriggerAndCaret)) {
+    return null;
+  }
+
+  let tokenEnd = caret;
+  while (tokenEnd < normalizedText.length && !/\s/u.test(normalizedText[tokenEnd])) {
+    tokenEnd += 1;
+  }
+
+  return {
+    triggerIndex,
+    tokenEnd,
+    query: betweenTriggerAndCaret,
+  };
+}
 
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
 const getScopedChatChannelId = (serverId, channelId) =>
@@ -449,6 +503,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const [voiceRecordingDurationMs, setVoiceRecordingDurationMs] = useState(0);
   const [voiceMicLevel, setVoiceMicLevel] = useState(0);
   const [speechRecognitionActive, setSpeechRecognitionActive] = useState(false);
+  const [composerEmojiPickerOpen, setComposerEmojiPickerOpen] = useState(false);
+  const [mentionSuggestionsOpen, setMentionSuggestionsOpen] = useState(false);
+  const [selectedMentionSuggestionIndex, setSelectedMentionSuggestionIndex] = useState(0);
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
@@ -467,6 +524,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const messagesEndRef = useRef(null);
   const messagesListRef = useRef(null);
   const textareaRef = useRef(null);
+  const composerEmojiButtonRef = useRef(null);
+  const composerEmojiPickerRef = useRef(null);
+  const mentionSuggestionsRef = useRef(null);
+  const composerSelectionRef = useRef({ start: 0, end: 0 });
   const contextMenuRef = useRef(null);
   const mediaPreviewVideoRef = useRef(null);
   const joinedChannelRef = useRef("");
@@ -521,6 +582,51 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       .sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
   }, [forwardModal.messageIds, messages]);
   const speechRecognitionSupported = useMemo(() => Boolean(getSpeechRecognitionConstructor()), []);
+  const mentionQueryContext = useMemo(
+    () => (!isDirectChat ? getMentionQueryContext(message, textareaRef.current?.selectionStart ?? composerSelectionRef.current.start) : null),
+    [isDirectChat, message]
+  );
+  const mentionSuggestions = useMemo(() => {
+    if (isDirectChat || !mentionQueryContext) {
+      return [];
+    }
+
+    const normalizedQuery = normalizeMentionAlias(mentionQueryContext.query);
+    return (serverMembers || [])
+      .map((member) => {
+        const handle = getMentionHandleForMember(member);
+        const displayName = String(member?.name || "User").trim() || "User";
+        const userId = String(member?.userId || "").trim();
+        const avatar = String(member?.avatar || member?.avatarUrl || "").trim();
+        if (!handle || !userId) {
+          return null;
+        }
+
+        const normalizedHandle = normalizeMentionAlias(handle);
+        const normalizedName = normalizeMentionAlias(displayName);
+        const startsWithHandle = normalizedQuery ? normalizedHandle.startsWith(normalizedQuery) : true;
+        const startsWithName = normalizedQuery ? normalizedName.startsWith(normalizedQuery) : true;
+        const includesHandle = normalizedQuery ? normalizedHandle.includes(normalizedQuery) : true;
+        const includesName = normalizedQuery ? normalizedName.includes(normalizedQuery) : true;
+        if (normalizedQuery && !startsWithHandle && !startsWithName && !includesHandle && !includesName) {
+          return null;
+        }
+
+        return {
+          userId,
+          handle,
+          displayName,
+          avatar,
+          score: startsWithHandle ? 0 : startsWithName ? 1 : includesHandle ? 2 : 3,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) =>
+        left.score - right.score
+        || left.displayName.localeCompare(right.displayName, "ru", { sensitivity: "base" })
+      )
+      .slice(0, 8);
+  }, [isDirectChat, mentionQueryContext, serverMembers]);
 
   const normalizeIncomingMessage = async (messageItem) => {
     const decrypted = await decryptIncomingMessageText(messageItem, user, { channelId: scopedChannelId });
@@ -568,6 +674,64 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       textarea.focus();
       const nextLength = textarea.value.length;
       textarea.setSelectionRange(nextLength, nextLength);
+      composerSelectionRef.current = { start: nextLength, end: nextLength };
+    });
+  };
+
+  const syncComposerSelection = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    composerSelectionRef.current = {
+      start: Number(textarea.selectionStart || 0),
+      end: Number(textarea.selectionEnd || 0),
+    };
+  };
+
+  const insertComposerEmoji = (emojiGlyph) => {
+    const textarea = textareaRef.current;
+    const currentValue = String(textarea?.value || message || "");
+    const selectionStart = Number(textarea?.selectionStart ?? composerSelectionRef.current.start ?? currentValue.length);
+    const selectionEnd = Number(textarea?.selectionEnd ?? composerSelectionRef.current.end ?? currentValue.length);
+    const nextValue = `${currentValue.slice(0, selectionStart)}${emojiGlyph}${currentValue.slice(selectionEnd)}`;
+    const nextCaretPosition = selectionStart + emojiGlyph.length;
+    setMessage(nextValue);
+    setComposerEmojiPickerOpen(false);
+    window.requestAnimationFrame(() => {
+      const nextTextarea = textareaRef.current;
+      if (!nextTextarea) {
+        return;
+      }
+
+      nextTextarea.focus();
+      nextTextarea.setSelectionRange(nextCaretPosition, nextCaretPosition);
+      composerSelectionRef.current = { start: nextCaretPosition, end: nextCaretPosition };
+    });
+  };
+
+  const applyMentionSuggestion = (suggestion) => {
+    if (!suggestion?.handle || !mentionQueryContext) {
+      return;
+    }
+
+    const currentValue = String(textareaRef.current?.value || message || "");
+    const mentionText = `@${suggestion.handle} `;
+    const nextValue = `${currentValue.slice(0, mentionQueryContext.triggerIndex)}${mentionText}${currentValue.slice(mentionQueryContext.tokenEnd)}`;
+    const nextCaretPosition = mentionQueryContext.triggerIndex + mentionText.length;
+    setMessage(nextValue);
+    setMentionSuggestionsOpen(false);
+    setSelectedMentionSuggestionIndex(0);
+    window.requestAnimationFrame(() => {
+      const nextTextarea = textareaRef.current;
+      if (!nextTextarea) {
+        return;
+      }
+
+      nextTextarea.focus();
+      nextTextarea.setSelectionRange(nextCaretPosition, nextCaretPosition);
+      composerSelectionRef.current = { start: nextCaretPosition, end: nextCaretPosition };
     });
   };
 
@@ -652,6 +816,70 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
     return undefined;
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!composerEmojiPickerOpen) {
+      return undefined;
+    }
+
+    const handlePointerDownOutside = (event) => {
+      const target = event.target;
+      if (
+        composerEmojiPickerRef.current?.contains(target)
+        || composerEmojiButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setComposerEmojiPickerOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDownOutside);
+    document.addEventListener("touchstart", handlePointerDownOutside);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDownOutside);
+      document.removeEventListener("touchstart", handlePointerDownOutside);
+    };
+  }, [composerEmojiPickerOpen]);
+
+  useEffect(() => {
+    if (!mentionSuggestionsOpen) {
+      return undefined;
+    }
+
+    const handlePointerDownOutside = (event) => {
+      const target = event.target;
+      if (mentionSuggestionsRef.current?.contains(target) || textareaRef.current?.contains(target)) {
+        return;
+      }
+
+      setMentionSuggestionsOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDownOutside);
+    document.addEventListener("touchstart", handlePointerDownOutside);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDownOutside);
+      document.removeEventListener("touchstart", handlePointerDownOutside);
+    };
+  }, [mentionSuggestionsOpen]);
+
+  useEffect(() => {
+    if (!mentionSuggestions.length || !mentionQueryContext) {
+      setMentionSuggestionsOpen(false);
+      setSelectedMentionSuggestionIndex(0);
+      return;
+    }
+
+    setMentionSuggestionsOpen(true);
+    setSelectedMentionSuggestionIndex((previous) => Math.min(previous, mentionSuggestions.length - 1));
+  }, [mentionQueryContext, mentionSuggestions]);
+
+  useEffect(() => {
+    setComposerEmojiPickerOpen(false);
+    setMentionSuggestionsOpen(false);
+    setSelectedMentionSuggestionIndex(0);
+  }, [scopedChannelId]);
 
   useEffect(() => {
     decryptedAttachmentsRef.current = decryptedAttachmentsByMessageId;
@@ -2935,6 +3163,22 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 <input type="file" className="attach-button__input" onChange={handleFileChange} disabled={uploadingFile} multiple />
                 <span className="attach-button__icon" aria-hidden="true" />
               </label>
+              <button
+                ref={composerEmojiButtonRef}
+                type="button"
+                className={`composer-tool composer-tool--emoji ${composerEmojiPickerOpen ? "composer-tool--active" : ""}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  syncComposerSelection();
+                  setComposerEmojiPickerOpen((previous) => !previous);
+                }}
+                disabled={uploadingFile || voiceRecordingState === "sending"}
+                title="Смайлики"
+                aria-label="Открыть смайлики"
+                aria-expanded={composerEmojiPickerOpen}
+              >
+                <span className="composer-tool__emoji" aria-hidden="true">🙂</span>
+              </button>
               {ENABLE_SPEECH_INPUT_BUTTON ? (
               <button
                 type="button"
@@ -2948,15 +3192,97 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 <span className="composer-tool__badge" aria-hidden="true">a</span>
               </button>
               ) : null}
+              {composerEmojiPickerOpen ? (
+                <div ref={composerEmojiPickerRef} className="composer-emoji-picker" role="dialog" aria-label="Выбор смайлика">
+                  <div className="composer-emoji-picker__grid">
+                    {COMPOSER_EMOJI_OPTIONS.map((emojiOption) => (
+                      <button
+                        key={emojiOption.key}
+                        type="button"
+                        className="composer-emoji-picker__item"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => insertComposerEmoji(emojiOption.glyph)}
+                        title={emojiOption.label}
+                        aria-label={emojiOption.label}
+                      >
+                        <span aria-hidden="true">{emojiOption.glyph}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {mentionSuggestionsOpen && mentionSuggestions.length ? (
+                <div ref={mentionSuggestionsRef} className="mention-suggestions" role="listbox" aria-label="Server mention suggestions">
+                  {mentionSuggestions.map((suggestion, index) => (
+                    <button
+                      key={`${suggestion.userId}-${suggestion.handle}`}
+                      type="button"
+                      className={`mention-suggestions__item ${index === selectedMentionSuggestionIndex ? "mention-suggestions__item--active" : ""}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyMentionSuggestion(suggestion)}
+                      role="option"
+                      aria-selected={index === selectedMentionSuggestionIndex}
+                    >
+                      <AnimatedAvatar
+                        className="mention-suggestions__avatar"
+                        src={suggestion.avatar || DEFAULT_AVATAR}
+                        alt={suggestion.displayName}
+                      />
+                      <span className="mention-suggestions__content">
+                        <span className="mention-suggestions__name">{suggestion.displayName}</span>
+                        <span className="mention-suggestions__handle">@{suggestion.handle}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <textarea
                 ref={textareaRef}
                 value={message}
                 disabled={uploadingFile || voiceRecordingState === "sending"}
-                onChange={(event) => setMessage(event.target.value)}
+                onChange={(event) => {
+                  setMessage(event.target.value);
+                  syncComposerSelection();
+                }}
+                onSelect={syncComposerSelection}
+                onClick={syncComposerSelection}
+                onKeyUp={syncComposerSelection}
                 data-editing={messageEditState ? "true" : "false"}
                 placeholder={uploadingFile ? "Загружаем вложения..." : "Введите сообщение..."}
                 onKeyDown={(event) => {
+                  if (mentionSuggestionsOpen && mentionSuggestions.length) {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setSelectedMentionSuggestionIndex((previous) => (previous + 1) % mentionSuggestions.length);
+                      return;
+                    }
+
+                    if (event.key === "ArrowUp" && String(message || "").trim()) {
+                      event.preventDefault();
+                      setSelectedMentionSuggestionIndex((previous) => (previous - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+                      return;
+                    }
+
+                    if (event.key === "Enter" || event.key === "Tab") {
+                      event.preventDefault();
+                      applyMentionSuggestion(mentionSuggestions[selectedMentionSuggestionIndex] || mentionSuggestions[0]);
+                      return;
+                    }
+                  }
+
                   if (event.key === "Escape") {
+                    if (composerEmojiPickerOpen) {
+                      event.preventDefault();
+                      setComposerEmojiPickerOpen(false);
+                      return;
+                    }
+
+                    if (mentionSuggestionsOpen) {
+                      event.preventDefault();
+                      setMentionSuggestionsOpen(false);
+                      return;
+                    }
+
                     if (speechRecognitionActive) {
                       stopSpeechRecognition(false);
                     }

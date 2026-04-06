@@ -46,6 +46,7 @@ export default defineConfig(({ command }) => ({
         ws: true,
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path.replace(/^\/livekit(?=\/|$)/, ""),
       },
     },
   },

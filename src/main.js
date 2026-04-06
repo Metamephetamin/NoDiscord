@@ -13,6 +13,10 @@ const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 const APP_PROTOCOL = "nodiscord";
 const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const resolveAppIconPath = () =>
+  app.isPackaged
+    ? path.join(app.getAppPath(), "assets", "app-icon.png")
+    : path.resolve(__dirname, "../../assets/app-icon.png");
 
 const resolveRendererDevServerUrl = () => {
   if (!MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -220,6 +224,7 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: resolveAppIconPath(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

@@ -219,6 +219,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = context =>
@@ -254,6 +255,38 @@ app.MapGet("/api/ping", () => Results.Ok(new { status = "ok" }))
 app.MapHub<ChatHub>("/chatHub").RequireAuthorization();
 app.MapHub<VoiceHub>("/voiceHub").RequireAuthorization();
 app.MapControllers();
+app.MapFallback(async context =>
+{
+    if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var requestPath = context.Request.Path;
+    if (requestPath.StartsWithSegments("/api") ||
+        requestPath.StartsWithSegments("/chatHub") ||
+        requestPath.StartsWithSegments("/voiceHub") ||
+        requestPath.StartsWithSegments("/swagger") ||
+        requestPath.StartsWithSegments("/avatars") ||
+        requestPath.StartsWithSegments("/chat-files"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var webRootPath = app.Environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+    var indexFilePath = Path.Combine(webRootPath, "index.html");
+
+    if (!File.Exists(indexFilePath))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    context.Response.ContentType = "text/html; charset=utf-8";
+    await context.Response.SendFileAsync(indexFilePath);
+});
 
 app.Run();
 

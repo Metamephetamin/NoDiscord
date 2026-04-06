@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isVideoAvatarUrl } from "../utils/avatarMedia";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
 
@@ -14,9 +14,14 @@ export default function AnimatedAvatar({
   const resolvedFallback = resolveMediaUrl(fallback, DEFAULT_AVATAR);
   const shouldRenderVideo = isVideoAvatarUrl(resolvedSrc) && !videoFailed;
 
+  useEffect(() => {
+    setVideoFailed(false);
+  }, [resolvedSrc]);
+
   if (shouldRenderVideo) {
     return (
       <video
+        key={resolvedSrc}
         {...rest}
         className={className}
         src={resolvedSrc}
@@ -34,6 +39,7 @@ export default function AnimatedAvatar({
 
   return (
     <img
+      key={resolvedSrc || resolvedFallback}
       {...rest}
       className={className}
       src={resolvedSrc || resolvedFallback}

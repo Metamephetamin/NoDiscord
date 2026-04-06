@@ -1,6 +1,6 @@
 {
-  "name": "nodiscord",
-  "productName": "nodiscord",
+  "name": "tend",
+  "productName": "Tend",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
@@ -12,6 +12,7 @@
     "start:livekit:docker": "docker compose --env-file .env -f src/livekit/docker-compose.yml up -d --force-recreate",
     "build": "npm run build:frontend",
     "build:frontend": "vite build --config vite.renderer.config.mjs",
+    "build:hosting": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-hosting-bundle.ps1",
     "package": "electron-forge package",
     "package:prod": "node ./scripts/run-with-runtime.mjs package",
     "make": "electron-forge make",

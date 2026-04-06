@@ -7,12 +7,18 @@ const shouldEnableFuses = npmLifecycleEvent !== "start";
 module.exports = {
   packagerConfig: {
     asar: true,
+    executableName: "Tend",
+    icon: "./assets/app-icon",
   },
   rebuildConfig: {},
   makers: [
     {
       name: "@electron-forge/maker-squirrel",
-      config: {},
+      config: {
+        name: "Tend",
+        setupExe: "Tend Setup.exe",
+        setupIcon: "./assets/app-icon.ico",
+      },
     },
     {
       name: "@electron-forge/maker-zip",

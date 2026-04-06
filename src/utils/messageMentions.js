@@ -19,6 +19,10 @@ function getMentionAliasesForMember(member) {
   ])).filter(Boolean);
 }
 
+export function getMentionHandleForMember(member) {
+  return getMentionAliasesForMember(member)[1] || getMentionAliasesForMember(member)[0] || "";
+}
+
 export function buildMentionLookup(serverMembers = []) {
   const aliasMap = new Map();
   const collisions = new Set();
@@ -136,3 +140,5 @@ export function isUserMentioned(mentions, userId) {
   const normalizedUserId = String(userId || "");
   return Array.isArray(mentions) && mentions.some((mention) => String(mention?.userId || "") === normalizedUserId);
 }
+
+export { normalizeMentionAlias };

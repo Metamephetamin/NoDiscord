@@ -8,6 +8,7 @@ import {
   ScreenSharePresets,
   Track,
   VideoPreset,
+  VideoQuality,
   isE2EESupported,
 } from "livekit-client";
 import { API_BASE_URL, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION } from "../config/runtime";
@@ -47,6 +48,8 @@ const AUDIO_SAMPLE_RATE = 48_000;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
 const VIDEO_ENCODING_PRIORITY = "high";
+const REMOTE_BACKGROUND_SHARE_TARGET = { width: 1280, height: 720, fps: 24 };
+const REMOTE_CAMERA_TARGET = { width: 960, height: 540, fps: 24 };
 const CAMERA_VIDEO_QUALITY_TARGETS = {
   "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000, 120: 6_200_000 } },
   "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000, 120: 10_000_000 } },
@@ -54,10 +57,10 @@ const CAMERA_VIDEO_QUALITY_TARGETS = {
   "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000, 120: 30_000_000 } },
 };
 const SCREEN_SHARE_QUALITY_TARGETS = {
-  "720p": { width: 1280, height: 720, bitrate: { 30: 3_500_000, 60: 5_500_000, 120: 8_000_000 } },
-  "1080p": { width: 1920, height: 1080, bitrate: { 30: 6_000_000, 60: 9_500_000, 120: 14_000_000 } },
-  "1440p": { width: 2560, height: 1440, bitrate: { 30: 9_500_000, 60: 14_500_000, 120: 21_000_000 } },
-  "2160p": { width: 3840, height: 2160, bitrate: { 30: 16_000_000, 60: 24_000_000, 120: 34_000_000 } },
+  "720p": { width: 1280, height: 720, bitrate: { 30: 4_500_000, 60: 6_800_000, 120: 9_000_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 8_000_000, 60: 12_500_000, 120: 16_500_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 12_000_000, 60: 18_000_000, 120: 24_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 18_000_000, 60: 27_000_000, 120: 36_000_000 } },
 };
 
 function normalizePublishFps(value, fallback = 30) {
@@ -231,6 +234,7 @@ export function createVoiceRoomClient({
   let voiceE2eeWorker = null;
   let voiceE2eeKeyProvider = null;
   let pendingVoiceE2eeEnvelopeRequest = null;
+  let preferredRemoteShareUserId = "";
 
   const remoteScreenShares = new Map();
   const remoteAudioElements = new Map();
@@ -559,6 +563,102 @@ export function createVoiceRoomClient({
     Array.from(remoteScreenShares.keys()).forEach(removeRemoteShare);
   };
 
+  const getPublicationVideoTarget = (publication, fallback = {}) => {
+    const trackSettings = publication?.videoTrack?.mediaStreamTrack?.getSettings?.() || {};
+    const width = Math.max(
+      320,
+      Math.round(
+        Number(trackSettings.width)
+        || Number(publication?.dimensions?.width)
+        || Number(fallback.width)
+        || REMOTE_BACKGROUND_SHARE_TARGET.width
+      )
+    );
+    const height = Math.max(
+      180,
+      Math.round(
+        Number(trackSettings.height)
+        || Number(publication?.dimensions?.height)
+        || Number(fallback.height)
+        || REMOTE_BACKGROUND_SHARE_TARGET.height
+      )
+    );
+    const fps = Math.max(
+      15,
+      Math.round(
+        Number(trackSettings.frameRate)
+        || Number(fallback.fps)
+        || REMOTE_BACKGROUND_SHARE_TARGET.fps
+      )
+    );
+
+    return { width, height, fps };
+  };
+
+  const applyRemotePublicationPreferences = (publication, options = {}) => {
+    if (!publication?.isManualOperationAllowed?.()) {
+      return;
+    }
+
+    const {
+      enabled = true,
+      subscribed = true,
+      quality = VideoQuality.MEDIUM,
+      width = 1280,
+      height = 720,
+      fps = 30,
+    } = options;
+
+    publication.setSubscribed(Boolean(subscribed));
+    publication.setEnabled(Boolean(enabled));
+
+    if (!enabled || !subscribed) {
+      return;
+    }
+
+    publication.setVideoQuality(quality);
+    publication.setVideoDimensions(Math.max(320, Math.round(width)), Math.max(180, Math.round(height)));
+    publication.setVideoFPS(Math.max(15, Math.round(fps)));
+  };
+
+  const applyRemoteSharePreferences = () => {
+    const activeVideoPublicationCount = Array.from(remoteParticipantMedia.values()).reduce(
+      (count, state) => count + (state.screenVideoPublication || state.cameraPublication ? 1 : 0),
+      0
+    );
+
+    remoteParticipantMedia.forEach((state, userId) => {
+      const isFocused =
+        (preferredRemoteShareUserId && String(preferredRemoteShareUserId) === String(userId))
+        || (!preferredRemoteShareUserId && activeVideoPublicationCount === 1);
+      const hasScreenShare = Boolean(state.screenVideoPublication);
+
+      if (state.screenVideoPublication) {
+        const focusedScreenTarget = getPublicationVideoTarget(state.screenVideoPublication, REMOTE_BACKGROUND_SHARE_TARGET);
+        applyRemotePublicationPreferences(state.screenVideoPublication, {
+          enabled: true,
+          subscribed: true,
+          quality: isFocused ? VideoQuality.HIGH : VideoQuality.MEDIUM,
+          width: isFocused ? focusedScreenTarget.width : Math.min(focusedScreenTarget.width, REMOTE_BACKGROUND_SHARE_TARGET.width),
+          height: isFocused ? focusedScreenTarget.height : Math.min(focusedScreenTarget.height, REMOTE_BACKGROUND_SHARE_TARGET.height),
+          fps: isFocused ? focusedScreenTarget.fps : Math.min(focusedScreenTarget.fps, REMOTE_BACKGROUND_SHARE_TARGET.fps),
+        });
+      }
+
+      if (state.cameraPublication) {
+        const focusedCameraTarget = getPublicationVideoTarget(state.cameraPublication, REMOTE_CAMERA_TARGET);
+        applyRemotePublicationPreferences(state.cameraPublication, {
+          enabled: true,
+          subscribed: true,
+          quality: !hasScreenShare && isFocused ? VideoQuality.HIGH : VideoQuality.LOW,
+          width: !hasScreenShare && isFocused ? focusedCameraTarget.width : Math.min(focusedCameraTarget.width, REMOTE_CAMERA_TARGET.width),
+          height: !hasScreenShare && isFocused ? focusedCameraTarget.height : Math.min(focusedCameraTarget.height, REMOTE_CAMERA_TARGET.height),
+          fps: !hasScreenShare && isFocused ? focusedCameraTarget.fps : Math.min(focusedCameraTarget.fps, REMOTE_CAMERA_TARGET.fps),
+        });
+      }
+    });
+  };
+
   const syncRemoteShareForParticipant = (participant) => {
     if (!participant?.identity) {
       return;
@@ -595,7 +695,11 @@ export function createVoiceRoomClient({
       updatedAt: Date.now(),
       hasAudio: Boolean(includeScreenAudio),
       mode: preferredPublication.source === Track.Source.Camera ? "camera" : "screen",
+      width: Number(preferredPublication.videoTrack.mediaStreamTrack?.getSettings?.().width || 0),
+      height: Number(preferredPublication.videoTrack.mediaStreamTrack?.getSettings?.().height || 0),
+      fps: Number(preferredPublication.videoTrack.mediaStreamTrack?.getSettings?.().frameRate || 0),
     });
+    applyRemoteSharePreferences();
     emitRemoteScreens();
   };
 
@@ -608,6 +712,7 @@ export function createVoiceRoomClient({
     room.remoteParticipants.forEach((participant) => {
       syncRemoteShareForParticipant(participant);
     });
+    applyRemoteSharePreferences();
   };
 
   const registerCurrentUser = async (user) => {
@@ -1380,6 +1485,17 @@ export function createVoiceRoomClient({
       const participant = room.remoteParticipants.get(String(targetUserId));
       if (participant) {
         syncRemoteShareForParticipant(participant);
+      }
+    },
+
+    setFocusedRemoteShareUser(targetUserId) {
+      preferredRemoteShareUserId = String(targetUserId || "").trim();
+      applyRemoteSharePreferences();
+      if (preferredRemoteShareUserId && room) {
+        const participant = room.remoteParticipants.get(preferredRemoteShareUserId);
+        if (participant) {
+          syncRemoteShareForParticipant(participant);
+        }
       }
     },
 

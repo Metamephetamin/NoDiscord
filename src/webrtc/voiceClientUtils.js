@@ -54,8 +54,8 @@ const getScreenSharePreset = (resolution = "1080p", fps = 60) => {
 const getResolutionConstraints = (resolution, fps) => {
   const preset = getScreenSharePreset(resolution, fps);
   return {
-    width: { ideal: preset.width },
-    height: { ideal: preset.height },
+    width: { ideal: preset.width, max: preset.width },
+    height: { ideal: preset.height, max: preset.height },
     frameRate: { ideal: preset.fps, max: preset.fps },
   };
 };
@@ -81,15 +81,48 @@ const tuneDisplayStream = async (stream, resolution, fps) => {
   const constraints = getResolutionConstraints(resolution, fps);
   try {
     await track.applyConstraints({
-      width: constraints.width,
-      height: constraints.height,
-      frameRate: constraints.frameRate,
+      width: { exact: constraints.width.ideal },
+      height: { exact: constraints.height.ideal },
+      frameRate: { ideal: constraints.frameRate.ideal, max: constraints.frameRate.max },
     });
   } catch {
-    // ignore optional tuning failures
+    try {
+      await track.applyConstraints({
+        width: constraints.width,
+        height: constraints.height,
+        frameRate: constraints.frameRate,
+      });
+    } catch {
+      // ignore optional tuning failures
+    }
   }
 
   return stream;
+};
+
+const buildElectronDisplayConstraints = (screenSourceId, resolution, fps, withAudio, strict = true) => {
+  const preset = getScreenSharePreset(resolution, fps);
+  return {
+    audio: withAudio
+      ? {
+          mandatory: {
+            chromeMediaSource: "desktop",
+          },
+        }
+      : false,
+    video: {
+      mandatory: {
+        chromeMediaSource: "desktop",
+        chromeMediaSourceId: screenSourceId,
+        minWidth: strict ? preset.width : Math.min(1280, preset.width),
+        maxWidth: preset.width,
+        minHeight: strict ? preset.height : Math.min(720, preset.height),
+        maxHeight: preset.height,
+        minFrameRate: strict ? Math.max(15, preset.fps) : Math.min(30, preset.fps),
+        maxFrameRate: preset.fps,
+      },
+    },
+  };
 };
 
 const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
@@ -105,29 +138,16 @@ const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
     throw new Error("Unable to get a screen capture source.");
   }
 
-  const constraints = getResolutionConstraints(resolution, fps);
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: withAudio
-      ? {
-          mandatory: {
-            chromeMediaSource: "desktop",
-          },
-        }
-      : false,
-    video: {
-      mandatory: {
-        chromeMediaSource: "desktop",
-        chromeMediaSourceId: screenSource.id,
-        minWidth: 1280,
-        maxWidth: constraints.width?.ideal || 1920,
-        minHeight: 720,
-        maxHeight: constraints.height?.ideal || 1080,
-        minFrameRate: 15,
-        maxFrameRate: constraints.frameRate?.ideal || fps,
-      },
-    },
-  });
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(
+      buildElectronDisplayConstraints(screenSource.id, resolution, fps, withAudio, true)
+    );
+  } catch {
+    stream = await navigator.mediaDevices.getUserMedia(
+      buildElectronDisplayConstraints(screenSource.id, resolution, fps, withAudio, false)
+    );
+  }
 
   return tuneDisplayStream(stream, resolution, fps);
 };

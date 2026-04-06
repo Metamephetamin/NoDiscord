@@ -28,13 +28,41 @@ export function getAvatarFileExtension(fileName) {
 }
 
 export function isVideoAvatarUrl(value) {
-  const normalizedValue = String(value || "").trim().toLowerCase();
-  return normalizedValue.endsWith(".mp4") || normalizedValue.startsWith("data:video/mp4");
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return false;
+  }
+
+  const lowerValue = normalizedValue.toLowerCase();
+  if (lowerValue.startsWith("data:video/mp4")) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(normalizedValue, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    return parsed.pathname.toLowerCase().endsWith(".mp4");
+  } catch {
+    return lowerValue.split(/[?#]/, 1)[0].endsWith(".mp4");
+  }
 }
 
 export function isAnimatedAvatarUrl(value) {
-  const normalizedValue = String(value || "").trim().toLowerCase();
-  return isVideoAvatarUrl(normalizedValue) || normalizedValue.endsWith(".gif") || normalizedValue.startsWith("data:image/gif");
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return false;
+  }
+
+  const lowerValue = normalizedValue.toLowerCase();
+  if (isVideoAvatarUrl(normalizedValue) || lowerValue.startsWith("data:image/gif")) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(normalizedValue, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    return parsed.pathname.toLowerCase().endsWith(".gif");
+  } catch {
+    return lowerValue.split(/[?#]/, 1)[0].endsWith(".gif");
+  }
 }
 
 function readLittleEndianWord(bytes, index) {
