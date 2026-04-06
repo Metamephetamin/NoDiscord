@@ -25,6 +25,16 @@ public class ServerPermissionEvaluatorTests
         Assert.False(ServerPermissionEvaluator.CanManageVoiceState(snapshot, "admin", "owner", "mute_members"));
     }
 
+    [Fact]
+    public void CanInviteMembers_AllowsOwnerAndInviteRole()
+    {
+        var snapshot = CreateSnapshot();
+
+        Assert.True(ServerPermissionEvaluator.CanInviteMembers(snapshot, "owner"));
+        Assert.True(ServerPermissionEvaluator.CanInviteMembers(snapshot, "admin"));
+        Assert.False(ServerPermissionEvaluator.CanInviteMembers(snapshot, "member"));
+    }
+
     private static ServerSnapshot CreateSnapshot()
     {
         return new ServerSnapshot

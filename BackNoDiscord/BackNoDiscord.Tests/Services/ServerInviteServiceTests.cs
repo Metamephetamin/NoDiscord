@@ -48,6 +48,30 @@ public class ServerInviteServiceTests
         Assert.Contains("already been used", exception.Message);
     }
 
+    [Fact]
+    public void GetInvitePreview_ReturnsServerSummaryAndMembershipState()
+    {
+        using var context = CreateContext();
+        var service = new ServerInviteService(context);
+        var invite = service.CreateInvite("owner-5", new ServerSnapshot
+        {
+            Id = "server-owner-5-lounge",
+            Name = "Lounge",
+            TextChannels = new List<ChannelSnapshot> { new() { Id = "text-1", Name = "# general" } },
+            VoiceChannels = new List<ChannelSnapshot> { new() { Id = "voice-1", Name = "General" } }
+        });
+
+        var preview = service.GetInvitePreview(invite.InviteCode, "owner-5");
+
+        Assert.Equal(invite.InviteCode, preview.InviteCode);
+        Assert.Equal("server-lounge", preview.ServerId);
+        Assert.Equal("Lounge", preview.ServerName);
+        Assert.Equal(1, preview.TextChannelCount);
+        Assert.Equal(1, preview.VoiceChannelCount);
+        Assert.True(preview.CurrentUserAlreadyMember);
+        Assert.False(preview.IsExpired);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

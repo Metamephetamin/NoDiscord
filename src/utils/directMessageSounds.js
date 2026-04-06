@@ -1,15 +1,17 @@
+import { resolveStaticAssetUrl } from "./media";
+
 const DIRECT_MESSAGE_SOUND_ENABLED_STORAGE_KEY = "nd_direct_message_sound_enabled";
 const DIRECT_MESSAGE_SEND_SOUND_STORAGE_KEY = "nd_direct_message_send_sound";
 const DIRECT_MESSAGE_RECEIVE_SOUND_STORAGE_KEY = "nd_direct_message_receive_sound";
 
 const DIRECT_MESSAGE_SOUND_OPTIONS = {
   send: [
-    { id: "classic", label: "iPhone Classic", path: "/sounds/iphone-send-w.mp3" },
-    { id: "soft", label: "Soft Tap", path: "/sounds/dm-send-soft.ogg" },
+    { id: "classic", label: "iPhone Classic", path: resolveStaticAssetUrl("/sounds/iphone-send-w.mp3") },
+    { id: "soft", label: "Soft Tap", path: resolveStaticAssetUrl("/sounds/dm-send-soft.ogg") },
   ],
   receive: [
-    { id: "classic", label: "iPhone Classic", path: "/sounds/iphone-receive-w.mp3" },
-    { id: "soft", label: "Soft Glass", path: "/sounds/dm-receive-soft.ogg" },
+    { id: "classic", label: "iPhone Classic", path: resolveStaticAssetUrl("/sounds/iphone-receive-w.mp3") },
+    { id: "soft", label: "Soft Glass", path: resolveStaticAssetUrl("/sounds/dm-receive-soft.ogg") },
   ],
 };
 

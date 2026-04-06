@@ -6,6 +6,7 @@
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
+    "dev:frontend": "vite --config vite.renderer.config.mjs",
     "start:backend": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-backend.ps1",
     "start:livekit": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-livekit.ps1",
     "start:livekit:docker": "docker compose --env-file .env -f src/livekit/docker-compose.yml up -d --force-recreate",
@@ -38,6 +39,7 @@
     "@electron-forge/plugin-vite": "^7.10.2",
     "@electron/fuses": "^1.8.0",
     "@eslint/js": "^9.39.4",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "electron": "39.0.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",

@@ -1,4 +1,5 @@
-const DEFAULT_AVATAR = "/image/avatar.jpg";
+import { DEFAULT_AVATAR } from "../utils/media";
+
 const NOISE_SUPPRESSION_MODE_TRANSPARENT = "transparent";
 const NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const PREFERRED_AUDIO_SAMPLE_RATE = 48_000;

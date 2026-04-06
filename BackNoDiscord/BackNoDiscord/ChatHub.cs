@@ -23,6 +23,9 @@ public class ChatHub : Hub
     private const int MaxMentionDisplayNameLength = 160;
     private const int MaxMentionsPerMessage = 24;
     private const int MaxForwardBatchSize = 30;
+    private const int MaxVoiceWaveformBars = 96;
+    private const int MaxVoiceMimeTypeLength = 120;
+    private const int MaxVoiceFileNameLength = 160;
     private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromSeconds(1.5);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
 
@@ -50,7 +53,8 @@ public class ChatHub : Hub
         string? attachmentContentType = null,
         ChatMessageEncryptionEnvelope? encryption = null,
         ChatAttachmentEncryptionEnvelope? attachmentEncryption = null,
-        List<ChatMentionInput>? mentions = null)
+        List<ChatMentionInput>? mentions = null,
+        ChatVoiceMessageInput? voiceMessage = null)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -86,7 +90,8 @@ public class ChatHub : Hub
                 : UploadPolicies.SanitizeDisplayFileName(attachmentName),
             AttachmentSize = attachmentSize,
             AttachmentContentType = UploadPolicies.TrimToLength(attachmentContentType, MaxAttachmentContentTypeLength),
-            Mentions = NormalizeMentions(normalizedChannelId, mentions)
+            Mentions = NormalizeMentions(normalizedChannelId, mentions),
+            VoiceMessage = NormalizeVoiceMessage(voiceMessage)
         };
 
         if (string.IsNullOrWhiteSpace(payload.Message) &&
@@ -179,7 +184,8 @@ public class ChatHub : Hub
                 : UploadPolicies.SanitizeDisplayFileName(item.AttachmentName),
             AttachmentSize = item.AttachmentSize,
             AttachmentContentType = UploadPolicies.TrimToLength(item.AttachmentContentType, MaxAttachmentContentTypeLength),
-            Mentions = []
+            Mentions = [],
+            VoiceMessage = NormalizeVoiceMessage(item.VoiceMessage)
         };
 
             if (string.IsNullOrWhiteSpace(payload.Message) && string.IsNullOrWhiteSpace(payload.AttachmentUrl))
@@ -337,6 +343,60 @@ public class ChatHub : Hub
         await Clients.Group(msg.ChannelId).SendAsync("MessageDeleted", messageId);
     }
 
+    public async Task EditMessage(
+        int messageId,
+        string message,
+        ChatMessageEncryptionEnvelope? encryption = null,
+        List<ChatMentionInput>? mentions = null)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+        {
+            throw new HubException("Unauthorized");
+        }
+
+        var msg = await _context.Messages.FirstOrDefaultAsync(item => item.Id == messageId && !item.IsDeleted);
+        if (msg == null)
+        {
+            throw new HubException("Message not found.");
+        }
+
+        if (!TryAuthorizeChannelAccess(msg.ChannelId, currentUser))
+        {
+            throw new HubException("Forbidden");
+        }
+
+        var payload = DeserializePayload(GetRawPayload(msg));
+        if (!string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
+        {
+            throw new HubException("You can edit only your own messages.");
+        }
+
+        var normalizedMessage = UploadPolicies.TrimToLength(message, MaxMessageLength);
+        var normalizedEncryption = NormalizeEncryptionEnvelope(encryption);
+        if (string.IsNullOrWhiteSpace(normalizedMessage) && normalizedEncryption is null)
+        {
+            throw new HubException("message is required");
+        }
+
+        payload.Message = normalizedMessage;
+        payload.Encryption = normalizedEncryption;
+        payload.Mentions = NormalizeMentions(msg.ChannelId, mentions);
+        payload.EditedAt = DateTime.UtcNow;
+
+        msg.EncryptedContent = _crypto.Encrypt(SerializePayload(payload));
+        msg.Content = null;
+
+        await _context.SaveChangesAsync();
+
+        var reactionsByMessageId = await BuildReactionMapAsync([messageId]);
+        await Clients.Group(msg.ChannelId).SendAsync(
+            "MessageUpdated",
+            ToMessageDto(
+                msg,
+                payload,
+                reactionsByMessageId.TryGetValue(messageId, out var reactions) ? reactions : []));
+    }
+
     public async Task ToggleReaction(int messageId, string reactionKey, string reactionGlyph)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
@@ -415,6 +475,7 @@ public class ChatHub : Hub
             AttachmentName = payload.AttachmentName,
             AttachmentSize = payload.AttachmentSize,
             AttachmentContentType = payload.AttachmentContentType,
+            VoiceMessage = payload.VoiceMessage,
             Mentions = payload.Mentions
                 .Select(mention => new MessageMentionDto
                 {
@@ -424,6 +485,7 @@ public class ChatHub : Hub
                 })
                 .ToList(),
             Timestamp = message.Timestamp,
+            EditedAt = payload.EditedAt,
             IsRead = message.ReadAt.HasValue,
             ReadAt = message.ReadAt,
             ReadByUserId = message.ReadByUserId,
@@ -526,6 +588,35 @@ public class ChatHub : Hub
             FileIv = fileIv,
             MetadataIv = metadataIv,
             MetadataCiphertext = metadataCiphertext
+        };
+    }
+
+    private static ChatVoiceMessagePayload? NormalizeVoiceMessage(ChatVoiceMessageInput? voiceMessage)
+    {
+        if (voiceMessage is null)
+        {
+            return null;
+        }
+
+        var durationMs = Math.Max(0, Math.Min(voiceMessage.DurationMs, 60 * 60 * 1000));
+        var mimeType = UploadPolicies.TrimToLength(voiceMessage.MimeType, MaxVoiceMimeTypeLength);
+        var fileName = UploadPolicies.TrimToLength(voiceMessage.FileName, MaxVoiceFileNameLength);
+        var waveform = (voiceMessage.Waveform ?? [])
+            .Take(MaxVoiceWaveformBars)
+            .Select(sample => Math.Max(0, Math.Min(1, sample)))
+            .ToList();
+
+        if (durationMs <= 0 && waveform.Count == 0 && string.IsNullOrWhiteSpace(mimeType) && string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        return new ChatVoiceMessagePayload
+        {
+            DurationMs = durationMs,
+            MimeType = mimeType,
+            FileName = fileName,
+            Waveform = waveform
         };
     }
 
@@ -824,8 +915,10 @@ public class MessageDto
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public ChatVoiceMessagePayload? VoiceMessage { get; set; }
     public List<MessageMentionDto> Mentions { get; set; } = [];
     public DateTime Timestamp { get; set; }
+    public DateTime? EditedAt { get; set; }
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public string? ReadByUserId { get; set; }
@@ -881,7 +974,25 @@ public class ChatMessagePayload
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public ChatVoiceMessagePayload? VoiceMessage { get; set; }
     public List<ChatMentionPayload> Mentions { get; set; } = [];
+    public DateTime? EditedAt { get; set; }
+}
+
+public class ChatVoiceMessageInput
+{
+    public int DurationMs { get; set; }
+    public string MimeType { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public List<double> Waveform { get; set; } = [];
+}
+
+public class ChatVoiceMessagePayload
+{
+    public int DurationMs { get; set; }
+    public string MimeType { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public List<double> Waveform { get; set; } = [];
 }
 
 public class ChatMessageEncryptionEnvelope
@@ -927,6 +1038,7 @@ public class ForwardMessageInput
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public ChatVoiceMessageInput? VoiceMessage { get; set; }
 }
 
 public class ChatMentionInput

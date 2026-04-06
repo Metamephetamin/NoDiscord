@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
+const DEFAULT_LOCAL_LIVEKIT_URL = "wss://localhost:5173/livekit";
 const DEFAULT_PACKAGED_API_URL = "https://api.85.198.68.187.sslip.io";
 const DEFAULT_PACKAGED_LIVEKIT_URL = "wss://live.85.198.68.187.sslip.io";
+const DEFAULT_APP_PROTOCOL = "nodiscord";
 
 function isPackagedRuntime() {
   return process.defaultApp !== true;
@@ -94,11 +96,14 @@ function buildVoiceRuntimeConfig() {
           ? "relay"
           : "all";
   const defaultApiUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_API_URL : DEFAULT_LOCAL_API_URL;
-  const defaultLiveKitUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_LIVEKIT_URL : "";
+  const defaultLiveKitUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_LIVEKIT_URL : DEFAULT_LOCAL_LIVEKIT_URL;
 
   return {
     apiUrl: process.env.ND_API_URL?.trim() || process.env.VITE_API_URL?.trim() || defaultApiUrl,
     liveKitUrl: process.env.ND_LIVEKIT_URL?.trim() || defaultLiveKitUrl,
+    publicAppUrl: process.env.ND_PUBLIC_APP_URL?.trim() || process.env.VITE_PUBLIC_APP_URL?.trim() || "",
+    appProtocol: process.env.ND_APP_PROTOCOL?.trim() || DEFAULT_APP_PROTOCOL,
+    isPackagedApp: isPackagedRuntime(),
     voiceRtcConfig: {
       iceServers: normalizedIceServers,
       iceTransportPolicy: resolvedIceTransportPolicy,
@@ -152,4 +157,27 @@ contextBridge.exposeInMainWorld("electronDownloads", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronClipboard", {
+  async writeText(value) {
+    return ipcRenderer.invoke("clipboard:write-text", value);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronRuntime", buildVoiceRuntimeConfig());
+
+contextBridge.exposeInMainWorld("electronAppLinks", {
+  onNavigate(callback) {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, route) => {
+      callback(String(route || ""));
+    };
+
+    ipcRenderer.on("app:navigate", listener);
+    return () => {
+      ipcRenderer.removeListener("app:navigate", listener);
+    };
+  },
+});

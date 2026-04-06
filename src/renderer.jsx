@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Auth from "./components/Auth";
 import MenuMain from "./components/MenuMain";
+import ServerInvitePage from "./components/ServerInvitePage";
 import { API_BASE_URL } from "./config/runtime";
 import "./index.css";
 import {
@@ -16,10 +18,15 @@ import {
 } from "./utils/auth";
 
 export default function Renderer() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+  const [pendingImportedServer, setPendingImportedServer] = useState(null);
+
+  const isInviteRoute = /^\/invite\/[^/]+$/i.test(location.pathname);
 
   useEffect(() => {
     let disposed = false;
@@ -121,6 +128,22 @@ export default function Renderer() {
     }
   }, [sessionHydrated, token, user]);
 
+  useEffect(() => {
+    const appLinksApi = window?.electronAppLinks;
+    if (!appLinksApi?.onNavigate) {
+      return undefined;
+    }
+
+    return appLinksApi.onNavigate((nextRoute) => {
+      const normalizedRoute = String(nextRoute || "").trim();
+      if (!normalizedRoute) {
+        return;
+      }
+
+      navigate(normalizedRoute, { replace: false });
+    });
+  }, [navigate]);
+
   const handleAuthSuccess = (nextUser, nextSession) => {
     const accessToken =
       nextSession && typeof nextSession === "object" ? nextSession.accessToken || nextSession.token || "" : nextSession;
@@ -138,18 +161,50 @@ export default function Renderer() {
     void clearStoredSession();
   };
 
+  const handleInviteAccepted = (snapshot) => {
+    if (!snapshot) {
+      return;
+    }
+
+    setPendingImportedServer(snapshot);
+    navigate("/", { replace: true });
+  };
+
   if (loading) {
     return (
       <div className="app-loader">
-        <div className="app-loader__orb" />
-        <div className="app-loader__title">Загрузка</div>
+        <div className="app-loader__stage" aria-hidden="true">
+          <div className="app-loader__halo" />
+          <div className="app-loader__ring app-loader__ring--outer" />
+          <div className="app-loader__ring app-loader__ring--inner" />
+          <div className="app-loader__core" />
+          <span className="app-loader__spark app-loader__spark--one" />
+          <span className="app-loader__spark app-loader__spark--two" />
+          <span className="app-loader__spark app-loader__spark--three" />
+        </div>
         <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
       </div>
     );
   }
 
+  if (isInviteRoute) {
+    return (
+      <ServerInvitePage
+        user={user}
+        onAuthSuccess={handleAuthSuccess}
+        onInviteAccepted={handleInviteAccepted}
+      />
+    );
+  }
+
   return token && user ? (
-    <MenuMain user={user} setUser={setUser} onLogout={handleLogout} />
+    <MenuMain
+      user={user}
+      setUser={setUser}
+      onLogout={handleLogout}
+      pendingImportedServer={pendingImportedServer}
+      onPendingImportedServerHandled={() => setPendingImportedServer(null)}
+    />
   ) : (
     <Auth onAuthSuccess={handleAuthSuccess} />
   );

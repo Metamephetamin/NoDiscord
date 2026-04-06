@@ -62,6 +62,27 @@ public class ServerStateService
             : CloneSnapshot(NormalizeSnapshot(DeserializeSnapshot(record.SnapshotJson), record.OwnerUserId));
     }
 
+    public IReadOnlyList<ServerSnapshot> GetSnapshotsForUser(string userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Array.Empty<ServerSnapshot>();
+        }
+
+        var normalizedUserId = userId.Trim();
+        return _context.SharedServerSnapshots
+            .AsNoTracking()
+            .AsEnumerable()
+            .Select((record) => NormalizeSnapshot(DeserializeSnapshot(record.SnapshotJson), record.OwnerUserId))
+            .Where((snapshot) =>
+                string.Equals(snapshot.OwnerId, normalizedUserId, StringComparison.Ordinal) ||
+                snapshot.Members.Any((member) => string.Equals(member.UserId, normalizedUserId, StringComparison.Ordinal)))
+            .OrderByDescending((snapshot) => snapshot.IsShared)
+            .ThenBy((snapshot) => snapshot.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(CloneSnapshot)
+            .ToList();
+    }
+
     public ServerSnapshot AddMember(string serverId, string userId, string name, string avatar)
     {
         var record = FindSnapshotRecordByServerId(serverId);

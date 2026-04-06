@@ -139,6 +139,19 @@ async function writeSecureValue(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+async function removeSecureValue(key) {
+  if (!key) {
+    return;
+  }
+
+  if (window?.electronSecrets?.remove) {
+    await window.electronSecrets.remove(key);
+    return;
+  }
+
+  localStorage.removeItem(key);
+}
+
 async function computeFingerprint(publicKeyJwk) {
   const canonicalJson = JSON.stringify(sortObjectKeys(publicKeyJwk));
   const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(canonicalJson));
@@ -277,6 +290,14 @@ async function persistSharedKey(sharedKeyId, keyDate, rawKey) {
   }));
 }
 
+async function clearPersistedSharedKey(sharedKeyId) {
+  const storageKey = getSharedKeyStorageKey(sharedKeyId);
+  sharedKeyCache.delete(sharedKeyId);
+  if (storageKey) {
+    await removeSecureValue(storageKey);
+  }
+}
+
 async function fetchChannelKeyState({ channelId, scope, keyDate }) {
   const response = await authFetch(`${API_BASE_URL}/e2ee/channel-key`, {
     method: "POST",
@@ -396,11 +417,21 @@ async function resolveSharedChannelKey({ channelId, user, scope = TEXT_SCOPE, ke
     const participantsWithoutKeys = participants.filter((participant) => !participant?.hasKey);
 
     let sharedKeyRaw = null;
-    if (secureStoredKey?.rawKey?.length) {
+    let usedSecureStoredKey = false;
+    if (keyState.currentEnvelope) {
+      try {
+        sharedKeyRaw = await decryptSharedKeyEnvelope({ envelope: keyState.currentEnvelope, identity });
+      } catch {
+        sharedKeyRaw = null;
+      }
+    }
+
+    if (!sharedKeyRaw && secureStoredKey?.rawKey?.length) {
       sharedKeyRaw = secureStoredKey.rawKey;
-    } else if (keyState.currentEnvelope) {
-      sharedKeyRaw = await decryptSharedKeyEnvelope({ envelope: keyState.currentEnvelope, identity });
-    } else {
+      usedSecureStoredKey = true;
+    }
+
+    if (!sharedKeyRaw) {
       if ((keyState.availableRecipientUserIds || []).length > 0) {
         throw new Error("The current daily E2EE key has not been shared with this user yet.");
       }
@@ -419,6 +450,17 @@ async function resolveSharedChannelKey({ channelId, user, scope = TEXT_SCOPE, ke
         sharedKeyRaw,
         participants: keyedParticipants,
       });
+    }
+
+    if (usedSecureStoredKey && keyState.currentEnvelope) {
+      try {
+        const refreshedSharedKey = await decryptSharedKeyEnvelope({ envelope: keyState.currentEnvelope, identity });
+        if (refreshedSharedKey?.length) {
+          sharedKeyRaw = refreshedSharedKey;
+        }
+      } catch {
+        // keep locally stored shared key when the envelope still targets an older device key
+      }
     }
 
     const availableRecipientUserIds = new Set((keyState.availableRecipientUserIds || []).map((item) => String(item || "")));
@@ -627,15 +669,32 @@ export async function decryptIncomingMessageText(messageItem, user, { channelId 
   try {
     if (String(encryption?.sharedKeyId || "").trim()) {
       const parsedSharedKey = parseSharedKeyId(encryption.sharedKeyId, scope);
-      const sharedKey = await ensureDailySharedChannelKey({
-        channelId: parsedSharedKey.channelId || channelId || String(messageItem?.channelId || ""),
-        user,
-        scope: parsedSharedKey.scope || scope,
-        keyDate: parsedSharedKey.keyDate,
-      });
-      const plaintextBytes = await decryptWithAesGcm(sharedKey.rawKey, encryption.iv, encryption.ciphertext);
+      const resolvedChannelId = parsedSharedKey.channelId || channelId || String(messageItem?.channelId || "");
+      const resolvedScope = parsedSharedKey.scope || scope;
+      let plaintextBytes = null;
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const sharedKey = await ensureDailySharedChannelKey({
+            channelId: resolvedChannelId,
+            user,
+            scope: resolvedScope,
+            keyDate: parsedSharedKey.keyDate,
+          });
+          plaintextBytes = await decryptWithAesGcm(sharedKey.rawKey, encryption.iv, encryption.ciphertext);
+          break;
+        } catch (error) {
+          if (attempt === 0 && String(encryption?.sharedKeyId || "").trim()) {
+            await clearPersistedSharedKey(encryption.sharedKeyId);
+            continue;
+          }
+
+          throw error;
+        }
+      }
+
       return {
-        text: textDecoder.decode(plaintextBytes),
+        text: textDecoder.decode(plaintextBytes || new Uint8Array()),
         encryptionState: "e2ee",
       };
     }
@@ -720,13 +779,30 @@ export async function decryptIncomingAttachment(messageItem, user, { channelId =
   }
 
   const parsedSharedKey = parseSharedKeyId(attachmentEncryption.sharedKeyId, scope);
-  const sharedKey = await ensureDailySharedChannelKey({
-    channelId: parsedSharedKey.channelId || channelId || String(messageItem?.channelId || ""),
-    user,
-    scope: parsedSharedKey.scope || scope,
-    keyDate: parsedSharedKey.keyDate,
-  });
-  const fileKeyRaw = await unwrapFileKeyWithSharedKey(sharedKey.rawKey, attachmentEncryption);
+  const resolvedChannelId = parsedSharedKey.channelId || channelId || String(messageItem?.channelId || "");
+  const resolvedScope = parsedSharedKey.scope || scope;
+  let fileKeyRaw = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const sharedKey = await ensureDailySharedChannelKey({
+        channelId: resolvedChannelId,
+        user,
+        scope: resolvedScope,
+        keyDate: parsedSharedKey.keyDate,
+      });
+      fileKeyRaw = await unwrapFileKeyWithSharedKey(sharedKey.rawKey, attachmentEncryption);
+      break;
+    } catch (error) {
+      if (attempt === 0) {
+        await clearPersistedSharedKey(attachmentEncryption.sharedKeyId);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
   const metadataBytes = await decryptWithAesGcm(fileKeyRaw, attachmentEncryption.metadataIv, attachmentEncryption.metadataCiphertext);
   const metadata = JSON.parse(textDecoder.decode(metadataBytes));
   const encryptedFileBytes = await readRemoteAttachmentCipherBytes(attachmentUrl);

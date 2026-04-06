@@ -2,9 +2,20 @@
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { resolveStaticAssetUrl } from "../utils/media";
+import {
+  areNamesUsingSameScript,
+  detectNameScript,
+  normalizeSingleWordNameInput,
+} from "../utils/nameScripts";
 
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
+const MAX_AUTH_NAME_LENGTH = 32;
+const MAX_AUTH_IDENTIFIER_LENGTH = 50;
+const MAX_AUTH_PASSWORD_LENGTH = 128;
+const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
+const AUTH_BRAND_LOGO_URL = resolveStaticAssetUrl("/image/image.png");
 
 const initialRegisterForm = {
   firstName: "",
@@ -17,6 +28,11 @@ const initialRegisterForm = {
 };
 
 const initialLoginForm = {
+  identifier: "",
+  password: "",
+};
+
+const initialLoginErrors = {
   identifier: "",
   password: "",
 };
@@ -84,10 +100,16 @@ function normalizeContactInput(value) {
   const candidate = String(value || "");
 
   if (candidate.includes("@") || /[a-zA-Z\u0400-\u04FF]/.test(candidate)) {
-    return candidate.trimStart().slice(0, 120);
+    return candidate.trimStart().slice(0, MAX_AUTH_IDENTIFIER_LENGTH);
   }
 
   return formatPhoneInput(candidate);
+}
+
+function normalizeIdentifierInput(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .slice(0, MAX_AUTH_IDENTIFIER_LENGTH);
 }
 
 function normalizeRussianPhone(value) {
@@ -166,7 +188,10 @@ async function submitAuthRequest(endpoint, payload, fallbackMessage) {
   const data = await parseApiResponse(response);
 
   if (!response.ok) {
-    throw new Error(getApiErrorMessage(response, data, fallbackMessage));
+    const error = new Error(getApiErrorMessage(response, data, fallbackMessage));
+    error.response = response;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -176,6 +201,7 @@ export default function Auth({ onAuthSuccess }) {
   const [mode, setMode] = useState("login");
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
   const [loginForm, setLoginForm] = useState(initialLoginForm);
+  const [loginErrors, setLoginErrors] = useState(initialLoginErrors);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRequestingPhoneCode, setIsRequestingPhoneCode] = useState(false);
@@ -233,6 +259,10 @@ export default function Auth({ onAuthSuccess }) {
     Boolean(emailVerificationModal.email) &&
     emailResendSecondsLeft === 0 &&
     !isResendingEmailCode;
+  const registerNameScript = useMemo(
+    () => detectNameScript(registerForm.firstName) || detectNameScript(registerForm.lastName),
+    [registerForm.firstName, registerForm.lastName]
+  );
 
   const resetPhoneVerification = () => {
     setPhoneVerificationCode("");
@@ -278,8 +308,27 @@ export default function Auth({ onAuthSuccess }) {
       nextValue = formatCardExpiry(nextValue);
     } else if (field === "cardCvc") {
       nextValue = nextValue.replace(/\D/g, "").slice(0, 3);
+    } else if (field === "firstName" || field === "lastName") {
+      const otherField = field === "firstName" ? "lastName" : "firstName";
+
+      setRegisterForm((previous) => {
+        const lockedScript =
+          detectNameScript(previous[otherField]) ||
+          detectNameScript(previous[field]) ||
+          detectNameScript(nextValue);
+
+        return {
+          ...previous,
+          [field]: normalizeSingleWordNameInput(nextValue, MAX_AUTH_NAME_LENGTH, lockedScript),
+        };
+      });
+
+      setMessage("");
+      return;
     } else if (field === "contact") {
       nextValue = normalizeContactInput(nextValue);
+    } else if (field === "password") {
+      nextValue = nextValue.slice(0, MAX_AUTH_PASSWORD_LENGTH);
     }
 
     setRegisterForm((previous) => ({ ...previous, [field]: nextValue }));
@@ -290,12 +339,22 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   const handleLoginFieldChange = (field) => (event) => {
-    setLoginForm((previous) => ({ ...previous, [field]: event.target.value }));
+    const nextValue =
+      field === "identifier"
+        ? normalizeIdentifierInput(event.target.value)
+        : field === "password"
+          ? event.target.value.slice(0, MAX_AUTH_PASSWORD_LENGTH)
+          : event.target.value;
+
+    setLoginForm((previous) => ({ ...previous, [field]: nextValue }));
+    setLoginErrors((previous) => ({ ...previous, [field]: "" }));
+    setMessage("");
   };
 
   const handleLogin = async (event) => {
     event.preventDefault();
     setMessage("");
+    setLoginErrors(initialLoginErrors);
 
     const payload = {
       identifier: loginForm.identifier.trim(),
@@ -303,17 +362,26 @@ export default function Auth({ onAuthSuccess }) {
     };
 
     if (!payload.identifier || !payload.password) {
-      setMessage("Введите email или номер телефона и пароль.");
+      setLoginErrors({
+        identifier: payload.identifier ? "" : "Введите email или номер телефона.",
+        password: payload.password ? "" : "Введите пароль.",
+      });
       return;
     }
 
     if (payload.identifier.includes("@") && !isSupportedEmail(payload.identifier)) {
-      setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
+      setLoginErrors({
+        identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
+        password: "",
+      });
       return;
     }
 
     if (!payload.identifier.includes("@") && !normalizeRussianPhone(payload.identifier)) {
-      setMessage("Введите российский номер телефона в формате +7XXXXXXXXXX.");
+      setLoginErrors({
+        identifier: "Введите российский номер телефона в формате +7XXXXXXXXXX.",
+        password: "",
+      });
       return;
     }
 
@@ -323,7 +391,19 @@ export default function Auth({ onAuthSuccess }) {
       const data = await submitAuthRequest("/auth/login", payload, "Не удалось войти в аккаунт.");
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
-      setMessage(error.message || "Не удалось войти в аккаунт.");
+      const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
+        ? error.data.fieldErrors
+        : null;
+
+      if (backendFieldErrors) {
+        setLoginErrors({
+          identifier: typeof backendFieldErrors.identifier === "string" ? backendFieldErrors.identifier : "",
+          password: typeof backendFieldErrors.password === "string" ? backendFieldErrors.password : "",
+        });
+      } else {
+        setMessage(error.message || "Не удалось войти в аккаунт.");
+      }
+
       setIsSubmitting(false);
     }
   };
@@ -414,6 +494,11 @@ export default function Auth({ onAuthSuccess }) {
 
     if (!payload.first_name || !payload.last_name || !registerForm.contact.trim()) {
       setMessage("Заполните обязательные поля.");
+      return;
+    }
+
+    if (!registerNameScript || !areNamesUsingSameScript(payload.first_name, payload.last_name)) {
+      setMessage("Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.");
       return;
     }
 
@@ -554,6 +639,7 @@ export default function Auth({ onAuthSuccess }) {
   const switchMode = (nextMode) => {
     setMode(nextMode);
     setMessage("");
+    setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
     setIsRequestingPhoneCode(false);
     setIsVerifyingPhoneCode(false);
@@ -575,12 +661,12 @@ export default function Auth({ onAuthSuccess }) {
         disableRemotePlayback
         aria-hidden="true"
       >
-        <source src="/video/GoldenDustGlow2.mp4" type="video/mp4" />
+        <source src={AUTH_BACKGROUND_VIDEO_URL} type="video/mp4" />
       </video>
 
       <div className="auth-brand">
         <div className="auth-brand__badge">
-          <img className="auth-brand__logo" src="/image/image.png" alt="MAX" />
+          <img className="auth-brand__logo" src={AUTH_BRAND_LOGO_URL} alt="MAX" />
         </div>
         <div className="auth-brand__copy">
           <span className="auth-brand__name">
@@ -625,22 +711,30 @@ export default function Auth({ onAuthSuccess }) {
           {mode === "login" ? (
             <div className="auth-section">
               <div className="auth-section__title">Данные для входа</div>
-              <input
-                className="auth-input"
-                placeholder="Email или телефон"
-                type="text"
-                value={loginForm.identifier}
-                onChange={handleLoginFieldChange("identifier")}
-                required
-              />
-              <input
-                className="auth-input"
-                placeholder="Пароль"
-                type="password"
-                value={loginForm.password}
-                onChange={handleLoginFieldChange("password")}
-                required
-              />
+              <label className="auth-field">
+                <input
+                  className={`auth-input ${loginErrors.identifier ? "auth-input--error" : ""}`}
+                  placeholder="Email или телефон"
+                  type="text"
+                  value={loginForm.identifier}
+                  onChange={handleLoginFieldChange("identifier")}
+                  maxLength={MAX_AUTH_IDENTIFIER_LENGTH}
+                  required
+                />
+                {loginErrors.identifier ? <span className="auth-field__error">{loginErrors.identifier}</span> : null}
+              </label>
+              <label className="auth-field">
+                <input
+                  className={`auth-input ${loginErrors.password ? "auth-input--error" : ""}`}
+                  placeholder="Пароль"
+                  type="password"
+                  value={loginForm.password}
+                  onChange={handleLoginFieldChange("password")}
+                  maxLength={MAX_AUTH_PASSWORD_LENGTH}
+                  required
+                />
+                {loginErrors.password ? <span className="auth-field__error">{loginErrors.password}</span> : null}
+              </label>
             </div>
           ) : (
             <div className="auth-section">
@@ -651,6 +745,7 @@ export default function Auth({ onAuthSuccess }) {
                   placeholder="Имя"
                   value={registerForm.firstName}
                   onChange={handleRegisterFieldChange("firstName")}
+                  maxLength={MAX_AUTH_NAME_LENGTH}
                   required
                 />
                 <input
@@ -658,6 +753,7 @@ export default function Auth({ onAuthSuccess }) {
                   placeholder="Фамилия"
                   value={registerForm.lastName}
                   onChange={handleRegisterFieldChange("lastName")}
+                  maxLength={MAX_AUTH_NAME_LENGTH}
                   required
                 />
               </div>
@@ -668,6 +764,7 @@ export default function Auth({ onAuthSuccess }) {
                 type="text"
                 value={registerForm.contact}
                 onChange={handleRegisterFieldChange("contact")}
+                maxLength={MAX_AUTH_IDENTIFIER_LENGTH}
                 required
               />
               {registerContactKind === "phone" ? (
@@ -710,6 +807,7 @@ export default function Auth({ onAuthSuccess }) {
                 type="password"
                 value={registerForm.password}
                 onChange={handleRegisterFieldChange("password")}
+                maxLength={MAX_AUTH_PASSWORD_LENGTH}
                 minLength={6}
                 required
               />

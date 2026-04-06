@@ -299,6 +299,12 @@
   gap: 12px;
 }
 
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .auth-section__title,
 .auth-side__title {
   color: #18263a;
@@ -346,6 +352,21 @@
 .auth-input:focus {
   border-color: rgba(91, 124, 255, 0.42);
   box-shadow: 0 0 0 3px rgba(91, 124, 255, 0.12);
+}
+
+.auth-input--error,
+.auth-input--error:focus,
+.auth-input--error:focus-visible {
+  border-color: rgba(208, 72, 72, 0.72);
+  box-shadow: 0 0 0 3px rgba(208, 72, 72, 0.12);
+}
+
+.auth-field__error {
+  color: #b43a3a;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 0 2px;
+  text-align: left;
 }
 
 .auth-file {

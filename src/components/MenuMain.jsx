@@ -13,6 +13,7 @@ import { API_BASE_URL, API_URL } from "../config/runtime";
 import { ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
 import {
   validateAvatarFile,
+  validateServerIconFile,
 } from "../utils/avatarMedia";
 import {
   authFetch,
@@ -25,6 +26,7 @@ import {
   storeSession,
 } from "../utils/auth";
 import { getChatDraftUpdatedEventName, hasChatDraft } from "../utils/chatDrafts";
+import { copyTextToClipboard } from "../utils/clipboard";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
 import {
   getDirectMessageReceiveSoundStorageKey,
@@ -33,8 +35,20 @@ import {
   getDirectMessageSoundOptions,
 } from "../utils/directMessageSounds";
 import { isUserMentioned } from "../utils/messageMentions";
+import {
+  areNamesUsingSameScript,
+  detectNameScript,
+  normalizeSingleWordNameInput,
+} from "../utils/nameScripts";
+import { buildServerInviteLink } from "../utils/serverInviteLinks";
 import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
-import { DEFAULT_AVATAR, DEFAULT_SERVER_ICON, readFileAsDataUrl, resolveMediaUrl } from "../utils/media";
+import {
+  DEFAULT_AVATAR,
+  DEFAULT_SERVER_ICON,
+  readFileAsDataUrl,
+  resolveMediaUrl,
+  resolveStaticAssetUrl,
+} from "../utils/media";
 
 const SERVERS_STORAGE_KEY = "nd_servers_v2";
 const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
@@ -48,7 +62,7 @@ const NOTIFICATION_SOUND_CUSTOM_NAME_STORAGE_KEY = "nd_notification_sound_custom
 const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
-const MAX_PROFILE_NAME_LENGTH = 60;
+const MAX_PROFILE_NAME_LENGTH = 32;
 const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "# general" },
   { id: "2", name: "# gaming" },
@@ -71,9 +85,9 @@ const STREAM_FPS_OPTIONS = [
   { value: 120, label: "120 FPS" },
 ];
 const NOTIFICATION_SOUND_OPTIONS = [
-  { id: "soft", label: "Мягкий", path: "/sounds/notification-soft.ogg" },
-  { id: "pulse", label: "Пульс", path: "/sounds/notification-pulse.ogg" },
-  { id: "minimal", label: "Минимал", path: "/sounds/notification-minimal.ogg" },
+  { id: "soft", label: "Мягкий", path: resolveStaticAssetUrl("/sounds/notification-soft.ogg") },
+  { id: "pulse", label: "Пульс", path: resolveStaticAssetUrl("/sounds/notification-pulse.ogg") },
+  { id: "minimal", label: "Минимал", path: resolveStaticAssetUrl("/sounds/notification-minimal.ogg") },
 ];
 const DEFAULT_SERVER_ROLES = [
   {
@@ -120,7 +134,7 @@ ROLE_PERMISSION_LABELS.move_members = "Перемещение участнико
 const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const getDisplayName = (user) => {
   if (user?.isSelf) {
-    return "С собой";
+    return "Избранное";
   }
 
   const firstName = String(user?.firstName || user?.first_name || "").trim();
@@ -134,7 +148,20 @@ const getCurrentUserId = (user) => String(user?.id || user?.email || "");
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
 const getScopedVoiceChannelId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
-const isValidProfileName = (value) => /^[\p{L}\p{M}\s'-]+$/u.test(value);
+const isValidProfileName = (value) => /^[\p{L}\p{M}'-]+$/u.test(value);
+const getFriendSearchModeForQuery = (value) =>
+  String(value || "").includes("@") ? "email" : "name";
+const parseFriendSearchInput = (value) => {
+  const rawValue = String(value || "");
+  const trimmedValue = rawValue.trim();
+  const mode = getFriendSearchModeForQuery(trimmedValue);
+  const normalizedQuery =
+    mode === "email"
+      ? trimmedValue.replace(/^@+/, "").trim().toLowerCase()
+      : trimmedValue;
+
+  return { mode, normalizedQuery };
+};
 const getUserStorageScope = (user) => String(user?.id || user?.email || "guest");
 const sanitizeScopeFragment = (value) =>
   String(value || "")
@@ -442,6 +469,16 @@ const readStoredServers = (user) => {
     return [];
   }
 };
+const mergePersistedServers = (localServers, remoteServers, currentUser) => {
+  const mergedById = new Map();
+  normalizeServers(remoteServers, currentUser).forEach((server) => {
+    mergedById.set(server.id, server);
+  });
+  normalizeServers(localServers, currentUser).forEach((server) => {
+    mergedById.set(server.id, server);
+  });
+  return Array.from(mergedById.values());
+};
 const getChannelDisplayName = (name, type) => (type === "text" && !name.startsWith("#") ? `# ${name}` : name);
 const parseServerChatChannelId = (channelId) => {
   const normalizedChannelId = String(channelId || "").trim();
@@ -455,10 +492,14 @@ const parseServerChatChannelId = (channelId) => {
     channelId: match[2],
   };
 };
-const getServerMessagePreview = (messageItem) => {
+const getIncomingMessagePreview = (messageItem, fallbackText = "Новое сообщение") => {
   const text = String(messageItem?.message || "").trim();
   if (text) {
-    return text;
+    return text.length > 180 ? `${text.slice(0, 177).trimEnd()}...` : text;
+  }
+
+  if (messageItem?.voiceMessage || messageItem?.VoiceMessage) {
+    return "Голосовое сообщение";
   }
 
   const contentType = String(messageItem?.attachmentContentType || "").toLowerCase();
@@ -472,7 +513,7 @@ const getServerMessagePreview = (messageItem) => {
     return `Отправил файл: ${messageItem.attachmentName}`;
   }
 
-  return "Новое сообщение";
+  return fallbackText;
 };
 const normalizeFriend = (friend) => ({
   id: String(friend?.id || ""),
@@ -486,14 +527,18 @@ const normalizeFriend = (friend) => ({
   isSelf: Boolean(friend?.isSelf),
 });
 const UI_SOUND_PATHS = {
-  join: "/sounds/discord-voice-join.mp3",
-  leave: "/sounds/discord-voice-leave.mp3",
-  share: "/sounds/ui-share.ogg",
+  join: resolveStaticAssetUrl("/sounds/discord-voice-join.mp3"),
+  leave: resolveStaticAssetUrl("/sounds/discord-voice-leave.mp3"),
+  share: resolveStaticAssetUrl("/sounds/ui-share.ogg"),
 };
+const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
+const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone.png");
+const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-simple.svg");
+const PENCIL_ICON_URL = resolveStaticAssetUrl("/icons/pencil.svg");
+const SEARCH_ICON_URL = resolveStaticAssetUrl("/icons/search.svg");
+const SMS_ICON_URL = resolveStaticAssetUrl("/icons/sms.svg");
 const FRIENDS_SIDEBAR_ITEMS = [
   { id: "friends", label: "Друзья", icon: "👥" },
-  { id: "discover", label: "Магазин", icon: "◻" },
-  { id: "tasks", label: "Задания", icon: "◎" },
 ];
 const SETTINGS_NAV_ITEMS = [
   { id: "personal_profile", label: "Личный профиль", section: "Пользователь" },
@@ -504,7 +549,13 @@ const SETTINGS_NAV_ITEMS = [
 ];
 const uiSoundCache = new Map();
 
-export default function MenuMain({ user, setUser, onLogout }) {
+export default function MenuMain({
+  user,
+  setUser,
+  onLogout,
+  pendingImportedServer = null,
+  onPendingImportedServerHandled,
+}) {
   const [servers, setServers] = useState(() => readStoredServers(user));
   const [activeServerId, setActiveServerId] = useState(
     () => localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
@@ -545,11 +596,12 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
   const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
   const [memberRoleMenu, setMemberRoleMenu] = useState(null);
+  const [serverContextMenu, setServerContextMenu] = useState(null);
   const [rolesExpanded, setRolesExpanded] = useState(false);
   const [channelRenameState, setChannelRenameState] = useState(null);
   const [friends, setFriends] = useState([]);
   const [friendEmail, setFriendEmail] = useState("");
-  const [friendSearchMode, setFriendSearchMode] = useState("email");
+  const [friendSearchMode, setFriendSearchMode] = useState("name");
   const [friendLookupResults, setFriendLookupResults] = useState([]);
   const [friendLookupLoading, setFriendLookupLoading] = useState(false);
   const [friendLookupPerformed, setFriendLookupPerformed] = useState(false);
@@ -594,6 +646,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
   const memberRoleMenuRef = useRef(null);
+  const serverContextMenuRef = useRef(null);
   const noiseMenuRef = useRef(null);
   const micMenuRef = useRef(null);
   const soundMenuRef = useRef(null);
@@ -610,6 +663,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const hasBoundChatReconnectHandlerRef = useRef(false);
   const userSessionActiveRef = useRef(false);
   const refreshFriendsRef = useRef(() => {});
+  const rerunFriendSearchRef = useRef(() => {});
   const directToastTimeoutsRef = useRef(new Map());
   const serverToastTimeoutsRef = useRef(new Map());
   const appliedInputDeviceRef = useRef("");
@@ -744,6 +798,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
   const canManageChannels = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_channels"), [activeServer, currentUserId]);
   const canManageRoles = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_roles"), [activeServer, currentUserId]);
   const canInviteMembers = useMemo(() => hasServerPermission(activeServer, currentUserId, "invite_members"), [activeServer, currentUserId]);
+  const canInviteToServer = (server) =>
+    Boolean(server) &&
+    !isPersonalDefaultServer(server, user) &&
+    (hasServerPermission(server, currentUserId, "invite_members") || hasServerPermission(server, currentUserId, "manage_server"));
   const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
   const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
@@ -1022,8 +1080,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
   };
 
   const searchFriendCandidates = async (query) => {
-    const normalizedQuery = query.trim();
-    if (normalizedQuery.length < 2) {
+    const { mode, normalizedQuery } = parseFriendSearchInput(query);
+    if (!normalizedQuery) {
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       return;
@@ -1032,10 +1090,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
     try {
       setFriendLookupLoading(true);
       setFriendsError("");
+      setFriendSearchMode(mode);
 
-      const response = await authFetch(`${API_BASE_URL}/friends/search?q=${encodeURIComponent(normalizedQuery)}`, {
-        method: "GET",
-      });
+      const response = await authFetch(
+        `${API_BASE_URL}/friends/search?q=${encodeURIComponent(normalizedQuery)}&mode=${encodeURIComponent(mode)}`,
+        {
+          method: "GET",
+        }
+      );
       const data = await parseApiResponse(response);
 
       if (!response.ok) {
@@ -1060,21 +1122,35 @@ export default function MenuMain({ user, setUser, onLogout }) {
     }
   };
 
-  const handleFriendSearchSubmit = async (event) => {
-    event.preventDefault();
-    const query = friendEmail.trim();
-    if (!query) {
-      setFriendsError(friendSearchMode === "email" ? "Введите email друга." : "Введите имя или ник пользователя.");
+  rerunFriendSearchRef.current = () => {
+    const { normalizedQuery } = parseFriendSearchInput(friendEmail);
+    if (friendsPageSection !== "add" || !normalizedQuery) {
       return;
     }
 
-    await searchFriendCandidates(query);
+    searchFriendCandidates(friendEmail).catch(() => {});
+  };
+
+  const handleFriendSearchSubmit = async (event) => {
+    event.preventDefault();
+    const { mode, normalizedQuery } = parseFriendSearchInput(friendEmail);
+    if (!normalizedQuery) {
+      setFriendsError(mode === "email" ? "Введите email после символа @." : "Введите имя пользователя.");
+      return;
+    }
+
+    await searchFriendCandidates(friendEmail);
   };
 
   const handleAddFriend = async (candidate) => {
-    const query = friendEmail.trim();
-    if (!candidate && !query) {
+    const { mode, normalizedQuery } = parseFriendSearchInput(friendEmail);
+    if (!candidate && !normalizedQuery) {
       setFriendsError("Сначала найдите пользователя.");
+      return;
+    }
+
+    if (!candidate && mode !== "email") {
+      setFriendsError("Без выбора из списка можно добавить друга только по email через @.");
       return;
     }
 
@@ -1088,7 +1164,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
         body: JSON.stringify(
           candidate
             ? { userId: Number(candidate.id), email: candidate.email || "" }
-            : { email: query.toLowerCase() }
+            : { email: mode === "email" ? normalizedQuery : "" }
         ),
       });
       const data = await parseApiResponse(response);
@@ -1109,6 +1185,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
         );
       });
       setFriendEmail("");
+      setFriendSearchMode("name");
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       setFriendsPageSection("friends");
@@ -1217,26 +1294,58 @@ export default function MenuMain({ user, setUser, onLogout }) {
   useEffect(() => {
     if (!user) return;
 
-    try {
-      const existingScopedValue = localStorage.getItem(serversStorageKey);
-      const nextServers = existingScopedValue
-        ? normalizeServers(JSON.parse(existingScopedValue), user)
-        : [];
-      const persistedActiveServerId = localStorage.getItem(activeServerStorageKey) || "";
-      const nextActiveServerId = nextServers.some((server) => server.id === persistedActiveServerId)
-        ? persistedActiveServerId
-        : nextServers[0]?.id || "";
-      const nextActiveServer = nextServers.find((server) => server.id === nextActiveServerId) || nextServers[0];
+    let isDisposed = false;
 
-      setServers(nextServers);
-      setActiveServerId(nextActiveServerId);
-      setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
-    } catch (error) {
-      console.error("Ошибка загрузки пользовательских серверов:", error);
-      setServers([]);
-      setActiveServerId("");
-      setCurrentTextChannelId("");
-    }
+    const loadPersistedServers = async () => {
+      try {
+        const existingScopedValue = localStorage.getItem(serversStorageKey);
+        const localServers = existingScopedValue ? JSON.parse(existingScopedValue) : [];
+        let nextServers = normalizeServers(localServers, user);
+
+        try {
+          const response = await authFetch(`${API_BASE_URL}/server-invites/my-servers`, {
+            method: "GET",
+            cache: "no-store",
+          });
+          const data = await parseApiResponse(response);
+          if (response.ok && Array.isArray(data)) {
+            nextServers = mergePersistedServers(localServers, data, user);
+          }
+        } catch (remoteError) {
+          console.warn("Не удалось загрузить серверы из backend, используем локальный кэш:", remoteError);
+        }
+
+        if (isDisposed) {
+          return;
+        }
+
+        const persistedActiveServerId = localStorage.getItem(activeServerStorageKey) || "";
+        const nextActiveServerId = nextServers.some((server) => server.id === persistedActiveServerId)
+          ? persistedActiveServerId
+          : nextServers[0]?.id || "";
+        const nextActiveServer = nextServers.find((server) => server.id === nextActiveServerId) || nextServers[0];
+
+        setServers(nextServers);
+        setActiveServerId(nextActiveServerId);
+        setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
+      } catch (error) {
+        console.error("Ошибка загрузки пользовательских серверов:", error);
+        if (isDisposed) {
+          return;
+        }
+        setServers([]);
+        setActiveServerId("");
+        setCurrentTextChannelId("");
+      }
+    };
+
+    loadPersistedServers().catch((error) => {
+      console.error("Ошибка инициализации списка серверов:", error);
+    });
+
+    return () => {
+      isDisposed = true;
+    };
   }, [activeServerStorageKey, serversStorageKey, user]);
 
   useEffect(() => {
@@ -1276,6 +1385,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       setFriends([]);
       setActiveDirectFriendId("");
       setFriendEmail("");
+      setFriendSearchMode("name");
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       setFriendsError("");
@@ -1416,6 +1526,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
         )
       );
 
+      rerunFriendSearchRef.current();
+
       setServers((previous) =>
         previous.map((server) => ({
           ...server,
@@ -1492,15 +1604,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
       return undefined;
     }
 
-    const query = friendEmail.trim();
-    if (query.length < 2) {
+    const { mode, normalizedQuery } = parseFriendSearchInput(friendEmail);
+    setFriendSearchMode(mode);
+
+    if (!normalizedQuery) {
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       return undefined;
     }
 
     const timeoutId = window.setTimeout(() => {
-      searchFriendCandidates(query).catch(() => {});
+      searchFriendCandidates(friendEmail).catch(() => {});
     }, 260);
 
     return () => window.clearTimeout(timeoutId);
@@ -2102,7 +2216,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
         return;
       }
 
-      const preview = String(messageItem?.message || "").trim() || "Новое сообщение в личном чате";
+      const preview = getIncomingMessagePreview(messageItem, "Новое сообщение в личном чате");
       pushDirectToast({
         id: createDirectToastId(),
         channelId,
@@ -2169,6 +2283,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       }
 
       const currentUserMentioned = isUserMentioned(messageItem?.mentions, currentUserId);
+      const messagePreview = getIncomingMessagePreview(messageItem, "Новое сообщение");
       pushServerToast({
         id: createServerToastId(),
         channelKey: scopedChannelId,
@@ -2179,8 +2294,8 @@ export default function MenuMain({ user, setUser, onLogout }) {
         channelName: channelInfo.channelName,
         authorName: String(messageItem?.username || "User"),
         preview: currentUserMentioned
-          ? `Вас упомянули в ${channelInfo.channelName}`
-          : getServerMessagePreview(messageItem),
+          ? `Вас упомянули: ${messagePreview}`
+          : messagePreview,
       });
     };
 
@@ -2268,6 +2383,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       const insidePopup = popupRef.current?.contains(target);
       const insideServerPanel = serverMembersRef.current?.contains(target);
       const insideMemberMenu = memberRoleMenuRef.current?.contains(target);
+      const insideServerContextMenu = serverContextMenuRef.current?.contains(target);
       const insideNoiseMenu = noiseMenuRef.current?.contains(target);
       const insideMicMenu = micMenuRef.current?.contains(target);
       const insideSoundMenu = soundMenuRef.current?.contains(target);
@@ -2275,6 +2391,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       if (popupRef.current && !insidePopup) setOpenSettings(false);
       if (serverMembersRef.current && !insideServerPanel && !insideMemberMenu) setShowServerMembersPanel(false);
       if (!insideMemberMenu) setMemberRoleMenu(null);
+      if (!insideServerContextMenu) setServerContextMenu(null);
       if (!insideNoiseMenu) setShowNoiseMenu(false);
       if (!insideMicMenu) setShowMicMenu(false);
       if (!insideSoundMenu) setShowSoundMenu(false);
@@ -2284,6 +2401,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
   }, []);
   useEffect(() => {
     setShowServerMembersPanel(false);
+    setServerContextMenu(null);
   }, [activeServerId]);
   useEffect(() => {
     let disposed = false;
@@ -2608,11 +2726,18 @@ export default function MenuMain({ user, setUser, onLogout }) {
     if (!file) return;
 
     try {
+      const validationError = await validateServerIconFile(file);
+      if (validationError) {
+        setCreateServerError(validationError);
+        return;
+      }
+
       const dataUrl = await readFileAsDataUrl(file);
       setCreateServerIcon(dataUrl);
+      setCreateServerError("");
     } catch (error) {
       console.error("Ошибка подготовки иконки сервера:", error);
-      setCreateServerError("Не удалось загрузить изображение сервера.");
+      setCreateServerError("Не удалось загрузить иконку сервера.");
     }
   };
   const handleCreateServerSubmit = (event) => {
@@ -2990,6 +3115,91 @@ export default function MenuMain({ user, setUser, onLogout }) {
     replaceServerSnapshot({ ...snapshot, isShared: true }, { activate: true });
     setOpenSettings(false);
   };
+  useEffect(() => {
+    if (!pendingImportedServer) {
+      return;
+    }
+
+    handleImportServer(pendingImportedServer);
+    onPendingImportedServerHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingImportedServer]);
+  const openServerContextMenu = (event, server) => {
+    if (!server) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    setServerContextMenu({
+      serverId: server.id,
+      x: Math.max(12, Math.min(event.clientX, window.innerWidth - 272)),
+      y: Math.max(12, Math.min(event.clientY, window.innerHeight - 172)),
+      status: "",
+      isLoading: false,
+    });
+  };
+  const copyServerInviteLink = async () => {
+    if (!serverContextMenu?.serverId) {
+      return;
+    }
+
+    const targetServer = servers.find((server) => String(server.id) === String(serverContextMenu.serverId));
+    if (!targetServer) {
+      setServerContextMenu((previous) => (previous ? { ...previous, status: "Сервер не найден.", isLoading: false } : previous));
+      return;
+    }
+
+    if (!canInviteToServer(targetServer)) {
+      setServerContextMenu((previous) => (previous ? { ...previous, status: "Недостаточно прав для приглашения.", isLoading: false } : previous));
+      return;
+    }
+
+    setServerContextMenu((previous) => (previous ? { ...previous, status: "", isLoading: true } : previous));
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/server-invites/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverSnapshot: targetServer,
+        }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось создать ссылку-приглашение."));
+      }
+
+      const inviteLink = buildServerInviteLink(data?.inviteCode || "");
+      if (!inviteLink) {
+        throw new Error("Не удалось подготовить ссылку-приглашение.");
+      }
+
+      await copyTextToClipboard(inviteLink);
+      markServerAsShared(data?.serverId || targetServer.id);
+      setServerContextMenu((previous) =>
+        previous
+          ? {
+              ...previous,
+              status: "Ссылка приглашения скопирована.",
+              isLoading: false,
+            }
+          : previous
+      );
+    } catch (error) {
+      setServerContextMenu((previous) =>
+        previous
+          ? {
+              ...previous,
+              status: error?.message || "Не удалось скопировать ссылку.",
+              isLoading: false,
+            }
+          : previous
+      );
+    }
+  };
   const toggleMicMute = () => {
     setIsMicMuted((previous) => {
       if (previous && (isMicForced || isSoundForced)) {
@@ -3071,7 +3281,24 @@ export default function MenuMain({ user, setUser, onLogout }) {
     }
   };
   const updateProfileDraft = (field, value) => {
-    setProfileDraft((previous) => ({ ...previous, [field]: value }));
+    if (field === "firstName" || field === "lastName") {
+      const otherField = field === "firstName" ? "lastName" : "firstName";
+
+      setProfileDraft((previous) => {
+        const lockedScript =
+          detectNameScript(previous[otherField]) ||
+          detectNameScript(previous[field]) ||
+          detectNameScript(value);
+
+        return {
+          ...previous,
+          [field]: normalizeSingleWordNameInput(value, MAX_PROFILE_NAME_LENGTH, lockedScript),
+        };
+      });
+    } else {
+      setProfileDraft((previous) => ({ ...previous, [field]: value }));
+    }
+
     if (profileStatus) {
       setProfileStatus("");
     }
@@ -3090,12 +3317,17 @@ export default function MenuMain({ user, setUser, onLogout }) {
       nextFirstName.length > MAX_PROFILE_NAME_LENGTH ||
       nextLastName.length > MAX_PROFILE_NAME_LENGTH
     ) {
-      setProfileStatus("Имя и фамилия должны быть не длиннее 60 символов.");
+      setProfileStatus("Имя и фамилия должны быть не длиннее 32 символов.");
       return;
     }
 
     if (!isValidProfileName(nextFirstName) || !isValidProfileName(nextLastName)) {
-      setProfileStatus("Имя и фамилия могут содержать только буквы, пробел, дефис и апостроф.");
+      setProfileStatus("Имя и фамилия должны состоять из одного слова и могут содержать только буквы, дефис и апостроф.");
+      return;
+    }
+
+    if (!areNamesUsingSameScript(nextFirstName, nextLastName)) {
+      setProfileStatus("Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.");
       return;
     }
 
@@ -3200,11 +3432,11 @@ export default function MenuMain({ user, setUser, onLogout }) {
             <div className="profile-settings-form__grid">
               <label className="voice-settings-field voice-settings-field--stacked">
                 <span>Имя</span>
-                <input className="settings-input" type="text" value={profileDraft.firstName} onChange={(event) => updateProfileDraft("firstName", event.target.value)} />
+                <input className="settings-input" type="text" value={profileDraft.firstName} onChange={(event) => updateProfileDraft("firstName", event.target.value)} maxLength={MAX_PROFILE_NAME_LENGTH} />
               </label>
               <label className="voice-settings-field voice-settings-field--stacked">
                 <span>Фамилия</span>
-                <input className="settings-input" type="text" value={profileDraft.lastName} onChange={(event) => updateProfileDraft("lastName", event.target.value)} />
+                <input className="settings-input" type="text" value={profileDraft.lastName} onChange={(event) => updateProfileDraft("lastName", event.target.value)} maxLength={MAX_PROFILE_NAME_LENGTH} />
               </label>
               <label className="voice-settings-field voice-settings-field--stacked profile-settings-form__field--full">
                 <span>Email</span>
@@ -3547,9 +3779,10 @@ export default function MenuMain({ user, setUser, onLogout }) {
           <section className="voice-settings-card">
             <div className="settings-server-card settings-server-card--shell">
               {activeServer?.icon ? (
-                <img
+                <AnimatedAvatar
                   className="settings-server-card__icon"
-                  src={resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON)}
+                  src={activeServer.icon}
+                  fallback={DEFAULT_SERVER_ICON}
                   alt={activeServer?.name || "Без названия"}
                 />
               ) : (
@@ -3596,12 +3829,12 @@ export default function MenuMain({ user, setUser, onLogout }) {
                     <div className="server-members-panel__indicators">
                       {memberVoiceState?.isMicMuted && (
                         <span className="server-members-panel__voice-flag server-members-panel__voice-flag--slashed" title="Микрофон выключен">
-                          <img src="/icons/microphone.png" alt="" />
+                          <img src={MICROPHONE_ICON_URL} alt="" />
                         </span>
                       )}
                       {memberVoiceState?.isDeafened && (
                         <span className="server-members-panel__voice-flag server-members-panel__voice-flag--slashed" title="Не слышит участников">
-                          <img src="/icons/headphones-simple.svg" alt="" />
+                          <img src={HEADPHONES_ICON_URL} alt="" />
                         </span>
                       )}
                       {canOpenMemberMenu && (
@@ -3611,7 +3844,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                           aria-label={`Управление участником ${member.name}`}
                           onClick={(event) => openMemberActionsMenu(event, member)}
                         >
-                          <img src="/icons/settings.png" alt="" />
+                          <img src={SETTINGS_ICON_URL} alt="" />
                         </button>
                       )}
                     </div>
@@ -3767,7 +4000,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       </div>
       <button type="button" className="device-menu__settings" onClick={() => openSettingsPanel("voice_video")}>
         <span>Настройки голоса</span>
-        <img src="/icons/settings.png" alt="" />
+        <img src={SETTINGS_ICON_URL} alt="" />
       </button>
     </div>
   );
@@ -3803,7 +4036,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
       </div>
       <button type="button" className="device-menu__settings" onClick={() => openSettingsPanel("voice_video")}>
         <span>Настройки голоса</span>
-        <img src="/icons/settings.png" alt="" />
+        <img src={SETTINGS_ICON_URL} alt="" />
       </button>
     </div>
   );
@@ -4068,7 +4301,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                       )}
                       {canRenameMember && (
                         <button type="button" className="member-role-menu__item" onClick={() => updateMemberNickname(memberRoleMenu.memberUserId)}>
-                          <img src="/icons/pencil.svg" alt="" className="member-role-menu__icon" />
+                          <img src={PENCIL_ICON_URL} alt="" className="member-role-menu__icon" />
                           Сменить ник
                         </button>
                       )}
@@ -4083,7 +4316,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                             })
                           }
                         >
-                          <img src="/icons/microphone.png" alt="" className="member-role-menu__icon" />
+                          <img src={MICROPHONE_ICON_URL} alt="" className="member-role-menu__icon" />
                           {targetVoiceState?.isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
                         </button>
                       )}
@@ -4098,7 +4331,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                             })
                           }
                         >
-                          <img src="/icons/headphones-simple.svg" alt="" className="member-role-menu__icon" />
+                          <img src={HEADPHONES_ICON_URL} alt="" className="member-role-menu__icon" />
                           {targetVoiceState?.isDeafened ? "Вернуть звук" : "Отключить звук"}
                         </button>
                       )}
@@ -4119,6 +4352,38 @@ export default function MenuMain({ user, setUser, onLogout }) {
                           ))}
                         </>
                       )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+            {serverContextMenu && (
+              <div
+                ref={serverContextMenuRef}
+                className="member-role-menu member-role-menu--server"
+                style={{ left: serverContextMenu.x, top: serverContextMenu.y }}
+              >
+                {(() => {
+                  const targetServer = servers.find((server) => String(server.id) === String(serverContextMenu.serverId));
+                  const canCopyInvite = canInviteToServer(targetServer);
+
+                  return (
+                    <>
+                      <div className="member-role-menu__title">{targetServer?.name || "Сервер"}</div>
+                      <button
+                        type="button"
+                        className={`member-role-menu__item ${!canCopyInvite ? "member-role-menu__item--disabled" : ""}`}
+                        onClick={copyServerInviteLink}
+                        disabled={!canCopyInvite || serverContextMenu.isLoading}
+                      >
+                        {serverContextMenu.isLoading ? "Готовим ссылку..." : "Скопировать ссылку-приглашение"}
+                      </button>
+                      {serverContextMenu.status ? (
+                        <>
+                          <div className="member-role-menu__separator" />
+                          <div className="member-role-menu__status">{serverContextMenu.status}</div>
+                        </>
+                      ) : null}
                     </>
                   );
                 })()}
@@ -4154,6 +4419,9 @@ export default function MenuMain({ user, setUser, onLogout }) {
                           type="text"
                           value={channelRenameState.value}
                           autoFocus
+                          spellCheck={false}
+                          autoCorrect="off"
+                          autoCapitalize="off"
                           onChange={(event) => updateChannelRenameValue(event.target.value)}
                           onBlur={submitChannelRename}
                           onKeyDown={(event) => {
@@ -4175,7 +4443,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
                         </button>
                       )}
                       <button type="button" className="channel-edit-button" onClick={() => startChannelRename("text", channel)} aria-label="Переименовать канал" disabled={!canManageChannels}>
-                        <img src="/icons/settings.png" alt="" />
+                        <img src={SETTINGS_ICON_URL} alt="" />
                       </button>
                     </li>
                   );
@@ -4251,29 +4519,27 @@ export default function MenuMain({ user, setUser, onLogout }) {
             <div className="friends-main__content">
               <div className="friends-hero">
                 <h1>Добавить в друзья</h1>
-                <p>Ищите пользователей по email или по имени, а затем выберите нужного человека из списка результатов.</p>
+                <p>Введите имя для поиска по имени. Если в запросе есть символ @, поиск автоматически переключится на email.</p>
                 <div className="friends-search-mode">
-                  <button
-                    type="button"
-                    className={`friends-search-mode__button ${friendSearchMode === "email" ? "friends-search-mode__button--active" : ""}`}
-                    onClick={() => setFriendSearchMode("email")}
-                  >
-                    По email
-                  </button>
-                  <button
-                    type="button"
-                    className={`friends-search-mode__button ${friendSearchMode === "name" ? "friends-search-mode__button--active" : ""}`}
-                    onClick={() => setFriendSearchMode("name")}
-                  >
+                  <span className={`friends-search-mode__button ${friendSearchMode === "name" ? "friends-search-mode__button--active" : ""}`}>
                     По имени
-                  </button>
+                  </span>
+                  <span className={`friends-search-mode__button ${friendSearchMode === "email" ? "friends-search-mode__button--active" : ""}`}>
+                    По email
+                  </span>
                 </div>
                 <form className="friends-hero__form" onSubmit={handleFriendSearchSubmit}>
                   <input
-                    type={friendSearchMode === "email" ? "email" : "text"}
-                    placeholder={friendSearchMode === "email" ? "Введите email друга" : "Введите имя пользователя"}
+                    type="text"
+                    placeholder={friendSearchMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
                     value={friendEmail}
-                    onChange={(event) => setFriendEmail(event.target.value)}
+                    onChange={(event) => {
+                      setFriendEmail(event.target.value);
+                      setFriendSearchMode(getFriendSearchModeForQuery(event.target.value));
+                      if (friendsError) {
+                        setFriendsError("");
+                      }
+                    }}
                   />
                   <button type="submit" disabled={friendLookupLoading}>
                     {friendLookupLoading ? "Ищем..." : "Найти"}
@@ -4296,7 +4562,11 @@ export default function MenuMain({ user, setUser, onLogout }) {
                     </div>
                   ))}
                   {friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
-                    <div className="friends-panel__empty">Никого не нашли. Попробуйте другой email или имя.</div>
+                    <div className="friends-panel__empty">
+                      {friendSearchMode === "email"
+                        ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
+                        : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -4349,7 +4619,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
             </div>
             <div className="chat__topbar-actions">
               <label className="chat__topbar-search-wrap">
-                <img src="/icons/search.svg" alt="" />
+                <img src={SEARCH_ICON_URL} alt="" />
                 <input
                   className="chat__topbar-search"
                   type="text"
@@ -4389,7 +4659,7 @@ export default function MenuMain({ user, setUser, onLogout }) {
           onClick={() => setWorkspaceMode("friends")}
           aria-label="Друзья"
         >
-          <img src="/icons/sms.svg" alt="" />
+          <img src={SMS_ICON_URL} alt="" />
           <span>Друзья</span>
         </button>
         {servers.map((server) => (
@@ -4398,9 +4668,19 @@ export default function MenuMain({ user, setUser, onLogout }) {
             type="button"
             className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
             onClick={() => { setWorkspaceMode("servers"); setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }}
+            onContextMenu={(event) => openServerContextMenu(event, server)}
             aria-label={server.name || "Без названия"}
           >
-            {server.icon ? <img src={resolveMediaUrl(server.icon, DEFAULT_SERVER_ICON)} alt={server.name || "Без названия"} /> : <span className="btn__server-empty" aria-hidden="true" />}
+            {server.icon ? (
+              <AnimatedAvatar
+                className="btn__server-media"
+                src={server.icon}
+                fallback={DEFAULT_SERVER_ICON}
+                alt={server.name || "Без названия"}
+              />
+            ) : (
+              <span className="btn__server-empty" aria-hidden="true" />
+            )}
           </button>
         ))}
         <button
@@ -4474,9 +4754,14 @@ export default function MenuMain({ user, setUser, onLogout }) {
 
             <div className="create-server-modal__body">
               <label className="create-server-modal__cover">
-                <input type="file" accept="image/*" onChange={handleCreateServerIconChange} />
+                <input type="file" accept=".png,.jpg,.jpeg,.heif,.heic,.gif,.mp4,image/png,image/jpeg,image/heif,image/heic,image/gif,video/mp4" onChange={handleCreateServerIconChange} />
                 <span className="create-server-modal__cover-frame">
-                  <img src={resolveMediaUrl(createServerIcon || DEFAULT_SERVER_ICON, DEFAULT_SERVER_ICON)} alt="Иконка сервера" />
+                  <AnimatedAvatar
+                    className="create-server-modal__icon-preview"
+                    src={createServerIcon || DEFAULT_SERVER_ICON}
+                    fallback={DEFAULT_SERVER_ICON}
+                    alt="Иконка сервера"
+                  />
                 </span>
                 <span className="create-server-modal__cover-text">
                   {createServerIcon ? "Сменить изображение" : "Загрузить изображение"}

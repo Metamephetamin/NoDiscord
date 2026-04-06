@@ -39,7 +39,8 @@ public class ServerInvitesController : ControllerBase
         }
 
         var existingSnapshot = _serverState.GetSnapshot(request.ServerSnapshot.Id);
-        if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
+        var permissionSnapshot = existingSnapshot ?? request.ServerSnapshot;
+        if (!ServerPermissionEvaluator.CanInviteMembers(permissionSnapshot, currentUser.UserId))
         {
             return Forbid();
         }
@@ -94,6 +95,40 @@ public class ServerInvitesController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
+    [HttpGet("{inviteCode}")]
+    public IActionResult GetInvitePreview([FromRoute] string inviteCode)
+    {
+        var currentUserId = AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser)
+            ? currentUser.UserId
+            : string.Empty;
+
+        try
+        {
+            var preview = _invites.GetInvitePreview(inviteCode, currentUserId);
+            return Ok(preview);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Invite not found." });
+        }
+        catch (InvalidOperationException error)
+        {
+            return BadRequest(new { message = error.Message });
+        }
+    }
+
+    [HttpPost("{inviteCode}/redeem")]
+    public IActionResult RedeemInviteByLink([FromRoute] string inviteCode, [FromBody] RedeemServerInviteRequest? request)
+    {
+        return RedeemInvite(new RedeemServerInviteRequest
+        {
+            InviteCode = inviteCode,
+            Name = request?.Name,
+            Avatar = request?.Avatar
+        });
+    }
+
     [HttpGet("server/{serverId}")]
     public IActionResult GetServerSnapshot([FromRoute] string serverId)
     {
@@ -111,6 +146,18 @@ public class ServerInvitesController : ControllerBase
         return snapshot is null
             ? NotFound(new { message = "Server snapshot not found." })
             : Ok(snapshot);
+    }
+
+    [HttpGet("my-servers")]
+    public IActionResult GetMyServers()
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshots = _serverState.GetSnapshotsForUser(currentUser.UserId);
+        return Ok(snapshots);
     }
 
     [HttpPost("server-sync")]

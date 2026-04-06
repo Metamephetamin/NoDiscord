@@ -29,6 +29,23 @@ public static class ServerPermissionEvaluator
         return GetPermissions(snapshot, userId).Contains("manage_server", StringComparer.Ordinal);
     }
 
+    public static bool CanInviteMembers(ServerSnapshot? snapshot, string userId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        if (IsOwner(snapshot, userId))
+        {
+            return true;
+        }
+
+        var permissions = GetPermissions(snapshot, userId);
+        return permissions.Contains("invite_members", StringComparer.Ordinal) ||
+               permissions.Contains("manage_server", StringComparer.Ordinal);
+    }
+
     public static bool CanManageVoiceState(ServerSnapshot? snapshot, string actorUserId, string targetUserId, string permission)
     {
         if (snapshot is null ||

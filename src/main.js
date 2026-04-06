@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, safeStorage, session, shell } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import started from "electron-squirrel-startup";
@@ -11,6 +11,101 @@ const SESSION_STORE_FILE_NAME = "session.secure.json";
 const SECURE_KEY_VALUE_STORE_FILE_NAME = "secure-store.json";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
+const APP_PROTOCOL = "nodiscord";
+const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+const resolveRendererDevServerUrl = () => {
+  if (!MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(String(MAIN_WINDOW_VITE_DEV_SERVER_URL).trim());
+    if (TRUSTED_DEV_HOSTS.has(parsed.hostname.toLowerCase())) {
+      parsed.protocol = "https:";
+    }
+
+    return parsed.toString();
+  } catch {
+    return String(MAIN_WINDOW_VITE_DEV_SERVER_URL || "").trim();
+  }
+};
+
+const RENDERER_DEV_SERVER_URL = resolveRendererDevServerUrl();
+
+let mainWindow = null;
+let pendingRendererRoute = "";
+
+const focusMainWindow = () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.focus();
+};
+
+const extractDeepLinkFromArgv = (argv = []) =>
+  argv.find((value) => typeof value === "string" && value.toLowerCase().startsWith(`${APP_PROTOCOL}://`)) || "";
+
+const parseRendererRouteFromDeepLink = (rawUrl) => {
+  try {
+    const parsed = new URL(String(rawUrl || "").trim());
+    if (parsed.protocol !== `${APP_PROTOCOL}:`) {
+      return "";
+    }
+
+    const action = String(parsed.hostname || "").trim().toLowerCase();
+    if (action !== "invite") {
+      return "";
+    }
+
+    const inviteCode = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).trim().toUpperCase();
+    return inviteCode ? `/invite/${encodeURIComponent(inviteCode)}` : "";
+  } catch {
+    return "";
+  }
+};
+
+const deliverPendingRendererRoute = () => {
+  if (!pendingRendererRoute || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  const routeToSend = pendingRendererRoute;
+  const sendRoute = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+
+    mainWindow.webContents.send("app:navigate", routeToSend);
+    if (pendingRendererRoute === routeToSend) {
+      pendingRendererRoute = "";
+    }
+  };
+
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once("did-finish-load", sendRoute);
+    return;
+  }
+
+  sendRoute();
+};
+
+const queueRendererRoute = (route) => {
+  const normalizedRoute = String(route || "").trim();
+  if (!normalizedRoute) {
+    focusMainWindow();
+    return;
+  }
+
+  pendingRendererRoute = normalizedRoute;
+  focusMainWindow();
+  deliverPendingRendererRoute();
+};
 
 const getSessionStorePath = () => path.join(app.getPath("userData"), SESSION_STORE_FILE_NAME);
 const getSecureKeyValueStorePath = () => path.join(app.getPath("userData"), SECURE_KEY_VALUE_STORE_FILE_NAME);
@@ -122,7 +217,7 @@ const sanitizeDownloadFileName = (value) => {
 };
 
 const createWindow = () => {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -143,7 +238,7 @@ const createWindow = () => {
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    const expectedUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL;
+    const expectedUrl = RENDERER_DEV_SERVER_URL;
     const isRendererNavigation = expectedUrl ? url.startsWith(expectedUrl) : url.startsWith("file://");
 
     if (!isRendererNavigation) {
@@ -155,16 +250,51 @@ const createWindow = () => {
     event.preventDefault();
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
+  if (RENDERER_DEV_SERVER_URL) {
+    mainWindow.loadURL(RENDERER_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
+    deliverPendingRendererRoute();
     return;
   }
 
   mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+  deliverPendingRendererRoute();
 };
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+app.on("second-instance", (_event, argv) => {
+  const route = parseRendererRouteFromDeepLink(extractDeepLinkFromArgv(argv));
+  if (route) {
+    queueRendererRoute(route);
+    return;
+  }
+
+  focusMainWindow();
+});
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  queueRendererRoute(parseRendererRouteFromDeepLink(url));
+});
+
 app.whenReady().then(() => {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  } else {
+    app.setAsDefaultProtocolClient(APP_PROTOCOL);
+  }
+
+  pendingRendererRoute = parseRendererRouteFromDeepLink(extractDeepLinkFromArgv(process.argv));
+
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     const allowedPermissions = new Set(["media", "display-capture"]);
     callback(allowedPermissions.has(permission));
@@ -174,6 +304,18 @@ app.whenReady().then(() => {
     const allowedPermissions = new Set(["media", "display-capture"]);
     return allowedPermissions.has(permission);
   });
+
+  if (RENDERER_DEV_SERVER_URL) {
+    session.defaultSession.setCertificateVerifyProc((request, callback) => {
+      const hostname = String(request?.hostname || "").trim().toLowerCase();
+      if (TRUSTED_DEV_HOSTS.has(hostname)) {
+        callback(0);
+        return;
+      }
+
+      callback(-3);
+    });
+  }
 
   ipcMain.handle("secure-session:get", async () => readSecureSession());
   ipcMain.handle("secure-session:set", async (_event, sessionValue) => {
@@ -213,6 +355,10 @@ app.whenReady().then(() => {
     const secureStore = await readSecureKeyValueStore();
     delete secureStore[normalizedKey];
     await writeSecureKeyValueStore(secureStore);
+    return true;
+  });
+  ipcMain.handle("clipboard:write-text", async (_event, value) => {
+    clipboard.writeText(String(value ?? ""));
     return true;
   });
 

@@ -8,6 +8,18 @@ export const ALLOWED_AVATAR_MIME_TYPES = [
   "image/gif",
   "video/mp4",
 ];
+export const MAX_STATIC_SERVER_ICON_SIZE_BYTES = 15 * 1024 * 1024;
+export const MAX_ANIMATED_SERVER_ICON_SIZE_BYTES = 30 * 1024 * 1024;
+export const MAX_SERVER_ICON_DURATION_SECONDS = 5;
+export const ALLOWED_SERVER_ICON_EXTENSIONS = [".png", ".jpg", ".jpeg", ".heif", ".heic", ".gif", ".mp4"];
+export const ALLOWED_SERVER_ICON_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/heif",
+  "image/heic",
+  "image/gif",
+  "video/mp4",
+];
 
 export function getAvatarFileExtension(fileName) {
   const normalizedName = String(fileName || "").toLowerCase().trim();
@@ -104,6 +116,40 @@ export async function validateAvatarFile(file) {
 
     if (durationSeconds > MAX_AVATAR_DURATION_SECONDS) {
       return "Анимированный аватар должен быть не длиннее 15 секунд.";
+    }
+  }
+
+  return "";
+}
+
+export async function validateServerIconFile(file) {
+  if (!file) {
+    return "Файл иконки сервера не выбран.";
+  }
+
+  const fileExtension = getAvatarFileExtension(file.name);
+  const normalizedType = String(file.type || "").toLowerCase().trim();
+  if (!ALLOWED_SERVER_ICON_EXTENSIONS.includes(fileExtension) || (normalizedType && !ALLOWED_SERVER_ICON_MIME_TYPES.includes(normalizedType))) {
+    return "Для иконки сервера разрешены PNG, JPG, JPEG, HEIF, GIF и MP4.";
+  }
+
+  const isAnimatedIcon = fileExtension === ".gif" || fileExtension === ".mp4";
+  const maxAllowedSize = isAnimatedIcon ? MAX_ANIMATED_SERVER_ICON_SIZE_BYTES : MAX_STATIC_SERVER_ICON_SIZE_BYTES;
+
+  if (file.size > maxAllowedSize) {
+    return isAnimatedIcon
+      ? "GIF или MP4 для иконки сервера должны быть не больше 30 МБ."
+      : "Статичная иконка сервера должна быть не больше 15 МБ.";
+  }
+
+  if (isAnimatedIcon) {
+    const durationSeconds = await readAvatarMediaDuration(file);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      return "Не удалось определить длительность анимированной иконки сервера.";
+    }
+
+    if (durationSeconds > MAX_SERVER_ICON_DURATION_SECONDS) {
+      return "Анимированная иконка сервера должна быть не длиннее 5 секунд.";
     }
   }
 

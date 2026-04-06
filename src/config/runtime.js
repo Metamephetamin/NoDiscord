@@ -1,4 +1,3 @@
-const DEFAULT_API_URL = "http://localhost:7031";
 const DEFAULT_VOICE_RTC_CONFIGURATION = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   iceTransportPolicy: "all",
@@ -13,7 +12,24 @@ const electronRuntime =
     ? window.electronRuntime
     : {};
 
-const API_URL = String(electronRuntime.apiUrl || import.meta.env.VITE_API_URL || DEFAULT_API_URL).trim();
+const resolveDefaultApiUrl = () => {
+  if (electronRuntime.apiUrl) {
+    return String(electronRuntime.apiUrl).trim();
+  }
+
+  const configuredApiUrl = String(import.meta.env.VITE_API_URL || "").trim();
+  if (configuredApiUrl) {
+    return configuredApiUrl;
+  }
+
+  if (typeof window !== "undefined" && /^https?:$/i.test(String(window.location?.protocol || ""))) {
+    return String(window.location.origin || "").trim();
+  }
+
+  return "http://localhost:7031";
+};
+
+const API_URL = resolveDefaultApiUrl();
 const API_BASE_URL = `${API_URL}/api`;
 const CHAT_HUB_URL = `${API_URL}/chatHub`;
 const VOICE_HUB_URL = `${API_URL}/voiceHub`;

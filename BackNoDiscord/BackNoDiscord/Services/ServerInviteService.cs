@@ -104,6 +104,44 @@ public class ServerInviteService
         };
     }
 
+    public ServerInvitePreviewResult GetInvitePreview(string inviteCode, string? currentUserId = null)
+    {
+        if (string.IsNullOrWhiteSpace(inviteCode))
+        {
+            throw new InvalidOperationException("Invite code is required.");
+        }
+
+        var normalizedCode = inviteCode.Trim().ToUpperInvariant();
+        var invite = _context.ServerInvites.FirstOrDefault(item => item.Code == normalizedCode);
+
+        if (invite is null)
+        {
+            throw new KeyNotFoundException("Invite not found.");
+        }
+
+        var snapshot = NormalizeSnapshot(CloneSnapshot(DeserializeSnapshot(invite.SnapshotJson)), invite.OwnerUserId);
+        var normalizedCurrentUserId = string.IsNullOrWhiteSpace(currentUserId) ? string.Empty : currentUserId.Trim();
+        var redeemedUserIds = DeserializeRedeemedUserIds(invite.RedeemedUserIdsJson);
+        var isCurrentUserMember =
+            !string.IsNullOrWhiteSpace(normalizedCurrentUserId) &&
+            (snapshot.Members.Any(member => string.Equals(member.UserId, normalizedCurrentUserId, StringComparison.Ordinal)) ||
+             redeemedUserIds.Contains(normalizedCurrentUserId, StringComparer.Ordinal));
+
+        return new ServerInvitePreviewResult
+        {
+            InviteCode = invite.Code,
+            ExpiresAt = invite.ExpiresAt,
+            IsExpired = invite.ExpiresAt <= DateTimeOffset.UtcNow,
+            CurrentUserAlreadyMember = isCurrentUserMember,
+            ServerId = snapshot.Id,
+            ServerName = snapshot.Name,
+            ServerIcon = snapshot.Icon ?? string.Empty,
+            MemberCount = snapshot.Members?.Count ?? 0,
+            TextChannelCount = snapshot.TextChannels?.Count ?? 0,
+            VoiceChannelCount = snapshot.VoiceChannels?.Count ?? 0,
+        };
+    }
+
     private string GenerateUniqueCode()
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -196,6 +234,20 @@ public class ServerInviteRedeemResult
 {
     public string InviteCode { get; set; } = string.Empty;
     public ServerSnapshot Snapshot { get; set; } = new();
+}
+
+public class ServerInvitePreviewResult
+{
+    public string InviteCode { get; set; } = string.Empty;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public bool IsExpired { get; set; }
+    public bool CurrentUserAlreadyMember { get; set; }
+    public string ServerId { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
+    public string ServerIcon { get; set; } = string.Empty;
+    public int MemberCount { get; set; }
+    public int TextChannelCount { get; set; }
+    public int VoiceChannelCount { get; set; }
 }
 
 public class ServerSnapshot

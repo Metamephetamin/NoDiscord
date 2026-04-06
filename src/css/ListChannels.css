@@ -135,6 +135,20 @@
   outline: none;
   font-family: var(--font-body);
   font-style: normal;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.channel-inline-input:focus,
+.channel-inline-input:focus-visible {
+  border-color: rgba(255, 255, 255, 0.12);
+  outline: none;
+  box-shadow: none;
+}
+
+.channel-inline-input::selection {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 
 .participant-list {

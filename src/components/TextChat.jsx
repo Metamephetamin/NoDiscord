@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
+import VoiceMessageBubble from "./VoiceMessageBubble";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/TextChat.css";
 import { API_URL } from "../config/runtime";
@@ -11,15 +12,35 @@ import {
   prepareOutgoingTextEncryption,
 } from "../e2ee/chatEncryption";
 import { authFetch, getStoredToken } from "../utils/auth";
+import { copyTextToClipboard } from "../utils/clipboard";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../utils/chatDrafts";
 import { isDirectMessageChannelId } from "../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../utils/directMessageSounds";
 import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
 import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
+import {
+  buildVoiceWaveform,
+  formatVoiceMessageDuration,
+  getSupportedVoiceRecordingMimeType,
+  getVoiceRecordingExtension,
+  MAX_VOICE_MESSAGE_DURATION_MS,
+  normalizeVoiceMessageMetadata,
+} from "../utils/voiceMessages";
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const MESSAGE_SEND_COOLDOWN_MS = 1500;
 const COMPAT_FORWARD_DELAY_MS = 1600;
+const VOICE_LOCK_DRAG_THRESHOLD_PX = 34;
+const VOICE_LEVEL_SAMPLE_INTERVAL_MS = 72;
+const VOICE_RECORDING_AUDIO_BITS_PER_SECOND = 192000;
+const VOICE_RECORDING_SAMPLE_RATE = 48000;
+const VOICE_HIGH_PASS_FREQUENCY_HZ = 95;
+const VOICE_PRESENCE_FREQUENCY_HZ = 2800;
+const VOICE_PRESENCE_GAIN_DB = 1.8;
+const VOICE_HIGH_SHELF_FREQUENCY_HZ = 5600;
+const VOICE_HIGH_SHELF_GAIN_DB = 2.4;
+const ENABLE_VOICE_MESSAGE_BUTTON = true; // flip to false to hide the simple voice-message record button
+const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
 const MESSAGE_REACTION_OPTIONS = [
   { key: "star", glyph: "\u2B50", label: "\u0417\u0432\u0435\u0437\u0434\u0430" },
   { key: "note", glyph: "\u270D\uFE0F", label: "\u0417\u0430\u043C\u0435\u0442\u043A\u0430" },
@@ -38,6 +59,8 @@ const MESSAGE_REACTION_OPTIONS = [
   { key: "chat", glyph: "\uD83D\uDCAC", label: "\u041E\u0431\u0441\u0443\u0434\u0438\u0442\u044C" },
   { key: "music", glyph: "\uD83C\uDFA7", label: "\u0412\u0430\u0439\u0431" },
 ];
+const PRIMARY_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(0, 8);
+const STICKER_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(8);
 
 const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
 const getScopedChatChannelId = (serverId, channelId) =>
@@ -222,6 +245,10 @@ function getMessagePreview(messageItem) {
     return text;
   }
 
+  if (messageItem?.voiceMessage) {
+    return buildVoiceMessageLabel(messageItem.voiceMessage.durationMs);
+  }
+
   const kind = getAttachmentKind(messageItem);
   if (kind === "image") {
     return "Изображение";
@@ -317,6 +344,26 @@ function formatTimestamp(timestamp) {
   return `${date.getDate()}.${(date.getMonth() + 1).toString().padStart(2, "0")}.${date.getFullYear()} в ${hours}:${minutes}`;
 }
 
+function isAudioAttachment(messageItem) {
+  return Boolean(messageItem?.attachmentContentType?.startsWith("audio/"));
+}
+
+function isVoiceMessage(messageItem) {
+  return Boolean(messageItem?.voiceMessage) && (Boolean(messageItem?.attachmentUrl) || Boolean(messageItem?.attachmentEncryption));
+}
+
+function buildVoiceMessageLabel(durationMs) {
+  return durationMs > 0 ? `Голосовое сообщение • ${formatVoiceMessageDuration(durationMs)}` : "Голосовое сообщение";
+}
+
+function getSpeechRecognitionConstructor() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
 function getChatErrorMessage(error, fallbackMessage) {
   const rawMessage = String(error?.message || "").trim();
   if (!rawMessage) {
@@ -391,15 +438,21 @@ function normalizeReactions(reactions) {
 
 export default function TextChat({ serverId, channelId, user, resolvedChannelId = "", searchQuery = "", directTargets = [], serverMembers = [] }) {
   const [message, setMessage] = useState("");
+  const [messageEditState, setMessageEditState] = useState(null);
   const [messagesByChannel, setMessagesByChannel] = useState({});
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
+  const [voiceRecordingState, setVoiceRecordingState] = useState("idle");
+  const [voiceRecordingDurationMs, setVoiceRecordingDurationMs] = useState(0);
+  const [voiceMicLevel, setVoiceMicLevel] = useState(0);
+  const [speechRecognitionActive, setSpeechRecognitionActive] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
+  const [reactionStickerPanelOpen, setReactionStickerPanelOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
@@ -420,10 +473,28 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
   const previousChannelIdRef = useRef("");
+  const editDraftBackupRef = useRef("");
   const forceScrollToBottomRef = useRef(false);
   const pendingInitialScrollChannelRef = useRef("");
+  const hasInitializedVisibleChannelRef = useRef(false);
   const decryptingAttachmentIdsRef = useRef(new Set());
   const decryptedAttachmentsRef = useRef({});
+  const voiceRecorderRef = useRef(null);
+  const voiceInputStreamRef = useRef(null);
+  const voiceStreamRef = useRef(null);
+  const voiceRecordingChunksRef = useRef([]);
+  const voiceRecordingStartAtRef = useRef(0);
+  const voicePointerStateRef = useRef({ pointerId: null, startY: 0, locked: false });
+  const voiceAudioContextRef = useRef(null);
+  const voiceAnalyserRef = useRef(null);
+  const voiceLevelFrameRef = useRef(0);
+  const voiceLevelSamplesRef = useRef([]);
+  const voiceLastSampleAtRef = useRef(0);
+  const speechRecognitionRef = useRef(null);
+  const speechFinalTranscriptRef = useRef("");
+  const speechDraftBaseRef = useRef("");
+  const speechDisplayedTranscriptRef = useRef("");
+  const speechPunctuationRequestIdRef = useRef(0);
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
@@ -449,6 +520,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       .filter((messageItem) => messageIds.has(String(messageItem.id)))
       .sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
   }, [forwardModal.messageIds, messages]);
+  const speechRecognitionSupported = useMemo(() => Boolean(getSpeechRecognitionConstructor()), []);
 
   const normalizeIncomingMessage = async (messageItem) => {
     const decrypted = await decryptIncomingMessageText(messageItem, user, { channelId: scopedChannelId });
@@ -457,6 +529,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       message: decrypted.text,
       encryption: messageItem?.encryption || messageItem?.Encryption || null,
       attachmentEncryption: messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null,
+      voiceMessage: normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage),
+      editedAt: messageItem?.editedAt || messageItem?.EditedAt || null,
       encryptionState: decrypted.encryptionState,
       reactions: normalizeReactions(messageItem?.reactions),
       mentions: Array.isArray(messageItem?.mentions)
@@ -470,6 +544,82 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         : [],
     };
   };
+
+  const isEditableMessage = (messageItem) => {
+    if (!messageItem) {
+      return false;
+    }
+
+    const authorUserId = String(messageItem.authorUserId || "");
+    const isOwnMessage =
+      authorUserId === currentUserId ||
+      (!authorUserId && String(messageItem.username || "").toLowerCase() === getUserName(user).toLowerCase());
+
+    return isOwnMessage && Boolean(String(messageItem.message || "").trim());
+  };
+
+  const focusComposerToEnd = () => {
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+
+      textarea.focus();
+      const nextLength = textarea.value.length;
+      textarea.setSelectionRange(nextLength, nextLength);
+    });
+  };
+
+  const stopEditingMessage = ({ restoreDraft = true } = {}) => {
+    const nextDraft = restoreDraft ? editDraftBackupRef.current : "";
+    editDraftBackupRef.current = "";
+    setMessageEditState(null);
+    setMessage(nextDraft);
+  };
+
+  const startEditingMessage = (messageItem) => {
+    if (!isEditableMessage(messageItem)) {
+      return;
+    }
+
+    if (selectedFiles.length) {
+      setErrorMessage("Сначала уберите новые вложения из поля ввода, затем откройте редактирование.");
+      setMessageContextMenu(null);
+      return;
+    }
+
+    if (!messageEditState) {
+      editDraftBackupRef.current = message;
+    }
+
+    setErrorMessage("");
+    setMessageEditState({
+      messageId: messageItem.id,
+      originalText: String(messageItem.message || ""),
+    });
+    setMessage(String(messageItem.message || ""));
+    setMessageContextMenu(null);
+    focusComposerToEnd();
+  };
+
+  const startEditingLatestOwnMessage = () => {
+    const latestOwnMessage = [...messages].reverse().find((messageItem) => isEditableMessage(messageItem));
+    if (!latestOwnMessage) {
+      return;
+    }
+
+    startEditingMessage(latestOwnMessage);
+  };
+
+  const renderEditedBadge = (messageItem) => (
+    messageItem?.editedAt ? (
+      <span className="message-edited-badge" title="Сообщение было отредактировано">
+        <span className="message-edited-badge__icon" aria-hidden="true">✎</span>
+        <span className="message-edited-badge__label">ред.</span>
+      </span>
+    ) : null
+  );
 
   const playDirectMessageSound = (type) => {
     if (!isDirectChat) {
@@ -507,6 +657,450 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     decryptedAttachmentsRef.current = decryptedAttachmentsByMessageId;
   }, [decryptedAttachmentsByMessageId]);
 
+  const stopVoiceLevelLoop = () => {
+    if (voiceLevelFrameRef.current) {
+      cancelAnimationFrame(voiceLevelFrameRef.current);
+      voiceLevelFrameRef.current = 0;
+    }
+  };
+
+  const cleanupVoiceRecordingResources = () => {
+    stopVoiceLevelLoop();
+    voiceAnalyserRef.current = null;
+    setVoiceMicLevel(0);
+
+    if (voiceAudioContextRef.current) {
+      voiceAudioContextRef.current.close().catch(() => {});
+      voiceAudioContextRef.current = null;
+    }
+
+    const processedStream = voiceStreamRef.current;
+    const inputStream = voiceInputStreamRef.current;
+
+    if (processedStream) {
+      processedStream.getTracks().forEach((track) => track.stop());
+      voiceStreamRef.current = null;
+    }
+
+    if (inputStream && inputStream !== processedStream) {
+      inputStream.getTracks().forEach((track) => track.stop());
+    }
+    voiceInputStreamRef.current = null;
+
+    voiceRecorderRef.current = null;
+    voiceRecordingChunksRef.current = [];
+    voiceLevelSamplesRef.current = [];
+    voiceLastSampleAtRef.current = 0;
+    voicePointerStateRef.current = { pointerId: null, startY: 0, locked: false };
+  };
+
+  const stopSpeechRecognition = (shouldFinalize = true) => {
+    const recognition = speechRecognitionRef.current;
+    if (!recognition) {
+      setSpeechRecognitionActive(false);
+      return;
+    }
+
+    recognition.__shouldFinalize = shouldFinalize;
+    try {
+      recognition.stop();
+    } catch {
+      setSpeechRecognitionActive(false);
+      speechRecognitionRef.current = null;
+    }
+  };
+
+  const composeSpeechDraftMessage = (baseText, transcriptText) => {
+    const normalizedBase = String(baseText || "").trim();
+    const normalizedTranscript = String(transcriptText || "").trim();
+    return [normalizedBase, normalizedTranscript].filter(Boolean).join(normalizedBase ? " " : "");
+  };
+
+  const punctuateSpeechTranscriptOnServer = async (rawTranscript) => {
+    const normalizedTranscript = String(rawTranscript || "").trim();
+    if (!normalizedTranscript) {
+      return "";
+    }
+
+    const response = await authFetch(`${API_URL}/api/speech/punctuate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text: normalizedTranscript }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Не удалось проставить пунктуацию на сервере.");
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    return String(payload?.text || normalizedTranscript).trim();
+  };
+
+  const sampleVoiceLevel = () => {
+    const analyser = voiceAnalyserRef.current;
+    if (!analyser) {
+      setVoiceMicLevel(0);
+      return;
+    }
+
+    const data = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let index = 0; index < data.length; index += 1) {
+      const normalized = (data[index] - 128) / 128;
+      sum += normalized * normalized;
+    }
+
+    const rms = Math.sqrt(sum / data.length);
+    const normalizedLevel = Math.max(0, Math.min(1, rms * 3.6));
+    setVoiceMicLevel(normalizedLevel);
+
+    const now = performance.now();
+    if (now - voiceLastSampleAtRef.current >= VOICE_LEVEL_SAMPLE_INTERVAL_MS) {
+      voiceLevelSamplesRef.current.push(normalizedLevel);
+      voiceLastSampleAtRef.current = now;
+    }
+
+    voiceLevelFrameRef.current = requestAnimationFrame(sampleVoiceLevel);
+  };
+
+  const startMicrophoneAnalysis = async (stream) => {
+    if (typeof window === "undefined" || !window.AudioContext) {
+      return stream;
+    }
+
+    const audioContext = new window.AudioContext({
+      latencyHint: "interactive",
+      sampleRate: VOICE_RECORDING_SAMPLE_RATE,
+    });
+
+    if (audioContext.state === "suspended") {
+      await audioContext.resume().catch(() => {});
+    }
+
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.84;
+
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = "highpass";
+    highPassFilter.frequency.value = VOICE_HIGH_PASS_FREQUENCY_HZ;
+    highPassFilter.Q.value = 0.82;
+
+    const presenceFilter = audioContext.createBiquadFilter();
+    presenceFilter.type = "peaking";
+    presenceFilter.frequency.value = VOICE_PRESENCE_FREQUENCY_HZ;
+    presenceFilter.Q.value = 0.88;
+    presenceFilter.gain.value = VOICE_PRESENCE_GAIN_DB;
+
+    const highShelfFilter = audioContext.createBiquadFilter();
+    highShelfFilter.type = "highshelf";
+    highShelfFilter.frequency.value = VOICE_HIGH_SHELF_FREQUENCY_HZ;
+    highShelfFilter.gain.value = VOICE_HIGH_SHELF_GAIN_DB;
+
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.value = -20;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 2.4;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.18;
+
+    const destination = audioContext.createMediaStreamDestination();
+
+    source.connect(highPassFilter);
+    highPassFilter.connect(presenceFilter);
+    presenceFilter.connect(highShelfFilter);
+    highShelfFilter.connect(compressor);
+    compressor.connect(analyser);
+    compressor.connect(destination);
+
+    voiceAudioContextRef.current = audioContext;
+    voiceAnalyserRef.current = analyser;
+    voiceLastSampleAtRef.current = performance.now();
+    stopVoiceLevelLoop();
+    voiceLevelFrameRef.current = requestAnimationFrame(sampleVoiceLevel);
+
+    return destination.stream;
+  };
+
+  const sendVoiceRecordingFile = async (voiceFile, durationMs, waveformSamples) => {
+    const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+    const encryptedAttachment = await prepareOutgoingAttachmentEncryption({
+      channelId: scopedChannelId,
+      user,
+      file: voiceFile,
+    });
+    const uploaded = await uploadAttachment({
+      blob: encryptedAttachment.uploadBlob,
+      fileName: encryptedAttachment.uploadFileName || voiceFile.name,
+    });
+
+    await sendMessagesCompat(scopedChannelId, avatar, [
+      {
+        message: "",
+        mentions: [],
+        attachmentUrl: uploaded?.fileUrl || "",
+        attachmentName: uploaded?.fileName || voiceFile.name,
+        attachmentSize: uploaded?.size || voiceFile.size || null,
+        attachmentContentType: uploaded?.contentType || voiceFile.type || "application/octet-stream",
+        attachmentEncryption: encryptedAttachment.attachmentEncryption || null,
+        voiceMessage: {
+          durationMs,
+          mimeType: voiceFile.type || "audio/webm",
+          fileName: voiceFile.name || "voice-message.webm",
+          waveform: buildVoiceWaveform(waveformSamples),
+        },
+      },
+    ]);
+  };
+
+  const finalizeVoiceRecording = (shouldSend) =>
+    new Promise((resolve, reject) => {
+      const recorder = voiceRecorderRef.current;
+      if (!recorder) {
+        cleanupVoiceRecordingResources();
+        setVoiceRecordingState("idle");
+        setVoiceRecordingDurationMs(0);
+        resolve();
+        return;
+      }
+
+      const finalize = async () => {
+        const mimeType = recorder.mimeType || getSupportedVoiceRecordingMimeType() || "audio/webm";
+        const blob = new Blob(voiceRecordingChunksRef.current, { type: mimeType });
+        const durationMs = Math.max(0, Date.now() - voiceRecordingStartAtRef.current);
+        const waveformSamples = [...voiceLevelSamplesRef.current];
+
+        cleanupVoiceRecordingResources();
+
+        if (!shouldSend || blob.size === 0) {
+          setVoiceRecordingState("idle");
+          setVoiceRecordingDurationMs(0);
+          resolve();
+          return;
+        }
+
+        try {
+          setVoiceRecordingState("sending");
+          setUploadingFile(true);
+
+          const extension = getVoiceRecordingExtension(mimeType);
+          const voiceFile = new File([blob], `voice-message-${Date.now()}.${extension}`, {
+            type: mimeType,
+            lastModified: Date.now(),
+          });
+
+          await ensureChannelJoined();
+          await sendVoiceRecordingFile(voiceFile, durationMs, waveformSamples);
+          forceScrollToBottomRef.current = true;
+          lastSendAtRef.current = Date.now();
+          setIsChannelReady(true);
+          if (isDirectChat) {
+            playDirectMessageSound("send");
+          }
+          setVoiceRecordingState("idle");
+          setVoiceRecordingDurationMs(0);
+          resolve();
+        } catch (error) {
+          console.error("Voice message send error:", error);
+          setVoiceRecordingState("idle");
+          setVoiceRecordingDurationMs(0);
+          setErrorMessage(getChatErrorMessage(error, "Не удалось отправить голосовое сообщение."));
+          reject(error);
+        } finally {
+          setUploadingFile(false);
+        }
+      };
+
+      recorder.onstop = () => {
+        void finalize();
+      };
+      recorder.onerror = (event) => {
+        cleanupVoiceRecordingResources();
+        setVoiceRecordingState("idle");
+        setVoiceRecordingDurationMs(0);
+        reject(event?.error || new Error("Не удалось записать голосовое сообщение."));
+      };
+
+      try {
+        recorder.stop();
+      } catch (error) {
+        cleanupVoiceRecordingResources();
+        setVoiceRecordingState("idle");
+        setVoiceRecordingDurationMs(0);
+        reject(error);
+      }
+    });
+
+  const startVoiceRecording = async (pointerEvent = null) => {
+    if (voiceRecordingState === "locked") {
+      await finalizeVoiceRecording(true);
+      return;
+    }
+
+    if (voiceRecordingState !== "idle" || uploadingFile || !scopedChannelId) {
+      return;
+    }
+
+    const mimeType = getSupportedVoiceRecordingMimeType();
+    if (!mimeType) {
+      setErrorMessage("На этом устройстве запись голосовых сообщений недоступна.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrorMessage("Доступ к микрофону недоступен в этом окружении.");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const inputStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: VOICE_RECORDING_SAMPLE_RATE,
+        },
+      });
+
+      voiceInputStreamRef.current = inputStream;
+      voiceRecordingChunksRef.current = [];
+      voiceLevelSamplesRef.current = [];
+      voicePointerStateRef.current = {
+        pointerId: pointerEvent?.pointerId ?? null,
+        startY: pointerEvent?.clientY ?? 0,
+        locked: false,
+      };
+
+      const processedStream = await startMicrophoneAnalysis(inputStream);
+      voiceStreamRef.current = processedStream;
+
+      const recorder = new MediaRecorder(processedStream, {
+        mimeType,
+        audioBitsPerSecond: VOICE_RECORDING_AUDIO_BITS_PER_SECOND,
+      });
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) {
+          voiceRecordingChunksRef.current.push(event.data);
+        }
+      };
+
+      voiceRecorderRef.current = recorder;
+      voiceRecordingStartAtRef.current = Date.now();
+      setVoiceRecordingState("holding");
+      setVoiceRecordingDurationMs(0);
+      recorder.start(220);
+    } catch (error) {
+      cleanupVoiceRecordingResources();
+      setVoiceRecordingState("idle");
+      setVoiceRecordingDurationMs(0);
+      setErrorMessage(error?.name === "NotAllowedError"
+        ? "Доступ к микрофону запрещён."
+        : "Не удалось включить микрофон для записи.");
+    }
+  };
+
+  const startSpeechRecognition = () => {
+    const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+    if (!SpeechRecognitionCtor) {
+      setErrorMessage("Голосовой ввод текста недоступен в этом окружении.");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const recognition = new SpeechRecognitionCtor();
+      speechDraftBaseRef.current = message;
+      speechFinalTranscriptRef.current = "";
+      speechDisplayedTranscriptRef.current = "";
+      recognition.lang = "ru-RU";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.__shouldFinalize = true;
+
+      recognition.onresult = (event) => {
+        let finalTranscript = speechFinalTranscriptRef.current;
+        let interimTranscript = "";
+
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const transcript = String(event.results[index][0]?.transcript || "");
+          if (event.results[index].isFinal) {
+            finalTranscript = `${finalTranscript} ${transcript}`.trim();
+          } else {
+            interimTranscript = `${interimTranscript} ${transcript}`.trim();
+          }
+        }
+
+        speechFinalTranscriptRef.current = finalTranscript;
+        const composedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
+        speechDisplayedTranscriptRef.current = composedTranscript;
+        setMessage(composeSpeechDraftMessage(speechDraftBaseRef.current, composedTranscript));
+      };
+
+      recognition.onerror = (event) => {
+        const errorCode = String(event?.error || "");
+        if (errorCode !== "no-speech" && errorCode !== "aborted") {
+          setErrorMessage("Не удалось распознать речь. Проверьте доступ к микрофону.");
+        }
+      };
+
+      recognition.onend = () => {
+        const shouldFinalize = recognition.__shouldFinalize !== false;
+        setSpeechRecognitionActive(false);
+        speechRecognitionRef.current = null;
+        speechDisplayedTranscriptRef.current = "";
+
+        if (shouldFinalize) {
+          const finalTranscript = String(speechFinalTranscriptRef.current || speechDisplayedTranscriptRef.current || "").trim();
+          const draftBase = speechDraftBaseRef.current;
+          const rawDraftValue = composeSpeechDraftMessage(draftBase, finalTranscript);
+          const requestId = speechPunctuationRequestIdRef.current + 1;
+          speechPunctuationRequestIdRef.current = requestId;
+
+          if (finalTranscript) {
+            void punctuateSpeechTranscriptOnServer(finalTranscript)
+              .then((punctuatedTranscript) => {
+                if (speechPunctuationRequestIdRef.current !== requestId) {
+                  return;
+                }
+
+                const currentValue = String(textareaRef.current?.value || message || "").trim();
+                if (currentValue && currentValue !== rawDraftValue) {
+                  return;
+                }
+
+                const nextMessage = composeSpeechDraftMessage(draftBase, punctuatedTranscript || finalTranscript);
+                if (nextMessage) {
+                  setMessage(nextMessage);
+                }
+              })
+              .catch((error) => {
+                console.error("Speech punctuation error:", error);
+                const currentValue = String(textareaRef.current?.value || message || "").trim();
+                if (!currentValue || currentValue === rawDraftValue) {
+                  setMessage(rawDraftValue);
+                }
+              });
+          }
+        }
+      };
+
+      speechRecognitionRef.current = recognition;
+      setSpeechRecognitionActive(true);
+      recognition.start();
+    } catch {
+      setSpeechRecognitionActive(false);
+      speechRecognitionRef.current = null;
+      setErrorMessage("Не удалось запустить голосовой ввод текста.");
+    }
+  };
+
   useEffect(() => {
     setDecryptedAttachmentsByMessageId((previous) => {
       Object.values(previous || {}).forEach(revokeAttachmentObjectUrl);
@@ -517,6 +1111,28 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   useEffect(() => () => {
     Object.values(decryptedAttachmentsRef.current || {}).forEach(revokeAttachmentObjectUrl);
+  }, []);
+
+  useEffect(() => {
+    if (voiceRecordingState !== "holding" && voiceRecordingState !== "locked") {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const nextDurationMs = Math.max(0, Date.now() - voiceRecordingStartAtRef.current);
+      setVoiceRecordingDurationMs(nextDurationMs);
+
+      if (nextDurationMs >= MAX_VOICE_MESSAGE_DURATION_MS) {
+        void finalizeVoiceRecording(true);
+      }
+    }, 180);
+
+    return () => window.clearInterval(intervalId);
+  }, [voiceRecordingState]);
+
+  useEffect(() => () => {
+    cleanupVoiceRecordingResources();
+    stopSpeechRecognition(false);
   }, []);
 
   useEffect(() => {
@@ -710,6 +1326,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   useEffect(() => {
     if (!messageContextMenu) {
+      setReactionStickerPanelOpen(false);
       return undefined;
     }
 
@@ -724,6 +1341,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         setMessageContextMenu(null);
+        if (speechRecognitionActive) {
+          stopSpeechRecognition(false);
+        }
+        if (voiceRecordingState === "holding" || voiceRecordingState === "locked") {
+          void handleCancelVoiceRecording();
+        }
       }
     };
 
@@ -742,12 +1365,14 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportChange, true);
     };
-  }, [messageContextMenu]);
+  }, [messageContextMenu, speechRecognitionActive, voiceRecordingState]);
 
   useEffect(() => {
     setPinnedMessages(readPinnedMessages(pinnedStorageKey));
     setSelectionMode(false);
     setSelectedMessageIds([]);
+    editDraftBackupRef.current = "";
+    setMessageEditState(null);
     setForwardModal({
       open: false,
       messageIds: [],
@@ -763,20 +1388,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   useEffect(() => {
     if (!user || !scopedChannelId) {
+      editDraftBackupRef.current = "";
+      setMessageEditState(null);
       setMessage("");
       return;
     }
 
+    editDraftBackupRef.current = "";
+    setMessageEditState(null);
     setMessage(readChatDraft(user, scopedChannelId));
   }, [scopedChannelId, user]);
 
   useEffect(() => {
-    if (!user || !scopedChannelId) {
+    if (!user || !scopedChannelId || messageEditState) {
       return;
     }
 
     writeChatDraft(user, scopedChannelId, message);
-  }, [message, scopedChannelId, user]);
+  }, [message, messageEditState, scopedChannelId, user]);
 
   const ensureChannelJoined = async () => {
     const connection = await startChatConnection();
@@ -794,6 +1423,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       : [];
     joinedChannelRef.current = scopedChannelId;
     setIsChannelReady(true);
+    hasInitializedVisibleChannelRef.current = true;
     setMessagesByChannel((previous) => ({
       ...previous,
       [scopedChannelId]: normalizedInitialMessages,
@@ -808,6 +1438,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     if (!scopedChannelId) {
       setIsChannelReady(false);
       joinedChannelRef.current = "";
+      hasInitializedVisibleChannelRef.current = false;
       return undefined;
     }
 
@@ -834,6 +1465,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     };
 
     const handleMessageDeleted = (deletedId) => {
+      if (String(messageEditState?.messageId || "") === String(deletedId)) {
+        stopEditingMessage();
+      }
+
       setMessageContextMenu((current) => (String(current?.messageId || "") === String(deletedId) ? null : current));
       setPinnedMessages((previous) => previous.filter((item) => String(item.id) !== String(deletedId)));
       setSelectedMessageIds((previous) => previous.filter((itemId) => String(itemId) !== String(deletedId)));
@@ -852,6 +1487,40 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           [scopedChannelId]: channelMessages.filter((item) => item.id !== deletedId),
         };
       });
+    };
+
+    const handleMessageUpdated = (updatedMessage) => {
+      if (String(updatedMessage?.channelId || scopedChannelId) !== String(scopedChannelId)) {
+        return;
+      }
+
+      void (async () => {
+        const normalizedMessage = await normalizeIncomingMessage(updatedMessage);
+
+        setMessageContextMenu((current) =>
+          String(current?.messageId || "") === String(normalizedMessage.id)
+            ? {
+                ...current,
+                text: String(normalizedMessage.message || current?.text || "").trim(),
+                hasText: Boolean(String(normalizedMessage.message || "").trim()),
+              }
+            : current
+        );
+
+        setPinnedMessages((previous) =>
+          previous.map((item) => (String(item.id) === String(normalizedMessage.id) ? createPinnedSnapshot(normalizedMessage) : item))
+        );
+
+        setMessagesByChannel((previous) => {
+          const channelMessages = previous[scopedChannelId] || [];
+          return {
+            ...previous,
+            [scopedChannelId]: channelMessages.map((messageItem) =>
+              String(messageItem.id) === String(normalizedMessage.id) ? normalizedMessage : messageItem
+            ),
+          };
+        });
+      })();
     };
 
     const handleMessagesRead = (payload) => {
@@ -908,13 +1577,16 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       try {
         setErrorMessage("");
         setIsChannelReady(false);
+        hasInitializedVisibleChannelRef.current = false;
 
         chatConnection.off("ReceiveMessage", handleReceiveMessage);
         chatConnection.off("MessageDeleted", handleMessageDeleted);
+        chatConnection.off("MessageUpdated", handleMessageUpdated);
         chatConnection.off("MessagesRead", handleMessagesRead);
         chatConnection.off("MessageReactionsUpdated", handleMessageReactionsUpdated);
         chatConnection.on("ReceiveMessage", handleReceiveMessage);
         chatConnection.on("MessageDeleted", handleMessageDeleted);
+        chatConnection.on("MessageUpdated", handleMessageUpdated);
         chatConnection.on("MessagesRead", handleMessagesRead);
         chatConnection.on("MessageReactionsUpdated", handleMessageReactionsUpdated);
 
@@ -928,6 +1600,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         joinedChannelRef.current = "";
         setIsChannelReady(false);
         setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: previous[scopedChannelId] || [] }));
+        if (!hasInitializedVisibleChannelRef.current) {
+          return;
+        }
         setErrorMessage(getChatErrorMessage(error, "Не удалось подключить чат."));
       }
     };
@@ -944,10 +1619,11 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
       chatConnection.off("ReceiveMessage", handleReceiveMessage);
       chatConnection.off("MessageDeleted", handleMessageDeleted);
+      chatConnection.off("MessageUpdated", handleMessageUpdated);
       chatConnection.off("MessagesRead", handleMessagesRead);
       chatConnection.off("MessageReactionsUpdated", handleMessageReactionsUpdated);
     };
-  }, [currentUserId, isDirectChat, scopedChannelId]);
+  }, [currentUserId, isDirectChat, messageEditState?.messageId, scopedChannelId]);
 
   useEffect(() => {
     const handleProfileUpdated = (payload) => {
@@ -1022,13 +1698,18 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     const messageText = message.trim();
     const filesToSend = selectedFiles;
 
-    if ((!messageText && !filesToSend.length) || !scopedChannelId || uploadingFile) {
+    if (messageEditState && filesToSend.length) {
+      setErrorMessage("Во время редактирования нельзя добавлять новые вложения.");
+      return;
+    }
+
+    if ((!messageText && !filesToSend.length) || !scopedChannelId || uploadingFile || voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
       return;
     }
 
     const now = Date.now();
     const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
-    if (cooldownLeft > 0) {
+    if (!messageEditState && cooldownLeft > 0) {
       setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
       return;
     }
@@ -1039,6 +1720,37 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     try {
       setErrorMessage("");
       await ensureChannelJoined();
+
+      if (messageEditState?.messageId) {
+        const preparedTextPayload = await prepareOutgoingTextEncryption({
+          channelId: scopedChannelId,
+          user,
+          text: messageText,
+        });
+
+        if (preparedTextPayload.reason) {
+          console.warn("E2EE fallback:", preparedTextPayload.reason);
+        }
+
+        await chatConnection.invoke(
+          "EditMessage",
+          messageEditState.messageId,
+          preparedTextPayload.message,
+          preparedTextPayload.encryption || null,
+          outgoingMentions
+        );
+
+        const preservedDraft = editDraftBackupRef.current;
+        editDraftBackupRef.current = "";
+        setMessageEditState(null);
+        setMessage(preservedDraft);
+        if (!preservedDraft) {
+          clearChatDraft(user, scopedChannelId);
+        }
+        setIsChannelReady(true);
+        focusComposerToEnd();
+        return;
+      }
 
       let attachments = [];
       if (filesToSend.length) {
@@ -1073,6 +1785,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             attachmentSize: attachment.size || null,
             attachmentContentType: attachment.contentType || "",
             attachmentEncryption: attachment.attachmentEncryption || null,
+            voiceMessage: null,
           }))
         : [
             {
@@ -1083,6 +1796,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               attachmentSize: null,
               attachmentContentType: "",
               attachmentEncryption: null,
+              voiceMessage: null,
             },
           ];
 
@@ -1098,10 +1812,18 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         playDirectMessageSound("send");
       }
     } catch (error) {
-      console.error("SendMessage error:", error);
-      joinedChannelRef.current = "";
-      setIsChannelReady(false);
+      console.error(messageEditState ? "EditMessage error:" : "SendMessage error:", error);
+      if (!messageEditState) {
+        joinedChannelRef.current = "";
+        setIsChannelReady(false);
+      }
+      if (messageEditState) {
+        setErrorMessage(getChatErrorMessage(error, "Не удалось сохранить изменения сообщения."));
+      }
       setErrorMessage(getChatErrorMessage(error, "Не удалось отправить сообщение."));
+      if (messageEditState) {
+        setErrorMessage(getChatErrorMessage(error, "Не удалось сохранить изменения сообщения."));
+      }
     } finally {
       setUploadingFile(false);
     }
@@ -1139,6 +1861,75 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     setSelectedFiles((previous) => [...previous, ...validFiles]);
+  };
+
+  const handleVoiceRecordPointerDown = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget?.setPointerCapture?.(event.pointerId);
+
+    if (speechRecognitionActive) {
+      stopSpeechRecognition(true);
+    }
+
+    if (voiceRecordingState === "locked") {
+      await finalizeVoiceRecording(true);
+      return;
+    }
+
+    await startVoiceRecording(event);
+  };
+
+  const handleVoiceRecordPointerMove = (event) => {
+    if (voiceRecordingState !== "holding") {
+      return;
+    }
+
+    const pointerState = voicePointerStateRef.current;
+    if (pointerState.locked || pointerState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (pointerState.startY - event.clientY >= VOICE_LOCK_DRAG_THRESHOLD_PX) {
+      voicePointerStateRef.current = {
+        ...pointerState,
+        locked: true,
+      };
+      setVoiceRecordingState("locked");
+    }
+  };
+
+  const handleVoiceRecordPointerUp = async (event) => {
+    const pointerState = voicePointerStateRef.current;
+    if (voiceRecordingState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
+      await finalizeVoiceRecording(true);
+    }
+  };
+
+  const handleVoiceRecordPointerCancel = async (event) => {
+    const pointerState = voicePointerStateRef.current;
+    if (voiceRecordingState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
+      await finalizeVoiceRecording(false);
+    }
+  };
+
+  const handleCancelVoiceRecording = async () => {
+    if (voiceRecordingState === "holding" || voiceRecordingState === "locked") {
+      await finalizeVoiceRecording(false);
+    }
+  };
+
+  const handleSpeechRecognitionToggle = () => {
+    if (voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+      return;
+    }
+
+    if (speechRecognitionActive) {
+      stopSpeechRecognition(true);
+      return;
+    }
+
+    startSpeechRecognition();
   };
 
   const buildForwardPayloadForTargetChannel = async (targetChannelId, sourceMessages) => {
@@ -1212,6 +2003,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         message: String(messageItem.message || ""),
         forwardedFromUserId: String(messageItem.authorUserId || ""),
         forwardedFromUsername: String(messageItem.username || ""),
+        voiceMessage: messageItem.voiceMessage || null,
         ...attachmentPayload,
       });
     }
@@ -1235,7 +2027,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         id: messageItem.id,
         username: messageItem.username,
         timestamp: messageItem.timestamp,
-        preview: String(messageItem.message || messageItem.attachmentName || "").trim(),
+        preview: getMessagePreview(messageItem),
       }));
   }, [messages, normalizedSearchQuery]);
 
@@ -1364,9 +2156,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           : "";
     const hasAttachment = Boolean(messageItem?.attachmentUrl);
     const hasText = Boolean(String(messageItem?.message || messageItem?.attachmentName || "").trim());
-    const enabledActionCount = 6 + (hasAttachment ? 1 : 0);
-    const menuWidth = 248;
-    const reactionPanelHeight = 66;
+    const canEdit = Boolean(isOwnMessage) && Boolean(String(messageItem?.message || "").trim());
+    const enabledActionCount = 7 + (hasAttachment ? 1 : 0);
+    const menuWidth = 224;
+    const reactionPanelHeight = 58;
     const menuHeight = reactionPanelHeight + 16 + enabledActionCount * 46;
     const padding = 12;
     const viewportWidth = window.innerWidth;
@@ -1374,6 +2167,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     const nextX = Math.min(event.clientX, viewportWidth - menuWidth - padding);
     const nextY = Math.min(event.clientY, viewportHeight - menuHeight - padding);
 
+    setReactionStickerPanelOpen(false);
     setMessageContextMenu({
       x: Math.max(padding, nextX),
       y: Math.max(padding, nextY),
@@ -1387,6 +2181,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       attachmentEncryption: messageItem?.attachmentEncryption || null,
       hasAttachment,
       hasText,
+      canEdit,
       isPinned: pinnedMessageIdSet.has(String(messageItem.id)),
       canDelete: Boolean(isOwnMessage),
     });
@@ -1398,7 +2193,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     try {
-      await navigator.clipboard.writeText(messageContextMenu.text);
+      await copyTextToClipboard(messageContextMenu.text);
       setErrorMessage("");
     } catch {
       setErrorMessage("Не удалось скопировать текст в буфер обмена.");
@@ -1421,6 +2216,20 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     } finally {
       setMessageContextMenu(null);
     }
+  };
+
+  const handleStartEditingMessage = () => {
+    if (!messageContextMenu?.canEdit || !messageContextMenu?.messageId) {
+      return;
+    }
+
+    const messageItem = messages.find((item) => String(item.id) === String(messageContextMenu.messageId));
+    if (!messageItem) {
+      setMessageContextMenu(null);
+      return;
+    }
+
+    startEditingMessage(messageItem);
   };
 
   const handleDownloadAttachment = async (attachment = messageContextMenu) => {
@@ -1569,7 +2378,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
     const normalizedPayload = Array.isArray(payload)
-      ? payload.filter((item) => String(item?.message || "").trim() || String(item?.attachmentUrl || "").trim())
+      ? payload.filter((item) => String(item?.message || "").trim() || String(item?.attachmentUrl || "").trim() || item?.voiceMessage)
       : [];
 
     if (!normalizedPayload.length) {
@@ -1613,7 +2422,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         item.attachmentContentType || null,
         preparedTextPayload.encryption || null,
         item.attachmentEncryption || null,
-        Array.isArray(item.mentions) ? item.mentions : []
+        Array.isArray(item.mentions) ? item.mentions : [],
+        item.voiceMessage || null
       );
 
       if (index < normalizedPayload.length - 1) {
@@ -1678,6 +2488,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   };
 
   const contextMenuActions = [
+    { id: "edit", label: "Редактировать", icon: "✎", disabled: !messageContextMenu?.canEdit, hidden: false, onClick: handleStartEditingMessage },
     { id: "reply", label: "Ответить", icon: "?", disabled: true, hidden: false, onClick: () => {} },
     {
       id: "pin",
@@ -1806,6 +2617,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             const attachmentSize = attachmentView?.size || messageItem.attachmentSize || null;
             const isResolvedImageAttachment = String(attachmentContentType).startsWith("image/");
             const isResolvedVideoAttachment = String(attachmentContentType).startsWith("video/");
+            const resolvedVoiceMessage = normalizeVoiceMessageMetadata(messageItem.voiceMessage);
+            const hasVoiceAttachment = isVoiceMessage({ ...messageItem, voiceMessage: resolvedVoiceMessage });
             const reactions = normalizeReactions(messageItem.reactions);
             const messageText = String(messageItem.message || "");
             const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
@@ -1857,6 +2670,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       <span>{messageItem.username}</span>
                       <span className="message-meta">
                         <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                        {renderEditedBadge(messageItem)}
                       </span>
                     </div>
                   ) : null}
@@ -1874,6 +2688,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                         <div className="message-text">{renderMessageText(messageText, messageMentions)}</div>
                         <div className={`message-footer message-footer--inline ${isOwnMessage ? "message-footer--own" : ""}`}>
                           <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                          {renderEditedBadge(messageItem)}
                           {isOwnMessage ? (
                             <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
                               <span className="message-read-status__check" />
@@ -1887,7 +2702,15 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     )
                   ) : null}
 
-                  {attachmentUrl ? (
+                  {hasVoiceAttachment ? (
+                    <VoiceMessageBubble
+                      src={attachmentUrl}
+                      pending={!attachmentUrl}
+                      waveform={resolvedVoiceMessage?.waveform || []}
+                      durationMs={resolvedVoiceMessage?.durationMs || 0}
+                      fileName={resolvedVoiceMessage?.fileName || attachmentName}
+                    />
+                  ) : attachmentUrl ? (
                     isResolvedImageAttachment ? (
                       <button
                         type="button"
@@ -2017,6 +2840,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       {isDirectChat && !useInlineFooter ? (
                         <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                           <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                          {renderEditedBadge(messageItem)}
                           {isOwnMessage ? (
                             <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
                               <span className="message-read-status__check" />
@@ -2056,33 +2880,161 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             </div>
           ) : null}
 
+          {messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") || speechRecognitionActive ? (
+            <div className="composer-status-strip">
+              {messageEditState ? (
+                <div className="composer-status composer-status--edit">
+                  <span className="composer-status__dot" aria-hidden="true" />
+                  <div className="composer-status__copy">
+                    <strong>Редактирование сообщения</strong>
+                    <span>PgUp редактирует последнее ваше сообщение. Enter сохраняет, Esc отменяет.</span>
+                  </div>
+                  <button type="button" className="composer-status__action" onClick={() => stopEditingMessage()}>
+                    Отмена
+                  </button>
+                </div>
+              ) : null}
+              {ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle" ? (
+                <div className={`composer-status composer-status--voice composer-status--${voiceRecordingState}`}>
+                  <span className="composer-status__dot" aria-hidden="true" />
+                  <div className="composer-status__copy">
+                    <strong>{buildVoiceMessageLabel(voiceRecordingDurationMs)}</strong>
+                    <span>
+                      {voiceRecordingState === "locked"
+                        ? "Запись зафиксирована. Нажмите на кнопку микрофона ещё раз, чтобы отправить."
+                        : voiceRecordingState === "sending"
+                          ? "Отправляем голосовое сообщение..."
+                          : "Удерживайте кнопку и отпустите для отправки или потяните вверх для фиксации."}
+                    </span>
+                  </div>
+                  {voiceRecordingState === "holding" || voiceRecordingState === "locked" ? (
+                    <button type="button" className="composer-status__action" onClick={() => void handleCancelVoiceRecording()}>
+                      Отмена
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {speechRecognitionActive ? (
+                <div className="composer-status composer-status--speech">
+                  <span className="composer-status__dot" aria-hidden="true" />
+                  <div className="composer-status__copy">
+                    <strong>Голосовой ввод</strong>
+                    <span>Слушаем речь на русском и вставляем её в поле сообщения.</span>
+                  </div>
+                  <button type="button" className="composer-status__action" onClick={handleSpeechRecognitionToggle}>
+                    Стоп
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="input-area__controls">
             <div className="message-composer">
               <label className="attach-button" aria-label="Прикрепить файл" title="Прикрепить файл">
                 <input type="file" className="attach-button__input" onChange={handleFileChange} disabled={uploadingFile} multiple />
                 <span className="attach-button__icon" aria-hidden="true" />
               </label>
+              {ENABLE_SPEECH_INPUT_BUTTON ? (
+              <button
+                type="button"
+                className={`composer-tool composer-tool--speech ${speechRecognitionActive ? "composer-tool--active" : ""}`}
+                onClick={handleSpeechRecognitionToggle}
+                disabled={uploadingFile || voiceRecordingState !== "idle"}
+                title={speechRecognitionSupported ? "Голосовой ввод текста" : "Голосовой ввод недоступен"}
+                aria-label="Голосовой ввод текста"
+              >
+                <span className="composer-tool__mic" aria-hidden="true" />
+                <span className="composer-tool__badge" aria-hidden="true">a</span>
+              </button>
+              ) : null}
               <textarea
                 ref={textareaRef}
                 value={message}
-                disabled={uploadingFile}
+                disabled={uploadingFile || voiceRecordingState === "sending"}
                 onChange={(event) => setMessage(event.target.value)}
+                data-editing={messageEditState ? "true" : "false"}
                 placeholder={uploadingFile ? "Загружаем вложения..." : "Введите сообщение..."}
                 onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    if (speechRecognitionActive) {
+                      stopSpeechRecognition(false);
+                    }
+
+                    if (voiceRecordingState === "holding" || voiceRecordingState === "locked") {
+                      event.preventDefault();
+                      void handleCancelVoiceRecording();
+                      return;
+                    }
+
+                    if (messageEditState) {
+                      event.preventDefault();
+                      stopEditingMessage();
+                      return;
+                    }
+                  }
+
+                  if (event.key === "PageUp") {
+                    event.preventDefault();
+                    startEditingLatestOwnMessage();
+                    return;
+                  }
+
+                  if (
+                    event.key === "ArrowUp"
+                    && !event.shiftKey
+                    && !event.altKey
+                    && !event.ctrlKey
+                    && !event.metaKey
+                    && textareaRef.current
+                    && textareaRef.current.selectionStart === 0
+                    && textareaRef.current.selectionEnd === 0
+                    && !String(message || "").trim()
+                    && !messageEditState
+                  ) {
+                    event.preventDefault();
+                    startEditingLatestOwnMessage();
+                    return;
+                  }
+
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     send();
                   }
                 }}
               />
+
+              {/* <button
+                type="button"
+                className={`composer-tool composer-tool--voice composer-tool--recording-${voiceRecordingState}`}
+                hidden={!ENABLE_VOICE_MESSAGE_BUTTON}
+                aria-hidden={!ENABLE_VOICE_MESSAGE_BUTTON}
+                onPointerDown={(event) => void handleVoiceRecordPointerDown(event)}
+                onPointerMove={handleVoiceRecordPointerMove}
+                onPointerUp={(event) => void handleVoiceRecordPointerUp(event)}
+                onPointerCancel={(event) => void handleVoiceRecordPointerCancel(event)}
+                disabled={uploadingFile || voiceRecordingState === "sending"}
+                title="Голосовое сообщение"
+                aria-label="Записать голосовое сообщение"
+              >
+                <span
+                  className="composer-tool__ring"
+                  aria-hidden="true"
+                  style={{ "--voice-level-scale": `${1 + voiceMicLevel * 0.9}` }}
+                />
+                <span className="composer-tool__mic" aria-hidden="true" />
+                {voiceRecordingState === "locked" ? (
+                  <span className="composer-tool__lock" aria-hidden="true">⇡</span>
+                ) : null}
+              </button> */}
             </div>
           </div>
         </div>
       </div>
 
-      {!isChannelReady && scopedChannelId ? (
+      {/*
         <div className="chat-error">Чат инициализируется. Если это не пройдёт, попробуйте переподключиться или ещё раз открыть диалог.</div>
-      ) : null}
+      */}
       {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
 
       {mediaPreview ? (
@@ -2154,26 +3106,59 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           onClick={(event) => event.stopPropagation()}
         >
           <div className="message-reaction-picker" aria-label="Быстрые реакции">
-            {MESSAGE_REACTION_OPTIONS.map((reactionOption) => {
+            {(() => {
               const contextMessage = messages.find((item) => String(item.id) === String(messageContextMenu.messageId));
               const contextReactions = normalizeReactions(contextMessage?.reactions);
-              const isActive = contextReactions.some((reaction) =>
+              const isReactionActive = (reactionOption) => contextReactions.some((reaction) =>
                 reaction.key === reactionOption.key
                 && reaction.reactorUserIds.some((userId) => String(userId) === currentUserId));
 
               return (
-                <button
-                  key={reactionOption.key}
-                  type="button"
-                  className={`message-reaction-picker__item ${isActive ? "message-reaction-picker__item--active" : ""}`}
-                  onClick={() => handleToggleReaction(messageContextMenu.messageId, reactionOption)}
-                  aria-label={reactionOption.label}
-                  title={reactionOption.label}
-                >
-                  <span aria-hidden="true">{reactionOption.glyph}</span>
-                </button>
+                <>
+                  <div className="message-reaction-picker__row">
+                    {PRIMARY_MESSAGE_REACTION_OPTIONS.map((reactionOption) => (
+                      <button
+                        key={reactionOption.key}
+                        type="button"
+                        className={`message-reaction-picker__item ${isReactionActive(reactionOption) ? "message-reaction-picker__item--active" : ""}`}
+                        onClick={() => handleToggleReaction(messageContextMenu.messageId, reactionOption)}
+                        aria-label={reactionOption.label}
+                        title={reactionOption.label}
+                      >
+                        <span aria-hidden="true">{reactionOption.glyph}</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className={`message-reaction-picker__stickers-toggle ${reactionStickerPanelOpen ? "message-reaction-picker__stickers-toggle--active" : ""}`}
+                      onClick={() => setReactionStickerPanelOpen((previous) => !previous)}
+                      aria-expanded={reactionStickerPanelOpen}
+                      aria-label="Открыть список стикеров"
+                    >
+                      <span className="message-reaction-picker__stickers-label">Стикеры</span>
+                      <span className="message-reaction-picker__stickers-arrow" aria-hidden="true">›</span>
+                    </button>
+                  </div>
+                  {reactionStickerPanelOpen ? (
+                    <div className="message-reaction-picker__stickers" role="menu" aria-label="Стикеры">
+                      {STICKER_MESSAGE_REACTION_OPTIONS.map((reactionOption) => (
+                        <button
+                          key={reactionOption.key}
+                          type="button"
+                          className={`message-reaction-picker__sticker ${isReactionActive(reactionOption) ? "message-reaction-picker__sticker--active" : ""}`}
+                          onClick={() => handleToggleReaction(messageContextMenu.messageId, reactionOption)}
+                          aria-label={reactionOption.label}
+                          title={reactionOption.label}
+                        >
+                          <span className="message-reaction-picker__sticker-glyph" aria-hidden="true">{reactionOption.glyph}</span>
+                          <span className="message-reaction-picker__sticker-label">{reactionOption.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               );
-            })}
+            })()}
           </div>
           <div className="message-context-menu" role="menu">
             {contextMenuActions.map((action) => (

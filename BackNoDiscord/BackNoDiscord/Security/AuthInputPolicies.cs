@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -6,7 +7,16 @@ namespace BackNoDiscord.Security;
 
 public static partial class AuthInputPolicies
 {
-    private const int MaxNameLength = 60;
+    private const int MaxNameLength = 32;
+    private const int MaxEmailLength = 50;
+    private enum PersonNameScript
+    {
+        Unknown = 0,
+        Cyrillic = 1,
+        Latin = 2,
+        Mixed = 3
+    }
+
     private static readonly HashSet<string> SupportedEmailDomains = new(StringComparer.OrdinalIgnoreCase)
     {
         "gmail.com",
@@ -18,7 +28,7 @@ public static partial class AuthInputPolicies
     [GeneratedRegex(@"^\+7\d{10}$", RegexOptions.Compiled)]
     private static partial Regex NormalizedRussianPhoneRegex();
 
-    [GeneratedRegex(@"^[\p{L}\p{M}\s'-]+$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^[\p{L}\p{M}'-]+$", RegexOptions.Compiled)]
     private static partial Regex PersonNameRegex();
 
     public static bool TryNormalizeEmail(string? value, out string normalizedEmail, out string error)
@@ -30,6 +40,12 @@ public static partial class AuthInputPolicies
         if (string.IsNullOrWhiteSpace(candidate))
         {
             error = "Email обязателен.";
+            return false;
+        }
+
+        if (candidate.Length > MaxEmailLength)
+        {
+            error = $"Email РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ {MaxEmailLength} СЃРёРјРІРѕР»РѕРІ.";
             return false;
         }
 
@@ -94,7 +110,7 @@ public static partial class AuthInputPolicies
 
     public static bool TryNormalizeProfileName(string? value, string fieldName, out string normalizedName, out string error)
     {
-        normalizedName = CollapseWhitespace((value ?? string.Empty).Trim());
+        normalizedName = (value ?? string.Empty).Trim();
         error = string.Empty;
 
         if (string.IsNullOrWhiteSpace(normalizedName))
@@ -109,9 +125,38 @@ public static partial class AuthInputPolicies
             return false;
         }
 
+        if (normalizedName.Any(char.IsWhiteSpace))
+        {
+            error = $"{fieldName} РґРѕР»Р¶РЅРѕ СЃРѕРґРµСЂР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ РѕРґРЅРѕ СЃР»РѕРІРѕ.";
+            return false;
+        }
+
         if (!PersonNameRegex().IsMatch(normalizedName))
         {
             error = $"{fieldName} может содержать только буквы, пробел, дефис и апостроф.";
+            return false;
+        }
+
+        return true;
+    }
+
+    public static bool TryEnsureMatchingProfileNameScripts(string firstName, string lastName, out string error)
+    {
+        error = string.Empty;
+
+        var firstScript = DetectPersonNameScript(firstName);
+        var lastScript = DetectPersonNameScript(lastName);
+
+        if (firstScript is PersonNameScript.Unknown or PersonNameScript.Mixed ||
+            lastScript is PersonNameScript.Unknown or PersonNameScript.Mixed)
+        {
+            error = "Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.";
+            return false;
+        }
+
+        if (firstScript != lastScript)
+        {
+            error = "Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.";
             return false;
         }
 
@@ -123,8 +168,58 @@ public static partial class AuthInputPolicies
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((value ?? string.Empty).Trim())));
     }
 
-    private static string CollapseWhitespace(string value)
+    private static PersonNameScript DetectPersonNameScript(string? value)
     {
-        return string.Join(" ", value.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        var hasCyrillic = false;
+        var hasLatin = false;
+
+        foreach (var character in value ?? string.Empty)
+        {
+            if (IsCyrillicLetter(character))
+            {
+                hasCyrillic = true;
+                continue;
+            }
+
+            if (IsLatinLetter(character))
+            {
+                hasLatin = true;
+                continue;
+            }
+
+            if (character is '\'' or '-' || char.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetter(character))
+            {
+                return PersonNameScript.Mixed;
+            }
+        }
+
+        return (hasCyrillic, hasLatin) switch
+        {
+            (true, true) => PersonNameScript.Mixed,
+            (true, false) => PersonNameScript.Cyrillic,
+            (false, true) => PersonNameScript.Latin,
+            _ => PersonNameScript.Unknown
+        };
+    }
+
+    private static bool IsCyrillicLetter(char character)
+    {
+        return character is >= '\u0400' and <= '\u052F'
+            or >= '\u1C80' and <= '\u1C8F'
+            or >= '\u2DE0' and <= '\u2DFF'
+            or >= '\uA640' and <= '\uA69F';
+    }
+
+    private static bool IsLatinLetter(char character)
+    {
+        return character is >= 'A' and <= 'Z'
+            or >= 'a' and <= 'z'
+            or >= '\u00C0' and <= '\u024F'
+            or >= '\u1E00' and <= '\u1EFF';
     }
 }

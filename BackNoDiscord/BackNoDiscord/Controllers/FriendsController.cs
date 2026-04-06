@@ -68,7 +68,7 @@ public class FriendsController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<IActionResult> SearchFriends([FromQuery] string? q)
+    public async Task<IActionResult> SearchFriends([FromQuery] string? q, [FromQuery] string? mode)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
             !int.TryParse(currentUser.UserId, out var currentUserId))
@@ -76,13 +76,16 @@ public class FriendsController : ControllerBase
             return Unauthorized();
         }
 
-        var query = q?.Trim();
-        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        var parsedSearch = ParseFriendSearch(q, mode);
+        if (string.IsNullOrWhiteSpace(parsedSearch.Query))
         {
             return Ok(Array.Empty<object>());
         }
 
-        var normalizedQuery = query.ToLowerInvariant();
+        var normalizedQuery = parsedSearch.Query;
+        var condensedQuery = CondenseSearchValue(normalizedQuery);
+        var queryTokens = TokenizeSearchValue(normalizedQuery);
+        var reversedQuery = queryTokens.Count > 1 ? string.Join(" ", queryTokens.AsEnumerable().Reverse()) : string.Empty;
         var existingFriendIds = await _context.Friendships
             .AsNoTracking()
             .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
@@ -90,17 +93,9 @@ public class FriendsController : ControllerBase
             .Distinct()
             .ToListAsync();
 
-        var result = await _context.Users
+        var usersQuery = _context.Users
             .AsNoTracking()
             .Where(item => item.id != currentUserId && !existingFriendIds.Contains(item.id))
-            .Where(item =>
-                (item.email ?? string.Empty).ToLower().Contains(normalizedQuery) ||
-                item.first_name.ToLower().Contains(normalizedQuery) ||
-                item.last_name.ToLower().Contains(normalizedQuery) ||
-                (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery))
-            .OrderBy(item => item.first_name)
-            .ThenBy(item => item.last_name)
-            .Take(12)
             .Select(item => new
             {
                 id = item.id,
@@ -109,8 +104,30 @@ public class FriendsController : ControllerBase
                 email = item.email,
                 avatar_url = item.avatar_url ?? string.Empty,
                 directChannelId = BuildDirectChannelId(currentUserId, item.id)
-            })
-            .ToListAsync();
+            });
+
+        var candidates = parsedSearch.Mode == FriendSearchMode.Email
+            ? await usersQuery
+                .Where(item => (item.email ?? string.Empty).ToLower().Contains(normalizedQuery))
+                .ToListAsync()
+            : await usersQuery
+                .Where(item =>
+                    item.first_name.ToLower().Contains(normalizedQuery) ||
+                    item.last_name.ToLower().Contains(normalizedQuery) ||
+                    (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery) ||
+                    (item.last_name + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
+                    ((item.first_name + item.last_name).ToLower()).Contains(condensedQuery) ||
+                    (!string.IsNullOrWhiteSpace(reversedQuery) && (item.last_name + " " + item.first_name).ToLower().Contains(reversedQuery)))
+                .ToListAsync();
+
+        var result = candidates
+            .OrderBy(item => parsedSearch.Mode == FriendSearchMode.Email
+                ? GetEmailSearchRank(item.email, normalizedQuery)
+                : GetNameSearchRank(item.first_name, item.last_name, normalizedQuery, condensedQuery, queryTokens))
+            .ThenBy(item => item.first_name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.last_name, StringComparer.OrdinalIgnoreCase)
+            .Take(20)
+            .ToList();
 
         return Ok(result);
     }
@@ -181,6 +198,119 @@ public class FriendsController : ControllerBase
         return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
     }
 
+    private static int GetNameSearchRank(string? firstName, string? lastName, string query, string condensedQuery, IReadOnlyList<string> queryTokens)
+    {
+        var first = NormalizeSearchValue(firstName);
+        var last = NormalizeSearchValue(lastName);
+        var full = $"{first} {last}".Trim();
+        var reverse = $"{last} {first}".Trim();
+        var condensedFull = CondenseSearchValue(full);
+
+        if (full == query || reverse == query)
+        {
+            return 0;
+        }
+
+        if ((!string.IsNullOrWhiteSpace(first) && first.StartsWith(query, StringComparison.Ordinal)) ||
+            (!string.IsNullOrWhiteSpace(last) && last.StartsWith(query, StringComparison.Ordinal)))
+        {
+            return 1;
+        }
+
+        if (!string.IsNullOrWhiteSpace(condensedQuery) && condensedFull == condensedQuery)
+        {
+            return 2;
+        }
+
+        if (queryTokens.Count > 1 && queryTokens.All((token) =>
+                first.Contains(token, StringComparison.Ordinal) ||
+                last.Contains(token, StringComparison.Ordinal) ||
+                full.Contains(token, StringComparison.Ordinal) ||
+                reverse.Contains(token, StringComparison.Ordinal)))
+        {
+            return 3;
+        }
+
+        if (full.Contains(query, StringComparison.Ordinal) ||
+            reverse.Contains(query, StringComparison.Ordinal) ||
+            first.Contains(query, StringComparison.Ordinal) ||
+            last.Contains(query, StringComparison.Ordinal))
+        {
+            return 4;
+        }
+
+        if (!string.IsNullOrWhiteSpace(condensedQuery) && condensedFull.Contains(condensedQuery, StringComparison.Ordinal))
+        {
+            return 5;
+        }
+
+        return 6;
+    }
+
+    private static int GetEmailSearchRank(string? email, string query)
+    {
+        var mail = NormalizeSearchValue(email);
+        if (mail == query)
+        {
+            return 0;
+        }
+
+        if (mail.StartsWith(query, StringComparison.Ordinal))
+        {
+            return 1;
+        }
+
+        var localPart = mail.Split('@', 2, StringSplitOptions.TrimEntries)[0];
+        if (!string.IsNullOrWhiteSpace(localPart) && localPart.StartsWith(query, StringComparison.Ordinal))
+        {
+            return 2;
+        }
+
+        if (!string.IsNullOrWhiteSpace(localPart) && localPart.Contains(query, StringComparison.Ordinal))
+        {
+            return 3;
+        }
+
+        if (mail.Contains(query, StringComparison.Ordinal))
+        {
+            return 4;
+        }
+
+        return 5;
+    }
+
+    private static string NormalizeSearchValue(string? value)
+    {
+        return (value ?? string.Empty).Trim().ToLowerInvariant();
+    }
+
+    private static string CondenseSearchValue(string? value)
+    {
+        return string.Concat(NormalizeSearchValue(value).Where(character => !char.IsWhiteSpace(character)));
+    }
+
+    private static IReadOnlyList<string> TokenizeSearchValue(string? value)
+    {
+        return NormalizeSearchValue(value)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static ParsedFriendSearch ParseFriendSearch(string? query, string? mode)
+    {
+        var rawQuery = (query ?? string.Empty).Trim();
+        var effectiveMode = string.Equals(mode, "email", StringComparison.OrdinalIgnoreCase) || rawQuery.StartsWith("@", StringComparison.Ordinal)
+            ? FriendSearchMode.Email
+            : FriendSearchMode.Name;
+
+        var normalizedQuery = effectiveMode == FriendSearchMode.Email
+            ? rawQuery.TrimStart('@').Trim().ToLowerInvariant()
+            : rawQuery.ToLowerInvariant();
+
+        return new ParsedFriendSearch(effectiveMode, normalizedQuery);
+    }
+
     private async Task BroadcastFriendListUpdatedAsync(int firstUserId, int secondUserId)
     {
         var directChannelId = BuildDirectChannelId(firstUserId, secondUserId);
@@ -195,6 +325,14 @@ public class FriendsController : ControllerBase
             .SendAsync("FriendListUpdated", payload);
     }
 }
+
+internal enum FriendSearchMode
+{
+    Name = 0,
+    Email = 1
+}
+
+internal readonly record struct ParsedFriendSearch(FriendSearchMode Mode, string Query);
 
 public class AddFriendRequest
 {

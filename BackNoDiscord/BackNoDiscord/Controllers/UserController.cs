@@ -1,10 +1,9 @@
 using BackNoDiscord.Security;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using System.Globalization;
 
 namespace BackNoDiscord.Controllers;
 
@@ -25,7 +24,6 @@ public class UpdateProfileRequest
 public class UserController : ControllerBase
 {
     private const long MaxAvatarSizeBytes = 50L * 1024 * 1024;
-    private const int MaxProfileNameLength = 60;
     private readonly AppDbContext _dbContext;
     private readonly IHubContext<ChatHub> _chatHubContext;
 
@@ -44,16 +42,19 @@ public class UserController : ControllerBase
             return Unauthorized();
         }
 
-        var firstName = NormalizeProfileName(request.FirstName, "Имя", out var firstNameError);
-        if (!string.IsNullOrEmpty(firstNameError))
+        if (!AuthInputPolicies.TryNormalizeProfileName(request.FirstName, "Имя", out var firstName, out var firstNameError))
         {
             return BadRequest(new { message = firstNameError });
         }
 
-        var lastName = NormalizeProfileName(request.LastName, "Фамилия", out var lastNameError);
-        if (!string.IsNullOrEmpty(lastNameError))
+        if (!AuthInputPolicies.TryNormalizeProfileName(request.LastName, "Фамилия", out var lastName, out var lastNameError))
         {
             return BadRequest(new { message = lastNameError });
+        }
+
+        if (!AuthInputPolicies.TryEnsureMatchingProfileNameScripts(firstName, lastName, out var nameScriptError))
+        {
+            return BadRequest(new { message = nameScriptError });
         }
 
         var user = await _dbContext.Users.FirstOrDefaultAsync(item => item.id == currentUserId, cancellationToken);
@@ -151,44 +152,5 @@ public class UserController : ControllerBase
 
         await _chatHubContext.Clients.Users(recipientIds.Distinct().Select(id => id.ToString()))
             .SendAsync("ProfileUpdated", payload, cancellationToken);
-    }
-
-    private static string NormalizeProfileName(string? value, string fieldName, out string error)
-    {
-        error = string.Empty;
-        var sanitized = UploadPolicies.TrimToLength(value, MaxProfileNameLength);
-
-        if (string.IsNullOrWhiteSpace(sanitized))
-        {
-            error = $"{fieldName} не должно быть пустым.";
-            return string.Empty;
-        }
-
-        if (sanitized.Any(char.IsControl))
-        {
-            error = $"{fieldName} содержит недопустимые символы.";
-            return string.Empty;
-        }
-
-        if (sanitized.Any(character => !IsAllowedProfileNameCharacter(character)))
-        {
-            error = $"{fieldName} может содержать только буквы, пробел, дефис и апостроф.";
-            return string.Empty;
-        }
-
-        return CollapseWhitespace(sanitized);
-    }
-
-    private static bool IsAllowedProfileNameCharacter(char character)
-    {
-        var category = char.GetUnicodeCategory(character);
-        return char.IsLetter(character) ||
-               category == UnicodeCategory.NonSpacingMark ||
-               character is ' ' or '-' or '\'';
-    }
-
-    private static string CollapseWhitespace(string value)
-    {
-        return string.Join(" ", value.Split(' ', StringSplitOptions.RemoveEmptyEntries));
     }
 }

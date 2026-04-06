@@ -1,9 +1,12 @@
 import { memo, useMemo } from "react";
 import "../css/ListChannels.css";
 import AnimatedAvatar from "./AnimatedAvatar";
-import { DEFAULT_AVATAR } from "../utils/media";
+import { DEFAULT_AVATAR, resolveStaticAssetUrl } from "../utils/media";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
+const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
+const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone.png");
+const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-simple.svg");
 
 const getVoiceDisplayName = (name) => {
   const normalized = String(name || "").trim();
@@ -83,6 +86,9 @@ const VoiceChannelList = ({
                   type="text"
                   value={editingChannelValue}
                   autoFocus
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
                   onChange={(event) => onRenameValueChange?.(event.target.value)}
                   onBlur={() => onRenameSubmit?.()}
                   onKeyDown={(event) => {
@@ -110,7 +116,7 @@ const VoiceChannelList = ({
                 disabled={!canManageChannels}
                 aria-label="Переименовать канал"
               >
-                <img src="/icons/settings.png" alt="" />
+                <img src={SETTINGS_ICON_URL} alt="" />
               </button>
             </div>
 
@@ -131,12 +137,12 @@ const VoiceChannelList = ({
                     <div className="participant-item__voice-flags">
                       {participant.isMicMuted && (
                         <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Микрофон выключен">
-                          <img src="/icons/microphone.png" alt="" />
+                          <img src={MICROPHONE_ICON_URL} alt="" />
                         </span>
                       )}
                       {participant.isDeafened && (
                         <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Не слышит канал">
-                          <img src="/icons/headphones-simple.svg" alt="" />
+                          <img src={HEADPHONES_ICON_URL} alt="" />
                         </span>
                       )}
                     </div>

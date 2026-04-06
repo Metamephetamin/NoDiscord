@@ -1,7 +1,31 @@
 import { API_URL } from "../config/runtime";
 
-export const DEFAULT_AVATAR = "/image/avatar.jpg";
-export const DEFAULT_SERVER_ICON = "/image/image.png";
+const STATIC_ASSET_BASE_URL = import.meta.env.BASE_URL || "/";
+
+export function resolveStaticAssetUrl(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:") ||
+    value.startsWith("blob:") ||
+    value.startsWith("file:")
+  ) {
+    return value;
+  }
+
+  if (!value.startsWith("/")) {
+    return value;
+  }
+
+  return `${STATIC_ASSET_BASE_URL}${value.slice(1)}`;
+}
+
+export const DEFAULT_AVATAR = resolveStaticAssetUrl("/image/avatar.jpg");
+export const DEFAULT_SERVER_ICON = resolveStaticAssetUrl("/image/image.png");
 
 export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   if (!value) return fallback;
@@ -10,7 +34,8 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
     value.startsWith("http://") ||
     value.startsWith("https://") ||
     value.startsWith("data:") ||
-    value.startsWith("blob:")
+    value.startsWith("blob:") ||
+    value.startsWith("file:")
   ) {
     return value;
   }
@@ -20,7 +45,7 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
       return `${API_URL}${value}`;
     }
 
-    return value;
+    return resolveStaticAssetUrl(value);
   }
 
   return value;

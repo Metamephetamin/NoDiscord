@@ -6,6 +6,33 @@ $bundledBinary = Join-Path $projectRoot "src\livekit\livekit-server.exe"
 $envFile = Join-Path $projectRoot ".env"
 $configFile = Join-Path $projectRoot "src\livekit\config.local.yaml"
 
+function Stop-DockerLiveKitIfRunning {
+    $dockerCommand = Get-Command "docker" -ErrorAction SilentlyContinue
+    if (-not $dockerCommand) {
+        return
+    }
+
+    try {
+        $runningContainerNames = & $dockerCommand.Source "ps" "--format" "{{.Names}}"
+        if ($LASTEXITCODE -ne 0) {
+            return
+        }
+
+        $normalizedNames = @($runningContainerNames) | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        if ($normalizedNames -notcontains "livekit") {
+            return
+        }
+
+        Write-Host "Stopping Docker LiveKit container before native startup. This avoids ICE failures on local Windows dev."
+        & $dockerCommand.Source "stop" "livekit" | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            & $dockerCommand.Source "rm" "livekit" | Out-Null
+        }
+    } catch {
+        Write-Warning "Failed to stop Docker LiveKit container automatically: $($_.Exception.Message)"
+    }
+}
+
 function Import-DotEnv {
     param([string]$Path)
 
@@ -35,6 +62,7 @@ function Import-DotEnv {
 }
 
 Import-DotEnv -Path $envFile
+Stop-DockerLiveKitIfRunning
 
 $livekitCommand = Get-Command "livekit-server" -ErrorAction SilentlyContinue
 

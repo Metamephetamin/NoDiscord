@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
@@ -58,7 +59,7 @@ export default function ServerInvitesPanel({
     }
 
     try {
-      await navigator.clipboard.writeText(inviteCode);
+      await copyTextToClipboard(inviteCode);
       setStatus("Код приглашения скопирован.");
     } catch {
       setStatus("Не удалось скопировать код.");

@@ -343,6 +343,11 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = lastNameError });
         }
 
+        if (!AuthInputPolicies.TryEnsureMatchingProfileNameScripts(firstName, lastName, out var nameScriptError))
+        {
+            return BadRequest(new { message = nameScriptError });
+        }
+
         var rawEmail = (dto.email ?? string.Empty).Trim();
         var rawPhone = (dto.phone ?? string.Empty).Trim();
         var hasEmail = !string.IsNullOrWhiteSpace(rawEmail);
@@ -488,10 +493,21 @@ public class AuthController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        var identifier = (dto.identifier ?? dto.email ?? string.Empty).Trim();
+        var rawIdentifier = dto.identifier ?? dto.email ?? string.Empty;
+        if (rawIdentifier.Any(char.IsWhiteSpace))
+        {
+            return BadRequest(CreateLoginError("identifier_invalid", "Логин не должен содержать пробелы.", identifier: "Логин не должен содержать пробелы."));
+        }
+
+        var identifier = rawIdentifier.Trim();
         if (string.IsNullOrWhiteSpace(identifier))
         {
-            return BadRequest(new { message = "Р’РІРµРґРёС‚Рµ email РёР»Рё РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°." });
+            return BadRequest(CreateLoginError("identifier_required", "Введите email или номер телефона.", identifier: "Введите email или номер телефона."));
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.password))
+        {
+            return BadRequest(CreateLoginError("password_required", "Введите пароль.", password: "Введите пароль."));
         }
 
         User? user;
@@ -499,7 +515,7 @@ public class AuthController : ControllerBase
         {
             if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
             {
-                return BadRequest(new { message = emailError });
+                return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
             }
 
             user = await _context.Users.FirstOrDefaultAsync(u => u.email == normalizedEmail);
@@ -508,7 +524,7 @@ public class AuthController : ControllerBase
         {
             if (!AuthInputPolicies.TryNormalizeRussianPhone(identifier, out var normalizedPhone, out var phoneError))
             {
-                return BadRequest(new { message = phoneError });
+                return BadRequest(CreateLoginError("identifier_invalid", phoneError, identifier: phoneError));
             }
 
             user = await _context.Users.FirstOrDefaultAsync(u => u.phone_number == normalizedPhone);
@@ -516,7 +532,7 @@ public class AuthController : ControllerBase
 
         if (user == null)
         {
-            return BadRequest(new { message = "Invalid email/phone or password" });
+            return BadRequest(CreateLoginError("user_not_found", "Пользователь с таким логином не найден.", identifier: "Пользователь с таким логином не найден."));
         }
 
         // Temporarily disabled email verification check.
@@ -528,7 +544,7 @@ public class AuthController : ControllerBase
         var result = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);
         if (result == PasswordVerificationResult.Failed)
         {
-            return BadRequest(new { message = "Invalid email/phone or password" });
+            return BadRequest(CreateLoginError("invalid_password", "Неверный пароль.", password: "Неверный пароль."));
         }
 
         if (result == PasswordVerificationResult.SuccessRehashNeeded)
@@ -804,14 +820,14 @@ public class AuthController : ControllerBase
     {
         return int.TryParse(_config["Jwt:AccessTokenMinutes"], out var configured) && configured > 0
             ? configured
-            : 20;
+            : 60 * 24 * 7;
     }
 
     private int GetRefreshTokenLifetimeDays()
     {
         return int.TryParse(_config["Jwt:RefreshTokenDays"], out var configured) && configured > 0
             ? configured
-            : 30;
+            : 14;
     }
 
     private string GetSmsDeliveryMode()
@@ -827,6 +843,28 @@ public class AuthController : ControllerBase
     private static string GenerateRefreshToken()
     {
         return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+    }
+
+    private static object CreateLoginError(string code, string message, string? identifier = null, string? password = null)
+    {
+        var fieldErrors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(identifier))
+        {
+            fieldErrors["identifier"] = identifier;
+        }
+
+        if (!string.IsNullOrWhiteSpace(password))
+        {
+            fieldErrors["password"] = password;
+        }
+
+        return new
+        {
+            code,
+            message,
+            fieldErrors
+        };
     }
 
     private static string GenerateVerificationToken()

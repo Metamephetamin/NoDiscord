@@ -57,7 +57,7 @@ export default [
     },
   },
   {
-    files: ["src/main.js", "src/preload.js", "vite*.mjs"],
+    files: ["src/main.js", "src/preload.js", "vite*.mjs", "scripts/**/*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
@@ -66,6 +66,9 @@ export default [
         MAIN_WINDOW_VITE_DEV_SERVER_URL: "readonly",
         MAIN_WINDOW_VITE_NAME: "readonly",
       },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
   {
