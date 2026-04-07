@@ -5,14 +5,148 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;"
     />
     <link rel="icon" type="image/png" href="/image/image.png" />
     <link rel="apple-touch-icon" href="/image/image.png" />
-    <title>Max Messanger</title>
+    <title>Tend</title>
+    <style>
+      .landing-hero-shell {
+        width: min(calc(100% - 100px), 100%);
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .landing-beta-note {
+        margin-top: 12px;
+        width: 100%;
+        text-align: center;
+        color: rgba(180, 186, 199, 0.82);
+        font-size: 12px;
+        line-height: 1.2;
+        letter-spacing: 0.02em;
+      }
+
+      @media (max-width: 900px) {
+        .landing-hero-shell {
+          width: min(calc(100% - 32px), 100%);
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/index.jsx"></script>
+    <script>
+      (() => {
+        const NOTE_CLASS = "landing-beta-note";
+        const HERO_CLASS = "landing-hero-shell";
+        const WINDOWS_DOWNLOAD_URL = "/downloads/Tend%20Setup.exe";
+        const MACOS_DOWNLOAD_URL = "";
+
+        const ensureHeroShellWidth = (actionContainer) => {
+          const heroShell =
+            actionContainer?.parentElement?.parentElement?.parentElement
+            || actionContainer?.parentElement?.parentElement
+            || actionContainer?.parentElement;
+
+          if (!heroShell || heroShell.classList.contains(HERO_CLASS)) {
+            return;
+          }
+
+          heroShell.classList.add(HERO_CLASS);
+        };
+
+        const startDownload = (url) => {
+          const normalizedUrl = String(url || "").trim();
+          if (!normalizedUrl) {
+            return;
+          }
+
+          const link = document.createElement("a");
+          link.href = normalizedUrl;
+          link.download = "";
+          link.rel = "noopener";
+          document.body.append(link);
+          link.click();
+          link.remove();
+        };
+
+        const wireDownloadButtons = (actionButtons) => {
+          actionButtons.forEach((button) => {
+            const text = String(button.textContent || "").toLowerCase();
+            const isWindowsButton = text.includes("windows");
+            const isMacButton = text.includes("macos");
+            if (!isWindowsButton && !isMacButton) {
+              return;
+            }
+
+            const targetUrl = isWindowsButton ? WINDOWS_DOWNLOAD_URL : MACOS_DOWNLOAD_URL;
+
+            if (button.tagName === "A") {
+              if (targetUrl) {
+                button.setAttribute("href", targetUrl);
+                button.setAttribute("download", "");
+              } else {
+                button.setAttribute("href", "#");
+              }
+            }
+
+            if (button.dataset.downloadWired === "true") {
+              return;
+            }
+
+            button.dataset.downloadWired = "true";
+            button.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              startDownload(targetUrl);
+            });
+          });
+        };
+
+        const installBetaNote = () => {
+          const actionButtons = Array.from(document.querySelectorAll("a, button")).filter((element) => {
+            const text = String(element.textContent || "").toLowerCase();
+            return text.includes("windows") || text.includes("macos");
+          });
+
+          if (actionButtons.length < 2) {
+            return false;
+          }
+
+          const actionContainer = actionButtons[0].parentElement;
+          if (!actionContainer || actionButtons[1].parentElement !== actionContainer) {
+            return false;
+          }
+
+          ensureHeroShellWidth(actionContainer);
+          wireDownloadButtons(actionButtons);
+
+          if (document.querySelector(`.${NOTE_CLASS}`)) {
+            return true;
+          }
+
+          const note = document.createElement("div");
+          note.className = NOTE_CLASS;
+          note.textContent = "Beta 0.1";
+          actionContainer.insertAdjacentElement("afterend", note);
+          return true;
+        };
+
+        if (installBetaNote()) {
+          return;
+        }
+
+        const observer = new MutationObserver(() => {
+          if (installBetaNote()) {
+            observer.disconnect();
+          }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+        window.addEventListener("beforeunload", () => observer.disconnect(), { once: true });
+      })();
+    </script>
   </body>
 </html>
