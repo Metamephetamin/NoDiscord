@@ -38,15 +38,16 @@ public static class AuthenticatedUserAccessor
                      ?? principal.FindFirstValue("sub");
         var email = principal.FindFirstValue(ClaimTypes.Email)
                     ?? principal.FindFirstValue("email");
+        var phoneNumber = principal.FindFirstValue("phone_number");
 
-        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(email))
+        if (string.IsNullOrWhiteSpace(userId))
         {
             return false;
         }
 
         user = new AuthenticatedUser(
             userId.Trim(),
-            email.Trim(),
+            string.IsNullOrWhiteSpace(email) ? phoneNumber?.Trim() ?? string.Empty : email.Trim(),
             principal.FindFirstValue("first_name")?.Trim() ?? string.Empty,
             principal.FindFirstValue("last_name")?.Trim() ?? string.Empty);
 

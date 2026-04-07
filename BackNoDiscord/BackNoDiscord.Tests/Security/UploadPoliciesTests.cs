@@ -1,5 +1,6 @@
 using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Http;
+using System.Buffers.Binary;
 
 namespace BackNoDiscord.Tests.Security;
 
@@ -55,6 +56,25 @@ public class UploadPoliciesTests
     }
 
     [Fact]
+    public void TryValidateAvatar_AcceptsAnimatedMp4WhenMovieHeaderNeedsFallbackScan()
+    {
+        var bytes = BuildMp4WithScannableMovieHeader(durationSeconds: 3);
+        using var stream = new MemoryStream(bytes);
+        IFormFile file = new FormFile(stream, 0, bytes.Length, "avatar", "avatar.mp4")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "video/mp4"
+        };
+
+        var success = UploadPolicies.TryValidateAvatar(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(".mp4", extension);
+        Assert.Equal("video/mp4", contentType);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
     public void TryValidateChatFile_RejectsDisallowedExtension()
     {
         using var stream = new MemoryStream([1, 2, 3]);
@@ -76,5 +96,44 @@ public class UploadPoliciesTests
         Assert.Equal("/avatars/user-1.png", UploadPolicies.SanitizeRelativeAssetUrl("/avatars/user-1.png", "/avatars/"));
         Assert.Equal(string.Empty, UploadPolicies.SanitizeRelativeAssetUrl("/chat-files/user-1.png", "/avatars/"));
         Assert.Equal(string.Empty, UploadPolicies.SanitizeRelativeAssetUrl("/avatars/../secret.txt", "/avatars/"));
+    }
+
+    private static byte[] BuildMp4WithScannableMovieHeader(uint durationSeconds)
+    {
+        var ftypPayload = new byte[]
+        {
+            (byte)'i', (byte)'s', (byte)'o', (byte)'m',
+            0x00, 0x00, 0x02, 0x00,
+            (byte)'i', (byte)'s', (byte)'o', (byte)'m',
+            (byte)'m', (byte)'p', (byte)'4', (byte)'2',
+        };
+        var ftypAtom = BuildAtom("ftyp", ftypPayload);
+
+        var invalidContainerHeader = new byte[8];
+        BinaryPrimitives.WriteUInt32BigEndian(invalidContainerHeader.AsSpan(0, 4), 1024);
+        invalidContainerHeader[4] = (byte)'f';
+        invalidContainerHeader[5] = (byte)'r';
+        invalidContainerHeader[6] = (byte)'e';
+        invalidContainerHeader[7] = (byte)'e';
+
+        var mvhdPayload = new byte[20];
+        mvhdPayload[0] = 0;
+        BinaryPrimitives.WriteUInt32BigEndian(mvhdPayload.AsSpan(12, 4), 1000);
+        BinaryPrimitives.WriteUInt32BigEndian(mvhdPayload.AsSpan(16, 4), durationSeconds * 1000);
+        var mvhdAtom = BuildAtom("mvhd", mvhdPayload);
+
+        return [.. ftypAtom, .. invalidContainerHeader, .. mvhdAtom];
+    }
+
+    private static byte[] BuildAtom(string type, byte[] payload)
+    {
+        var atom = new byte[8 + payload.Length];
+        BinaryPrimitives.WriteUInt32BigEndian(atom.AsSpan(0, 4), (uint)atom.Length);
+        atom[4] = (byte)type[0];
+        atom[5] = (byte)type[1];
+        atom[6] = (byte)type[2];
+        atom[7] = (byte)type[3];
+        payload.CopyTo(atom, 8);
+        return atom;
     }
 }

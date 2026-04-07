@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Auth from "./components/Auth";
+import AppUpdateBanner from "./components/AppUpdateBanner";
 import MenuMain from "./components/MenuMain";
 import ServerInvitePage from "./components/ServerInvitePage";
 import { API_BASE_URL } from "./config/runtime";
@@ -17,6 +18,252 @@ import {
   storeSession,
 } from "./utils/auth";
 
+const MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY = "nd_media_permissions_bootstrap_v2";
+
+function readMediaPermissionBootstrapState() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage?.getItem(MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeMediaPermissionBootstrapState(value) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage?.setItem(MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY, JSON.stringify(value ?? {}));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+async function getBrowserPermissionState(name) {
+  if (typeof window === "undefined" || !navigator.permissions?.query) {
+    return "unknown";
+  }
+
+  try {
+    const status = await navigator.permissions.query({ name });
+    return String(status?.state || "").trim().toLowerCase() || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function getAvailableMediaDeviceKinds() {
+  if (typeof window === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
+    return { hasMicrophone: null, hasCamera: null };
+  }
+
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    if (!Array.isArray(devices) || devices.length === 0) {
+      return { hasMicrophone: null, hasCamera: null };
+    }
+
+    const hasAudioInput = devices.some((device) => device?.kind === "audioinput");
+    const hasVideoInput = devices.some((device) => device?.kind === "videoinput");
+    return {
+      hasMicrophone: hasAudioInput,
+      hasCamera: hasVideoInput,
+    };
+  } catch {
+    return { hasMicrophone: null, hasCamera: null };
+  }
+}
+
+async function requestMediaPermissionsAtAppLevel() {
+  if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    return {
+      completed: false,
+      microphone: "unsupported",
+      camera: "unsupported",
+    };
+  }
+
+  const permissionApi = window.electronPermissions;
+  const availableDevices = await getAvailableMediaDeviceKinds();
+  const requiresMicrophone = availableDevices.hasMicrophone !== false;
+  const requiresCamera = availableDevices.hasCamera !== false;
+
+  const permissionState = {
+    microphone: requiresMicrophone ? "pending" : "not-required",
+    camera: requiresCamera ? "pending" : "not-required",
+  };
+
+  const updatePermissionStateFromStatus = (mediaType, status) => {
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    if (normalizedStatus === "granted") {
+      permissionState[mediaType] = "granted";
+      return true;
+    }
+
+    if (normalizedStatus === "denied" || normalizedStatus === "restricted") {
+      permissionState[mediaType] = "denied";
+      return false;
+    }
+
+    return permissionState[mediaType] === "granted";
+  };
+
+  const markGranted = (mediaType) => {
+    permissionState[mediaType] = "granted";
+  };
+
+  const markDenied = (mediaType) => {
+    if (permissionState[mediaType] !== "granted") {
+      permissionState[mediaType] = "denied";
+    }
+  };
+
+  const stopTracks = (stream) => {
+    stream?.getTracks?.().forEach((track) => {
+      try {
+        track.stop();
+      } catch {
+        // ignore cleanup failures
+      }
+    });
+  };
+
+  const syncKnownPermissionState = async () => {
+    const checks = [
+      {
+        mediaType: "microphone",
+        permissionName: "microphone",
+        required: requiresMicrophone,
+      },
+      {
+        mediaType: "camera",
+        permissionName: "camera",
+        required: requiresCamera,
+      },
+    ];
+
+    for (const check of checks) {
+      if (!check.required) {
+        continue;
+      }
+
+      try {
+        const nativeStatus = await permissionApi?.getMediaStatus?.(check.mediaType);
+        if (updatePermissionStateFromStatus(check.mediaType, nativeStatus)) {
+          continue;
+        }
+      } catch {
+        // ignore native status lookup failures
+      }
+
+      const browserStatus = await getBrowserPermissionState(check.permissionName);
+      if (browserStatus === "granted") {
+        markGranted(check.mediaType);
+      } else if (browserStatus === "denied") {
+        markDenied(check.mediaType);
+      }
+    }
+  };
+
+  const requestSystemPromptIfNeeded = async (mediaType) => {
+    if (!permissionApi?.requestMediaAccess) {
+      return;
+    }
+
+    try {
+      const status = await permissionApi.getMediaStatus?.(mediaType);
+      if (updatePermissionStateFromStatus(mediaType, status)) {
+        return;
+      }
+
+      const result = await permissionApi.requestMediaAccess(mediaType);
+      if (result?.granted) {
+        markGranted(mediaType);
+        return;
+      }
+
+      updatePermissionStateFromStatus(mediaType, result?.status);
+    } catch {
+      // ignore and fallback to renderer prompt path
+    }
+  };
+
+  await syncKnownPermissionState();
+  await requestSystemPromptIfNeeded("microphone");
+  await requestSystemPromptIfNeeded("camera");
+  await syncKnownPermissionState();
+
+  try {
+    if (requiresMicrophone || requiresCamera) {
+      const combinedStream = await navigator.mediaDevices.getUserMedia({
+        audio: requiresMicrophone,
+        video: requiresCamera,
+      });
+      stopTracks(combinedStream);
+
+      if (requiresMicrophone) {
+        markGranted("microphone");
+      }
+      if (requiresCamera) {
+        markGranted("camera");
+      }
+
+      return {
+        completed: true,
+        microphone: permissionState.microphone,
+        camera: permissionState.camera,
+      };
+    }
+  } catch {
+    // fall back to separate permission prompts
+  }
+
+  for (const request of [
+    { mediaType: "microphone", constraints: { audio: true, video: false }, required: requiresMicrophone },
+    { mediaType: "camera", constraints: { audio: false, video: true }, required: requiresCamera },
+  ]) {
+    if (!request.required || permissionState[request.mediaType] === "granted") {
+      continue;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(request.constraints);
+      stopTracks(stream);
+      markGranted(request.mediaType);
+    } catch (error) {
+      const errorName = String(error?.name || "").trim();
+      if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+        markDenied(request.mediaType);
+      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+        permissionState[request.mediaType] = "not-required";
+      }
+    }
+  }
+
+  await syncKnownPermissionState();
+
+  const completed = [permissionState.microphone, permissionState.camera].every((status) =>
+    status === "granted" || status === "not-required"
+  );
+
+  return {
+    completed,
+    microphone: permissionState.microphone,
+    camera: permissionState.camera,
+  };
+}
+
 export default function Renderer() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -25,6 +272,8 @@ export default function Renderer() {
   const [loading, setLoading] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [pendingImportedServer, setPendingImportedServer] = useState(null);
+  const [appUpdateState, setAppUpdateState] = useState(null);
+  const mediaPermissionBootstrapStartedRef = useRef(false);
 
   const isInviteRoute = /^\/invite\/[^/]+$/i.test(location.pathname);
 
@@ -113,6 +362,47 @@ export default function Renderer() {
   }, []);
 
   useEffect(() => {
+    if (!sessionHydrated || !token || !user) {
+      mediaPermissionBootstrapStartedRef.current = false;
+      return;
+    }
+
+    if (mediaPermissionBootstrapStartedRef.current) {
+      return;
+    }
+
+    const storedBootstrapState = readMediaPermissionBootstrapState();
+    if (storedBootstrapState?.completed === true) {
+      mediaPermissionBootstrapStartedRef.current = true;
+      return;
+    }
+
+    mediaPermissionBootstrapStartedRef.current = true;
+    let disposed = false;
+
+    void requestMediaPermissionsAtAppLevel()
+      .then((result) => {
+        if (disposed || !result?.completed) {
+          return;
+        }
+
+        writeMediaPermissionBootstrapState({
+          completed: true,
+          completedAt: new Date().toISOString(),
+          microphone: result.microphone || "",
+          camera: result.camera || "",
+        });
+      })
+      .catch(() => {
+        mediaPermissionBootstrapStartedRef.current = false;
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [sessionHydrated, token, user]);
+
+  useEffect(() => {
     if (!sessionHydrated) {
       return;
     }
@@ -143,6 +433,44 @@ export default function Renderer() {
       navigate(normalizedRoute, { replace: false });
     });
   }, [navigate]);
+
+  useEffect(() => {
+    const updaterApi = window?.electronAppUpdate;
+    if (!updaterApi?.getState) {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    updaterApi.getState()
+      .then((nextState) => {
+        if (!disposed) {
+          setAppUpdateState(nextState);
+        }
+      })
+      .catch(() => {});
+
+    const unsubscribe = updaterApi.onStateChange?.((nextState) => {
+      if (!disposed) {
+        setAppUpdateState(nextState);
+      }
+    });
+
+    return () => {
+      disposed = true;
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  const handleInstallDownloadedUpdate = () => {
+    void window?.electronAppUpdate?.install?.();
+  };
+
+  const handleRetryAppUpdateCheck = () => {
+    void window?.electronAppUpdate?.check?.();
+  };
 
   const handleAuthSuccess = (nextUser, nextSession) => {
     const accessToken =
@@ -189,23 +517,39 @@ export default function Renderer() {
 
   if (isInviteRoute) {
     return (
-      <ServerInvitePage
-        user={user}
-        onAuthSuccess={handleAuthSuccess}
-        onInviteAccepted={handleInviteAccepted}
-      />
+      <>
+        <AppUpdateBanner
+          state={appUpdateState}
+          onInstall={handleInstallDownloadedUpdate}
+          onRetry={handleRetryAppUpdateCheck}
+        />
+        <ServerInvitePage
+          user={user}
+          onAuthSuccess={handleAuthSuccess}
+          onInviteAccepted={handleInviteAccepted}
+        />
+      </>
     );
   }
 
-  return token && user ? (
-    <MenuMain
-      user={user}
-      setUser={setUser}
-      onLogout={handleLogout}
-      pendingImportedServer={pendingImportedServer}
-      onPendingImportedServerHandled={() => setPendingImportedServer(null)}
-    />
-  ) : (
-    <Auth onAuthSuccess={handleAuthSuccess} />
+  return (
+    <>
+      <AppUpdateBanner
+        state={appUpdateState}
+        onInstall={handleInstallDownloadedUpdate}
+        onRetry={handleRetryAppUpdateCheck}
+      />
+      {token && user ? (
+        <MenuMain
+          user={user}
+          setUser={setUser}
+          onLogout={handleLogout}
+          pendingImportedServer={pendingImportedServer}
+          onPendingImportedServerHandled={() => setPendingImportedServer(null)}
+        />
+      ) : (
+        <Auth onAuthSuccess={handleAuthSuccess} />
+      )}
+    </>
   );
 }

@@ -109,6 +109,26 @@ public class ServerStateServiceTests
         Assert.DoesNotContain(snapshot.Members, member => member.UserId == "member-7" && member.Name == "Alice Updated");
     }
 
+    [Fact]
+    public void DeleteSnapshot_RemovesSnapshotRecord()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-team",
+            OwnerId = "owner-5",
+            Name = "Team"
+        }, "owner-5");
+
+        var deleted = service.DeleteSnapshot("server-team");
+
+        Assert.True(deleted);
+        Assert.Null(service.GetSnapshot("server-team"));
+        Assert.Empty(service.GetSnapshotsForUser("owner-5"));
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

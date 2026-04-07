@@ -96,7 +96,7 @@ public class ServerInvitesController : ControllerBase
     }
 
     [AllowAnonymous]
-    [HttpGet("{inviteCode}")]
+    [HttpGet("{inviteCode:length(8)}")]
     public IActionResult GetInvitePreview([FromRoute] string inviteCode)
     {
         var currentUserId = AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser)
@@ -118,7 +118,7 @@ public class ServerInvitesController : ControllerBase
         }
     }
 
-    [HttpPost("{inviteCode}/redeem")]
+    [HttpPost("{inviteCode:length(8)}/redeem")]
     public IActionResult RedeemInviteByLink([FromRoute] string inviteCode, [FromBody] RedeemServerInviteRequest? request)
     {
         return RedeemInvite(new RedeemServerInviteRequest
@@ -129,7 +129,7 @@ public class ServerInvitesController : ControllerBase
         });
     }
 
-    [HttpGet("server/{serverId}")]
+    [HttpGet("server/{serverId}", Order = -1)]
     public IActionResult GetServerSnapshot([FromRoute] string serverId)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
@@ -148,7 +148,31 @@ public class ServerInvitesController : ControllerBase
             : Ok(snapshot);
     }
 
-    [HttpGet("my-servers")]
+    [HttpDelete("server/{serverId}", Order = -1)]
+    public IActionResult DeleteServerSnapshot([FromRoute] string serverId)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is null)
+        {
+            return NotFound(new { message = "Server snapshot not found." });
+        }
+
+        if (!string.Equals(snapshot.OwnerId, currentUser.UserId, StringComparison.Ordinal))
+        {
+            return Forbid();
+        }
+
+        _invites.DeleteInvitesForServer(snapshot.Id, currentUser.UserId);
+        _serverState.DeleteSnapshot(snapshot.Id);
+        return NoContent();
+    }
+
+    [HttpGet("my-servers", Order = -1)]
     public IActionResult GetMyServers()
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
@@ -158,6 +182,12 @@ public class ServerInvitesController : ControllerBase
 
         var snapshots = _serverState.GetSnapshotsForUser(currentUser.UserId);
         return Ok(snapshots);
+    }
+
+    [HttpGet("memberships", Order = -1)]
+    public IActionResult GetServerMemberships()
+    {
+        return GetMyServers();
     }
 
     [HttpPost("server-sync")]

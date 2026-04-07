@@ -72,6 +72,36 @@ public class ServerInviteServiceTests
         Assert.False(preview.IsExpired);
     }
 
+    [Fact]
+    public void DeleteInvitesForServer_RemovesOnlyMatchingOwnerServerInvites()
+    {
+        using var context = CreateContext();
+        var service = new ServerInviteService(context);
+
+        var firstInvite = service.CreateInvite("owner-5", new ServerSnapshot
+        {
+            Id = "server-owner-5-lounge",
+            Name = "Lounge",
+        });
+        var secondInvite = service.CreateInvite("owner-5", new ServerSnapshot
+        {
+            Id = "server-owner-5-guild",
+            Name = "Guild",
+        });
+        service.CreateInvite("owner-9", new ServerSnapshot
+        {
+            Id = "server-owner-9-lounge",
+            Name = "Lounge",
+        });
+
+        var deletedCount = service.DeleteInvitesForServer("server-lounge", "owner-5");
+
+        Assert.Equal(1, deletedCount);
+        Assert.Throws<KeyNotFoundException>(() => service.GetInvitePreview(firstInvite.InviteCode));
+        Assert.Equal("server-guild", service.GetInvitePreview(secondInvite.InviteCode).ServerId);
+        Assert.Equal(2, context.ServerInvites.Count());
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

@@ -12,6 +12,7 @@ const LEGACY_MESSAGE_ENCRYPTION_VERSION = "nd-e2ee-v1";
 const FILE_ENCRYPTION_VERSION = "nd-e2ee-file-v1";
 const KEY_DIGEST_LABEL = "nd-e2ee-wrap-v1";
 const SHARED_KEY_DELIMITER = "::";
+const MESSAGE_PLAINTEXT_CACHE_PREFIX = "nd:e2ee:message:";
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const identityCache = new Map();
@@ -25,6 +26,69 @@ function getIdentityStorageKey(userId) {
 function getSharedKeyStorageKey(sharedKeyId) {
   const normalizedSharedKeyId = String(sharedKeyId || "").trim();
   return normalizedSharedKeyId ? `${SHARED_KEY_PREFIX}${encodeURIComponent(normalizedSharedKeyId)}` : "";
+}
+
+async function computeSha256Hex(value) {
+  const normalizedValue = typeof value === "string" ? textEncoder.encode(value) : value;
+  const digest = await crypto.subtle.digest("SHA-256", normalizedValue);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function getMessagePlaintextCacheStorageKey(encryption) {
+  if (!encryption?.ciphertext || !encryption?.iv) {
+    return "";
+  }
+
+  const fingerprintPayload = JSON.stringify(sortObjectKeys({
+    version: String(encryption?.version || ""),
+    algorithm: String(encryption?.algorithm || ""),
+    curve: String(encryption?.curve || ""),
+    sharedKeyId: String(encryption?.sharedKeyId || ""),
+    senderFingerprint: String(encryption?.senderFingerprint || ""),
+    senderPublicKeyJwk: String(encryption?.senderPublicKeyJwk || ""),
+    iv: String(encryption?.iv || ""),
+    ciphertext: String(encryption?.ciphertext || ""),
+    recipients: Array.isArray(encryption?.recipients) ? encryption.recipients : [],
+  }));
+  const digest = await computeSha256Hex(fingerprintPayload);
+  return `${MESSAGE_PLAINTEXT_CACHE_PREFIX}${digest}`;
+}
+
+async function persistCachedMessagePlaintext(encryption, plaintext) {
+  const normalizedText = typeof plaintext === "string" ? plaintext : String(plaintext || "");
+  if (!normalizedText) {
+    return;
+  }
+
+  try {
+    const storageKey = await getMessagePlaintextCacheStorageKey(encryption);
+    if (!storageKey) {
+      return;
+    }
+
+    await writeSecureValue(storageKey, {
+      text: normalizedText,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch {
+    // ignore local cache persistence failures
+  }
+}
+
+async function readCachedMessagePlaintext(encryption) {
+  try {
+    const storageKey = await getMessagePlaintextCacheStorageKey(encryption);
+    if (!storageKey) {
+      return "";
+    }
+
+    const payload = await readSecureValue(storageKey);
+    return typeof payload?.text === "string" ? payload.text : "";
+  } catch {
+    return "";
+  }
 }
 
 function normalizeScope(scope) {
@@ -634,18 +698,21 @@ export async function prepareOutgoingTextEncryption({ channelId, user, text, sco
   try {
     const sharedKey = await ensureDailySharedChannelKey({ channelId, user, scope });
     const { iv, ciphertext } = await encryptWithAesGcm(sharedKey.rawKey, textEncoder.encode(normalizedText));
+    const encryptionPayload = {
+      version: MESSAGE_ENCRYPTION_VERSION,
+      algorithm: "AES-GCM",
+      sharedKeyId: sharedKey.sharedKeyId,
+      iv: toBase64(iv),
+      ciphertext: toBase64(ciphertext),
+      recipients: [],
+    };
+
+    await persistCachedMessagePlaintext(encryptionPayload, normalizedText);
 
     return {
       message: "",
       encryptionState: "e2ee",
-      encryption: {
-        version: MESSAGE_ENCRYPTION_VERSION,
-        algorithm: "AES-GCM",
-        sharedKeyId: sharedKey.sharedKeyId,
-        iv: toBase64(iv),
-        ciphertext: toBase64(ciphertext),
-        recipients: [],
-      },
+      encryption: encryptionPayload,
     };
   } catch (error) {
     return {
@@ -665,6 +732,18 @@ export async function decryptIncomingMessageText(messageItem, user, { channelId 
       encryptionState: "plaintext",
     };
   }
+
+  const resolveCachedPlaintextFallback = async () => {
+    const cachedText = await readCachedMessagePlaintext(encryption);
+    if (!cachedText) {
+      return null;
+    }
+
+    return {
+      text: cachedText,
+      encryptionState: "e2ee-local-cache",
+    };
+  };
 
   try {
     if (String(encryption?.sharedKeyId || "").trim()) {
@@ -693,8 +772,10 @@ export async function decryptIncomingMessageText(messageItem, user, { channelId 
         }
       }
 
+      const decryptedText = textDecoder.decode(plaintextBytes || new Uint8Array());
+      await persistCachedMessagePlaintext(encryption, decryptedText);
       return {
-        text: textDecoder.decode(plaintextBytes || new Uint8Array()),
+        text: decryptedText,
         encryptionState: "e2ee",
       };
     }
@@ -705,6 +786,11 @@ export async function decryptIncomingMessageText(messageItem, user, { channelId 
       ? encryption.recipients.find((entry) => String(entry?.userId || "") === currentUserId)
       : null;
     if (!recipientEntry?.wrappedKey || !recipientEntry?.wrapIv || !encryption?.senderPublicKeyJwk) {
+      const cachedFallback = await resolveCachedPlaintextFallback();
+      if (cachedFallback) {
+        return cachedFallback;
+      }
+
       return {
         text: "[Encrypted message unavailable]",
         encryptionState: "unavailable",
@@ -723,12 +809,19 @@ export async function decryptIncomingMessageText(messageItem, user, { channelId 
       messageKey,
       fromBase64(encryption.ciphertext)
     );
+    const decryptedText = textDecoder.decode(plaintext);
+    await persistCachedMessagePlaintext(encryption, decryptedText);
 
     return {
-      text: textDecoder.decode(plaintext),
+      text: decryptedText,
       encryptionState: encryption?.version === LEGACY_MESSAGE_ENCRYPTION_VERSION ? "e2ee-legacy" : "e2ee",
     };
   } catch {
+    const cachedFallback = await resolveCachedPlaintextFallback();
+    if (cachedFallback) {
+      return cachedFallback;
+    }
+
     return {
       text: "[Encrypted message unavailable]",
       encryptionState: "unavailable",

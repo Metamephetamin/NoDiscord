@@ -72,26 +72,33 @@ $liveKitConfigContent = $liveKitConfigContent -replace 'use_external_ip:\s*false
 Set-Content -LiteralPath $liveKitConfigPath -Value $liveKitConfigContent -Encoding UTF8
 
 $serverReadyEnvContent = @'
-ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=voiceapp;Username=postgres;Password=admin
-Jwt__Key=9f1d6b4c2a7e8d3f5b9c1e6a4d8f2c7b5e1a9d3c6f2b8a4e
+ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=voiceapp;Username=postgres;Password=CHANGE_ME
+Jwt__Key=REPLACE_WITH_A_LONG_RANDOM_SECRET_AT_LEAST_32_CHARACTERS
 Jwt__Issuer=BackNoDiscord
 Jwt__Audience=BackNoDiscordUsers
 Jwt__AccessTokenMinutes=10080
 Jwt__RefreshTokenDays=14
-Crypto__Key=6c2e9a4d8f1b5c7e3a9d2f6b4c8e1a7d5f3b9c2e6a4d8f1b
+Crypto__Key=REPLACE_WITH_A_SEPARATE_LONG_RANDOM_SECRET_AT_LEAST_32_CHARACTERS
 Email__Mode=smtp
-Email__FromAddress=nodiscordcode@yandex.ru
+Email__FromAddress=no-reply@example.com
 Email__FromName=Tend
-Email__Smtp__Host=smtp.yandex.ru
+Email__Smtp__Host=smtp.example.com
 Email__Smtp__Port=465
-Email__Smtp__Username=nodiscordcode@yandex.ru
-Email__Smtp__Password=desrwnsxjuplhvod
+Email__Smtp__Username=YOUR_SMTP_LOGIN
+Email__Smtp__Password=YOUR_SMTP_PASSWORD
 Email__Smtp__EnableSsl=true
 ND_API_URL=https://api.85.198.68.187.sslip.io
+ND_PUBLIC_APP_URL=https://api.85.198.68.187.sslip.io
+ND_ALLOWED_ORIGINS=https://api.85.198.68.187.sslip.io
 ND_LIVEKIT_URL=wss://live.85.198.68.187.sslip.io
 ND_ICE_TRANSPORT_POLICY=all
 LiveKit__Url=wss://live.85.198.68.187.sslip.io
-LIVEKIT_KEYS=devkey: 4e9a1c7b5d3f8a2e6c4b9d1f7a5e3c8b
+LIVEKIT_KEYS=devkey: REPLACE_WITH_YOUR_OWN_LIVEKIT_SECRET
+ClientUpdates__LatestVersion=1.0.0
+ClientUpdates__MinimumVersion=1.0.0
+ClientUpdates__AutoInstallOnQuit=true
+# ClientUpdates__Windows__X64__DownloadUrl=https://downloads.example.com/Tend%20Setup%201.0.0.exe
+# ClientUpdates__Windows__X64__Sha256=REPLACE_WITH_INSTALLER_SHA256
 '@
 
 Set-Content -LiteralPath $serverReadyEnvPath -Value $serverReadyEnvContent -Encoding UTF8

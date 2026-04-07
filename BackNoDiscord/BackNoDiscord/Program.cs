@@ -4,6 +4,7 @@ using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -38,27 +39,22 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
 });
 
-static bool IsAllowedFrontendOrigin(string? origin)
-{
-    if (string.IsNullOrWhiteSpace(origin) || origin == "null")
-    {
-        return true;
-    }
-
-    return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
-           && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-               || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase));
-}
-
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin => IsAllowedFrontendOrigin(origin))
+        policy.SetIsOriginAllowed(origin => FrontendOriginPolicy.IsAllowed(origin, builder.Configuration))
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
     });
+});
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 builder.Services
@@ -172,6 +168,7 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 builder.Services.AddSingleton<ChannelService>();
+builder.Services.AddSingleton<IClientUpdateService, ClientUpdateService>();
 builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
@@ -208,11 +205,15 @@ else
     app.UseHsts();
 }
 
+app.UseForwardedHeaders();
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;";
     context.Response.Headers["Permissions-Policy"] =
         "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=(), serial=()";
 
@@ -230,7 +231,7 @@ app.UseStaticFiles(new StaticFileOptions
         }
 
         var origin = context.Context.Request.Headers.Origin.ToString();
-        if (!IsAllowedFrontendOrigin(origin))
+        if (!FrontendOriginPolicy.IsAllowed(origin, app.Configuration))
         {
             return;
         }

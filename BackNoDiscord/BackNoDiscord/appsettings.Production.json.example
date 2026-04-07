@@ -22,10 +22,29 @@
       "EnableSsl": true
     }
   },
+  "Cors": {
+    "AllowedOrigins": [
+      "https://app.your-domain.example",
+      "https://api.your-domain.example"
+    ]
+  },
+  "ClientUpdates": {
+    "LatestVersion": "1.0.1",
+    "MinimumVersion": "1.0.0",
+    "AutoInstallOnQuit": true,
+    "ReleaseNotes": "Фоновое обновление клиента и улучшения стабильности.",
+    "Windows": {
+      "X64": {
+        "DownloadUrl": "https://downloads.your-domain.example/Tend%20Setup%201.0.1.exe",
+        "Sha256": "REPLACE_WITH_SHA256_OF_THE_INSTALLER"
+      }
+    }
+  },
   "Logging": {
     "LogLevel": {
       "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
     }
   },
   "AllowedHosts": "*"

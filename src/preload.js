@@ -103,6 +103,7 @@ function buildVoiceRuntimeConfig() {
     liveKitUrl: process.env.ND_LIVEKIT_URL?.trim() || defaultLiveKitUrl,
     publicAppUrl: process.env.ND_PUBLIC_APP_URL?.trim() || process.env.VITE_PUBLIC_APP_URL?.trim() || "",
     appProtocol: process.env.ND_APP_PROTOCOL?.trim() || DEFAULT_APP_PROTOCOL,
+    appVersion: process.env.npm_package_version?.trim?.() || "",
     isPackagedApp: isPackagedRuntime(),
     voiceRtcConfig: {
       iceServers: normalizedIceServers,
@@ -163,6 +164,15 @@ contextBridge.exposeInMainWorld("electronClipboard", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronPermissions", {
+  async getMediaStatus(mediaType) {
+    return ipcRenderer.invoke("permissions:get-media-status", mediaType);
+  },
+  async requestMediaAccess(mediaType) {
+    return ipcRenderer.invoke("permissions:request-media-access", mediaType);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronRuntime", buildVoiceRuntimeConfig());
 
 contextBridge.exposeInMainWorld("electronAppLinks", {
@@ -178,6 +188,32 @@ contextBridge.exposeInMainWorld("electronAppLinks", {
     ipcRenderer.on("app:navigate", listener);
     return () => {
       ipcRenderer.removeListener("app:navigate", listener);
+    };
+  },
+});
+
+contextBridge.exposeInMainWorld("electronAppUpdate", {
+  async getState() {
+    return ipcRenderer.invoke("app-update:get-state");
+  },
+  async check() {
+    return ipcRenderer.invoke("app-update:check");
+  },
+  async install() {
+    return ipcRenderer.invoke("app-update:install");
+  },
+  onStateChange(callback) {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, nextState) => {
+      callback(nextState && typeof nextState === "object" ? nextState : {});
+    };
+
+    ipcRenderer.on("app-update:state", listener);
+    return () => {
+      ipcRenderer.removeListener("app-update:state", listener);
     };
   },
 });

@@ -45,7 +45,6 @@ import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
 import {
   DEFAULT_AVATAR,
   DEFAULT_SERVER_ICON,
-  readFileAsDataUrl,
   resolveMediaUrl,
   resolveStaticAssetUrl,
 } from "../utils/media";
@@ -477,14 +476,26 @@ const readStoredServers = (user) => {
   }
 };
 const mergePersistedServers = (localServers, remoteServers, currentUser) => {
-  const mergedById = new Map();
+  const getServerMergeKey = (server) => {
+    const normalizedServerId = String(server?.id || "").trim();
+    if (!normalizedServerId) {
+      return normalizedServerId;
+    }
+
+    return getCanonicalSharedServerId(normalizedServerId, server?.ownerId || "");
+  };
+
+  const mergedByKey = new Map();
   normalizeServers(remoteServers, currentUser).forEach((server) => {
-    mergedById.set(server.id, server);
+    mergedByKey.set(getServerMergeKey(server), server);
   });
   normalizeServers(localServers, currentUser).forEach((server) => {
-    mergedById.set(server.id, server);
+    const mergeKey = getServerMergeKey(server);
+    if (!mergedByKey.has(mergeKey)) {
+      mergedByKey.set(mergeKey, server);
+    }
   });
-  return Array.from(mergedById.values());
+  return Array.from(mergedByKey.values());
 };
 const getChannelDisplayName = (name, type) =>
   type === "text" ? normalizeTextChannelName(name, "channel") : String(name || "").trim();
@@ -651,7 +662,6 @@ export default function MenuMain({
   const [channelRenameState, setChannelRenameState] = useState(null);
   const [friends, setFriends] = useState([]);
   const [friendEmail, setFriendEmail] = useState("");
-  const [friendSearchMode, setFriendSearchMode] = useState("name");
   const [friendLookupResults, setFriendLookupResults] = useState([]);
   const [friendLookupLoading, setFriendLookupLoading] = useState(false);
   const [friendLookupPerformed, setFriendLookupPerformed] = useState(false);
@@ -887,6 +897,7 @@ export default function MenuMain({
     () => friends.filter((friend) => voiceParticipantByUserId.has(String(friend.id))),
     [friends, voiceParticipantByUserId]
   );
+  const friendQueryMode = getFriendSearchModeForQuery(friendEmail);
   const filteredFriends = useMemo(() => {
     const query = friendsSidebarQuery.trim().toLowerCase();
     if (!query) {
@@ -1140,7 +1151,6 @@ export default function MenuMain({
     try {
       setFriendLookupLoading(true);
       setFriendsError("");
-      setFriendSearchMode(mode);
 
       const response = await authFetch(
         `${API_BASE_URL}/friends/search?q=${encodeURIComponent(normalizedQuery)}&mode=${encodeURIComponent(mode)}`,
@@ -1235,7 +1245,6 @@ export default function MenuMain({
         );
       });
       setFriendEmail("");
-      setFriendSearchMode("name");
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       setFriendsPageSection("friends");
@@ -1353,13 +1362,15 @@ export default function MenuMain({
         let nextServers = normalizeServers(localServers, user);
 
         try {
-          const response = await authFetch(`${API_BASE_URL}/server-invites/my-servers`, {
+          const response = await authFetch(`${API_BASE_URL}/server-memberships`, {
             method: "GET",
             cache: "no-store",
           });
           const data = await parseApiResponse(response);
           if (response.ok && Array.isArray(data)) {
             nextServers = mergePersistedServers(localServers, data, user);
+          } else if (response.status !== 404) {
+            console.warn("Не удалось загрузить серверы из backend, используем локальный кэш:", data);
           }
         } catch (remoteError) {
           console.warn("Не удалось загрузить серверы из backend, используем локальный кэш:", remoteError);
@@ -1435,7 +1446,6 @@ export default function MenuMain({
       setFriends([]);
       setActiveDirectFriendId("");
       setFriendEmail("");
-      setFriendSearchMode("name");
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       setFriendsError("");
@@ -1654,8 +1664,7 @@ export default function MenuMain({
       return undefined;
     }
 
-    const { mode, normalizedQuery } = parseFriendSearchInput(friendEmail);
-    setFriendSearchMode(mode);
+    const { normalizedQuery } = parseFriendSearchInput(friendEmail);
 
     if (!normalizedQuery) {
       setFriendLookupResults([]);
@@ -2375,7 +2384,7 @@ export default function MenuMain({
   ]);
 
   useEffect(() => {
-    if (!activeServer?.id || isDefaultServer || !currentUserId || !canManageServer) return;
+    if (!activeServer?.id || !activeServer?.isShared || isDefaultServer || !currentUserId || !canManageServer) return;
 
     const timeoutId = window.setTimeout(() => {
       syncServerSnapshot(activeServer);
@@ -2708,6 +2717,11 @@ export default function MenuMain({
       if (response.status === 403) {
         return;
       }
+
+      const data = await parseApiResponse(response);
+      if (response.ok && data) {
+        replaceServerSnapshot(data);
+      }
     } catch (error) {
       console.error("Ошибка синхронизации сервера:", error);
     }
@@ -2793,12 +2807,22 @@ export default function MenuMain({
         return;
       }
 
-      const dataUrl = await readFileAsDataUrl(file);
-      setCreateServerIcon(dataUrl);
+      const formData = new FormData();
+      formData.append("icon", file);
+      const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
+      }
+
+      setCreateServerIcon(data?.iconUrl || data?.icon_url || "");
       setCreateServerError("");
     } catch (error) {
       console.error("Ошибка подготовки иконки сервера:", error);
-      setCreateServerError("Не удалось загрузить иконку сервера.");
+      setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
     }
   };
   const handleCreateServerSubmit = (event) => {
@@ -2824,6 +2848,23 @@ export default function MenuMain({
     if (!canManageServer) return;
     const serverToDelete = servers.find((server) => server.id === serverId);
     if (!serverToDelete) return;
+
+    if (serverToDelete.isShared) {
+      try {
+        const response = await authFetch(`${API_BASE_URL}/server-invites/server/${encodeURIComponent(serverToDelete.id)}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok && response.status !== 404) {
+          const data = await parseApiResponse(response);
+          throw new Error(getApiErrorMessage(response, data, "Не удалось удалить сервер."));
+        }
+      } catch (error) {
+        setProfileStatus(error?.message || "Не удалось удалить сервер.");
+        return;
+      }
+    }
+
     if (serverToDelete.voiceChannels.some((channel) => getScopedVoiceChannelId(serverToDelete.id, channel.id) === currentVoiceChannel)) await leaveVoiceChannel();
     const nextServers = servers.filter((server) => server.id !== serverId);
     const nextActiveId = activeServerId === serverId ? nextServers[0]?.id || "" : activeServerId;
@@ -2832,6 +2873,7 @@ export default function MenuMain({
     setActiveServerId(nextActiveId);
     setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
     setSelectedStreamUserId(null);
+    setProfileStatus("Сервер удалён.");
   };
   const handleDeleteTextChannel = (channelId) => {
     if (!canManageChannels) return;
@@ -3340,10 +3382,29 @@ export default function MenuMain({
     event.target.value = "";
     if (!file || !activeServer) return;
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      updateServer((server) => ({ ...server, icon: dataUrl }));
+      const validationError = await validateServerIconFile(file);
+      if (validationError) {
+        setProfileStatus(validationError);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("icon", file);
+      const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
+      }
+
+      const nextIconUrl = data?.iconUrl || data?.icon_url || "";
+      updateServer((server) => ({ ...server, icon: nextIconUrl }));
+      setProfileStatus("Иконка сервера сохранена.");
     } catch (error) {
       console.error("Ошибка смены иконки сервера:", error);
+      setProfileStatus(error?.message || "Не удалось загрузить иконку сервера.");
     }
   };
   const updateProfileDraft = (field, value) => {
@@ -4183,7 +4244,13 @@ export default function MenuMain({
           <button type="button" className="profile__identity" onClick={() => openSettingsPanel("personal_profile")}>
             <AnimatedAvatar className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={user?.avatarUrl || user?.avatar} alt="avatar" />
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
-            <input ref={serverIconInputRef} type="file" accept="image/*" className="hidden-input" onChange={handleServerIconChange} />
+            <input
+              ref={serverIconInputRef}
+              type="file"
+              accept=".png,.jpg,.jpeg,.heif,.heic,.gif,.mp4,image/png,image/jpeg,image/heif,image/heic,image/gif,video/mp4"
+              className="hidden-input"
+              onChange={handleServerIconChange}
+            />
             <div className="profile__names">
               <span className="profile__username">{getDisplayName(user)}</span>
               <div className="status__profile">
@@ -4586,22 +4653,13 @@ export default function MenuMain({
               <div className="friends-hero">
                 <h1>Добавить в друзья</h1>
                 <p>Введите имя для поиска по имени. Если в запросе есть символ @, поиск автоматически переключится на email.</p>
-                <div className="friends-search-mode">
-                  <span className={`friends-search-mode__button ${friendSearchMode === "name" ? "friends-search-mode__button--active" : ""}`}>
-                    По имени
-                  </span>
-                  <span className={`friends-search-mode__button ${friendSearchMode === "email" ? "friends-search-mode__button--active" : ""}`}>
-                    По email
-                  </span>
-                </div>
                 <form className="friends-hero__form" onSubmit={handleFriendSearchSubmit}>
                   <input
                     type="text"
-                    placeholder={friendSearchMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
+                    placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
                     value={friendEmail}
                     onChange={(event) => {
                       setFriendEmail(event.target.value);
-                      setFriendSearchMode(getFriendSearchModeForQuery(event.target.value));
                       if (friendsError) {
                         setFriendsError("");
                       }
@@ -4629,7 +4687,7 @@ export default function MenuMain({
                   ))}
                   {friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
                     <div className="friends-panel__empty">
-                      {friendSearchMode === "email"
+                      {friendQueryMode === "email"
                         ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
                         : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
                     </div>

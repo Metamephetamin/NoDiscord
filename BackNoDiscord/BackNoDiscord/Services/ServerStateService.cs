@@ -114,6 +114,24 @@ public class ServerStateService
         return CloneSnapshot(normalized);
     }
 
+    public bool DeleteSnapshot(string serverId)
+    {
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            return false;
+        }
+
+        var record = FindSnapshotRecordByServerId(serverId.Trim());
+        if (record is null)
+        {
+            return false;
+        }
+
+        _context.SharedServerSnapshots.Remove(record);
+        _context.SaveChanges();
+        return true;
+    }
+
     private SharedServerSnapshotRecord? FindSnapshotRecordByServerId(string serverId, bool asNoTracking = false)
     {
         var query = asNoTracking

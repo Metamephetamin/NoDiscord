@@ -91,6 +91,8 @@ typings/
 
 # Vite
 .vite/
+.tmp/
+.artifacts/
 dist/
 
 .node_modules/

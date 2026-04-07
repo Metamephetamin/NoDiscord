@@ -142,6 +142,39 @@ public class ServerInviteService
         };
     }
 
+    public int DeleteInvitesForServer(string serverId, string ownerUserId)
+    {
+        if (string.IsNullOrWhiteSpace(serverId) || string.IsNullOrWhiteSpace(ownerUserId))
+        {
+            return 0;
+        }
+
+        var normalizedServerId = serverId.Trim();
+        var normalizedOwnerUserId = ownerUserId.Trim();
+        var invitesToDelete = _context.ServerInvites
+            .AsEnumerable()
+            .Where((invite) =>
+            {
+                if (!string.Equals(invite.OwnerUserId, normalizedOwnerUserId, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var snapshot = NormalizeSnapshot(CloneSnapshot(DeserializeSnapshot(invite.SnapshotJson)), invite.OwnerUserId);
+                return string.Equals(snapshot.Id, normalizedServerId, StringComparison.Ordinal);
+            })
+            .ToList();
+
+        if (invitesToDelete.Count == 0)
+        {
+            return 0;
+        }
+
+        _context.ServerInvites.RemoveRange(invitesToDelete);
+        _context.SaveChanges();
+        return invitesToDelete.Count;
+    }
+
     private string GenerateUniqueCode()
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

@@ -19,6 +19,18 @@ public static class UploadPolicies
     };
 
     private const double MaxAnimatedAvatarDurationSeconds = 15;
+    private const double MaxAnimatedServerIconDurationSeconds = 5;
+
+    private static readonly HashSet<string> AllowedServerIconExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".heif",
+        ".heic",
+        ".gif",
+        ".mp4"
+    };
 
     private static readonly HashSet<string> AllowedChatExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -158,6 +170,49 @@ public static class UploadPolicies
         return true;
     }
 
+    public static bool TryValidateServerIcon(IFormFile file, out string extension, out string contentType, out string error)
+    {
+        extension = NormalizeExtension(file.FileName, ".png");
+        contentType = GetContentType(extension);
+        error = string.Empty;
+
+        if (!AllowedServerIconExtensions.Contains(extension))
+        {
+            error = "Only PNG, JPG, JPEG, HEIF, GIF, and MP4 server icons are allowed.";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && !IsAllowedServerIconContentType(extension, file.ContentType))
+        {
+            error = extension == ".mp4" ? "Server icon must be an MP4 video." : "Server icon must be an image.";
+            return false;
+        }
+
+        if (!HasExpectedFileSignature(file, extension))
+        {
+            error = "Server icon content does not match the selected file type.";
+            return false;
+        }
+
+        var durationSeconds = 0d;
+        if (extension == ".gif" || extension == ".mp4")
+        {
+            if (!TryGetAnimatedAvatarDurationSeconds(file, extension, out durationSeconds))
+            {
+                error = "Could not determine animated server icon duration.";
+                return false;
+            }
+        }
+
+        if ((extension == ".gif" || extension == ".mp4") && durationSeconds > MaxAnimatedServerIconDurationSeconds)
+        {
+            error = "Animated server icon duration must be less than or equal to 5 seconds.";
+            return false;
+        }
+
+        return true;
+    }
+
     private static string NormalizeExtension(string? fileName, string fallback)
     {
         var extension = Path.GetExtension(fileName ?? string.Empty);
@@ -189,6 +244,7 @@ public static class UploadPolicies
             ".png" => StartsWith(header, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A),
             ".webp" => StartsWithAscii(header, "RIFF") && HasAsciiAt(header, 8, "WEBP"),
             ".gif" => StartsWithAscii(header, "GIF87a") || StartsWithAscii(header, "GIF89a"),
+            ".heif" or ".heic" => HasAsciiAt(header, 4, "ftyp"),
             ".bmp" => StartsWithAscii(header, "BM"),
             ".pdf" => StartsWithAscii(header, "%PDF"),
             ".zip" => StartsWith(header, 0x50, 0x4B, 0x03, 0x04) || StartsWith(header, 0x50, 0x4B, 0x05, 0x06) || StartsWith(header, 0x50, 0x4B, 0x07, 0x08),
@@ -210,6 +266,24 @@ public static class UploadPolicies
         if (extension == ".mp4")
         {
             return string.Equals(contentType, "video/mp4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAllowedServerIconContentType(string extension, string contentType)
+    {
+        if (extension == ".mp4")
+        {
+            return string.Equals(contentType, "video/mp4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (extension is ".heif" or ".heic")
+        {
+            return string.Equals(contentType, "image/heif", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(contentType, "image/heic", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(contentType, "image/heif-sequence", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(contentType, "image/heic-sequence", StringComparison.OrdinalIgnoreCase);
         }
 
         return contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
@@ -258,7 +332,8 @@ public static class UploadPolicies
     private static bool TryReadMp4Duration(byte[] bytes, out double durationSeconds)
     {
         durationSeconds = 0;
-        return TryReadMp4Duration(bytes, 0, bytes.Length, out durationSeconds);
+        return TryReadMp4Duration(bytes, 0, bytes.Length, out durationSeconds)
+               || TryReadMp4DurationByMovieHeaderScan(bytes, out durationSeconds);
     }
 
     private static bool TryReadMp4Duration(byte[] bytes, int start, int length, out double durationSeconds)
@@ -342,6 +417,34 @@ public static class UploadPolicies
         return false;
     }
 
+    private static bool TryReadMp4DurationByMovieHeaderScan(byte[] bytes, out double durationSeconds)
+    {
+        durationSeconds = 0;
+        var searchOffset = 0;
+
+        while (searchOffset <= bytes.Length - 4)
+        {
+            var atomTypeOffset = FindAscii(bytes, "mvhd", searchOffset);
+            if (atomTypeOffset < 4)
+            {
+                return false;
+            }
+
+            var atomOffset = atomTypeOffset - 4;
+            var atomSize = ReadMp4AtomSize(bytes, atomOffset, bytes.Length, out var headerSize);
+            if (atomSize > 0 &&
+                atomOffset + atomSize <= bytes.Length &&
+                TryReadMovieHeaderDuration(bytes, atomOffset + headerSize, atomSize - headerSize, out durationSeconds))
+            {
+                return true;
+            }
+
+            searchOffset = atomTypeOffset + 4;
+        }
+
+        return false;
+    }
+
     private static int ReadMp4AtomSize(byte[] bytes, int offset, int end, out int headerSize)
     {
         headerSize = 8;
@@ -374,6 +477,24 @@ public static class UploadPolicies
         }
 
         return System.Text.Encoding.ASCII.GetString(bytes, offset, count);
+    }
+
+    private static int FindAscii(byte[] bytes, string signature, int startOffset)
+    {
+        if (string.IsNullOrEmpty(signature) || startOffset < 0)
+        {
+            return -1;
+        }
+
+        for (var offset = startOffset; offset <= bytes.Length - signature.Length; offset++)
+        {
+            if (HasAsciiAt(bytes, offset, signature))
+            {
+                return offset;
+            }
+        }
+
+        return -1;
     }
 
     private static bool StartsWith(ReadOnlySpan<byte> buffer, params byte[] signature)
