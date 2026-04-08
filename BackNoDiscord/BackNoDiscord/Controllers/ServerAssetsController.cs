@@ -1,3 +1,4 @@
+using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -17,6 +18,12 @@ public class ServerAssetsController : ControllerBase
 {
     private const long MaxStaticServerIconSizeBytes = 15L * 1024 * 1024;
     private const long MaxAnimatedServerIconSizeBytes = 30L * 1024 * 1024;
+    private readonly UploadStoragePaths _uploadStoragePaths;
+
+    public ServerAssetsController(UploadStoragePaths uploadStoragePaths)
+    {
+        _uploadStoragePaths = uploadStoragePaths;
+    }
 
     [HttpPost("upload-icon")]
     [RequestSizeLimit(MaxAnimatedServerIconSizeBytes)]
@@ -51,7 +58,7 @@ public class ServerAssetsController : ControllerBase
             });
         }
 
-        var uploadsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "server-icons");
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("server-icons");
         Directory.CreateDirectory(uploadsDirectory);
 
         var fileName = $"server-icon-{UploadPolicies.SanitizeIdentifier(currentUser.UserId)}-{Guid.NewGuid():N}{extension}";

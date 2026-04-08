@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
@@ -16,6 +16,7 @@ const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
 const AUTH_BRAND_LOGO_URL = resolveStaticAssetUrl("/image/image.png");
+const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
 
 const initialRegisterForm = {
   firstName: "",
@@ -157,6 +158,23 @@ function detectContactKind(value) {
   return "";
 }
 
+function shouldUseLiteAuthVisualMode() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return false;
+  }
+
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const usesCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+  const compactViewport = window.matchMedia("(max-width: 900px)").matches;
+  const saveData = Boolean(connection?.saveData);
+  const slowConnection = SLOW_CONNECTION_TYPES.has(connection?.effectiveType || "");
+  const lowCpu = Number.isFinite(navigator.hardwareConcurrency) && navigator.hardwareConcurrency <= 4;
+  const lowMemory = Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory <= 4;
+
+  return prefersReducedMotion || usesCoarsePointer || compactViewport || saveData || slowConnection || lowCpu || lowMemory;
+}
+
 function mapAuthUser(data) {
   return {
     id: data?.id,
@@ -216,6 +234,8 @@ export default function Auth({ onAuthSuccess }) {
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
   const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
+  const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
+  const authVideoRef = useRef(null);
 
   const cardHolderName = useMemo(() => {
     const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
@@ -282,6 +302,62 @@ export default function Auth({ onAuthSuccess }) {
     }, 2200);
 
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const updateVisualMode = () => {
+      setIsLiteVisualMode(shouldUseLiteAuthVisualMode());
+    };
+
+    const mediaQueries = [
+      window.matchMedia("(prefers-reduced-motion: reduce)"),
+      window.matchMedia("(pointer: coarse)"),
+      window.matchMedia("(max-width: 900px)"),
+    ];
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const addMediaListener = (mediaQuery) => {
+      if (typeof mediaQuery.addEventListener === "function") {
+        mediaQuery.addEventListener("change", updateVisualMode);
+        return () => mediaQuery.removeEventListener("change", updateVisualMode);
+      }
+
+      mediaQuery.addListener(updateVisualMode);
+      return () => mediaQuery.removeListener(updateVisualMode);
+    };
+
+    updateVisualMode();
+    const removeMediaListeners = mediaQueries.map(addMediaListener);
+    window.addEventListener("resize", updateVisualMode, { passive: true });
+    connection?.addEventListener?.("change", updateVisualMode);
+
+    return () => {
+      removeMediaListeners.forEach((removeListener) => removeListener());
+      window.removeEventListener("resize", updateVisualMode);
+      connection?.removeEventListener?.("change", updateVisualMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    const videoNode = authVideoRef.current;
+    if (!videoNode) {
+      return undefined;
+    }
+
+    const syncVideoPlayback = () => {
+      if (document.hidden) {
+        videoNode.pause();
+        return;
+      }
+
+      const playPromise = videoNode.play();
+      if (typeof playPromise?.catch === "function") {
+        playPromise.catch(() => {});
+      }
+    };
+
+    syncVideoPlayback();
+    document.addEventListener("visibilitychange", syncVideoPlayback);
+    return () => document.removeEventListener("visibilitychange", syncVideoPlayback);
   }, []);
 
   useEffect(() => {
@@ -649,8 +725,9 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   return (
-    <div className="auth-page">
+    <div className={`auth-page ${isLiteVisualMode ? "auth-page--lite" : ""}`}>
       <video
+        ref={authVideoRef}
         className="auth-video-bg"
         autoPlay
         muted
@@ -671,29 +748,37 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-brand__copy">
           <span className="auth-brand__name">
             <span className="auth-brand__name-base">MAX</span>
-            <span className="auth-brand__name-overlay auth-brand__name-overlay--glitch" data-text="MAX" aria-hidden="true">
-              MAX
-            </span>
+            {!isLiteVisualMode ? (
+              <span className="auth-brand__name-overlay auth-brand__name-overlay--glitch" data-text="MAX" aria-hidden="true">
+                MAX
+              </span>
+            ) : null}
           </span>
           <h1 className="auth-brand__title">
             <span className="auth-brand__title-static">- симум возможностей для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">
-              <span
-                className="auth-brand__title-prism"
-                style={{
-                  "--active-slogan-word-index": activeSloganWordIndex,
-                }}
-              >
-                {sloganWords.map((word, index) => (
-                  <span
-                    key={word}
-                    className="auth-brand__title-face"
-                    style={{ "--face-index": index }}
-                  >
-                    {word}
-                  </span>
-                ))}
-              </span>
+              {isLiteVisualMode ? (
+                <span className="auth-brand__title-lite-word">
+                  {sloganWords[activeSloganWordIndex % sloganWords.length]}
+                </span>
+              ) : (
+                <span
+                  className="auth-brand__title-prism"
+                  style={{
+                    "--active-slogan-word-index": activeSloganWordIndex,
+                  }}
+                >
+                  {sloganWords.map((word, index) => (
+                    <span
+                      key={word}
+                      className="auth-brand__title-face"
+                      style={{ "--face-index": index }}
+                    >
+                      {word}
+                    </span>
+                  ))}
+                </span>
+              )}
             </span>
           </h1>
         </div>

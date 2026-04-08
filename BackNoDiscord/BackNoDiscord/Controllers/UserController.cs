@@ -1,3 +1,4 @@
+using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -26,11 +27,13 @@ public class UserController : ControllerBase
     private const long MaxAvatarSizeBytes = 50L * 1024 * 1024;
     private readonly AppDbContext _dbContext;
     private readonly IHubContext<ChatHub> _chatHubContext;
+    private readonly UploadStoragePaths _uploadStoragePaths;
 
-    public UserController(AppDbContext dbContext, IHubContext<ChatHub> chatHubContext)
+    public UserController(AppDbContext dbContext, IHubContext<ChatHub> chatHubContext, UploadStoragePaths uploadStoragePaths)
     {
         _dbContext = dbContext;
         _chatHubContext = chatHubContext;
+        _uploadStoragePaths = uploadStoragePaths;
     }
 
     [HttpPut("profile")]
@@ -105,7 +108,7 @@ public class UserController : ControllerBase
             return BadRequest(new { message = error });
         }
 
-        var uploadsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "avatars");
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("avatars");
         Directory.CreateDirectory(uploadsDirectory);
 
         var fileName = $"user-{UploadPolicies.SanitizeIdentifier(currentUser.UserId)}-{Guid.NewGuid():N}{extension}";

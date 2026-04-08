@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -171,6 +172,7 @@ builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<IClientUpdateService, ClientUpdateService>();
 builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
+builder.Services.AddSingleton<UploadStoragePaths>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSender>();
 builder.Services.AddScoped<ServerInviteService>();
@@ -220,16 +222,31 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseDefaultFiles();
+var uploadStoragePaths = app.Services.GetRequiredService<UploadStoragePaths>();
+var avatarsDirectory = uploadStoragePaths.ResolveDirectory("avatars");
+var serverIconsDirectory = uploadStoragePaths.ResolveDirectory("server-icons");
+var chatFilesDirectory = uploadStoragePaths.ResolveDirectory("chat-files");
+
+Directory.CreateDirectory(avatarsDirectory);
+Directory.CreateDirectory(serverIconsDirectory);
+Directory.CreateDirectory(chatFilesDirectory);
+
 app.UseStaticFiles(new StaticFileOptions
 {
+    FileProvider = new PhysicalFileProvider(avatarsDirectory),
+    RequestPath = "/avatars"
+});
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(serverIconsDirectory),
+    RequestPath = "/server-icons"
+});
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(chatFilesDirectory),
+    RequestPath = "/chat-files",
     OnPrepareResponse = context =>
     {
-        if (!context.Context.Request.Path.StartsWithSegments("/chat-files"))
-        {
-            return;
-        }
-
         var origin = context.Context.Request.Headers.Origin.ToString();
         if (!FrontendOriginPolicy.IsAllowed(origin, app.Configuration))
         {
@@ -244,6 +261,9 @@ app.UseStaticFiles(new StaticFileOptions
         }
     }
 });
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
@@ -270,7 +290,8 @@ app.MapFallback(async context =>
         requestPath.StartsWithSegments("/voiceHub") ||
         requestPath.StartsWithSegments("/swagger") ||
         requestPath.StartsWithSegments("/avatars") ||
-        requestPath.StartsWithSegments("/chat-files"))
+        requestPath.StartsWithSegments("/chat-files") ||
+        requestPath.StartsWithSegments("/server-icons"))
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
         return;

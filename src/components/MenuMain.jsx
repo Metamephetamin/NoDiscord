@@ -43,7 +43,6 @@ import {
 import { buildServerInviteLink } from "../utils/serverInviteLinks";
 import { createVoiceRoomClient } from "../webrtc/voiceRoomClient";
 import {
-  DEFAULT_AVATAR,
   DEFAULT_SERVER_ICON,
   resolveMediaUrl,
   resolveStaticAssetUrl,
@@ -126,6 +125,7 @@ const ROLE_PERMISSION_LABELS = {
   manage_nicknames: "Управление никами",
   invite_members: "Приглашение участников",
 };
+const MOBILE_VIEWPORT_QUERY = "(max-width: 900px)";
 
 ROLE_PERMISSION_LABELS.mute_members = "Управление микрофоном";
 ROLE_PERMISSION_LABELS.deafen_members = "Отключение звука участникам";
@@ -142,7 +142,7 @@ const getDisplayName = (user) => {
 
   return fullName || user?.name || user?.email || "User";
 };
-const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || "";
 const getCurrentUserId = (user) => String(user?.id || user?.email || "");
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
@@ -702,6 +702,16 @@ export default function MenuMain({
     email: user?.email || "",
   });
   const [profileStatus, setProfileStatus] = useState("");
+  const [serverInviteFeedback, setServerInviteFeedback] = useState("");
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+
+    return window.matchMedia(MOBILE_VIEWPORT_QUERY).matches;
+  });
+  const [mobileSection, setMobileSection] = useState("servers");
+  const [mobileServersPane, setMobileServersPane] = useState("channels");
 
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
@@ -726,6 +736,10 @@ export default function MenuMain({
   const rerunFriendSearchRef = useRef(() => {});
   const directToastTimeoutsRef = useRef(new Map());
   const serverToastTimeoutsRef = useRef(new Map());
+  const serverInviteFeedbackTimeoutRef = useRef(null);
+  const serverLongPressTimeoutRef = useRef(null);
+  const serverLongPressTriggeredRef = useRef(false);
+  const suppressedServerClickRef = useRef("");
   const appliedInputDeviceRef = useRef("");
   const appliedOutputDeviceRef = useRef("");
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
@@ -825,6 +839,50 @@ export default function MenuMain({
     () => currentDirectFriend?.directChannelId || buildDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
     [currentDirectFriend?.directChannelId, currentDirectFriend?.id, currentUserId]
   );
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+
+    const mediaQueryList = window.matchMedia(MOBILE_VIEWPORT_QUERY);
+    const handleViewportChange = (event) => setIsMobileViewport(event.matches);
+
+    setIsMobileViewport(mediaQueryList.matches);
+
+    if (typeof mediaQueryList.addEventListener === "function") {
+      mediaQueryList.addEventListener("change", handleViewportChange);
+      return () => mediaQueryList.removeEventListener("change", handleViewportChange);
+    }
+
+    mediaQueryList.addListener(handleViewportChange);
+    return () => mediaQueryList.removeListener(handleViewportChange);
+  }, []);
+  useEffect(() => {
+    if (!isMobileViewport) {
+      return;
+    }
+
+    setMobileSection((previousSection) => {
+      if (previousSection === "profile") {
+        return previousSection;
+      }
+
+      return workspaceMode === "friends" ? "friends" : "servers";
+    });
+  }, [isMobileViewport, workspaceMode]);
+  useEffect(() => {
+    if (!activeServer && (settingsTab === "server" || settingsTab === "roles")) {
+      setSettingsTab("voice_video");
+    }
+  }, [activeServer, settingsTab]);
+  useEffect(() => () => {
+    if (serverInviteFeedbackTimeoutRef.current) {
+      window.clearTimeout(serverInviteFeedbackTimeoutRef.current);
+    }
+    if (serverLongPressTimeoutRef.current) {
+      window.clearTimeout(serverLongPressTimeoutRef.current);
+    }
+  }, []);
   const serverChannelLookup = useMemo(() => {
     const nextMap = new Map();
     (servers || []).forEach((server) => {
@@ -1255,11 +1313,58 @@ export default function MenuMain({
     }
   };
 
+  const openServersWorkspace = () => {
+    setWorkspaceMode("servers");
+    setActiveDirectFriendId("");
+    setSelectedStreamUserId(null);
+    if (isMobileViewport) {
+      setMobileSection("servers");
+      setMobileServersPane("channels");
+    }
+  };
+
+  const openFriendsWorkspace = () => {
+    setWorkspaceMode("friends");
+    setSelectedStreamUserId(null);
+    if (isMobileViewport) {
+      setMobileSection("friends");
+    }
+  };
+
+  const selectServer = (server) => {
+    if (!server) {
+      return;
+    }
+
+    setWorkspaceMode("servers");
+    setActiveServerId(server.id);
+    setCurrentTextChannelId(server.textChannels[0]?.id || "");
+    setActiveDirectFriendId("");
+    setSelectedStreamUserId(null);
+    if (isMobileViewport) {
+      setMobileSection("servers");
+      setMobileServersPane("channels");
+    }
+  };
+
+  const selectServerTextChannel = (channelId) => {
+    setWorkspaceMode("servers");
+    setCurrentTextChannelId(channelId);
+    setActiveDirectFriendId("");
+    if (isMobileViewport) {
+      setMobileSection("servers");
+      setMobileServersPane("chat");
+    }
+  };
+
   const openDirectChat = (friendId) => {
     setActiveDirectFriendId(String(friendId || ""));
     setWorkspaceMode("friends");
     setFriendsPageSection("friends");
     setSelectedStreamUserId(null);
+    if (isMobileViewport) {
+      setMobileSection("friends");
+    }
   };
 
   const openServerChannelFromToast = (toast) => {
@@ -1271,6 +1376,10 @@ export default function MenuMain({
     setActiveDirectFriendId("");
     setActiveServerId(String(toast.serverId));
     setCurrentTextChannelId(String(toast.channelId));
+    if (isMobileViewport) {
+      setMobileSection("servers");
+      setMobileServersPane("chat");
+    }
     dismissServerToast(toast.id);
   };
 
@@ -3232,6 +3341,58 @@ export default function MenuMain({
     onPendingImportedServerHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingImportedServer]);
+  const showServerInviteFeedback = (message) => {
+    if (!message) {
+      return;
+    }
+
+    if (serverInviteFeedbackTimeoutRef.current) {
+      window.clearTimeout(serverInviteFeedbackTimeoutRef.current);
+    }
+
+    setServerInviteFeedback(message);
+    serverInviteFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setServerInviteFeedback("");
+      serverInviteFeedbackTimeoutRef.current = null;
+    }, 2600);
+  };
+  const clearServerLongPress = () => {
+    if (serverLongPressTimeoutRef.current) {
+      window.clearTimeout(serverLongPressTimeoutRef.current);
+      serverLongPressTimeoutRef.current = null;
+    }
+  };
+  const requestServerInviteLink = async (targetServer) => {
+    if (!targetServer) {
+      throw new Error("Сервер не найден.");
+    }
+
+    if (!canInviteToServer(targetServer)) {
+      throw new Error("Недостаточно прав для приглашения.");
+    }
+
+    const response = await authFetch(`${API_BASE_URL}/server-invites/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        serverSnapshot: targetServer,
+      }),
+    });
+    const data = await parseApiResponse(response);
+
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось создать ссылку-приглашение."));
+    }
+
+    const inviteLink = buildServerInviteLink(data?.inviteCode || "");
+    if (!inviteLink) {
+      throw new Error("Не удалось подготовить ссылку-приглашение.");
+    }
+
+    await copyTextToClipboard(inviteLink);
+    markServerAsShared(data?.serverId || targetServer.id);
+    return inviteLink;
+  };
   const openServerContextMenu = (event, server) => {
     if (!server) {
       return;
@@ -3247,6 +3408,59 @@ export default function MenuMain({
       status: "",
       isLoading: false,
     });
+  };
+  const handleServerShortcutPointerDown = (event, server) => {
+    if (!server || event.button > 0 || event.pointerType === "mouse") {
+      return;
+    }
+
+    clearServerLongPress();
+    serverLongPressTriggeredRef.current = false;
+    serverLongPressTimeoutRef.current = window.setTimeout(async () => {
+      serverLongPressTriggeredRef.current = true;
+      suppressedServerClickRef.current = String(server.id);
+      window.setTimeout(() => {
+        if (suppressedServerClickRef.current === String(server.id)) {
+          suppressedServerClickRef.current = "";
+        }
+      }, 1200);
+
+      try {
+        await requestServerInviteLink(server);
+        showServerInviteFeedback(`Ссылка на ${server.name || "сервер"} скопирована.`);
+        if (typeof navigator?.vibrate === "function") {
+          navigator.vibrate(16);
+        }
+      } catch (error) {
+        showServerInviteFeedback(error?.message || "Не удалось скопировать ссылку.");
+      } finally {
+        serverLongPressTimeoutRef.current = null;
+      }
+    }, 520);
+  };
+  const handleServerShortcutPointerUp = (event) => {
+    clearServerLongPress();
+    if (!serverLongPressTriggeredRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    serverLongPressTriggeredRef.current = false;
+  };
+  const handleServerShortcutPointerCancel = () => {
+    clearServerLongPress();
+    serverLongPressTriggeredRef.current = false;
+  };
+  const handleServerShortcutClick = (server) => (event) => {
+    if (String(suppressedServerClickRef.current || "") === String(server?.id || "")) {
+      suppressedServerClickRef.current = "";
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    selectServer(server);
   };
   const copyServerInviteLink = async () => {
     if (!serverContextMenu?.serverId) {
@@ -3267,26 +3481,7 @@ export default function MenuMain({
     setServerContextMenu((previous) => (previous ? { ...previous, status: "", isLoading: true } : previous));
 
     try {
-      const response = await authFetch(`${API_BASE_URL}/server-invites/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          serverSnapshot: targetServer,
-        }),
-      });
-      const data = await parseApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(response, data, "Не удалось создать ссылку-приглашение."));
-      }
-
-      const inviteLink = buildServerInviteLink(data?.inviteCode || "");
-      if (!inviteLink) {
-        throw new Error("Не удалось подготовить ссылку-приглашение.");
-      }
-
-      await copyTextToClipboard(inviteLink);
-      markServerAsShared(data?.serverId || targetServer.id);
+      await requestServerInviteLink(targetServer);
       setServerContextMenu((previous) =>
         previous
           ? {
@@ -3500,7 +3695,7 @@ export default function MenuMain({
 
   if (!user) return <div className="menu-loading">Загрузка пользователя...</div>;
 
-  const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, DEFAULT_AVATAR);
+  const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, "");
   const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
     if (!sections[item.section]) {
       sections[item.section] = [];
@@ -3509,6 +3704,13 @@ export default function MenuMain({
     sections[item.section].push(item);
     return sections;
   }, {});
+  const mobileSettingsNavItems = SETTINGS_NAV_ITEMS.filter(
+    (item) => activeServer || (item.id !== "server" && item.id !== "roles")
+  );
+  const activeSettingsTabMeta =
+    mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
+    SETTINGS_NAV_ITEMS.find((item) => item.id === settingsTab) ||
+    SETTINGS_NAV_ITEMS[0];
   const deviceInputLabel =
     audioInputDevices.find((device) => device.id === selectedInputDeviceId)?.label ||
     audioInputDevices[0]?.label ||
@@ -4078,6 +4280,44 @@ export default function MenuMain({
         return renderVoiceSettingsPanel();
     }
   };
+  const renderMobileSettingsShell = () => (
+    <div className="settings-mobile-shell">
+      <div className="settings-mobile-shell__header">
+        <div className="settings-mobile-shell__header-copy">
+          <strong>{activeSettingsTabMeta?.label || "Настройки"}</strong>
+          <span>{activeSettingsTabMeta?.section || "Параметры приложения"}</span>
+        </div>
+        <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>×</button>
+      </div>
+
+      <div className="settings-mobile-shell__profile">
+        <AnimatedAvatar className="settings-mobile-shell__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
+        <div className="settings-mobile-shell__profile-copy">
+          <strong>{getDisplayName(user)}</strong>
+          <span>{user?.email || "Ваш аккаунт Tend"}</span>
+        </div>
+      </div>
+
+      <div className="settings-mobile-shell__tabs" role="tablist" aria-label="Разделы настроек">
+        {mobileSettingsNavItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={settingsTab === item.id}
+            className={`settings-mobile-shell__tab ${settingsTab === item.id ? "settings-mobile-shell__tab--active" : ""}`}
+            onClick={() => setSettingsTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="settings-mobile-shell__body">
+        {renderSettingsContent()}
+      </div>
+    </div>
+  );
   const renderMicMenuPanel = () => (
     <div className="device-menu__panel">
       <div className="device-menu__group">
@@ -4349,13 +4589,13 @@ export default function MenuMain({
               className={`friends-nav__item ${item.id === "friends" ? "friends-nav__item--active" : ""}`}
               onClick={() => {
                 if (item.id === "friends") {
-                  setWorkspaceMode("friends");
+                  openFriendsWorkspace();
                   setActiveDirectFriendId("");
                   setFriendsPageSection("friends");
                   return;
                 }
 
-                setWorkspaceMode("servers");
+                openServersWorkspace();
               }}
             >
               <span className="friends-nav__icon">{item.icon}</span>
@@ -4403,7 +4643,7 @@ export default function MenuMain({
       {renderProfilePanel()}
     </aside>
   );
-  const renderServersSidebar = () => (
+  const renderServersSidebar = (includeProfilePanel = true) => (
     <aside className="sidebar__channels sidebar__channels--servers">
       <div className="channels__top">
         {activeServer ? (
@@ -4569,7 +4809,7 @@ export default function MenuMain({
                           }}
                         />
                       ) : (
-                        <button type="button" className="channel-item__button" onClick={() => { setWorkspaceMode("servers"); setCurrentTextChannelId(channel.id); setActiveDirectFriendId(""); }}>
+                        <button type="button" className="channel-item__button" onClick={() => selectServerTextChannel(channel.id)}>
                           <span className="channel-item__label">{getChannelDisplayName(channel.name, "text")}</span>
                           {hasDraft ? <span className="channel-item__draft">Черновик</span> : null}
                           {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
@@ -4595,7 +4835,7 @@ export default function MenuMain({
         )}
       </div>
 
-      {renderProfilePanel()}
+      {includeProfilePanel ? renderProfilePanel() : null}
     </aside>
   );
   const renderFriendsMain = () => (
@@ -4698,7 +4938,7 @@ export default function MenuMain({
               <div className="friends-discovery">
                 <h2>Где ещё можно завести друзей</h2>
                 <p>Если пока не с кем переписываться, можно открыть свои серверы или пригласить туда новых людей.</p>
-                <button type="button" className="friends-discovery__card" onClick={() => setWorkspaceMode("servers")}>
+                <button type="button" className="friends-discovery__card" onClick={openServersWorkspace}>
                   <span className="friends-discovery__icon">◉</span>
                   <span>Исследуйте доступные серверы</span>
                   <span className="friends-discovery__arrow">›</span>
@@ -4772,26 +5012,65 @@ export default function MenuMain({
       </div>
     </main>
   );
-
-  return (
-    <div className="menu__main">
-      <aside className="sidebar__servers">
+  const renderDesktopServerRail = () => (
+    <aside className="sidebar__servers">
+      <button
+        type="button"
+        className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`}
+        onClick={openFriendsWorkspace}
+        aria-label="Друзья"
+      >
+        <img src={SMS_ICON_URL} alt="" />
+        <span>Друзья</span>
+      </button>
+      {servers.map((server) => (
         <button
+          key={server.id}
           type="button"
-          className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`}
-          onClick={() => setWorkspaceMode("friends")}
-          aria-label="Друзья"
+          className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
+          onClick={handleServerShortcutClick(server)}
+          onContextMenu={(event) => openServerContextMenu(event, server)}
+          onPointerDown={(event) => handleServerShortcutPointerDown(event, server)}
+          onPointerUp={handleServerShortcutPointerUp}
+          onPointerLeave={handleServerShortcutPointerCancel}
+          onPointerCancel={handleServerShortcutPointerCancel}
+          aria-label={server.name || "Без названия"}
         >
-          <img src={SMS_ICON_URL} alt="" />
-          <span>Друзья</span>
+          {server.icon ? (
+            <AnimatedAvatar
+              className="btn__server-media"
+              src={server.icon}
+              fallback={DEFAULT_SERVER_ICON}
+              alt={server.name || "Без названия"}
+            />
+          ) : (
+            <span className="btn__server-empty" aria-hidden="true" />
+          )}
         </button>
+      ))}
+      <button
+        type="button"
+        className="btn__create-server"
+        aria-label="Создать сервер"
+        onClick={handleAddServer}
+      >
+        +
+      </button>
+    </aside>
+  );
+  const renderMobileServerStrip = () => (
+    <div className="mobile-server-strip">
+      <div className="mobile-server-strip__scroller">
         {servers.map((server) => (
           <button
             key={server.id}
             type="button"
             className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
-            onClick={() => { setWorkspaceMode("servers"); setActiveServerId(server.id); setCurrentTextChannelId(server.textChannels[0]?.id || ""); setActiveDirectFriendId(""); }}
-            onContextMenu={(event) => openServerContextMenu(event, server)}
+            onClick={handleServerShortcutClick(server)}
+            onPointerDown={(event) => handleServerShortcutPointerDown(event, server)}
+            onPointerUp={handleServerShortcutPointerUp}
+            onPointerLeave={handleServerShortcutPointerCancel}
+            onPointerCancel={handleServerShortcutPointerCancel}
             aria-label={server.name || "Без названия"}
           >
             {server.icon ? (
@@ -4808,60 +5087,307 @@ export default function MenuMain({
         ))}
         <button
           type="button"
-          className="btn__create-server"
+          className="btn__create-server btn__create-server--mobile"
           aria-label="Создать сервер"
           onClick={handleAddServer}
         >
           +
         </button>
-      </aside>
-      {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
-      {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}
-
-      {openSettings && (
-        <div className="settings-backdrop" onClick={() => setOpenSettings(false)}>
-          <div ref={popupRef} className="settings-popup settings-popup--shell" onClick={(event) => event.stopPropagation()}>
-            <aside className="settings-shell__sidebar">
-              <div className="settings-shell__profile">
-                <AnimatedAvatar className="settings-shell__profile-avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
-                <div>
-                  <strong>{getDisplayName(user)}</strong>
-                  <button type="button" className="settings-shell__profile-link" onClick={() => setSettingsTab("personal_profile")}>
-                    Редактировать профиль...
-                  </button>
-                </div>
-              </div>
-              <input className="settings-shell__search" type="text" placeholder="Поиск" />
-
-              {Object.entries(settingsNavSections).map(([section, items]) => (
-                <div key={section} className="settings-shell__nav-group">
-                  <span className="settings-shell__nav-label">{section}</span>
-                  <div className="settings-shell__nav-list">
-                    {items.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`settings-shell__nav-item ${settingsTab === item.id ? "settings-shell__nav-item--active" : ""}`}
-                        onClick={() => setSettingsTab(item.id)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </aside>
-
-            <div className="settings-shell__main">
-              <div className="settings-shell__closebar">
-                <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>×</button>
-              </div>
-              {renderSettingsContent()}
+      </div>
+    </div>
+  );
+  const renderMobileDirectChat = () => (
+    <main className="chat__wrapper chat__wrapper--friends chat__wrapper--mobile-direct">
+      <div className="chat__box chat__box--servers">
+        <div className="chat__topbar chat__topbar--mobile-direct">
+          <div className="chat__topbar-title">
+            <div className="chat__topbar-copy">
+              <strong>{getDisplayName(currentDirectFriend)}</strong>
+              <span>Личный чат между двумя пользователями</span>
             </div>
           </div>
         </div>
+        <TextChat resolvedChannelId={currentDirectChannelId} user={user} directTargets={directConversationTargets} />
+      </div>
+    </main>
+  );
+  const renderMobileProfileScreen = () => (
+    <section className="mobile-profile-screen">
+      <div className="mobile-profile-screen__hero">
+        <div className="mobile-profile-screen__cover" aria-hidden="true" />
+        <div className="mobile-profile-screen__hero-main">
+          <AnimatedAvatar
+            className={`mobile-profile-screen__avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "mobile-profile-screen__avatar--speaking" : ""}`}
+            src={getUserAvatar(user)}
+            alt={getDisplayName(user)}
+          />
+          <div className="mobile-profile-screen__identity">
+            <h1>{getDisplayName(user)}</h1>
+            <p>{user?.email || "Ваш аккаунт Tend"}</p>
+            <span className="mobile-profile-screen__presence">{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
+          </div>
+        </div>
+        <button type="button" className="mobile-profile-screen__primary" onClick={() => openSettingsPanel("personal_profile")}>
+          Редактировать профиль
+        </button>
+      </div>
+
+      <div className="mobile-profile-screen__cards">
+        <button type="button" className="mobile-profile-screen__card mobile-profile-screen__card--action" onClick={() => openSettingsPanel("voice_video")}>
+          <strong>Голос и видео</strong>
+          <span>Микрофон, камера, устройства и чувствительность.</span>
+        </button>
+        <button type="button" className="mobile-profile-screen__card mobile-profile-screen__card--action" onClick={() => openSettingsPanel("notifications")}>
+          <strong>Уведомления</strong>
+          <span>Личные чаты, серверы и звуки оповещений.</span>
+        </button>
+        <div className="mobile-profile-screen__toggle-row">
+          <button type="button" className={`mobile-profile-screen__toggle ${isMicMuted ? "mobile-profile-screen__toggle--muted" : ""}`} onClick={toggleMicMute}>
+            {isMicMuted ? "Микрофон выключен" : "Микрофон включён"}
+          </button>
+          <button type="button" className={`mobile-profile-screen__toggle ${isSoundMuted ? "mobile-profile-screen__toggle--muted" : ""}`} onClick={toggleSoundMute}>
+            {isSoundMuted ? "Звук выключен" : "Звук включён"}
+          </button>
+        </div>
+        <div className="mobile-profile-screen__card">
+          <strong>Аккаунт</strong>
+          <span>{currentVoiceChannelName ? `Подключено к ${currentVoiceChannelName}` : "Сейчас вы не в голосовом канале."}</span>
+        </div>
+        <div className="mobile-profile-screen__stats">
+          <div className="mobile-profile-screen__stat">
+            <strong>{servers.length}</strong>
+            <span>Серверы</span>
+          </div>
+          <div className="mobile-profile-screen__stat">
+            <strong>{friends.length}</strong>
+            <span>Друзья</span>
+          </div>
+        </div>
+        <div className="mobile-profile-screen__card mobile-profile-screen__card--danger">
+          <button type="button" className="mobile-profile-screen__danger-button" onClick={handleLogout}>
+            Выйти из аккаунта
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+  const handleMobileBack = () => {
+    if (mobileSection === "profile") {
+      setMobileSection(workspaceMode === "friends" ? "friends" : "servers");
+      return;
+    }
+
+    if (mobileSection === "friends" && currentDirectFriend) {
+      setActiveDirectFriendId("");
+      setFriendsPageSection("friends");
+      return;
+    }
+
+    if (mobileSection === "servers" && selectedStreamUserId) {
+      setSelectedStreamUserId(null);
+      setMobileServersPane("chat");
+      return;
+    }
+
+    if (mobileSection === "servers" && mobileServersPane === "chat") {
+      setMobileServersPane("channels");
+    }
+  };
+  const getMobileHeaderMeta = () => {
+    if (mobileSection === "profile") {
+      return {
+        title: getDisplayName(user),
+        subtitle: user?.email || "Профиль",
+        canGoBack: true,
+        actionLabel: "Настройки",
+        onAction: () => openSettingsPanel("personal_profile"),
+      };
+    }
+
+    if (mobileSection === "friends" && currentDirectFriend) {
+      return {
+        title: getDisplayName(currentDirectFriend),
+        subtitle: "Личный чат",
+        canGoBack: true,
+        actionLabel: "Профиль",
+        onAction: () => setMobileSection("profile"),
+      };
+    }
+
+    if (mobileSection === "friends") {
+      return {
+        title: "Личные сообщения",
+        subtitle: friendsPageSection === "add" ? "Поиск и добавление друзей" : `${friends.length} контактов`,
+        canGoBack: false,
+        actionLabel: friendsPageSection === "add" ? "Друзья" : "Добавить",
+        onAction: () => {
+          setActiveDirectFriendId("");
+          setFriendsPageSection((previousSection) => (previousSection === "add" ? "friends" : "add"));
+        },
+      };
+    }
+
+    if (mobileServersPane === "chat" || selectedStreamUserId) {
+      return {
+        title: getChannelDisplayName(currentTextChannel?.name || "channel", "text"),
+        subtitle: activeServer?.name || "Текстовый канал",
+        canGoBack: true,
+        actionLabel: "Каналы",
+        onAction: () => setMobileServersPane("channels"),
+      };
+    }
+
+    return {
+      title: activeServer?.name || "Серверы",
+      subtitle: "Текстовые и голосовые каналы",
+      canGoBack: false,
+      actionLabel: "Профиль",
+      onAction: () => setMobileSection("profile"),
+    };
+  };
+  const renderMobileShell = () => {
+    const mobileHeader = getMobileHeaderMeta();
+
+    return (
+      <div className="menu__main menu__main--mobile">
+        <header className="mobile-shell__header">
+          <div className="mobile-shell__header-main">
+            {mobileHeader.canGoBack ? (
+              <button type="button" className="mobile-shell__back" onClick={handleMobileBack} aria-label="Назад">
+                ‹
+              </button>
+            ) : (
+              <span className="mobile-shell__back-spacer" aria-hidden="true" />
+            )}
+            <div className="mobile-shell__header-copy">
+              <strong>{mobileHeader.title}</strong>
+              <span>{mobileHeader.subtitle}</span>
+            </div>
+          </div>
+          {mobileHeader.onAction ? (
+            <button type="button" className="mobile-shell__header-action" onClick={mobileHeader.onAction}>
+              {mobileHeader.actionLabel}
+            </button>
+          ) : null}
+        </header>
+
+        <div className="mobile-shell__body">
+          {mobileSection === "profile" ? (
+            renderMobileProfileScreen()
+          ) : mobileSection === "friends" ? (
+            <div className="mobile-shell__workspace mobile-shell__workspace--friends">
+              {currentDirectFriend ? renderMobileDirectChat() : renderFriendsMain()}
+            </div>
+          ) : (
+            <div className="mobile-shell__panel mobile-shell__panel--servers">
+              {renderMobileServerStrip()}
+              <div className="mobile-shell__workspace mobile-shell__workspace--servers">
+                {mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <nav className="mobile-shell__nav" aria-label="Основная навигация">
+          <button
+            type="button"
+            className={`mobile-shell__nav-item ${mobileSection === "servers" ? "mobile-shell__nav-item--active" : ""}`}
+            onClick={openServersWorkspace}
+          >
+            <span className="mobile-shell__nav-glyph" aria-hidden="true">#</span>
+            <span>Серверы</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-shell__nav-item ${mobileSection === "friends" ? "mobile-shell__nav-item--active" : ""}`}
+            onClick={openFriendsWorkspace}
+          >
+            <span className="mobile-shell__nav-glyph" aria-hidden="true">◌</span>
+            <span>Чаты</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-shell__nav-item ${mobileSection === "profile" ? "mobile-shell__nav-item--active" : ""}`}
+            onClick={() => setMobileSection("profile")}
+          >
+            <span className="mobile-shell__nav-glyph" aria-hidden="true">◎</span>
+            <span>Вы</span>
+          </button>
+        </nav>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {serverInviteFeedback ? (
+        <div className={`server-invite-feedback ${isMobileViewport ? "server-invite-feedback--mobile" : ""}`} role="status" aria-live="polite">
+          {serverInviteFeedback}
+        </div>
+      ) : null}
+      {isMobileViewport ? (
+        renderMobileShell()
+      ) : (
+        <div className="menu__main">
+          {renderDesktopServerRail()}
+          {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
+          {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}
+        </div>
       )}
 
+      {openSettings && (
+        <div className="settings-backdrop" onClick={() => setOpenSettings(false)}>
+          <div
+            ref={popupRef}
+            className={`settings-popup settings-popup--shell ${isMobileViewport ? "settings-popup--mobile" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {isMobileViewport ? (
+              renderMobileSettingsShell()
+            ) : (
+              <>
+                <aside className="settings-shell__sidebar">
+                  <div className="settings-shell__profile">
+                    <AnimatedAvatar className="settings-shell__profile-avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
+                    <div>
+                      <strong>{getDisplayName(user)}</strong>
+                      <button type="button" className="settings-shell__profile-link" onClick={() => setSettingsTab("personal_profile")}>
+                        Редактировать профиль...
+                      </button>
+                    </div>
+                  </div>
+                  <input className="settings-shell__search" type="text" placeholder="Поиск" />
+
+                  {Object.entries(settingsNavSections).map(([section, items]) => (
+                    <div key={section} className="settings-shell__nav-group">
+                      <span className="settings-shell__nav-label">{section}</span>
+                      <div className="settings-shell__nav-list">
+                        {items.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`settings-shell__nav-item ${settingsTab === item.id ? "settings-shell__nav-item--active" : ""}`}
+                            onClick={() => setSettingsTab(item.id)}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </aside>
+
+                <div className="settings-shell__main">
+                  <div className="settings-shell__closebar">
+                    <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>×</button>
+                  </div>
+                  {renderSettingsContent()}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {showCreateServerModal && (
         <div className="modal-backdrop" onClick={closeCreateServerModal}>
           <form className="create-server-modal" onSubmit={handleCreateServerSubmit} onClick={(event) => event.stopPropagation()}>
@@ -5090,7 +5616,7 @@ export default function MenuMain({
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }
 

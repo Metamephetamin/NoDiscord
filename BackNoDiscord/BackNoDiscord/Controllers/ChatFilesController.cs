@@ -1,3 +1,4 @@
+using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -16,6 +17,12 @@ public class UploadChatFileRequest
 public class ChatFilesController : ControllerBase
 {
     private const long MaxFileSizeBytes = 100L * 1024 * 1024;
+    private readonly UploadStoragePaths _uploadStoragePaths;
+
+    public ChatFilesController(UploadStoragePaths uploadStoragePaths)
+    {
+        _uploadStoragePaths = uploadStoragePaths;
+    }
 
     [HttpPost("upload")]
     [RequestSizeLimit(MaxFileSizeBytes)]
@@ -42,7 +49,7 @@ public class ChatFilesController : ControllerBase
             return BadRequest(new { message = error });
         }
 
-        var uploadsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "chat-files");
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");
         Directory.CreateDirectory(uploadsDirectory);
 
         var fileName = $"chat-{UploadPolicies.SanitizeIdentifier(currentUser.UserId)}-{Guid.NewGuid():N}{extension}";

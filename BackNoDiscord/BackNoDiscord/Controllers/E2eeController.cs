@@ -18,11 +18,13 @@ public class E2eeController : ControllerBase
     private const string VoiceScope = "voice";
     private readonly AppDbContext _context;
     private readonly ServerStateService _serverState;
+    private readonly CryptoService _crypto;
 
-    public E2eeController(AppDbContext context, ServerStateService serverState)
+    public E2eeController(AppDbContext context, ServerStateService serverState, CryptoService crypto)
     {
         _context = context;
         _serverState = serverState;
+        _crypto = crypto;
     }
 
     public class UpsertDeviceKeyRequest
@@ -30,6 +32,7 @@ public class E2eeController : ControllerBase
         public string Algorithm { get; set; } = "ECDH-P256";
         public string PublicKeyJwk { get; set; } = "{}";
         public string Fingerprint { get; set; } = string.Empty;
+        public string PrivateKeyJwk { get; set; } = string.Empty;
     }
 
     public class ChannelDirectoryRequest
@@ -63,6 +66,53 @@ public class E2eeController : ControllerBase
         public string WrappedKey { get; set; } = string.Empty;
     }
 
+    [HttpGet("device-key")]
+    public async Task<IActionResult> GetDeviceKey()
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId) ||
+            currentUserId <= 0)
+        {
+            return Unauthorized();
+        }
+
+        var existing = await _context.UserE2eeKeys
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.UserId == currentUserId);
+
+        if (existing is null)
+        {
+            return Ok(new
+            {
+                userId = currentUserId.ToString(),
+                hasKey = false
+            });
+        }
+
+        string privateKeyJwk = string.Empty;
+        if (!string.IsNullOrWhiteSpace(existing.PrivateKeyJwkEncrypted))
+        {
+            try
+            {
+                privateKeyJwk = _crypto.Decrypt(existing.PrivateKeyJwkEncrypted);
+            }
+            catch
+            {
+                privateKeyJwk = string.Empty;
+            }
+        }
+
+        return Ok(new
+        {
+            userId = currentUserId.ToString(),
+            hasKey = true,
+            algorithm = existing.Algorithm,
+            publicKeyJwk = existing.PublicKeyJwk,
+            fingerprint = existing.Fingerprint,
+            privateKeyJwk
+        });
+    }
+
     [HttpPut("device-key")]
     public async Task<IActionResult> UpsertDeviceKey([FromBody] UpsertDeviceKeyRequest request)
     {
@@ -76,6 +126,7 @@ public class E2eeController : ControllerBase
         var algorithm = UploadPolicies.TrimToLength(request.Algorithm, 32);
         var fingerprint = UploadPolicies.TrimToLength(request.Fingerprint, 128);
         var publicKeyJwk = request.PublicKeyJwk?.Trim() ?? string.Empty;
+        var privateKeyJwk = request.PrivateKeyJwk?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(algorithm) || string.IsNullOrWhiteSpace(fingerprint) || string.IsNullOrWhiteSpace(publicKeyJwk))
         {
             return BadRequest(new { message = "algorithm, publicKeyJwk and fingerprint are required." });
@@ -94,8 +145,27 @@ public class E2eeController : ControllerBase
             return BadRequest(new { message = "publicKeyJwk must be valid JSON." });
         }
 
+        if (!string.IsNullOrWhiteSpace(privateKeyJwk))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(privateKeyJwk);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return BadRequest(new { message = "privateKeyJwk must be a valid JWK object." });
+                }
+            }
+            catch (JsonException)
+            {
+                return BadRequest(new { message = "privateKeyJwk must be valid JSON." });
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         var existing = await _context.UserE2eeKeys.FirstOrDefaultAsync(item => item.UserId == currentUserId);
+        var encryptedPrivateKeyJwk = string.IsNullOrWhiteSpace(privateKeyJwk)
+            ? string.Empty
+            : _crypto.Encrypt(privateKeyJwk);
         if (existing is null)
         {
             _context.UserE2eeKeys.Add(new UserE2eeKeyRecord
@@ -104,6 +174,7 @@ public class E2eeController : ControllerBase
                 Algorithm = algorithm,
                 PublicKeyJwk = publicKeyJwk,
                 Fingerprint = fingerprint,
+                PrivateKeyJwkEncrypted = string.IsNullOrWhiteSpace(encryptedPrivateKeyJwk) ? null : encryptedPrivateKeyJwk,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -113,11 +184,21 @@ public class E2eeController : ControllerBase
             existing.Algorithm = algorithm;
             existing.PublicKeyJwk = publicKeyJwk;
             existing.Fingerprint = fingerprint;
+            if (!string.IsNullOrWhiteSpace(encryptedPrivateKeyJwk))
+            {
+                existing.PrivateKeyJwkEncrypted = encryptedPrivateKeyJwk;
+            }
             existing.UpdatedAt = now;
         }
 
         await _context.SaveChangesAsync();
-        return Ok(new { userId = currentUserId.ToString(), algorithm, fingerprint });
+        return Ok(new
+        {
+            userId = currentUserId.ToString(),
+            algorithm,
+            fingerprint,
+            hasPrivateKey = !string.IsNullOrWhiteSpace(existing?.PrivateKeyJwkEncrypted ?? encryptedPrivateKeyJwk)
+        });
     }
 
     [HttpPost("channel-directory")]

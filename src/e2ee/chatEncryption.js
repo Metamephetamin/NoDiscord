@@ -295,6 +295,60 @@ async function importStoredIdentity(serializedIdentity) {
   };
 }
 
+function normalizeStoredIdentityPayload(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  let publicKeyJwk = value.publicKeyJwk;
+  let privateKeyJwk = value.privateKeyJwk;
+
+  try {
+    if (typeof publicKeyJwk === "string" && publicKeyJwk.trim()) {
+      publicKeyJwk = JSON.parse(publicKeyJwk);
+    }
+    if (typeof privateKeyJwk === "string" && privateKeyJwk.trim()) {
+      privateKeyJwk = JSON.parse(privateKeyJwk);
+    }
+  } catch {
+    return null;
+  }
+
+  const fingerprint = String(value.fingerprint || "").trim();
+  const algorithm = String(value.algorithm || DEVICE_IDENTITY_ALGORITHM).trim() || DEVICE_IDENTITY_ALGORITHM;
+  if (!publicKeyJwk || typeof publicKeyJwk !== "object" || !privateKeyJwk || typeof privateKeyJwk !== "object" || !fingerprint) {
+    return null;
+  }
+
+  return {
+    algorithm,
+    publicKeyJwk,
+    privateKeyJwk,
+    fingerprint,
+  };
+}
+
+async function fetchRegisteredDeviceKey() {
+  const response = await authFetch(`${API_BASE_URL}/e2ee/device-key`, {
+    method: "GET",
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(response, data, "Failed to resolve E2EE account key."));
+  }
+
+  if (!data?.hasKey) {
+    return null;
+  }
+
+  return normalizeStoredIdentityPayload({
+    algorithm: data?.algorithm || DEVICE_IDENTITY_ALGORITHM,
+    publicKeyJwk: data?.publicKeyJwk || {},
+    privateKeyJwk: data?.privateKeyJwk || "",
+    fingerprint: data?.fingerprint || "",
+  });
+}
+
 async function registerDeviceKey(identity, userId) {
   const response = await authFetch(`${API_BASE_URL}/e2ee/device-key`, {
     method: "PUT",
@@ -303,6 +357,7 @@ async function registerDeviceKey(identity, userId) {
       algorithm: identity.algorithm,
       publicKeyJwk: JSON.stringify(identity.publicKeyJwk),
       fingerprint: identity.fingerprint,
+      privateKeyJwk: JSON.stringify(identity.privateKeyJwk),
     }),
   });
   const data = await parseApiResponse(response);
@@ -646,15 +701,29 @@ export async function ensureE2eeDeviceIdentity(user) {
 
   const identityPromise = (async () => {
     const storageKey = getIdentityStorageKey(userId);
-    const storedIdentity = await readSecureValue(storageKey);
-    const normalizedStoredIdentity =
-      storedIdentity?.publicKeyJwk && storedIdentity?.privateKeyJwk && storedIdentity?.fingerprint
-        ? storedIdentity
-        : await generateDeviceIdentity();
+    const storedIdentity = normalizeStoredIdentityPayload(await readSecureValue(storageKey));
+    const serverIdentity = await fetchRegisteredDeviceKey().catch(() => null);
 
-    await writeSecureValue(storageKey, normalizedStoredIdentity);
-    const importedIdentity = await importStoredIdentity(normalizedStoredIdentity);
-    await registerDeviceKey(importedIdentity, userId);
+    let resolvedIdentity = null;
+    if (serverIdentity?.privateKeyJwk) {
+      resolvedIdentity = serverIdentity;
+    } else if (storedIdentity) {
+      resolvedIdentity = storedIdentity;
+    } else {
+      resolvedIdentity = await generateDeviceIdentity();
+    }
+
+    await writeSecureValue(storageKey, resolvedIdentity);
+    const importedIdentity = await importStoredIdentity(resolvedIdentity);
+
+    if (
+      !serverIdentity ||
+      !serverIdentity.privateKeyJwk ||
+      String(serverIdentity.fingerprint || "") !== String(resolvedIdentity.fingerprint || "")
+    ) {
+      await registerDeviceKey(importedIdentity, userId);
+    }
+
     return importedIdentity;
   })();
 

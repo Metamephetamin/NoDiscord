@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import "../css/ListChannels.css";
 import AnimatedAvatar from "./AnimatedAvatar";
-import { DEFAULT_AVATAR, resolveStaticAssetUrl } from "../utils/media";
+import { resolveStaticAssetUrl } from "../utils/media";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
@@ -61,7 +61,7 @@ const VoiceChannelList = ({
     return {
       userId,
       name: getVoiceDisplayName(memberNameByUserId.get(String(userId)) || participant.name || participant.Name || "Unknown"),
-      avatar: participant.avatar || participant.Avatar || DEFAULT_AVATAR,
+      avatar: participant.avatar || participant.Avatar || "",
       isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
       isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
       isDeafened: Boolean(participant.isDeafened || participant.IsDeafened),

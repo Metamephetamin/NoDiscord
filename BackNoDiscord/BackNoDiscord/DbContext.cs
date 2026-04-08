@@ -272,6 +272,9 @@ public class UserE2eeKeyRecord
     [Column("fingerprint")]
     public string Fingerprint { get; set; } = string.Empty;
 
+    [Column("private_key_jwk_encrypted")]
+    public string? PrivateKeyJwkEncrypted { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 
@@ -371,6 +374,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Algorithm).IsRequired();
             entity.Property(x => x.PublicKeyJwk).IsRequired();
             entity.Property(x => x.Fingerprint).IsRequired();
+            entity.Property(x => x.PrivateKeyJwkEncrypted).IsRequired(false);
         });
 
         modelBuilder.Entity<ChannelE2eeDailyKeyRecord>(entity =>

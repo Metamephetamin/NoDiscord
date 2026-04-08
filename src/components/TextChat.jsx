@@ -22,7 +22,7 @@ import {
   normalizeMentionAlias,
   segmentMessageTextByMentions,
 } from "../utils/messageMentions";
-import { DEFAULT_AVATAR, resolveMediaUrl } from "../utils/media";
+import { resolveMediaUrl } from "../utils/media";
 import {
   buildVoiceWaveform,
   formatVoiceMessageDuration,
@@ -453,6 +453,12 @@ function revokeAttachmentObjectUrl(entry) {
       // ignore object URL cleanup failures
     }
   }
+}
+
+function isExpectedAttachmentKeyError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("daily e2ee key has not been shared")
+    || message.includes("not all participants have published e2ee keys yet");
 }
 
 function isMissingHubMethodError(error, methodName) {
@@ -1055,7 +1061,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   };
 
   const sendVoiceRecordingFile = async (voiceFile, durationMs, waveformSamples) => {
-    const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+    const avatar = user?.avatarUrl || user?.avatar || "";
     const encryptedAttachment = await prepareOutgoingAttachmentEncryption({
       channelId: scopedChannelId,
       user,
@@ -1404,6 +1410,21 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             };
           });
         } catch (error) {
+          if (cancelled) {
+            return;
+          }
+
+          if (isExpectedAttachmentKeyError(error)) {
+            setDecryptedAttachmentsByMessageId((previous) => ({
+              ...previous,
+              [normalizedMessageId]: {
+                unavailable: true,
+                reason: "missing-shared-key",
+              },
+            }));
+            return;
+          }
+
           console.warn("Failed to decrypt attachment:", error?.message || error);
         } finally {
           decryptingAttachmentIdsRef.current.delete(normalizedMessageId);
@@ -1875,7 +1896,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     ? {
                         ...messageItem,
                         username: nextUsername || messageItem.username || "User",
-                        photoUrl: nextAvatar || messageItem.photoUrl || DEFAULT_AVATAR,
+                        photoUrl: nextAvatar || messageItem.photoUrl || "",
                       }
                     : messageItem
                 )
@@ -1942,7 +1963,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       return;
     }
 
-    const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+    const avatar = user?.avatarUrl || user?.avatar || "";
     const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers) : [];
 
     try {
@@ -2680,7 +2701,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         throw new Error("Сессия недействительна. Войдите снова.");
       }
 
-      const avatar = user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
+      const avatar = user?.avatarUrl || user?.avatar || "";
 
       const targetChannels = directTargets
         .filter((target) => forwardModal.targetIds.some((targetId) => String(target.id) === String(targetId)))
@@ -2833,6 +2854,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         <div ref={messagesListRef} className="messages-list">
           {messages.map((messageItem) => {
             const attachmentView = decryptedAttachmentsByMessageId[String(messageItem.id)] || null;
+            const attachmentUnavailable = Boolean(attachmentView?.unavailable);
             const attachmentUrl = attachmentView?.objectUrl || (
               messageItem.attachmentEncryption
                 ? ""
@@ -2847,6 +2869,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             const isResolvedVideoAttachment = String(attachmentContentType).startsWith("video/");
             const resolvedVoiceMessage = normalizeVoiceMessageMetadata(messageItem.voiceMessage);
             const hasVoiceAttachment = isVoiceMessage({ ...messageItem, voiceMessage: resolvedVoiceMessage });
+            const canRenderVoiceAttachment = hasVoiceAttachment && !attachmentUnavailable;
             const reactions = normalizeReactions(messageItem.reactions);
             const messageText = String(messageItem.message || "");
             const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
@@ -2930,7 +2953,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     )
                   ) : null}
 
-                  {hasVoiceAttachment ? (
+                  {canRenderVoiceAttachment ? (
                     <VoiceMessageBubble
                       src={attachmentUrl}
                       pending={!attachmentUrl}
@@ -3016,11 +3039,15 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       </a>
                     )
                   ) : messageItem.attachmentEncryption ? (
-                    <div className="message-attachment message-attachment--pending">
+                    <div className={`message-attachment ${attachmentUnavailable ? "message-attachment--unavailable" : "message-attachment--pending"}`}>
                       <span className="message-attachment__icon" aria-hidden="true" />
                       <span className="message-attachment__meta">
-                        <span className="message-attachment__name">Зашифрованный файл</span>
-                        <span className="message-attachment__size">Расшифровывается автоматически</span>
+                        <span className="message-attachment__name">
+                          {attachmentUnavailable ? "Зашифрованное вложение недоступно" : "Зашифрованный файл"}
+                        </span>
+                        <span className="message-attachment__size">
+                          {attachmentUnavailable ? "На этом устройстве нет ключа для расшифровки" : "Расшифровывается автоматически"}
+                        </span>
                       </span>
                     </div>
                   ) : null}
@@ -3225,7 +3252,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     >
                       <AnimatedAvatar
                         className="mention-suggestions__avatar"
-                        src={suggestion.avatar || DEFAULT_AVATAR}
+                        src={suggestion.avatar || ""}
                         alt={suggestion.displayName}
                       />
                       <span className="mention-suggestions__content">

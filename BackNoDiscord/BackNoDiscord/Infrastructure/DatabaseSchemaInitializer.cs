@@ -110,6 +110,7 @@ public static class DatabaseSchemaInitializer
                 algorithm character varying(32) NOT NULL,
                 public_key_jwk text NOT NULL,
                 fingerprint character varying(128) NOT NULL,
+                private_key_jwk_encrypted text NULL,
                 created_at timestamptz NOT NULL,
                 updated_at timestamptz NOT NULL
             );
@@ -157,6 +158,8 @@ public static class DatabaseSchemaInitializer
                 ALTER COLUMN message DROP NOT NULL;
             ALTER TABLE IF EXISTS chatmessages
                 ALTER COLUMN photourl DROP NOT NULL;
+            ALTER TABLE IF EXISTS user_e2ee_keys
+                ADD COLUMN IF NOT EXISTS private_key_jwk_encrypted text NULL;
 
             CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_timestamp ON chatmessages (channelid, timestamp);
             CREATE INDEX IF NOT EXISTS ix_chatmessages_timestamp ON chatmessages (timestamp);
