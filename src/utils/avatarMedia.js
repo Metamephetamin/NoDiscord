@@ -1,5 +1,7 @@
 ﻿export const MAX_AVATAR_SIZE_BYTES = 50 * 1024 * 1024;
 export const MAX_AVATAR_DURATION_SECONDS = 15;
+export const MAX_PROFILE_BACKGROUND_SIZE_BYTES = 60 * 1024 * 1024;
+export const MAX_PROFILE_BACKGROUND_DURATION_SECONDS = 20;
 export const ALLOWED_AVATAR_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"];
 export const ALLOWED_AVATAR_MIME_TYPES = [
   "image/jpeg",
@@ -8,6 +10,8 @@ export const ALLOWED_AVATAR_MIME_TYPES = [
   "image/gif",
   "video/mp4",
 ];
+export const ALLOWED_PROFILE_BACKGROUND_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"];
+export const ALLOWED_PROFILE_BACKGROUND_MIME_TYPES = [...ALLOWED_AVATAR_MIME_TYPES];
 export const MAX_STATIC_SERVER_ICON_SIZE_BYTES = 15 * 1024 * 1024;
 export const MAX_ANIMATED_SERVER_ICON_SIZE_BYTES = 30 * 1024 * 1024;
 export const MAX_SERVER_ICON_DURATION_SECONDS = 5;
@@ -365,6 +369,34 @@ export async function validateAvatarFile(file) {
     const durationSeconds = await readAvatarMediaDuration(file);
     if (Number.isFinite(durationSeconds) && durationSeconds > MAX_AVATAR_DURATION_SECONDS) {
       return "РђРЅРёРјРёСЂРѕРІР°РЅРЅС‹Р№ Р°РІР°С‚Р°СЂ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ 15 СЃРµРєСѓРЅРґ.";
+    }
+  }
+
+  return "";
+}
+
+export async function validateProfileBackgroundFile(file) {
+  if (!file) {
+    return "Файл фона профиля не выбран.";
+  }
+
+  const fileExtension = getAvatarFileExtension(file.name);
+  const normalizedType = String(file.type || "").toLowerCase().trim();
+  if (
+    !ALLOWED_PROFILE_BACKGROUND_EXTENSIONS.includes(fileExtension)
+    || (normalizedType && !ALLOWED_PROFILE_BACKGROUND_MIME_TYPES.includes(normalizedType))
+  ) {
+    return "Для фона профиля разрешены JPG, PNG, WEBP, GIF и MP4.";
+  }
+
+  if (file.size > MAX_PROFILE_BACKGROUND_SIZE_BYTES) {
+    return "Фон профиля должен быть не больше 60 МБ.";
+  }
+
+  if (fileExtension === ".gif" || fileExtension === ".mp4") {
+    const durationSeconds = await readAvatarMediaDuration(file);
+    if (Number.isFinite(durationSeconds) && durationSeconds > MAX_PROFILE_BACKGROUND_DURATION_SECONDS) {
+      return "Анимированный фон профиля должен быть не длиннее 20 секунд.";
     }
   }
 

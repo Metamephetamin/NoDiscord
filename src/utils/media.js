@@ -41,7 +41,13 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   }
 
   if (value.startsWith("/")) {
-    if (value.startsWith("/avatars/") || value.startsWith("/chat-files/") || value.startsWith("/server-icons/")) {
+    if (
+      value.startsWith("/avatars/")
+      || value.startsWith("/api/profile-backgrounds/")
+      || value.startsWith("/profile-backgrounds/")
+      || value.startsWith("/chat-files/")
+      || value.startsWith("/server-icons/")
+    ) {
       return `${API_URL}${value}`;
     }
 

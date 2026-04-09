@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace BackNoDiscord.Controllers;
 
@@ -13,10 +14,16 @@ public class UploadAvatarRequest
     public IFormFile? Avatar { get; set; }
 }
 
+public class UploadProfileBackgroundRequest
+{
+    public IFormFile? Background { get; set; }
+}
+
 public class UpdateProfileRequest
 {
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
+    public string? ProfileBackgroundUrl { get; set; }
 }
 
 [ApiController]
@@ -25,6 +32,8 @@ public class UpdateProfileRequest
 public class UserController : ControllerBase
 {
     private const long MaxAvatarSizeBytes = 50L * 1024 * 1024;
+    private const long MaxProfileBackgroundSizeBytes = 60L * 1024 * 1024;
+    private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
     private readonly AppDbContext _dbContext;
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly UploadStoragePaths _uploadStoragePaths;
@@ -68,6 +77,10 @@ public class UserController : ControllerBase
 
         user.first_name = firstName;
         user.last_name = lastName;
+        if (request.ProfileBackgroundUrl != null)
+        {
+            user.profile_background_url = UploadPolicies.SanitizeRelativeAssetUrl(request.ProfileBackgroundUrl, "/api/profile-backgrounds/");
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await BroadcastProfileUpdatedAsync(user, cancellationToken);
@@ -78,7 +91,8 @@ public class UserController : ControllerBase
             first_name = user.first_name,
             last_name = user.last_name,
             email = user.email,
-            avatar_url = user.avatar_url ?? string.Empty
+            avatar_url = user.avatar_url ?? string.Empty,
+            profile_background_url = user.profile_background_url ?? string.Empty
         });
     }
 
@@ -134,6 +148,83 @@ public class UserController : ControllerBase
         return Ok(new { avatarUrl, avatar_url = avatarUrl });
     }
 
+    [HttpPost("upload-profile-background")]
+    [RequestSizeLimit(MaxProfileBackgroundSizeBytes)]
+    public async Task<IActionResult> UploadProfileBackground([FromForm] UploadProfileBackgroundRequest request, CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var background = request.Background;
+        if (background == null || background.Length == 0)
+        {
+            return BadRequest(new { message = "Profile background file is required" });
+        }
+
+        if (background.Length > MaxProfileBackgroundSizeBytes)
+        {
+            return BadRequest(new { message = "Profile background size must be less than or equal to 60 MB" });
+        }
+
+        if (!UploadPolicies.TryValidateProfileBackground(background, out var extension, out _, out var error))
+        {
+            return BadRequest(new { message = error });
+        }
+
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("profile-backgrounds");
+        Directory.CreateDirectory(uploadsDirectory);
+
+        var fileName = $"profile-bg-{UploadPolicies.SanitizeIdentifier(currentUser.UserId)}-{Guid.NewGuid():N}{extension}";
+        var filePath = Path.Combine(uploadsDirectory, fileName);
+
+        await using (var stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.SequentialScan))
+        {
+            await background.CopyToAsync(stream, cancellationToken);
+        }
+
+        var profileBackgroundUrl = $"/api/profile-backgrounds/{fileName}";
+        var user = await _dbContext.Users.FirstOrDefaultAsync(item => item.id == currentUserId, cancellationToken);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        user.profile_background_url = profileBackgroundUrl;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await BroadcastProfileUpdatedAsync(user, cancellationToken);
+
+        return Ok(new { profileBackgroundUrl, profile_background_url = profileBackgroundUrl });
+    }
+
+    [AllowAnonymous]
+    [HttpGet("~/api/profile-backgrounds/{fileName}")]
+    public IActionResult GetProfileBackground([FromRoute] string fileName)
+    {
+        var sanitizedFileName = Path.GetFileName(fileName ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(sanitizedFileName))
+        {
+            return NotFound();
+        }
+
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("profile-backgrounds");
+        var filePath = Path.Combine(uploadsDirectory, sanitizedFileName);
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound();
+        }
+
+        if (!ContentTypeProvider.TryGetContentType(sanitizedFileName, out var contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        return PhysicalFile(filePath, contentType);
+    }
+
     private async Task BroadcastProfileUpdatedAsync(User user, CancellationToken cancellationToken)
     {
         var recipientIds = await _dbContext.Friendships
@@ -150,7 +241,8 @@ public class UserController : ControllerBase
             first_name = user.first_name,
             last_name = user.last_name,
             email = user.email ?? string.Empty,
-            avatar_url = user.avatar_url ?? string.Empty
+            avatar_url = user.avatar_url ?? string.Empty,
+            profile_background_url = user.profile_background_url ?? string.Empty
         };
 
         await _chatHubContext.Clients.Users(recipientIds.Distinct().Select(id => id.ToString()))

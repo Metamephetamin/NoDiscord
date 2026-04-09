@@ -360,6 +360,18 @@ export default function Renderer() {
           ),
           avatarUrl: data.avatar_url || savedUser.avatarUrl || savedUser.avatar || "",
           avatar: data.avatar_url || savedUser.avatar || savedUser.avatarUrl || "",
+          profileBackgroundUrl:
+            data.profile_background_url
+            || savedUser.profileBackgroundUrl
+            || savedUser.profile_background_url
+            || savedUser.profileBackground
+            || "",
+          profileBackground:
+            data.profile_background_url
+            || savedUser.profileBackground
+            || savedUser.profileBackgroundUrl
+            || savedUser.profile_background_url
+            || "",
         };
 
         if (!disposed) {

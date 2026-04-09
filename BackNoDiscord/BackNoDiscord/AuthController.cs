@@ -693,6 +693,7 @@ public class AuthController : ControllerBase
             user.phone_number,
             user.is_phone_verified,
             avatar_url = user.avatar_url ?? string.Empty,
+            profile_background_url = user.profile_background_url ?? string.Empty,
             token = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
@@ -711,7 +712,8 @@ public class AuthController : ControllerBase
             is_email_verified = user.is_email_verified,
             phone_number = user.phone_number ?? string.Empty,
             is_phone_verified = user.is_phone_verified,
-            avatar_url = user.avatar_url ?? string.Empty
+            avatar_url = user.avatar_url ?? string.Empty,
+            profile_background_url = user.profile_background_url ?? string.Empty
         };
     }
 

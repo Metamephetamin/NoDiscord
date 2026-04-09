@@ -18,8 +18,19 @@ public static class UploadPolicies
         ".mp4"
     };
 
+    private static readonly HashSet<string> AllowedProfileBackgroundExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        ".gif",
+        ".mp4"
+    };
+
     private const double MaxAnimatedAvatarDurationSeconds = 15;
     private const double MaxAnimatedServerIconDurationSeconds = 5;
+    private const double MaxAnimatedProfileBackgroundDurationSeconds = 20;
 
     private static readonly HashSet<string> AllowedServerIconExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -143,6 +154,49 @@ public static class UploadPolicies
         if ((extension == ".gif" || extension == ".mp4") && durationSeconds > MaxAnimatedAvatarDurationSeconds)
         {
             error = "Animated avatar duration must be less than or equal to 15 seconds.";
+            return false;
+        }
+
+        return true;
+    }
+
+    public static bool TryValidateProfileBackground(IFormFile file, out string extension, out string contentType, out string error)
+    {
+        extension = NormalizeExtension(file.FileName, ".png");
+        contentType = GetContentType(extension);
+        error = string.Empty;
+
+        if (!AllowedProfileBackgroundExtensions.Contains(extension))
+        {
+            error = "Only JPG, PNG, WEBP, GIF, and MP4 profile backgrounds are allowed.";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && !IsAllowedAvatarContentType(extension, file.ContentType))
+        {
+            error = extension == ".mp4" ? "Profile background must be an MP4 video." : "Profile background must be an image.";
+            return false;
+        }
+
+        if (!HasExpectedFileSignature(file, extension))
+        {
+            error = "Profile background content does not match the selected file type.";
+            return false;
+        }
+
+        var durationSeconds = 0d;
+        if (extension == ".gif" || extension == ".mp4")
+        {
+            if (!TryGetAnimatedAvatarDurationSeconds(file, extension, out durationSeconds))
+            {
+                error = "Could not determine profile background duration.";
+                return false;
+            }
+        }
+
+        if ((extension == ".gif" || extension == ".mp4") && durationSeconds > MaxAnimatedProfileBackgroundDurationSeconds)
+        {
+            error = "Animated profile background duration must be less than or equal to 20 seconds.";
             return false;
         }
 

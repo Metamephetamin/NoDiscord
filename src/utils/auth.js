@@ -404,6 +404,18 @@ export async function refreshAccessToken() {
             ),
             avatarUrl: data.avatar_url || sessionCache.user?.avatarUrl || sessionCache.user?.avatar || "",
             avatar: data.avatar_url || sessionCache.user?.avatar || sessionCache.user?.avatarUrl || "",
+            profileBackgroundUrl:
+              data.profile_background_url
+              || sessionCache.user?.profileBackgroundUrl
+              || sessionCache.user?.profile_background_url
+              || sessionCache.user?.profileBackground
+              || "",
+            profileBackground:
+              data.profile_background_url
+              || sessionCache.user?.profileBackground
+              || sessionCache.user?.profileBackgroundUrl
+              || sessionCache.user?.profile_background_url
+              || "",
           }
         : sessionCache.user;
 

@@ -12,7 +12,9 @@ import "../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { decryptIncomingMessageText, ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
 import {
+  isVideoAvatarUrl,
   validateAvatarFile,
+  validateProfileBackgroundFile,
   validateServerIconFile,
 } from "../utils/avatarMedia";
 import {
@@ -143,6 +145,8 @@ const getDisplayName = (user) => {
   return fullName || user?.name || user?.email || "User";
 };
 const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || "";
+const getUserProfileBackground = (user) =>
+  user?.profileBackgroundUrl || user?.profile_background_url || user?.profileBackground || "";
 const getCurrentUserId = (user) => String(user?.id || user?.email || "");
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
@@ -707,6 +711,7 @@ export default function MenuMain({
     firstName: user?.first_name || user?.firstName || "",
     lastName: user?.last_name || user?.lastName || "",
     email: user?.email || "",
+    profileBackgroundUrl: getUserProfileBackground(user),
   });
   const [profileStatus, setProfileStatus] = useState("");
   const [serverInviteFeedback, setServerInviteFeedback] = useState("");
@@ -728,6 +733,7 @@ export default function MenuMain({
   const micMenuRef = useRef(null);
   const soundMenuRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const profileBackgroundInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
   const notificationSoundInputRef = useRef(null);
   const cameraPreviewRef = useRef(null);
@@ -1791,6 +1797,9 @@ export default function MenuMain({
       const nextFirstName = String(payload?.first_name || payload?.firstName || "").trim();
       const nextLastName = String(payload?.last_name || payload?.lastName || "").trim();
       const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
+      const nextProfileBackground = String(
+        payload?.profile_background_url || payload?.profileBackgroundUrl || payload?.profileBackground || ""
+      ).trim();
       const nextEmail = String(payload?.email || "").trim();
       const nextDisplayName = `${nextFirstName} ${nextLastName}`.trim();
 
@@ -1890,6 +1899,10 @@ export default function MenuMain({
           email: nextEmail || user.email || "",
           avatarUrl: nextAvatar || user.avatarUrl || user.avatar || "",
           avatar: nextAvatar || user.avatar || user.avatarUrl || "",
+          profileBackgroundUrl:
+            nextProfileBackground || user.profileBackgroundUrl || user.profile_background_url || user.profileBackground || "",
+          profileBackground:
+            nextProfileBackground || user.profileBackground || user.profileBackgroundUrl || user.profile_background_url || "",
         };
 
         setUser?.(nextUser);
@@ -2653,8 +2666,9 @@ export default function MenuMain({
       firstName: user?.first_name || user?.firstName || "",
       lastName: user?.last_name || user?.lastName || "",
       email: user?.email || "",
+      profileBackgroundUrl: getUserProfileBackground(user),
     });
-  }, [user?.email, user?.first_name, user?.firstName, user?.last_name, user?.lastName]);
+  }, [user?.email, user?.first_name, user?.firstName, user?.last_name, user?.lastName, user?.profileBackgroundUrl, user?.profile_background_url, user?.profileBackground]);
   useEffect(() => {
     if (!activeServer?.id || !activeServer?.isShared || isDefaultServer || workspaceMode !== "servers") return;
 
@@ -3828,6 +3842,44 @@ export default function MenuMain({
       setProfileStatus(error?.message || "Не удалось загрузить аватар.");
     }
   };
+  const handleProfileBackgroundChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user?.id) return;
+
+    const backgroundValidationError = await validateProfileBackgroundFile(file);
+    if (backgroundValidationError) {
+      setProfileStatus(backgroundValidationError);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("background", file);
+
+    try {
+      const response = await authFetch(`${API_URL}/api/user/upload-profile-background`, { method: "POST", body: formData });
+      const data = await parseApiResponse(response);
+      if (!response.ok) throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить фон профиля."));
+      const nextProfileBackgroundUrl = data?.profileBackgroundUrl || data?.profile_background_url || "";
+      const nextUser = {
+        ...user,
+        profileBackgroundUrl: nextProfileBackgroundUrl,
+        profile_background_url: nextProfileBackgroundUrl,
+        profileBackground: nextProfileBackgroundUrl,
+      };
+      setUser?.(nextUser);
+      setProfileDraft((previous) => ({ ...previous, profileBackgroundUrl: nextProfileBackgroundUrl }));
+      await storeSession(nextUser, {
+        accessToken: getStoredToken(),
+        refreshToken: getStoredRefreshToken(),
+        accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+      });
+      setProfileStatus("Фон профиля сохранён.");
+    } catch (error) {
+      console.error("Ошибка смены фона профиля:", error);
+      setProfileStatus(error?.message || "Не удалось загрузить фон профиля.");
+    }
+  };
   const handleServerIconChange = async (event) => {
     if (!canManageServer) return;
     const file = event.target.files?.[0];
@@ -3919,6 +3971,7 @@ export default function MenuMain({
         body: JSON.stringify({
           firstName: nextFirstName,
           lastName: nextLastName,
+          profileBackgroundUrl: profileDraft.profileBackgroundUrl ?? getUserProfileBackground(user),
         }),
       });
       const data = await parseApiResponse(response);
@@ -3935,6 +3988,12 @@ export default function MenuMain({
         email: data?.email || profileDraft.email || user?.email || "",
         avatarUrl: data?.avatar_url || user?.avatarUrl || user?.avatar || "",
         avatar: data?.avatar_url || user?.avatar || user?.avatarUrl || "",
+        profileBackgroundUrl:
+          data?.profile_background_url || profileDraft.profileBackgroundUrl || getUserProfileBackground(user),
+        profile_background_url:
+          data?.profile_background_url || profileDraft.profileBackgroundUrl || getUserProfileBackground(user),
+        profileBackground:
+          data?.profile_background_url || profileDraft.profileBackgroundUrl || getUserProfileBackground(user),
       };
 
       setUser?.(nextUser);
@@ -3953,6 +4012,8 @@ export default function MenuMain({
   if (!user) return <div className="menu-loading">Загрузка пользователя...</div>;
 
   const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, "");
+  const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
+  const isProfileBackgroundVideo = isVideoAvatarUrl(profileBackgroundSrc);
   const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
     if (!sections[item.section]) {
       sections[item.section] = [];
@@ -4001,13 +4062,27 @@ export default function MenuMain({
       <div className="settings-shell__content-header">
         <div>
           <h2>Личный профиль</h2>
-          <p>Управляйте своим именем, фамилией, email и аватаром в одном месте.</p>
+          <p>Управляйте своим именем, фамилией, email, аватаром и фоном профиля в одном месте.</p>
         </div>
       </div>
 
       <section className="voice-settings-card">
         <form className="profile-settings-form" onSubmit={handleProfileSave}>
           <div className="profile-settings-form__hero">
+            <div className="profile-settings-form__cover">
+              {profileBackgroundSrc ? (
+                isProfileBackgroundVideo ? (
+                  <video className="profile-settings-form__cover-media" src={profileBackgroundSrc} autoPlay loop muted playsInline preload="metadata" />
+                ) : (
+                  <img className="profile-settings-form__cover-media" src={profileBackgroundSrc} alt="" />
+                )
+              ) : (
+                <div className="profile-settings-form__cover-fallback" aria-hidden="true" />
+              )}
+              <button type="button" className="settings-inline-button profile-settings-form__cover-action" onClick={() => profileBackgroundInputRef.current?.click()}>
+                Сменить фон профиля
+              </button>
+            </div>
             <div className="profile-settings-form__avatar-wrap">
               <AnimatedAvatar className="profile-settings-form__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
               <button type="button" className="settings-inline-button" onClick={() => avatarInputRef.current?.click()}>
@@ -5597,15 +5672,25 @@ export default function MenuMain({
   );
   const renderMobileProfileScreen = () => (
     <section className="mobile-profile-screen">
-      <input
-        type="file"
-        accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4"
-        ref={avatarInputRef}
-        className="hidden-input"
-        onChange={handleAvatarChange}
-      />
       <div className="mobile-profile-screen__hero">
-        <div className="mobile-profile-screen__cover" aria-hidden="true" />
+        {profileBackgroundSrc ? (
+          isProfileBackgroundVideo ? (
+            <video className="mobile-profile-screen__cover-media" src={profileBackgroundSrc} autoPlay loop muted playsInline preload="metadata" />
+          ) : (
+            <img className="mobile-profile-screen__cover-media" src={profileBackgroundSrc} alt="" />
+          )
+        ) : (
+          <div className="mobile-profile-screen__cover-fallback" aria-hidden="true" />
+        )}
+        <div className="mobile-profile-screen__cover-overlay" aria-hidden="true" />
+        <div className="mobile-profile-screen__hero-topbar">
+          <button type="button" className="mobile-profile-screen__toolbar-button" onClick={() => profileBackgroundInputRef.current?.click()}>
+            Сменить фон
+          </button>
+          <button type="button" className="mobile-profile-screen__toolbar-button" onClick={() => openSettingsPanel("personal_profile")}>
+            Профиль
+          </button>
+        </div>
         <div className="mobile-profile-screen__hero-main">
           <button type="button" className="mobile-profile-screen__avatar-button" onClick={() => avatarInputRef.current?.click()}>
             <AnimatedAvatar
@@ -5618,12 +5703,19 @@ export default function MenuMain({
           <div className="mobile-profile-screen__identity">
             <h1>{getDisplayName(user)}</h1>
             <p>{user?.email || "Ваш аккаунт Tend"}</p>
-            <span className="mobile-profile-screen__presence">{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
+            <div className="mobile-profile-screen__meta">
+              <span className="mobile-profile-screen__presence">{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
+              <span className="mobile-profile-screen__meta-badge">{servers.length} серверов</span>
+              <span className="mobile-profile-screen__meta-badge">{friends.length} друзей</span>
+            </div>
           </div>
         </div>
         <div className="mobile-profile-screen__hero-actions">
           <button type="button" className="mobile-profile-screen__primary" onClick={() => openSettingsPanel("personal_profile")}>
             Редактировать профиль
+          </button>
+          <button type="button" className="mobile-profile-screen__secondary" onClick={() => profileBackgroundInputRef.current?.click()}>
+            Сменить фон
           </button>
           <button type="button" className="mobile-profile-screen__secondary" onClick={() => avatarInputRef.current?.click()}>
             Изменить аватар
@@ -5890,6 +5982,20 @@ export default function MenuMain({
 
   return (
     <>
+      <input
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4"
+        ref={avatarInputRef}
+        className="hidden-input"
+        onChange={handleAvatarChange}
+      />
+      <input
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4"
+        ref={profileBackgroundInputRef}
+        className="hidden-input"
+        onChange={handleProfileBackgroundChange}
+      />
       {serverInviteFeedback ? (
         <div className={`server-invite-feedback ${isMobileViewport ? "server-invite-feedback--mobile" : ""}`} role="status" aria-live="polite">
           {serverInviteFeedback}

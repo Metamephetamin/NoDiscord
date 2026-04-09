@@ -224,10 +224,12 @@ app.Use(async (context, next) =>
 
 var uploadStoragePaths = app.Services.GetRequiredService<UploadStoragePaths>();
 var avatarsDirectory = uploadStoragePaths.ResolveDirectory("avatars");
+var profileBackgroundsDirectory = uploadStoragePaths.ResolveDirectory("profile-backgrounds");
 var serverIconsDirectory = uploadStoragePaths.ResolveDirectory("server-icons");
 var chatFilesDirectory = uploadStoragePaths.ResolveDirectory("chat-files");
 
 Directory.CreateDirectory(avatarsDirectory);
+Directory.CreateDirectory(profileBackgroundsDirectory);
 Directory.CreateDirectory(serverIconsDirectory);
 Directory.CreateDirectory(chatFilesDirectory);
 
@@ -235,6 +237,11 @@ app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(avatarsDirectory),
     RequestPath = "/avatars"
+});
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(profileBackgroundsDirectory),
+    RequestPath = "/profile-backgrounds"
 });
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -290,6 +297,7 @@ app.MapFallback(async context =>
         requestPath.StartsWithSegments("/voiceHub") ||
         requestPath.StartsWithSegments("/swagger") ||
         requestPath.StartsWithSegments("/avatars") ||
+        requestPath.StartsWithSegments("/profile-backgrounds") ||
         requestPath.StartsWithSegments("/chat-files") ||
         requestPath.StartsWithSegments("/server-icons"))
     {

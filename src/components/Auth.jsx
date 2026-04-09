@@ -186,6 +186,8 @@ function mapAuthUser(data) {
     isPhoneVerified: Boolean(data?.is_phone_verified),
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
+    profileBackgroundUrl: data?.profile_background_url || data?.profileBackgroundUrl || "",
+    profileBackground: data?.profile_background_url || data?.profileBackgroundUrl || "",
   };
 }
 
