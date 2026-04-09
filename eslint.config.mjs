@@ -57,6 +57,19 @@ export default [
     },
   },
   {
+    files: ["landing/**/*.js"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "script",
+      globals: {
+        ...globals.browser,
+      },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
+  },
+  {
     files: ["src/main.js", "src/preload.js", "vite*.mjs", "scripts/**/*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: "latest",
