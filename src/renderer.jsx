@@ -50,6 +50,31 @@ function writeMediaPermissionBootstrapState(value) {
   }
 }
 
+function hasSettledMediaPermissionBootstrapState(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  if (value.settled === true || value.completed === true) {
+    return true;
+  }
+
+  const statuses = [value.microphone, value.camera]
+    .map((status) => String(status || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!statuses.length) {
+    return false;
+  }
+
+  return statuses.every((status) =>
+    status === "granted"
+    || status === "denied"
+    || status === "not-required"
+    || status === "unsupported"
+  );
+}
+
 async function getBrowserPermissionState(name) {
   if (typeof window === "undefined" || !navigator.permissions?.query) {
     return "unknown";
@@ -256,9 +281,16 @@ async function requestMediaPermissionsAtAppLevel() {
   const completed = [permissionState.microphone, permissionState.camera].every((status) =>
     status === "granted" || status === "not-required"
   );
+  const settled = [permissionState.microphone, permissionState.camera].every((status) =>
+    status === "granted"
+    || status === "denied"
+    || status === "not-required"
+    || status === "unsupported"
+  );
 
   return {
     completed,
+    settled,
     microphone: permissionState.microphone,
     camera: permissionState.camera,
   };
@@ -372,7 +404,7 @@ export default function Renderer() {
     }
 
     const storedBootstrapState = readMediaPermissionBootstrapState();
-    if (storedBootstrapState?.completed === true) {
+    if (hasSettledMediaPermissionBootstrapState(storedBootstrapState)) {
       mediaPermissionBootstrapStartedRef.current = true;
       return;
     }
@@ -382,12 +414,13 @@ export default function Renderer() {
 
     void requestMediaPermissionsAtAppLevel()
       .then((result) => {
-        if (disposed || !result?.completed) {
+        if (disposed || !result?.settled) {
           return;
         }
 
         writeMediaPermissionBootstrapState({
-          completed: true,
+          settled: true,
+          completed: Boolean(result.completed),
           completedAt: new Date().toISOString(),
           microphone: result.microphone || "",
           camera: result.camera || "",

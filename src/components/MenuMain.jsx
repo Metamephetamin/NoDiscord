@@ -689,6 +689,7 @@ export default function MenuMain({
   const [settingsTab, setSettingsTab] = useState("voice_video");
   const [autoInputSensitivity, setAutoInputSensitivity] = useState(true);
   const [showMicMenu, setShowMicMenu] = useState(false);
+  const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [showSoundMenu, setShowSoundMenu] = useState(false);
   const [cameraDevices, setCameraDevices] = useState([]);
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState("");
@@ -875,6 +876,13 @@ export default function MenuMain({
       setSettingsTab("voice_video");
     }
   }, [activeServer, settingsTab]);
+  useEffect(() => {
+    if (openSettings) {
+      return;
+    }
+
+    setIsMicTestActive(false);
+  }, [openSettings]);
   useEffect(() => () => {
     if (serverInviteFeedbackTimeoutRef.current) {
       window.clearTimeout(serverInviteFeedbackTimeoutRef.current);
@@ -2726,8 +2734,8 @@ export default function MenuMain({
       return;
     }
 
-    const shouldPreviewMicrophone = showMicMenu || (openSettings && settingsTab === "voice_video");
-    const shouldLoadAudioDevices = shouldPreviewMicrophone || showSoundMenu;
+    const shouldPreviewMicrophone = showMicMenu || isMicTestActive;
+    const shouldLoadAudioDevices = shouldPreviewMicrophone || showSoundMenu || (openSettings && settingsTab === "voice_video");
 
     if (!shouldLoadAudioDevices) {
       voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
@@ -2749,7 +2757,7 @@ export default function MenuMain({
     voiceClientRef.current.getAudioDevices().catch((error) => {
       console.error("Ошибка обновления списка аудио-устройств:", error);
     });
-  }, [openSettings, settingsTab, showMicMenu, showSoundMenu, user?.id]);
+  }, [isMicTestActive, openSettings, settingsTab, showMicMenu, showSoundMenu, user?.id]);
   useEffect(() => {
     if (!showCameraModal) {
       stopCameraPreview();
@@ -2761,8 +2769,8 @@ export default function MenuMain({
       return;
     }
 
-    startCameraPreview(selectedVideoDeviceId).catch((error) => {
-      console.error("Ошибка обновления предпросмотра камеры:", error);
+    loadCameraDevices(selectedVideoDeviceId).catch((error) => {
+      console.error("Ошибка обновления списка камер:", error);
     });
   }, [isCameraShareActive, selectedVideoDeviceId, showCameraModal]);
   useEffect(() => () => {
@@ -3786,6 +3794,20 @@ export default function MenuMain({
       </section>
     </div>
   );
+  const toggleMicrophoneTestPreview = () => {
+    setIsMicTestActive((previous) => !previous);
+  };
+  const handleCameraPreviewDeviceChange = (deviceId) => {
+    setSelectedVideoDeviceId(deviceId);
+
+    if (!hasCameraPreview) {
+      return;
+    }
+
+    startCameraPreview(deviceId).catch((error) => {
+      console.error("Ошибка обновления предпросмотра камеры:", error);
+    });
+  };
 
   const renderVoiceSettingsPanel = () => (
     <div className="settings-shell__content">
@@ -3853,7 +3875,9 @@ export default function MenuMain({
         </div>
 
         <div className="voice-settings-meter">
-          <button type="button" className="voice-settings-meter__button">Проверка микрофона</button>
+          <button type="button" className="voice-settings-meter__button" onClick={toggleMicrophoneTestPreview}>
+            {isMicTestActive ? "Остановить проверку" : "Проверка микрофона"}
+          </button>
           <div className="voice-settings-meter__bars" aria-hidden="true">
             {Array.from({ length: 48 }).map((_, index) => (
               <span key={index} className={index < activeMicSettingsBars ? "is-active" : ""} />
@@ -5498,7 +5522,7 @@ export default function MenuMain({
 
             <label className="camera-modal__field">
               <span>Устройство камеры</span>
-              <select value={selectedVideoDeviceId} onChange={(event) => setSelectedVideoDeviceId(event.target.value)}>
+              <select value={selectedVideoDeviceId} onChange={(event) => handleCameraPreviewDeviceChange(event.target.value)}>
                 {cameraDevices.length > 0 ? (
                   cameraDevices.map((device) => (
                     <option key={device.id} value={device.id}>
@@ -5528,7 +5552,7 @@ export default function MenuMain({
 
             <div className="camera-modal__actions">
               <button type="button" className="stream-modal__action" onClick={() => startCameraPreview(selectedVideoDeviceId)}>
-                Обновить предпросмотр
+                {hasCameraPreview ? "Обновить предпросмотр" : "Включить предпросмотр"}
               </button>
               <button
                 type="button"

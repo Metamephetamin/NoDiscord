@@ -1741,12 +1741,20 @@
 }
 
 .menu__main--mobile .friends-main__toolbar {
-  padding: 14px;
+  padding: 8px 0 10px;
+  border-bottom: 0;
 }
 
 .menu__main--mobile .friends-main__tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.menu__main--mobile .friends-main__tab {
+  min-height: 40px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .menu__main--mobile .friends-contacts {
@@ -1755,38 +1763,83 @@
 
 .menu__main--mobile .friends-hero,
 .menu__main--mobile .friends-discovery {
-  margin: 12px;
-  padding: 18px;
-  border-radius: 22px;
+  margin: 0 0 12px;
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.menu__main--mobile .friends-hero h1,
+.menu__main--mobile .friends-discovery h2 {
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+
+.menu__main--mobile .friends-hero p,
+.menu__main--mobile .friends-discovery p {
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.menu__main--mobile .friends-main__content,
+.menu__main--mobile .friends-main__chat {
+  padding-bottom: 8px;
 }
 
 .menu__main--mobile .friends-hero__form {
   grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.menu__main--mobile .friends-results {
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .menu__main--mobile .friends-results__item {
   flex-direction: column;
   align-items: stretch;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.menu__main--mobile .friends-results__identity {
+  gap: 10px;
+}
+
+.menu__main--mobile .friends-results__avatar {
+  width: 38px;
+  height: 38px;
+}
+
+.menu__main--mobile .friends-results__meta strong {
+  font-size: 14px;
+}
+
+.menu__main--mobile .friends-results__meta span {
+  font-size: 12px;
 }
 
 .menu__main--mobile .friends-results__action {
   width: 100%;
+  min-height: 42px;
 }
 
 .mobile-profile-screen {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  padding-bottom: 8px;
 }
 
 .mobile-profile-screen__hero {
   position: relative;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(16, 17, 24, 0.96), rgba(20, 23, 32, 0.94));
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.28);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(14, 16, 24, 0.98), rgba(18, 21, 31, 0.96));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
   overflow: hidden;
 }
 
@@ -1801,22 +1854,23 @@
 .mobile-profile-screen__cover {
   position: absolute;
   inset: 0 0 auto;
-  height: 128px;
+  height: 104px;
   background:
-    radial-gradient(circle at top left, rgba(255, 186, 145, 0.62), transparent 38%),
-    linear-gradient(180deg, rgba(196, 129, 115, 0.9), rgba(171, 106, 95, 0.78));
+    radial-gradient(circle at top left, rgba(126, 119, 255, 0.28), transparent 42%),
+    radial-gradient(circle at top right, rgba(255, 156, 111, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(40, 38, 76, 0.88), rgba(22, 25, 37, 0.08));
 }
 
 .mobile-profile-screen__avatar {
   position: relative;
   z-index: 1;
-  width: 84px;
-  height: 84px;
-  margin-top: 18px;
+  width: 76px;
+  height: 76px;
+  margin-top: 8px;
   border-radius: 50%;
-  border: 4px solid #181b23;
+  border: 3px solid #181b23;
   object-fit: cover;
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.24);
 }
 
 .mobile-profile-screen__avatar--speaking {
@@ -1833,28 +1887,28 @@
 .mobile-profile-screen__identity h1 {
   margin: 0;
   color: #ffffff;
-  font-size: 26px;
-  line-height: 1.02;
+  font-size: 22px;
+  line-height: 1.06;
   word-break: break-word;
 }
 
 .mobile-profile-screen__identity p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: #cbd3e8;
-  font-size: 14px;
+  font-size: 13px;
   word-break: break-word;
 }
 
 .mobile-profile-screen__presence {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  margin-top: 12px;
-  padding: 0 12px;
+  min-height: 28px;
+  margin-top: 10px;
+  padding: 0 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: #f1f4ff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1862,13 +1916,13 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  min-height: 52px;
-  margin-top: 14px;
+  min-height: 46px;
+  margin-top: 12px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   background: linear-gradient(180deg, #6873ff 0%, #5a5dff 100%);
   color: #ffffff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -1876,15 +1930,15 @@
 .mobile-profile-screen__cards {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .mobile-profile-screen__card,
 .mobile-profile-screen__toggle {
   width: 100%;
-  padding: 18px;
+  padding: 15px 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 22px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   color: #eff3ff;
   text-align: left;
@@ -1898,40 +1952,41 @@
 
 .mobile-profile-screen__card strong,
 .mobile-profile-screen__toggle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .mobile-profile-screen__card span {
   color: #9ea8c1;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .mobile-profile-screen__stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .mobile-profile-screen__stat {
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 20px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
 }
 
 .mobile-profile-screen__stat strong {
   display: block;
   color: #ffffff;
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 800;
 }
 
 .mobile-profile-screen__stat span {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #9ea8c1;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .mobile-profile-screen__card--action {
@@ -1946,12 +2001,12 @@
 
 .mobile-profile-screen__danger-button {
   width: 100%;
-  min-height: 50px;
+  min-height: 46px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   background: rgba(212, 66, 66, 0.18);
   color: #ffd4d4;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -1963,7 +2018,7 @@
 }
 
 .mobile-profile-screen__toggle {
-  min-height: 96px;
+  min-height: 78px;
   cursor: pointer;
 }
 
@@ -3377,27 +3432,56 @@
 .settings-popup--mobile .settings-shell__content {
   width: 100%;
   margin: 0;
-  padding: 6px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 12px calc(22px + env(safe-area-inset-bottom, 0px));
 }
 
 .settings-popup--mobile .settings-shell__content-header {
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .settings-popup--mobile .settings-shell__content-header h2 {
-  font-size: 24px;
+  margin-bottom: 4px;
+  font-size: 20px;
+}
+
+.settings-popup--mobile .settings-shell__content-header p {
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .settings-popup--mobile .voice-settings-card {
-  padding: 18px;
-  border-radius: 18px;
-  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+
+.settings-popup--mobile .voice-settings-card__title {
+  margin-bottom: 14px;
+  font-size: 16px;
 }
 
 .settings-popup--mobile .voice-settings-grid,
 .settings-popup--mobile .voice-settings-field-grid,
 .settings-popup--mobile .profile-settings-form__grid {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-popup--mobile .voice-settings-field,
+.settings-popup--mobile .settings-field {
+  gap: 8px;
+}
+
+.settings-popup--mobile .voice-settings-field > span,
+.settings-popup--mobile .settings-field span {
+  font-size: 12px;
+}
+
+.settings-popup--mobile .voice-settings-select,
+.settings-popup--mobile .settings-input,
+.settings-popup--mobile .settings-shell__search {
+  min-height: 44px;
+  font-size: 14px;
 }
 
 .settings-popup--mobile .settings-shell__actions,
@@ -3408,9 +3492,20 @@
   align-items: stretch;
 }
 
+.settings-popup--mobile .settings-shell__actions > * {
+  width: 100%;
+}
+
 .settings-popup--mobile .voice-settings-meter {
   flex-direction: column;
   align-items: stretch;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.settings-popup--mobile .voice-toggle-row {
+  gap: 12px;
+  padding: 14px 0;
 }
 
 .settings-popup--mobile .voice-settings-select--compact,
@@ -3420,7 +3515,11 @@
 
 .settings-popup--mobile .profile-settings-form__hero {
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .settings-popup--mobile .profile-settings-form__avatar-wrap {
@@ -3437,6 +3536,11 @@
   width: 56px;
   height: 56px;
   border-radius: 18px;
+}
+
+.settings-popup--mobile .settings-list__row {
+  padding: 12px 14px;
+  border-radius: 14px;
 }
 
 @media (max-width: 1500px) {
@@ -3680,6 +3784,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(16, 18, 27, 0.96);
@@ -3707,7 +3814,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px 6px;
+  padding: 12px 14px 4px;
 }
 
 .settings-mobile-shell__avatar {
@@ -3742,7 +3849,7 @@
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding: 8px 16px 12px;
+  padding: 8px 14px 10px;
   scrollbar-width: none;
 }
 
@@ -3775,6 +3882,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: linear-gradient(180deg, rgba(14, 16, 23, 0.72), rgba(14, 16, 23, 0));
 }
 
 .settings-section {
@@ -4611,10 +4719,6 @@
     padding: 0 12px;
   }
 
-  .mobile-profile-screen__identity h1 {
-    font-size: 28px;
-  }
-
   .mobile-profile-screen__toggle-row {
     grid-template-columns: 1fr;
   }
@@ -4639,6 +4743,28 @@
 
   .settings-mobile-shell__header-copy strong {
     font-size: 18px;
+  }
+
+  .settings-mobile-shell__tabs {
+    gap: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .settings-mobile-shell__tab {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  .menu__main--mobile .friends-main__tabs {
+    gap: 6px;
+  }
+
+  .menu__main--mobile .friends-main__tab {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 13px;
   }
 
   .settings-popup--mobile .settings-shell__content {
