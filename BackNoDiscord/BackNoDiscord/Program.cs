@@ -177,6 +177,7 @@ builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email
 builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSender>();
 builder.Services.AddScoped<ServerInviteService>();
 builder.Services.AddScoped<ServerStateService>();
+builder.Services.AddScoped<FriendRequestService>();
 builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationService>();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>

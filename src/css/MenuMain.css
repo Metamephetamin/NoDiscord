@@ -643,6 +643,17 @@
   color: #9ca7bd;
 }
 
+.friends-panel__success {
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(49, 180, 117, 0.12);
+  border: 1px solid rgba(49, 180, 117, 0.24);
+  color: #cbf7de;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .channels__top::-webkit-scrollbar,
 .messages-list::-webkit-scrollbar {
   width: 8px;
@@ -1158,6 +1169,25 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.friends-main__tab-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff6161, #d92d20);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 10px 20px rgba(217, 45, 32, 0.24);
 }
 
 .friends-main__tab--active {
@@ -1303,6 +1333,23 @@
   margin-top: 18px;
 }
 
+.friends-requests {
+  margin-bottom: 18px;
+}
+
+.friends-requests__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.friends-requests__header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #ffffff;
+}
+
 .friends-results__item {
   display: flex;
   align-items: center;
@@ -1312,6 +1359,10 @@
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.friends-results__item--request {
+  align-items: center;
 }
 
 .friends-results__identity {
@@ -1358,6 +1409,27 @@
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.friends-results__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.friends-results__action--accept,
+.friends-results__action--decline {
+  min-width: 42px;
+  padding: 0;
+  justify-content: center;
+}
+
+.friends-results__action--decline {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .friends-contacts {
@@ -1694,6 +1766,9 @@
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .mobile-shell__header-badge {

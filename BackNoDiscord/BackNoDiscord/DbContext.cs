@@ -232,6 +232,34 @@ public class FriendshipRecord
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+[Table("friend_requests")]
+public class FriendRequestRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("sender_user_id")]
+    public int SenderUserId { get; set; }
+
+    [Column("receiver_user_id")]
+    public int ReceiverUserId { get; set; }
+
+    [Column("user_low_id")]
+    public int UserLowId { get; set; }
+
+    [Column("user_high_id")]
+    public int UserHighId { get; set; }
+
+    [Column("status")]
+    public string Status { get; set; } = "pending";
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("responded_at")]
+    public DateTimeOffset? RespondedAt { get; set; }
+}
+
 [Table("message_reactions")]
 public class MessageReactionRecord
 {
@@ -337,6 +365,7 @@ public class AppDbContext : DbContext
     public DbSet<SharedServerSnapshotRecord> SharedServerSnapshots => Set<SharedServerSnapshotRecord>();
     public DbSet<ServerInviteRecordEntity> ServerInvites => Set<ServerInviteRecordEntity>();
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
+    public DbSet<FriendRequestRecord> FriendRequests => Set<FriendRequestRecord>();
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
@@ -410,6 +439,18 @@ public class AppDbContext : DbContext
             entity.Property(x => x.avatar_url).IsRequired(false);
             entity.Property(x => x.profile_background_url).IsRequired(false);
             entity.Property(x => x.password_hash).IsRequired();
+        });
+
+        modelBuilder.Entity<FriendRequestRecord>(entity =>
+        {
+            entity.ToTable("friend_requests");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserLowId, x.UserHighId })
+                .IsUnique()
+                .HasFilter("status = 'pending'");
+            entity.HasIndex(x => new { x.ReceiverUserId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.SenderUserId, x.Status, x.CreatedAt });
+            entity.Property(x => x.Status).IsRequired();
         });
 
         modelBuilder.Entity<EmailVerificationCodeRecord>(entity =>

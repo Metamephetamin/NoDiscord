@@ -1,9 +1,10 @@
 using BackNoDiscord.Security;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
 namespace BackNoDiscord.Controllers;
 
@@ -14,18 +15,22 @@ public class FriendsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IHubContext<ChatHub> _chatHubContext;
+    private readonly FriendRequestService _friendRequestService;
 
-    public FriendsController(AppDbContext context, IHubContext<ChatHub> chatHubContext)
+    public FriendsController(
+        AppDbContext context,
+        IHubContext<ChatHub> chatHubContext,
+        FriendRequestService friendRequestService)
     {
         _context = context;
         _chatHubContext = chatHubContext;
+        _friendRequestService = friendRequestService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetFriends()
     {
-        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
-            !int.TryParse(currentUser.UserId, out var currentUserId))
+        if (!TryGetCurrentUserId(out var currentUserId))
         {
             return Unauthorized();
         }
@@ -50,19 +55,7 @@ public class FriendsController : ControllerBase
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .Distinct()
             .Where(friendId => users.ContainsKey(friendId))
-            .Select(friendId =>
-            {
-                var friend = users[friendId];
-                return new
-                {
-                    id = friend.id,
-                    first_name = friend.first_name,
-                    last_name = friend.last_name,
-                    email = friend.email,
-                    avatar_url = friend.avatar_url ?? string.Empty,
-                    directChannelId = BuildDirectChannelId(currentUserId, friend.id)
-                };
-            });
+            .Select(friendId => BuildFriendPayload(users[friendId], currentUserId));
 
         return Ok(result);
     }
@@ -70,8 +63,7 @@ public class FriendsController : ControllerBase
     [HttpGet("search")]
     public async Task<IActionResult> SearchFriends([FromQuery] string? q, [FromQuery] string? mode)
     {
-        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
-            !int.TryParse(currentUser.UserId, out var currentUserId))
+        if (!TryGetCurrentUserId(out var currentUserId))
         {
             return Unauthorized();
         }
@@ -92,10 +84,11 @@ public class FriendsController : ControllerBase
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .Distinct()
             .ToListAsync();
+        var pendingFriendIds = (await _friendRequestService.GetPendingRelatedUserIdsAsync(currentUserId)).ToList();
 
         var usersQuery = _context.Users
             .AsNoTracking()
-            .Where(item => item.id != currentUserId && !existingFriendIds.Contains(item.id))
+            .Where(item => item.id != currentUserId && !existingFriendIds.Contains(item.id) && !pendingFriendIds.Contains(item.id))
             .Select(item => new
             {
                 id = item.id,
@@ -116,7 +109,7 @@ public class FriendsController : ControllerBase
                     item.last_name.ToLower().Contains(normalizedQuery) ||
                     (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery) ||
                     (item.last_name + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
-                    ((item.first_name + item.last_name).ToLower()).Contains(condensedQuery) ||
+                    (item.first_name + item.last_name).ToLower().Contains(condensedQuery) ||
                     (!string.IsNullOrWhiteSpace(reversedQuery) && (item.last_name + " " + item.first_name).ToLower().Contains(reversedQuery)))
                 .ToListAsync();
 
@@ -135,8 +128,7 @@ public class FriendsController : ControllerBase
     [HttpPost("add")]
     public async Task<IActionResult> AddFriend([FromBody] AddFriendRequest request)
     {
-        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
-            !int.TryParse(currentUser.UserId, out var currentUserId))
+        if (!TryGetCurrentUserId(out var currentUserId))
         {
             return Unauthorized();
         }
@@ -149,7 +141,7 @@ public class FriendsController : ControllerBase
 
         var friend = request?.UserId is int userId
             ? await _context.Users.AsNoTracking().FirstOrDefaultAsync(item => item.id == userId)
-            : await _context.Users.AsNoTracking().FirstOrDefaultAsync(item => item.email == email);
+            : await _context.Users.AsNoTracking().FirstOrDefaultAsync(item => (item.email ?? string.Empty).ToLower() == email);
 
         if (friend is null)
         {
@@ -161,23 +153,140 @@ public class FriendsController : ControllerBase
             return BadRequest(new { message = "Нельзя добавить самого себя." });
         }
 
-        var (lowId, highId) = NormalizePair(currentUserId, friend.id);
-        var existing = await _context.Friendships.AsNoTracking().AnyAsync(item => item.UserLowId == lowId && item.UserHighId == highId);
-        if (!existing)
-        {
-            _context.Friendships.Add(new FriendshipRecord
-            {
-                UserLowId = lowId,
-                UserHighId = highId,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
+        var result = await _friendRequestService.CreateOrAcceptRequestAsync(currentUserId, friend.id);
 
-            await _context.SaveChangesAsync();
+        if (result.Status == FriendRequestActionStatuses.AlreadyFriends)
+        {
+            return Ok(new
+            {
+                status = FriendRequestActionStatuses.AlreadyFriends,
+                friend = BuildFriendPayload(friend, currentUserId)
+            });
         }
 
-        await BroadcastFriendListUpdatedAsync(currentUserId, friend.id);
+        if (result.Status == FriendRequestActionStatuses.AlreadyRequested)
+        {
+            return Ok(new
+            {
+                status = FriendRequestActionStatuses.AlreadyRequested,
+                userId = friend.id
+            });
+        }
+
+        await BroadcastFriendRequestsUpdatedAsync(currentUserId, friend.id);
+
+        if (result.Status == FriendRequestActionStatuses.AutoAccepted)
+        {
+            await BroadcastFriendListUpdatedAsync(currentUserId, friend.id);
+            return Ok(new
+            {
+                status = FriendRequestActionStatuses.AutoAccepted,
+                friend = BuildFriendPayload(friend, currentUserId)
+            });
+        }
 
         return Ok(new
+        {
+            status = FriendRequestActionStatuses.RequestSent,
+            requestId = result.Request?.Id,
+            userId = friend.id
+        });
+    }
+
+    [HttpGet("requests")]
+    public async Task<IActionResult> GetIncomingFriendRequests()
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var requests = await _friendRequestService.GetIncomingPendingRequestsAsync(currentUserId);
+        var senderIds = requests.Select(item => item.SenderUserId).Distinct().ToList();
+        var senders = await _context.Users
+            .AsNoTracking()
+            .Where(item => senderIds.Contains(item.id))
+            .ToDictionaryAsync(item => item.id);
+
+        var result = requests
+            .Where(item => senders.ContainsKey(item.SenderUserId))
+            .Select(item => BuildFriendRequestPayload(item, senders[item.SenderUserId]))
+            .ToList();
+
+        return Ok(result);
+    }
+
+    [HttpPost("requests/{requestId:int}/accept")]
+    public async Task<IActionResult> AcceptFriendRequest([FromRoute] int requestId)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _friendRequestService.AcceptRequestAsync(requestId, currentUserId);
+        if (result is null)
+        {
+            return NotFound(new { message = "Заявка не найдена." });
+        }
+
+        var sender = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.id == result.Request.SenderUserId);
+
+        if (sender is null)
+        {
+            return NotFound(new { message = "Пользователь не найден." });
+        }
+
+        await BroadcastFriendRequestsUpdatedAsync(result.Request.SenderUserId, result.Request.ReceiverUserId);
+        await BroadcastFriendListUpdatedAsync(result.Request.SenderUserId, result.Request.ReceiverUserId);
+
+        return Ok(new
+        {
+            status = FriendRequestActionStatuses.Accepted,
+            friend = BuildFriendPayload(sender, currentUserId)
+        });
+    }
+
+    [HttpPost("requests/{requestId:int}/decline")]
+    public async Task<IActionResult> DeclineFriendRequest([FromRoute] int requestId)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _friendRequestService.DeclineRequestAsync(requestId, currentUserId);
+        if (result is null)
+        {
+            return NotFound(new { message = "Заявка не найдена." });
+        }
+
+        await BroadcastFriendRequestsUpdatedAsync(result.Request.SenderUserId, result.Request.ReceiverUserId);
+
+        return Ok(new
+        {
+            status = FriendRequestActionStatuses.Declined,
+            requestId = result.Request.Id
+        });
+    }
+
+    private bool TryGetCurrentUserId(out int currentUserId)
+    {
+        currentUserId = 0;
+        return AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) &&
+               int.TryParse(currentUser.UserId, out currentUserId);
+    }
+
+    private static string BuildDirectChannelId(int firstUserId, int secondUserId)
+    {
+        return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
+    }
+
+    private static object BuildFriendPayload(User friend, int currentUserId)
+    {
+        return new
         {
             id = friend.id,
             first_name = friend.first_name,
@@ -185,17 +294,25 @@ public class FriendsController : ControllerBase
             email = friend.email,
             avatar_url = friend.avatar_url ?? string.Empty,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id)
-        });
+        };
     }
 
-    private static (int LowId, int HighId) NormalizePair(int first, int second)
+    private static object BuildFriendRequestPayload(FriendRequestRecord request, User sender)
     {
-        return first <= second ? (first, second) : (second, first);
-    }
-
-    private static string BuildDirectChannelId(int firstUserId, int secondUserId)
-    {
-        return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
+        return new
+        {
+            id = request.Id,
+            status = request.Status,
+            created_at = request.CreatedAt,
+            sender = new
+            {
+                id = sender.id,
+                first_name = sender.first_name,
+                last_name = sender.last_name,
+                email = sender.email,
+                avatar_url = sender.avatar_url ?? string.Empty
+            }
+        };
     }
 
     private static int GetNameSearchRank(string? firstName, string? lastName, string query, string condensedQuery, IReadOnlyList<string> queryTokens)
@@ -222,7 +339,7 @@ public class FriendsController : ControllerBase
             return 2;
         }
 
-        if (queryTokens.Count > 1 && queryTokens.All((token) =>
+        if (queryTokens.Count > 1 && queryTokens.All(token =>
                 first.Contains(token, StringComparison.Ordinal) ||
                 last.Contains(token, StringComparison.Ordinal) ||
                 full.Contains(token, StringComparison.Ordinal) ||
@@ -313,16 +430,27 @@ public class FriendsController : ControllerBase
 
     private async Task BroadcastFriendListUpdatedAsync(int firstUserId, int secondUserId)
     {
-        var directChannelId = BuildDirectChannelId(firstUserId, secondUserId);
         var payload = new
         {
             firstUserId,
             secondUserId,
-            directChannelId
+            directChannelId = BuildDirectChannelId(firstUserId, secondUserId)
         };
 
         await _chatHubContext.Clients.Users(firstUserId.ToString(), secondUserId.ToString())
             .SendAsync("FriendListUpdated", payload);
+    }
+
+    private async Task BroadcastFriendRequestsUpdatedAsync(int firstUserId, int secondUserId)
+    {
+        var payload = new
+        {
+            firstUserId,
+            secondUserId
+        };
+
+        await _chatHubContext.Clients.Users(firstUserId.ToString(), secondUserId.ToString())
+            .SendAsync("FriendRequestsUpdated", payload);
     }
 }
 

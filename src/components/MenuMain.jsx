@@ -591,6 +591,12 @@ const normalizeFriend = (friend) => ({
   directChannelId: String(friend?.directChannelId || ""),
   isSelf: Boolean(friend?.isSelf),
 });
+const normalizeFriendRequest = (request) => ({
+  id: Number(request?.id || 0),
+  status: String(request?.status || "pending"),
+  createdAt: String(request?.created_at || request?.createdAt || ""),
+  sender: normalizeFriend(request?.sender || {}),
+});
 const UI_SOUND_PATHS = {
   join: resolveStaticAssetUrl("/sounds/discord-voice-join.mp3"),
   leave: resolveStaticAssetUrl("/sounds/discord-voice-leave.mp3"),
@@ -676,7 +682,12 @@ export default function MenuMain({
   const [friendLookupLoading, setFriendLookupLoading] = useState(false);
   const [friendLookupPerformed, setFriendLookupPerformed] = useState(false);
   const [friendsError, setFriendsError] = useState("");
+  const [friendActionStatus, setFriendActionStatus] = useState("");
   const [isAddingFriend, setIsAddingFriend] = useState(false);
+  const [incomingFriendRequests, setIncomingFriendRequests] = useState([]);
+  const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
+  const [friendRequestsError, setFriendRequestsError] = useState("");
+  const [friendRequestActionId, setFriendRequestActionId] = useState(0);
   const [activeDirectFriendId, setActiveDirectFriendId] = useState("");
   const [directNotificationsEnabled, setDirectNotificationsEnabled] = useState(true);
   const [directMessageToasts, setDirectMessageToasts] = useState([]);
@@ -746,6 +757,7 @@ export default function MenuMain({
   const hasBoundChatReconnectHandlerRef = useRef(false);
   const userSessionActiveRef = useRef(false);
   const refreshFriendsRef = useRef(() => {});
+  const refreshFriendRequestsRef = useRef(() => {});
   const rerunFriendSearchRef = useRef(() => {});
   const directToastTimeoutsRef = useRef(new Map());
   const serverToastTimeoutsRef = useRef(new Map());
@@ -1056,6 +1068,11 @@ export default function MenuMain({
     () => Object.values(directUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
     [directUnreadCounts]
   );
+  const incomingFriendRequestCount = useMemo(() => incomingFriendRequests.length, [incomingFriendRequests]);
+  const totalFriendsAttentionCount = useMemo(
+    () => totalDirectUnreadCount + incomingFriendRequestCount,
+    [incomingFriendRequestCount, totalDirectUnreadCount]
+  );
   const totalServerUnreadCount = useMemo(
     () => Object.values(serverUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
     [serverUnreadCounts]
@@ -1362,6 +1379,7 @@ export default function MenuMain({
     try {
       setFriendLookupLoading(true);
       setFriendsError("");
+      setFriendActionStatus("");
 
       const response = await authFetch(
         `${API_BASE_URL}/friends/search?q=${encodeURIComponent(normalizedQuery)}&mode=${encodeURIComponent(mode)}`,
@@ -1393,6 +1411,36 @@ export default function MenuMain({
     }
   };
 
+  const loadFriendRequests = async () => {
+    try {
+      setFriendRequestsLoading(true);
+      setFriendRequestsError("");
+
+      const response = await authFetch(`${API_BASE_URL}/friends/requests`, { method: "GET" });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить заявки в друзья."));
+      }
+
+      setIncomingFriendRequests(
+        Array.isArray(data)
+          ? data
+              .map(normalizeFriendRequest)
+              .filter((request) => request.id && request.sender?.id)
+              .sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
+          : []
+      );
+      setFriendRequestsError("");
+    } catch (error) {
+      console.error("Ошибка загрузки заявок в друзья:", error);
+      setIncomingFriendRequests([]);
+      setFriendRequestsError(error.message || "Не удалось загрузить заявки в друзья.");
+    } finally {
+      setFriendRequestsLoading(false);
+    }
+  };
+
   rerunFriendSearchRef.current = () => {
     const { normalizedQuery } = parseFriendSearchInput(friendEmail);
     if (friendsPageSection !== "add" || !normalizedQuery) {
@@ -1400,6 +1448,10 @@ export default function MenuMain({
     }
 
     searchFriendCandidates(friendEmail).catch(() => {});
+  };
+
+  refreshFriendRequestsRef.current = () => {
+    loadFriendRequests().catch(() => {});
   };
 
   const handleFriendSearchSubmit = async (event) => {
@@ -1428,6 +1480,7 @@ export default function MenuMain({
     try {
       setIsAddingFriend(true);
       setFriendsError("");
+      setFriendActionStatus("");
 
       const response = await authFetch(`${API_BASE_URL}/friends/add`, {
         method: "POST",
@@ -1444,25 +1497,91 @@ export default function MenuMain({
         throw new Error(getApiErrorMessage(response, data, "Не удалось добавить друга."));
       }
 
-      const nextFriend = normalizeFriend(data);
-      setFriends((previous) => {
-        const exists = previous.some((friend) => friend.id === nextFriend.id);
-        const nextFriends = exists
-          ? previous.map((friend) => (friend.id === nextFriend.id ? nextFriend : friend))
-          : [nextFriend, ...previous];
+      if (data?.status === "auto_accepted" || data?.status === "already_friends") {
+        if (data?.friend) {
+          const nextFriend = normalizeFriend(data.friend);
+          setFriends((previous) => {
+            const exists = previous.some((friend) => friend.id === nextFriend.id);
+            const nextFriends = exists
+              ? previous.map((friend) => (friend.id === nextFriend.id ? nextFriend : friend))
+              : [nextFriend, ...previous];
 
-        return nextFriends.sort((left, right) =>
-          getDisplayName(left).localeCompare(getDisplayName(right), "ru", { sensitivity: "base" })
+            return nextFriends.sort((left, right) =>
+              getDisplayName(left).localeCompare(getDisplayName(right), "ru", { sensitivity: "base" })
+            );
+          });
+        }
+
+        setFriendActionStatus(
+          data?.status === "auto_accepted"
+            ? "Встречная заявка уже была. Друг добавлен автоматически."
+            : "Этот пользователь уже у вас в друзьях."
         );
-      });
-      setFriendEmail("");
-      setFriendLookupResults([]);
-      setFriendLookupPerformed(false);
-      setFriendsPageSection("friends");
+        rerunFriendSearchRef.current();
+        refreshFriendRequestsRef.current();
+        return;
+      }
+
+      if (data?.status === "already_requested") {
+        setFriendActionStatus("Заявка уже отправлена и ждёт ответа.");
+        rerunFriendSearchRef.current();
+        refreshFriendRequestsRef.current();
+        return;
+      }
+
+      setFriendActionStatus("Заявка отправлена.");
+      rerunFriendSearchRef.current();
+      refreshFriendRequestsRef.current();
     } catch (error) {
       setFriendsError(error.message || "Не удалось добавить друга.");
     } finally {
       setIsAddingFriend(false);
+    }
+  };
+
+  const handleFriendRequestAction = async (requestId, action) => {
+    if (!requestId || (action !== "accept" && action !== "decline")) {
+      return;
+    }
+
+    try {
+      setFriendRequestActionId(Number(requestId));
+      setFriendRequestsError("");
+      setFriendActionStatus("");
+      setFriendsError("");
+
+      const response = await authFetch(`${API_BASE_URL}/friends/requests/${requestId}/${action}`, {
+        method: "POST",
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, action === "accept" ? "Не удалось принять заявку." : "Не удалось отклонить заявку."));
+      }
+
+      if (action === "accept" && data?.friend) {
+        const nextFriend = normalizeFriend(data.friend);
+        setFriends((previous) => {
+          const exists = previous.some((friend) => friend.id === nextFriend.id);
+          const nextFriends = exists
+            ? previous.map((friend) => (friend.id === nextFriend.id ? nextFriend : friend))
+            : [nextFriend, ...previous];
+
+          return nextFriends.sort((left, right) =>
+            getDisplayName(left).localeCompare(getDisplayName(right), "ru", { sensitivity: "base" })
+          );
+        });
+        setFriendActionStatus("Заявка принята.");
+      } else {
+        setFriendActionStatus("Заявка отклонена.");
+      }
+
+      setIncomingFriendRequests((previous) => previous.filter((request) => Number(request.id) !== Number(requestId)));
+      rerunFriendSearchRef.current();
+    } catch (error) {
+      setFriendRequestsError(error.message || "Не удалось обработать заявку.");
+    } finally {
+      setFriendRequestActionId(0);
     }
   };
 
@@ -1706,11 +1825,14 @@ export default function MenuMain({
   useEffect(() => {
     if (!user) {
       setFriends([]);
+      setIncomingFriendRequests([]);
       setActiveDirectFriendId("");
       setFriendEmail("");
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       setFriendsError("");
+      setFriendActionStatus("");
+      setFriendRequestsError("");
       setDirectMessageToasts([]);
       setServerMessageToasts([]);
       setDirectUnreadCounts({});
@@ -1728,6 +1850,7 @@ export default function MenuMain({
     }
 
     loadFriends().catch(() => {});
+    loadFriendRequests().catch(() => {});
   }, [user?.id, user?.email]);
 
   useEffect(() => {
@@ -1742,12 +1865,18 @@ export default function MenuMain({
     const handleFriendListUpdated = () => {
       refreshFriendsRef.current();
     };
+    const handleFriendRequestsUpdated = () => {
+      refreshFriendRequestsRef.current();
+      rerunFriendSearchRef.current();
+    };
 
     const handleWindowFocus = () => {
       refreshFriendsRef.current();
+      refreshFriendRequestsRef.current();
     };
 
     chatConnection.on("FriendListUpdated", handleFriendListUpdated);
+    chatConnection.on("FriendRequestsUpdated", handleFriendRequestsUpdated);
     window.addEventListener("focus", handleWindowFocus);
 
     const intervalId = window.setInterval(() => {
@@ -1756,10 +1885,12 @@ export default function MenuMain({
       }
 
       refreshFriendsRef.current();
+      refreshFriendRequestsRef.current();
     }, 30000);
 
     return () => {
       chatConnection.off("FriendListUpdated", handleFriendListUpdated);
+      chatConnection.off("FriendRequestsUpdated", handleFriendRequestsUpdated);
       window.removeEventListener("focus", handleWindowFocus);
       window.clearInterval(intervalId);
     };
@@ -1947,6 +2078,14 @@ export default function MenuMain({
 
     return () => window.clearTimeout(timeoutId);
   }, [activeDirectFriendId, friendEmail, friendsPageSection, user?.id]);
+
+  useEffect(() => {
+    if (!user || friendsPageSection !== "add" || activeDirectFriendId) {
+      return;
+    }
+
+    refreshFriendRequestsRef.current();
+  }, [activeDirectFriendId, friendsPageSection, user?.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -5198,7 +5337,8 @@ export default function MenuMain({
                 Друзья
               </button>
               <button type="button" className={`friends-main__tab ${friendsPageSection === "add" && !activeDirectFriendId ? "friends-main__tab--accent" : ""}`} onClick={() => { setActiveDirectFriendId(""); setFriendsPageSection("add"); }}>
-                Добавить в друзья
+                <span>Добавить в друзья</span>
+                {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
               </button>
             </div>
           </div>
@@ -5243,6 +5383,50 @@ export default function MenuMain({
               <div className="friends-hero">
                 <h1>Добавить в друзья</h1>
                 <p>Введите имя для поиска по имени. Если в запросе есть символ @, поиск автоматически переключится на email.</p>
+                <div className="friends-requests">
+                  <div className="friends-requests__header">
+                    <h2>Входящие заявки</h2>
+                    {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
+                  </div>
+                  {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
+                  {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
+                  {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
+                    <div className="friends-results friends-results--requests">
+                      {incomingFriendRequests.map((request) => (
+                        <div key={request.id} className="friends-results__item friends-results__item--request">
+                          <div className="friends-results__identity">
+                            <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} />
+                            <div className="friends-results__meta">
+                              <strong>{getDisplayName(request.sender)}</strong>
+                              <span>{request.sender.email || "Без email"}</span>
+                            </div>
+                          </div>
+                          <div className="friends-results__actions">
+                            <button
+                              type="button"
+                              className="friends-results__action friends-results__action--accept"
+                              disabled={friendRequestActionId === request.id}
+                              onClick={() => handleFriendRequestAction(request.id, "accept")}
+                            >
+                              {friendRequestActionId === request.id ? "..." : "✓"}
+                            </button>
+                            <button
+                              type="button"
+                              className="friends-results__action friends-results__action--decline"
+                              disabled={friendRequestActionId === request.id}
+                              onClick={() => handleFriendRequestAction(request.id, "decline")}
+                            >
+                              {friendRequestActionId === request.id ? "..." : "✕"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!friendRequestsLoading && !friendRequestsError && !incomingFriendRequests.length ? (
+                    <div className="friends-panel__empty">Новых заявок пока нет.</div>
+                  ) : null}
+                </div>
                 <form className="friends-hero__form" onSubmit={handleFriendSearchSubmit}>
                   <input
                     type="text"
@@ -5253,6 +5437,9 @@ export default function MenuMain({
                       if (friendsError) {
                         setFriendsError("");
                       }
+                      if (friendActionStatus) {
+                        setFriendActionStatus("");
+                      }
                     }}
                   />
                   <button type="submit" disabled={friendLookupLoading}>
@@ -5260,6 +5447,7 @@ export default function MenuMain({
                   </button>
                 </form>
                 {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
+                {friendActionStatus ? <div className="friends-panel__success">{friendActionStatus}</div> : null}
                 <div className="friends-results">
                   {friendLookupResults.map((friend) => (
                     <div key={friend.id} className="friends-results__item">
@@ -5271,7 +5459,7 @@ export default function MenuMain({
                         </div>
                       </div>
                       <button type="button" className="friends-results__action" disabled={isAddingFriend} onClick={() => handleAddFriend(friend)}>
-                        {isAddingFriend ? "Добавляем..." : "Добавить"}
+                        {isAddingFriend ? "Отправляем..." : "Добавить"}
                       </button>
                     </div>
                   ))}
@@ -5562,8 +5750,8 @@ export default function MenuMain({
         <button type="button" className="mobile-voice-room__invite" onClick={handleInvitePeopleToVoice}>
           <span className="mobile-voice-room__invite-icon" aria-hidden="true">✦</span>
           <span className="mobile-voice-room__invite-copy">
-            <strong>Добавить людей в голосовой чат</strong>
-            <span>Ссылка-приглашение скопируется в буфер обмена.</span>
+            <strong>Пригласить на сервер</strong>
+            <span>Полная ссылка на сервер скопируется в буфер обмена.</span>
           </span>
           <span className="mobile-voice-room__invite-arrow" aria-hidden="true">›</span>
         </button>
@@ -5836,9 +6024,10 @@ export default function MenuMain({
       return {
         title: "Личные сообщения",
         subtitle: friendsPageSection === "add" ? "Поиск и добавление друзей" : `${friends.length} контактов`,
-        badge: totalDirectUnreadCount,
+        badge: friendsPageSection === "add" ? incomingFriendRequestCount : totalFriendsAttentionCount,
         canGoBack: false,
         actionLabel: friendsPageSection === "add" ? "Друзья" : "Добавить",
+        actionBadge: friendsPageSection === "add" ? 0 : incomingFriendRequestCount,
         onAction: () => {
           setActiveDirectFriendId("");
           setFriendsPageSection((previousSection) => (previousSection === "add" ? "friends" : "add"));
@@ -5926,7 +6115,8 @@ export default function MenuMain({
           </div>
           {mobileHeader.onAction ? (
             <button type="button" className="mobile-shell__header-action" onClick={mobileHeader.onAction}>
-              {mobileHeader.actionLabel}
+              <span>{mobileHeader.actionLabel}</span>
+              {Number(mobileHeader.actionBadge || 0) > 0 ? <span className="mobile-shell__header-badge">{Math.min(Number(mobileHeader.actionBadge || 0), 99)}</span> : null}
             </button>
           ) : null}
         </header>
@@ -5965,7 +6155,7 @@ export default function MenuMain({
           >
             <span className="mobile-shell__nav-glyph" aria-hidden="true">◌</span>
             <span>Чаты</span>
-            {totalDirectUnreadCount > 0 ? <span className="mobile-shell__nav-badge">{Math.min(totalDirectUnreadCount, 99)}</span> : null}
+            {totalFriendsAttentionCount > 0 ? <span className="mobile-shell__nav-badge">{Math.min(totalFriendsAttentionCount, 99)}</span> : null}
           </button>
           <button
             type="button"
