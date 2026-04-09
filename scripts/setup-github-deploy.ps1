@@ -122,10 +122,9 @@ Write-Host ""
 
 $hostValue = Ask-Required -Prompt "DEPLOY_HOST (server host/ip)"
 $userValue = Ask-Required -Prompt "DEPLOY_USER (ssh user)"
-$pathValue = Ask-Required -Prompt "DEPLOY_PATH (remote base path, e.g. /var/www/nodiscord)"
 $portValue = Read-Host "DEPLOY_PORT (optional, default 22)"
 
-$defaultKeyPath = "$HOME\.ssh\id_rsa"
+$defaultKeyPath = "$HOME\.ssh\github_actions_tendsec_deploy"
 $keyPath = Ask-Required -Prompt "Path to private SSH key" -Default $defaultKeyPath
 if (-not (Test-Path $keyPath)) {
   throw "SSH key file not found: $keyPath"
@@ -134,7 +133,6 @@ $sshKeyValue = Get-Content -Path $keyPath -Raw
 
 & $gh secret set DEPLOY_HOST --repo $Repo --body $hostValue
 & $gh secret set DEPLOY_USER --repo $Repo --body $userValue
-& $gh secret set DEPLOY_PATH --repo $Repo --body $pathValue
 & $gh secret set DEPLOY_SSH_KEY --repo $Repo --body $sshKeyValue
 
 if (-not [string]::IsNullOrWhiteSpace($portValue)) {
@@ -143,4 +141,17 @@ if (-not [string]::IsNullOrWhiteSpace($portValue)) {
 
 Write-Host ""
 Write-Host "Secrets configured successfully for $Repo" -ForegroundColor Green
+Write-Host ""
+Write-Host "The deploy workflow uses these default server paths:" -ForegroundColor Cyan
+Write-Host "  frontend: /var/www/tend-app/current"
+Write-Host "  backend:  /opt/nodiscord/.deploy/backend"
+Write-Host "  service:  nodiscord-backend.service"
+Write-Host ""
+Write-Host "You can override them in GitHub Repository Variables if needed:" -ForegroundColor Cyan
+Write-Host "  FRONTEND_DEPLOY_PATH"
+Write-Host "  BACKEND_DEPLOY_PATH"
+Write-Host "  BACKEND_SERVICE_NAME"
+Write-Host "  FRONTEND_DEPLOY_OWNER"
+Write-Host "  BACKEND_DEPLOY_OWNER"
+Write-Host "  HEALTHCHECK_URL"
 Write-Host "You can now run the Deploy workflow in GitHub Actions." -ForegroundColor Green

@@ -4,11 +4,16 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - master
       - main
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  DOTNET_VERSION: "8.0.x"
 
 jobs:
   build-artifacts:
@@ -22,13 +27,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Install frontend dependencies
         run: npm ci
@@ -91,9 +96,8 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_PATH" ]; then
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "Deploy secrets are not fully configured. Skipping deploy step."
             exit 0
@@ -124,8 +128,51 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          FRONTEND_DEPLOY_PATH: ${{ vars.FRONTEND_DEPLOY_PATH }}
+          BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+          BACKEND_SERVICE_NAME: ${{ vars.BACKEND_SERVICE_NAME }}
+          FRONTEND_DEPLOY_OWNER: ${{ vars.FRONTEND_DEPLOY_OWNER }}
+          BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
         run: |
           PORT="${DEPLOY_PORT:-22}"
-          rsync -az --delete -e "ssh -p $PORT" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/frontend/"
-          rsync -az --delete -e "ssh -p $PORT" ./backend/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/backend/"
+          FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
+          BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
+          BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
+          FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
+          BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
+          HEALTHCHECK="${HEALTHCHECK_URL:-https://tendsec.ru}"
+          TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/frontend' '$TEMP_ROOT/backend' '$FRONTEND_PATH' '$BACKEND_PATH'"
+
+          rsync -az --delete -e "ssh -p $PORT" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/frontend/"
+          rsync -az --delete -e "ssh -p $PORT" ./backend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/backend/"
+
+          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
+            set -e
+            FRONTEND_PATH='$FRONTEND_PATH'
+            BACKEND_PATH='$BACKEND_PATH'
+            TEMP_ROOT='$TEMP_ROOT'
+            FRONTEND_OWNER='$FRONTEND_OWNER'
+            BACKEND_OWNER='$BACKEND_OWNER'
+            BACKEND_SERVICE='$BACKEND_SERVICE'
+            for required_path in \"\$FRONTEND_PATH\" \"\$BACKEND_PATH\"; do
+              case \"\$required_path\" in
+                /var/www/*|/opt/nodiscord/*) ;;
+                *)
+                  echo \"Unsafe deploy path: \$required_path\" >&2
+                  exit 1
+                  ;;
+              esac
+            done
+            rsync -az --delete \"\$TEMP_ROOT/frontend/\" \"\$FRONTEND_PATH/\"
+            rsync -az --delete \"\$TEMP_ROOT/backend/\" \"\$BACKEND_PATH/\"
+            chown -R \"\$FRONTEND_OWNER\" \"\$FRONTEND_PATH\"
+            chown -R \"\$BACKEND_OWNER\" \"\$BACKEND_PATH\"
+            systemctl restart \"\$BACKEND_SERVICE\"
+            systemctl reload nginx
+            rm -rf \"\$TEMP_ROOT\"
+          "
+
+          curl --fail --silent --show-error --location "$HEALTHCHECK" > /dev/null
