@@ -4560,7 +4560,9 @@ export default function MenuMain({
           <strong>{activeSettingsTabMeta?.label || "Настройки"}</strong>
           <span>{activeSettingsTabMeta?.section || "Параметры приложения"}</span>
         </div>
-        <button type="button" className="settings-popup__close" onClick={() => setOpenSettings(false)}>×</button>
+        <button type="button" className="settings-mobile-shell__close" onClick={() => setOpenSettings(false)}>
+          Готово
+        </button>
       </div>
 
       <div className="settings-mobile-shell__profile">

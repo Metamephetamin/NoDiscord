@@ -4021,11 +4021,18 @@
   width: 100%;
   margin: 0;
   padding: 4px 12px calc(22px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .settings-popup--mobile .settings-shell__content-header {
   gap: 10px;
   margin-bottom: 14px;
+}
+
+.settings-popup--mobile .settings-shell__content > * {
+  min-width: 0;
 }
 
 .settings-popup--mobile .settings-shell__content-header h2 {
@@ -4080,6 +4087,15 @@
   align-items: stretch;
 }
 
+.settings-popup--mobile .settings-section__header,
+.settings-popup--mobile .settings-section__actions,
+.settings-popup--mobile .settings-list__actions,
+.settings-popup--mobile .settings-server-card,
+.settings-popup--mobile .settings-server-card__actions {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .settings-popup--mobile .settings-shell__actions > * {
   width: 100%;
 }
@@ -4129,6 +4145,20 @@
 .settings-popup--mobile .settings-list__row {
   padding: 12px 14px;
   border-radius: 14px;
+}
+
+.settings-popup--mobile .settings-inline-button,
+.settings-popup--mobile .channel-add-button,
+.settings-popup--mobile .settings-role-current {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-popup--mobile .settings-member-name,
+.settings-popup--mobile .settings-role-description,
+.settings-popup--mobile .settings-helper,
+.settings-popup--mobile .settings-channel-name {
+  word-break: break-word;
 }
 
 @media (max-width: 1500px) {
@@ -4381,6 +4411,7 @@
   border-radius: 0;
   transform: none;
   border: 0;
+  overflow: hidden;
 }
 
 .settings-mobile-shell {
@@ -4388,6 +4419,9 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .settings-mobile-shell__header {
@@ -4401,6 +4435,7 @@
   padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(16, 18, 27, 0.96);
+  box-sizing: border-box;
 }
 
 .settings-mobile-shell__header-copy {
@@ -4414,11 +4449,27 @@
   color: #ffffff;
   font-size: 20px;
   font-weight: 800;
+  line-height: 1.08;
+  word-break: break-word;
 }
 
 .settings-mobile-shell__header-copy span {
   color: #9aa4bc;
   font-size: 12px;
+}
+
+.settings-mobile-shell__close {
+  flex: 0 0 auto;
+  min-width: 78px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f7ff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .settings-mobile-shell__profile {
@@ -4431,6 +4482,7 @@
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .settings-mobile-shell__avatar {
@@ -4442,6 +4494,7 @@
 
 .settings-mobile-shell__profile-copy {
   min-width: 0;
+  flex: 1;
 }
 
 .settings-mobile-shell__profile-copy strong,
@@ -4471,6 +4524,7 @@
   top: 0;
   z-index: 2;
   background: linear-gradient(180deg, rgba(16, 18, 27, 0.98), rgba(16, 18, 27, 0.9));
+  box-sizing: border-box;
 }
 
 .settings-mobile-shell__tabs::-webkit-scrollbar {
@@ -4502,7 +4556,10 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   background: linear-gradient(180deg, rgba(14, 16, 23, 0.72), rgba(14, 16, 23, 0));
+  width: 100%;
+  min-width: 0;
 }
 
 .settings-section {
