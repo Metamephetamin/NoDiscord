@@ -8,6 +8,10 @@
   - backend tests (auto-skip if no `*Tests*.csproj`)
 - Deploy workflow: `.github/workflows/deploy.yml`
 - Landing deploy workflow: `.github/workflows/deploy-landing.yml`
+- Production infra templates:
+  - `infra/nginx/tendsec.ru.conf`
+  - `infra/nginx/land.tendsec.ru.conf`
+  - `infra/systemd/nodiscord-backend.service`
 
 ## How deploy works now
 

@@ -124,3 +124,4 @@ BackNoDiscord/BackNoDiscord/appsettings.Local.json
 src/livekit/livekit-keys.txt
 certs/
 src/livekit/livekit_certs/
+.tools/

@@ -1,0 +1,19 @@
+[Unit]
+Description=NoDiscord Backend
+After=network.target
+
+[Service]
+Type=simple
+User=nodiscord
+Group=nodiscord
+WorkingDirectory=/opt/nodiscord/.deploy/backend
+Environment=ASPNETCORE_URLS=http://127.0.0.1:7031
+EnvironmentFile=-/opt/nodiscord/.deploy/backend/.env
+ExecStart=/usr/bin/dotnet /opt/nodiscord/.deploy/backend/BackNoDiscord.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=nodiscord-backend
+
+[Install]
+WantedBy=multi-user.target
