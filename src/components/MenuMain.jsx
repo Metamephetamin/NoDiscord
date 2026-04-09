@@ -1046,6 +1046,24 @@ export default function MenuMain({
     () => friends.filter((friend) => voiceParticipantByUserId.has(String(friend.id))),
     [friends, voiceParticipantByUserId]
   );
+  const totalDirectUnreadCount = useMemo(
+    () => Object.values(directUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
+    [directUnreadCounts]
+  );
+  const totalServerUnreadCount = useMemo(
+    () => Object.values(serverUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
+    [serverUnreadCounts]
+  );
+  const activeServerUnreadCount = useMemo(() => {
+    if (!activeServer?.id) {
+      return 0;
+    }
+
+    return (activeServer.textChannels || []).reduce((sum, channel) => {
+      const scopedChannelId = getScopedChatChannelId(activeServer.id, channel.id);
+      return sum + Math.max(0, Number(serverUnreadCounts?.[scopedChannelId]) || 0);
+    }, 0);
+  }, [activeServer, serverUnreadCounts]);
   const currentVoiceParticipants = useMemo(() => {
     if (!currentVoiceChannel) {
       return [];
@@ -5247,7 +5265,10 @@ export default function MenuMain({
           <div className="chat__topbar">
           <div className="chat__topbar-title">
             <div className="chat__topbar-copy">
-              <strong>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</strong>
+              <strong>
+                <span>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
+                {activeServerUnreadCount > 0 ? <span className="chat__topbar-badge">{Math.min(activeServerUnreadCount, 99)}</span> : null}
+              </strong>
               <span>Текстовый канал сервера</span>
             </div>
           </div>
@@ -5574,26 +5595,49 @@ export default function MenuMain({
   );
   const renderMobileProfileScreen = () => (
     <section className="mobile-profile-screen">
+      <input
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4"
+        ref={avatarInputRef}
+        className="hidden-input"
+        onChange={handleAvatarChange}
+      />
       <div className="mobile-profile-screen__hero">
         <div className="mobile-profile-screen__cover" aria-hidden="true" />
         <div className="mobile-profile-screen__hero-main">
-          <AnimatedAvatar
-            className={`mobile-profile-screen__avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "mobile-profile-screen__avatar--speaking" : ""}`}
-            src={getUserAvatar(user)}
-            alt={getDisplayName(user)}
-          />
+          <button type="button" className="mobile-profile-screen__avatar-button" onClick={() => avatarInputRef.current?.click()}>
+            <AnimatedAvatar
+              className={`mobile-profile-screen__avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "mobile-profile-screen__avatar--speaking" : ""}`}
+              src={getUserAvatar(user)}
+              alt={getDisplayName(user)}
+            />
+            <span className="mobile-profile-screen__avatar-chip">Сменить</span>
+          </button>
           <div className="mobile-profile-screen__identity">
             <h1>{getDisplayName(user)}</h1>
             <p>{user?.email || "Ваш аккаунт Tend"}</p>
             <span className="mobile-profile-screen__presence">{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
           </div>
         </div>
-        <button type="button" className="mobile-profile-screen__primary" onClick={() => openSettingsPanel("personal_profile")}>
-          Редактировать профиль
-        </button>
+        <div className="mobile-profile-screen__hero-actions">
+          <button type="button" className="mobile-profile-screen__primary" onClick={() => openSettingsPanel("personal_profile")}>
+            Редактировать профиль
+          </button>
+          <button type="button" className="mobile-profile-screen__secondary" onClick={() => avatarInputRef.current?.click()}>
+            Изменить аватар
+          </button>
+        </div>
       </div>
 
       <div className="mobile-profile-screen__cards">
+        <button type="button" className="mobile-profile-screen__card mobile-profile-screen__card--action" onClick={() => openSettingsPanel("personal_profile")}>
+          <strong>Имя и профиль</strong>
+          <span>Изменить имя, фамилию, открыть настройки аккаунта и проверить текущий email.</span>
+        </button>
+        <button type="button" className="mobile-profile-screen__card mobile-profile-screen__card--action" onClick={() => avatarInputRef.current?.click()}>
+          <strong>Аватарка</strong>
+          <span>Загрузить новую статичную или анимированную аватарку для профиля.</span>
+        </button>
         <button type="button" className="mobile-profile-screen__card mobile-profile-screen__card--action" onClick={() => openSettingsPanel("voice_video")}>
           <strong>Голос и видео</strong>
           <span>Микрофон, камера, устройства и чувствительность.</span>
@@ -5602,18 +5646,16 @@ export default function MenuMain({
           <strong>Уведомления</strong>
           <span>Личные чаты, серверы и звуки оповещений.</span>
         </button>
-        <div className="mobile-profile-screen__toggle-row">
-          <button type="button" className={`mobile-profile-screen__toggle ${isMicMuted ? "mobile-profile-screen__toggle--muted" : ""}`} onClick={toggleMicMute}>
-            {isMicMuted ? "Микрофон выключен" : "Микрофон включён"}
-          </button>
-          <button type="button" className={`mobile-profile-screen__toggle ${isSoundMuted ? "mobile-profile-screen__toggle--muted" : ""}`} onClick={toggleSoundMute}>
-            {isSoundMuted ? "Звук выключен" : "Звук включён"}
-          </button>
-        </div>
         <div className="mobile-profile-screen__card">
           <strong>Аккаунт</strong>
           <span>{currentVoiceChannelName ? `Подключено к ${currentVoiceChannelName}` : "Сейчас вы не в голосовом канале."}</span>
         </div>
+        {profileStatus ? (
+          <div className="mobile-profile-screen__card mobile-profile-screen__card--status">
+            <strong>Статус профиля</strong>
+            <span>{profileStatus}</span>
+          </div>
+        ) : null}
         <div className="mobile-profile-screen__stats">
           <div className="mobile-profile-screen__stat">
             <strong>{servers.length}</strong>
@@ -5622,6 +5664,14 @@ export default function MenuMain({
           <div className="mobile-profile-screen__stat">
             <strong>{friends.length}</strong>
             <span>Друзья</span>
+          </div>
+          <div className="mobile-profile-screen__stat">
+            <strong>{totalDirectUnreadCount}</strong>
+            <span>Новых в чатах</span>
+          </div>
+          <div className="mobile-profile-screen__stat">
+            <strong>{totalServerUnreadCount}</strong>
+            <span>Новых в серверах</span>
           </div>
         </div>
         <div className="mobile-profile-screen__card mobile-profile-screen__card--danger">
@@ -5670,6 +5720,7 @@ export default function MenuMain({
       return {
         title: getDisplayName(user),
         subtitle: user?.email || "Профиль",
+        badge: totalDirectUnreadCount + totalServerUnreadCount,
         canGoBack: true,
         actionLabel: "Настройки",
         onAction: () => openSettingsPanel("personal_profile"),
@@ -5680,6 +5731,7 @@ export default function MenuMain({
       return {
         title: getDisplayName(currentDirectFriend),
         subtitle: "Личный чат",
+        badge: Number(directUnreadCounts[currentDirectChannelId] || 0),
         canGoBack: true,
         actionLabel: "Профиль",
         onAction: () => setMobileSection("profile"),
@@ -5690,6 +5742,7 @@ export default function MenuMain({
       return {
         title: "Личные сообщения",
         subtitle: friendsPageSection === "add" ? "Поиск и добавление друзей" : `${friends.length} контактов`,
+        badge: totalDirectUnreadCount,
         canGoBack: false,
         actionLabel: friendsPageSection === "add" ? "Друзья" : "Добавить",
         onAction: () => {
@@ -5703,6 +5756,7 @@ export default function MenuMain({
       return {
         title: localSharePreview?.mode === "camera" ? "Ваше видео" : "Ваш стрим",
         subtitle: "Предпросмотр своего эфира",
+        badge: activeServerUnreadCount,
         canGoBack: true,
         actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
         onAction: () => {
@@ -5716,6 +5770,7 @@ export default function MenuMain({
       return {
         title: selectedStreamParticipant?.name || "Трансляция",
         subtitle: "Просмотр эфира участника",
+        badge: activeServerUnreadCount,
         canGoBack: true,
         actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
         onAction: () => setMobileServersPane(currentVoiceChannel ? "voice" : "channels"),
@@ -5726,6 +5781,7 @@ export default function MenuMain({
       return {
         title: currentVoiceChannelName || "Голосовой канал",
         subtitle: activeServer?.name || `${currentVoiceParticipants.length} участников`,
+        badge: activeServerUnreadCount,
         canGoBack: true,
         actionLabel: "Чат",
         onAction: () => setMobileServersPane("chat"),
@@ -5736,6 +5792,7 @@ export default function MenuMain({
       return {
         title: getChannelDisplayName(currentTextChannel?.name || "channel", "text"),
         subtitle: activeServer?.name || "Текстовый канал",
+        badge: activeServerUnreadCount,
         canGoBack: true,
         actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
         onAction: () => setMobileServersPane(currentVoiceChannel ? "voice" : "channels"),
@@ -5745,6 +5802,7 @@ export default function MenuMain({
     return {
       title: activeServer?.name || "Серверы",
       subtitle: "Текстовые и голосовые каналы",
+      badge: activeServerUnreadCount,
       canGoBack: false,
       actionLabel: "Профиль",
       onAction: () => setMobileSection("profile"),
@@ -5765,7 +5823,10 @@ export default function MenuMain({
               <span className="mobile-shell__back-spacer" aria-hidden="true" />
             )}
             <div className="mobile-shell__header-copy">
-              <strong>{mobileHeader.title}</strong>
+              <strong>
+                <span>{mobileHeader.title}</span>
+                {Number(mobileHeader.badge || 0) > 0 ? <span className="mobile-shell__header-badge">{Math.min(Number(mobileHeader.badge || 0), 99)}</span> : null}
+              </strong>
               <span>{mobileHeader.subtitle}</span>
             </div>
           </div>
@@ -5801,6 +5862,7 @@ export default function MenuMain({
           >
             <span className="mobile-shell__nav-glyph" aria-hidden="true">#</span>
             <span>Серверы</span>
+            {totalServerUnreadCount > 0 ? <span className="mobile-shell__nav-badge">{Math.min(totalServerUnreadCount, 99)}</span> : null}
           </button>
           <button
             type="button"
@@ -5809,6 +5871,7 @@ export default function MenuMain({
           >
             <span className="mobile-shell__nav-glyph" aria-hidden="true">◌</span>
             <span>Чаты</span>
+            {totalDirectUnreadCount > 0 ? <span className="mobile-shell__nav-badge">{Math.min(totalDirectUnreadCount, 99)}</span> : null}
           </button>
           <button
             type="button"
