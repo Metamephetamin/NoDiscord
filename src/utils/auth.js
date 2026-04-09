@@ -330,6 +330,19 @@ export async function parseApiResponse(response) {
   }
 }
 
+function isLikelyHtmlPayload(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html");
+}
+
 export function getApiErrorMessage(response, data, fallbackMessage) {
   if (response?.status === 401) {
     return "Сессия истекла. Войдите снова.";
@@ -342,9 +355,15 @@ export function getApiErrorMessage(response, data, fallbackMessage) {
     return "Слишком много попыток. Подождите немного и попробуйте снова.";
   }
 
+  if ([500, 502, 503, 504].includes(response?.status)) {
+    return "Сервис временно недоступен. Попробуйте снова через пару минут.";
+  }
+
   if (data && typeof data === "object") {
     if (typeof data.message === "string" && data.message.trim()) {
-      return data.message.trim();
+      if (!isLikelyHtmlPayload(data.message)) {
+        return data.message.trim();
+      }
     }
 
     if (data.errors && typeof data.errors === "object") {
