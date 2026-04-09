@@ -196,6 +196,7 @@ export function createVoiceRoomClient({
   onRemoteScreenStreamsChanged,
   onLocalScreenShareChanged,
   onLocalLiveShareChanged,
+  onLocalPreviewStreamChanged,
   onLiveUsersChanged,
   onSpeakingUsersChanged,
   onSelfVoiceStateChanged,
@@ -259,6 +260,10 @@ export function createVoiceRoomClient({
     onLocalScreenShareChanged?.(isActive);
     onLocalLiveShareChanged?.({
       isActive,
+      mode: isActive ? localLiveShareMode || "screen" : "",
+    });
+    onLocalPreviewStreamChanged?.({
+      stream: localScreenStream || null,
       mode: isActive ? localLiveShareMode || "screen" : "",
     });
   };

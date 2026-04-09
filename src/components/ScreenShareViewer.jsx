@@ -7,6 +7,10 @@ export default function ScreenShareViewer({
   title,
   subtitle,
   debugInfo,
+  onClose,
+  actionLabel,
+  onAction,
+  actionVariant = "default",
 }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
@@ -130,9 +134,23 @@ export default function ScreenShareViewer({
         </div>
 
         <div className="stream-viewer__actions">
-          <button type="button" className="stream-viewer__fullscreen" onClick={requestFullscreen}>
+          {onAction ? (
+            <button
+              type="button"
+              className={`stream-viewer__button ${actionVariant === "danger" ? "stream-viewer__button--danger" : ""}`}
+              onClick={onAction}
+            >
+              {actionLabel || "Действие"}
+            </button>
+          ) : null}
+          <button type="button" className="stream-viewer__button" onClick={requestFullscreen}>
             На весь экран
           </button>
+          {onClose ? (
+            <button type="button" className="stream-viewer__button stream-viewer__button--ghost" onClick={onClose}>
+              Закрыть
+            </button>
+          ) : null}
         </div>
       </div>
 

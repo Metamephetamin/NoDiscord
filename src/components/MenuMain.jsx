@@ -640,6 +640,7 @@ export default function MenuMain({
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [screenShareError, setScreenShareError] = useState("");
   const [showCreateServerModal, setShowCreateServerModal] = useState(false);
   const [createServerName, setCreateServerName] = useState("");
   const [createServerIcon, setCreateServerIcon] = useState("");
@@ -651,6 +652,8 @@ export default function MenuMain({
   const [announcedLiveUserIds, setAnnouncedLiveUserIds] = useState([]);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [localLiveShareMode, setLocalLiveShareMode] = useState("");
+  const [localSharePreview, setLocalSharePreview] = useState({ stream: null, mode: "" });
+  const [isLocalSharePreviewVisible, setIsLocalSharePreviewVisible] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [isMicForced, setIsMicForced] = useState(false);
@@ -957,6 +960,38 @@ export default function MenuMain({
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
   const isScreenShareActive = isSharingScreen && localLiveShareMode === "screen";
   const isCameraShareActive = isSharingScreen && localLiveShareMode === "camera";
+  const hasLocalSharePreview = Boolean(localSharePreview?.stream);
+  const isScreenShareSupported = useMemo(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    if (window.electronScreenCapture?.getSources) {
+      return true;
+    }
+
+    return typeof navigator?.mediaDevices?.getDisplayMedia === "function";
+  }, []);
+  const screenShareStatusCopy = useMemo(() => {
+    if (isScreenShareActive) {
+      return {
+        title: "Стрим экрана уже идёт",
+        subtitle: "Можно остановить эфир или поменять его параметры.",
+      };
+    }
+
+    if (!isScreenShareSupported) {
+      return {
+        title: "Стрим экрана недоступен",
+        subtitle: "На этом устройстве браузер не дал доступ к захвату экрана.",
+      };
+    }
+
+    return {
+      title: "Запустить стрим экрана",
+      subtitle: "Показать участникам экран телефона или вкладку браузера.",
+    };
+  }, [isScreenShareActive, isScreenShareSupported]);
   const selectedStreamParticipant = useMemo(() => Object.values(participantsMap).flat().find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [participantsMap, selectedStreamUserId]);
   const selectedStreamDebugInfo = useMemo(() => ({
     userId: selectedStreamUserId ? String(selectedStreamUserId) : "",
@@ -969,6 +1004,30 @@ export default function MenuMain({
     mode: selectedStream?.mode || (selectedStream?.videoSrc ? "mse" : selectedStream?.imageSrc ? "frame" : "none"),
     hasAudio: Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length),
   }), [liveUserIds, remoteScreenShares.length, selectedStream, selectedStreamUserId]);
+  const localSharePreviewDebugInfo = useMemo(() => ({
+    userId: currentUserId ? String(currentUserId) : "",
+    liveSelected: Boolean(hasLocalSharePreview),
+    remoteSharesCount: remoteScreenShares.length,
+    videoTracks: localSharePreview?.stream?.getVideoTracks?.().length || 0,
+    audioTracks: localSharePreview?.stream?.getAudioTracks?.().length || 0,
+    readyState: localSharePreview?.stream?.getVideoTracks?.()[0]?.readyState || "none",
+    updatedAt: hasLocalSharePreview ? new Date().toLocaleTimeString() : "",
+    mode: localSharePreview?.mode || "none",
+    hasAudio: Boolean(localSharePreview?.stream?.getAudioTracks?.().length),
+  }), [currentUserId, hasLocalSharePreview, localSharePreview, remoteScreenShares.length]);
+  const localSharePreviewMeta = useMemo(() => {
+    if (localSharePreview?.mode === "camera") {
+      return {
+        title: "Ваше видео",
+        subtitle: "Так камера выглядит для участников голосового канала.",
+      };
+    }
+
+    return {
+      title: "Ваш стрим",
+      subtitle: "Так участники видят ваш экран в эфире.",
+    };
+  }, [localSharePreview?.mode]);
   const voiceParticipantByUserId = useMemo(() => {
     const nextMap = new Map();
     Object.values(activeVoiceParticipantsMap || {}).forEach((participants) => {
@@ -2624,6 +2683,13 @@ export default function MenuMain({
     if (!isStillLive && !selectedStream) setSelectedStreamUserId(null);
   }, [liveUserIds, selectedStream, selectedStreamUserId]);
   useEffect(() => {
+    if (hasLocalSharePreview) {
+      return;
+    }
+
+    setIsLocalSharePreviewVisible(false);
+  }, [hasLocalSharePreview]);
+  useEffect(() => {
     voiceClientRef.current?.setFocusedRemoteShareUser(selectedStreamUserId || "");
   }, [selectedStreamUserId]);
   useEffect(() => {
@@ -2690,6 +2756,12 @@ export default function MenuMain({
       onRemoteScreenStreamsChanged: setRemoteScreenShares,
       onLocalScreenShareChanged: setIsSharingScreen,
       onLocalLiveShareChanged: ({ mode }) => setLocalLiveShareMode(mode || ""),
+      onLocalPreviewStreamChanged: ({ stream, mode }) => {
+        setLocalSharePreview({
+          stream: stream || null,
+          mode: mode || "",
+        });
+      },
       onLiveUsersChanged: setAnnouncedLiveUserIds,
       onSpeakingUsersChanged: setSpeakingUserIds,
       onSelfVoiceStateChanged: ({
@@ -3240,19 +3312,47 @@ export default function MenuMain({
       setOpenSettings(false);
       setShowModal(false);
       setShowCameraModal(false);
+      setIsLocalSharePreviewVisible(false);
       stopCameraPreview();
       onLogout?.();
     }
   };
   const startScreenShare = async () => {
-    if (!voiceClientRef.current) return;
-    await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
-    setShowModal(false);
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    setScreenShareError("");
+
+    try {
+      await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
+      setShowModal(false);
+      setSelectedStreamUserId(null);
+      setIsLocalSharePreviewVisible(true);
+    } catch (error) {
+      const message = error?.message || "Не удалось запустить трансляцию экрана.";
+      setScreenShareError(message);
+      showServerInviteFeedback(message);
+      throw error;
+    }
   };
   const stopScreenShare = async () => {
-    if (!voiceClientRef.current) return;
-    await voiceClientRef.current.stopScreenShare();
-    setShowModal(false);
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    setScreenShareError("");
+
+    try {
+      await voiceClientRef.current.stopScreenShare();
+      setShowModal(false);
+      setIsLocalSharePreviewVisible(false);
+    } catch (error) {
+      const message = error?.message || "Не удалось остановить трансляцию экрана.";
+      setScreenShareError(message);
+      showServerInviteFeedback(message);
+      throw error;
+    }
   };
   const handleScreenShareAction = async () => {
     if (isScreenShareActive) {
@@ -3260,8 +3360,48 @@ export default function MenuMain({
       return;
     }
 
+    if (!currentVoiceChannel) {
+      showServerInviteFeedback("Сначала подключитесь к голосовому каналу.");
+      return;
+    }
+
+    if (!isScreenShareSupported) {
+      setScreenShareError("На этом устройстве браузер не поддерживает захват экрана.");
+      showServerInviteFeedback("На этом устройстве браузер не поддерживает захват экрана.");
+      return;
+    }
+
     setShowCameraModal(false);
+    setScreenShareError("");
     setShowModal(true);
+  };
+  const openLocalSharePreview = () => {
+    if (!hasLocalSharePreview) {
+      showServerInviteFeedback("Сначала запустите камеру или стрим.");
+      return;
+    }
+
+    setSelectedStreamUserId(null);
+    setIsLocalSharePreviewVisible(true);
+  };
+  const closeLocalSharePreview = () => {
+    setIsLocalSharePreviewVisible(false);
+  };
+  const handleScreenShareCardClick = async () => {
+    if (isScreenShareActive) {
+      openLocalSharePreview();
+      return;
+    }
+
+    await handleScreenShareAction();
+  };
+  const handleCameraShareCardClick = () => {
+    if (isCameraShareActive) {
+      openLocalSharePreview();
+      return;
+    }
+
+    openCameraModal();
   };
   const startCameraShare = async () => {
     if (!voiceClientRef.current) return;
@@ -3276,6 +3416,8 @@ export default function MenuMain({
         fps,
       });
       setShowCameraModal(false);
+      setSelectedStreamUserId(null);
+      setIsLocalSharePreviewVisible(true);
     } catch (error) {
       setCameraError(error?.message || "Не удалось запустить трансляцию камеры.");
       startCameraPreview(selectedVideoDeviceId).catch(() => {});
@@ -3288,6 +3430,7 @@ export default function MenuMain({
     try {
       await voiceClientRef.current.stopScreenShare();
       setShowCameraModal(false);
+      setIsLocalSharePreviewVisible(false);
       stopCameraPreview();
     } catch (error) {
       setCameraError(error?.message || "Не удалось остановить трансляцию камеры.");
@@ -3391,6 +3534,7 @@ export default function MenuMain({
   const openCameraModal = () => {
     setCameraError("");
     setShowModal(false);
+    setScreenShareError("");
     setShowNoiseMenu(false);
     setShowCameraModal(true);
   };
@@ -3401,6 +3545,7 @@ export default function MenuMain({
   };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
+    setIsLocalSharePreviewVisible(false);
     if (String(selectedStreamUserId || "") === normalizedUserId) {
       setSelectedStreamUserId(null);
       return;
@@ -5100,18 +5245,27 @@ export default function MenuMain({
       <div className="chat__box chat__box--servers">
         {activeServer ? (
           <div className="chat__topbar">
-            <div className="chat__topbar-title">
-              <div className="chat__topbar-copy">
-                <strong>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</strong>
-                <span>Текстовый канал сервера</span>
-              </div>
+          <div className="chat__topbar-title">
+            <div className="chat__topbar-copy">
+              <strong>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</strong>
+              <span>Текстовый канал сервера</span>
             </div>
-            <div className="chat__topbar-actions">
-              <label className="chat__topbar-search-wrap">
-                <img src={SEARCH_ICON_URL} alt="" />
-                <input
-                  className="chat__topbar-search"
-                  type="text"
+          </div>
+          <div className="chat__topbar-actions">
+            {hasLocalSharePreview ? (
+              <button
+                type="button"
+                className={`chat__topbar-action ${isLocalSharePreviewVisible ? "chat__topbar-action--active" : ""}`}
+                onClick={openLocalSharePreview}
+              >
+                {localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим"}
+              </button>
+            ) : null}
+            <label className="chat__topbar-search-wrap">
+              <img src={SEARCH_ICON_URL} alt="" />
+              <input
+                className="chat__topbar-search"
+                type="text"
                   value={channelSearchQuery}
                   onChange={(event) => setChannelSearchQuery(event.target.value)}
                   placeholder={`Искать в ${getChannelDisplayName(currentTextChannel?.name || "канал", "text")}`}
@@ -5130,6 +5284,17 @@ export default function MenuMain({
           </div>
         ) : selectedStreamUserId ? (
           <ScreenShareViewer stream={selectedStream?.stream || null} videoSrc={selectedStream?.videoSrc || ""} imageSrc={selectedStream?.imageSrc || ""} hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)} title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`} subtitle="Просмотр видеопотока участника" onClose={() => setSelectedStreamUserId(null)} debugInfo={selectedStreamDebugInfo} />
+        ) : isLocalSharePreviewVisible && hasLocalSharePreview ? (
+          <ScreenShareViewer
+            stream={localSharePreview?.stream || null}
+            title={localSharePreviewMeta.title}
+            subtitle={localSharePreviewMeta.subtitle}
+            onAction={localSharePreview?.mode === "camera" ? stopCameraShare : stopScreenShare}
+            actionLabel={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
+            actionVariant="danger"
+            onClose={closeLocalSharePreview}
+            debugInfo={localSharePreviewDebugInfo}
+          />
         ) : (
           <>
             {currentTextChannel && <TextChat serverId={activeServer?.id} channelId={currentTextChannel.id} user={user} searchQuery={channelSearchQuery} directTargets={directConversationTargets} serverMembers={activeServer?.members || []} />}
@@ -5306,6 +5471,37 @@ export default function MenuMain({
         </button>
       ) : null}
 
+      <div className="mobile-voice-room__share-grid">
+        <button
+          type="button"
+          className={`mobile-voice-room__share-card ${isScreenShareActive ? "mobile-voice-room__share-card--active" : ""} ${!isScreenShareSupported && !isScreenShareActive ? "mobile-voice-room__share-card--disabled" : ""}`}
+          onClick={handleScreenShareCardClick}
+          disabled={!isScreenShareSupported && !isScreenShareActive}
+        >
+          <span className="mobile-voice-room__share-card-icon" aria-hidden="true">
+            <img src={MONITOR_ICON_URL} alt="" />
+          </span>
+          <span className="mobile-voice-room__share-card-copy">
+            <strong>{screenShareStatusCopy.title}</strong>
+            <span>{isScreenShareActive ? "Открыть предпросмотр своего экрана." : screenShareStatusCopy.subtitle}</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-voice-room__share-card ${isCameraShareActive ? "mobile-voice-room__share-card--active" : ""}`}
+          onClick={handleCameraShareCardClick}
+        >
+          <span className="mobile-voice-room__share-card-icon" aria-hidden="true">
+            <img src={CAMERA_ICON_URL} alt="" />
+          </span>
+          <span className="mobile-voice-room__share-card-copy">
+            <strong>{isCameraShareActive ? "Камера уже в эфире" : "Запустить камеру"}</strong>
+            <span>{isCameraShareActive ? "Открыть предпросмотр своего видео." : "Открыть предпросмотр и начать видеострим."}</span>
+          </span>
+        </button>
+      </div>
+
       <div className="mobile-voice-room__controls" role="toolbar" aria-label="Управление голосовым чатом">
         <button
           type="button"
@@ -5316,6 +5512,7 @@ export default function MenuMain({
           <span className={`mobile-voice-room__control-icon ${isMicMuted || isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <img src={MICROPHONE_ICON_URL} alt="" />
           </span>
+          <span className="mobile-voice-room__control-label">Мик</span>
         </button>
         <button
           type="button"
@@ -5326,6 +5523,7 @@ export default function MenuMain({
           <span className={`mobile-voice-room__control-icon ${isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <img src={HEADPHONES_ICON_URL} alt="" />
           </span>
+          <span className="mobile-voice-room__control-label">Звук</span>
         </button>
         <button
           type="button"
@@ -5336,6 +5534,7 @@ export default function MenuMain({
           <span className="mobile-voice-room__control-icon">
             <img src={SMS_ICON_URL} alt="" />
           </span>
+          <span className="mobile-voice-room__control-label">Чат</span>
         </button>
         <button
           type="button"
@@ -5346,6 +5545,7 @@ export default function MenuMain({
           <span className="mobile-voice-room__control-icon">
             <img src={MONITOR_ICON_URL} alt="" />
           </span>
+          <span className="mobile-voice-room__control-label">Стрим</span>
         </button>
         <button
           type="button"
@@ -5356,6 +5556,7 @@ export default function MenuMain({
           <span className="mobile-voice-room__control-icon">
             <img src={CAMERA_ICON_URL} alt="" />
           </span>
+          <span className="mobile-voice-room__control-label">Кам</span>
         </button>
         <button
           type="button"
@@ -5366,6 +5567,7 @@ export default function MenuMain({
           <span className="mobile-voice-room__control-icon">
             <img src={PHONE_ICON_URL} alt="" />
           </span>
+          <span className="mobile-voice-room__control-label">Выйти</span>
         </button>
       </div>
     </section>
@@ -5442,6 +5644,12 @@ export default function MenuMain({
       return;
     }
 
+    if (mobileSection === "servers" && isLocalSharePreviewVisible) {
+      setIsLocalSharePreviewVisible(false);
+      setMobileServersPane(currentVoiceChannel ? "voice" : "chat");
+      return;
+    }
+
     if (mobileSection === "servers" && selectedStreamUserId) {
       setSelectedStreamUserId(null);
       setMobileServersPane(currentVoiceChannel ? "voice" : "chat");
@@ -5487,6 +5695,19 @@ export default function MenuMain({
         onAction: () => {
           setActiveDirectFriendId("");
           setFriendsPageSection((previousSection) => (previousSection === "add" ? "friends" : "add"));
+        },
+      };
+    }
+
+    if (isLocalSharePreviewVisible && hasLocalSharePreview) {
+      return {
+        title: localSharePreview?.mode === "camera" ? "Ваше видео" : "Ваш стрим",
+        subtitle: "Предпросмотр своего эфира",
+        canGoBack: true,
+        actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
+        onAction: () => {
+          setIsLocalSharePreviewVisible(false);
+          setMobileServersPane(currentVoiceChannel ? "voice" : "channels");
         },
       };
     }
@@ -5566,7 +5787,7 @@ export default function MenuMain({
             <div className="mobile-shell__panel mobile-shell__panel--servers">
               {renderMobileServerStrip()}
               <div className="mobile-shell__workspace mobile-shell__workspace--servers">
-                {selectedStreamUserId ? renderServerMain() : mobileServersPane === "voice" ? renderMobileVoiceRoom() : mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
+                {selectedStreamUserId || isLocalSharePreviewVisible ? renderServerMain() : mobileServersPane === "voice" ? renderMobileVoiceRoom() : mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
               </div>
             </div>
           )}
@@ -5734,11 +5955,18 @@ export default function MenuMain({
       )}
 
       {showModal && (
-        <div className="modal-backdrop" onClick={() => setShowModal(false)}>
+        <div className="modal-backdrop" onClick={() => { setShowModal(false); setScreenShareError(""); }}>
           <div className="stream-modal" onClick={(event) => event.stopPropagation()}>
             <div className="stream-modal__header">
-              <h3>Настройки трансляции</h3>
-              <button type="button" className="stream-modal__close" onClick={() => setShowModal(false)}>x</button>
+              <div>
+                <h3>{isMobileViewport ? "Стрим экрана" : "Настройки трансляции"}</h3>
+                <p className="stream-modal__subtitle">
+                  {isMobileViewport
+                    ? "Подберите качество и запустите захват экрана прямо с телефона, если браузер это поддерживает."
+                    : "Подберите качество трансляции и запустите захват экрана."}
+                </p>
+              </div>
+              <button type="button" className="stream-modal__close" onClick={() => { setShowModal(false); setScreenShareError(""); }}>x</button>
             </div>
             <label className="stream-modal__field">
               <span>Разрешение</span>
@@ -5760,9 +5988,16 @@ export default function MenuMain({
               <input type="checkbox" checked={shareStreamAudio} onChange={(event) => setShareStreamAudio(event.target.checked)} />
               <span>Передавать звук экрана, если система это поддерживает</span>
             </label>
-            <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isScreenShareActive} disabled={!currentVoiceChannel} />
+            <ScreenShareButton onStart={startScreenShare} onStop={stopScreenShare} isActive={isScreenShareActive} disabled={!currentVoiceChannel || !isScreenShareSupported} />
+            {isScreenShareActive ? (
+              <button type="button" className="stream-modal__action stream-modal__action--secondary" onClick={openLocalSharePreview}>
+                Открыть предпросмотр
+              </button>
+            ) : null}
             {!currentVoiceChannel && <div className="stream-modal__hint">Сначала подключитесь к голосовому каналу.</div>}
+            {!isScreenShareSupported && <div className="stream-modal__hint">На этом устройстве браузер не поддерживает захват экрана.</div>}
             {isCameraShareActive ? <div className="stream-modal__hint">Сейчас у вас уже идет трансляция камеры. Запуск экрана заменит ее.</div> : null}
+            {screenShareError ? <div className="stream-modal__error">{screenShareError}</div> : null}
           </div>
         </div>
       )}
@@ -5814,6 +6049,11 @@ export default function MenuMain({
               <button type="button" className="stream-modal__action" onClick={() => startCameraPreview(selectedVideoDeviceId)}>
                 {hasCameraPreview ? "Обновить предпросмотр" : "Включить предпросмотр"}
               </button>
+              {isCameraShareActive ? (
+                <button type="button" className="stream-modal__action stream-modal__action--secondary" onClick={openLocalSharePreview}>
+                  Открыть предпросмотр эфира
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={`stream-modal__action ${isCameraShareActive ? "stream-modal__action--danger" : ""}`}
