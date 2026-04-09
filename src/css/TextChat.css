@@ -617,6 +617,58 @@
   background: rgba(110, 24, 32, 0.22);
 }
 
+.message-attachments-stack {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.message-attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.message-attachment-grid__item,
+.message-attachment-list__item {
+  min-width: 0;
+}
+
+.message-attachment-grid__item .message-media,
+.message-attachment-grid__item .voice-message,
+.message-attachment-list__item .message-attachment {
+  margin-top: 0;
+}
+
+.message-attachment-grid__item .message-media {
+  width: 100%;
+  max-width: 100%;
+}
+
+.message-attachment-grid__item .message-media__image,
+.message-attachment-grid__item .message-media__video {
+  max-width: 100%;
+  min-height: 180px;
+  max-height: 260px;
+}
+
+.message-attachment-grid__item--voice {
+  grid-column: 1 / -1;
+}
+
+.message-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.message-attachment-list__item .message-attachment {
+  width: 100%;
+}
+
 .message-reactions {
   display: flex;
   flex-wrap: wrap;
@@ -1727,6 +1779,56 @@
   margin-left: 2px;
 }
 
+.composer-send-button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(120, 108, 255, 0.96), rgba(82, 152, 255, 0.96));
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(66, 78, 188, 0.24);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.composer-send-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(66, 78, 188, 0.3);
+}
+
+.composer-send-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.composer-send-button__icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: translateX(-1px) rotate(45deg);
+}
+
+.composer-send-button__icon::before {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 5px;
+  width: 10px;
+  height: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+
 .composer-emoji-picker {
   position: absolute;
   right: 14px;
@@ -2184,6 +2286,10 @@
     border-radius: 16px;
   }
 
+  .message-attachment-grid {
+    grid-template-columns: 1fr;
+  }
+
   .message-composer {
     min-height: 62px;
     padding: 0 12px 0 8px;
@@ -2253,6 +2359,12 @@
   .attach-button {
     width: 40px;
     height: 40px;
+    border-radius: 12px;
+  }
+
+  .composer-send-button {
+    width: 34px;
+    height: 34px;
     border-radius: 12px;
   }
 

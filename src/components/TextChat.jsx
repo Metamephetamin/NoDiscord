@@ -120,6 +120,64 @@ const getUserName = (user) => user?.firstName || user?.first_name || user?.name 
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
 
+function normalizeAttachmentItems(messageItem) {
+  const sourceAttachments = Array.isArray(messageItem?.attachments)
+    ? messageItem.attachments
+    : Array.isArray(messageItem?.Attachments)
+      ? messageItem.Attachments
+      : [];
+
+  const normalizedFromArray = sourceAttachments
+    .map((attachment, index) => ({
+      id: String(attachment?.id || attachment?.Id || `${messageItem?.id || "message"}:${index}`),
+      attachmentUrl: String(attachment?.attachmentUrl || attachment?.AttachmentUrl || "").trim(),
+      attachmentName: String(attachment?.attachmentName || attachment?.AttachmentName || "").trim(),
+      attachmentSize: Number.isFinite(Number(attachment?.attachmentSize))
+        ? Number(attachment.attachmentSize)
+        : Number.isFinite(Number(attachment?.AttachmentSize))
+          ? Number(attachment.AttachmentSize)
+          : null,
+      attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || "").trim(),
+      attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null,
+      voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage),
+    }))
+    .filter((attachment) => attachment.attachmentUrl || attachment.attachmentEncryption || attachment.voiceMessage);
+
+  if (normalizedFromArray.length) {
+    return normalizedFromArray;
+  }
+
+  const legacyAttachmentUrl = String(messageItem?.attachmentUrl || messageItem?.AttachmentUrl || "").trim();
+  const legacyAttachmentEncryption = messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null;
+  const legacyVoiceMessage = normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage);
+
+  if (!legacyAttachmentUrl && !legacyAttachmentEncryption && !legacyVoiceMessage) {
+    return [];
+  }
+
+  return [{
+    id: String(messageItem?.id || "message"),
+    attachmentUrl: legacyAttachmentUrl,
+    attachmentName: String(messageItem?.attachmentName || messageItem?.AttachmentName || "").trim(),
+    attachmentSize: Number.isFinite(Number(messageItem?.attachmentSize))
+      ? Number(messageItem.attachmentSize)
+      : Number.isFinite(Number(messageItem?.AttachmentSize))
+        ? Number(messageItem.AttachmentSize)
+        : null,
+    attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "").trim(),
+    attachmentEncryption: legacyAttachmentEncryption,
+    voiceMessage: legacyVoiceMessage,
+  }];
+}
+
+function getPrimaryAttachment(messageItem) {
+  return normalizeAttachmentItems(messageItem)[0] || null;
+}
+
+function getAttachmentCacheKey(messageId, attachmentIndex = 0) {
+  return `${String(messageId || "")}:${Number(attachmentIndex) || 0}`;
+}
+
 function formatFileSize(size) {
   if (!size) {
     return "0 B";
@@ -138,11 +196,11 @@ function formatFileSize(size) {
 }
 
 function isImageAttachment(messageItem) {
-  return Boolean(messageItem?.attachmentContentType?.startsWith("image/"));
+  return Boolean(getPrimaryAttachment(messageItem)?.attachmentContentType?.startsWith("image/"));
 }
 
 function isVideoAttachment(messageItem) {
-  return Boolean(messageItem?.attachmentContentType?.startsWith("video/"));
+  return Boolean(getPrimaryAttachment(messageItem)?.attachmentContentType?.startsWith("video/"));
 }
 
 function getAttachmentKind(messageItem) {
@@ -154,7 +212,7 @@ function getAttachmentKind(messageItem) {
     return "video";
   }
 
-  if (messageItem?.attachmentUrl) {
+  if (getPrimaryAttachment(messageItem)?.attachmentUrl) {
     return "file";
   }
 
@@ -299,8 +357,14 @@ function getMessagePreview(messageItem) {
     return text;
   }
 
-  if (messageItem?.voiceMessage) {
-    return buildVoiceMessageLabel(messageItem.voiceMessage.durationMs);
+  const attachments = normalizeAttachmentItems(messageItem);
+  const voiceAttachment = attachments.find((attachment) => attachment.voiceMessage);
+  if (voiceAttachment?.voiceMessage) {
+    return buildVoiceMessageLabel(voiceAttachment.voiceMessage.durationMs);
+  }
+
+  if (attachments.length > 1) {
+    return `${attachments.length} вложений`;
   }
 
   const kind = getAttachmentKind(messageItem);
@@ -520,6 +584,11 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
   const [decryptedAttachmentsByMessageId, setDecryptedAttachmentsByMessageId] = useState({});
+  const [preferExplicitSend, setPreferExplicitSend] = useState(() => (
+    typeof window !== "undefined"
+      ? window.matchMedia("(pointer: coarse), (max-width: 900px)").matches
+      : false
+  ));
   const [forwardModal, setForwardModal] = useState({
     open: false,
     messageIds: [],
@@ -566,6 +635,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const messages = messagesByChannel[scopedChannelId] || [];
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(pointer: coarse), (max-width: 900px)");
+    const syncPreference = () => setPreferExplicitSend(mediaQuery.matches);
+    syncPreference();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncPreference);
+      return () => mediaQuery.removeEventListener("change", syncPreference);
+    }
+
+    mediaQuery.addListener(syncPreference);
+    return () => mediaQuery.removeListener(syncPreference);
+  }, []);
+
   const pinnedStorageKey = useMemo(() => getPinnedStorageKey(currentUserId, scopedChannelId), [currentUserId, scopedChannelId]);
   const selectedMessageIdSet = useMemo(() => new Set(selectedMessageIds.map((id) => String(id))), [selectedMessageIds]);
   const pinnedMessageIdSet = useMemo(() => new Set(pinnedMessages.map((item) => String(item.id))), [pinnedMessages]);
@@ -636,12 +723,19 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   const normalizeIncomingMessage = async (messageItem) => {
     const decrypted = await decryptIncomingMessageText(messageItem, user, { channelId: scopedChannelId });
+    const attachments = normalizeAttachmentItems(messageItem);
+    const primaryAttachment = attachments[0] || null;
     return {
       ...messageItem,
       message: decrypted.text,
       encryption: messageItem?.encryption || messageItem?.Encryption || null,
-      attachmentEncryption: messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null,
-      voiceMessage: normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage),
+      attachments,
+      attachmentEncryption: primaryAttachment?.attachmentEncryption || messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null,
+      attachmentUrl: primaryAttachment?.attachmentUrl || messageItem?.attachmentUrl || messageItem?.AttachmentUrl || "",
+      attachmentName: primaryAttachment?.attachmentName || messageItem?.attachmentName || messageItem?.AttachmentName || "",
+      attachmentSize: primaryAttachment?.attachmentSize ?? messageItem?.attachmentSize ?? messageItem?.AttachmentSize ?? null,
+      attachmentContentType: primaryAttachment?.attachmentContentType || messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "",
+      voiceMessage: primaryAttachment?.voiceMessage || normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage),
       editedAt: messageItem?.editedAt || messageItem?.EditedAt || null,
       encryptionState: decrypted.encryptionState,
       reactions: normalizeReactions(messageItem?.reactions),
@@ -965,6 +1059,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     });
 
     if (!response.ok) {
+      if (response.status === 413) {
+        throw new Error("Файл слишком большой для загрузки на сервер. Уменьшите размер вложения.");
+      }
       throw new Error("Не удалось проставить пунктуацию на сервере.");
     }
 
@@ -1076,6 +1173,21 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       {
         message: "",
         mentions: [],
+        attachments: [
+          {
+            attachmentUrl: uploaded?.fileUrl || "",
+            attachmentName: uploaded?.fileName || voiceFile.name,
+            attachmentSize: uploaded?.size || voiceFile.size || null,
+            attachmentContentType: uploaded?.contentType || voiceFile.type || "application/octet-stream",
+            attachmentEncryption: encryptedAttachment.attachmentEncryption || null,
+            voiceMessage: {
+              durationMs,
+              mimeType: voiceFile.type || "audio/webm",
+              fileName: voiceFile.name || "voice-message.webm",
+              waveform: buildVoiceWaveform(waveformSamples),
+            },
+          },
+        ],
         attachmentUrl: uploaded?.fileUrl || "",
         attachmentName: uploaded?.fileName || voiceFile.name,
         attachmentSize: uploaded?.size || voiceFile.size || null,
@@ -1375,61 +1487,65 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     let cancelled = false;
-    const encryptedMessages = messages.filter((messageItem) =>
-      messageItem?.attachmentEncryption && String(messageItem?.attachmentUrl || "").trim());
-
-    encryptedMessages.forEach((messageItem) => {
-      const normalizedMessageId = String(messageItem.id || "");
-      if (!normalizedMessageId
-        || decryptedAttachmentsByMessageId[normalizedMessageId]
-        || decryptingAttachmentIdsRef.current.has(normalizedMessageId)) {
-        return;
-      }
-
-      decryptingAttachmentIdsRef.current.add(normalizedMessageId);
-
-      void (async () => {
-        try {
-          const decryptedAttachment = await decryptIncomingAttachment(messageItem, user, { channelId: scopedChannelId });
-          if (cancelled || !decryptedAttachment) {
-            if (decryptedAttachment?.objectUrl) {
-              revokeAttachmentObjectUrl(decryptedAttachment);
-            }
-            return;
-          }
-
-          setDecryptedAttachmentsByMessageId((previous) => {
-            const existingEntry = previous[normalizedMessageId];
-            if (existingEntry) {
-              revokeAttachmentObjectUrl(existingEntry);
-            }
-
-            return {
-              ...previous,
-              [normalizedMessageId]: decryptedAttachment,
-            };
-          });
-        } catch (error) {
-          if (cancelled) {
-            return;
-          }
-
-          if (isExpectedAttachmentKeyError(error)) {
-            setDecryptedAttachmentsByMessageId((previous) => ({
-              ...previous,
-              [normalizedMessageId]: {
-                unavailable: true,
-                reason: "missing-shared-key",
-              },
-            }));
-            return;
-          }
-
-          console.warn("Failed to decrypt attachment:", error?.message || error);
-        } finally {
-          decryptingAttachmentIdsRef.current.delete(normalizedMessageId);
+    messages.forEach((messageItem) => {
+      const attachments = normalizeAttachmentItems(messageItem);
+      attachments.forEach((attachmentItem, attachmentIndex) => {
+        if (!attachmentItem?.attachmentEncryption || !String(attachmentItem?.attachmentUrl || "").trim()) {
+          return;
         }
-      })();
+
+        const cacheKey = getAttachmentCacheKey(messageItem.id, attachmentIndex);
+        if (!cacheKey
+          || decryptedAttachmentsByMessageId[cacheKey]
+          || decryptingAttachmentIdsRef.current.has(cacheKey)) {
+          return;
+        }
+
+        decryptingAttachmentIdsRef.current.add(cacheKey);
+
+        void (async () => {
+          try {
+            const decryptedAttachment = await decryptIncomingAttachment(attachmentItem, user, { channelId: scopedChannelId });
+            if (cancelled || !decryptedAttachment) {
+              if (decryptedAttachment?.objectUrl) {
+                revokeAttachmentObjectUrl(decryptedAttachment);
+              }
+              return;
+            }
+
+            setDecryptedAttachmentsByMessageId((previous) => {
+              const existingEntry = previous[cacheKey];
+              if (existingEntry) {
+                revokeAttachmentObjectUrl(existingEntry);
+              }
+
+              return {
+                ...previous,
+                [cacheKey]: decryptedAttachment,
+              };
+            });
+          } catch (error) {
+            if (cancelled) {
+              return;
+            }
+
+            if (isExpectedAttachmentKeyError(error)) {
+              setDecryptedAttachmentsByMessageId((previous) => ({
+                ...previous,
+                [cacheKey]: {
+                  unavailable: true,
+                  reason: "missing-shared-key",
+                },
+              }));
+              return;
+            }
+
+            console.warn("Failed to decrypt attachment:", error?.message || error);
+          } finally {
+            decryptingAttachmentIdsRef.current.delete(cacheKey);
+          }
+        })();
+      });
     });
 
     return () => {
@@ -2025,29 +2141,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         }
       }
 
-      const payload = attachments.length
-        ? attachments.map((attachment, index) => ({
-            message: index === 0 ? messageText : "",
-            mentions: index === 0 ? outgoingMentions : [],
-            attachmentUrl: attachment.fileUrl || "",
-            attachmentName: attachment.fileName || "",
-            attachmentSize: attachment.size || null,
-            attachmentContentType: attachment.contentType || "",
-            attachmentEncryption: attachment.attachmentEncryption || null,
-            voiceMessage: null,
-          }))
-        : [
-            {
-              message: messageText,
-              mentions: outgoingMentions,
-              attachmentUrl: "",
-              attachmentName: "",
-              attachmentSize: null,
-              attachmentContentType: "",
-              attachmentEncryption: null,
-              voiceMessage: null,
-            },
-          ];
+      const payload = [{
+        message: messageText,
+        mentions: outgoingMentions,
+        attachments: attachments.map((attachment) => ({
+          attachmentUrl: attachment.fileUrl || "",
+          attachmentName: attachment.fileName || "",
+          attachmentSize: attachment.size || null,
+          attachmentContentType: attachment.contentType || "",
+          attachmentEncryption: attachment.attachmentEncryption || null,
+          voiceMessage: null,
+        })),
+        attachmentUrl: attachments[0]?.fileUrl || "",
+        attachmentName: attachments[0]?.fileName || "",
+        attachmentSize: attachments[0]?.size || null,
+        attachmentContentType: attachments[0]?.contentType || "",
+        attachmentEncryption: attachments[0]?.attachmentEncryption || null,
+        voiceMessage: null,
+      }];
 
       await sendMessagesCompat(scopedChannelId, avatar, payload);
 
@@ -2185,20 +2296,21 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     const payload = [];
 
     for (const messageItem of sourceMessages.slice(0, MAX_FORWARD_BATCH_SIZE)) {
-      let attachmentPayload = {
-        attachmentUrl: String(messageItem.attachmentUrl || ""),
-        attachmentName: String(messageItem.attachmentName || ""),
-        attachmentSize: messageItem.attachmentSize || null,
-        attachmentContentType: String(messageItem.attachmentContentType || ""),
-        attachmentEncryption: messageItem.attachmentEncryption || null,
-      };
+      const sourceAttachments = normalizeAttachmentItems(messageItem);
+      const forwardedAttachments = [];
 
-      if (messageItem.attachmentUrl) {
+      for (let attachmentIndex = 0; attachmentIndex < sourceAttachments.length; attachmentIndex += 1) {
+        const attachmentItem = sourceAttachments[attachmentIndex];
+        if (!attachmentItem.attachmentUrl) {
+          continue;
+        }
+
         let forwardFile = null;
 
-        if (messageItem.attachmentEncryption) {
-          const cachedAttachment = decryptedAttachmentsByMessageId[String(messageItem.id)];
-          const decryptedAttachment = cachedAttachment || await decryptIncomingAttachment(messageItem, user, { channelId: scopedChannelId });
+        if (attachmentItem.attachmentEncryption) {
+          const cacheKey = getAttachmentCacheKey(messageItem.id, attachmentIndex);
+          const cachedAttachment = decryptedAttachmentsByMessageId[cacheKey];
+          const decryptedAttachment = cachedAttachment || await decryptIncomingAttachment(attachmentItem, user, { channelId: scopedChannelId });
           if (!decryptedAttachment?.blob) {
             throw new Error("Не удалось подготовить вложение для пересылки.");
           }
@@ -2211,7 +2323,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             revokeAttachmentObjectUrl(decryptedAttachment);
           }
         } else {
-          const sourceUrl = resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl);
+          const sourceUrl = resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl);
           const response = shouldUseAuthenticatedDownload(sourceUrl)
             ? await authFetch(sourceUrl)
             : await fetch(sourceUrl);
@@ -2220,8 +2332,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           }
 
           const blob = await response.blob();
-          forwardFile = new File([blob], messageItem.attachmentName || "file", {
-            type: messageItem.attachmentContentType || blob.type || "application/octet-stream",
+          forwardFile = new File([blob], attachmentItem.attachmentName || "file", {
+            type: attachmentItem.attachmentContentType || blob.type || "application/octet-stream",
           });
         }
 
@@ -2232,19 +2344,20 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         });
         const uploaded = await uploadAttachment({
           blob: encryptedAttachment.uploadBlob,
-          fileName: `attachment-forward-${Date.now()}-${messageItem.id}.bin`,
+          fileName: `attachment-forward-${Date.now()}-${messageItem.id}-${attachmentIndex}.bin`,
         });
 
-        attachmentPayload = {
+        forwardedAttachments.push({
           attachmentUrl: uploaded?.fileUrl || "",
           attachmentName: uploaded?.fileName || "attachment.bin",
           attachmentSize: uploaded?.size || encryptedAttachment.uploadBlob.size || null,
           attachmentContentType: uploaded?.contentType || "application/octet-stream",
           attachmentEncryption: encryptedAttachment.attachmentEncryption,
-        };
+          voiceMessage: attachmentItem.voiceMessage || null,
+        });
       }
 
-      if (!String(messageItem.message || "").trim() && !attachmentPayload.attachmentUrl) {
+      if (!String(messageItem.message || "").trim() && !forwardedAttachments.length) {
         continue;
       }
 
@@ -2252,8 +2365,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         message: String(messageItem.message || ""),
         forwardedFromUserId: String(messageItem.authorUserId || ""),
         forwardedFromUsername: String(messageItem.username || ""),
-        voiceMessage: messageItem.voiceMessage || null,
-        ...attachmentPayload,
+        voiceMessage: forwardedAttachments[0]?.voiceMessage || messageItem.voiceMessage || null,
+        attachments: forwardedAttachments,
+        attachmentUrl: forwardedAttachments[0]?.attachmentUrl || "",
+        attachmentName: forwardedAttachments[0]?.attachmentName || "",
+        attachmentSize: forwardedAttachments[0]?.attachmentSize || null,
+        attachmentContentType: forwardedAttachments[0]?.attachmentContentType || "",
+        attachmentEncryption: forwardedAttachments[0]?.attachmentEncryption || null,
       });
     }
 
@@ -2269,7 +2387,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     return messages
       .filter((messageItem) => {
         const messageText = String(messageItem.message || "").toLowerCase();
-        const attachmentName = String(messageItem.attachmentName || "").toLowerCase();
+        const attachmentName = normalizeAttachmentItems(messageItem)
+          .map((attachment) => String(attachment.attachmentName || "").toLowerCase())
+          .join(" ");
         return messageText.includes(normalizedSearchQuery) || attachmentName.includes(normalizedSearchQuery);
       })
       .map((messageItem) => ({
@@ -2375,7 +2495,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     });
   };
 
-  const openMediaPreview = (type, url, name, contentType = "", messageId = "", attachmentEncryption = null, sourceUrl = "") => {
+  const openMediaPreview = (type, url, name, contentType = "", messageId = "", attachmentEncryption = null, sourceUrl = "", attachmentIndex = 0) => {
     if (!url) {
       return;
     }
@@ -2386,6 +2506,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       name: name || (type === "image" ? "Изображение" : "Видео"),
       contentType,
       messageId: String(messageId || ""),
+      attachmentIndex: Number(attachmentIndex) || 0,
       attachmentEncryption,
       sourceUrl: sourceUrl || url,
     });
@@ -2394,7 +2515,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const openMessageContextMenu = (event, messageItem, isOwnMessage) => {
     event.preventDefault();
 
-    const decryptedAttachment = decryptedAttachmentsByMessageId[String(messageItem?.id || "")];
+    const decryptedAttachment = decryptedAttachmentsByMessageId[getAttachmentCacheKey(messageItem?.id, 0)];
     const resolvedAttachmentContentType = decryptedAttachment?.contentType || messageItem?.attachmentContentType || "";
     const attachmentKind = resolvedAttachmentContentType.startsWith("image/")
       ? "image"
@@ -2499,7 +2620,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       let fileBytes = null;
 
       if (attachment?.attachmentEncryption) {
-        const cachedAttachment = decryptedAttachmentsByMessageId[String(attachment?.messageId || "")];
+        const cachedAttachment = decryptedAttachmentsByMessageId[getAttachmentCacheKey(attachment?.messageId, attachment?.attachmentIndex)];
         const decryptedAttachment = cachedAttachment || await decryptIncomingAttachment(attachment, user, { channelId: scopedChannelId });
         if (!decryptedAttachment?.blob) {
           throw new Error("Не удалось расшифровать файл.");
@@ -2609,6 +2730,207 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
   };
 
+  const resolveRenderedAttachments = (messageItem) =>
+    normalizeAttachmentItems(messageItem).map((attachmentItem, attachmentIndex) => {
+      const cacheKey = getAttachmentCacheKey(messageItem?.id, attachmentIndex);
+      const attachmentView = decryptedAttachmentsByMessageId[cacheKey] || null;
+      const attachmentUnavailable = Boolean(attachmentView?.unavailable);
+      const attachmentUrl = attachmentView?.objectUrl || (
+        attachmentItem.attachmentEncryption
+          ? ""
+          : attachmentItem.attachmentUrl
+            ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+            : ""
+      );
+      const attachmentName = attachmentView?.name || attachmentItem.attachmentName || "";
+      const attachmentContentType = attachmentView?.contentType || attachmentItem.attachmentContentType || "";
+      const attachmentSize = attachmentView?.size || attachmentItem.attachmentSize || null;
+      const voiceMessage = normalizeVoiceMessageMetadata(attachmentItem.voiceMessage);
+
+      return {
+        ...attachmentItem,
+        attachmentIndex,
+        cacheKey,
+        attachmentView,
+        attachmentUnavailable,
+        attachmentUrl,
+        attachmentName,
+        attachmentContentType,
+        attachmentSize,
+        voiceMessage,
+        isImage: String(attachmentContentType).startsWith("image/"),
+        isVideo: String(attachmentContentType).startsWith("video/"),
+        isVoice: isVoiceMessage({
+          attachmentUrl,
+          attachmentEncryption: attachmentItem.attachmentEncryption,
+          voiceMessage,
+        }) && !attachmentUnavailable,
+      };
+    });
+
+  const renderAttachmentCard = (messageItem, attachmentItem) => {
+    if (attachmentItem.isVoice) {
+      return (
+        <VoiceMessageBubble
+          src={attachmentItem.attachmentUrl}
+          pending={!attachmentItem.attachmentUrl}
+          waveform={attachmentItem.voiceMessage?.waveform || []}
+          durationMs={attachmentItem.voiceMessage?.durationMs || 0}
+          fileName={attachmentItem.voiceMessage?.fileName || attachmentItem.attachmentName}
+        />
+      );
+    }
+
+    if (attachmentItem.attachmentUrl) {
+      if (attachmentItem.isImage) {
+        return (
+          <button
+            type="button"
+            className="message-media message-media--button"
+            onClick={(event) => {
+              if (selectionMode) {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleMessageSelection(messageItem.id);
+                return;
+              }
+
+              openMediaPreview(
+                "image",
+                attachmentItem.attachmentUrl,
+                attachmentItem.attachmentName,
+                attachmentItem.attachmentContentType,
+                messageItem.id,
+                attachmentItem.attachmentEncryption,
+                attachmentItem.attachmentUrl ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl) : attachmentItem.attachmentUrl,
+                attachmentItem.attachmentIndex
+              );
+            }}
+            aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
+          >
+            <img className="message-media__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "image"} />
+          </button>
+        );
+      }
+
+      if (attachmentItem.isVideo) {
+        return (
+          <button
+            type="button"
+            className="message-media message-media--video message-media--button"
+            onClick={(event) => {
+              if (selectionMode) {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleMessageSelection(messageItem.id);
+                return;
+              }
+
+              openMediaPreview(
+                "video",
+                attachmentItem.attachmentUrl,
+                attachmentItem.attachmentName,
+                attachmentItem.attachmentContentType,
+                messageItem.id,
+                attachmentItem.attachmentEncryption,
+                attachmentItem.attachmentUrl ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl) : attachmentItem.attachmentUrl,
+                attachmentItem.attachmentIndex
+              );
+            }}
+            aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
+          >
+            <video className="message-media__video" src={attachmentItem.attachmentUrl} preload="metadata" playsInline muted />
+            <span className="message-media__play" aria-hidden="true" />
+          </button>
+        );
+      }
+
+      return (
+        <a
+          className="message-attachment"
+          href={attachmentItem.attachmentUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => {
+            if (!selectionMode) {
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            toggleMessageSelection(messageItem.id);
+          }}
+        >
+          <span className="message-attachment__icon" aria-hidden="true" />
+          <span className="message-attachment__meta">
+            <span className="message-attachment__name">{attachmentItem.attachmentName || "Файл"}</span>
+            <span className="message-attachment__size">{formatFileSize(attachmentItem.attachmentSize)}</span>
+          </span>
+        </a>
+      );
+    }
+
+    if (attachmentItem.attachmentEncryption) {
+      return (
+        <div className={`message-attachment ${attachmentItem.attachmentUnavailable ? "message-attachment--unavailable" : "message-attachment--pending"}`}>
+          <span className="message-attachment__icon" aria-hidden="true" />
+          <span className="message-attachment__meta">
+            <span className="message-attachment__name">
+              {attachmentItem.attachmentUnavailable ? "Зашифрованное вложение недоступно" : "Зашифрованный файл"}
+            </span>
+            <span className="message-attachment__size">
+              {attachmentItem.attachmentUnavailable ? "На этом устройстве нет ключа для расшифровки" : "Расшифровывается автоматически"}
+            </span>
+          </span>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderResolvedAttachmentCollection = (messageItem, attachments) => {
+    if (!attachments.length) {
+      return null;
+    }
+
+    if (attachments.length === 1) {
+      return renderAttachmentCard(messageItem, attachments[0]);
+    }
+
+    const visualAttachments = attachments.filter((attachmentItem) => attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo);
+    const fileAttachments = attachments.filter((attachmentItem) => !attachmentItem.isVoice && !attachmentItem.isImage && !attachmentItem.isVideo);
+
+    return (
+      <div className="message-attachments-stack">
+        {visualAttachments.length ? (
+          <div className="message-attachment-grid">
+            {visualAttachments.map((attachmentItem) => (
+              <div
+                key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
+                className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""}`}
+              >
+                {renderAttachmentCard(messageItem, attachmentItem)}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {fileAttachments.length ? (
+          <div className="message-attachment-list">
+            {fileAttachments.map((attachmentItem) => (
+              <div key={`${messageItem.id}-${attachmentItem.attachmentIndex}`} className="message-attachment-list__item">
+                {renderAttachmentCard(messageItem, attachmentItem)}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderMessageAttachments = (messageItem) => renderResolvedAttachmentCollection(messageItem, resolveRenderedAttachments(messageItem));
+
   const renderMessageText = (text, mentions) => (
     segmentMessageTextByMentions(text, mentions).map((segment, index) => (
       segment.isMention ? (
@@ -2627,7 +2949,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
     const normalizedPayload = Array.isArray(payload)
-      ? payload.filter((item) => String(item?.message || "").trim() || String(item?.attachmentUrl || "").trim() || item?.voiceMessage)
+      ? payload.filter((item) => {
+          const attachments = Array.isArray(item?.attachments) ? item.attachments : [];
+          return String(item?.message || "").trim()
+            || String(item?.attachmentUrl || "").trim()
+            || item?.voiceMessage
+            || attachments.some((attachment) => String(attachment?.attachmentUrl || "").trim() || attachment?.voiceMessage);
+        })
       : [];
 
     if (!normalizedPayload.length) {
@@ -2659,20 +2987,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         console.warn("E2EE fallback:", preparedTextPayload.reason);
       }
 
+      const attachmentList = Array.isArray(item.attachments) ? item.attachments : [];
+      const primaryAttachment = attachmentList[0] || null;
+
       await chatConnection.invoke(
         "SendMessage",
         targetChannelId,
         getUserName(user),
         preparedTextPayload.message,
         avatar,
-        item.attachmentUrl || null,
-        item.attachmentName || null,
-        item.attachmentSize || null,
-        item.attachmentContentType || null,
+        primaryAttachment?.attachmentUrl || item.attachmentUrl || null,
+        primaryAttachment?.attachmentName || item.attachmentName || null,
+        primaryAttachment?.attachmentSize || item.attachmentSize || null,
+        primaryAttachment?.attachmentContentType || item.attachmentContentType || null,
         preparedTextPayload.encryption || null,
-        item.attachmentEncryption || null,
+        primaryAttachment?.attachmentEncryption || item.attachmentEncryption || null,
         Array.isArray(item.mentions) ? item.mentions : [],
-        item.voiceMessage || null
+        primaryAttachment?.voiceMessage || item.voiceMessage || null,
+        attachmentList
       );
 
       if (index < normalizedPayload.length - 1) {
@@ -2853,22 +3185,19 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
         <div ref={messagesListRef} className="messages-list">
           {messages.map((messageItem) => {
-            const attachmentView = decryptedAttachmentsByMessageId[String(messageItem.id)] || null;
-            const attachmentUnavailable = Boolean(attachmentView?.unavailable);
-            const attachmentUrl = attachmentView?.objectUrl || (
-              messageItem.attachmentEncryption
-                ? ""
-                : messageItem.attachmentUrl
-                  ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl)
-                  : ""
-            );
-            const attachmentName = attachmentView?.name || messageItem.attachmentName || "";
-            const attachmentContentType = attachmentView?.contentType || messageItem.attachmentContentType || "";
-            const attachmentSize = attachmentView?.size || messageItem.attachmentSize || null;
-            const isResolvedImageAttachment = String(attachmentContentType).startsWith("image/");
-            const isResolvedVideoAttachment = String(attachmentContentType).startsWith("video/");
-            const resolvedVoiceMessage = normalizeVoiceMessageMetadata(messageItem.voiceMessage);
-            const hasVoiceAttachment = isVoiceMessage({ ...messageItem, voiceMessage: resolvedVoiceMessage });
+            const attachments = resolveRenderedAttachments(messageItem);
+            const hasRenderableAttachments = attachments.length > 0;
+            const primaryAttachment = attachments[0] || null;
+            const attachmentView = primaryAttachment?.attachmentView || null;
+            const attachmentUnavailable = Boolean(primaryAttachment?.attachmentUnavailable);
+            const attachmentUrl = primaryAttachment?.attachmentUrl || "";
+            const attachmentName = primaryAttachment?.attachmentName || "";
+            const attachmentContentType = primaryAttachment?.attachmentContentType || "";
+            const attachmentSize = primaryAttachment?.attachmentSize || null;
+            const isResolvedImageAttachment = Boolean(primaryAttachment?.isImage);
+            const isResolvedVideoAttachment = Boolean(primaryAttachment?.isVideo);
+            const resolvedVoiceMessage = primaryAttachment?.voiceMessage || normalizeVoiceMessageMetadata(messageItem.voiceMessage);
+            const hasVoiceAttachment = Boolean(primaryAttachment?.isVoice);
             const canRenderVoiceAttachment = hasVoiceAttachment && !attachmentUnavailable;
             const reactions = normalizeReactions(messageItem.reactions);
             const messageText = String(messageItem.message || "");
@@ -2879,8 +3208,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             const isSelectedMessage = selectedMessageIdSet.has(String(messageItem.id));
             const useInlineFooter = isDirectChat
               && Boolean(messageText.trim())
-              && !attachmentUrl
-              && !messageItem.attachmentEncryption
+              && !hasRenderableAttachments
               && !reactions.length
               && !messageItem.forwardedFromUsername
               && !messageText.includes("\n")
@@ -3051,6 +3379,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       </span>
                     </div>
                   ) : null}
+
+                  {attachments.length > 1 ? renderResolvedAttachmentCollection(messageItem, attachments.slice(1)) : null}
 
                   {((isDirectChat && !useInlineFooter) || reactions.length) ? (
                     <div className="message-bottom-row">
@@ -3350,12 +3680,31 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     return;
                   }
 
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !preferExplicitSend) {
                     event.preventDefault();
                     send();
                   }
                 }}
               />
+
+              <div className="composer-tools-end">
+                <button
+                  type="button"
+                  className="composer-send-button"
+                  onClick={() => void send()}
+                  disabled={
+                    uploadingFile
+                    || voiceRecordingState === "holding"
+                    || voiceRecordingState === "locked"
+                    || voiceRecordingState === "sending"
+                    || (!String(message || "").trim() && !selectedFiles.length)
+                  }
+                  aria-label="Отправить сообщение"
+                  title="Отправить сообщение"
+                >
+                  <span className="composer-send-button__icon" aria-hidden="true" />
+                </button>
+              </div>
 
               {/* <button
                 type="button"
@@ -3411,6 +3760,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                       attachmentContentType: mediaPreview.contentType || "",
                       attachmentEncryption: mediaPreview.attachmentEncryption || null,
                       messageId: mediaPreview.messageId || "",
+                      attachmentIndex: mediaPreview.attachmentIndex || 0,
                     })
                   }
                 >

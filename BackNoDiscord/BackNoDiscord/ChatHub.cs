@@ -17,6 +17,7 @@ public class ChatHub : Hub
     private const int MaxMessageLength = 4000;
     private const int MaxAttachmentUrlLength = 260;
     private const int MaxAttachmentContentTypeLength = 120;
+    private const int MaxAttachmentsPerMessage = 12;
     private const int MaxReactionKeyLength = 32;
     private const int MaxReactionGlyphLength = 16;
     private const int MaxMentionHandleLength = 80;
@@ -54,7 +55,8 @@ public class ChatHub : Hub
         ChatMessageEncryptionEnvelope? encryption = null,
         ChatAttachmentEncryptionEnvelope? attachmentEncryption = null,
         List<ChatMentionInput>? mentions = null,
-        ChatVoiceMessageInput? voiceMessage = null)
+        ChatVoiceMessageInput? voiceMessage = null,
+        List<ChatAttachmentInput>? attachments = null)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -78,32 +80,32 @@ public class ChatHub : Hub
             throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
         }
 
+        var normalizedAttachments = NormalizeAttachments(
+            attachments,
+            attachmentUrl,
+            attachmentName,
+            attachmentSize,
+            attachmentContentType,
+            attachmentEncryption,
+            voiceMessage);
+
         var payload = new ChatMessagePayload
         {
             AuthorUserId = currentUser.UserId,
             Message = UploadPolicies.TrimToLength(message, MaxMessageLength),
             Encryption = NormalizeEncryptionEnvelope(encryption),
-            AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(attachmentEncryption),
-            AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(attachmentUrl, "/chat-files/"),
-            AttachmentName = string.IsNullOrWhiteSpace(attachmentUrl)
-                ? null
-                : UploadPolicies.SanitizeDisplayFileName(attachmentName),
-            AttachmentSize = attachmentSize,
-            AttachmentContentType = UploadPolicies.TrimToLength(attachmentContentType, MaxAttachmentContentTypeLength),
+            Attachments = normalizedAttachments,
             Mentions = NormalizeMentions(normalizedChannelId, mentions),
-            VoiceMessage = NormalizeVoiceMessage(voiceMessage)
+            VoiceMessage = normalizedAttachments.FirstOrDefault(static item => item.VoiceMessage is not null)?.VoiceMessage
         };
+
+        ApplyLegacyAttachmentFields(payload);
 
         if (string.IsNullOrWhiteSpace(payload.Message) &&
             payload.Encryption is null &&
-            string.IsNullOrWhiteSpace(payload.AttachmentUrl))
+            payload.Attachments.Count == 0)
         {
             throw new HubException("message or attachment is required");
-        }
-
-        if (!string.IsNullOrWhiteSpace(payload.AttachmentUrl) && payload.AttachmentUrl.Length > MaxAttachmentUrlLength)
-        {
-            throw new HubException("attachmentUrl is too long");
         }
 
         var serializedPayload = SerializePayload(payload);
@@ -171,31 +173,31 @@ public class ChatHub : Hub
 
         foreach (var item in sourceItems.Take(MaxForwardBatchSize))
         {
+            var normalizedAttachments = NormalizeAttachments(
+                item.Attachments,
+                item.AttachmentUrl,
+                item.AttachmentName,
+                item.AttachmentSize,
+                item.AttachmentContentType,
+                item.AttachmentEncryption,
+                item.VoiceMessage);
+
             var payload = new ChatMessagePayload
             {
                 AuthorUserId = currentUser.UserId,
                 Message = UploadPolicies.TrimToLength(item.Message, MaxMessageLength),
                 ForwardedFromUserId = UploadPolicies.TrimToLength(item.ForwardedFromUserId, 64),
                 ForwardedFromUsername = UploadPolicies.TrimToLength(item.ForwardedFromUsername, 160),
-            AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(item.AttachmentEncryption),
-            AttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(item.AttachmentUrl, "/chat-files/"),
-            AttachmentName = string.IsNullOrWhiteSpace(item.AttachmentUrl)
-                ? null
-                : UploadPolicies.SanitizeDisplayFileName(item.AttachmentName),
-            AttachmentSize = item.AttachmentSize,
-            AttachmentContentType = UploadPolicies.TrimToLength(item.AttachmentContentType, MaxAttachmentContentTypeLength),
-            Mentions = [],
-            VoiceMessage = NormalizeVoiceMessage(item.VoiceMessage)
-        };
+                Attachments = normalizedAttachments,
+                Mentions = [],
+                VoiceMessage = normalizedAttachments.FirstOrDefault(static attachment => attachment.VoiceMessage is not null)?.VoiceMessage
+            };
 
-            if (string.IsNullOrWhiteSpace(payload.Message) && string.IsNullOrWhiteSpace(payload.AttachmentUrl))
+            ApplyLegacyAttachmentFields(payload);
+
+            if (string.IsNullOrWhiteSpace(payload.Message) && payload.Attachments.Count == 0)
             {
                 continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(payload.AttachmentUrl) && payload.AttachmentUrl.Length > MaxAttachmentUrlLength)
-            {
-                throw new HubException("attachmentUrl is too long");
             }
 
             var entity = new Message
@@ -475,6 +477,17 @@ public class ChatHub : Hub
             AttachmentName = payload.AttachmentName,
             AttachmentSize = payload.AttachmentSize,
             AttachmentContentType = payload.AttachmentContentType,
+            Attachments = payload.Attachments
+                .Select(attachment => new ChatAttachmentDto
+                {
+                    AttachmentEncryption = attachment.AttachmentEncryption,
+                    AttachmentUrl = attachment.AttachmentUrl,
+                    AttachmentName = attachment.AttachmentName,
+                    AttachmentSize = attachment.AttachmentSize,
+                    AttachmentContentType = attachment.AttachmentContentType,
+                    VoiceMessage = attachment.VoiceMessage
+                })
+                .ToList(),
             VoiceMessage = payload.VoiceMessage,
             Mentions = payload.Mentions
                 .Select(mention => new MessageMentionDto
@@ -634,12 +647,132 @@ public class ChatHub : Hub
 
         try
         {
-            return JsonSerializer.Deserialize<ChatMessagePayload>(raw[MessagePayloadPrefix.Length..]) ?? new ChatMessagePayload();
+            var payload = JsonSerializer.Deserialize<ChatMessagePayload>(raw[MessagePayloadPrefix.Length..]) ?? new ChatMessagePayload();
+            NormalizeLegacyPayload(payload);
+            return payload;
         }
         catch
         {
             return new ChatMessagePayload { Message = raw };
         }
+    }
+
+    private static List<ChatAttachmentPayload> NormalizeAttachments(
+        List<ChatAttachmentInput>? attachments,
+        string? legacyAttachmentUrl,
+        string? legacyAttachmentName,
+        long? legacyAttachmentSize,
+        string? legacyAttachmentContentType,
+        ChatAttachmentEncryptionEnvelope? legacyAttachmentEncryption,
+        ChatVoiceMessageInput? legacyVoiceMessage)
+    {
+        var normalized = new List<ChatAttachmentPayload>();
+        foreach (var item in attachments ?? [])
+        {
+            var normalizedAttachment = NormalizeAttachment(item.AttachmentUrl, item.AttachmentName, item.AttachmentSize, item.AttachmentContentType, item.AttachmentEncryption, item.VoiceMessage);
+            if (normalizedAttachment is not null)
+            {
+                normalized.Add(normalizedAttachment);
+            }
+        }
+
+        if (normalized.Count == 0)
+        {
+            var legacyAttachment = NormalizeAttachment(
+                legacyAttachmentUrl,
+                legacyAttachmentName,
+                legacyAttachmentSize,
+                legacyAttachmentContentType,
+                legacyAttachmentEncryption,
+                legacyVoiceMessage);
+
+            if (legacyAttachment is not null)
+            {
+                normalized.Add(legacyAttachment);
+            }
+        }
+
+        if (normalized.Count > MaxAttachmentsPerMessage)
+        {
+            throw new HubException($"attachments limit exceeded: max {MaxAttachmentsPerMessage}");
+        }
+
+        return normalized;
+    }
+
+    private static ChatAttachmentPayload? NormalizeAttachment(
+        string? attachmentUrl,
+        string? attachmentName,
+        long? attachmentSize,
+        string? attachmentContentType,
+        ChatAttachmentEncryptionEnvelope? attachmentEncryption,
+        ChatVoiceMessageInput? voiceMessage)
+    {
+        var normalizedAttachmentUrl = UploadPolicies.SanitizeRelativeAssetUrl(attachmentUrl, "/chat-files/");
+        var normalizedVoiceMessage = NormalizeVoiceMessage(voiceMessage);
+
+        if (string.IsNullOrWhiteSpace(normalizedAttachmentUrl) && normalizedVoiceMessage is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedAttachmentUrl) && normalizedAttachmentUrl.Length > MaxAttachmentUrlLength)
+        {
+            throw new HubException("attachmentUrl is too long");
+        }
+
+        return new ChatAttachmentPayload
+        {
+            AttachmentEncryption = NormalizeAttachmentEncryptionEnvelope(attachmentEncryption),
+            AttachmentUrl = normalizedAttachmentUrl,
+            AttachmentName = string.IsNullOrWhiteSpace(normalizedAttachmentUrl)
+                ? null
+                : UploadPolicies.SanitizeDisplayFileName(attachmentName),
+            AttachmentSize = attachmentSize,
+            AttachmentContentType = UploadPolicies.TrimToLength(attachmentContentType, MaxAttachmentContentTypeLength),
+            VoiceMessage = normalizedVoiceMessage
+        };
+    }
+
+    private static void NormalizeLegacyPayload(ChatMessagePayload payload)
+    {
+        payload.Attachments ??= [];
+        if (payload.Attachments.Count == 0)
+        {
+            var legacyAttachment = NormalizeAttachment(
+                payload.AttachmentUrl,
+                payload.AttachmentName,
+                payload.AttachmentSize,
+                payload.AttachmentContentType,
+                payload.AttachmentEncryption,
+                payload.VoiceMessage is null
+                    ? null
+                    : new ChatVoiceMessageInput
+                    {
+                        DurationMs = payload.VoiceMessage.DurationMs,
+                        MimeType = payload.VoiceMessage.MimeType,
+                        FileName = payload.VoiceMessage.FileName,
+                        Waveform = payload.VoiceMessage.Waveform
+                    });
+
+            if (legacyAttachment is not null)
+            {
+                payload.Attachments.Add(legacyAttachment);
+            }
+        }
+
+        ApplyLegacyAttachmentFields(payload);
+    }
+
+    private static void ApplyLegacyAttachmentFields(ChatMessagePayload payload)
+    {
+        var primaryAttachment = payload.Attachments.FirstOrDefault();
+        payload.AttachmentEncryption = primaryAttachment?.AttachmentEncryption;
+        payload.AttachmentUrl = primaryAttachment?.AttachmentUrl;
+        payload.AttachmentName = primaryAttachment?.AttachmentName;
+        payload.AttachmentSize = primaryAttachment?.AttachmentSize;
+        payload.AttachmentContentType = primaryAttachment?.AttachmentContentType;
+        payload.VoiceMessage = primaryAttachment?.VoiceMessage ?? payload.VoiceMessage;
     }
 
     private string GetRawPayload(Message message)
@@ -915,6 +1048,7 @@ public class MessageDto
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public List<ChatAttachmentDto> Attachments { get; set; } = [];
     public ChatVoiceMessagePayload? VoiceMessage { get; set; }
     public List<MessageMentionDto> Mentions { get; set; } = [];
     public DateTime Timestamp { get; set; }
@@ -974,9 +1108,40 @@ public class ChatMessagePayload
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public List<ChatAttachmentPayload> Attachments { get; set; } = [];
     public ChatVoiceMessagePayload? VoiceMessage { get; set; }
     public List<ChatMentionPayload> Mentions { get; set; } = [];
     public DateTime? EditedAt { get; set; }
+}
+
+public class ChatAttachmentInput
+{
+    public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentName { get; set; }
+    public long? AttachmentSize { get; set; }
+    public string? AttachmentContentType { get; set; }
+    public ChatVoiceMessageInput? VoiceMessage { get; set; }
+}
+
+public class ChatAttachmentPayload
+{
+    public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentName { get; set; }
+    public long? AttachmentSize { get; set; }
+    public string? AttachmentContentType { get; set; }
+    public ChatVoiceMessagePayload? VoiceMessage { get; set; }
+}
+
+public class ChatAttachmentDto
+{
+    public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentName { get; set; }
+    public long? AttachmentSize { get; set; }
+    public string? AttachmentContentType { get; set; }
+    public ChatVoiceMessagePayload? VoiceMessage { get; set; }
 }
 
 public class ChatVoiceMessageInput
@@ -1038,6 +1203,7 @@ public class ForwardMessageInput
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
     public string? AttachmentContentType { get; set; }
+    public List<ChatAttachmentInput> Attachments { get; set; } = [];
     public ChatVoiceMessageInput? VoiceMessage { get; set; }
 }
 
