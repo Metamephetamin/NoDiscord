@@ -154,4 +154,7 @@ Write-Host "  BACKEND_SERVICE_NAME"
 Write-Host "  FRONTEND_DEPLOY_OWNER"
 Write-Host "  BACKEND_DEPLOY_OWNER"
 Write-Host "  HEALTHCHECK_URL"
+Write-Host "  LANDING_DEPLOY_PATH"
+Write-Host "  LANDING_DEPLOY_OWNER"
+Write-Host "  LANDING_HEALTHCHECK_URL"
 Write-Host "You can now run the Deploy workflow in GitHub Actions." -ForegroundColor Green

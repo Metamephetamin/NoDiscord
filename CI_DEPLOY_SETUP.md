@@ -7,6 +7,7 @@
   - backend build
   - backend tests (auto-skip if no `*Tests*.csproj`)
 - Deploy workflow: `.github/workflows/deploy.yml`
+- Landing deploy workflow: `.github/workflows/deploy-landing.yml`
 
 ## How deploy works now
 
@@ -25,8 +26,24 @@ On every push to `master` or `main`, GitHub Actions will:
 
 Important:
 
-- This repository deploys the main app and backend only.
-- The separate landing folder `C:\Users\Admin2.0\Desktop\Tendland` is not part of this repo, so it will not be deployed by this workflow.
+- This workflow deploys the main app and backend.
+- The landing is deployed separately by `.github/workflows/deploy-landing.yml`.
+
+## How landing deploy works now
+
+The landing source now lives in:
+
+- `landing/index.html`
+- `landing/styles.css`
+- `landing/script.js`
+- `landing/assets/*`
+
+On every push that changes `landing/**`, GitHub Actions will:
+
+1. sync `landing/` to `/var/www/tend-land/current`
+2. keep the existing `Tend Setup.exe` file on the server
+3. reload `nginx`
+4. run a healthcheck against `https://land.tendsec.ru`
 
 ## GitHub Secrets required
 
@@ -55,6 +72,9 @@ Only needed if you want to override the defaults:
 - `FRONTEND_DEPLOY_OWNER` default `www-data:www-data`
 - `BACKEND_DEPLOY_OWNER` default `nodiscord:nodiscord`
 - `HEALTHCHECK_URL` default `https://tendsec.ru`
+- `LANDING_DEPLOY_PATH` default `/var/www/tend-land/current`
+- `LANDING_DEPLOY_OWNER` default `www-data:www-data`
+- `LANDING_HEALTHCHECK_URL` default `https://land.tendsec.ru`
 
 ## One-command deploy secrets setup
 

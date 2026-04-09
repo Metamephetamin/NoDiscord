@@ -1,0 +1,98 @@
+name: Deploy Landing
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - "landing/**"
+      - ".github/workflows/deploy-landing.yml"
+      - "CI_DEPLOY_SETUP.md"
+
+concurrency:
+  group: deploy-landing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy Landing to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy secrets
+        id: validate
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Deploy secrets are not fully configured. Skipping landing deploy."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup SSH agent
+        if: steps.validate.outputs.ready == 'true'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add deploy host to known_hosts
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          PORT="${DEPLOY_PORT:-22}"
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync landing to server
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          LANDING_DEPLOY_PATH: ${{ vars.LANDING_DEPLOY_PATH }}
+          LANDING_DEPLOY_OWNER: ${{ vars.LANDING_DEPLOY_OWNER }}
+          LANDING_HEALTHCHECK_URL: ${{ vars.LANDING_HEALTHCHECK_URL }}
+        run: |
+          PORT="${DEPLOY_PORT:-22}"
+          LANDING_PATH="${LANDING_DEPLOY_PATH:-/var/www/tend-land/current}"
+          LANDING_OWNER="${LANDING_DEPLOY_OWNER:-www-data:www-data}"
+          HEALTHCHECK="${LANDING_HEALTHCHECK_URL:-https://land.tendsec.ru}"
+          TEMP_ROOT="/tmp/tend-landing-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/landing' '$LANDING_PATH'"
+
+          rsync -az --delete -e "ssh -p $PORT" ./landing/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/landing/"
+
+          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
+            set -e
+            LANDING_PATH='$LANDING_PATH'
+            TEMP_ROOT='$TEMP_ROOT'
+            LANDING_OWNER='$LANDING_OWNER'
+            case \"\$LANDING_PATH\" in
+              /var/www/*) ;;
+              *)
+                echo \"Unsafe deploy path: \$LANDING_PATH\" >&2
+                exit 1
+                ;;
+            esac
+            rsync -az --delete --exclude 'Tend Setup.exe' \"\$TEMP_ROOT/landing/\" \"\$LANDING_PATH/\"
+            chown -R \"\$LANDING_OWNER\" \"\$LANDING_PATH\"
+            systemctl reload nginx
+            rm -rf \"\$TEMP_ROOT\"
+          "
+
+          curl --fail --silent --show-error --location "$HEALTHCHECK" > /dev/null

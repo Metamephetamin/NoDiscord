@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Tend — защищенный мессенджер с чатами, голосом, видео, серверами и демонстрацией экрана.">
+  <title>Tend | Защищенный мессенджер</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="scroll-progress" aria-hidden="true">
+    <span id="scrollBar"></span>
+  </div>
+
+  <div class="background-stage" aria-hidden="true">
+    <video class="background-video" autoplay muted loop playsinline>
+      <source src="assets/background.mp4" type="video/mp4">
+    </video>
+    <div class="background-overlay"></div>
+    <div class="background-grid"></div>
+    <div id="particleField" class="particle-field"></div>
+    <div id="cursorGlow" class="cursor-glow"></div>
+  </div>
+
+  <div class="page-shell">
+    <header class="site-header">
+      <a href="#hero" class="brand-mark">
+        <img class="brand-logo brand-logo--small logo-recolor-target" src="assets/brain.png" alt="Tend logo">
+        <span class="brand-text">Tend</span>
+      </a>
+
+      <nav class="site-nav">
+        <a href="#about">О проекте</a>
+        <a href="#security">Защита</a>
+        <a href="#flow">Как работает</a>
+        <a href="#future">Преимущества</a>
+      </nav>
+
+      <a href="#contact" class="header-cta">Скачать</a>
+    </header>
+
+    <main>
+      <section id="hero" class="hero section">
+        <div class="hero-copy reveal reveal-left">
+          <span class="eyebrow">Защищенный мессенджер</span>
+          <h1>
+            Tend объединяет
+            <span>защищенные чаты, голос и видео</span>
+            в одном приложении.
+          </h1>
+          <p class="hero-text">
+            Tend это современный мессенджер для тех, кому важны приватность, стабильная связь
+            и удобное общение в одном приложении. Чаты, голосовые комнаты, видео, серверы и
+            демонстрация экрана собраны здесь в одну цельную среду.
+          </p>
+
+          <div class="hero-actions">
+            <a href="#contact" class="button button-primary">Скачать Tend</a>
+            <a href="#about" class="button button-secondary">Посмотреть возможности</a>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card reveal">
+              <strong class="counter" data-target="120">0</strong>
+              <span>FPS для плавной демонстрации экрана</span>
+            </article>
+            <article class="stat-card reveal">
+              <strong class="counter" data-target="100">0</strong>
+              <span>МБ лимит на загрузку медиа и файлов</span>
+            </article>
+            <article class="stat-card reveal">
+              <strong class="counter" data-target="24">0</strong>
+              <span>часа стабильной связи, чатов и серверов</span>
+            </article>
+          </div>
+        </div>
+
+        <div class="hero-visual reveal reveal-right">
+          <div class="hero-orb hero-orb-a" data-parallax="0.14"></div>
+          <div class="hero-orb hero-orb-b" data-parallax="0.2"></div>
+          <div class="hero-frame">
+            <div class="logo-aura"></div>
+            <img id="brainLogo" class="brain-logo logo-recolor-target" src="assets/brain.png" alt="Tend brain logo">
+            <div class="hero-badge badge-top">E2EE защита</div>
+            <div class="hero-badge badge-bottom">Desktop формат</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="about" class="section">
+        <div class="section-heading reveal">
+          <span class="eyebrow">О Tend</span>
+          <h2>Tend это мессенджер с серверами, каналами, медиа и приватной связью в реальном времени.</h2>
+          <p>
+            Tend создан как единое пространство для общения, командной работы и закрытых сообществ.
+            Здесь удобно переписываться, созваниваться, делиться экраном, отправлять медиа и
+            быстро переключаться между серверами, каналами и личными диалогами.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="glass-card reveal">
+            <span class="card-index">01</span>
+            <h3>Чаты, серверы и каналы</h3>
+            <p>
+              Создавайте свои пространства общения, настраивайте каналы и приглашайте людей по ссылке.
+              Вся структура остается понятной, быстрой и удобной даже при активной коммуникации.
+            </p>
+          </article>
+
+          <article class="glass-card reveal">
+            <span class="card-index">02</span>
+            <h3>Голос, видео и демонстрация экрана</h3>
+            <p>
+              Tend подходит не только для переписки. Голосовые комнаты, видеосвязь и демонстрация
+              экрана позволяют легко перейти от текста к живому разговору без смены платформы.
+            </p>
+          </article>
+
+          <article class="glass-card reveal">
+            <span class="card-index">03</span>
+            <h3>Desktop-клиент и обновления</h3>
+            <p>
+              Приложение ощущается как цельный desktop-продукт: быстрый запуск, плавная работа,
+              актуальные обновления и интерфейс, в котором удобно находиться каждый день.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="security" class="section">
+        <div class="split-layout">
+          <div class="section-heading reveal reveal-left">
+            <span class="eyebrow">Защищенность</span>
+            <h2>Tend создан как пространство, в котором приватность и безопасность не остаются на втором плане.</h2>
+            <p>
+              Tend делает акцент на приватность общения, безопасный доступ и аккуратную работу с данными.
+              Защита встроена в саму логику продукта, чтобы переписки, вложения и подключение к
+              серверам ощущались надежно на каждом этапе.
+            </p>
+          </div>
+
+          <div class="security-stack">
+            <article class="security-card reveal">
+              <h3>E2EE для сообщений и файлов</h3>
+              <p>
+                Личные сообщения, вложения и чувствительный контент защищаются дополнительным
+                уровнем шифрования, чтобы приватное общение оставалось действительно приватным.
+              </p>
+            </article>
+
+            <article class="security-card reveal">
+              <h3>JWT и контроль доступа</h3>
+              <p>
+                Доступ к серверам, каналам и действиям внутри пространства управляется аккуратно,
+                поэтому у каждого участника остается только тот уровень доступа, который ему нужен.
+              </p>
+            </article>
+
+            <article class="security-card reveal">
+              <h3>Rate limit и origin policy</h3>
+              <p>
+                Tend снижает риски за счет ограничений на чувствительные сценарии входа и
+                дополнительного контроля источников подключения.
+              </p>
+            </article>
+
+            <article class="security-card reveal">
+              <h3>Безопасные медиа-политики</h3>
+              <p>
+                Загрузка файлов, медиа и пользовательского контента проходит через продуманную
+                проверку, чтобы общение оставалось не только удобным, но и безопасным.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="flow" class="section">
+        <div class="section-heading reveal">
+          <span class="eyebrow">Как работает</span>
+          <h2>Tend собирает привычный сценарий общения в один быстрый и цельный рабочий поток.</h2>
+        </div>
+
+        <div class="timeline">
+          <article class="timeline-step reveal">
+            <span class="timeline-point"></span>
+            <h3>Вход и запуск</h3>
+            <p>
+              Пользователь открывает Tend и сразу попадает в знакомую, чистую среду общения,
+              где все готово для переписки, звонков и быстрого подключения к своим серверам.
+            </p>
+          </article>
+
+          <article class="timeline-step reveal">
+            <span class="timeline-point"></span>
+            <h3>Чаты и каналы</h3>
+            <p>
+              Общение строится вокруг серверов, каналов и личных диалогов, поэтому даже большие
+              сообщества остаются организованными и удобными для ежедневной работы.
+            </p>
+          </article>
+
+          <article class="timeline-step reveal">
+            <span class="timeline-point"></span>
+            <h3>Голос, видео, демонстрация экрана</h3>
+            <p>
+              Когда текста уже мало, Tend позволяет мгновенно перейти в голос, включить видео
+              или показать экран, сохраняя ощущение цельного и живого общения.
+            </p>
+          </article>
+
+          <article class="timeline-step reveal">
+            <span class="timeline-point"></span>
+            <h3>Шифрование и обновления</h3>
+            <p>
+              Защита данных, стабильная работа клиента и регулярное развитие продукта делают Tend
+              удобной основой для постоянного общения без компромиссов по качеству.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="future" class="section">
+        <div class="section-heading reveal">
+          <span class="eyebrow">Преимущества</span>
+          <h2>Tend можно подавать как быстрый, приватный и визуально сильный мессенджер нового поколения.</h2>
+        </div>
+
+        <div class="advantage-grid">
+          <article class="advantage-panel reveal">
+            <h3>Максимум приватности</h3>
+            <p>Tend создан для тех, кто хочет общаться спокойнее: меньше лишнего шума, больше контроля и сильный акцент на приватность.</p>
+          </article>
+
+          <article class="advantage-panel reveal">
+            <h3>Хорошее качество видео</h3>
+            <p>Видео и демонстрация экрана остаются важной частью продукта, поэтому Tend подходит не только для текста, но и для полноценной визуальной связи.</p>
+          </article>
+
+          <article class="advantage-panel reveal">
+            <h3>Настоящий desktop-опыт</h3>
+            <p>Tend ощущается как полноценное приложение для ежедневного использования: быстрое, удобное и собранное вокруг реального общения.</p>
+          </article>
+
+          <article class="advantage-panel reveal">
+            <h3>Стабильная голосовая связь</h3>
+            <p>Голосовые комнаты помогают быстро собираться, общаться без задержек и оставаться на связи в привычном ритме.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact" class="section cta-section">
+        <div class="cta-card reveal">
+          <span class="eyebrow">Скачать Tend</span>
+          <h2>Скачайте Tend и переходите в защищенные чаты, голосовые комнаты, видео и серверы без лишнего шума.</h2>
+          <p>
+            Tend объединяет приватность, стабильную связь и современный desktop-интерфейс в одном
+            приложении, чтобы общение было быстрым, удобным и действительно комфортным каждый день.
+          </p>
+          <div class="cta-actions">
+            <a href="./Tend%20Setup.exe" class="button button-primary" download>
+              <span class="button-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img">
+                  <path d="M2 3.6 10.2 2.4v8.2H2V3.6Zm9.4-1.4L22 0v10.6H11.4V2.2ZM2 11.8h8.2V20L2 18.8v-7Zm9.4 0H22V22l-10.6-1.5v-8.7Z"/>
+                </svg>
+              </span>
+              <span>Скачать для Windows</span>
+            </a>
+            <a href="#" class="button button-secondary button-disabled" aria-disabled="true" onclick="return false;">
+              <span class="button-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img">
+                  <path d="M16.1 12.7c0-1.8 1-3.5 2.6-4.4-1-1.5-2.5-2.4-4.3-2.6-1.8-.2-3.5 1-4.4 1-.9 0-2.3-.9-3.8-.9C3 5.8 0 8.6 0 13.1c0 1.3.2 2.7.8 4 .8 1.8 3.5 6.3 6.2 6.2 1.4 0 2.3-.9 4.1-.9s2.6.9 4.1.9c2.7 0 5.2-4.1 6-5.9-3.3-1.6-5.1-4.6-5.1-4.7ZM13.2 3.6c.6-.8 1-1.9.9-3-1 .1-2.1.7-2.8 1.5-.6.7-1.1 1.8-.9 2.9 1.1.1 2.2-.5 2.8-1.4Z"/>
+                </svg>
+              </span>
+              <span>macOS скоро</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>Tend</span>
+      <span>Приватные чаты. Стабильная связь. Чистое видео. Удобный desktop-формат.</span>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
