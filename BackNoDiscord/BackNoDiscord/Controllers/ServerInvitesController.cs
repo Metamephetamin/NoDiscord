@@ -96,7 +96,7 @@ public class ServerInvitesController : ControllerBase
     }
 
     [AllowAnonymous]
-    [HttpGet("{inviteCode:length(8)}")]
+    [HttpGet("{inviteCode}")]
     public IActionResult GetInvitePreview([FromRoute] string inviteCode)
     {
         var currentUserId = AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser)
@@ -118,7 +118,7 @@ public class ServerInvitesController : ControllerBase
         }
     }
 
-    [HttpPost("{inviteCode:length(8)}/redeem")]
+    [HttpPost("{inviteCode}/redeem")]
     public IActionResult RedeemInviteByLink([FromRoute] string inviteCode, [FromBody] RedeemServerInviteRequest? request)
     {
         return RedeemInvite(new RedeemServerInviteRequest

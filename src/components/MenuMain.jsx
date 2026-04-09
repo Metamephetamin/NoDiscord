@@ -5045,6 +5045,22 @@ export default function MenuMain({
                 </div>
               </div>
 
+              <div className="friends-discovery friends-discovery--server-code">
+                <h2>Вступить по коду сервера</h2>
+                <p>Если друг прислал код сервера, вставьте его сюда. Новые коды длинные и криптостойкие, их нельзя просто подобрать.</p>
+                <ServerInvitesPanel
+                  activeServer={null}
+                  user={user}
+                  canInvite={false}
+                  showCreate={false}
+                  showJoin
+                  title="Код сервера"
+                  helperText="Введите код сервера целиком, и сервер появится у вас в списке сразу после подтверждения."
+                  onImportServer={handleImportServer}
+                  onServerShared={markServerAsShared}
+                />
+              </div>
+
               <div className="friends-discovery">
                 <h2>Где ещё можно завести друзей</h2>
                 <p>Если пока не с кем переписываться, можно открыть свои серверы или пригласить туда новых людей.</p>

@@ -22,6 +22,7 @@ public class ServerInviteServiceTests
         var redeemed = service.RedeemInvite(result.InviteCode, "member-1", "Member", "avatar.png");
 
         Assert.Equal(result.InviteCode, redeemed.InviteCode);
+        Assert.Equal(20, result.InviteCode.Length);
         Assert.True(redeemed.Snapshot.IsShared);
         Assert.Equal("server-guild", redeemed.Snapshot.Id);
         Assert.Equal("Guild", redeemed.Snapshot.Name);
@@ -100,6 +101,26 @@ public class ServerInviteServiceTests
         Assert.Throws<KeyNotFoundException>(() => service.GetInvitePreview(firstInvite.InviteCode));
         Assert.Equal("server-guild", service.GetInvitePreview(secondInvite.InviteCode).ServerId);
         Assert.Equal(2, context.ServerInvites.Count());
+    }
+
+    [Fact]
+    public void RedeemInvite_AcceptsFormattedCodeInput()
+    {
+        using var context = CreateContext();
+        var service = new ServerInviteService(context);
+        var invite = service.CreateInvite("owner-7", new ServerSnapshot
+        {
+            Id = "server-owner-7-lounge",
+            Name = "Lounge",
+        });
+
+        var formattedCode = string.Join("-", Enumerable.Range(0, invite.InviteCode.Length / 5 + (invite.InviteCode.Length % 5 == 0 ? 0 : 1))
+            .Select((index) => invite.InviteCode.Substring(index * 5, Math.Min(5, invite.InviteCode.Length - (index * 5)))));
+
+        var redeemed = service.RedeemInvite(formattedCode, "member-9", "Member", "");
+
+        Assert.Equal(invite.InviteCode, redeemed.InviteCode);
+        Assert.Contains(redeemed.Snapshot.Members, member => member.UserId == "member-9");
     }
 
     private static AppDbContext CreateContext()

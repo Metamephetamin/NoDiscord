@@ -1272,6 +1272,18 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.friends-discovery--server-code .settings-section {
+  margin: 0;
+}
+
+.friends-discovery--server-code .settings-list__row {
+  align-items: stretch;
+}
+
+.friends-discovery--server-code .settings-list__actions {
+  justify-content: flex-end;
+}
+
 .friends-discovery__icon,
 .friends-discovery__arrow {
   flex: 0 0 auto;
@@ -1823,6 +1835,12 @@
 .menu__main--mobile .friends-results__action {
   width: 100%;
   min-height: 42px;
+}
+
+.menu__main--mobile .friends-discovery--server-code .settings-list__row,
+.menu__main--mobile .friends-discovery--server-code .settings-list__actions {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .mobile-voice-room {

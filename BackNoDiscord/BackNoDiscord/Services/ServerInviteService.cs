@@ -7,6 +7,9 @@ namespace BackNoDiscord.Services;
 
 public class ServerInviteService
 {
+    private const string InviteAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private const int InviteCodeLength = 20;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -50,7 +53,8 @@ public class ServerInviteService
 
     public ServerInviteRedeemResult RedeemInvite(string inviteCode, string userId, string name, string avatar)
     {
-        if (string.IsNullOrWhiteSpace(inviteCode))
+        var normalizedCode = NormalizeInviteCode(inviteCode);
+        if (string.IsNullOrWhiteSpace(normalizedCode))
         {
             throw new InvalidOperationException("Invite code is required.");
         }
@@ -60,7 +64,6 @@ public class ServerInviteService
             throw new InvalidOperationException("User id is required.");
         }
 
-        var normalizedCode = inviteCode.Trim().ToUpperInvariant();
         var invite = _context.ServerInvites.FirstOrDefault(item => item.Code == normalizedCode);
 
         if (invite is null)
@@ -106,12 +109,11 @@ public class ServerInviteService
 
     public ServerInvitePreviewResult GetInvitePreview(string inviteCode, string? currentUserId = null)
     {
-        if (string.IsNullOrWhiteSpace(inviteCode))
+        var normalizedCode = NormalizeInviteCode(inviteCode);
+        if (string.IsNullOrWhiteSpace(normalizedCode))
         {
             throw new InvalidOperationException("Invite code is required.");
         }
-
-        var normalizedCode = inviteCode.Trim().ToUpperInvariant();
         var invite = _context.ServerInvites.FirstOrDefault(item => item.Code == normalizedCode);
 
         if (invite is null)
@@ -177,12 +179,10 @@ public class ServerInviteService
 
     private string GenerateUniqueCode()
     {
-        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
         while (true)
         {
-            var code = new string(Enumerable.Range(0, 8)
-                .Select(_ => alphabet[RandomNumberGenerator.GetInt32(alphabet.Length)])
+            var code = new string(Enumerable.Range(0, InviteCodeLength)
+                .Select(_ => InviteAlphabet[RandomNumberGenerator.GetInt32(InviteAlphabet.Length)])
                 .ToArray());
 
             if (!_context.ServerInvites.Any(item => item.Code == code))
@@ -190,6 +190,20 @@ public class ServerInviteService
                 return code;
             }
         }
+    }
+
+    private static string NormalizeInviteCode(string? inviteCode)
+    {
+        if (string.IsNullOrWhiteSpace(inviteCode))
+        {
+            return string.Empty;
+        }
+
+        return new string(inviteCode
+            .Trim()
+            .ToUpperInvariant()
+            .Where(char.IsLetterOrDigit)
+            .ToArray());
     }
 
     private static ServerSnapshot NormalizeSnapshot(ServerSnapshot snapshot, string ownerUserId)
