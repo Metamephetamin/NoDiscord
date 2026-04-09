@@ -595,6 +595,9 @@ const UI_SOUND_PATHS = {
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone.png");
 const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-simple.svg");
+const MONITOR_ICON_URL = resolveStaticAssetUrl("/icons/monitor.svg");
+const CAMERA_ICON_URL = resolveStaticAssetUrl("/icons/camera.png");
+const PHONE_ICON_URL = resolveStaticAssetUrl("/icons/phone.png");
 const PENCIL_ICON_URL = resolveStaticAssetUrl("/icons/pencil.svg");
 const SEARCH_ICON_URL = resolveStaticAssetUrl("/icons/search.svg");
 const SMS_ICON_URL = resolveStaticAssetUrl("/icons/sms.svg");
@@ -811,6 +814,20 @@ export default function MenuMain({
 
     return scopedVoiceChannels.find((channel) => channel.runtimeId === currentVoiceChannel)?.name || currentVoiceChannel;
   }, [currentVoiceChannel, servers]);
+  const memberNameByUserId = useMemo(
+    () => new Map((activeServer?.members || []).map((member) => [String(member.userId), String(member.name || "").trim()])),
+    [activeServer?.members]
+  );
+  const memberRoleColorByUserId = useMemo(
+    () =>
+      new Map(
+        (activeServer?.members || []).map((member) => {
+          const role = (activeServer?.roles || []).find((item) => item.id === member.roleId);
+          return [String(member.userId), role?.color || "#7b89a8"];
+        })
+      ),
+    [activeServer?.members, activeServer?.roles]
+  );
   const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
   const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
   const selfDirectEntry = useMemo(() => {
@@ -871,6 +888,13 @@ export default function MenuMain({
       return workspaceMode === "friends" ? "friends" : "servers";
     });
   }, [isMobileViewport, workspaceMode]);
+  useEffect(() => {
+    if (!isMobileViewport || currentVoiceChannel || mobileServersPane !== "voice") {
+      return;
+    }
+
+    setMobileServersPane("channels");
+  }, [currentVoiceChannel, isMobileViewport, mobileServersPane]);
   useEffect(() => {
     if (!activeServer && (settingsTab === "server" || settingsTab === "roles")) {
       setSettingsTab("voice_video");
@@ -962,6 +986,44 @@ export default function MenuMain({
   const activeContacts = useMemo(
     () => friends.filter((friend) => voiceParticipantByUserId.has(String(friend.id))),
     [friends, voiceParticipantByUserId]
+  );
+  const currentVoiceParticipants = useMemo(() => {
+    if (!currentVoiceChannel) {
+      return [];
+    }
+
+    const rawParticipants = activeVoiceParticipantsMap?.[currentVoiceChannel] || [];
+    return rawParticipants
+      .map((participant) => {
+        const userId = String(participant?.userId || participant?.UserId || "");
+        const fallbackName = String(participant?.name || participant?.Name || "").trim();
+
+        return {
+          userId,
+          name: memberNameByUserId.get(userId) || fallbackName || "Участник",
+          avatar: participant?.avatar || participant?.Avatar || "",
+          isSelf: userId === String(currentUserId),
+          isSpeaking: speakingUserIds.some((id) => String(id) === userId),
+          isMicMuted: Boolean(participant?.isMicMuted || participant?.IsMicMuted),
+          isDeafened: Boolean(participant?.isDeafened || participant?.IsDeafened),
+          isLive: liveUserIds.some((id) => String(id) === userId) || Boolean(participant?.isScreenSharing || participant?.IsScreenSharing),
+          roleColor: memberRoleColorByUserId.get(userId) || "#7b89a8",
+        };
+      })
+      .sort((left, right) => {
+        const leftWeight = (left.isSpeaking ? 4 : 0) + (left.isLive ? 2 : 0) + (left.isSelf ? 1 : 0);
+        const rightWeight = (right.isSpeaking ? 4 : 0) + (right.isLive ? 2 : 0) + (right.isSelf ? 1 : 0);
+        return rightWeight - leftWeight;
+      });
+  }, [activeVoiceParticipantsMap, currentUserId, currentVoiceChannel, liveUserIds, memberNameByUserId, memberRoleColorByUserId, speakingUserIds]);
+  const spotlightVoiceParticipant = useMemo(
+    () =>
+      currentVoiceParticipants.find((participant) => participant.isSpeaking)
+      || currentVoiceParticipants.find((participant) => participant.isLive)
+      || currentVoiceParticipants.find((participant) => participant.isSelf)
+      || currentVoiceParticipants[0]
+      || null,
+    [currentVoiceParticipants]
   );
   const friendQueryMode = getFriendSearchModeForQuery(friendEmail);
   const filteredFriends = useMemo(() => {
@@ -1327,7 +1389,7 @@ export default function MenuMain({
     setSelectedStreamUserId(null);
     if (isMobileViewport) {
       setMobileSection("servers");
-      setMobileServersPane("channels");
+      setMobileServersPane(currentVoiceChannel ? "voice" : "channels");
     }
   };
 
@@ -3153,13 +3215,24 @@ export default function MenuMain({
     if (!voiceClientRef.current || !user?.id || !channel?.id || !activeServer?.id) return;
     try {
       await voiceClientRef.current.joinChannel(getScopedVoiceChannelId(activeServer.id, channel.id), user);
+      if (isMobileViewport) {
+        setMobileSection("servers");
+        setMobileServersPane("voice");
+      }
     } catch (error) {
       console.error("Ошибка входа в голосовой канал:", error);
     }
   };
   const leaveVoiceChannel = async () => {
     if (!voiceClientRef.current) return;
-    try { await voiceClientRef.current.leaveChannel(); } catch (error) { console.error("Ошибка выхода из голосового канала:", error); }
+    try {
+      await voiceClientRef.current.leaveChannel();
+      if (isMobileViewport) {
+        setMobileServersPane("channels");
+      }
+    } catch (error) {
+      console.error("Ошибка выхода из голосового канала:", error);
+    }
   };
   const handleLogout = async () => {
     try { await voiceClientRef.current?.disconnect(); } catch (error) { console.error("Ошибка при отключении перед выходом:", error); }
@@ -3400,6 +3473,19 @@ export default function MenuMain({
     await copyTextToClipboard(inviteLink);
     markServerAsShared(data?.serverId || targetServer.id);
     return inviteLink;
+  };
+  const handleInvitePeopleToVoice = async () => {
+    if (!activeServer) {
+      showServerInviteFeedback("Сервер не найден.");
+      return;
+    }
+
+    try {
+      await requestServerInviteLink(activeServer);
+      showServerInviteFeedback(`Ссылка на ${activeServer.name || "сервер"} скопирована.`);
+    } catch (error) {
+      showServerInviteFeedback(error?.message || "Не удалось скопировать ссылку.");
+    }
   };
   const openServerContextMenu = (event, server) => {
     if (!server) {
@@ -5135,6 +5221,139 @@ export default function MenuMain({
       </div>
     </main>
   );
+  const renderMobileVoiceRoom = () => (
+    <section className="mobile-voice-room">
+      <div className="mobile-voice-room__stage">
+        <div className={`mobile-voice-room__spotlight ${spotlightVoiceParticipant?.isSpeaking ? "mobile-voice-room__spotlight--speaking" : ""}`}>
+          <div className="mobile-voice-room__spotlight-glow" aria-hidden="true" />
+          <AnimatedAvatar
+            className={`mobile-voice-room__spotlight-avatar ${spotlightVoiceParticipant?.isSpeaking ? "mobile-voice-room__spotlight-avatar--speaking" : ""}`}
+            src={spotlightVoiceParticipant?.avatar || ""}
+            alt={spotlightVoiceParticipant?.name || "Участник"}
+          />
+          <div className="mobile-voice-room__spotlight-copy">
+            <strong>{spotlightVoiceParticipant?.name || "Голосовой канал"}</strong>
+            <span>
+              {spotlightVoiceParticipant?.isSpeaking
+                ? "Сейчас говорит"
+                : spotlightVoiceParticipant?.isLive
+                  ? "Идёт эфир"
+                  : `${currentVoiceParticipants.length} участников в комнате`}
+            </span>
+          </div>
+          <div className="mobile-voice-room__spotlight-badges">
+            {spotlightVoiceParticipant?.isSelf ? <span className="mobile-voice-room__badge">Вы</span> : null}
+            {spotlightVoiceParticipant?.isLive ? <span className="mobile-voice-room__badge mobile-voice-room__badge--live">LIVE</span> : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="mobile-voice-room__participants">
+        {currentVoiceParticipants.map((participant) => (
+          <button
+            key={participant.userId || participant.name}
+            type="button"
+            className={`mobile-voice-room__participant ${participant.isSpeaking ? "mobile-voice-room__participant--speaking" : ""} ${participant.isLive ? "mobile-voice-room__participant--live" : ""}`}
+            onClick={participant.isLive ? () => handleWatchStream(participant.userId) : undefined}
+            disabled={!participant.isLive}
+          >
+            <AnimatedAvatar className="mobile-voice-room__participant-avatar" src={participant.avatar} alt={participant.name} />
+            <div className="mobile-voice-room__participant-copy">
+              <strong>{participant.name}</strong>
+              <span>
+                {participant.isLive
+                  ? "Открыть эфир"
+                  : participant.isSpeaking
+                    ? "Говорит"
+                    : participant.isSelf
+                      ? "Это вы"
+                      : "В комнате"}
+              </span>
+            </div>
+            <div className="mobile-voice-room__participant-meta">
+              <span className="mobile-voice-room__participant-role" style={{ backgroundColor: participant.roleColor }} aria-hidden="true" />
+              {participant.isMicMuted ? <span className="mobile-voice-room__participant-flag mobile-voice-room__participant-flag--slashed"><img src={MICROPHONE_ICON_URL} alt="" /></span> : null}
+              {participant.isDeafened ? <span className="mobile-voice-room__participant-flag mobile-voice-room__participant-flag--slashed"><img src={HEADPHONES_ICON_URL} alt="" /></span> : null}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {canInviteToServer(activeServer) ? (
+        <button type="button" className="mobile-voice-room__invite" onClick={handleInvitePeopleToVoice}>
+          <span className="mobile-voice-room__invite-icon" aria-hidden="true">✦</span>
+          <span className="mobile-voice-room__invite-copy">
+            <strong>Добавить людей в голосовой чат</strong>
+            <span>Ссылка-приглашение скопируется в буфер обмена.</span>
+          </span>
+          <span className="mobile-voice-room__invite-arrow" aria-hidden="true">›</span>
+        </button>
+      ) : null}
+
+      <div className="mobile-voice-room__controls" role="toolbar" aria-label="Управление голосовым чатом">
+        <button
+          type="button"
+          className={`mobile-voice-room__control ${isMicMuted || isSoundMuted ? "mobile-voice-room__control--muted" : ""}`}
+          onClick={toggleMicMute}
+          aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+        >
+          <span className={`mobile-voice-room__control-icon ${isMicMuted || isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
+            <img src={MICROPHONE_ICON_URL} alt="" />
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-voice-room__control ${isSoundMuted ? "mobile-voice-room__control--muted" : ""}`}
+          onClick={toggleSoundMute}
+          aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
+        >
+          <span className={`mobile-voice-room__control-icon ${isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
+            <img src={HEADPHONES_ICON_URL} alt="" />
+          </span>
+        </button>
+        <button
+          type="button"
+          className="mobile-voice-room__control"
+          onClick={() => setMobileServersPane("chat")}
+          aria-label="Перейти в чат"
+        >
+          <span className="mobile-voice-room__control-icon">
+            <img src={SMS_ICON_URL} alt="" />
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-voice-room__control ${isScreenShareActive ? "mobile-voice-room__control--active" : ""}`}
+          onClick={handleScreenShareAction}
+          aria-label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
+        >
+          <span className="mobile-voice-room__control-icon">
+            <img src={MONITOR_ICON_URL} alt="" />
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-voice-room__control ${isCameraShareActive ? "mobile-voice-room__control--active" : ""}`}
+          onClick={openCameraModal}
+          aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
+        >
+          <span className="mobile-voice-room__control-icon">
+            <img src={CAMERA_ICON_URL} alt="" />
+          </span>
+        </button>
+        <button
+          type="button"
+          className="mobile-voice-room__control mobile-voice-room__control--danger"
+          onClick={leaveVoiceChannel}
+          aria-label="Отключиться от голосового канала"
+        >
+          <span className="mobile-voice-room__control-icon">
+            <img src={PHONE_ICON_URL} alt="" />
+          </span>
+        </button>
+      </div>
+    </section>
+  );
   const renderMobileProfileScreen = () => (
     <section className="mobile-profile-screen">
       <div className="mobile-profile-screen__hero">
@@ -5209,12 +5428,17 @@ export default function MenuMain({
 
     if (mobileSection === "servers" && selectedStreamUserId) {
       setSelectedStreamUserId(null);
-      setMobileServersPane("chat");
+      setMobileServersPane(currentVoiceChannel ? "voice" : "chat");
+      return;
+    }
+
+    if (mobileSection === "servers" && mobileServersPane === "voice") {
+      setMobileServersPane("channels");
       return;
     }
 
     if (mobileSection === "servers" && mobileServersPane === "chat") {
-      setMobileServersPane("channels");
+      setMobileServersPane(currentVoiceChannel ? "voice" : "channels");
     }
   };
   const getMobileHeaderMeta = () => {
@@ -5251,13 +5475,33 @@ export default function MenuMain({
       };
     }
 
-    if (mobileServersPane === "chat" || selectedStreamUserId) {
+    if (selectedStreamUserId) {
+      return {
+        title: selectedStreamParticipant?.name || "Трансляция",
+        subtitle: "Просмотр эфира участника",
+        canGoBack: true,
+        actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
+        onAction: () => setMobileServersPane(currentVoiceChannel ? "voice" : "channels"),
+      };
+    }
+
+    if (mobileServersPane === "voice" && currentVoiceChannel) {
+      return {
+        title: currentVoiceChannelName || "Голосовой канал",
+        subtitle: activeServer?.name || `${currentVoiceParticipants.length} участников`,
+        canGoBack: true,
+        actionLabel: "Чат",
+        onAction: () => setMobileServersPane("chat"),
+      };
+    }
+
+    if (mobileServersPane === "chat") {
       return {
         title: getChannelDisplayName(currentTextChannel?.name || "channel", "text"),
         subtitle: activeServer?.name || "Текстовый канал",
         canGoBack: true,
-        actionLabel: "Каналы",
-        onAction: () => setMobileServersPane("channels"),
+        actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
+        onAction: () => setMobileServersPane(currentVoiceChannel ? "voice" : "channels"),
       };
     }
 
@@ -5306,7 +5550,7 @@ export default function MenuMain({
             <div className="mobile-shell__panel mobile-shell__panel--servers">
               {renderMobileServerStrip()}
               <div className="mobile-shell__workspace mobile-shell__workspace--servers">
-                {mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
+                {selectedStreamUserId ? renderServerMain() : mobileServersPane === "voice" ? renderMobileVoiceRoom() : mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
               </div>
             </div>
           )}
