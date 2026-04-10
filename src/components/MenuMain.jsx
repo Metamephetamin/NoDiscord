@@ -399,6 +399,7 @@ const createServer = (name, user, options = {}) => {
   return {
   id: getScopedPrivateServerId(createId("server"), ownerUser),
   name: name?.trim() || "Новый сервер",
+  description: String(options?.description || "").trim().slice(0, 280),
   icon: String(options?.icon || DEFAULT_SERVER_ICON),
   isDefault: false,
   isShared: false,
@@ -450,6 +451,7 @@ const normalizeServers = (value, currentUser) => {
       isDefault: false,
       id: nextId,
       name: String(server?.name || `Сервер ${index + 1}`),
+      description: String(server?.description || server?.Description || "").trim().slice(0, 280),
       icon: server?.icon ?? "",
       isShared: isSharedServer,
       ownerId: nextOwnerId,
@@ -3340,6 +3342,10 @@ export default function MenuMain({
     if (!canManageServer) return;
     updateServer((server) => ({ ...server, name: value }));
   };
+  const updateActiveServerDescription = (value) => {
+    if (!canManageServer) return;
+    updateServer((server) => ({ ...server, description: String(value || "").slice(0, 280) }));
+  };
   const updateTextChannelName = (channelId, value) => {
     if (!canManageChannels) return;
     updateServer((server) => ({
@@ -4617,6 +4623,21 @@ export default function MenuMain({
                 <input className="settings-input" type="text" value={activeServer?.name || ""} onChange={(event) => updateActiveServerName(event.target.value)} disabled={!canManageServer} />
               </label>
             </div>
+            <label className="voice-settings-field voice-settings-field--stacked voice-settings-field--grow">
+              <span>Описание сервера</span>
+              <textarea
+                className="settings-input settings-input--textarea"
+                value={activeServer?.description || ""}
+                onChange={(event) => updateActiveServerDescription(event.target.value)}
+                placeholder="Коротко опишите, для чего нужен этот сервер."
+                maxLength={280}
+                rows={4}
+                disabled={!canManageServer}
+              />
+              <span className="voice-settings-caption">
+                Это описание увидят люди, которые откроют ссылку-приглашение.
+              </span>
+            </label>
             <div className="settings-shell__actions">
               <button type="button" className="settings-inline-button" onClick={() => serverIconInputRef.current?.click()}>Сменить картинку</button>
               <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => handleDeleteServer(activeServer?.id)} disabled={!canManageServer}>Удалить сервер</button>

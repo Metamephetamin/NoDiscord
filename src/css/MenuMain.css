@@ -4858,6 +4858,13 @@
   outline: none;
 }
 
+.settings-input--textarea {
+  min-height: 104px;
+  resize: vertical;
+  line-height: 1.5;
+  font: inherit;
+}
+
 .settings-server-card {
   display: flex;
   align-items: center;

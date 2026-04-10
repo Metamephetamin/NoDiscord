@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { buildServerInviteLink } from "../utils/serverInviteLinks";
 
 const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
@@ -18,7 +19,7 @@ export default function ServerInvitesPanel({
   title = "Приглашения",
   helperText = "",
 }) {
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [status, setStatus] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -53,26 +54,27 @@ export default function ServerInvitesPanel({
         throw new Error(getApiErrorMessage(response, data, "Не удалось создать приглашение."));
       }
 
-      setInviteCode(data?.inviteCode || "");
+      const nextInviteLink = buildServerInviteLink(data?.inviteCode || "");
+      setInviteLink(nextInviteLink || data?.inviteCode || "");
       onServerShared?.(data?.serverId || inviteSource?.id || activeServer.id);
-      setStatus("Код сервера создан.");
+      setStatus("Ссылка-приглашение создана.");
     } catch (error) {
-      setStatus(error.message || "Ошибка создания кода сервера.");
+      setStatus(error?.message || "Ошибка создания приглашения.");
     } finally {
       setIsCreating(false);
     }
   };
 
   const copyInvite = async () => {
-    if (!inviteCode) {
+    if (!inviteLink) {
       return;
     }
 
     try {
-      await copyTextToClipboard(inviteCode);
-      setStatus("Код сервера скопирован.");
+      await copyTextToClipboard(inviteLink);
+      setStatus("Ссылка-приглашение скопирована.");
     } catch {
-      setStatus("Не удалось скопировать код.");
+      setStatus("Не удалось скопировать ссылку.");
     }
   };
 
@@ -106,7 +108,7 @@ export default function ServerInvitesPanel({
       setJoinCode("");
       setStatus("Сервер добавлен.");
     } catch (error) {
-      setStatus(error.message || "Ошибка присоединения к серверу.");
+      setStatus(error?.message || "Ошибка присоединения к серверу.");
     } finally {
       setIsJoining(false);
     }
@@ -121,7 +123,7 @@ export default function ServerInvitesPanel({
       <div className="settings-list">
         {showCreate ? (
           <div className="settings-list__row">
-            <input className="settings-input" type="text" value={inviteCode} readOnly placeholder="Код сервера" />
+            <input className="settings-input" type="text" value={inviteLink} readOnly placeholder="Ссылка-приглашение" />
             <div className="settings-list__actions">
               <button
                 type="button"
@@ -131,7 +133,7 @@ export default function ServerInvitesPanel({
               >
                 {isCreating ? "Создаём..." : "Создать"}
               </button>
-              <button type="button" className="settings-inline-button" onClick={copyInvite} disabled={!inviteCode}>
+              <button type="button" className="settings-inline-button" onClick={copyInvite} disabled={!inviteLink}>
                 Копировать
               </button>
             </div>
@@ -162,7 +164,7 @@ export default function ServerInvitesPanel({
       </div>
 
       <div className="settings-helper">
-        {status || helperText || "Создайте код, чтобы пригласить человека, или вставьте код, чтобы добавить сервер к себе."}
+        {status || helperText || "Создайте ссылку, чтобы пригласить человека, или вставьте код, чтобы добавить сервер к себе."}
       </div>
     </div>
   );

@@ -161,6 +161,13 @@ public class ServerStateService
             string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim(),
             string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim());
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name.Trim();
+        normalized.Description = string.IsNullOrWhiteSpace(normalized.Description)
+            ? string.Empty
+            : normalized.Description.Trim();
+        if (normalized.Description.Length > 280)
+        {
+            normalized.Description = normalized.Description[..280];
+        }
         normalized.Icon ??= string.Empty;
         normalized.IsShared = true;
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();

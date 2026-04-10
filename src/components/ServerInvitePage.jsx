@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Auth from "./Auth";
 import "../css/ServerInvitePage.css";
 import { API_BASE_URL } from "../config/runtime";
@@ -9,8 +9,52 @@ import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
 const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
 
+function getServerTypeLabel(preview) {
+  const textCount = Number(preview?.textChannelCount || 0);
+  const voiceCount = Number(preview?.voiceChannelCount || 0);
+
+  if (textCount > 0 && voiceCount > 0) {
+    return "Текстовый и голосовой сервер";
+  }
+
+  if (voiceCount > 0) {
+    return "Голосовой сервер";
+  }
+
+  if (textCount > 0) {
+    return "Текстовый сервер";
+  }
+
+  return "Сервер сообщества";
+}
+
+function getServerDescription(preview) {
+  const description = String(preview?.serverDescription || "").trim();
+  if (description) {
+    return description;
+  }
+
+  const textCount = Number(preview?.textChannelCount || 0);
+  const voiceCount = Number(preview?.voiceChannelCount || 0);
+
+  if (textCount > 0 && voiceCount > 0) {
+    return "Сервер для общения, переписки и голосовых созвонов.";
+  }
+
+  if (voiceCount > 0) {
+    return "Сервер в первую очередь рассчитан на голосовое общение.";
+  }
+
+  if (textCount > 0) {
+    return "Сервер для переписки, обсуждений и координации участников.";
+  }
+
+  return "Сервер для общения и совместной работы участников.";
+}
+
 export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted }) {
   const { inviteCode = "" } = useParams();
+  const navigate = useNavigate();
   const [preview, setPreview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,11 +63,13 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
 
   const normalizedInviteCode = useMemo(() => String(inviteCode || "").trim().toUpperCase(), [inviteCode]);
   const serverIconUrl = resolveMediaUrl(preview?.serverIcon, DEFAULT_SERVER_ICON);
+  const serverTypeLabel = useMemo(() => getServerTypeLabel(preview), [preview]);
+  const serverDescription = useMemo(() => getServerDescription(preview), [preview]);
 
   useEffect(() => {
     if (!normalizedInviteCode) {
       setPreview(null);
-      setError("Ссылка приглашения повреждена.");
+      setError("Ссылка-приглашение повреждена.");
       setIsLoading(false);
       return;
     }
@@ -130,6 +176,15 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
     }
   };
 
+  const handleDeclineInvite = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate("/", { replace: true });
+  };
+
   const renderInviteCard = () => {
     if (isLoading) {
       return (
@@ -146,7 +201,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
         <div className="server-invite-card server-invite-card--error">
           <div className="server-invite-card__badge">Invite</div>
           <h1>Приглашение недоступно</h1>
-          <p>{error || "Ссылка приглашения не найдена или больше не работает."}</p>
+          <p>{error || "Ссылка-приглашение не найдена или больше не работает."}</p>
         </div>
       );
     }
@@ -156,6 +211,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
     return (
       <div className={`server-invite-card ${preview.isExpired ? "server-invite-card--error" : ""}`}>
         <div className="server-invite-card__badge">Приглашение</div>
+
         <div className="server-invite-card__server">
           <img
             className="server-invite-card__icon"
@@ -171,14 +227,27 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
           </div>
         </div>
 
+        <div className="server-invite-card__summary">
+          <div className="server-invite-card__summary-label">Что это за сервер</div>
+          <div className="server-invite-card__summary-type">{serverTypeLabel}</div>
+          <p>{serverDescription}</p>
+        </div>
+
         <div className="server-invite-card__meta">
           <span>Код: {preview.inviteCode}</span>
           <span>Действует до: {new Date(preview.expiresAt).toLocaleString("ru-RU")}</span>
         </div>
 
         {!user ? (
-          <div className="server-invite-card__notice">
-            Войдите или зарегистрируйтесь ниже, после чего приглашение можно будет принять.
+          <div className="server-invite-card__actions">
+            <div className="server-invite-card__notice">
+              Войдите или зарегистрируйтесь ниже, после чего сможете принять приглашение.
+            </div>
+            <div className="server-invite-card__action-row">
+              <button type="button" className="server-invite-card__button server-invite-card__button--secondary" onClick={handleDeclineInvite}>
+                Отклонить
+              </button>
+            </div>
           </div>
         ) : preview.isExpired ? (
           <div className="server-invite-card__notice server-invite-card__notice--error">
@@ -187,15 +256,25 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
         ) : isAlreadyMember ? (
           <div className="server-invite-card__actions">
             <div className="server-invite-card__notice">Вы уже состоите на этом сервере.</div>
-            <button type="button" className="server-invite-card__button" onClick={handleOpenServer} disabled={isSubmitting}>
-              {isSubmitting ? "Открываем..." : "Открыть сервер"}
-            </button>
+            <div className="server-invite-card__action-row">
+              <button type="button" className="server-invite-card__button server-invite-card__button--secondary" onClick={handleDeclineInvite}>
+                Отклонить
+              </button>
+              <button type="button" className="server-invite-card__button" onClick={handleOpenServer} disabled={isSubmitting}>
+                {isSubmitting ? "Открываем..." : "Открыть сервер"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="server-invite-card__actions">
-            <button type="button" className="server-invite-card__button" onClick={handleAcceptInvite} disabled={isSubmitting}>
-              {isSubmitting ? "Принимаем..." : "Принять приглашение"}
-            </button>
+            <div className="server-invite-card__action-row">
+              <button type="button" className="server-invite-card__button server-invite-card__button--secondary" onClick={handleDeclineInvite} disabled={isSubmitting}>
+                Отклонить
+              </button>
+              <button type="button" className="server-invite-card__button" onClick={handleAcceptInvite} disabled={isSubmitting}>
+                {isSubmitting ? "Принимаем..." : "Принять приглашение"}
+              </button>
+            </div>
           </div>
         )}
 
@@ -210,7 +289,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
         <div className="server-invite-page__intro">
           <div className="server-invite-page__eyebrow">MAX Invite</div>
           <h2>Приглашение на сервер</h2>
-          <p>Открывайте ссылку, смотрите карточку сервера и принимайте приглашение без ручного ввода кода.</p>
+          <p>Откройте ссылку, посмотрите карточку сервера и решите, принимать приглашение или отклонить его.</p>
           {renderInviteCard()}
         </div>
 

@@ -137,6 +137,7 @@ public class ServerInviteService
             CurrentUserAlreadyMember = isCurrentUserMember,
             ServerId = snapshot.Id,
             ServerName = snapshot.Name,
+            ServerDescription = snapshot.Description,
             ServerIcon = snapshot.Icon ?? string.Empty,
             MemberCount = snapshot.Members?.Count ?? 0,
             TextChannelCount = snapshot.TextChannels?.Count ?? 0,
@@ -213,6 +214,13 @@ public class ServerInviteService
             string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim(),
             string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim());
         normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name.Trim();
+        normalized.Description = string.IsNullOrWhiteSpace(normalized.Description)
+            ? string.Empty
+            : normalized.Description.Trim();
+        if (normalized.Description.Length > 280)
+        {
+            normalized.Description = normalized.Description[..280];
+        }
         normalized.Icon ??= string.Empty;
         normalized.IsShared = true;
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();
@@ -291,6 +299,7 @@ public class ServerInvitePreviewResult
     public bool CurrentUserAlreadyMember { get; set; }
     public string ServerId { get; set; } = string.Empty;
     public string ServerName { get; set; } = string.Empty;
+    public string ServerDescription { get; set; } = string.Empty;
     public string ServerIcon { get; set; } = string.Empty;
     public int MemberCount { get; set; }
     public int TextChannelCount { get; set; }
@@ -301,6 +310,7 @@ public class ServerSnapshot
 {
     public string Id { get; set; } = "server";
     public string Name { get; set; } = "Server";
+    public string Description { get; set; } = string.Empty;
     public string Icon { get; set; } = string.Empty;
     public bool IsShared { get; set; }
     public string OwnerId { get; set; } = string.Empty;

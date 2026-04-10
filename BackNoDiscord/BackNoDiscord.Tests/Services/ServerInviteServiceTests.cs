@@ -58,6 +58,7 @@ public class ServerInviteServiceTests
         {
             Id = "server-owner-5-lounge",
             Name = "Lounge",
+            Description = "Сервер для команды разработки и быстрых голосовых созвонов.",
             TextChannels = new List<ChannelSnapshot> { new() { Id = "text-1", Name = "# general" } },
             VoiceChannels = new List<ChannelSnapshot> { new() { Id = "voice-1", Name = "General" } }
         });
@@ -67,6 +68,7 @@ public class ServerInviteServiceTests
         Assert.Equal(invite.InviteCode, preview.InviteCode);
         Assert.Equal("server-lounge", preview.ServerId);
         Assert.Equal("Lounge", preview.ServerName);
+        Assert.Equal("Сервер для команды разработки и быстрых голосовых созвонов.", preview.ServerDescription);
         Assert.Equal(1, preview.TextChannelCount);
         Assert.Equal(1, preview.VoiceChannelCount);
         Assert.True(preview.CurrentUserAlreadyMember);
