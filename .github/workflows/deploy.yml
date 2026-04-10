@@ -146,6 +146,7 @@ jobs:
             echo "has_backend_env=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_backend_env=false" >> "$GITHUB_OUTPUT"
+            echo "BACKEND_ENV_FILE is empty or missing. Deploy will continue without replacing backend .env."
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
@@ -221,13 +222,13 @@ jobs:
               mv \"\$TEMP_ENV_FILE\" \"\$BACKEND_PATH/.env\"
             fi
             if [ ! -f \"\$BACKEND_PATH/.env\" ]; then
-              echo \"Missing backend environment file: \$BACKEND_PATH/.env\" >&2
-              echo \"Set GitHub secret BACKEND_ENV_FILE or restore the server .env before restarting the service.\" >&2
-              exit 1
+              echo \"Backend environment file is missing: \$BACKEND_PATH/.env\"
+              echo \"Continuing deploy without .env replacement because BACKEND_ENV_FILE is optional for this server.\"
+            else
+              chmod 600 \"\$BACKEND_PATH/.env\"
             fi
             chown -R \"\$FRONTEND_OWNER\" \"\$FRONTEND_PATH\"
             chown -R \"\$BACKEND_OWNER\" \"\$BACKEND_PATH\"
-            chmod 600 \"\$BACKEND_PATH/.env\"
             systemctl restart \"\$BACKEND_SERVICE\"
             systemctl reload nginx
             rm -rf \"\$TEMP_ROOT\"
