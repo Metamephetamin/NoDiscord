@@ -3124,7 +3124,9 @@ export default function MenuMain({
   };
   const updateServer = (updater) => setServers((previous) => previous.map((server) => (server.id === activeServerId ? updater(server) : server)));
   const syncServerSnapshot = async (serverSnapshot) => {
-    if (!serverSnapshot || !currentUserId || !canManageServer) return;
+    if (!serverSnapshot || !currentUserId || !hasServerPermission(serverSnapshot, currentUserId, "manage_server")) {
+      return null;
+    }
 
     try {
       const response = await authFetch(`${API_BASE_URL}/server-invites/server-sync`, {
@@ -3137,16 +3139,19 @@ export default function MenuMain({
       });
 
       if (response.status === 403) {
-        return;
+        return null;
       }
 
       const data = await parseApiResponse(response);
       if (response.ok && data) {
         replaceServerSnapshot(data);
+        return data;
       }
     } catch (error) {
       console.error("Ошибка синхронизации сервера:", error);
     }
+
+    return null;
   };
   const refreshServerSnapshot = async (serverId) => {
     if (!serverId) return;
@@ -3768,11 +3773,14 @@ export default function MenuMain({
       throw new Error("Недостаточно прав для приглашения.");
     }
 
+    const syncedSnapshot = await syncServerSnapshot(targetServer);
+    const inviteSource = syncedSnapshot || targetServer;
+
     const response = await authFetch(`${API_BASE_URL}/server-invites/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        serverSnapshot: targetServer,
+        serverSnapshot: inviteSource,
       }),
     });
     const data = await parseApiResponse(response);
@@ -3787,7 +3795,7 @@ export default function MenuMain({
     }
 
     await copyTextToClipboard(inviteLink);
-    markServerAsShared(data?.serverId || targetServer.id);
+    markServerAsShared(data?.serverId || inviteSource.id || targetServer.id);
     return inviteLink;
   };
   const handleInvitePeopleToVoice = async () => {
@@ -4679,6 +4687,7 @@ export default function MenuMain({
               activeServer={activeServer}
               user={user}
               canInvite={canInviteMembers && !isDefaultServer}
+              onBeforeCreateInvite={syncServerSnapshot}
               onImportServer={handleImportServer}
               onServerShared={markServerAsShared}
             />

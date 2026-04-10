@@ -46,6 +46,43 @@ public static class ServerPermissionEvaluator
                permissions.Contains("manage_server", StringComparer.Ordinal);
     }
 
+    public static bool CanCreateInvite(ServerSnapshot? existingSnapshot, ServerSnapshot? requestedSnapshot, string userId)
+    {
+        if (requestedSnapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        if (CanInviteMembers(existingSnapshot, userId))
+        {
+            return true;
+        }
+
+        if (!CanInviteMembers(requestedSnapshot, userId))
+        {
+            return false;
+        }
+
+        if (existingSnapshot is null)
+        {
+            return true;
+        }
+
+        var normalizedUserId = userId.Trim();
+        var existingOwnerId = existingSnapshot.OwnerId?.Trim() ?? string.Empty;
+        var requestedOwnerId = requestedSnapshot.OwnerId?.Trim() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(existingOwnerId))
+        {
+            return string.Equals(existingOwnerId, normalizedUserId, StringComparison.Ordinal) &&
+                   (string.IsNullOrWhiteSpace(requestedOwnerId) ||
+                    string.Equals(requestedOwnerId, normalizedUserId, StringComparison.Ordinal));
+        }
+
+        return string.IsNullOrWhiteSpace(requestedOwnerId) ||
+               string.Equals(requestedOwnerId, normalizedUserId, StringComparison.Ordinal);
+    }
+
     public static bool CanManageVoiceState(ServerSnapshot? snapshot, string actorUserId, string targetUserId, string permission)
     {
         if (snapshot is null ||

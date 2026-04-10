@@ -10,6 +10,7 @@ export default function ServerInvitesPanel({
   activeServer,
   user,
   canInvite = false,
+  onBeforeCreateInvite,
   onImportServer,
   onServerShared,
   showCreate = true,
@@ -38,11 +39,12 @@ export default function ServerInvitesPanel({
     setStatus("");
 
     try {
+      const inviteSource = (await onBeforeCreateInvite?.(activeServer)) || activeServer;
       const response = await authFetch(`${API_BASE_URL}/server-invites/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          serverSnapshot: activeServer,
+          serverSnapshot: inviteSource,
         }),
       });
       const data = await parseApiResponse(response);
@@ -52,7 +54,7 @@ export default function ServerInvitesPanel({
       }
 
       setInviteCode(data?.inviteCode || "");
-      onServerShared?.(data?.serverId || activeServer.id);
+      onServerShared?.(data?.serverId || inviteSource?.id || activeServer.id);
       setStatus("Код сервера создан.");
     } catch (error) {
       setStatus(error.message || "Ошибка создания кода сервера.");

@@ -35,6 +35,36 @@ public class ServerPermissionEvaluatorTests
         Assert.False(ServerPermissionEvaluator.CanInviteMembers(snapshot, "member"));
     }
 
+    [Fact]
+    public void CanCreateInvite_AllowsOwnerToRecoverStaleSnapshot()
+    {
+        var existingSnapshot = new ServerSnapshot
+        {
+            Id = "server-1",
+            OwnerId = string.Empty,
+            Roles = [],
+            Members = []
+        };
+        var requestedSnapshot = CreateSnapshot();
+
+        Assert.True(ServerPermissionEvaluator.CanCreateInvite(existingSnapshot, requestedSnapshot, "owner"));
+    }
+
+    [Fact]
+    public void CanCreateInvite_RejectsClientSideRoleEscalationAgainstStoredSnapshot()
+    {
+        var existingSnapshot = CreateSnapshot();
+        var requestedSnapshot = CreateSnapshot();
+        requestedSnapshot.Roles =
+        [
+            new ServerRoleSnapshot { Id = "owner", Priority = 400, Permissions = ["manage_server", "invite_members"] },
+            new ServerRoleSnapshot { Id = "admin", Priority = 300, Permissions = ["manage_server", "invite_members"] },
+            new ServerRoleSnapshot { Id = "member", Priority = 100, Permissions = ["invite_members"] }
+        ];
+
+        Assert.False(ServerPermissionEvaluator.CanCreateInvite(existingSnapshot, requestedSnapshot, "member"));
+    }
+
     private static ServerSnapshot CreateSnapshot()
     {
         return new ServerSnapshot
