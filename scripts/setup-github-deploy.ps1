@@ -123,6 +123,7 @@ Write-Host ""
 $hostValue = Ask-Required -Prompt "DEPLOY_HOST (server host/ip)"
 $userValue = Ask-Required -Prompt "DEPLOY_USER (ssh user)"
 $portValue = Read-Host "DEPLOY_PORT (optional, default 22)"
+$backendEnvPath = Read-Host "Path to backend .env file (optional, recommended)"
 
 $defaultKeyPath = "$HOME\.ssh\github_actions_tendsec_deploy"
 $keyPath = Ask-Required -Prompt "Path to private SSH key" -Default $defaultKeyPath
@@ -134,6 +135,15 @@ $sshKeyValue = Get-Content -Path $keyPath -Raw
 & $gh secret set DEPLOY_HOST --repo $Repo --body $hostValue
 & $gh secret set DEPLOY_USER --repo $Repo --body $userValue
 & $gh secret set DEPLOY_SSH_KEY --repo $Repo --body $sshKeyValue
+
+if (-not [string]::IsNullOrWhiteSpace($backendEnvPath)) {
+  if (-not (Test-Path $backendEnvPath)) {
+    throw "Backend .env file not found: $backendEnvPath"
+  }
+
+  $backendEnvValue = Get-Content -Path $backendEnvPath -Raw
+  & $gh secret set BACKEND_ENV_FILE --repo $Repo --body $backendEnvValue
+}
 
 if (-not [string]::IsNullOrWhiteSpace($portValue)) {
   & $gh secret set DEPLOY_PORT --repo $Repo --body $portValue

@@ -45,7 +45,7 @@ public static partial class AuthInputPolicies
 
         if (candidate.Length > MaxEmailLength)
         {
-            error = $"Email РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ {MaxEmailLength} СЃРёРјРІРѕР»РѕРІ.";
+            error = $"Email должен быть не длиннее {MaxEmailLength} символов.";
             return false;
         }
 
@@ -127,7 +127,7 @@ public static partial class AuthInputPolicies
 
         if (normalizedName.Any(char.IsWhiteSpace))
         {
-            error = $"{fieldName} РґРѕР»Р¶РЅРѕ СЃРѕРґРµСЂР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ РѕРґРЅРѕ СЃР»РѕРІРѕ.";
+            error = $"{fieldName} должно содержать только одно слово.";
             return false;
         }
 

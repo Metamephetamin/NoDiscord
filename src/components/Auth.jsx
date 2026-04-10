@@ -984,7 +984,7 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-verify-modal__backdrop">
           <form className="auth-verify-modal" onSubmit={handleVerifyEmailCode}>
             <div className="auth-verify-modal__header">
-              <h3>\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043f\u043e\u0447\u0442\u0443</h3>
+              <h3>Подтвердите почту</h3>
               <button type="button" className="auth-verify-modal__close" onClick={resetEmailVerificationModal}>
                 ×
               </button>
@@ -997,7 +997,7 @@ export default function Auth({ onAuthSuccess }) {
             ) : null}
             <input
               className="auth-input"
-              placeholder="\u041a\u043e\u0434 \u0438\u0437 \u043f\u0438\u0441\u044c\u043c\u0430"
+              placeholder="Код из письма"
               value={emailVerificationCode}
               onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
               autoFocus
@@ -1019,3 +1019,4 @@ export default function Auth({ onAuthSuccess }) {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../config/runtime";
+﻿import { API_BASE_URL } from "../config/runtime";
 
 const TOKEN_STORAGE_KEY = "token";
 const USER_STORAGE_KEY = "user";
@@ -356,7 +356,7 @@ export function getApiErrorMessage(response, data, fallbackMessage) {
   }
 
   if ([500, 502, 503, 504].includes(response?.status)) {
-    return "Сервис временно недоступен. Попробуйте снова через пару минут.";
+    return "Сервис временно недоступен. Попробуйте позже.";
   }
 
   if (data && typeof data === "object") {
@@ -495,3 +495,5 @@ export async function authFetch(input, init = {}) {
 
   return response;
 }
+
+

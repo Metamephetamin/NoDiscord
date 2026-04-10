@@ -68,7 +68,7 @@ public class AuthController : ControllerBase
             var waitSeconds = Math.Max(1, (int)Math.Ceiling((latestActive.LastSentAt + PhoneVerificationResendCooldown - now).TotalSeconds));
             return StatusCode(StatusCodes.Status429TooManyRequests, new
             {
-                message = $"РџРѕРІС‚РѕСЂРЅРѕ РѕС‚РїСЂР°РІРёС‚СЊ РєРѕРґ РјРѕР¶РЅРѕ С‡РµСЂРµР· {waitSeconds} СЃРµРє."
+                message = $"Повторно отправить код можно через {waitSeconds} сек."
             });
         }
 
@@ -141,7 +141,7 @@ public class AuthController : ControllerBase
         var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
         if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
         {
-            return BadRequest(new { message = "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ С€РµСЃС‚РёР·РЅР°С‡РЅС‹Р№ РєРѕРґ." });
+            return BadRequest(new { message = "Введите корректный шестизначный код." });
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -155,19 +155,19 @@ public class AuthController : ControllerBase
 
         if (record == null)
         {
-            return BadRequest(new { message = "РЎРµСЃСЃРёСЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РЅРѕРјРµСЂР° РЅРµ РЅР°Р№РґРµРЅР°. Р—Р°РїСЂРѕСЃРёС‚Рµ РєРѕРґ Р·Р°РЅРѕРІРѕ." });
+            return BadRequest(new { message = "Сессия подтверждения номера не найдена. Запросите код заново." });
         }
 
         if (record.ExpiresAt <= now)
         {
             record.ConsumedAt = now;
             await _context.SaveChangesAsync();
-            return BadRequest(new { message = "РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ РєРѕРґР° РёСЃС‚С‘Рє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
+            return BadRequest(new { message = "Срок действия кода истёк. Запросите новый код." });
         }
 
         if (record.AttemptCount >= MaxPhoneVerificationAttempts)
         {
-            return BadRequest(new { message = "Р›РёРјРёС‚ РїРѕРїС‹С‚РѕРє РёСЃС‡РµСЂРїР°РЅ. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
+            return BadRequest(new { message = "Лимит попыток исчерпан. Запросите новый код." });
         }
 
         if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
@@ -179,7 +179,7 @@ public class AuthController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
-            return BadRequest(new { message = "РќРµРІРµСЂРЅС‹Р№ РєРѕРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ." });
+            return BadRequest(new { message = "Неверный код подтверждения." });
         }
 
         record.VerifiedAt = now;
@@ -259,7 +259,7 @@ public class AuthController : ControllerBase
         var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
         if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
         {
-            return BadRequest(new { message = "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ С€РµСЃС‚РёР·РЅР°С‡РЅС‹Р№ РєРѕРґ." });
+            return BadRequest(new { message = "Введите корректный шестизначный код." });
         }
 
         var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
@@ -287,19 +287,19 @@ public class AuthController : ControllerBase
 
         if (record == null)
         {
-            return BadRequest(new { message = "РЎРµСЃСЃРёСЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РїРѕС‡С‚С‹ РЅРµ РЅР°Р№РґРµРЅР°. Р—Р°РїСЂРѕСЃРёС‚Рµ РєРѕРґ Р·Р°РЅРѕРІРѕ." });
+            return BadRequest(new { message = "Сессия подтверждения почты не найдена. Запросите код заново." });
         }
 
         if (record.ExpiresAt <= now)
         {
             record.ConsumedAt = now;
             await _context.SaveChangesAsync();
-            return BadRequest(new { message = "РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ РєРѕРґР° РёСЃС‚С‘Рє. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
+            return BadRequest(new { message = "Срок действия кода истёк. Запросите новый код." });
         }
 
         if (record.AttemptCount >= MaxEmailVerificationAttempts)
         {
-            return BadRequest(new { message = "Р›РёРјРёС‚ РїРѕРїС‹С‚РѕРє РёСЃС‡РµСЂРїР°РЅ. Р—Р°РїСЂРѕСЃРёС‚Рµ РЅРѕРІС‹Р№ РєРѕРґ." });
+            return BadRequest(new { message = "Лимит попыток исчерпан. Запросите новый код." });
         }
 
         if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
@@ -311,7 +311,7 @@ public class AuthController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
-            return BadRequest(new { message = "РќРµРІРµСЂРЅС‹Р№ РєРѕРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ." });
+            return BadRequest(new { message = "Неверный код подтверждения." });
         }
 
         record.VerifiedAt = now;
@@ -333,12 +333,12 @@ public class AuthController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        if (!AuthInputPolicies.TryNormalizeProfileName(dto.first_name, "РРјСЏ", out var firstName, out var firstNameError))
+        if (!AuthInputPolicies.TryNormalizeProfileName(dto.first_name, "Имя", out var firstName, out var firstNameError))
         {
             return BadRequest(new { message = firstNameError });
         }
 
-        if (!AuthInputPolicies.TryNormalizeProfileName(dto.last_name, "Р¤Р°РјРёР»РёСЏ", out var lastName, out var lastNameError))
+        if (!AuthInputPolicies.TryNormalizeProfileName(dto.last_name, "Фамилия", out var lastName, out var lastNameError))
         {
             return BadRequest(new { message = lastNameError });
         }
@@ -388,7 +388,7 @@ public class AuthController : ControllerBase
 
         if (dto.password.Trim().Length < 6)
         {
-            return BadRequest(new { message = "РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РєРѕСЂРѕС‡Рµ 6 СЃРёРјРІРѕР»РѕРІ." });
+            return BadRequest(new { message = "Пароль должен быть не короче 6 символов." });
         }
 
         if (!string.IsNullOrWhiteSpace(normalizedEmail) && await _context.Users.AnyAsync(u => u.email == normalizedEmail))
@@ -407,7 +407,7 @@ public class AuthController : ControllerBase
             var verificationToken = (dto.phone_verification_token ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(verificationToken))
             {
-                return BadRequest(new { message = "РЎРЅР°С‡Р°Р»Р° РїРѕРґС‚РІРµСЂРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР°." });
+                return BadRequest(new { message = "Сначала подтвердите номер телефона." });
             }
 
             phoneVerification = await _context.PhoneVerificationCodes
@@ -420,7 +420,7 @@ public class AuthController : ControllerBase
 
             if (phoneVerification == null || !phoneVerification.VerifiedAt.HasValue || phoneVerification.ExpiresAt <= DateTimeOffset.UtcNow)
             {
-                return BadRequest(new { message = "РќРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅ." });
+                return BadRequest(new { message = "Номер телефона не подтверждён." });
             }
         }
 
@@ -538,7 +538,7 @@ public class AuthController : ControllerBase
         // Temporarily disabled email verification check.
         // if (!string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
         // {
-        //     return BadRequest(new { message = "РЎРЅР°С‡Р°Р»Р° РїРѕРґС‚РІРµСЂРґРёС‚Рµ email." });
+        //     return BadRequest(new { message = "Сначала подтвердите email." });
         // }
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);

@@ -96,11 +96,17 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "Deploy secrets are not fully configured. Skipping deploy step."
             exit 0
+          fi
+          if [ -n "$BACKEND_ENV_FILE" ]; then
+            echo "has_backend_env=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_backend_env=false" >> "$GITHUB_OUTPUT"
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
@@ -134,6 +140,7 @@ jobs:
           FRONTEND_DEPLOY_OWNER: ${{ vars.FRONTEND_DEPLOY_OWNER }}
           BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
           HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+          BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           PORT="${DEPLOY_PORT:-22}"
           FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
@@ -142,18 +149,26 @@ jobs:
           FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
           HEALTHCHECK="${HEALTHCHECK_URL:-https://tendsec.ru}"
+          API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
+          CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
+          VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
 
           ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/frontend' '$TEMP_ROOT/backend' '$FRONTEND_PATH' '$BACKEND_PATH'"
 
           rsync -az --delete -e "ssh -p $PORT" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/frontend/"
           rsync -az --delete -e "ssh -p $PORT" ./backend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/backend/"
+          if [ -n "$BACKEND_ENV_FILE" ]; then
+            printf '%s\n' "$BACKEND_ENV_FILE" | ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
+          fi
 
           ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
             set -e
             FRONTEND_PATH='$FRONTEND_PATH'
             BACKEND_PATH='$BACKEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
+            TEMP_ENV_FILE='$TEMP_ENV_FILE'
             FRONTEND_OWNER='$FRONTEND_OWNER'
             BACKEND_OWNER='$BACKEND_OWNER'
             BACKEND_SERVICE='$BACKEND_SERVICE'
@@ -167,12 +182,39 @@ jobs:
               esac
             done
             rsync -az --delete \"\$TEMP_ROOT/frontend/\" \"\$FRONTEND_PATH/\"
-            rsync -az --delete \"\$TEMP_ROOT/backend/\" \"\$BACKEND_PATH/\"
+            rsync -az --delete --exclude='.env' \"\$TEMP_ROOT/backend/\" \"\$BACKEND_PATH/\"
+            if [ -f \"\$TEMP_ENV_FILE\" ]; then
+              mv \"\$TEMP_ENV_FILE\" \"\$BACKEND_PATH/.env\"
+            fi
+            if [ ! -f \"\$BACKEND_PATH/.env\" ]; then
+              echo \"Missing backend environment file: \$BACKEND_PATH/.env\" >&2
+              echo \"Set GitHub secret BACKEND_ENV_FILE or restore the server .env before restarting the service.\" >&2
+              exit 1
+            fi
             chown -R \"\$FRONTEND_OWNER\" \"\$FRONTEND_PATH\"
             chown -R \"\$BACKEND_OWNER\" \"\$BACKEND_PATH\"
+            chmod 600 \"\$BACKEND_PATH/.env\"
             systemctl restart \"\$BACKEND_SERVICE\"
             systemctl reload nginx
             rm -rf \"\$TEMP_ROOT\"
           "
 
+          echo "Running frontend healthcheck: $HEALTHCHECK"
           curl --fail --silent --show-error --location "$HEALTHCHECK" > /dev/null
+
+          echo "Running backend API healthcheck: $API_HEALTHCHECK"
+          curl --fail --silent --show-error --location "$API_HEALTHCHECK" > /dev/null
+
+          echo "Running SignalR negotiate healthcheck: $CHAT_NEGOTIATE_HEALTHCHECK"
+          chat_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$CHAT_NEGOTIATE_HEALTHCHECK")"
+          if [ "$chat_status" -ge 500 ] || [ "$chat_status" -eq 000 ]; then
+            echo "Chat hub negotiate endpoint is unhealthy (HTTP $chat_status)." >&2
+            exit 1
+          fi
+
+          echo "Running SignalR negotiate healthcheck: $VOICE_NEGOTIATE_HEALTHCHECK"
+          voice_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$VOICE_NEGOTIATE_HEALTHCHECK")"
+          if [ "$voice_status" -ge 500 ] || [ "$voice_status" -eq 000 ]; then
+            echo "Voice hub negotiate endpoint is unhealthy (HTTP $voice_status)." >&2
+            exit 1
+          fi

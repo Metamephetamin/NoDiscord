@@ -56,6 +56,7 @@ Set these repository secrets:
 - `DEPLOY_HOST`
 - `DEPLOY_USER`
 - `DEPLOY_SSH_KEY`
+- `BACKEND_ENV_FILE`
 - optional `DEPLOY_PORT`
 
 Recommended values for the current production server:
@@ -65,6 +66,17 @@ Recommended values for the current production server:
 - `DEPLOY_PORT=22`
 
 `DEPLOY_SSH_KEY` must be the private key content for a key that is already allowed on the server in `~/.ssh/authorized_keys`.
+
+`BACKEND_ENV_FILE` must contain the full backend `.env` file content that production needs:
+
+```text
+ConnectionStrings__DefaultConnection=...
+Jwt__Key=...
+Jwt__Issuer=BackNoDiscord
+Jwt__Audience=BackNoDiscordUsers
+Crypto__Key=...
+...
+```
 
 ## Optional GitHub Variables
 
@@ -97,6 +109,7 @@ The script will:
    - `DEPLOY_HOST`
    - `DEPLOY_USER`
    - `DEPLOY_SSH_KEY`
+   - `BACKEND_ENV_FILE`
    - optional `DEPLOY_PORT`
 
 After that, push to `master` and the deploy workflow will run automatically.
