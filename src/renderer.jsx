@@ -6,6 +6,8 @@ import MenuMain from "./components/MenuMain";
 import ServerInvitePage from "./components/ServerInvitePage";
 import { API_BASE_URL } from "./config/runtime";
 import "./index.css";
+import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
+import { parseMediaFrame } from "./utils/mediaFrames";
 import {
   AUTH_UNAUTHORIZED_EVENT,
   clearStoredSession,
@@ -59,7 +61,7 @@ function hasSettledMediaPermissionBootstrapState(value) {
     return true;
   }
 
-  const statuses = [value.microphone, value.camera]
+  const statuses = [value.microphone, value.camera, value.displayCapture]
     .map((status) => String(status || "").trim().toLowerCase())
     .filter(Boolean);
 
@@ -116,6 +118,7 @@ async function requestMediaPermissionsAtAppLevel() {
       completed: false,
       microphone: "unsupported",
       camera: "unsupported",
+      displayCapture: "unsupported",
     };
   }
 
@@ -127,6 +130,7 @@ async function requestMediaPermissionsAtAppLevel() {
   const permissionState = {
     microphone: requiresMicrophone ? "pending" : "not-required",
     camera: requiresCamera ? "pending" : "not-required",
+    displayCapture: getDisplayCaptureSupportInfo().status,
   };
 
   const updatePermissionStateFromStatus = (mediaType, status) => {
@@ -248,6 +252,7 @@ async function requestMediaPermissionsAtAppLevel() {
         completed: true,
         microphone: permissionState.microphone,
         camera: permissionState.camera,
+        displayCapture: permissionState.displayCapture,
       };
     }
   } catch {
@@ -281,7 +286,7 @@ async function requestMediaPermissionsAtAppLevel() {
   const completed = [permissionState.microphone, permissionState.camera].every((status) =>
     status === "granted" || status === "not-required"
   );
-  const settled = [permissionState.microphone, permissionState.camera].every((status) =>
+  const settled = [permissionState.microphone, permissionState.camera, permissionState.displayCapture].every((status) =>
     status === "granted"
     || status === "denied"
     || status === "not-required"
@@ -293,6 +298,7 @@ async function requestMediaPermissionsAtAppLevel() {
     settled,
     microphone: permissionState.microphone,
     camera: permissionState.camera,
+    displayCapture: permissionState.displayCapture,
   };
 }
 
@@ -360,6 +366,8 @@ export default function Renderer() {
           ),
           avatarUrl: data.avatar_url || savedUser.avatarUrl || savedUser.avatar || "",
           avatar: data.avatar_url || savedUser.avatar || savedUser.avatarUrl || "",
+          avatarFrame: parseMediaFrame(data.avatar_frame, data.avatarFrame, savedUser.avatarFrame, savedUser.avatar_frame),
+          avatar_frame: parseMediaFrame(data.avatar_frame, data.avatarFrame, savedUser.avatarFrame, savedUser.avatar_frame),
           profileBackgroundUrl:
             data.profile_background_url
             || savedUser.profileBackgroundUrl
@@ -372,6 +380,18 @@ export default function Renderer() {
             || savedUser.profileBackgroundUrl
             || savedUser.profile_background_url
             || "",
+          profileBackgroundFrame: parseMediaFrame(
+            data.profile_background_frame,
+            data.profileBackgroundFrame,
+            savedUser.profileBackgroundFrame,
+            savedUser.profile_background_frame
+          ),
+          profile_background_frame: parseMediaFrame(
+            data.profile_background_frame,
+            data.profileBackgroundFrame,
+            savedUser.profileBackgroundFrame,
+            savedUser.profile_background_frame
+          ),
         };
 
         if (!disposed) {

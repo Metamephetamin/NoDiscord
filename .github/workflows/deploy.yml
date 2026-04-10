@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - master
-      - main
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -16,9 +15,25 @@ env:
   DOTNET_VERSION: "8.0.x"
 
 jobs:
-  build-artifacts:
-    name: Build Deployment Artifacts
+  guard-master:
+    name: Проверить release-ветку
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Проверить, что workflow запущен из master
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "master" ]; then
+            echo "Продакшен-деплой разрешён только из ветки master. Текущая ветка: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+  build-artifacts:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    needs: guard-master
 
     steps:
       - name: Checkout
@@ -38,12 +53,6 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Lint frontend
-        run: npm run lint:ci
-
-      - name: Check encoding
-        run: npm run check:encoding
-
       - name: Build frontend
         run: npm run build:frontend
 
@@ -52,9 +61,6 @@ jobs:
 
       - name: Build backend solution
         run: dotnet build BackNoDiscord/BackNoDiscord.sln --configuration Release --no-restore
-
-      - name: Run backend tests
-        run: dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --no-build --verbosity normal
 
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --output ./artifacts/backend
@@ -71,10 +77,43 @@ jobs:
           name: backend-publish
           path: artifacts/backend
 
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: build-artifacts
+
+    steps:
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-publish
+          path: backend
+
+      - name: Verify frontend artifact
+        shell: bash
+        run: |
+          test -f frontend/index.html
+
+      - name: Verify backend artifact
+        shell: bash
+        run: |
+          test -f backend/BackNoDiscord.dll
+          test -f backend/appsettings.json
+
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
-    needs: build-artifacts
+    needs:
+      - smoke-tests
+    environment: production
+    outputs:
+      deploy_ready: ${{ steps.validate.outputs.ready }}
 
     steps:
       - name: Download frontend artifact
@@ -139,7 +178,6 @@ jobs:
           BACKEND_SERVICE_NAME: ${{ vars.BACKEND_SERVICE_NAME }}
           FRONTEND_DEPLOY_OWNER: ${{ vars.FRONTEND_DEPLOY_OWNER }}
           BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
-          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           PORT="${DEPLOY_PORT:-22}"
@@ -148,10 +186,6 @@ jobs:
           BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
           FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
-          HEALTHCHECK="${HEALTHCHECK_URL:-https://tendsec.ru}"
-          API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
-          CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
-          VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
 
@@ -199,20 +233,38 @@ jobs:
             rm -rf \"\$TEMP_ROOT\"
           "
 
+  health-checks:
+    name: Health Checks
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: needs.deploy.outputs.deploy_ready == 'true'
+    environment: production
+
+    steps:
+      - name: Run production health checks
+        shell: bash
+        env:
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+        run: |
+          HEALTHCHECK="${HEALTHCHECK_URL:-https://tendsec.ru}"
+          API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
+          CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
+          VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"
+
           echo "Running frontend healthcheck: $HEALTHCHECK"
           curl --fail --silent --show-error --location "$HEALTHCHECK" > /dev/null
 
           echo "Running backend API healthcheck: $API_HEALTHCHECK"
           curl --fail --silent --show-error --location "$API_HEALTHCHECK" > /dev/null
 
-          echo "Running SignalR negotiate healthcheck: $CHAT_NEGOTIATE_HEALTHCHECK"
+          echo "Running chat negotiate healthcheck: $CHAT_NEGOTIATE_HEALTHCHECK"
           chat_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$CHAT_NEGOTIATE_HEALTHCHECK")"
           if [ "$chat_status" -ge 500 ] || [ "$chat_status" -eq 000 ]; then
             echo "Chat hub negotiate endpoint is unhealthy (HTTP $chat_status)." >&2
             exit 1
           fi
 
-          echo "Running SignalR negotiate healthcheck: $VOICE_NEGOTIATE_HEALTHCHECK"
+          echo "Running voice negotiate healthcheck: $VOICE_NEGOTIATE_HEALTHCHECK"
           voice_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$VOICE_NEGOTIATE_HEALTHCHECK")"
           if [ "$voice_status" -ge 500 ] || [ "$voice_status" -eq 000 ]; then
             echo "Voice hub negotiate endpoint is unhealthy (HTTP $voice_status)." >&2

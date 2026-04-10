@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Auth from "./Auth";
+import AnimatedMedia from "./AnimatedMedia";
 import "../css/ServerInvitePage.css";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
+import { parseMediaFrame } from "../utils/mediaFrames";
 
 const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
@@ -63,6 +65,10 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
 
   const normalizedInviteCode = useMemo(() => String(inviteCode || "").trim().toUpperCase(), [inviteCode]);
   const serverIconUrl = resolveMediaUrl(preview?.serverIcon, DEFAULT_SERVER_ICON);
+  const serverIconFrame = useMemo(
+    () => parseMediaFrame(preview?.serverIconFrame, preview?.server_icon_frame),
+    [preview?.serverIconFrame, preview?.server_icon_frame]
+  );
   const serverTypeLabel = useMemo(() => getServerTypeLabel(preview), [preview]);
   const serverDescription = useMemo(() => getServerDescription(preview), [preview]);
 

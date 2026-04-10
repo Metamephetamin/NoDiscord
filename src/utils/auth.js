@@ -1,5 +1,7 @@
 ﻿import { API_BASE_URL } from "../config/runtime";
 
+import { parseMediaFrame } from "./mediaFrames";
+
 const TOKEN_STORAGE_KEY = "token";
 const USER_STORAGE_KEY = "user";
 const REFRESH_TOKEN_STORAGE_KEY = "refresh_token";
@@ -423,6 +425,18 @@ export async function refreshAccessToken() {
             ),
             avatarUrl: data.avatar_url || sessionCache.user?.avatarUrl || sessionCache.user?.avatar || "",
             avatar: data.avatar_url || sessionCache.user?.avatar || sessionCache.user?.avatarUrl || "",
+            avatarFrame: parseMediaFrame(
+              data.avatar_frame,
+              data.avatarFrame,
+              sessionCache.user?.avatarFrame,
+              sessionCache.user?.avatar_frame
+            ),
+            avatar_frame: parseMediaFrame(
+              data.avatar_frame,
+              data.avatarFrame,
+              sessionCache.user?.avatarFrame,
+              sessionCache.user?.avatar_frame
+            ),
             profileBackgroundUrl:
               data.profile_background_url
               || sessionCache.user?.profileBackgroundUrl
@@ -435,6 +449,18 @@ export async function refreshAccessToken() {
               || sessionCache.user?.profileBackgroundUrl
               || sessionCache.user?.profile_background_url
               || "",
+            profileBackgroundFrame: parseMediaFrame(
+              data.profile_background_frame,
+              data.profileBackgroundFrame,
+              sessionCache.user?.profileBackgroundFrame,
+              sessionCache.user?.profile_background_frame
+            ),
+            profile_background_frame: parseMediaFrame(
+              data.profile_background_frame,
+              data.profileBackgroundFrame,
+              sessionCache.user?.profileBackgroundFrame,
+              sessionCache.user?.profile_background_frame
+            ),
           }
         : sessionCache.user;
 

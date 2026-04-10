@@ -64,8 +64,14 @@ public class User
     [Column("avatar_url")]
     public string? avatar_url { get; set; }
 
+    [Column("avatar_frame_json")]
+    public string? avatar_frame_json { get; set; }
+
     [Column("profile_background_url")]
     public string? profile_background_url { get; set; }
+
+    [Column("profile_background_frame_json")]
+    public string? profile_background_frame_json { get; set; }
 
     [Column("password_hash")]
     public string password_hash { get; set; } = null!;
@@ -437,7 +443,9 @@ public class AppDbContext : DbContext
             entity.Property(x => x.phone_number).IsRequired(false);
             entity.Property(x => x.is_phone_verified).HasDefaultValue(false);
             entity.Property(x => x.avatar_url).IsRequired(false);
+            entity.Property(x => x.avatar_frame_json).IsRequired(false);
             entity.Property(x => x.profile_background_url).IsRequired(false);
+            entity.Property(x => x.profile_background_frame_json).IsRequired(false);
             entity.Property(x => x.password_hash).IsRequired();
         });
 

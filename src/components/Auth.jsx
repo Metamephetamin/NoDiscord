@@ -3,6 +3,7 @@ import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { resolveStaticAssetUrl } from "../utils/media";
+import { parseMediaFrame } from "../utils/mediaFrames";
 import {
   areNamesUsingSameScript,
   detectNameScript,
@@ -186,8 +187,12 @@ function mapAuthUser(data) {
     isPhoneVerified: Boolean(data?.is_phone_verified),
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
+    avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
+    avatar_frame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
     profileBackgroundUrl: data?.profile_background_url || data?.profileBackgroundUrl || "",
     profileBackground: data?.profile_background_url || data?.profileBackgroundUrl || "",
+    profileBackgroundFrame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
+    profile_background_frame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
   };
 }
 

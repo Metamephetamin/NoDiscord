@@ -5,6 +5,8 @@ import ScreenShareButton from "./ScreenShareButton";
 import ScreenShareViewer from "./ScreenShareViewer";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import AnimatedAvatar from "./AnimatedAvatar";
+import AnimatedMedia from "./AnimatedMedia";
+import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import "../css/MenuMain.css";
 import "../css/MenuProfile.css";
@@ -49,6 +51,13 @@ import {
   resolveMediaUrl,
   resolveStaticAssetUrl,
 } from "../utils/media";
+import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
+import {
+  getDefaultMediaFrame,
+  normalizeMediaFrame,
+  parseMediaFrame,
+  serializeMediaFrame,
+} from "../utils/mediaFrames";
 
 const SERVERS_STORAGE_KEY = "nd_servers_v2";
 const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
@@ -145,8 +154,19 @@ const getDisplayName = (user) => {
   return fullName || user?.name || user?.email || "User";
 };
 const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || "";
+const getUserAvatarFrame = (user) =>
+  parseMediaFrame(user?.avatarFrame, user?.avatar_frame, user?.avatarFrameJson, user?.avatar_frame_json);
 const getUserProfileBackground = (user) =>
   user?.profileBackgroundUrl || user?.profile_background_url || user?.profileBackground || "";
+const getUserProfileBackgroundFrame = (user) =>
+  parseMediaFrame(
+    user?.profileBackgroundFrame,
+    user?.profile_background_frame,
+    user?.profileBackgroundFrameJson,
+    user?.profile_background_frame_json
+  );
+const getServerIconFrame = (server) =>
+  parseMediaFrame(server?.iconFrame, server?.icon_frame, server?.iconFrameJson, server?.icon_frame_json);
 const getCurrentUserId = (user) => String(user?.id || user?.email || "");
 const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
@@ -401,6 +421,7 @@ const createServer = (name, user, options = {}) => {
   name: name?.trim() || "Новый сервер",
   description: String(options?.description || "").trim().slice(0, 280),
   icon: String(options?.icon || DEFAULT_SERVER_ICON),
+  iconFrame: normalizeMediaFrame(options?.iconFrame, { allowNull: false }),
   isDefault: false,
   isShared: false,
   ownerId,
@@ -453,6 +474,7 @@ const normalizeServers = (value, currentUser) => {
       name: String(server?.name || `Сервер ${index + 1}`),
       description: String(server?.description || server?.Description || "").trim().slice(0, 280),
       icon: server?.icon ?? "",
+      iconFrame: getServerIconFrame(server),
       isShared: isSharedServer,
       ownerId: nextOwnerId,
       roles: normalizeRoles(server?.roles),
@@ -656,6 +678,7 @@ export default function MenuMain({
   const [showCreateServerModal, setShowCreateServerModal] = useState(false);
   const [createServerName, setCreateServerName] = useState("");
   const [createServerIcon, setCreateServerIcon] = useState("");
+  const [createServerIconFrame, setCreateServerIconFrame] = useState(() => getDefaultMediaFrame());
   const [createServerError, setCreateServerError] = useState("");
   const [resolution, setResolution] = useState("1080p");
   const [fps, setFps] = useState(60);
@@ -725,8 +748,10 @@ export default function MenuMain({
     lastName: user?.last_name || user?.lastName || "",
     email: user?.email || "",
     profileBackgroundUrl: getUserProfileBackground(user),
+    profileBackgroundFrame: getUserProfileBackgroundFrame(user),
   });
   const [profileStatus, setProfileStatus] = useState("");
+  const [mediaFrameEditorState, setMediaFrameEditorState] = useState(null);
   const [serverInviteFeedback, setServerInviteFeedback] = useState("");
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -748,6 +773,11 @@ export default function MenuMain({
   const avatarInputRef = useRef(null);
   const profileBackgroundInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
+  const mobileVoiceStageVideoRef = useRef(null);
+  const mobileVoiceStageImageRef = useRef(null);
+  const voiceJoinAttemptRef = useRef(0);
+  const voiceJoinInFlightRef = useRef(false);
+  const pendingVoiceChannelTargetRef = useRef("");
   const notificationSoundInputRef = useRef(null);
   const cameraPreviewRef = useRef(null);
   const cameraStreamRef = useRef(null);
@@ -981,17 +1011,8 @@ export default function MenuMain({
   const isScreenShareActive = isSharingScreen && localLiveShareMode === "screen";
   const isCameraShareActive = isSharingScreen && localLiveShareMode === "camera";
   const hasLocalSharePreview = Boolean(localSharePreview?.stream);
-  const isScreenShareSupported = useMemo(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    if (window.electronScreenCapture?.getSources) {
-      return true;
-    }
-
-    return typeof navigator?.mediaDevices?.getDisplayMedia === "function";
-  }, []);
+  const displayCaptureSupportInfo = useMemo(() => getDisplayCaptureSupportInfo(), []);
+  const isScreenShareSupported = displayCaptureSupportInfo.supported;
   const screenShareStatusCopy = useMemo(() => {
     if (isScreenShareActive) {
       return {
@@ -1002,16 +1023,16 @@ export default function MenuMain({
 
     if (!isScreenShareSupported) {
       return {
-        title: "Стрим экрана недоступен",
-        subtitle: "На этом устройстве браузер не дал доступ к захвату экрана.",
+        title: displayCaptureSupportInfo.title,
+        subtitle: displayCaptureSupportInfo.subtitle,
       };
     }
 
     return {
-      title: "Запустить стрим экрана",
-      subtitle: "Показать участникам экран телефона или вкладку браузера.",
+      title: displayCaptureSupportInfo.title,
+      subtitle: displayCaptureSupportInfo.subtitle,
     };
-  }, [isScreenShareActive, isScreenShareSupported]);
+  }, [displayCaptureSupportInfo, isScreenShareActive, isScreenShareSupported]);
   const selectedStreamParticipant = useMemo(() => Object.values(participantsMap).flat().find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [participantsMap, selectedStreamUserId]);
   const selectedStreamDebugInfo = useMemo(() => ({
     userId: selectedStreamUserId ? String(selectedStreamUserId) : "",
@@ -1048,6 +1069,58 @@ export default function MenuMain({
       subtitle: "Так участники видят ваш экран в эфире.",
     };
   }, [localSharePreview?.mode]);
+  const mobileVoiceStageMode = useMemo(() => {
+    if (selectedStreamUserId && selectedStream) {
+      return "remote";
+    }
+
+    if (isLocalSharePreviewVisible && hasLocalSharePreview) {
+      return "local";
+    }
+
+    return "spotlight";
+  }, [hasLocalSharePreview, isLocalSharePreviewVisible, selectedStream, selectedStreamUserId]);
+  const mobileVoiceStageCopy = useMemo(() => {
+    if (mobileVoiceStageMode === "remote") {
+      return {
+        title: selectedStreamParticipant?.name || "Трансляция участника",
+        subtitle: selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length
+          ? "Идёт эфир со звуком"
+          : "Идёт эфир без звука",
+        badge: "LIVE",
+      };
+    }
+
+    if (mobileVoiceStageMode === "local") {
+      return {
+        title: localSharePreviewMeta.title,
+        subtitle: localSharePreviewMeta.subtitle,
+        badge: localSharePreview?.mode === "camera" ? "CAM" : "LIVE",
+      };
+    }
+
+    return {
+      title: spotlightVoiceParticipant?.name || "Голосовой канал",
+      subtitle:
+        spotlightVoiceParticipant?.isSpeaking
+          ? "Сейчас говорит"
+          : spotlightVoiceParticipant?.isLive
+            ? "Идёт эфир"
+            : `${currentVoiceParticipants.length} участников в комнате`,
+      badge: spotlightVoiceParticipant?.isLive ? "LIVE" : spotlightVoiceParticipant?.isSelf ? "Вы" : "",
+    };
+  }, [
+    currentVoiceParticipants.length,
+    localSharePreview?.mode,
+    localSharePreviewMeta,
+    mobileVoiceStageMode,
+    selectedStream,
+    selectedStreamParticipant?.name,
+    spotlightVoiceParticipant?.isLive,
+    spotlightVoiceParticipant?.isSelf,
+    spotlightVoiceParticipant?.isSpeaking,
+    spotlightVoiceParticipant?.name,
+  ]);
   const voiceParticipantByUserId = useMemo(() => {
     const nextMap = new Map();
     Object.values(activeVoiceParticipantsMap || {}).forEach((participants) => {
@@ -1933,6 +2006,11 @@ export default function MenuMain({
       const nextProfileBackground = String(
         payload?.profile_background_url || payload?.profileBackgroundUrl || payload?.profileBackground || ""
       ).trim();
+      const nextAvatarFrame = parseMediaFrame(payload?.avatar_frame, payload?.avatarFrame);
+      const nextProfileBackgroundFrame = parseMediaFrame(
+        payload?.profile_background_frame,
+        payload?.profileBackgroundFrame
+      );
       const nextEmail = String(payload?.email || "").trim();
       const nextDisplayName = `${nextFirstName} ${nextLastName}`.trim();
 
@@ -2032,10 +2110,16 @@ export default function MenuMain({
           email: nextEmail || user.email || "",
           avatarUrl: nextAvatar || user.avatarUrl || user.avatar || "",
           avatar: nextAvatar || user.avatar || user.avatarUrl || "",
+          avatarFrame: nextAvatarFrame,
+          avatar_frame: nextAvatarFrame,
           profileBackgroundUrl:
             nextProfileBackground || user.profileBackgroundUrl || user.profile_background_url || user.profileBackground || "",
+          profile_background_url:
+            nextProfileBackground || user.profileBackground || user.profileBackgroundUrl || user.profile_background_url || "",
           profileBackground:
             nextProfileBackground || user.profileBackground || user.profileBackgroundUrl || user.profile_background_url || "",
+          profileBackgroundFrame: nextProfileBackgroundFrame,
+          profile_background_frame: nextProfileBackgroundFrame,
         };
 
         setUser?.(nextUser);
@@ -2808,8 +2892,20 @@ export default function MenuMain({
       lastName: user?.last_name || user?.lastName || "",
       email: user?.email || "",
       profileBackgroundUrl: getUserProfileBackground(user),
+      profileBackgroundFrame: getUserProfileBackgroundFrame(user),
     });
-  }, [user?.email, user?.first_name, user?.firstName, user?.last_name, user?.lastName, user?.profileBackgroundUrl, user?.profile_background_url, user?.profileBackground]);
+  }, [
+    user?.email,
+    user?.first_name,
+    user?.firstName,
+    user?.last_name,
+    user?.lastName,
+    user?.profileBackgroundUrl,
+    user?.profile_background_url,
+    user?.profileBackground,
+    user?.profileBackgroundFrame,
+    user?.profile_background_frame,
+  ]);
   useEffect(() => {
     if (!activeServer?.id || !activeServer?.isShared || isDefaultServer || workspaceMode !== "servers") return;
 
@@ -2855,6 +2951,33 @@ export default function MenuMain({
     const isStillLive = liveUserIds.some((id) => String(id) === String(selectedStreamUserId));
     if (!isStillLive && !selectedStream) setSelectedStreamUserId(null);
   }, [liveUserIds, selectedStream, selectedStreamUserId]);
+  useEffect(() => {
+    const mediaElement = mobileVoiceStageVideoRef.current;
+    if (!mediaElement) {
+      return;
+    }
+
+    const activeStream =
+      mobileVoiceStageMode === "remote"
+        ? selectedStream?.stream || null
+        : mobileVoiceStageMode === "local"
+          ? localSharePreview?.stream || null
+          : null;
+    const activeVideoSrc = mobileVoiceStageMode === "remote" ? selectedStream?.videoSrc || "" : "";
+
+    mediaElement.srcObject = activeStream;
+    mediaElement.src = activeStream ? "" : activeVideoSrc;
+    mediaElement.muted = true;
+
+    if (activeStream || activeVideoSrc) {
+      mediaElement.play().catch(() => {});
+    }
+
+    return () => {
+      mediaElement.srcObject = null;
+      mediaElement.src = "";
+    };
+  }, [localSharePreview?.stream, mobileVoiceStageMode, selectedStream?.stream, selectedStream?.videoSrc]);
   useEffect(() => {
     if (hasLocalSharePreview) {
       return;
@@ -2925,7 +3048,13 @@ export default function MenuMain({
     if (!user?.id) return undefined;
     const client = createVoiceRoomClient({
       onParticipantsMapChanged: setParticipantsMap,
-      onChannelChanged: setCurrentVoiceChannel,
+      onChannelChanged: (nextChannel) => {
+        if (!nextChannel && voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current) {
+          return;
+        }
+
+        setCurrentVoiceChannel(nextChannel);
+      },
       onRemoteScreenStreamsChanged: setRemoteScreenShares,
       onLocalScreenShareChanged: setIsSharingScreen,
       onLocalLiveShareChanged: ({ mode }) => setLocalLiveShareMode(mode || ""),
@@ -3184,11 +3313,13 @@ export default function MenuMain({
   const openCreateServerModal = () => {
     setCreateServerName("");
     setCreateServerIcon("");
+    setCreateServerIconFrame(getDefaultMediaFrame());
     setCreateServerError("");
     setShowCreateServerModal(true);
   };
   const closeCreateServerModal = () => {
     setShowCreateServerModal(false);
+    setCreateServerIconFrame(getDefaultMediaFrame());
     setCreateServerError("");
   };
   const startChannelRename = (type, channel) => {
@@ -3235,24 +3366,19 @@ export default function MenuMain({
         setCreateServerError(validationError);
         return;
       }
-
-      const formData = new FormData();
-      formData.append("icon", file);
-      const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await parseApiResponse(response);
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
-      }
-
-      setCreateServerIcon(data?.iconUrl || data?.icon_url || "");
-      setCreateServerError("");
     } catch (error) {
       console.error("Ошибка подготовки иконки сервера:", error);
       setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
+      return;
     }
+
+    openMediaFrameEditor({
+      kind: "createServerIcon",
+      target: "serverIcon",
+      file,
+      initialFrame: createServerIconFrame,
+      title: "Иконка сервера",
+    });
   };
   const handleCreateServerSubmit = (event) => {
     event?.preventDefault?.();
@@ -3262,7 +3388,10 @@ export default function MenuMain({
       return;
     }
 
-    const server = createServer(nextName, user, { icon: createServerIcon || DEFAULT_SERVER_ICON });
+    const server = createServer(nextName, user, {
+      icon: createServerIcon || DEFAULT_SERVER_ICON,
+      iconFrame: createServerIconFrame,
+    });
     setServers((previous) => [...previous, server]);
     setWorkspaceMode("servers");
     setActiveServerId(server.id);
@@ -3271,6 +3400,7 @@ export default function MenuMain({
     setShowCreateServerModal(false);
     setCreateServerName("");
     setCreateServerIcon("");
+    setCreateServerIconFrame(getDefaultMediaFrame());
     setCreateServerError("");
   };
   const handleDeleteServer = async (serverId) => {
@@ -3345,6 +3475,147 @@ export default function MenuMain({
   const updateActiveServerDescription = (value) => {
     if (!canManageServer) return;
     updateServer((server) => ({ ...server, description: String(value || "").slice(0, 280) }));
+  };
+  const revokeMediaEditorPreviewUrl = (editorState) => {
+    const previewUrl = String(editorState?.previewUrl || "");
+    if (previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
+  };
+  const closeMediaFrameEditor = () => {
+    revokeMediaEditorPreviewUrl(mediaFrameEditorState);
+    setMediaFrameEditorState(null);
+  };
+  const openMediaFrameEditor = ({ kind, target, file, initialFrame, title }) => {
+    const previewUrl = URL.createObjectURL(file);
+    revokeMediaEditorPreviewUrl(mediaFrameEditorState);
+    setMediaFrameEditorState({
+      kind,
+      target,
+      title: title || "",
+      file,
+      previewUrl,
+      frame: normalizeMediaFrame(initialFrame),
+      activeServerId: activeServer?.id || "",
+    });
+  };
+  const uploadAvatarWithFrame = async (file, frame) => {
+    const formData = new FormData();
+    formData.append("avatar", file);
+    formData.append("frame", JSON.stringify(serializeMediaFrame(frame)));
+    const response = await authFetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить аватар."));
+    }
+
+    const nextAvatarUrl = data?.avatarUrl || data?.avatar_url || "";
+    const nextAvatarFrame = parseMediaFrame(data?.avatar_frame, data?.avatarFrame, frame);
+    const nextUser = {
+      ...user,
+      avatarUrl: nextAvatarUrl,
+      avatar: nextAvatarUrl,
+      avatarFrame: nextAvatarFrame,
+      avatar_frame: nextAvatarFrame,
+    };
+    setUser?.(nextUser);
+    await storeSession(nextUser, {
+      accessToken: getStoredToken(),
+      refreshToken: getStoredRefreshToken(),
+      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+    });
+    setProfileStatus("Аватар сохранён.");
+  };
+  const uploadProfileBackgroundWithFrame = async (file, frame) => {
+    const formData = new FormData();
+    formData.append("background", file);
+    formData.append("frame", JSON.stringify(serializeMediaFrame(frame)));
+
+    const response = await authFetch(`${API_URL}/api/user/upload-profile-background`, { method: "POST", body: formData });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить фон профиля."));
+    }
+
+    const nextProfileBackgroundUrl = data?.profileBackgroundUrl || data?.profile_background_url || "";
+    const nextProfileBackgroundFrame = parseMediaFrame(
+      data?.profile_background_frame,
+      data?.profileBackgroundFrame,
+      frame
+    );
+    const nextUser = {
+      ...user,
+      profileBackgroundUrl: nextProfileBackgroundUrl,
+      profile_background_url: nextProfileBackgroundUrl,
+      profileBackground: nextProfileBackgroundUrl,
+      profileBackgroundFrame: nextProfileBackgroundFrame,
+      profile_background_frame: nextProfileBackgroundFrame,
+    };
+    setUser?.(nextUser);
+    setProfileDraft((previous) => ({
+      ...previous,
+      profileBackgroundUrl: nextProfileBackgroundUrl,
+      profileBackgroundFrame: nextProfileBackgroundFrame,
+    }));
+    await storeSession(nextUser, {
+      accessToken: getStoredToken(),
+      refreshToken: getStoredRefreshToken(),
+      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+    });
+    setProfileStatus("Фон профиля сохранён.");
+  };
+  const uploadServerIconWithFrame = async (file, frame, { createDraft = false } = {}) => {
+    const formData = new FormData();
+    formData.append("icon", file);
+    const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
+    }
+
+    const nextIconUrl = data?.iconUrl || data?.icon_url || "";
+    const nextIconFrame = normalizeMediaFrame(frame);
+    if (createDraft) {
+      setCreateServerIcon(nextIconUrl);
+      setCreateServerIconFrame(nextIconFrame);
+      setCreateServerError("");
+      return;
+    }
+
+    updateServer((server) => ({ ...server, icon: nextIconUrl, iconFrame: nextIconFrame }));
+    setProfileStatus("Иконка сервера сохранена.");
+  };
+  const handleMediaFrameConfirm = async (frame) => {
+    const editorState = mediaFrameEditorState;
+    if (!editorState?.file) {
+      closeMediaFrameEditor();
+      return;
+    }
+
+    try {
+      if (editorState.kind === "avatar") {
+        await uploadAvatarWithFrame(editorState.file, frame);
+      } else if (editorState.kind === "profileBackground") {
+        await uploadProfileBackgroundWithFrame(editorState.file, frame);
+      } else if (editorState.kind === "serverIcon") {
+        await uploadServerIconWithFrame(editorState.file, frame);
+      } else if (editorState.kind === "createServerIcon") {
+        await uploadServerIconWithFrame(editorState.file, frame, { createDraft: true });
+      }
+    } catch (error) {
+      if (editorState.kind === "createServerIcon") {
+        setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
+      } else {
+        setProfileStatus(error?.message || "Не удалось сохранить медиа.");
+      }
+      console.error("Ошибка сохранения медиа с кадрированием:", error);
+    } finally {
+      revokeMediaEditorPreviewUrl(editorState);
+      setMediaFrameEditorState(null);
+    }
   };
   const updateTextChannelName = (channelId, value) => {
     if (!canManageChannels) return;
@@ -3467,19 +3738,55 @@ export default function MenuMain({
   };
   const joinVoiceChannel = async (channel) => {
     if (!voiceClientRef.current || !user?.id || !channel?.id || !activeServer?.id) return;
+    const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
+    if (voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current === scopedChannelId) {
+      return;
+    }
+
+    const joinAttemptId = voiceJoinAttemptRef.current + 1;
+    voiceJoinAttemptRef.current = joinAttemptId;
+    voiceJoinInFlightRef.current = true;
+    pendingVoiceChannelTargetRef.current = scopedChannelId;
     try {
-      await voiceClientRef.current.joinChannel(getScopedVoiceChannelId(activeServer.id, channel.id), user);
+      await voiceClientRef.current.joinChannel(scopedChannelId, user);
       if (isMobileViewport) {
         setMobileSection("servers");
         setMobileServersPane("voice");
       }
     } catch (error) {
-      console.error("Ошибка входа в голосовой канал:", error);
+      if (voiceJoinAttemptRef.current === joinAttemptId) {
+        try {
+          await voiceClientRef.current.leaveChannel();
+        } catch {
+          // ignore retry cleanup failures
+        }
+
+        try {
+          await voiceClientRef.current.joinChannel(scopedChannelId, user);
+          if (isMobileViewport) {
+            setMobileSection("servers");
+            setMobileServersPane("voice");
+          }
+          return;
+        } catch (retryError) {
+          const message = retryError?.message || error?.message || "Не удалось подключиться к голосовому каналу.";
+          showServerInviteFeedback(message);
+          console.error("Ошибка входа в голосовой канал:", retryError);
+          setCurrentVoiceChannel(null);
+        }
+      }
+    } finally {
+      if (voiceJoinAttemptRef.current === joinAttemptId) {
+        voiceJoinInFlightRef.current = false;
+        pendingVoiceChannelTargetRef.current = "";
+      }
     }
   };
   const leaveVoiceChannel = async () => {
     if (!voiceClientRef.current) return;
     try {
+      voiceJoinInFlightRef.current = false;
+      pendingVoiceChannelTargetRef.current = "";
       await voiceClientRef.current.leaveChannel();
       if (isMobileViewport) {
         setMobileServersPane("channels");
@@ -3548,8 +3855,8 @@ export default function MenuMain({
     }
 
     if (!isScreenShareSupported) {
-      setScreenShareError("На этом устройстве браузер не поддерживает захват экрана.");
-      showServerInviteFeedback("На этом устройстве браузер не поддерживает захват экрана.");
+      setScreenShareError(displayCaptureSupportInfo.subtitle);
+      showServerInviteFeedback(displayCaptureSupportInfo.subtitle);
       return;
     }
 
@@ -3733,6 +4040,9 @@ export default function MenuMain({
       return;
     }
     setSelectedStreamUserId(normalizedUserId);
+    if (isMobileViewport) {
+      setMobileServersPane("voice");
+    }
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
   };
   const handleImportServer = (snapshot) => {
@@ -3975,25 +4285,13 @@ export default function MenuMain({
       return;
     }
 
-    const formData = new FormData();
-    formData.append("avatar", file);
-    try {
-      const response = await authFetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
-      const data = await parseApiResponse(response);
-      if (!response.ok) throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить аватар."));
-      const nextAvatarUrl = data?.avatarUrl || data?.avatar_url || "";
-      const nextUser = { ...user, avatarUrl: nextAvatarUrl, avatar: nextAvatarUrl };
-      setUser?.(nextUser);
-      await storeSession(nextUser, {
-        accessToken: getStoredToken(),
-        refreshToken: getStoredRefreshToken(),
-        accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
-      });
-      setProfileStatus("Аватар сохранён.");
-    } catch (error) {
-      console.error("Ошибка смены аватара:", error);
-      setProfileStatus(error?.message || "Не удалось загрузить аватар.");
-    }
+    openMediaFrameEditor({
+      kind: "avatar",
+      target: "avatar",
+      file,
+      initialFrame: getUserAvatarFrame(user),
+      title: "Аватар",
+    });
   };
   const handleProfileBackgroundChange = async (event) => {
     const file = event.target.files?.[0];
@@ -4006,32 +4304,13 @@ export default function MenuMain({
       return;
     }
 
-    const formData = new FormData();
-    formData.append("background", file);
-
-    try {
-      const response = await authFetch(`${API_URL}/api/user/upload-profile-background`, { method: "POST", body: formData });
-      const data = await parseApiResponse(response);
-      if (!response.ok) throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить фон профиля."));
-      const nextProfileBackgroundUrl = data?.profileBackgroundUrl || data?.profile_background_url || "";
-      const nextUser = {
-        ...user,
-        profileBackgroundUrl: nextProfileBackgroundUrl,
-        profile_background_url: nextProfileBackgroundUrl,
-        profileBackground: nextProfileBackgroundUrl,
-      };
-      setUser?.(nextUser);
-      setProfileDraft((previous) => ({ ...previous, profileBackgroundUrl: nextProfileBackgroundUrl }));
-      await storeSession(nextUser, {
-        accessToken: getStoredToken(),
-        refreshToken: getStoredRefreshToken(),
-        accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
-      });
-      setProfileStatus("Фон профиля сохранён.");
-    } catch (error) {
-      console.error("Ошибка смены фона профиля:", error);
-      setProfileStatus(error?.message || "Не удалось загрузить фон профиля.");
-    }
+    openMediaFrameEditor({
+      kind: "profileBackground",
+      target: "profileBackground",
+      file,
+      initialFrame: profileDraft.profileBackgroundFrame,
+      title: "Фон профиля",
+    });
   };
   const handleServerIconChange = async (event) => {
     if (!canManageServer) return;
@@ -4045,20 +4324,13 @@ export default function MenuMain({
         return;
       }
 
-      const formData = new FormData();
-      formData.append("icon", file);
-      const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
-        method: "POST",
-        body: formData,
+      openMediaFrameEditor({
+        kind: "serverIcon",
+        target: "serverIcon",
+        file,
+        initialFrame: getServerIconFrame(activeServer),
+        title: "Иконка сервера",
       });
-      const data = await parseApiResponse(response);
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
-      }
-
-      const nextIconUrl = data?.iconUrl || data?.icon_url || "";
-      updateServer((server) => ({ ...server, icon: nextIconUrl }));
-      setProfileStatus("Иконка сервера сохранена.");
     } catch (error) {
       console.error("Ошибка смены иконки сервера:", error);
       setProfileStatus(error?.message || "Не удалось загрузить иконку сервера.");
@@ -4124,7 +4396,9 @@ export default function MenuMain({
         body: JSON.stringify({
           firstName: nextFirstName,
           lastName: nextLastName,
+          avatarFrame: serializeMediaFrame(getUserAvatarFrame(user)),
           profileBackgroundUrl: profileDraft.profileBackgroundUrl ?? getUserProfileBackground(user),
+          profileBackgroundFrame: serializeMediaFrame(profileDraft.profileBackgroundFrame),
         }),
       });
       const data = await parseApiResponse(response);
@@ -4141,12 +4415,24 @@ export default function MenuMain({
         email: data?.email || profileDraft.email || user?.email || "",
         avatarUrl: data?.avatar_url || user?.avatarUrl || user?.avatar || "",
         avatar: data?.avatar_url || user?.avatar || user?.avatarUrl || "",
+        avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame, getUserAvatarFrame(user)),
+        avatar_frame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame, getUserAvatarFrame(user)),
         profileBackgroundUrl:
           data?.profile_background_url || profileDraft.profileBackgroundUrl || getUserProfileBackground(user),
         profile_background_url:
           data?.profile_background_url || profileDraft.profileBackgroundUrl || getUserProfileBackground(user),
         profileBackground:
           data?.profile_background_url || profileDraft.profileBackgroundUrl || getUserProfileBackground(user),
+        profileBackgroundFrame: parseMediaFrame(
+          data?.profile_background_frame,
+          data?.profileBackgroundFrame,
+          profileDraft.profileBackgroundFrame
+        ),
+        profile_background_frame: parseMediaFrame(
+          data?.profile_background_frame,
+          data?.profileBackgroundFrame,
+          profileDraft.profileBackgroundFrame
+        ),
       };
 
       setUser?.(nextUser);
@@ -4164,9 +4450,7 @@ export default function MenuMain({
 
   if (!user) return <div className="menu-loading">Загрузка пользователя...</div>;
 
-  const avatarSrc = resolveMediaUrl(user?.avatarUrl || user?.avatar, "");
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
-  const isProfileBackgroundVideo = isVideoAvatarUrl(profileBackgroundSrc);
   const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
     if (!sections[item.section]) {
       sections[item.section] = [];
@@ -4224,11 +4508,12 @@ export default function MenuMain({
           <div className="profile-settings-form__hero">
             <div className="profile-settings-form__cover">
               {profileBackgroundSrc ? (
-                isProfileBackgroundVideo ? (
-                  <video className="profile-settings-form__cover-media" src={profileBackgroundSrc} autoPlay loop muted playsInline preload="metadata" />
-                ) : (
-                  <img className="profile-settings-form__cover-media" src={profileBackgroundSrc} alt="" />
-                )
+                <AnimatedMedia
+                  className="profile-settings-form__cover-media"
+                  src={profileBackgroundSrc}
+                  alt=""
+                  frame={profileDraft.profileBackgroundFrame}
+                />
               ) : (
                 <div className="profile-settings-form__cover-fallback" aria-hidden="true" />
               )}
@@ -4236,12 +4521,9 @@ export default function MenuMain({
                 Сменить фон профиля
               </button>
             </div>
-            <div className="profile-settings-form__avatar-wrap">
-              <AnimatedAvatar className="profile-settings-form__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
-              <button type="button" className="settings-inline-button" onClick={() => avatarInputRef.current?.click()}>
-                Сменить аватар
-              </button>
-            </div>
+            <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={() => avatarInputRef.current?.click()}>
+              <AnimatedAvatar className="profile-settings-form__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} frame={getUserAvatarFrame(user)} />
+            </button>
 
             <div className="profile-settings-form__grid">
               <label className="voice-settings-field voice-settings-field--stacked">
@@ -4810,7 +5092,7 @@ export default function MenuMain({
       </div>
 
       <div className="settings-mobile-shell__profile">
-        <AnimatedAvatar className="settings-mobile-shell__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
+        <AnimatedAvatar className="settings-mobile-shell__avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} frame={getUserAvatarFrame(user)} />
         <div className="settings-mobile-shell__profile-copy">
           <strong>{getDisplayName(user)}</strong>
           <span>{user?.email || "Ваш аккаунт Tend"}</span>
@@ -5001,7 +5283,7 @@ export default function MenuMain({
       <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
         <div className="profile__identity-row">
           <button type="button" className="profile__identity" onClick={() => openSettingsPanel("personal_profile")}>
-            <AnimatedAvatar className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={user?.avatarUrl || user?.avatar} alt="avatar" />
+            <AnimatedAvatar className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={user?.avatarUrl || user?.avatar} alt="avatar" frame={getUserAvatarFrame(user)} />
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={handleAvatarChange} />
             <input
               ref={serverIconInputRef}
@@ -5012,10 +5294,6 @@ export default function MenuMain({
             />
             <div className="profile__names">
               <span className="profile__username">{getDisplayName(user)}</span>
-              <div className="status__profile">
-                <span className="status__role-dot" style={{ backgroundColor: "#3ba55d" }} aria-hidden="true" />
-                <span>{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
-              </div>
             </div>
           </button>
 
@@ -5649,6 +5927,7 @@ export default function MenuMain({
               src={server.icon}
               fallback={DEFAULT_SERVER_ICON}
               alt={server.name || "Без названия"}
+              frame={getServerIconFrame(server)}
             />
           ) : (
             <span className="btn__server-empty" aria-hidden="true" />
@@ -5681,12 +5960,13 @@ export default function MenuMain({
             aria-label={server.name || "Без названия"}
           >
             {server.icon ? (
-              <AnimatedAvatar
-                className="btn__server-media"
-                src={server.icon}
-                fallback={DEFAULT_SERVER_ICON}
-                alt={server.name || "Без названия"}
-              />
+            <AnimatedAvatar
+              className="btn__server-media"
+              src={server.icon}
+              fallback={DEFAULT_SERVER_ICON}
+              alt={server.name || "Без названия"}
+              frame={getServerIconFrame(server)}
+            />
             ) : (
               <span className="btn__server-empty" aria-hidden="true" />
             )}
@@ -5721,27 +6001,147 @@ export default function MenuMain({
   const renderMobileVoiceRoom = () => (
     <section className="mobile-voice-room">
       <div className="mobile-voice-room__stage">
-        <div className={`mobile-voice-room__spotlight ${spotlightVoiceParticipant?.isSpeaking ? "mobile-voice-room__spotlight--speaking" : ""}`}>
+        <div className={`mobile-voice-room__spotlight ${spotlightVoiceParticipant?.isSpeaking ? "mobile-voice-room__spotlight--speaking" : ""} ${mobileVoiceStageMode !== "spotlight" ? "mobile-voice-room__spotlight--media" : ""}`}>
           <div className="mobile-voice-room__spotlight-glow" aria-hidden="true" />
-          <AnimatedAvatar
-            className={`mobile-voice-room__spotlight-avatar ${spotlightVoiceParticipant?.isSpeaking ? "mobile-voice-room__spotlight-avatar--speaking" : ""}`}
-            src={spotlightVoiceParticipant?.avatar || ""}
-            alt={spotlightVoiceParticipant?.name || "Участник"}
-          />
+          {mobileVoiceStageMode === "spotlight" ? (
+            <AnimatedAvatar
+              className={`mobile-voice-room__spotlight-avatar ${spotlightVoiceParticipant?.isSpeaking ? "mobile-voice-room__spotlight-avatar--speaking" : ""}`}
+              src={spotlightVoiceParticipant?.avatar || ""}
+              alt={spotlightVoiceParticipant?.name || "Участник"}
+            />
+          ) : (
+            <div className="mobile-voice-room__stage-media-shell">
+              {mobileVoiceStageMode === "remote" && !selectedStream?.stream && selectedStream?.imageSrc ? (
+                <img
+                  ref={mobileVoiceStageImageRef}
+                  className="mobile-voice-room__stage-media"
+                  src={selectedStream.imageSrc}
+                  alt={mobileVoiceStageCopy.title}
+                />
+              ) : (
+                <video
+                  ref={mobileVoiceStageVideoRef}
+                  className="mobile-voice-room__stage-media"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+              )}
+              <div className="mobile-voice-room__stage-media-overlay" aria-hidden="true" />
+            </div>
+          )}
           <div className="mobile-voice-room__spotlight-copy">
-            <strong>{spotlightVoiceParticipant?.name || "Голосовой канал"}</strong>
-            <span>
-              {spotlightVoiceParticipant?.isSpeaking
-                ? "Сейчас говорит"
-                : spotlightVoiceParticipant?.isLive
-                  ? "Идёт эфир"
-                  : `${currentVoiceParticipants.length} участников в комнате`}
-            </span>
+            <strong>{mobileVoiceStageCopy.title}</strong>
+            <span>{mobileVoiceStageCopy.subtitle}</span>
           </div>
           <div className="mobile-voice-room__spotlight-badges">
-            {spotlightVoiceParticipant?.isSelf ? <span className="mobile-voice-room__badge">Вы</span> : null}
-            {spotlightVoiceParticipant?.isLive ? <span className="mobile-voice-room__badge mobile-voice-room__badge--live">LIVE</span> : null}
+            {mobileVoiceStageMode === "local" ? <span className="mobile-voice-room__badge">Вы</span> : null}
+            {mobileVoiceStageCopy.badge ? <span className={`mobile-voice-room__badge ${mobileVoiceStageCopy.badge === "LIVE" ? "mobile-voice-room__badge--live" : ""}`}>{mobileVoiceStageCopy.badge}</span> : null}
           </div>
+          {mobileVoiceStageMode === "remote" ? (
+            <div className="mobile-voice-room__stage-actions">
+              <button type="button" className="mobile-voice-room__stage-action" onClick={() => setSelectedStreamUserId(null)}>
+                Закрыть эфир
+              </button>
+            </div>
+          ) : null}
+          {mobileVoiceStageMode === "local" ? (
+            <div className="mobile-voice-room__stage-actions">
+              <button type="button" className="mobile-voice-room__stage-action" onClick={closeLocalSharePreview}>
+                Скрыть
+              </button>
+              <button
+                type="button"
+                className="mobile-voice-room__stage-action mobile-voice-room__stage-action--danger"
+                onClick={localSharePreview?.mode === "camera" ? stopCameraShare : stopScreenShare}
+              >
+                {localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
+              </button>
+            </div>
+          ) : null}
+          {!isScreenShareSupported ? (
+            <div className="mobile-voice-room__spotlight-note">
+              {displayCaptureSupportInfo.subtitle}
+            </div>
+          ) : null}
+          {voiceJoinInFlightRef.current ? (
+            <div className="mobile-voice-room__spotlight-note">Подключаемся к голосовому каналу...</div>
+          ) : null}
+          {screenShareError ? (
+            <div className="mobile-voice-room__spotlight-note mobile-voice-room__spotlight-note--error">{screenShareError}</div>
+          ) : null}
+          {cameraError ? (
+            <div className="mobile-voice-room__spotlight-note mobile-voice-room__spotlight-note--error">{cameraError}</div>
+          ) : null}
+          {profileStatus && mobileSection === "servers" ? (
+            <div className="mobile-voice-room__spotlight-note">{profileStatus}</div>
+          ) : null}
+          {screenShareStatusCopy.subtitle && mobileVoiceStageMode === "spotlight" && !isScreenShareSupported ? (
+            <div className="mobile-voice-room__spotlight-note">{screenShareStatusCopy.subtitle}</div>
+          ) : null}
+          {mobileVoiceStageMode === "remote" && !selectedStream?.stream && !selectedStream?.videoSrc && !selectedStream?.imageSrc ? (
+            <div className="mobile-voice-room__spotlight-note">Ожидаем видеопоток участника...</div>
+          ) : null}
+          {mobileVoiceStageMode === "local" && !hasLocalSharePreview ? (
+            <div className="mobile-voice-room__spotlight-note">Видео появится здесь сразу после запуска камеры или стрима.</div>
+          ) : null}
+          {mobileVoiceStageMode !== "spotlight" && currentVoiceChannelName ? (
+            <div className="mobile-voice-room__spotlight-note">Канал: {currentVoiceChannelName}</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && activeServer?.name ? (
+            <div className="mobile-voice-room__spotlight-note">Сервер: {activeServer.name}</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && currentVoiceChannelName ? (
+            <div className="mobile-voice-room__spotlight-note">Канал: {currentVoiceChannelName}</div>
+          ) : null}
+          {mobileVoiceStageMode === "remote" && selectedStreamParticipant?.name ? (
+            <div className="mobile-voice-room__spotlight-note">Участник: {selectedStreamParticipant.name}</div>
+          ) : null}
+          {mobileVoiceStageMode === "local" ? (
+            <div className="mobile-voice-room__spotlight-note">Предпросмотр остаётся прямо в голосовой комнате.</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isSelf ? (
+            <div className="mobile-voice-room__spotlight-note">Нажми на камеру или монитор ниже, чтобы вывести свой эфир сюда.</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isLive ? (
+            <div className="mobile-voice-room__spotlight-note">Нажми на участника ниже, чтобы открыть его эфир прямо здесь.</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && !currentVoiceParticipants.length ? (
+            <div className="mobile-voice-room__spotlight-note">Участники появятся здесь после подключения к каналу.</div>
+          ) : null}
+          {mobileVoiceStageMode !== "spotlight" && selectedStream?.hasAudio ? (
+            <div className="mobile-voice-room__spotlight-note">В эфире есть аудио-дорожка.</div>
+          ) : null}
+          {mobileVoiceStageMode === "remote" && selectedStreamDebugInfo?.readyState === "none" ? (
+            <div className="mobile-voice-room__spotlight-note">Подключаем удалённый видеопоток...</div>
+          ) : null}
+          {mobileVoiceStageMode === "local" && localSharePreview?.mode === "camera" ? (
+            <div className="mobile-voice-room__spotlight-note">Так ваше видео выглядит для остальных участников.</div>
+          ) : null}
+          {mobileVoiceStageMode === "local" && localSharePreview?.mode === "screen" ? (
+            <div className="mobile-voice-room__spotlight-note">Так ваш экран выглядит в эфире.</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isSpeaking ? (
+            <div className="mobile-voice-room__spotlight-note">Активный спикер автоматически поднимается в spotlight.</div>
+          ) : null}
+          {!isScreenShareSupported && displayCaptureSupportInfo.status === "platform-limited" ? (
+            <div className="mobile-voice-room__spotlight-note">На iPhone Safari экран не шарится из браузера. Для стрима нужен другой браузер или десктоп.</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && isCameraShareActive ? (
+            <div className="mobile-voice-room__spotlight-note">Камера уже запущена, нажми кнопку камеры ниже для управления.</div>
+          ) : null}
+          {mobileVoiceStageMode === "spotlight" && isScreenShareActive ? (
+            <div className="mobile-voice-room__spotlight-note">Стрим уже идёт, нажми кнопку монитора ниже для управления.</div>
+          ) : null}
+          {mobileVoiceStageMode === "remote" && activeServer?.name ? (
+            <div className="mobile-voice-room__spotlight-note">Сервер: {activeServer.name}</div>
+          ) : null}
+          {mobileVoiceStageMode === "remote" && currentVoiceChannelName ? (
+            <div className="mobile-voice-room__spotlight-note">Канал: {currentVoiceChannelName}</div>
+          ) : null}
+          {mobileVoiceStageMode === "local" && activeServer?.name ? (
+            <div className="mobile-voice-room__spotlight-note">Сервер: {activeServer.name}</div>
+          ) : null}
         </div>
       </div>
 
@@ -5824,66 +6224,66 @@ export default function MenuMain({
           className={`mobile-voice-room__control ${isMicMuted || isSoundMuted ? "mobile-voice-room__control--muted" : ""}`}
           onClick={toggleMicMute}
           aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
+          title={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
         >
           <span className={`mobile-voice-room__control-icon ${isMicMuted || isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <img src={MICROPHONE_ICON_URL} alt="" />
           </span>
-          <span className="mobile-voice-room__control-label">Мик</span>
         </button>
         <button
           type="button"
           className={`mobile-voice-room__control ${isSoundMuted ? "mobile-voice-room__control--muted" : ""}`}
           onClick={toggleSoundMute}
           aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
+          title={isSoundMuted ? "Включить звук" : "Выключить звук"}
         >
           <span className={`mobile-voice-room__control-icon ${isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <img src={HEADPHONES_ICON_URL} alt="" />
           </span>
-          <span className="mobile-voice-room__control-label">Звук</span>
         </button>
         <button
           type="button"
           className="mobile-voice-room__control"
           onClick={() => setMobileServersPane("chat")}
           aria-label="Перейти в чат"
+          title="Перейти в чат"
         >
           <span className="mobile-voice-room__control-icon">
             <img src={SMS_ICON_URL} alt="" />
           </span>
-          <span className="mobile-voice-room__control-label">Чат</span>
         </button>
         <button
           type="button"
           className={`mobile-voice-room__control ${isScreenShareActive ? "mobile-voice-room__control--active" : ""}`}
           onClick={handleScreenShareAction}
           aria-label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
+          title={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
         >
           <span className="mobile-voice-room__control-icon">
             <img src={MONITOR_ICON_URL} alt="" />
           </span>
-          <span className="mobile-voice-room__control-label">Стрим</span>
         </button>
         <button
           type="button"
           className={`mobile-voice-room__control ${isCameraShareActive ? "mobile-voice-room__control--active" : ""}`}
           onClick={openCameraModal}
           aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
+          title={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
         >
           <span className="mobile-voice-room__control-icon">
             <img src={CAMERA_ICON_URL} alt="" />
           </span>
-          <span className="mobile-voice-room__control-label">Кам</span>
         </button>
         <button
           type="button"
           className="mobile-voice-room__control mobile-voice-room__control--danger"
           onClick={leaveVoiceChannel}
           aria-label="Отключиться от голосового канала"
+          title="Отключиться от голосового канала"
         >
           <span className="mobile-voice-room__control-icon">
             <img src={PHONE_ICON_URL} alt="" />
           </span>
-          <span className="mobile-voice-room__control-label">Выйти</span>
         </button>
       </div>
     </section>
@@ -5892,11 +6292,12 @@ export default function MenuMain({
     <section className="mobile-profile-screen">
       <div className="mobile-profile-screen__hero">
         {profileBackgroundSrc ? (
-          isProfileBackgroundVideo ? (
-            <video className="mobile-profile-screen__cover-media" src={profileBackgroundSrc} autoPlay loop muted playsInline preload="metadata" />
-          ) : (
-            <img className="mobile-profile-screen__cover-media" src={profileBackgroundSrc} alt="" />
-          )
+          <AnimatedMedia
+            className="mobile-profile-screen__cover-media"
+            src={profileBackgroundSrc}
+            alt=""
+            frame={profileDraft.profileBackgroundFrame}
+          />
         ) : (
           <div className="mobile-profile-screen__cover-fallback" aria-hidden="true" />
         )}
@@ -5915,17 +6316,12 @@ export default function MenuMain({
               className={`mobile-profile-screen__avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "mobile-profile-screen__avatar--speaking" : ""}`}
               src={getUserAvatar(user)}
               alt={getDisplayName(user)}
+              frame={getUserAvatarFrame(user)}
             />
-            <span className="mobile-profile-screen__avatar-chip">Сменить</span>
           </button>
           <div className="mobile-profile-screen__identity">
             <h1>{getDisplayName(user)}</h1>
             <p>{user?.email || "Ваш аккаунт Tend"}</p>
-            <div className="mobile-profile-screen__meta">
-              <span className="mobile-profile-screen__presence">{currentVoiceChannelName ? "В голосовом чате" : "В сети"}</span>
-              <span className="mobile-profile-screen__meta-badge">{servers.length} серверов</span>
-              <span className="mobile-profile-screen__meta-badge">{friends.length} друзей</span>
-            </div>
           </div>
         </div>
         <div className="mobile-profile-screen__hero-actions">
@@ -5934,9 +6330,6 @@ export default function MenuMain({
           </button>
           <button type="button" className="mobile-profile-screen__secondary" onClick={() => profileBackgroundInputRef.current?.click()}>
             Сменить фон
-          </button>
-          <button type="button" className="mobile-profile-screen__secondary" onClick={() => avatarInputRef.current?.click()}>
-            Изменить аватар
           </button>
         </div>
       </div>
@@ -5961,30 +6354,6 @@ export default function MenuMain({
         <div className="mobile-profile-screen__card">
           <strong>Аккаунт</strong>
           <span>{currentVoiceChannelName ? `Подключено к ${currentVoiceChannelName}` : "Сейчас вы не в голосовом канале."}</span>
-        </div>
-        {profileStatus ? (
-          <div className="mobile-profile-screen__card mobile-profile-screen__card--status">
-            <strong>Статус профиля</strong>
-            <span>{profileStatus}</span>
-          </div>
-        ) : null}
-        <div className="mobile-profile-screen__stats">
-          <div className="mobile-profile-screen__stat">
-            <strong>{servers.length}</strong>
-            <span>Серверы</span>
-          </div>
-          <div className="mobile-profile-screen__stat">
-            <strong>{friends.length}</strong>
-            <span>Друзья</span>
-          </div>
-          <div className="mobile-profile-screen__stat">
-            <strong>{totalDirectUnreadCount}</strong>
-            <span>Новых в чатах</span>
-          </div>
-          <div className="mobile-profile-screen__stat">
-            <strong>{totalServerUnreadCount}</strong>
-            <span>Новых в серверах</span>
-          </div>
         </div>
         <div className="mobile-profile-screen__card mobile-profile-screen__card--danger">
           <button type="button" className="mobile-profile-screen__danger-button" onClick={handleLogout}>
@@ -6086,7 +6455,7 @@ export default function MenuMain({
         badge: activeServerUnreadCount,
         canGoBack: true,
         actionLabel: currentVoiceChannel ? "Голос" : "Каналы",
-        onAction: () => setMobileServersPane(currentVoiceChannel ? "voice" : "channels"),
+        onAction: () => setSelectedStreamUserId(null),
       };
     }
 
@@ -6162,7 +6531,7 @@ export default function MenuMain({
             <div className="mobile-shell__panel mobile-shell__panel--servers">
               {renderMobileServerStrip()}
               <div className="mobile-shell__workspace mobile-shell__workspace--servers">
-                {selectedStreamUserId || isLocalSharePreviewVisible ? renderServerMain() : mobileServersPane === "voice" ? renderMobileVoiceRoom() : mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
+                {mobileServersPane === "voice" ? renderMobileVoiceRoom() : mobileServersPane === "chat" ? renderServerMain() : renderServersSidebar(false)}
               </div>
             </div>
           )}
@@ -6244,7 +6613,7 @@ export default function MenuMain({
               <>
                 <aside className="settings-shell__sidebar">
                   <div className="settings-shell__profile">
-                    <AnimatedAvatar className="settings-shell__profile-avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} />
+                    <AnimatedAvatar className="settings-shell__profile-avatar" src={user?.avatarUrl || user?.avatar} alt={getDisplayName(user)} frame={getUserAvatarFrame(user)} />
                     <div>
                       <strong>{getDisplayName(user)}</strong>
                       <button type="button" className="settings-shell__profile-link" onClick={() => setSettingsTab("personal_profile")}>
@@ -6301,12 +6670,13 @@ export default function MenuMain({
               <label className="create-server-modal__cover">
                 <input type="file" accept=".png,.jpg,.jpeg,.heif,.heic,.gif,.mp4,image/png,image/jpeg,image/heif,image/heic,image/gif,video/mp4" onChange={handleCreateServerIconChange} />
                 <span className="create-server-modal__cover-frame">
-                  <AnimatedAvatar
-                    className="create-server-modal__icon-preview"
-                    src={createServerIcon || DEFAULT_SERVER_ICON}
-                    fallback={DEFAULT_SERVER_ICON}
-                    alt="Иконка сервера"
-                  />
+                    <AnimatedAvatar
+                      className="create-server-modal__icon-preview"
+                      src={createServerIcon || DEFAULT_SERVER_ICON}
+                      fallback={DEFAULT_SERVER_ICON}
+                      alt="Иконка сервера"
+                      frame={createServerIconFrame}
+                    />
                 </span>
                 <span className="create-server-modal__cover-text">
                   {createServerIcon ? "Сменить изображение" : "Загрузить изображение"}
@@ -6468,6 +6838,22 @@ export default function MenuMain({
           </div>
         </div>
       )}
+
+      <MediaFrameEditorModal
+        open={Boolean(mediaFrameEditorState)}
+        source={mediaFrameEditorState?.previewUrl || ""}
+        fallback={
+          mediaFrameEditorState?.target === "serverIcon"
+            ? DEFAULT_SERVER_ICON
+            : mediaFrameEditorState?.target === "profileBackground"
+              ? getUserProfileBackground(user)
+              : getUserAvatar(user)
+        }
+        frame={mediaFrameEditorState?.frame}
+        target={mediaFrameEditorState?.target || "avatar"}
+        onCancel={closeMediaFrameEditor}
+        onConfirm={handleMediaFrameConfirm}
+      />
 
       {directMessageToasts.length > 0 && (
         <div className="direct-toast-stack">

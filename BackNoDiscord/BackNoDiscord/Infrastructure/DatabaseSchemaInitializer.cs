@@ -171,7 +171,11 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS avatar_url text NULL;
             ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS avatar_frame_json text NULL;
+            ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS profile_background_url text NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS profile_background_frame_json text NULL;
             ALTER TABLE IF EXISTS users
                 ALTER COLUMN email DROP NOT NULL;
             ALTER TABLE IF EXISTS chatmessages

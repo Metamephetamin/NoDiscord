@@ -35,6 +35,7 @@ import {
   normalizeParticipantsMap,
   tuneDisplayStream,
 } from "./voiceClientUtils";
+import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
 
 const RTC_CONFIGURATION = {
   ...VOICE_RTC_CONFIGURATION,
@@ -1331,11 +1332,10 @@ export function createVoiceRoomClient({
         getAvatar(user)
       );
 
-      currentChannel = channelName;
-      onChannelChanged?.(channelName);
-
       try {
         await ensureRoomConnection(channelName, user, Array.isArray(joinResponse?.participants) ? joinResponse.participants : []);
+        currentChannel = channelName;
+        onChannelChanged?.(channelName);
       } catch (error) {
         try {
           await signalConnection.invoke("LeaveChannel", String(user.id));
@@ -1364,6 +1364,11 @@ export function createVoiceRoomClient({
     async startScreenShare({ resolution = "1080p", fps = 60, shareAudio = false } = {}) {
       if (!currentChannel || !room) {
         throw new Error("Join a voice channel first.");
+      }
+
+      const displayCaptureSupport = getDisplayCaptureSupportInfo();
+      if (!displayCaptureSupport.supported) {
+        throw new Error(displayCaptureSupport.subtitle || "Screen capture is not supported on this device.");
       }
 
       if (localScreenStream) {

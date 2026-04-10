@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text.Json;
+using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 
 namespace BackNoDiscord.Services;
@@ -139,6 +140,7 @@ public class ServerInviteService
             ServerName = snapshot.Name,
             ServerDescription = snapshot.Description,
             ServerIcon = snapshot.Icon ?? string.Empty,
+            ServerIconFrame = snapshot.IconFrame,
             MemberCount = snapshot.Members?.Count ?? 0,
             TextChannelCount = snapshot.TextChannels?.Count ?? 0,
             VoiceChannelCount = snapshot.VoiceChannels?.Count ?? 0,
@@ -222,6 +224,7 @@ public class ServerInviteService
             normalized.Description = normalized.Description[..280];
         }
         normalized.Icon ??= string.Empty;
+        normalized.IconFrame = MediaFrameSerializer.Normalize(normalized.IconFrame, allowNull: false);
         normalized.IsShared = true;
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();
         normalized.Roles ??= new List<ServerRoleSnapshot>();
@@ -301,6 +304,7 @@ public class ServerInvitePreviewResult
     public string ServerName { get; set; } = string.Empty;
     public string ServerDescription { get; set; } = string.Empty;
     public string ServerIcon { get; set; } = string.Empty;
+    public MediaFrameData? ServerIconFrame { get; set; }
     public int MemberCount { get; set; }
     public int TextChannelCount { get; set; }
     public int VoiceChannelCount { get; set; }
@@ -312,6 +316,7 @@ public class ServerSnapshot
     public string Name { get; set; } = "Server";
     public string Description { get; set; } = string.Empty;
     public string Icon { get; set; } = string.Empty;
+    public MediaFrameData? IconFrame { get; set; }
     public bool IsShared { get; set; }
     public string OwnerId { get; set; } = string.Empty;
     public List<ServerRoleSnapshot> Roles { get; set; } = new();

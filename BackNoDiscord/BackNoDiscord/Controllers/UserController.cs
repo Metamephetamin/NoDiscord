@@ -12,11 +12,13 @@ namespace BackNoDiscord.Controllers;
 public class UploadAvatarRequest
 {
     public IFormFile? Avatar { get; set; }
+    public string? Frame { get; set; }
 }
 
 public class UploadProfileBackgroundRequest
 {
     public IFormFile? Background { get; set; }
+    public string? Frame { get; set; }
 }
 
 public class UpdateProfileRequest
@@ -24,6 +26,8 @@ public class UpdateProfileRequest
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? ProfileBackgroundUrl { get; set; }
+    public MediaFrameData? AvatarFrame { get; set; }
+    public MediaFrameData? ProfileBackgroundFrame { get; set; }
 }
 
 [ApiController]
@@ -77,10 +81,12 @@ public class UserController : ControllerBase
 
         user.first_name = firstName;
         user.last_name = lastName;
+        user.avatar_frame_json = MediaFrameSerializer.Serialize(request.AvatarFrame, allowNull: false);
         if (request.ProfileBackgroundUrl != null)
         {
             user.profile_background_url = UploadPolicies.SanitizeRelativeAssetUrl(request.ProfileBackgroundUrl, "/api/profile-backgrounds/");
         }
+        user.profile_background_frame_json = MediaFrameSerializer.Serialize(request.ProfileBackgroundFrame, allowNull: false);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await BroadcastProfileUpdatedAsync(user, cancellationToken);
@@ -92,7 +98,9 @@ public class UserController : ControllerBase
             last_name = user.last_name,
             email = user.email,
             avatar_url = user.avatar_url ?? string.Empty,
-            profile_background_url = user.profile_background_url ?? string.Empty
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
+            profile_background_url = user.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
         });
     }
 
@@ -141,11 +149,17 @@ public class UserController : ControllerBase
         }
 
         user.avatar_url = avatarUrl;
+        user.avatar_frame_json = MediaFrameSerializer.Serialize(MediaFrameSerializer.Parse(request.Frame, allowNull: true), allowNull: false);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await BroadcastProfileUpdatedAsync(user, cancellationToken);
 
-        return Ok(new { avatarUrl, avatar_url = avatarUrl });
+        return Ok(new
+        {
+            avatarUrl,
+            avatar_url = avatarUrl,
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true)
+        });
     }
 
     [HttpPost("upload-profile-background")]
@@ -193,11 +207,17 @@ public class UserController : ControllerBase
         }
 
         user.profile_background_url = profileBackgroundUrl;
+        user.profile_background_frame_json = MediaFrameSerializer.Serialize(MediaFrameSerializer.Parse(request.Frame, allowNull: true), allowNull: false);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await BroadcastProfileUpdatedAsync(user, cancellationToken);
 
-        return Ok(new { profileBackgroundUrl, profile_background_url = profileBackgroundUrl });
+        return Ok(new
+        {
+            profileBackgroundUrl,
+            profile_background_url = profileBackgroundUrl,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
+        });
     }
 
     [AllowAnonymous]
@@ -242,7 +262,9 @@ public class UserController : ControllerBase
             last_name = user.last_name,
             email = user.email ?? string.Empty,
             avatar_url = user.avatar_url ?? string.Empty,
-            profile_background_url = user.profile_background_url ?? string.Empty
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
+            profile_background_url = user.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
         };
 
         await _chatHubContext.Clients.Users(recipientIds.Distinct().Select(id => id.ToString()))

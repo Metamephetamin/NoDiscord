@@ -5,11 +5,27 @@ on:
   push:
     branches:
       - master
-      - main
 
 jobs:
-  build-windows:
+  guard-master:
+    name: Проверить release-ветку
     runs-on: windows-latest
+
+    steps:
+      - name: Проверить, что workflow запущен из master
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "master" ]; then
+            echo "Сборка release-артефакта Windows разрешена только из ветки master. Текущая ветка: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+  build-windows:
+    name: Build Windows Package
+    runs-on: windows-latest
+    needs: guard-master
 
     steps:
       - name: Checkout

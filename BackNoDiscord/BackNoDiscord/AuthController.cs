@@ -13,6 +13,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using BackNoDiscord.Infrastructure;
 
 namespace BackNoDiscord;
 
@@ -693,7 +694,9 @@ public class AuthController : ControllerBase
             user.phone_number,
             user.is_phone_verified,
             avatar_url = user.avatar_url ?? string.Empty,
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
             token = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
@@ -713,7 +716,9 @@ public class AuthController : ControllerBase
             phone_number = user.phone_number ?? string.Empty,
             is_phone_verified = user.is_phone_verified,
             avatar_url = user.avatar_url ?? string.Empty,
-            profile_background_url = user.profile_background_url ?? string.Empty
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
+            profile_background_url = user.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
         };
     }
 
