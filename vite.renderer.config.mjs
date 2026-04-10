@@ -6,7 +6,7 @@ import dns from "node:dns";
 dns.setDefaultResultOrder("verbatim");
 
 export default defineConfig(({ command }) => ({
-  base: command === "serve" ? "/" : "./",
+  base: "/",
   plugins: [react(), command === "serve" ? basicSsl() : null].filter(Boolean),
   server: {
     host: "localhost",

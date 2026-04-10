@@ -732,7 +732,7 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   return (
-    <div className={`auth-page ${isLiteVisualMode ? "auth-page--lite" : ""}`}>
+    <div className="auth-page">
       <video
         ref={authVideoRef}
         className="auth-video-bg"
@@ -740,7 +740,7 @@ export default function Auth({ onAuthSuccess }) {
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="auto"
         disablePictureInPicture
         disableRemotePlayback
         aria-hidden="true"
