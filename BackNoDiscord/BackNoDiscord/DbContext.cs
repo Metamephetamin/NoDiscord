@@ -514,7 +514,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.Code).IsUnique();
             entity.HasIndex(x => new { x.OwnerUserId, x.ExpiresAt });
-            entity.Property(x => x.Code).IsRequired();
+            entity.Property(x => x.Code).IsRequired().HasMaxLength(20);
             entity.Property(x => x.OwnerUserId).IsRequired();
             entity.Property(x => x.SnapshotJson).IsRequired();
             entity.Property(x => x.RedeemedUserIdsJson).IsRequired();
