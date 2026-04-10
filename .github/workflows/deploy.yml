@@ -112,6 +112,7 @@ jobs:
     needs:
       - smoke-tests
     environment: production
+    timeout-minutes: 25
     outputs:
       deploy_ready: ${{ steps.validate.outputs.ready }}
 
@@ -167,7 +168,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Sync artifacts to server
+      - name: Sync frontend artifact to server
         if: steps.validate.outputs.ready == 'true'
         shell: bash
         env:
@@ -176,47 +177,69 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           FRONTEND_DEPLOY_PATH: ${{ vars.FRONTEND_DEPLOY_PATH }}
           BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
-          BACKEND_SERVICE_NAME: ${{ vars.BACKEND_SERVICE_NAME }}
           FRONTEND_DEPLOY_OWNER: ${{ vars.FRONTEND_DEPLOY_OWNER }}
+        run: |
+          PORT="${DEPLOY_PORT:-22}"
+          FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
+          FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
+          TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/frontend' '$FRONTEND_PATH'"
+          rsync -az --delete --timeout=60 -e "ssh $SSH_OPTS" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/frontend/"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "
+            set -e
+            FRONTEND_PATH='$FRONTEND_PATH'
+            TEMP_ROOT='$TEMP_ROOT'
+            FRONTEND_OWNER='$FRONTEND_OWNER'
+            case \"\$FRONTEND_PATH\" in
+              /var/www/*) ;;
+              *)
+                echo \"Unsafe frontend deploy path: \$FRONTEND_PATH\" >&2
+                exit 1
+                ;;
+            esac
+            rsync -az --delete \"\$TEMP_ROOT/frontend/\" \"\$FRONTEND_PATH/\"
+            chown -R \"\$FRONTEND_OWNER\" \"\$FRONTEND_PATH\"
+          "
+
+      - name: Sync backend artifact to server
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
           BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           PORT="${DEPLOY_PORT:-22}"
-          FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
           BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
-          BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
-          FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
-          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/frontend' '$TEMP_ROOT/backend' '$FRONTEND_PATH' '$BACKEND_PATH'"
-
-          rsync -az --delete -e "ssh -p $PORT" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/frontend/"
-          rsync -az --delete -e "ssh -p $PORT" ./backend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/backend/"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/backend' '$BACKEND_PATH'"
+          rsync -az --delete --timeout=60 -e "ssh $SSH_OPTS" ./backend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/backend/"
           if [ -n "$BACKEND_ENV_FILE" ]; then
-            printf '%s\n' "$BACKEND_ENV_FILE" | ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
+            printf '%s\n' "$BACKEND_ENV_FILE" | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
           fi
 
-          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "
             set -e
-            FRONTEND_PATH='$FRONTEND_PATH'
             BACKEND_PATH='$BACKEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
             TEMP_ENV_FILE='$TEMP_ENV_FILE'
-            FRONTEND_OWNER='$FRONTEND_OWNER'
             BACKEND_OWNER='$BACKEND_OWNER'
-            BACKEND_SERVICE='$BACKEND_SERVICE'
-            for required_path in \"\$FRONTEND_PATH\" \"\$BACKEND_PATH\"; do
-              case \"\$required_path\" in
-                /var/www/*|/opt/nodiscord/*) ;;
-                *)
-                  echo \"Unsafe deploy path: \$required_path\" >&2
-                  exit 1
-                  ;;
-              esac
-            done
-            rsync -az --delete \"\$TEMP_ROOT/frontend/\" \"\$FRONTEND_PATH/\"
+            case \"\$BACKEND_PATH\" in
+              /opt/nodiscord/*) ;;
+              *)
+                echo \"Unsafe backend deploy path: \$BACKEND_PATH\" >&2
+                exit 1
+                ;;
+            esac
             rsync -az --delete --exclude='.env' \"\$TEMP_ROOT/backend/\" \"\$BACKEND_PATH/\"
             if [ -f \"\$TEMP_ENV_FILE\" ]; then
               mv \"\$TEMP_ENV_FILE\" \"\$BACKEND_PATH/.env\"
@@ -227,8 +250,27 @@ jobs:
             else
               chmod 600 \"\$BACKEND_PATH/.env\"
             fi
-            chown -R \"\$FRONTEND_OWNER\" \"\$FRONTEND_PATH\"
             chown -R \"\$BACKEND_OWNER\" \"\$BACKEND_PATH\"
+          "
+
+      - name: Restart backend and reload nginx
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          BACKEND_SERVICE_NAME: ${{ vars.BACKEND_SERVICE_NAME }}
+        run: |
+          PORT="${DEPLOY_PORT:-22}"
+          BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
+          TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "
+            set -e
+            BACKEND_SERVICE='$BACKEND_SERVICE'
+            TEMP_ROOT='$TEMP_ROOT'
             systemctl restart \"\$BACKEND_SERVICE\"
             systemctl reload nginx
             rm -rf \"\$TEMP_ROOT\"
