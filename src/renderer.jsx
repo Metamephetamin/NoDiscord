@@ -590,6 +590,7 @@ export default function Renderer() {
         />
         <ServerInvitePage
           user={user}
+          inviteCode={location.pathname.replace(/^\/invite\//i, "")}
           onAuthSuccess={handleAuthSuccess}
           onInviteAccepted={handleInviteAccepted}
         />

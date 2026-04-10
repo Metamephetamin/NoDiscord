@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Auth from "./Auth";
 import AnimatedMedia from "./AnimatedMedia";
 import "../css/ServerInvitePage.css";
@@ -54,8 +54,14 @@ function getServerDescription(preview) {
   return "Сервер для общения и совместной работы участников.";
 }
 
-export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted }) {
-  const { inviteCode = "" } = useParams();
+function resolveInviteCodeFromPath(pathname) {
+  const match = String(pathname || "").match(/^\/invite\/([^/?#]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1]) : "";
+}
+
+export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted, inviteCode: inviteCodeProp = "" }) {
+  const location = useLocation();
+  const { inviteCode: inviteCodeParam = "" } = useParams();
   const navigate = useNavigate();
   const [preview, setPreview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,7 +69,10 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
 
-  const normalizedInviteCode = useMemo(() => String(inviteCode || "").trim().toUpperCase(), [inviteCode]);
+  const normalizedInviteCode = useMemo(() => {
+    const rawInviteCode = inviteCodeParam || inviteCodeProp || resolveInviteCodeFromPath(location.pathname);
+    return String(rawInviteCode || "").trim().toUpperCase();
+  }, [inviteCodeParam, inviteCodeProp, location.pathname]);
   const serverIconUrl = resolveMediaUrl(preview?.serverIcon, DEFAULT_SERVER_ICON);
   const serverIconFrame = useMemo(
     () => parseMediaFrame(preview?.serverIconFrame, preview?.server_icon_frame),
