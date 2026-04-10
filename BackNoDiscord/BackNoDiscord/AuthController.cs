@@ -339,7 +339,7 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = firstNameError });
         }
 
-        if (!AuthInputPolicies.TryNormalizeProfileName(dto.last_name, "Фамилия", out var lastName, out var lastNameError))
+        if (!AuthInputPolicies.TryNormalizeOptionalProfileName(dto.last_name, "Фамилия", out var lastName, out var lastNameError))
         {
             return BadRequest(new { message = lastNameError });
         }
@@ -900,7 +900,6 @@ public class RegisterDto
     [Required]
     public string first_name { get; set; } = string.Empty;
 
-    [Required]
     public string last_name { get; set; } = string.Empty;
 
     public string? email { get; set; }

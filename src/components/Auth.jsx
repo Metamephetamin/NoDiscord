@@ -575,12 +575,12 @@ export default function Auth({ onAuthSuccess }) {
         : {}),
     };
 
-    if (!payload.first_name || !payload.last_name || !registerForm.contact.trim()) {
+    if (!payload.first_name || !registerForm.contact.trim()) {
       setMessage("Заполните обязательные поля.");
       return;
     }
 
-    if (!registerNameScript || !areNamesUsingSameScript(payload.first_name, payload.last_name)) {
+    if (!registerNameScript || (payload.last_name && !areNamesUsingSameScript(payload.first_name, payload.last_name))) {
       setMessage("Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.");
       return;
     }
@@ -846,7 +846,6 @@ export default function Auth({ onAuthSuccess }) {
                   value={registerForm.lastName}
                   onChange={handleRegisterFieldChange("lastName")}
                   maxLength={MAX_AUTH_NAME_LENGTH}
-                  required
                 />
               </div>
 

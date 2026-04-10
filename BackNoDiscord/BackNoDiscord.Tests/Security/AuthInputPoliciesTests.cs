@@ -50,4 +50,23 @@ public class AuthInputPoliciesTests
         Assert.Equal(string.Empty, normalized);
         Assert.Contains("+7", error);
     }
+
+    [Fact]
+    public void TryNormalizeOptionalProfileName_AllowsEmptyValue()
+    {
+        var result = AuthInputPolicies.TryNormalizeOptionalProfileName("   ", "Фамилия", out var normalized, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, normalized);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
+    public void TryEnsureMatchingProfileNameScripts_AllowsMissingLastName()
+    {
+        var result = AuthInputPolicies.TryEnsureMatchingProfileNameScripts("Иван", string.Empty, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, error);
+    }
 }

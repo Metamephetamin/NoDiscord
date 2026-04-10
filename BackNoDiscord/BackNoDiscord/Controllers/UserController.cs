@@ -63,7 +63,7 @@ public class UserController : ControllerBase
             return BadRequest(new { message = firstNameError });
         }
 
-        if (!AuthInputPolicies.TryNormalizeProfileName(request.LastName, "Фамилия", out var lastName, out var lastNameError))
+        if (!AuthInputPolicies.TryNormalizeOptionalProfileName(request.LastName, "Фамилия", out var lastName, out var lastNameError))
         {
             return BadRequest(new { message = lastNameError });
         }

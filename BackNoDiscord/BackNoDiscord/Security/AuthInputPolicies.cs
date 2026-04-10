@@ -140,11 +140,36 @@ public static partial class AuthInputPolicies
         return true;
     }
 
+    public static bool TryNormalizeOptionalProfileName(string? value, string fieldName, out string normalizedName, out string error)
+    {
+        normalizedName = (value ?? string.Empty).Trim();
+        error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            normalizedName = string.Empty;
+            return true;
+        }
+
+        return TryNormalizeProfileName(normalizedName, fieldName, out normalizedName, out error);
+    }
+
     public static bool TryEnsureMatchingProfileNameScripts(string firstName, string lastName, out string error)
     {
         error = string.Empty;
 
         var firstScript = DetectPersonNameScript(firstName);
+        if (string.IsNullOrWhiteSpace(lastName))
+        {
+            if (firstScript is PersonNameScript.Unknown or PersonNameScript.Mixed)
+            {
+                error = "Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.";
+                return false;
+            }
+
+            return true;
+        }
+
         var lastScript = DetectPersonNameScript(lastName);
 
         if (firstScript is PersonNameScript.Unknown or PersonNameScript.Mixed ||

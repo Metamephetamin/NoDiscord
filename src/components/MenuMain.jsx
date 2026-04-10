@@ -4364,8 +4364,8 @@ export default function MenuMain({
 
     const nextFirstName = profileDraft.firstName.trim();
     const nextLastName = profileDraft.lastName.trim();
-    if (!nextFirstName || !nextLastName) {
-      setProfileStatus("Имя и фамилия не должны быть пустыми.");
+    if (!nextFirstName) {
+      setProfileStatus("Имя не должно быть пустым.");
       return;
     }
 
@@ -4377,12 +4377,12 @@ export default function MenuMain({
       return;
     }
 
-    if (!isValidProfileName(nextFirstName) || !isValidProfileName(nextLastName)) {
+    if (!isValidProfileName(nextFirstName) || (nextLastName && !isValidProfileName(nextLastName))) {
       setProfileStatus("Имя и фамилия должны состоять из одного слова и могут содержать только буквы, дефис и апостроф.");
       return;
     }
 
-    if (!areNamesUsingSameScript(nextFirstName, nextLastName)) {
+    if (nextLastName && !areNamesUsingSameScript(nextFirstName, nextLastName)) {
       setProfileStatus("Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.");
       return;
     }
