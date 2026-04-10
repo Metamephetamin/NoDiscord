@@ -6076,29 +6076,11 @@ export default function MenuMain({
           {profileStatus && mobileSection === "servers" ? (
             <div className="mobile-voice-room__spotlight-note">{profileStatus}</div>
           ) : null}
-          {screenShareStatusCopy.subtitle && mobileVoiceStageMode === "spotlight" && !isScreenShareSupported ? (
-            <div className="mobile-voice-room__spotlight-note">{screenShareStatusCopy.subtitle}</div>
-          ) : null}
           {mobileVoiceStageMode === "remote" && !selectedStream?.stream && !selectedStream?.videoSrc && !selectedStream?.imageSrc ? (
             <div className="mobile-voice-room__spotlight-note">Ожидаем видеопоток участника...</div>
           ) : null}
           {mobileVoiceStageMode === "local" && !hasLocalSharePreview ? (
             <div className="mobile-voice-room__spotlight-note">Видео появится здесь сразу после запуска камеры или стрима.</div>
-          ) : null}
-          {mobileVoiceStageMode !== "spotlight" && currentVoiceChannelName ? (
-            <div className="mobile-voice-room__spotlight-note">Канал: {currentVoiceChannelName}</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && activeServer?.name ? (
-            <div className="mobile-voice-room__spotlight-note">Сервер: {activeServer.name}</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && currentVoiceChannelName ? (
-            <div className="mobile-voice-room__spotlight-note">Канал: {currentVoiceChannelName}</div>
-          ) : null}
-          {mobileVoiceStageMode === "remote" && selectedStreamParticipant?.name ? (
-            <div className="mobile-voice-room__spotlight-note">Участник: {selectedStreamParticipant.name}</div>
-          ) : null}
-          {mobileVoiceStageMode === "local" ? (
-            <div className="mobile-voice-room__spotlight-note">Предпросмотр остаётся прямо в голосовой комнате.</div>
           ) : null}
           {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isSelf ? (
             <div className="mobile-voice-room__spotlight-note">Нажми на камеру или монитор ниже, чтобы вывести свой эфир сюда.</div>
@@ -6109,38 +6091,17 @@ export default function MenuMain({
           {mobileVoiceStageMode === "spotlight" && !currentVoiceParticipants.length ? (
             <div className="mobile-voice-room__spotlight-note">Участники появятся здесь после подключения к каналу.</div>
           ) : null}
-          {mobileVoiceStageMode !== "spotlight" && selectedStream?.hasAudio ? (
-            <div className="mobile-voice-room__spotlight-note">В эфире есть аудио-дорожка.</div>
-          ) : null}
           {mobileVoiceStageMode === "remote" && selectedStreamDebugInfo?.readyState === "none" ? (
             <div className="mobile-voice-room__spotlight-note">Подключаем удалённый видеопоток...</div>
           ) : null}
-          {mobileVoiceStageMode === "local" && localSharePreview?.mode === "camera" ? (
-            <div className="mobile-voice-room__spotlight-note">Так ваше видео выглядит для остальных участников.</div>
-          ) : null}
-          {mobileVoiceStageMode === "local" && localSharePreview?.mode === "screen" ? (
-            <div className="mobile-voice-room__spotlight-note">Так ваш экран выглядит в эфире.</div>
-          ) : null}
           {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isSpeaking ? (
             <div className="mobile-voice-room__spotlight-note">Активный спикер автоматически поднимается в spotlight.</div>
-          ) : null}
-          {!isScreenShareSupported && displayCaptureSupportInfo.status === "platform-limited" ? (
-            <div className="mobile-voice-room__spotlight-note">На iPhone Safari экран не шарится из браузера. Для стрима нужен другой браузер или десктоп.</div>
           ) : null}
           {mobileVoiceStageMode === "spotlight" && isCameraShareActive ? (
             <div className="mobile-voice-room__spotlight-note">Камера уже запущена, нажми кнопку камеры ниже для управления.</div>
           ) : null}
           {mobileVoiceStageMode === "spotlight" && isScreenShareActive ? (
             <div className="mobile-voice-room__spotlight-note">Стрим уже идёт, нажми кнопку монитора ниже для управления.</div>
-          ) : null}
-          {mobileVoiceStageMode === "remote" && activeServer?.name ? (
-            <div className="mobile-voice-room__spotlight-note">Сервер: {activeServer.name}</div>
-          ) : null}
-          {mobileVoiceStageMode === "remote" && currentVoiceChannelName ? (
-            <div className="mobile-voice-room__spotlight-note">Канал: {currentVoiceChannelName}</div>
-          ) : null}
-          {mobileVoiceStageMode === "local" && activeServer?.name ? (
-            <div className="mobile-voice-room__spotlight-note">Сервер: {activeServer.name}</div>
           ) : null}
         </div>
       </div>

@@ -529,24 +529,48 @@ export function createVoiceRoomClient({
     Array.from(remoteAudioElements.keys()).forEach(removeRemoteAudioElement);
   };
 
-  const attachRemoteAudioTrack = async (publication, participant) => {
-    const audioTrack = publication?.audioTrack;
+  const attachRemoteAudioTrack = async (track, publication, participant) => {
+    const audioTrack =
+      track?.kind === "audio"
+        ? track
+        : publication?.audioTrack || publication?.track || null;
     if (!audioTrack) {
       return;
     }
 
-    const key = `${participant.identity}:${publication.trackSid}`;
+    const key = `${participant.identity}:${publication?.trackSid || audioTrack?.sid || "audio"}`;
     removeRemoteAudioElement(key);
 
     const element = audioTrack.attach();
     element.autoplay = true;
     element.playsInline = true;
+    element.defaultMuted = false;
+    element.muted = false;
     element.volume = remoteVolume;
     element.style.display = "none";
     document.body.appendChild(element);
 
     await applyOutputDeviceToElement(element).catch(() => {});
+    const playPromise = element.play?.();
+    if (typeof playPromise?.catch === "function") {
+      playPromise.catch(() => {});
+    }
     remoteAudioElements.set(key, element);
+  };
+
+  const attachExistingRemoteAudioTracks = (participant) => {
+    if (!participant?.identity) {
+      return;
+    }
+
+    Array.from(participant.trackPublications.values()).forEach((publication) => {
+      if (
+        publication?.source === Track.Source.Microphone
+        || publication?.source === Track.Source.ScreenShareAudio
+      ) {
+        attachRemoteAudioTrack(publication.track, publication, participant).catch(() => {});
+      }
+    });
   };
 
   const removeRemoteShare = (userId) => {
@@ -1022,10 +1046,10 @@ export function createVoiceRoomClient({
         state.cameraPublication = publication;
       } else if (publication.source === Track.Source.ScreenShareAudio) {
         state.screenAudioPublication = publication;
-        attachRemoteAudioTrack(publication, participant).catch(() => {});
+        attachRemoteAudioTrack(track, publication, participant).catch(() => {});
       } else if (publication.source === Track.Source.Microphone) {
         state.microphonePublication = publication;
-        attachRemoteAudioTrack(publication, participant).catch(() => {});
+        attachRemoteAudioTrack(track, publication, participant).catch(() => {});
       }
 
       syncRemoteShareForParticipant(participant);
@@ -1162,6 +1186,9 @@ export function createVoiceRoomClient({
 
         room = nextRoom;
         await syncPublishedMicrophoneTrack();
+        Array.from(nextRoom.remoteParticipants.values()).forEach((participant) => {
+          attachExistingRemoteAudioTracks(participant);
+        });
         syncAllRemoteShares();
 
         return nextRoom;

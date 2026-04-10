@@ -2010,7 +2010,7 @@
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  padding-bottom: 12px;
+  padding-bottom: 0;
 }
 
 .mobile-voice-room__stage {
@@ -2489,7 +2489,8 @@
   gap: 8px;
   margin-top: auto;
   position: sticky;
-  bottom: max(8px, env(safe-area-inset-bottom));
+  bottom: 0;
+  margin-bottom: -4px;
   padding: 10px 8px;
 }
 
