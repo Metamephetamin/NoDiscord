@@ -1080,47 +1080,6 @@ export default function MenuMain({
 
     return "spotlight";
   }, [hasLocalSharePreview, isLocalSharePreviewVisible, selectedStream, selectedStreamUserId]);
-  const mobileVoiceStageCopy = useMemo(() => {
-    if (mobileVoiceStageMode === "remote") {
-      return {
-        title: selectedStreamParticipant?.name || "Трансляция участника",
-        subtitle: selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length
-          ? "Идёт эфир со звуком"
-          : "Идёт эфир без звука",
-        badge: "LIVE",
-      };
-    }
-
-    if (mobileVoiceStageMode === "local") {
-      return {
-        title: localSharePreviewMeta.title,
-        subtitle: localSharePreviewMeta.subtitle,
-        badge: localSharePreview?.mode === "camera" ? "CAM" : "LIVE",
-      };
-    }
-
-    return {
-      title: spotlightVoiceParticipant?.name || "Голосовой канал",
-      subtitle:
-        spotlightVoiceParticipant?.isSpeaking
-          ? "Сейчас говорит"
-          : spotlightVoiceParticipant?.isLive
-            ? "Идёт эфир"
-            : `${currentVoiceParticipants.length} участников в комнате`,
-      badge: spotlightVoiceParticipant?.isLive ? "LIVE" : spotlightVoiceParticipant?.isSelf ? "Вы" : "",
-    };
-  }, [
-    currentVoiceParticipants.length,
-    localSharePreview?.mode,
-    localSharePreviewMeta,
-    mobileVoiceStageMode,
-    selectedStream,
-    selectedStreamParticipant?.name,
-    spotlightVoiceParticipant?.isLive,
-    spotlightVoiceParticipant?.isSelf,
-    spotlightVoiceParticipant?.isSpeaking,
-    spotlightVoiceParticipant?.name,
-  ]);
   const voiceParticipantByUserId = useMemo(() => {
     const nextMap = new Map();
     Object.values(activeVoiceParticipantsMap || {}).forEach((participants) => {
@@ -1200,6 +1159,47 @@ export default function MenuMain({
       || null,
     [currentVoiceParticipants]
   );
+  const mobileVoiceStageCopy = useMemo(() => {
+    if (mobileVoiceStageMode === "remote") {
+      return {
+        title: selectedStreamParticipant?.name || "Трансляция участника",
+        subtitle: selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length
+          ? "Идёт эфир со звуком"
+          : "Идёт эфир без звука",
+        badge: "LIVE",
+      };
+    }
+
+    if (mobileVoiceStageMode === "local") {
+      return {
+        title: localSharePreviewMeta.title,
+        subtitle: localSharePreviewMeta.subtitle,
+        badge: localSharePreview?.mode === "camera" ? "CAM" : "LIVE",
+      };
+    }
+
+    return {
+      title: spotlightVoiceParticipant?.name || "Голосовой канал",
+      subtitle:
+        spotlightVoiceParticipant?.isSpeaking
+          ? "Сейчас говорит"
+          : spotlightVoiceParticipant?.isLive
+            ? "Идёт эфир"
+            : `${currentVoiceParticipants.length} участников в комнате`,
+      badge: spotlightVoiceParticipant?.isLive ? "LIVE" : spotlightVoiceParticipant?.isSelf ? "Вы" : "",
+    };
+  }, [
+    currentVoiceParticipants.length,
+    localSharePreview?.mode,
+    localSharePreviewMeta,
+    mobileVoiceStageMode,
+    selectedStream,
+    selectedStreamParticipant?.name,
+    spotlightVoiceParticipant?.isLive,
+    spotlightVoiceParticipant?.isSelf,
+    spotlightVoiceParticipant?.isSpeaking,
+    spotlightVoiceParticipant?.name,
+  ]);
   const friendQueryMode = getFriendSearchModeForQuery(friendEmail);
   const filteredFriends = useMemo(() => {
     const query = friendsSidebarQuery.trim().toLowerCase();
