@@ -45,6 +45,7 @@ const MICROPHONE_TRACK_NAME = "microphone";
 const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
+const ENABLE_VOICE_E2EE = false;
 const AUDIO_SAMPLE_RATE = 48_000;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
@@ -902,6 +903,10 @@ export function createVoiceRoomClient({
     });
 
   const resolveVoiceChannelPassphrase = async (channelName, user, existingParticipants = []) => {
+    if (!ENABLE_VOICE_E2EE) {
+      return "";
+    }
+
     if (!isE2EESupported()) {
       return "";
     }
@@ -1152,13 +1157,17 @@ export function createVoiceRoomClient({
       const session = await fetchLiveKitSession(channelName, user);
       let encryptionOptions = null;
 
-      try {
-        const voicePassphrase = await resolveVoiceChannelPassphrase(channelName, user, existingParticipants);
-        if (voicePassphrase) {
-          encryptionOptions = await setupVoiceEncryptionOptions(voicePassphrase);
+      if (ENABLE_VOICE_E2EE) {
+        try {
+          const voicePassphrase = await resolveVoiceChannelPassphrase(channelName, user, existingParticipants);
+          if (voicePassphrase) {
+            encryptionOptions = await setupVoiceEncryptionOptions(voicePassphrase);
+          }
+        } catch (error) {
+          console.warn("Voice E2EE fallback:", error?.message || error);
+          disposeVoiceEncryptionState();
         }
-      } catch (error) {
-        console.warn("Voice E2EE fallback:", error?.message || error);
+      } else {
         disposeVoiceEncryptionState();
       }
 
