@@ -511,97 +511,14 @@ public class ChatHub : Hub
         return $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
     }
 
-    private static ChatMessageEncryptionEnvelope? NormalizeEncryptionEnvelope(ChatMessageEncryptionEnvelope? encryption)
+    private static ChatMessageEncryptionEnvelope? NormalizeEncryptionEnvelope(ChatMessageEncryptionEnvelope? _)
     {
-        if (encryption is null)
-        {
-            return null;
-        }
-
-        var version = UploadPolicies.TrimToLength(encryption.Version, 24);
-        var algorithm = UploadPolicies.TrimToLength(encryption.Algorithm, 32);
-        var curve = UploadPolicies.TrimToLength(encryption.Curve, 32);
-        var senderFingerprint = UploadPolicies.TrimToLength(encryption.SenderFingerprint, 128);
-        var senderPublicKeyJwk = UploadPolicies.TrimToLength(encryption.SenderPublicKeyJwk, 4096);
-        var iv = UploadPolicies.TrimToLength(encryption.Iv, 256);
-        var ciphertext = UploadPolicies.TrimToLength(encryption.Ciphertext, 32768);
-        var recipients = (encryption.Recipients ?? [])
-            .Select(item => new ChatMessageEncryptionRecipient
-            {
-                UserId = UploadPolicies.TrimToLength(item.UserId, 64),
-                KeyFingerprint = UploadPolicies.TrimToLength(item.KeyFingerprint, 128),
-                WrapIv = UploadPolicies.TrimToLength(item.WrapIv, 256),
-                WrappedKey = UploadPolicies.TrimToLength(item.WrappedKey, 2048)
-            })
-            .Where(item =>
-                !string.IsNullOrWhiteSpace(item.UserId) &&
-                !string.IsNullOrWhiteSpace(item.WrapIv) &&
-                !string.IsNullOrWhiteSpace(item.WrappedKey))
-            .ToList();
-
-        if (string.IsNullOrWhiteSpace(version) ||
-            string.IsNullOrWhiteSpace(algorithm) ||
-            string.IsNullOrWhiteSpace(iv) ||
-            string.IsNullOrWhiteSpace(ciphertext) ||
-            (string.IsNullOrWhiteSpace(senderPublicKeyJwk) && string.IsNullOrWhiteSpace(UploadPolicies.TrimToLength(encryption.SharedKeyId, 256))) ||
-            (recipients.Count == 0 && string.IsNullOrWhiteSpace(UploadPolicies.TrimToLength(encryption.SharedKeyId, 256))))
-        {
-            return null;
-        }
-
-        return new ChatMessageEncryptionEnvelope
-        {
-            Version = version,
-            Algorithm = algorithm,
-            Curve = curve,
-            SenderFingerprint = senderFingerprint,
-            SenderPublicKeyJwk = senderPublicKeyJwk,
-            SharedKeyId = UploadPolicies.TrimToLength(encryption.SharedKeyId, 256),
-            Iv = iv,
-            Ciphertext = ciphertext,
-            Recipients = recipients
-        };
+        return null;
     }
 
-    private static ChatAttachmentEncryptionEnvelope? NormalizeAttachmentEncryptionEnvelope(ChatAttachmentEncryptionEnvelope? encryption)
+    private static ChatAttachmentEncryptionEnvelope? NormalizeAttachmentEncryptionEnvelope(ChatAttachmentEncryptionEnvelope? _)
     {
-        if (encryption is null)
-        {
-            return null;
-        }
-
-        var version = UploadPolicies.TrimToLength(encryption.Version, 24);
-        var algorithm = UploadPolicies.TrimToLength(encryption.Algorithm, 32);
-        var sharedKeyId = UploadPolicies.TrimToLength(encryption.SharedKeyId, 256);
-        var keyWrapIv = UploadPolicies.TrimToLength(encryption.KeyWrapIv, 256);
-        var wrappedFileKey = UploadPolicies.TrimToLength(encryption.WrappedFileKey, 2048);
-        var fileIv = UploadPolicies.TrimToLength(encryption.FileIv, 256);
-        var metadataIv = UploadPolicies.TrimToLength(encryption.MetadataIv, 256);
-        var metadataCiphertext = UploadPolicies.TrimToLength(encryption.MetadataCiphertext, 4096);
-
-        if (string.IsNullOrWhiteSpace(version) ||
-            string.IsNullOrWhiteSpace(algorithm) ||
-            string.IsNullOrWhiteSpace(sharedKeyId) ||
-            string.IsNullOrWhiteSpace(keyWrapIv) ||
-            string.IsNullOrWhiteSpace(wrappedFileKey) ||
-            string.IsNullOrWhiteSpace(fileIv) ||
-            string.IsNullOrWhiteSpace(metadataIv) ||
-            string.IsNullOrWhiteSpace(metadataCiphertext))
-        {
-            return null;
-        }
-
-        return new ChatAttachmentEncryptionEnvelope
-        {
-            Version = version,
-            Algorithm = algorithm,
-            SharedKeyId = sharedKeyId,
-            KeyWrapIv = keyWrapIv,
-            WrappedFileKey = wrappedFileKey,
-            FileIv = fileIv,
-            MetadataIv = metadataIv,
-            MetadataCiphertext = metadataCiphertext
-        };
+        return null;
     }
 
     private static ChatVoiceMessagePayload? NormalizeVoiceMessage(ChatVoiceMessageInput? voiceMessage)

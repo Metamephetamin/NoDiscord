@@ -7,7 +7,6 @@ import { API_URL } from "../config/runtime";
 import {
   decryptIncomingAttachment,
   decryptIncomingMessageText,
-  ensureE2eeDeviceIdentity,
   prepareOutgoingAttachmentEncryption,
   prepareOutgoingTextEncryption,
 } from "../e2ee/chatEncryption";
@@ -904,18 +903,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       // ignore DM sound failures
     }
   };
-
-  useEffect(() => {
-    if (!user?.id) {
-      return undefined;
-    }
-
-    ensureE2eeDeviceIdentity(user).catch((error) => {
-      console.warn("Failed to initialize local E2EE identity:", error);
-    });
-
-    return undefined;
-  }, [user?.id]);
 
   useEffect(() => {
     if (!composerEmojiPickerOpen) {
@@ -2129,13 +2116,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           });
           const uploaded = await uploadAttachment({
             blob: encryptedAttachment.uploadBlob,
-            fileName: `attachment-${Date.now()}-${index}.bin`,
+            fileName: encryptedAttachment.uploadFileName || fileItem.name || `attachment-${Date.now()}-${index}`,
           });
           attachments.push({
             fileUrl: uploaded?.fileUrl || null,
-            fileName: uploaded?.fileName || "attachment.bin",
+            fileName: uploaded?.fileName || fileItem.name || "attachment",
             size: uploaded?.size || encryptedAttachment.uploadBlob.size || null,
-            contentType: uploaded?.contentType || "application/octet-stream",
+            contentType: uploaded?.contentType || fileItem.type || "application/octet-stream",
             attachmentEncryption: encryptedAttachment.attachmentEncryption,
           });
         }
@@ -2344,14 +2331,16 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         });
         const uploaded = await uploadAttachment({
           blob: encryptedAttachment.uploadBlob,
-          fileName: `attachment-forward-${Date.now()}-${messageItem.id}-${attachmentIndex}.bin`,
+          fileName: encryptedAttachment.uploadFileName
+            || forwardFile.name
+            || `attachment-forward-${Date.now()}-${messageItem.id}-${attachmentIndex}`,
         });
 
         forwardedAttachments.push({
           attachmentUrl: uploaded?.fileUrl || "",
-          attachmentName: uploaded?.fileName || "attachment.bin",
+          attachmentName: uploaded?.fileName || forwardFile.name || "attachment",
           attachmentSize: uploaded?.size || encryptedAttachment.uploadBlob.size || null,
-          attachmentContentType: uploaded?.contentType || "application/octet-stream",
+          attachmentContentType: uploaded?.contentType || forwardFile.type || "application/octet-stream",
           attachmentEncryption: encryptedAttachment.attachmentEncryption,
           voiceMessage: attachmentItem.voiceMessage || null,
         });

@@ -754,7 +754,7 @@ export async function ensureDailySharedChannelKey({ channelId, user, scope = TEX
   return resolveSharedChannelKey({ channelId, user, scope, keyDate });
 }
 
-export async function prepareOutgoingTextEncryption({ channelId, user, text, scope = TEXT_SCOPE }) {
+export async function prepareOutgoingTextEncryption({ text }) {
   const normalizedText = String(text || "").trim();
   if (!normalizedText) {
     return {
@@ -764,33 +764,11 @@ export async function prepareOutgoingTextEncryption({ channelId, user, text, sco
     };
   }
 
-  try {
-    const sharedKey = await ensureDailySharedChannelKey({ channelId, user, scope });
-    const { iv, ciphertext } = await encryptWithAesGcm(sharedKey.rawKey, textEncoder.encode(normalizedText));
-    const encryptionPayload = {
-      version: MESSAGE_ENCRYPTION_VERSION,
-      algorithm: "AES-GCM",
-      sharedKeyId: sharedKey.sharedKeyId,
-      iv: toBase64(iv),
-      ciphertext: toBase64(ciphertext),
-      recipients: [],
-    };
-
-    await persistCachedMessagePlaintext(encryptionPayload, normalizedText);
-
-    return {
-      message: "",
-      encryptionState: "e2ee",
-      encryption: encryptionPayload,
-    };
-  } catch (error) {
-    return {
-      message: normalizedText,
-      encryption: null,
-      encryptionState: "plaintext",
-      reason: error?.message || "Falling back to plaintext because E2EE setup failed.",
-    };
-  }
+  return {
+    message: normalizedText,
+    encryption: null,
+    encryptionState: "plaintext",
+  };
 }
 
 export async function decryptIncomingMessageText(messageItem, user, { channelId = "", scope = TEXT_SCOPE } = {}) {
@@ -898,38 +876,15 @@ export async function decryptIncomingMessageText(messageItem, user, { channelId 
   }
 }
 
-export async function prepareOutgoingAttachmentEncryption({ channelId, user, file }) {
+export async function prepareOutgoingAttachmentEncryption({ file }) {
   if (!(file instanceof Blob)) {
-    throw new Error("Attachment blob is required for encryption.");
+    throw new Error("Attachment blob is required.");
   }
 
-  const sharedKey = await ensureDailySharedChannelKey({ channelId, user, scope: TEXT_SCOPE });
-  const fileKeyRaw = randomBytes(32);
-  // Preserve the exact original attachment bytes. Do not transcode or recompress here.
-  const fileBytes = new Uint8Array(await file.arrayBuffer());
-  const encryptedFile = await encryptWithAesGcm(fileKeyRaw, fileBytes);
-  const metadataPayload = {
-    name: String(file.name || "file"),
-    contentType: String(file.type || "application/octet-stream"),
-    size: Number(file.size || fileBytes.byteLength || 0),
-    lastModified: Number(file.lastModified || 0),
-  };
-  const encryptedMetadata = await encryptWithAesGcm(fileKeyRaw, textEncoder.encode(JSON.stringify(metadataPayload)));
-  const wrappedFileKey = await wrapFileKeyWithSharedKey(sharedKey.rawKey, fileKeyRaw);
-
   return {
-    uploadBlob: new Blob([encryptedFile.ciphertext], { type: "application/octet-stream" }),
-    uploadFileName: "attachment.bin",
-    attachmentEncryption: {
-      version: FILE_ENCRYPTION_VERSION,
-      algorithm: "AES-GCM",
-      sharedKeyId: sharedKey.sharedKeyId,
-      keyWrapIv: wrappedFileKey.keyWrapIv,
-      wrappedFileKey: wrappedFileKey.wrappedFileKey,
-      fileIv: toBase64(encryptedFile.iv),
-      metadataIv: toBase64(encryptedMetadata.iv),
-      metadataCiphertext: toBase64(encryptedMetadata.ciphertext),
-    },
+    uploadBlob: file,
+    uploadFileName: String(file.name || "attachment"),
+    attachmentEncryption: null,
   };
 }
 
