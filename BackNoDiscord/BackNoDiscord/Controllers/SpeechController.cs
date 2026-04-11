@@ -16,10 +16,12 @@ public sealed class SpeechPunctuationRequest
 public class SpeechController : ControllerBase
 {
     private readonly ISpeechPunctuationService _speechPunctuationService;
+    private readonly ILogger<SpeechController> _logger;
 
-    public SpeechController(ISpeechPunctuationService speechPunctuationService)
+    public SpeechController(ISpeechPunctuationService speechPunctuationService, ILogger<SpeechController> logger)
     {
         _speechPunctuationService = speechPunctuationService;
+        _logger = logger;
     }
 
     [HttpPost("punctuate")]
@@ -36,7 +38,22 @@ public class SpeechController : ControllerBase
             return BadRequest(new { message = "Текст для пунктуации слишком длинный." });
         }
 
-        var result = await _speechPunctuationService.PunctuateAsync(rawText, cancellationToken);
+        SpeechPunctuationResult result;
+        try
+        {
+            result = await _speechPunctuationService.PunctuateAsync(rawText, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(exception, "Speech punctuation failed, using heuristic fallback.");
+            result = new SpeechPunctuationResult
+            {
+                Text = SpeechPunctuationService.ApplyHeuristicPunctuation(rawText),
+                Provider = "server-heuristic-fallback",
+                UsedModel = false,
+            };
+        }
+
         return Ok(new
         {
             text = result.Text,

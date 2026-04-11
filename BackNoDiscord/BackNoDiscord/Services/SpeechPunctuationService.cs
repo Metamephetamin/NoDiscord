@@ -27,11 +27,11 @@ internal sealed class PythonSpeechPunctuationResponse
 public sealed class SpeechPunctuationService : ISpeechPunctuationService
 {
     private static readonly Regex QuestionStartRegex = new(
-        "^(кто|что|где|когда|почему|зачем|как|какой|какая|какие|сколько|разве|неужели|ли)\\b",
+        "^(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex QuestionEndRegex = new("\\bли\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex QuestionEndRegex = new("\\bли\\b|(?:,\\s*)?(правда|верно)\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex ExclamationStartRegex = new(
-        "^(привет|здравствуйте|спасибо|пожалуйста|срочно|осторожно|внимание)\\b",
+        "^(привет|здравствуйте|спасибо|пожалуйста|срочно|осторожно|внимание|ура|класс|супер|отлично)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex IntroductoryPhrasesRegex = new(
         "(^|[.!?]\\s+)(ну|в общем|короче|слушай|смотри|кстати|например)\\s+",
@@ -45,14 +45,20 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
 
     private static readonly IReadOnlyList<(Regex Regex, string Replacement)> SpokenPunctuationRules =
     [
+        (new Regex("\\s+(знак восклицания|восклицание)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "! "),
         (new Regex("\\s+восклицательный знак\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "! "),
+        (new Regex("\\s+знак вопроса\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "? "),
         (new Regex("\\s+вопросительный знак\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "? "),
         (new Regex("\\s+точка с запятой\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "; "),
         (new Regex("\\s+двоеточие\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), ": "),
         (new Regex("\\s+многоточие\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "… "),
+        (new Regex("\\s+(открой скобку|открыть скобку)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), " ("),
+        (new Regex("\\s+(закрой скобку|закрыть скобку)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), ") "),
+        (new Regex("\\s+(тире|длинное тире)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), " - "),
+        (new Regex("\\s+дефис\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), "-"),
         (new Regex("\\s+запятая\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), ", "),
         (new Regex("\\s+точка\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), ". "),
-        (new Regex("\\s+(новая строка|новый абзац|абзац)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), ". "),
+        (new Regex("\\s+(новая строка|перенос строки|новый абзац|абзац)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled), ". "),
     ];
 
     private static readonly IReadOnlyList<Regex> CommaBeforeRules =

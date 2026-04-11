@@ -29,6 +29,7 @@ import {
   getVoiceRecordingExtension,
   MAX_VOICE_MESSAGE_DURATION_MS,
   normalizeVoiceMessageMetadata,
+  restoreRussianSpeechPunctuation,
 } from "../utils/voiceMessages";
 
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
@@ -43,6 +44,11 @@ const VOICE_PRESENCE_FREQUENCY_HZ = 2800;
 const VOICE_PRESENCE_GAIN_DB = 1.8;
 const VOICE_HIGH_SHELF_FREQUENCY_HZ = 5600;
 const VOICE_HIGH_SHELF_GAIN_DB = 2.4;
+const SPEECH_RECOGNITION_RESTART_DELAY_MS = 240;
+const MEDIA_PREVIEW_MIN_ZOOM = 1;
+const MEDIA_PREVIEW_MAX_ZOOM = 4;
+const MEDIA_PREVIEW_ZOOM_STEP = 0.25;
+const AUTO_PUNCTUATE_TYPED_MESSAGES = true;
 const ENABLE_VOICE_MESSAGE_BUTTON = true; // flip to false to hide the simple voice-message record button
 const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
 const COMPOSER_EMOJI_OPTIONS = [
@@ -481,6 +487,37 @@ function getSpeechRecognitionConstructor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, Number(value) || min));
+}
+
+function shouldAutoPunctuateTypedText(text) {
+  const normalizedText = String(text || "").trim();
+  if (!AUTO_PUNCTUATE_TYPED_MESSAGES || normalizedText.length < 8) {
+    return false;
+  }
+
+  if (!/[а-яё]/i.test(normalizedText)) {
+    return false;
+  }
+
+  if (/https?:\/\/|www\.|```|^\s*[/>]/i.test(normalizedText)) {
+    return false;
+  }
+
+  const words = normalizedText.split(/\s+/).filter(Boolean);
+  return words.length >= 3;
+}
+
+function formatTypedMessageText(text) {
+  const normalizedText = String(text || "").trim();
+  if (!shouldAutoPunctuateTypedText(normalizedText)) {
+    return normalizedText;
+  }
+
+  return restoreRussianSpeechPunctuation(normalizedText, { finalize: true });
+}
+
 function getChatErrorMessage(error, fallbackMessage) {
   const rawMessage = String(error?.message || "").trim();
   if (!rawMessage) {
@@ -630,6 +667,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const speechDraftBaseRef = useRef("");
   const speechDisplayedTranscriptRef = useRef("");
   const speechPunctuationRequestIdRef = useRef(0);
+  const speechShouldRestartRef = useRef(false);
+  const speechRestartTimeoutRef = useRef(0);
+  const speechSessionIdRef = useRef(0);
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
@@ -1009,7 +1049,22 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     voicePointerStateRef.current = { pointerId: null, startY: 0, locked: false };
   };
 
+  const clearSpeechRecognitionRestartTimer = () => {
+    if (!speechRestartTimeoutRef.current || typeof window === "undefined") {
+      speechRestartTimeoutRef.current = 0;
+      return;
+    }
+
+    window.clearTimeout(speechRestartTimeoutRef.current);
+    speechRestartTimeoutRef.current = 0;
+  };
+
+  const formatSpeechTranscriptDraft = (transcriptText, finalize = false) =>
+    restoreRussianSpeechPunctuation(transcriptText, { finalize });
+
   const stopSpeechRecognition = (shouldFinalize = true) => {
+    speechShouldRestartRef.current = false;
+    clearSpeechRecognitionRestartTimer();
     const recognition = speechRecognitionRef.current;
     if (!recognition) {
       setSpeechRecognitionActive(false);
@@ -1053,7 +1108,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
 
     const payload = await response.json().catch(() => ({}));
-    return String(payload?.text || normalizedTranscript).trim();
+    return formatSpeechTranscriptDraft(String(payload?.text || normalizedTranscript).trim(), true);
   };
 
   const sampleVoiceLevel = () => {
@@ -1338,24 +1393,39 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
   };
 
-  const startSpeechRecognition = () => {
+  const startSpeechRecognition = ({ preserveDraft = false, sessionId = null } = {}) => {
     const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
     if (!SpeechRecognitionCtor) {
       setErrorMessage("Голосовой ввод текста недоступен в этом окружении.");
       return;
     }
 
+    if (speechRecognitionRef.current) {
+      return;
+    }
+
+    const nextSessionId = sessionId ?? speechSessionIdRef.current + 1;
+    if (preserveDraft && speechSessionIdRef.current !== nextSessionId) {
+      return;
+    }
+
     try {
       setErrorMessage("");
+      clearSpeechRecognitionRestartTimer();
       const recognition = new SpeechRecognitionCtor();
-      speechDraftBaseRef.current = message;
-      speechFinalTranscriptRef.current = "";
-      speechDisplayedTranscriptRef.current = "";
+      if (!preserveDraft) {
+        speechSessionIdRef.current = nextSessionId;
+        speechDraftBaseRef.current = message;
+        speechFinalTranscriptRef.current = "";
+        speechDisplayedTranscriptRef.current = "";
+        speechShouldRestartRef.current = true;
+      }
       recognition.lang = "ru-RU";
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
       recognition.__shouldFinalize = true;
+      recognition.__sessionId = nextSessionId;
 
       recognition.onresult = (event) => {
         let finalTranscript = speechFinalTranscriptRef.current;
@@ -1372,39 +1442,82 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
         speechFinalTranscriptRef.current = finalTranscript;
         const composedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
-        speechDisplayedTranscriptRef.current = composedTranscript;
-        setMessage(composeSpeechDraftMessage(speechDraftBaseRef.current, composedTranscript));
+        const formattedTranscript = formatSpeechTranscriptDraft(composedTranscript, false);
+        speechDisplayedTranscriptRef.current = formattedTranscript;
+        setMessage(composeSpeechDraftMessage(speechDraftBaseRef.current, formattedTranscript));
       };
 
       recognition.onerror = (event) => {
         const errorCode = String(event?.error || "");
-        if (errorCode !== "no-speech" && errorCode !== "aborted") {
-          setErrorMessage("Не удалось распознать речь. Проверьте доступ к микрофону.");
+        if (errorCode === "no-speech" || errorCode === "aborted") {
+          return;
         }
+
+        if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+          speechShouldRestartRef.current = false;
+          recognition.__shouldFinalize = false;
+          setErrorMessage("Доступ к микрофону запрещён. Разрешите микрофон для сайта и попробуйте снова.");
+          return;
+        }
+
+        if (errorCode === "audio-capture") {
+          speechShouldRestartRef.current = false;
+          recognition.__shouldFinalize = false;
+          setErrorMessage("Микрофон не найден или занят другой программой.");
+          return;
+        }
+
+        console.warn("Speech recognition error:", event);
       };
 
       recognition.onend = () => {
         const shouldFinalize = recognition.__shouldFinalize !== false;
-        setSpeechRecognitionActive(false);
         speechRecognitionRef.current = null;
-        speechDisplayedTranscriptRef.current = "";
+        const shouldRestart = shouldFinalize
+          && speechShouldRestartRef.current
+          && speechSessionIdRef.current === recognition.__sessionId;
+
+        if (shouldRestart) {
+          setSpeechRecognitionActive(true);
+          clearSpeechRecognitionRestartTimer();
+          speechRestartTimeoutRef.current = window.setTimeout(() => {
+            speechRestartTimeoutRef.current = 0;
+            if (!speechShouldRestartRef.current || speechSessionIdRef.current !== recognition.__sessionId) {
+              return;
+            }
+
+            startSpeechRecognition({ preserveDraft: true, sessionId: recognition.__sessionId });
+          }, SPEECH_RECOGNITION_RESTART_DELAY_MS);
+          return;
+        }
+
+        setSpeechRecognitionActive(false);
 
         if (shouldFinalize) {
-          const finalTranscript = String(speechFinalTranscriptRef.current || speechDisplayedTranscriptRef.current || "").trim();
+          const finalTranscriptRaw = String(speechFinalTranscriptRef.current || speechDisplayedTranscriptRef.current || "").trim();
+          speechDisplayedTranscriptRef.current = "";
+          const finalTranscript = formatSpeechTranscriptDraft(finalTranscriptRaw, true);
+          const displayedTranscript = formatSpeechTranscriptDraft(finalTranscriptRaw, false);
           const draftBase = speechDraftBaseRef.current;
           const rawDraftValue = composeSpeechDraftMessage(draftBase, finalTranscript);
+          const displayedDraftValue = composeSpeechDraftMessage(draftBase, displayedTranscript);
           const requestId = speechPunctuationRequestIdRef.current + 1;
           speechPunctuationRequestIdRef.current = requestId;
 
-          if (finalTranscript) {
-            void punctuateSpeechTranscriptOnServer(finalTranscript)
+          if (finalTranscriptRaw) {
+            const currentValue = String(textareaRef.current?.value || message || "").trim();
+            if (!currentValue || currentValue === displayedDraftValue) {
+              setMessage(rawDraftValue);
+            }
+
+            void punctuateSpeechTranscriptOnServer(finalTranscriptRaw)
               .then((punctuatedTranscript) => {
                 if (speechPunctuationRequestIdRef.current !== requestId) {
                   return;
                 }
 
                 const currentValue = String(textareaRef.current?.value || message || "").trim();
-                if (currentValue && currentValue !== rawDraftValue) {
+                if (currentValue && currentValue !== rawDraftValue && currentValue !== displayedDraftValue) {
                   return;
                 }
 
@@ -1416,11 +1529,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               .catch((error) => {
                 console.error("Speech punctuation error:", error);
                 const currentValue = String(textareaRef.current?.value || message || "").trim();
-                if (!currentValue || currentValue === rawDraftValue) {
+                if (!currentValue || currentValue === rawDraftValue || currentValue === displayedDraftValue) {
                   setMessage(rawDraftValue);
                 }
               });
           }
+        } else {
+          speechDisplayedTranscriptRef.current = "";
         }
       };
 
@@ -1650,6 +1765,36 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         setMediaPreview(null);
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        updateMediaPreviewIndex(-1);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        updateMediaPreviewIndex(1);
+        return;
+      }
+
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        updateMediaPreviewZoom(MEDIA_PREVIEW_ZOOM_STEP);
+        return;
+      }
+
+      if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        updateMediaPreviewZoom(-MEDIA_PREVIEW_ZOOM_STEP);
+        return;
+      }
+
+      if (event.key === "0") {
+        event.preventDefault();
+        resetMediaPreviewZoom();
       }
     };
 
@@ -2047,7 +2192,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   };
 
   const send = async () => {
-    const messageText = message.trim();
+    const rawMessageText = message.trim();
+    const messageText = formatTypedMessageText(rawMessageText);
     const filesToSend = selectedFiles;
 
     if (messageEditState && filesToSend.length) {
@@ -2484,12 +2630,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     });
   };
 
-  const openMediaPreview = (type, url, name, contentType = "", messageId = "", attachmentEncryption = null, sourceUrl = "", attachmentIndex = 0) => {
+  const openMediaPreview = (type, url, name, contentType = "", messageId = "", attachmentEncryption = null, sourceUrl = "", attachmentIndex = 0, galleryItems = []) => {
     if (!url) {
       return;
     }
 
-    setMediaPreview({
+    const fallbackItem = {
       type,
       url,
       name: name || (type === "image" ? "Изображение" : "Видео"),
@@ -2498,6 +2644,19 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       attachmentIndex: Number(attachmentIndex) || 0,
       attachmentEncryption,
       sourceUrl: sourceUrl || url,
+    };
+    const items = Array.isArray(galleryItems) && galleryItems.length ? galleryItems : [fallbackItem];
+    const matchingIndex = items.findIndex((item) =>
+      String(item.messageId || "") === String(messageId || "")
+      && Number(item.attachmentIndex || 0) === Number(attachmentIndex || 0));
+    const activeIndex = matchingIndex >= 0 ? matchingIndex : 0;
+    const activeItem = items[activeIndex] || fallbackItem;
+
+    setMediaPreview({
+      ...activeItem,
+      items,
+      activeIndex,
+      zoom: 1,
     });
   };
 
@@ -2719,6 +2878,70 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     }
   };
 
+  const getPreviewableMediaItems = (messageItem, attachments) =>
+    attachments
+      .filter((attachmentItem) => attachmentItem.attachmentUrl && (attachmentItem.isImage || attachmentItem.isVideo))
+      .map((attachmentItem) => ({
+        type: attachmentItem.isImage ? "image" : "video",
+        url: attachmentItem.attachmentUrl,
+        name: attachmentItem.attachmentName || (attachmentItem.isImage ? "Изображение" : "Видео"),
+        contentType: attachmentItem.attachmentContentType || "",
+        messageId: String(messageItem?.id || ""),
+        attachmentIndex: Number(attachmentItem.attachmentIndex) || 0,
+        attachmentEncryption: attachmentItem.attachmentEncryption || null,
+        sourceUrl: attachmentItem.attachmentSourceUrl || attachmentItem.attachmentUrl,
+      }));
+
+  const openAttachmentMediaPreview = (messageItem, attachments, attachmentItem) => {
+    const type = attachmentItem.isImage ? "image" : "video";
+    openMediaPreview(
+      type,
+      attachmentItem.attachmentUrl,
+      attachmentItem.attachmentName,
+      attachmentItem.attachmentContentType,
+      messageItem.id,
+      attachmentItem.attachmentEncryption,
+      attachmentItem.attachmentSourceUrl || attachmentItem.attachmentUrl,
+      attachmentItem.attachmentIndex,
+      getPreviewableMediaItems(messageItem, attachments)
+    );
+  };
+
+  const updateMediaPreviewIndex = (direction) => {
+    setMediaPreview((current) => {
+      if (!current?.items?.length || current.items.length < 2) {
+        return current;
+      }
+
+      const itemCount = current.items.length;
+      const nextIndex = (Number(current.activeIndex || 0) + direction + itemCount) % itemCount;
+      const nextItem = current.items[nextIndex] || current.items[0];
+      return {
+        ...current,
+        ...nextItem,
+        activeIndex: nextIndex,
+        zoom: 1,
+      };
+    });
+  };
+
+  const updateMediaPreviewZoom = (delta) => {
+    setMediaPreview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        zoom: clampNumber((Number(current.zoom) || 1) + delta, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_MAX_ZOOM),
+      };
+    });
+  };
+
+  const resetMediaPreviewZoom = () => {
+    setMediaPreview((current) => (current ? { ...current, zoom: 1 } : current));
+  };
+
   const resolveRenderedAttachments = (messageItem) =>
     normalizeAttachmentItems(messageItem).map((attachmentItem, attachmentIndex) => {
       const cacheKey = getAttachmentCacheKey(messageItem?.id, attachmentIndex);
@@ -2743,6 +2966,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
         attachmentView,
         attachmentUnavailable,
         attachmentUrl,
+        attachmentSourceUrl: attachmentItem.attachmentUrl
+          ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+          : attachmentUrl,
         attachmentName,
         attachmentContentType,
         attachmentSize,
@@ -2757,7 +2983,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       };
     });
 
-  const renderAttachmentCard = (messageItem, attachmentItem) => {
+  const renderAttachmentCard = (messageItem, attachmentItem, attachments = resolveRenderedAttachments(messageItem)) => {
     if (attachmentItem.isVoice) {
       return (
         <VoiceMessageBubble
@@ -2784,16 +3010,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 return;
               }
 
-              openMediaPreview(
-                "image",
-                attachmentItem.attachmentUrl,
-                attachmentItem.attachmentName,
-                attachmentItem.attachmentContentType,
-                messageItem.id,
-                attachmentItem.attachmentEncryption,
-                attachmentItem.attachmentUrl ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl) : attachmentItem.attachmentUrl,
-                attachmentItem.attachmentIndex
-              );
+              openAttachmentMediaPreview(messageItem, attachments, attachmentItem);
             }}
             aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
           >
@@ -2815,16 +3032,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 return;
               }
 
-              openMediaPreview(
-                "video",
-                attachmentItem.attachmentUrl,
-                attachmentItem.attachmentName,
-                attachmentItem.attachmentContentType,
-                messageItem.id,
-                attachmentItem.attachmentEncryption,
-                attachmentItem.attachmentUrl ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl) : attachmentItem.attachmentUrl,
-                attachmentItem.attachmentIndex
-              );
+              openAttachmentMediaPreview(messageItem, attachments, attachmentItem);
             }}
             aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
           >
@@ -2878,13 +3086,13 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     return null;
   };
 
-  const renderResolvedAttachmentCollection = (messageItem, attachments) => {
+  const renderResolvedAttachmentCollection = (messageItem, attachments, galleryAttachments = attachments) => {
     if (!attachments.length) {
       return null;
     }
 
     if (attachments.length === 1) {
-      return renderAttachmentCard(messageItem, attachments[0]);
+      return renderAttachmentCard(messageItem, attachments[0], galleryAttachments);
     }
 
     const visualAttachments = attachments.filter((attachmentItem) => attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo);
@@ -2899,7 +3107,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                 key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
                 className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""}`}
               >
-                {renderAttachmentCard(messageItem, attachmentItem)}
+                {renderAttachmentCard(messageItem, attachmentItem, galleryAttachments)}
               </div>
             ))}
           </div>
@@ -2909,7 +3117,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
           <div className="message-attachment-list">
             {fileAttachments.map((attachmentItem) => (
               <div key={`${messageItem.id}-${attachmentItem.attachmentIndex}`} className="message-attachment-list__item">
-                {renderAttachmentCard(messageItem, attachmentItem)}
+                {renderAttachmentCard(messageItem, attachmentItem, galleryAttachments)}
               </div>
             ))}
           </div>
@@ -3291,15 +3499,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                             return;
                           }
 
-                          openMediaPreview(
-                            "image",
-                            attachmentUrl,
-                            attachmentName,
-                            attachmentContentType,
-                            messageItem.id,
-                            messageItem.attachmentEncryption,
-                            messageItem.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : attachmentUrl
-                          );
+                          openAttachmentMediaPreview(messageItem, attachments, primaryAttachment);
                         }}
                         aria-label={`Открыть изображение ${attachmentName || ""}`.trim()}
                       >
@@ -3317,15 +3517,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                             return;
                           }
 
-                          openMediaPreview(
-                            "video",
-                            attachmentUrl,
-                            attachmentName,
-                            attachmentContentType,
-                            messageItem.id,
-                            messageItem.attachmentEncryption,
-                            messageItem.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : attachmentUrl
-                          );
+                          openAttachmentMediaPreview(messageItem, attachments, primaryAttachment);
                         }}
                         aria-label={`Открыть видео ${attachmentName || ""}`.trim()}
                       >
@@ -3369,7 +3561,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
                     </div>
                   ) : null}
 
-                  {attachments.length > 1 ? renderResolvedAttachmentCollection(messageItem, attachments.slice(1)) : null}
+                  {attachments.length > 1 ? renderResolvedAttachmentCollection(messageItem, attachments.slice(1), attachments) : null}
 
                   {((isDirectChat && !useInlineFooter) || reactions.length) ? (
                     <div className="message-bottom-row">
@@ -3734,9 +3926,39 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
             <div className="media-preview__header">
               <div className="media-preview__meta">
                 <strong>{mediaPreview.name}</strong>
-                <span>{mediaPreview.type === "image" ? "Изображение" : "Видео"}</span>
+                <span>
+                  {mediaPreview.type === "image" ? "Изображение" : "Видео"}
+                  {mediaPreview.items?.length > 1 ? ` ${Number(mediaPreview.activeIndex || 0) + 1}/${mediaPreview.items.length}` : ""}
+                </span>
               </div>
               <div className="media-preview__actions">
+                <button
+                  type="button"
+                  className="media-preview__action media-preview__action--compact"
+                  onClick={() => updateMediaPreviewZoom(-MEDIA_PREVIEW_ZOOM_STEP)}
+                  disabled={(Number(mediaPreview.zoom) || 1) <= MEDIA_PREVIEW_MIN_ZOOM}
+                  aria-label="Уменьшить"
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__action media-preview__action--compact"
+                  onClick={() => updateMediaPreviewZoom(MEDIA_PREVIEW_ZOOM_STEP)}
+                  disabled={(Number(mediaPreview.zoom) || 1) >= MEDIA_PREVIEW_MAX_ZOOM}
+                  aria-label="Приблизить"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__action media-preview__action--compact"
+                  onClick={resetMediaPreviewZoom}
+                  disabled={(Number(mediaPreview.zoom) || 1) === 1}
+                  aria-label="Сбросить масштаб"
+                >
+                  {Math.round((Number(mediaPreview.zoom) || 1) * 100)}%
+                </button>
                 <button
                   type="button"
                   className="media-preview__action"
@@ -3771,13 +3993,39 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
               </div>
             </div>
             <div className="media-preview__content">
+              {mediaPreview.items?.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    className="media-preview__nav media-preview__nav--prev"
+                    onClick={() => updateMediaPreviewIndex(-1)}
+                    aria-label="Предыдущее вложение"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    className="media-preview__nav media-preview__nav--next"
+                    onClick={() => updateMediaPreviewIndex(1)}
+                    aria-label="Следующее вложение"
+                  >
+                    ›
+                  </button>
+                </>
+              ) : null}
               {mediaPreview.type === "image" ? (
-                <img className="media-preview__image" src={mediaPreview.url} alt={mediaPreview.name} />
+                <img
+                  className="media-preview__image"
+                  src={mediaPreview.url}
+                  alt={mediaPreview.name}
+                  style={{ transform: `scale(${Number(mediaPreview.zoom) || 1})` }}
+                />
               ) : (
                 <video
                   ref={mediaPreviewVideoRef}
                   className="media-preview__video"
                   src={mediaPreview.url}
+                  style={{ transform: `scale(${Number(mediaPreview.zoom) || 1})` }}
                   controls
                   autoPlay
                   playsInline
