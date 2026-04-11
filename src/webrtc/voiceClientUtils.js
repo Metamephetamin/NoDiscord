@@ -1,6 +1,7 @@
 import { DEFAULT_AVATAR } from "../utils/media";
 
 const NOISE_SUPPRESSION_MODE_TRANSPARENT = "transparent";
+const NOISE_SUPPRESSION_MODE_BROADCAST = "broadcast";
 const NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const PREFERRED_AUDIO_SAMPLE_RATE = 48_000;
 const SCREEN_SHARE_PRESETS = {
@@ -175,6 +176,7 @@ const createPreferredAudioContext = () => {
 export {
   DEFAULT_AVATAR,
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
+  NOISE_SUPPRESSION_MODE_BROADCAST,
   NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
   getAvatar,
   getCameraConstraints,

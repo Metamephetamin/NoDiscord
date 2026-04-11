@@ -24,6 +24,7 @@ import {
 } from "../utils/auth";
 import {
   DEFAULT_AVATAR,
+  NOISE_SUPPRESSION_MODE_BROADCAST,
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
   NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
   createPreferredAudioContext,
@@ -49,6 +50,7 @@ const ENABLE_VOICE_E2EE = false;
 const VOICE_DEBUG_PREFIX = "[voice]";
 const AUDIO_SAMPLE_RATE = 48_000;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
+const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
 const VIDEO_ENCODING_PRIORITY = "high";
 const REMOTE_BACKGROUND_SHARE_TARGET = { width: 1280, height: 720, fps: 24 };
@@ -166,10 +168,13 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
   };
 }
 
-function getMicrophonePublishOptions() {
+function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) {
   return {
-    audioPreset: HIGH_QUALITY_MIC_AUDIO_PRESET,
-    dtx: false,
+    audioPreset:
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
+        ? VOICE_ISOLATION_MIC_AUDIO_PRESET
+        : HIGH_QUALITY_MIC_AUDIO_PRESET,
+    dtx: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     red: true,
     forceStereo: false,
   };
@@ -458,8 +463,12 @@ export function createVoiceRoomClient({
       selectedInputDeviceId && selectedInputDeviceId !== "default"
         ? { exact: selectedInputDeviceId }
         : undefined,
-    echoCancellation: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
-    noiseSuppression: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    echoCancellation:
+      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    noiseSuppression:
+      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     channelCount: 1,
     sampleRate: AUDIO_SAMPLE_RATE,
@@ -483,6 +492,45 @@ export function createVoiceRoomClient({
       const normalizedLevel = Math.max(0, Math.min(1, rms * 8));
       onMicLevelChanged?.(normalizedLevel);
     }, 120);
+  };
+
+  const buildBroadcastVoiceChain = (sourceNode) => {
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = "highpass";
+    highPassFilter.frequency.value = 85;
+    highPassFilter.Q.value = 0.7;
+
+    const mudCutFilter = audioContext.createBiquadFilter();
+    mudCutFilter.type = "peaking";
+    mudCutFilter.frequency.value = 260;
+    mudCutFilter.Q.value = 1.0;
+    mudCutFilter.gain.value = -1.8;
+
+    const presenceFilter = audioContext.createBiquadFilter();
+    presenceFilter.type = "peaking";
+    presenceFilter.frequency.value = 2400;
+    presenceFilter.Q.value = 1.0;
+    presenceFilter.gain.value = 2.4;
+
+    const airFilter = audioContext.createBiquadFilter();
+    airFilter.type = "highshelf";
+    airFilter.frequency.value = 5200;
+    airFilter.gain.value = 1.5;
+
+    const compressor = audioContext.createDynamicsCompressor();
+    compressor.threshold.value = -24;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 4.2;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.18;
+
+    sourceNode.connect(highPassFilter);
+    highPassFilter.connect(mudCutFilter);
+    mudCutFilter.connect(presenceFilter);
+    presenceFilter.connect(airFilter);
+    airFilter.connect(compressor);
+
+    return compressor;
   };
 
   const buildNoiseIsolationChain = (sourceNode) => {
@@ -518,10 +566,12 @@ export function createVoiceRoomClient({
   };
 
   const connectLocalAudioGraph = (sourceNode) => {
-    const inputNode =
-      noiseSuppressionMode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
-        ? buildNoiseIsolationChain(sourceNode)
-        : sourceNode;
+    let inputNode = sourceNode;
+    if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
+      inputNode = buildNoiseIsolationChain(sourceNode);
+    } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
+      inputNode = buildBroadcastVoiceChain(sourceNode);
+    }
 
     inputNode.connect(gainNode);
     gainNode.connect(destinationNode);
@@ -1210,7 +1260,7 @@ export function createVoiceRoomClient({
     micPublication = await room.localParticipant.publishTrack(nextTrack, {
       source: Track.Source.Microphone,
       name: MICROPHONE_TRACK_NAME,
-      ...getMicrophonePublishOptions(),
+      ...getMicrophonePublishOptions(noiseSuppressionMode),
     });
     await applyPublishedAudioState();
     logVoiceDebug("local-audio:published", {
@@ -1241,7 +1291,7 @@ export function createVoiceRoomClient({
       micPublication = await room.localParticipant.publishTrack(nextTrack, {
         source: Track.Source.Microphone,
         name: MICROPHONE_TRACK_NAME,
-        ...getMicrophonePublishOptions(),
+        ...getMicrophonePublishOptions(noiseSuppressionMode),
       });
       logVoiceDebug("local-audio:rebuild-published-track", {
         publicationSid: micPublication?.trackSid || "",

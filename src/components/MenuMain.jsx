@@ -72,6 +72,7 @@ const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 const MAX_PROFILE_NAME_LENGTH = 32;
+const VOICE_INPUT_MODES = ["broadcast", "voice_isolation", "transparent"];
 const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "general" },
   { id: "2", name: "gaming" },
@@ -2191,7 +2192,7 @@ export default function MenuMain({
 
     try {
       const storedMode = localStorage.getItem(noiseSuppressionStorageKey);
-      setNoiseSuppressionMode(storedMode === "voice_isolation" ? "voice_isolation" : "transparent");
+      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(storedMode) ? storedMode : "broadcast");
     } catch {
       setNoiseSuppressionMode("transparent");
     }
@@ -3650,7 +3651,7 @@ export default function MenuMain({
     setSelectedOutputDeviceId(deviceId || "");
   };
   const handleNoiseSuppressionModeChange = (mode) => {
-    setNoiseSuppressionMode(mode === "voice_isolation" ? "voice_isolation" : "transparent");
+    setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(mode) ? mode : "broadcast");
     setShowNoiseMenu(false);
   };
   const openMemberActionsMenu = (event, member) => {
@@ -4486,6 +4487,11 @@ export default function MenuMain({
   const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
   const outputSelectionAvailable = outputSelectionSupported && audioOutputDevices.length > 0;
   const noiseProfileOptions = [
+    {
+      id: "broadcast",
+      title: "Broadcast",
+      description: "Оптимальный режим для звонков: эхоподавление, мягкий EQ и компрессия голоса.",
+    },
     {
       id: "voice_isolation",
       title: "Изоляция голоса",
