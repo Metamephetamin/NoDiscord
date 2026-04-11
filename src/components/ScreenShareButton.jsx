@@ -43,14 +43,24 @@ export default function ScreenShareButton({
 
   if (isActive) {
     return (
-      <button
-        type="button"
-        className="stream-modal__action stream-modal__action--danger"
-        onClick={stopScreenShare}
-        disabled={isStopping}
-      >
-        {isStopping ? "Завершение..." : "Завершить трансляцию"}
-      </button>
+      <>
+        <button
+          type="button"
+          className="stream-modal__action"
+          onClick={startScreenShare}
+          disabled={disabled || isStarting || isStopping}
+        >
+          {isStarting ? "Применение..." : "Применить качество"}
+        </button>
+        <button
+          type="button"
+          className="stream-modal__action stream-modal__action--danger"
+          onClick={stopScreenShare}
+          disabled={isStopping || isStarting}
+        >
+          {isStopping ? "Завершение..." : "Завершить трансляцию"}
+        </button>
+      </>
     );
   }
 

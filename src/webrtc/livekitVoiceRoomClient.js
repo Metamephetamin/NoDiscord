@@ -1518,10 +1518,6 @@ export function createVoiceRoomClient({
       }
 
       if (localScreenStream) {
-        if (localLiveShareMode === "screen") {
-          return;
-        }
-
         await stopScreenShareInternal();
       }
 

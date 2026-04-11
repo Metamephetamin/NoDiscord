@@ -774,6 +774,7 @@ export default function MenuMain({
   const avatarInputRef = useRef(null);
   const profileBackgroundInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
+  const mobileVoiceStageShellRef = useRef(null);
   const mobileVoiceStageVideoRef = useRef(null);
   const mobileVoiceStageImageRef = useRef(null);
   const voiceJoinAttemptRef = useRef(0);
@@ -3879,6 +3880,26 @@ export default function MenuMain({
   const closeLocalSharePreview = () => {
     setIsLocalSharePreviewVisible(false);
   };
+  const openMobileVoiceStageFullscreen = async () => {
+    const videoElement = mobileVoiceStageVideoRef.current;
+    const targetElement = videoElement || mobileVoiceStageImageRef.current || mobileVoiceStageShellRef.current;
+    if (!targetElement) {
+      return;
+    }
+
+    try {
+      if (typeof targetElement.requestFullscreen === "function") {
+        await targetElement.requestFullscreen();
+        return;
+      }
+
+      if (videoElement && typeof videoElement.webkitEnterFullscreen === "function") {
+        videoElement.webkitEnterFullscreen();
+      }
+    } catch (error) {
+      console.error("Не удалось открыть эфир на весь экран:", error);
+    }
+  };
   const startCameraShare = async () => {
     if (!voiceClientRef.current) return;
 
@@ -5997,7 +6018,7 @@ export default function MenuMain({
               alt={spotlightVoiceParticipant?.name || "Участник"}
             />
           ) : (
-            <div className="mobile-voice-room__stage-media-shell">
+            <div ref={mobileVoiceStageShellRef} className="mobile-voice-room__stage-media-shell">
               {mobileVoiceStageMode === "remote" && !selectedStream?.stream && selectedStream?.imageSrc ? (
                 <img
                   ref={mobileVoiceStageImageRef}
@@ -6017,32 +6038,43 @@ export default function MenuMain({
               <div className="mobile-voice-room__stage-media-overlay" aria-hidden="true" />
             </div>
           )}
-          <div className="mobile-voice-room__spotlight-copy">
-            <strong>{mobileVoiceStageCopy.title}</strong>
-            <span>{mobileVoiceStageCopy.subtitle}</span>
-          </div>
-          <div className="mobile-voice-room__spotlight-badges">
-            {mobileVoiceStageMode === "local" ? <span className="mobile-voice-room__badge">Вы</span> : null}
-            {mobileVoiceStageCopy.badge ? <span className={`mobile-voice-room__badge ${mobileVoiceStageCopy.badge === "LIVE" ? "mobile-voice-room__badge--live" : ""}`}>{mobileVoiceStageCopy.badge}</span> : null}
-          </div>
+          {mobileVoiceStageMode === "spotlight" ? (
+            <>
+              <div className="mobile-voice-room__spotlight-copy">
+                <strong>{mobileVoiceStageCopy.title}</strong>
+                <span>{mobileVoiceStageCopy.subtitle}</span>
+              </div>
+              <div className="mobile-voice-room__spotlight-badges">
+                {mobileVoiceStageCopy.badge ? <span className={`mobile-voice-room__badge ${mobileVoiceStageCopy.badge === "LIVE" ? "mobile-voice-room__badge--live" : ""}`}>{mobileVoiceStageCopy.badge}</span> : null}
+              </div>
+            </>
+          ) : null}
           {mobileVoiceStageMode === "remote" ? (
             <div className="mobile-voice-room__stage-actions">
-              <button type="button" className="mobile-voice-room__stage-action" onClick={() => setSelectedStreamUserId(null)}>
-                Закрыть эфир
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={openMobileVoiceStageFullscreen} aria-label="Открыть эфир на весь экран" title="На весь экран">
+                ⛶
+              </button>
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={() => setSelectedStreamUserId(null)} aria-label="Закрыть эфир" title="Закрыть эфир">
+                x
               </button>
             </div>
           ) : null}
           {mobileVoiceStageMode === "local" ? (
             <div className="mobile-voice-room__stage-actions">
-              <button type="button" className="mobile-voice-room__stage-action" onClick={closeLocalSharePreview}>
-                Скрыть
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={openMobileVoiceStageFullscreen} aria-label="Открыть предпросмотр на весь экран" title="На весь экран">
+                ⛶
+              </button>
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={closeLocalSharePreview} aria-label="Скрыть предпросмотр" title="Скрыть">
+                x
               </button>
               <button
                 type="button"
-                className="mobile-voice-room__stage-action mobile-voice-room__stage-action--danger"
+                className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon mobile-voice-room__stage-action--danger"
                 onClick={localSharePreview?.mode === "camera" ? stopCameraShare : stopScreenShare}
+                aria-label={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
+                title={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
               >
-                {localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
+                ■
               </button>
             </div>
           ) : null}
