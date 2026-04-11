@@ -661,6 +661,7 @@ export default function MenuMain({
   const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "");
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [participantsMap, setParticipantsMap] = useState({});
+  const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
   const [micVolume, setMicVolume] = useState(70);
   const [audioVolume, setAudioVolume] = useState(100);
@@ -1013,27 +1014,15 @@ export default function MenuMain({
   const hasLocalSharePreview = Boolean(localSharePreview?.stream);
   const displayCaptureSupportInfo = useMemo(() => getDisplayCaptureSupportInfo(), []);
   const isScreenShareSupported = displayCaptureSupportInfo.supported;
-  const screenShareStatusCopy = useMemo(() => {
-    if (isScreenShareActive) {
-      return {
-        title: "Стрим экрана уже идёт",
-        subtitle: "Можно остановить эфир или поменять его параметры.",
-      };
+  const selectedStreamParticipant = useMemo(() => {
+    const participantFromVoiceRoom = (roomVoiceParticipants?.participants || [])
+      .find((item) => String(item.userId || item.UserId || "") === String(selectedStreamUserId));
+    if (participantFromVoiceRoom) {
+      return participantFromVoiceRoom;
     }
 
-    if (!isScreenShareSupported) {
-      return {
-        title: displayCaptureSupportInfo.title,
-        subtitle: displayCaptureSupportInfo.subtitle,
-      };
-    }
-
-    return {
-      title: displayCaptureSupportInfo.title,
-      subtitle: displayCaptureSupportInfo.subtitle,
-    };
-  }, [displayCaptureSupportInfo, isScreenShareActive, isScreenShareSupported]);
-  const selectedStreamParticipant = useMemo(() => Object.values(participantsMap).flat().find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [participantsMap, selectedStreamUserId]);
+    return Object.values(participantsMap).flat().find((item) => String(item.userId) === String(selectedStreamUserId)) || null;
+  }, [participantsMap, roomVoiceParticipants, selectedStreamUserId]);
   const selectedStreamDebugInfo = useMemo(() => ({
     userId: selectedStreamUserId ? String(selectedStreamUserId) : "",
     liveSelected: selectedStreamUserId ? liveUserIds.some((id) => String(id) === String(selectedStreamUserId)) : false,
@@ -1127,7 +1116,22 @@ export default function MenuMain({
     }
 
     const rawParticipants = activeVoiceParticipantsMap?.[currentVoiceChannel] || [];
-    return rawParticipants
+    const liveKitParticipants =
+      String(roomVoiceParticipants?.channel || "") === String(currentVoiceChannel)
+        ? roomVoiceParticipants.participants || []
+        : [];
+    const participantsById = new Map();
+
+    [...rawParticipants, ...liveKitParticipants].forEach((participant) => {
+      const userId = String(participant?.userId || participant?.UserId || "");
+      if (!userId || participantsById.has(userId)) {
+        return;
+      }
+
+      participantsById.set(userId, participant);
+    });
+
+    return Array.from(participantsById.values())
       .map((participant) => {
         const userId = String(participant?.userId || participant?.UserId || "");
         const fallbackName = String(participant?.name || participant?.Name || "").trim();
@@ -1149,7 +1153,7 @@ export default function MenuMain({
         const rightWeight = (right.isSpeaking ? 4 : 0) + (right.isLive ? 2 : 0) + (right.isSelf ? 1 : 0);
         return rightWeight - leftWeight;
       });
-  }, [activeVoiceParticipantsMap, currentUserId, currentVoiceChannel, liveUserIds, memberNameByUserId, memberRoleColorByUserId, speakingUserIds]);
+  }, [activeVoiceParticipantsMap, currentUserId, currentVoiceChannel, liveUserIds, memberNameByUserId, memberRoleColorByUserId, roomVoiceParticipants, speakingUserIds]);
   const spotlightVoiceParticipant = useMemo(
     () =>
       currentVoiceParticipants.find((participant) => participant.isSpeaking)
@@ -3059,6 +3063,12 @@ export default function MenuMain({
       },
       onLiveUsersChanged: setAnnouncedLiveUserIds,
       onSpeakingUsersChanged: setSpeakingUserIds,
+      onRoomParticipantsChanged: ({ channel, participants }) => {
+        setRoomVoiceParticipants({
+          channel: channel || "",
+          participants: Array.isArray(participants) ? participants : [],
+        });
+      },
       onSelfVoiceStateChanged: ({
         isMicMuted: nextMicMuted,
         isDeafened: nextIsDeafened,
@@ -3869,22 +3879,6 @@ export default function MenuMain({
   const closeLocalSharePreview = () => {
     setIsLocalSharePreviewVisible(false);
   };
-  const handleScreenShareCardClick = async () => {
-    if (isScreenShareActive) {
-      openLocalSharePreview();
-      return;
-    }
-
-    await handleScreenShareAction();
-  };
-  const handleCameraShareCardClick = () => {
-    if (isCameraShareActive) {
-      openLocalSharePreview();
-      return;
-    }
-
-    openCameraModal();
-  };
   const startCameraShare = async () => {
     if (!voiceClientRef.current) return;
 
@@ -4028,7 +4022,7 @@ export default function MenuMain({
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
     setIsLocalSharePreviewVisible(false);
-    if (String(selectedStreamUserId || "") === normalizedUserId) {
+    if (String(selectedStreamUserId || "") === normalizedUserId && selectedStream) {
       setSelectedStreamUserId(null);
       return;
     }
@@ -6052,50 +6046,6 @@ export default function MenuMain({
               </button>
             </div>
           ) : null}
-          {!isScreenShareSupported ? (
-            <div className="mobile-voice-room__spotlight-note">
-              {displayCaptureSupportInfo.subtitle}
-            </div>
-          ) : null}
-          {voiceJoinInFlightRef.current ? (
-            <div className="mobile-voice-room__spotlight-note">Подключаемся к голосовому каналу...</div>
-          ) : null}
-          {screenShareError ? (
-            <div className="mobile-voice-room__spotlight-note mobile-voice-room__spotlight-note--error">{screenShareError}</div>
-          ) : null}
-          {cameraError ? (
-            <div className="mobile-voice-room__spotlight-note mobile-voice-room__spotlight-note--error">{cameraError}</div>
-          ) : null}
-          {profileStatus && mobileSection === "servers" ? (
-            <div className="mobile-voice-room__spotlight-note">{profileStatus}</div>
-          ) : null}
-          {mobileVoiceStageMode === "remote" && !selectedStream?.stream && !selectedStream?.videoSrc && !selectedStream?.imageSrc ? (
-            <div className="mobile-voice-room__spotlight-note">Ожидаем видеопоток участника...</div>
-          ) : null}
-          {mobileVoiceStageMode === "local" && !hasLocalSharePreview ? (
-            <div className="mobile-voice-room__spotlight-note">Видео появится здесь сразу после запуска камеры или стрима.</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isSelf ? (
-            <div className="mobile-voice-room__spotlight-note">Нажми на камеру или монитор ниже, чтобы вывести свой эфир сюда.</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isLive ? (
-            <div className="mobile-voice-room__spotlight-note">Нажми на участника ниже, чтобы открыть его эфир прямо здесь.</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && !currentVoiceParticipants.length ? (
-            <div className="mobile-voice-room__spotlight-note">Участники появятся здесь после подключения к каналу.</div>
-          ) : null}
-          {mobileVoiceStageMode === "remote" && selectedStreamDebugInfo?.readyState === "none" ? (
-            <div className="mobile-voice-room__spotlight-note">Подключаем удалённый видеопоток...</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && spotlightVoiceParticipant?.isSpeaking ? (
-            <div className="mobile-voice-room__spotlight-note">Активный спикер автоматически поднимается в spotlight.</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && isCameraShareActive ? (
-            <div className="mobile-voice-room__spotlight-note">Камера уже запущена, нажми кнопку камеры ниже для управления.</div>
-          ) : null}
-          {mobileVoiceStageMode === "spotlight" && isScreenShareActive ? (
-            <div className="mobile-voice-room__spotlight-note">Стрим уже идёт, нажми кнопку монитора ниже для управления.</div>
-          ) : null}
         </div>
       </div>
 
@@ -6140,37 +6090,6 @@ export default function MenuMain({
           <span className="mobile-voice-room__invite-arrow" aria-hidden="true">›</span>
         </button>
       ) : null}
-
-      <div className="mobile-voice-room__share-grid">
-        <button
-          type="button"
-          className={`mobile-voice-room__share-card ${isScreenShareActive ? "mobile-voice-room__share-card--active" : ""} ${!isScreenShareSupported && !isScreenShareActive ? "mobile-voice-room__share-card--disabled" : ""}`}
-          onClick={handleScreenShareCardClick}
-          disabled={!isScreenShareSupported && !isScreenShareActive}
-        >
-          <span className="mobile-voice-room__share-card-icon" aria-hidden="true">
-            <img src={MONITOR_ICON_URL} alt="" />
-          </span>
-          <span className="mobile-voice-room__share-card-copy">
-            <strong>{screenShareStatusCopy.title}</strong>
-            <span>{isScreenShareActive ? "Открыть предпросмотр своего экрана." : screenShareStatusCopy.subtitle}</span>
-          </span>
-        </button>
-
-        <button
-          type="button"
-          className={`mobile-voice-room__share-card ${isCameraShareActive ? "mobile-voice-room__share-card--active" : ""}`}
-          onClick={handleCameraShareCardClick}
-        >
-          <span className="mobile-voice-room__share-card-icon" aria-hidden="true">
-            <img src={CAMERA_ICON_URL} alt="" />
-          </span>
-          <span className="mobile-voice-room__share-card-copy">
-            <strong>{isCameraShareActive ? "Камера уже в эфире" : "Запустить камеру"}</strong>
-            <span>{isCameraShareActive ? "Открыть предпросмотр своего видео." : "Открыть предпросмотр и начать видеострим."}</span>
-          </span>
-        </button>
-      </div>
 
       <div className="mobile-voice-room__controls" role="toolbar" aria-label="Управление голосовым чатом">
         <button

@@ -201,6 +201,7 @@ export function createVoiceRoomClient({
   onLocalPreviewStreamChanged,
   onLiveUsersChanged,
   onSpeakingUsersChanged,
+  onRoomParticipantsChanged,
   onSelfVoiceStateChanged,
   onMicLevelChanged,
   onAudioDevicesChanged,
@@ -255,6 +256,30 @@ export function createVoiceRoomClient({
   const emitRemoteScreens = () => {
     onRemoteScreenStreamsChanged?.(Array.from(remoteScreenShares.values()));
     onLiveUsersChanged?.(Array.from(remoteScreenShares.keys()));
+  };
+
+  const emitRoomParticipants = () => {
+    if (!room || !currentChannel) {
+      onRoomParticipantsChanged?.({ channel: "", participants: [] });
+      return;
+    }
+
+    const participants = [];
+    if (room.localParticipant) {
+      participants.push({
+        ...getParticipantSnapshot(room.localParticipant),
+        userId: String(currentUser?.id || room.localParticipant.identity || ""),
+        name: getDisplayName(currentUser || {}) || room.localParticipant.name || "Вы",
+        avatar: getAvatar(currentUser || {}) || DEFAULT_AVATAR,
+        isSelf: true,
+      });
+    }
+
+    room.remoteParticipants.forEach((participant) => {
+      participants.push(getParticipantSnapshot(participant));
+    });
+
+    onRoomParticipantsChanged?.({ channel: currentChannel, participants });
   };
 
   const emitLocalScreenState = () => {
@@ -782,6 +807,7 @@ export function createVoiceRoomClient({
     clearRemoteScreens();
     removeAllRemoteAudioElements();
     remoteParticipantMedia.clear();
+    onRoomParticipantsChanged?.({ channel: preserveChannel ? currentChannel || "" : "", participants: [] });
 
     isIntentionalRoomDisconnect = true;
     try {
@@ -1058,6 +1084,7 @@ export function createVoiceRoomClient({
       }
 
       syncRemoteShareForParticipant(participant);
+      emitRoomParticipants();
     });
 
     nextRoom.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
@@ -1079,7 +1106,74 @@ export function createVoiceRoomClient({
 
       removeRemoteAudioElement(`${userId}:${publication.trackSid}`);
       syncRemoteShareForParticipant(participant);
+      emitRoomParticipants();
     });
+
+    nextRoom.on(RoomEvent.TrackPublished, (publication, participant) => {
+      if (!participant?.identity) {
+        return;
+      }
+
+      const state = getRemoteParticipantMediaState(String(participant.identity));
+      if (publication.source === Track.Source.ScreenShare) {
+        state.screenVideoPublication = publication;
+      } else if (publication.source === Track.Source.Camera) {
+        state.cameraPublication = publication;
+      } else if (publication.source === Track.Source.ScreenShareAudio) {
+        state.screenAudioPublication = publication;
+      } else if (publication.source === Track.Source.Microphone) {
+        state.microphonePublication = publication;
+      }
+
+      if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.Camera) {
+        applyRemotePublicationPreferences(publication, {
+          enabled: true,
+          subscribed: true,
+          quality: publication.source === Track.Source.Camera ? VideoQuality.MEDIUM : VideoQuality.HIGH,
+        });
+      } else if (
+        (publication.source === Track.Source.ScreenShareAudio || publication.source === Track.Source.Microphone)
+        && publication?.isManualOperationAllowed?.()
+      ) {
+        publication.setSubscribed(true);
+        publication.setEnabled(true);
+      }
+
+      syncRemoteShareForParticipant(participant);
+      emitRoomParticipants();
+    });
+
+    nextRoom.on(RoomEvent.TrackUnpublished, (publication, participant) => {
+      const userId = String(participant?.identity || "");
+      if (!userId) {
+        return;
+      }
+
+      const state = getRemoteParticipantMediaState(userId);
+      if (publication.source === Track.Source.ScreenShare) {
+        state.screenVideoPublication = null;
+      } else if (publication.source === Track.Source.Camera) {
+        state.cameraPublication = null;
+      } else if (publication.source === Track.Source.ScreenShareAudio) {
+        state.screenAudioPublication = null;
+      } else if (publication.source === Track.Source.Microphone) {
+        state.microphonePublication = null;
+      }
+
+      removeRemoteAudioElement(`${userId}:${publication.trackSid}`);
+      syncRemoteShareForParticipant(participant);
+      emitRoomParticipants();
+    });
+
+    nextRoom.on(RoomEvent.ParticipantConnected, () => {
+      emitRoomParticipants();
+    });
+
+    if (RoomEvent.ParticipantMetadataChanged) {
+      nextRoom.on(RoomEvent.ParticipantMetadataChanged, () => {
+        emitRoomParticipants();
+      });
+    }
 
     nextRoom.on(RoomEvent.TrackMuted, (publication, participant) => {
       if (publication?.source === Track.Source.ScreenShare || publication?.source === Track.Source.Camera) {
@@ -1106,14 +1200,17 @@ export function createVoiceRoomClient({
       remoteParticipantMedia.delete(userId);
       roomActiveSpeakerIds.delete(userId);
       emitSpeakingUsers();
+      emitRoomParticipants();
     });
 
     nextRoom.on(RoomEvent.Connected, () => {
       syncAllRemoteShares();
+      emitRoomParticipants();
     });
 
     nextRoom.on(RoomEvent.Reconnected, () => {
       syncAllRemoteShares();
+      emitRoomParticipants();
     });
 
     nextRoom.on(RoomEvent.Disconnected, async () => {
@@ -1126,6 +1223,7 @@ export function createVoiceRoomClient({
       remoteParticipantMedia.clear();
       roomActiveSpeakerIds.clear();
       emitSpeakingUsers();
+      onRoomParticipantsChanged?.({ channel: "", participants: [] });
 
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
         try {
@@ -1171,8 +1269,9 @@ export function createVoiceRoomClient({
         disposeVoiceEncryptionState();
       }
 
+      let nextRoom = null;
       try {
-        const nextRoom = new Room({
+        nextRoom = new Room({
           adaptiveStream: true,
           dynacast: true,
           disconnectOnPageLeave: false,
@@ -1194,15 +1293,26 @@ export function createVoiceRoomClient({
         await nextRoom.startAudio().catch(() => {});
 
         room = nextRoom;
+        currentChannel = channelName;
+        emitRoomParticipants();
         await syncPublishedMicrophoneTrack();
         Array.from(nextRoom.remoteParticipants.values()).forEach((participant) => {
           attachExistingRemoteAudioTracks(participant);
         });
         syncAllRemoteShares();
+        emitRoomParticipants();
 
         return nextRoom;
       } catch (error) {
         disposeVoiceEncryptionState();
+        if (room === nextRoom) {
+          room = null;
+        }
+        if (currentChannel === channelName) {
+          currentChannel = null;
+          onRoomParticipantsChanged?.({ channel: "", participants: [] });
+        }
+        await nextRoom?.disconnect?.().catch(() => {});
         throw error;
       }
     })();

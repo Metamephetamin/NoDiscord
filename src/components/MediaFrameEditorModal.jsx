@@ -40,6 +40,7 @@ export default function MediaFrameEditorModal({
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftFrame(normalizeMediaFrame(frame));
   }, [frame, open]);
 
