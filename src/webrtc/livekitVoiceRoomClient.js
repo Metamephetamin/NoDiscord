@@ -46,6 +46,7 @@ const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
 const ENABLE_VOICE_E2EE = false;
+const VOICE_DEBUG_PREFIX = "[voice]";
 const AUDIO_SAMPLE_RATE = 48_000;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
@@ -192,6 +193,39 @@ function bytesToBase64(value) {
   return btoa(binary);
 }
 
+function isVoiceDebugEnabled() {
+  try {
+    return typeof window !== "undefined" && window.localStorage?.getItem("ND_VOICE_DEBUG") !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function logVoiceDebug(eventName, payload = {}) {
+  if (!isVoiceDebugEnabled()) {
+    return;
+  }
+
+  try {
+    console.info(`${VOICE_DEBUG_PREFIX} ${eventName}`, payload);
+  } catch {
+    // ignore debug logging failures
+  }
+}
+
+function getTrackDebugInfo(track) {
+  const mediaTrack = track?.mediaStreamTrack || track;
+  return {
+    kind: mediaTrack?.kind || track?.kind || "",
+    id: mediaTrack?.id || track?.sid || "",
+    label: mediaTrack?.label || "",
+    enabled: mediaTrack?.enabled,
+    muted: mediaTrack?.muted,
+    readyState: mediaTrack?.readyState,
+    settings: typeof mediaTrack?.getSettings === "function" ? mediaTrack.getSettings() : null,
+  };
+}
+
 export function createVoiceRoomClient({
   onParticipantsMapChanged,
   onChannelChanged,
@@ -244,6 +278,65 @@ export function createVoiceRoomClient({
   const remoteAudioElements = new Map();
   const remoteParticipantMedia = new Map();
   const roomActiveSpeakerIds = new Set();
+
+  const getVoiceDebugSnapshot = () => ({
+    currentChannel,
+    hasRoom: Boolean(room),
+    roomState: room?.state || "",
+    connectionState: room?.engine?.client?.connectionState || "",
+    localParticipant: {
+      identity: room?.localParticipant?.identity || "",
+      sid: room?.localParticipant?.sid || "",
+    },
+    localMic: {
+      sourceTracks: localMicSourceStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      outputTracks: localAudioStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      audioContextState: audioContext?.state || "",
+      micVolume,
+      isSelfMicMuted,
+      isSelfDeafened,
+      publicationSid: micPublication?.trackSid || "",
+      publicationMuted: micPublication?.isMuted,
+      publicationSubscribed: micPublication?.isSubscribed,
+      publicationTrack: getTrackDebugInfo(micPublication?.track || null),
+    },
+    remoteAudioElements: Array.from(remoteAudioElements.entries()).map(([key, element]) => ({
+      key,
+      paused: element.paused,
+      muted: element.muted,
+      volume: element.volume,
+      readyState: element.readyState,
+      networkState: element.networkState,
+      srcObjectTracks: element.srcObject?.getTracks?.().map(getTrackDebugInfo) || [],
+    })),
+    remoteParticipants: Array.from(room?.remoteParticipants?.values?.() || []).map((participant) => ({
+      identity: participant.identity,
+      sid: participant.sid,
+      audioPublications: Array.from(participant.trackPublications?.values?.() || [])
+        .filter((publication) => publication.source === Track.Source.Microphone || publication.source === Track.Source.ScreenShareAudio)
+        .map((publication) => ({
+          source: publication.source,
+          trackSid: publication.trackSid,
+          isSubscribed: publication.isSubscribed,
+          isMuted: publication.isMuted,
+          hasTrack: Boolean(publication.track || publication.audioTrack),
+          track: getTrackDebugInfo(publication.track || publication.audioTrack || null),
+        })),
+    })),
+  });
+
+  const publishVoiceDebugSnapshot = (reason) => {
+    const snapshot = getVoiceDebugSnapshot();
+    if (typeof window !== "undefined") {
+      window.__ndVoiceDebug = snapshot;
+      window.__ndVoiceDebugDump = () => {
+        const nextSnapshot = getVoiceDebugSnapshot();
+        console.info(`${VOICE_DEBUG_PREFIX} dump`, nextSnapshot);
+        return nextSnapshot;
+      };
+    }
+    logVoiceDebug(reason, snapshot);
+  };
 
   const emitSpeakingUsers = () => {
     onSpeakingUsersChanged?.(Array.from(roomActiveSpeakerIds.values()));
@@ -439,6 +532,12 @@ export function createVoiceRoomClient({
   };
 
   const stopLocalMic = () => {
+    logVoiceDebug("local-mic:stop", {
+      sourceTracks: localMicSourceStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      outputTracks: localAudioStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      audioContextState: audioContext?.state || "",
+    });
+
     if (localSpeakingMeter) {
       window.clearInterval(localSpeakingMeter);
       localSpeakingMeter = null;
@@ -464,8 +563,18 @@ export function createVoiceRoomClient({
       if (audioContext?.state === "suspended") {
         await audioContext.resume();
       }
+      logVoiceDebug("local-audio:pipeline-reuse", {
+        outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+        audioContextState: audioContext?.state || "",
+      });
       return localAudioStream;
     }
+
+    logVoiceDebug("local-audio:pipeline-create:start", {
+      selectedInputDeviceId,
+      noiseSuppressionMode,
+      micVolume,
+    });
 
     localMicSourceStream = await navigator.mediaDevices.getUserMedia({
       audio: getMicConstraints(),
@@ -489,6 +598,12 @@ export function createVoiceRoomClient({
     localAudioStream = destinationNode.stream;
 
     startLocalMetering(localOutputAnalyser);
+
+    logVoiceDebug("local-audio:pipeline-create:success", {
+      sourceTracks: localMicSourceStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      audioContextState: audioContext?.state || "",
+    });
 
     return localAudioStream;
   };
@@ -530,8 +645,12 @@ export function createVoiceRoomClient({
 
     try {
       await element.setSinkId(selectedOutputDeviceId);
-    } catch {
-      // ignore sink selection failures
+      logVoiceDebug("remote-audio:sink-applied", { selectedOutputDeviceId });
+    } catch (error) {
+      logVoiceDebug("remote-audio:sink-failed", {
+        selectedOutputDeviceId,
+        error: error?.message || String(error),
+      });
     }
   };
 
@@ -549,6 +668,7 @@ export function createVoiceRoomClient({
     }
 
     remoteAudioElements.delete(key);
+    logVoiceDebug("remote-audio:element-removed", { key, remaining: remoteAudioElements.size });
   };
 
   const removeAllRemoteAudioElements = () => {
@@ -561,11 +681,26 @@ export function createVoiceRoomClient({
         ? track
         : publication?.audioTrack || publication?.track || null;
     if (!audioTrack) {
+      logVoiceDebug("remote-audio:attach-skipped-no-track", {
+        participant: participant?.identity || "",
+        source: publication?.source || "",
+        trackSid: publication?.trackSid || "",
+        subscribed: publication?.isSubscribed,
+      });
       return;
     }
 
     const key = `${participant.identity}:${publication?.trackSid || audioTrack?.sid || "audio"}`;
     removeRemoteAudioElement(key);
+    logVoiceDebug("remote-audio:attach-start", {
+      key,
+      participant: participant?.identity || "",
+      source: publication?.source || "",
+      publicationMuted: publication?.isMuted,
+      publicationSubscribed: publication?.isSubscribed,
+      remoteVolume,
+      track: getTrackDebugInfo(audioTrack),
+    });
 
     const element = audioTrack.attach();
     element.autoplay = true;
@@ -579,15 +714,51 @@ export function createVoiceRoomClient({
     await applyOutputDeviceToElement(element).catch(() => {});
     const playPromise = element.play?.();
     if (typeof playPromise?.catch === "function") {
-      playPromise.catch(() => {});
+      playPromise
+        .then(() => {
+          logVoiceDebug("remote-audio:play-ok", {
+            key,
+            paused: element.paused,
+            readyState: element.readyState,
+            networkState: element.networkState,
+            volume: element.volume,
+            muted: element.muted,
+          });
+          publishVoiceDebugSnapshot("remote-audio:play-ok:snapshot");
+        })
+        .catch((error) => {
+          logVoiceDebug("remote-audio:play-failed", {
+            key,
+            errorName: error?.name || "",
+            error: error?.message || String(error),
+            paused: element.paused,
+            readyState: element.readyState,
+            networkState: element.networkState,
+            volume: element.volume,
+            muted: element.muted,
+          });
+          publishVoiceDebugSnapshot("remote-audio:play-failed:snapshot");
+        });
     }
     remoteAudioElements.set(key, element);
+    publishVoiceDebugSnapshot("remote-audio:attached");
   };
 
   const attachExistingRemoteAudioTracks = (participant) => {
     if (!participant?.identity) {
       return;
     }
+
+    logVoiceDebug("remote-audio:scan-existing", {
+      participant: participant.identity,
+      publications: Array.from(participant.trackPublications.values()).map((publication) => ({
+        source: publication.source,
+        trackSid: publication.trackSid,
+        isSubscribed: publication.isSubscribed,
+        isMuted: publication.isMuted,
+        hasTrack: Boolean(publication.track || publication.audioTrack),
+      })),
+    });
 
     Array.from(participant.trackPublications.values()).forEach((publication) => {
       if (
@@ -969,6 +1140,11 @@ export function createVoiceRoomClient({
     }
 
     if (!micPublication) {
+      logVoiceDebug("local-audio:state-no-publication", {
+        shouldMuteMicrophone,
+        isSelfMicMuted,
+        isSelfDeafened,
+      });
       return;
     }
 
@@ -978,19 +1154,43 @@ export function createVoiceRoomClient({
       } else if (!shouldMuteMicrophone && micPublication.isMuted) {
         await micPublication.unmute();
       }
-    } catch {
-      // ignore local mute synchronization failures
+      logVoiceDebug("local-audio:state-applied", {
+        shouldMuteMicrophone,
+        publicationMuted: micPublication.isMuted,
+        track: getTrackDebugInfo(micPublication.track || null),
+      });
+    } catch (error) {
+      logVoiceDebug("local-audio:state-failed", {
+        shouldMuteMicrophone,
+        error: error?.message || String(error),
+      });
     }
   };
 
   const syncPublishedMicrophoneTrack = async () => {
     if (!room || !currentChannel) {
+      logVoiceDebug("local-audio:publish-skipped-no-room", {
+        hasRoom: Boolean(room),
+        currentChannel,
+      });
       return;
     }
+
+    logVoiceDebug("local-audio:publish-start", {
+      currentChannel,
+      roomState: room.state,
+      localParticipantIdentity: room.localParticipant?.identity || "",
+      existingPublicationSid: micPublication?.trackSid || "",
+      isSelfMicMuted,
+      isSelfDeafened,
+    });
 
     const micStream = await ensureAudioPipeline();
     const nextTrack = micStream?.getAudioTracks?.()?.[0] || null;
     if (!nextTrack) {
+      logVoiceDebug("local-audio:publish-skipped-no-track", {
+        streamTracks: micStream?.getTracks?.().map(getTrackDebugInfo) || [],
+      });
       return;
     }
 
@@ -999,6 +1199,11 @@ export function createVoiceRoomClient({
     if (micPublication?.track?.replaceTrack) {
       await micPublication.track.replaceTrack(nextTrack, true);
       await applyPublishedAudioState();
+      logVoiceDebug("local-audio:track-replaced", {
+        publicationSid: micPublication.trackSid,
+        track: getTrackDebugInfo(nextTrack),
+      });
+      publishVoiceDebugSnapshot("local-audio:track-replaced:snapshot");
       return;
     }
 
@@ -1008,6 +1213,12 @@ export function createVoiceRoomClient({
       ...getMicrophonePublishOptions(),
     });
     await applyPublishedAudioState();
+    logVoiceDebug("local-audio:published", {
+      publicationSid: micPublication?.trackSid || "",
+      publicationMuted: micPublication?.isMuted,
+      track: getTrackDebugInfo(nextTrack),
+    });
+    publishVoiceDebugSnapshot("local-audio:published:snapshot");
   };
 
   const rebuildLocalAudioPipeline = async () => {
@@ -1023,15 +1234,23 @@ export function createVoiceRoomClient({
 
     if (nextTrack && micPublication?.track?.replaceTrack) {
       await micPublication.track.replaceTrack(nextTrack, true);
+      logVoiceDebug("local-audio:rebuild-replaced-track", {
+        track: getTrackDebugInfo(nextTrack),
+      });
     } else if (nextTrack && room && currentChannel) {
       micPublication = await room.localParticipant.publishTrack(nextTrack, {
         source: Track.Source.Microphone,
         name: MICROPHONE_TRACK_NAME,
         ...getMicrophonePublishOptions(),
       });
+      logVoiceDebug("local-audio:rebuild-published-track", {
+        publicationSid: micPublication?.trackSid || "",
+        track: getTrackDebugInfo(nextTrack),
+      });
     }
 
     await applyPublishedAudioState();
+    publishVoiceDebugSnapshot("local-audio:rebuild-complete");
 
     return nextStream;
   };
@@ -1070,6 +1289,16 @@ export function createVoiceRoomClient({
         return;
       }
 
+      logVoiceDebug("room:event:track-subscribed", {
+        participant: participant.identity,
+        source: publication?.source || "",
+        kind: track?.kind || "",
+        trackSid: publication?.trackSid || "",
+        publicationMuted: publication?.isMuted,
+        publicationSubscribed: publication?.isSubscribed,
+        track: getTrackDebugInfo(track),
+      });
+
       const state = getRemoteParticipantMediaState(String(participant.identity));
       if (publication.source === Track.Source.ScreenShare) {
         state.screenVideoPublication = publication;
@@ -1093,6 +1322,13 @@ export function createVoiceRoomClient({
         return;
       }
 
+      logVoiceDebug("room:event:track-unsubscribed", {
+        participant: userId,
+        source: publication?.source || "",
+        kind: track?.kind || "",
+        trackSid: publication?.trackSid || "",
+      });
+
       const state = getRemoteParticipantMediaState(userId);
       if (publication.source === Track.Source.ScreenShare) {
         state.screenVideoPublication = null;
@@ -1113,6 +1349,14 @@ export function createVoiceRoomClient({
       if (!participant?.identity) {
         return;
       }
+
+      logVoiceDebug("room:event:track-published", {
+        participant: participant.identity,
+        source: publication?.source || "",
+        trackSid: publication?.trackSid || "",
+        publicationMuted: publication?.isMuted,
+        publicationSubscribed: publication?.isSubscribed,
+      });
 
       const state = getRemoteParticipantMediaState(String(participant.identity));
       if (publication.source === Track.Source.ScreenShare) {
@@ -1149,6 +1393,12 @@ export function createVoiceRoomClient({
         return;
       }
 
+      logVoiceDebug("room:event:track-unpublished", {
+        participant: userId,
+        source: publication?.source || "",
+        trackSid: publication?.trackSid || "",
+      });
+
       const state = getRemoteParticipantMediaState(userId);
       if (publication.source === Track.Source.ScreenShare) {
         state.screenVideoPublication = null;
@@ -1166,6 +1416,7 @@ export function createVoiceRoomClient({
     });
 
     nextRoom.on(RoomEvent.ParticipantConnected, () => {
+      logVoiceDebug("room:event:participant-connected");
       emitRoomParticipants();
     });
 
@@ -1204,16 +1455,28 @@ export function createVoiceRoomClient({
     });
 
     nextRoom.on(RoomEvent.Connected, () => {
+      logVoiceDebug("room:event:connected", {
+        roomState: nextRoom.state,
+        remoteParticipants: nextRoom.remoteParticipants.size,
+      });
       syncAllRemoteShares();
       emitRoomParticipants();
     });
 
     nextRoom.on(RoomEvent.Reconnected, () => {
+      logVoiceDebug("room:event:reconnected", {
+        roomState: nextRoom.state,
+        remoteParticipants: nextRoom.remoteParticipants.size,
+      });
       syncAllRemoteShares();
       emitRoomParticipants();
     });
 
     nextRoom.on(RoomEvent.Disconnected, async () => {
+      logVoiceDebug("room:event:disconnected", {
+        intentional: isIntentionalRoomDisconnect,
+        currentChannel,
+      });
       if (isIntentionalRoomDisconnect) {
         return;
       }
@@ -1285,12 +1548,29 @@ export function createVoiceRoomClient({
           autoSubscribe: true,
           rtcConfig: RTC_CONFIGURATION,
         });
+        logVoiceDebug("room:connect-ok", {
+          serverUrl: session.serverUrl,
+          roomName: session.roomName || channelName,
+          remoteParticipants: nextRoom.remoteParticipants.size,
+          roomState: nextRoom.state,
+        });
 
         if (encryptionOptions) {
           await nextRoom.setE2EEEnabled(true).catch(() => {});
         }
 
-        await nextRoom.startAudio().catch(() => {});
+        await nextRoom.startAudio()
+          .then(() => {
+            logVoiceDebug("room:start-audio-ok", {
+              roomState: nextRoom.state,
+            });
+          })
+          .catch((error) => {
+            logVoiceDebug("room:start-audio-failed", {
+              errorName: error?.name || "",
+              error: error?.message || String(error),
+            });
+          });
 
         room = nextRoom;
         currentChannel = channelName;
@@ -1459,10 +1739,17 @@ export function createVoiceRoomClient({
     },
 
     async joinChannel(channelName, user) {
+      logVoiceDebug("join:start", {
+        channelName,
+        userId: user?.id || "",
+        hasExistingRoom: Boolean(room),
+        currentChannel,
+      });
       await ensureSignalConnection(user);
       await ensureAudioPipeline();
 
       if (currentChannel === channelName && room) {
+        publishVoiceDebugSnapshot("join:already-connected");
         return;
       }
 
@@ -1482,7 +1769,12 @@ export function createVoiceRoomClient({
         await ensureRoomConnection(channelName, user, Array.isArray(joinResponse?.participants) ? joinResponse.participants : []);
         currentChannel = channelName;
         onChannelChanged?.(channelName);
+        publishVoiceDebugSnapshot("join:success");
       } catch (error) {
+        logVoiceDebug("join:failed", {
+          channelName,
+          error: error?.message || String(error),
+        });
         try {
           await signalConnection.invoke("LeaveChannel", String(user.id));
         } catch {
@@ -1656,6 +1948,7 @@ export function createVoiceRoomClient({
       if (gainNode) {
         gainNode.gain.value = micVolume;
       }
+      logVoiceDebug("local-audio:volume-set", { value, micVolume });
     },
 
     setRemoteVolume(value) {
@@ -1663,6 +1956,11 @@ export function createVoiceRoomClient({
       for (const element of remoteAudioElements.values()) {
         element.volume = remoteVolume;
       }
+      logVoiceDebug("remote-audio:volume-set", {
+        value,
+        remoteVolume,
+        elements: remoteAudioElements.size,
+      });
     },
 
     async getAudioDevices({ ensurePermission = false } = {}) {
@@ -1724,6 +2022,10 @@ export function createVoiceRoomClient({
     async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {
       isSelfMicMuted = Boolean(isMicMuted);
       isSelfDeafened = Boolean(isDeafened);
+      logVoiceDebug("local-audio:self-state-update", {
+        isSelfMicMuted,
+        isSelfDeafened,
+      });
       await applyPublishedAudioState();
 
       if (!signalConnection || signalConnection.state !== signalR.HubConnectionState.Connected || !currentUser?.id) {
