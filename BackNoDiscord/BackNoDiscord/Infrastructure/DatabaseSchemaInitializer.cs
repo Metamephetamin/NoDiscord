@@ -122,7 +122,7 @@ public static class DatabaseSchemaInitializer
             CREATE INDEX IF NOT EXISTS ix_message_reactions_message_key
                 ON message_reactions (message_id, reaction_key);
             CREATE INDEX IF NOT EXISTS ix_message_reactions_channel_created_at
-                ON message_reactions (channel_id, created_at);`r`n
+                ON message_reactions (channel_id, created_at);
             ALTER TABLE IF EXISTS chatmessages
                 ADD COLUMN IF NOT EXISTS message_encrypted text NULL;
             ALTER TABLE IF EXISTS chatmessages
