@@ -1,3 +1,5 @@
+import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
+
 export default function TextChatContextMenu({
   menuRef,
   menu,
@@ -31,7 +33,7 @@ export default function TextChatContextMenu({
               aria-label={reactionOption.label}
               title={reactionOption.label}
             >
-              <span aria-hidden="true">{reactionOption.glyph}</span>
+              <AnimatedEmojiGlyph emoji={reactionOption} />
             </button>
           ))}
           <button
@@ -56,7 +58,7 @@ export default function TextChatContextMenu({
                 aria-label={reactionOption.label}
                 title={reactionOption.label}
               >
-                <span className="message-reaction-picker__sticker-glyph" aria-hidden="true">{reactionOption.glyph}</span>
+                <AnimatedEmojiGlyph emoji={reactionOption} className="message-reaction-picker__sticker-glyph" />
                 <span className="message-reaction-picker__sticker-label">{reactionOption.label}</span>
               </button>
             ))}

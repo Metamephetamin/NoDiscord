@@ -266,6 +266,7 @@ export function createVoiceRoomClient({
   let currentChannel = null;
   let localMicSourceStream = null;
   let localAudioStream = null;
+  let localAudioPipelinePromise = null;
   let audioContext = null;
   let gainNode = null;
   let destinationNode = null;
@@ -484,6 +485,69 @@ export function createVoiceRoomClient({
     sampleRate: AUDIO_SAMPLE_RATE,
   });
 
+  const getRelaxedMicConstraints = (mode = noiseSuppressionMode) => ({
+    echoCancellation: echoCancellationEnabled,
+    noiseSuppression:
+      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
+      mode === NOISE_SUPPRESSION_MODE_KRISP,
+    autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+  });
+
+  const isAudioCaptureStartError = (error) => {
+    const errorName = String(error?.name || "").trim();
+    return errorName === "NotReadableError" || errorName === "TrackStartError";
+  };
+
+  const buildMicrophoneAccessError = (error) => {
+    const errorName = String(error?.name || "").trim();
+    if (isAudioCaptureStartError(error)) {
+      const nextError = new Error("Микрофон не удалось запустить. Закройте приложения, которые могут использовать микрофон, или выберите другой вход в настройках голоса.");
+      nextError.name = errorName || "NotReadableError";
+      nextError.cause = error;
+      return nextError;
+    }
+
+    return error;
+  };
+
+  const requestLocalMicSourceStream = async () => {
+    const preferredConstraints = getMicConstraints();
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: preferredConstraints });
+    } catch (error) {
+      logVoiceDebug("local-audio:capture-failed", {
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+        selectedInputDeviceId,
+        constraints: preferredConstraints,
+      });
+
+      if (!isAudioCaptureStartError(error)) {
+        throw buildMicrophoneAccessError(error);
+      }
+
+      const relaxedConstraints = getRelaxedMicConstraints();
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: relaxedConstraints });
+        logVoiceDebug("local-audio:capture-fallback-success", {
+          selectedInputDeviceId,
+          constraints: relaxedConstraints,
+          tracks: fallbackStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+        });
+        return fallbackStream;
+      } catch (fallbackError) {
+        logVoiceDebug("local-audio:capture-fallback-failed", {
+          errorName: fallbackError?.name || "",
+          error: fallbackError?.message || String(fallbackError),
+          selectedInputDeviceId,
+          constraints: relaxedConstraints,
+        });
+        throw buildMicrophoneAccessError(fallbackError);
+      }
+    }
+  };
+
   const loadKrispNoiseFilterModule = () => {
     if (!krispNoiseFilterModulePromise) {
       krispNoiseFilterModulePromise = import("@livekit/krisp-noise-filter");
@@ -665,6 +729,7 @@ export function createVoiceRoomClient({
     localMicSourceStream?.getTracks().forEach((track) => track.stop());
     localMicSourceStream = null;
     localAudioStream = null;
+    localAudioPipelinePromise = null;
     localOutputAnalyser = null;
     onMicLevelChanged?.(0);
 
@@ -675,6 +740,50 @@ export function createVoiceRoomClient({
 
     gainNode = null;
     destinationNode = null;
+  };
+
+  const createLocalAudioPipeline = async () => {
+    logVoiceDebug("local-audio:pipeline-create:start", {
+      selectedInputDeviceId,
+      noiseSuppressionMode,
+      echoCancellationEnabled,
+      micVolume,
+    });
+
+    try {
+      localMicSourceStream = await requestLocalMicSourceStream();
+      const [capturedMicTrack] = localMicSourceStream.getAudioTracks();
+      if (capturedMicTrack) {
+        capturedMicTrack.contentHint = "speech";
+      }
+      await emitAudioDevices().catch(() => {});
+
+      audioContext = createPreferredAudioContext();
+      if (!audioContext) {
+        throw new Error("Unable to initialize audio context.");
+      }
+
+      const sourceNode = audioContext.createMediaStreamSource(localMicSourceStream);
+      gainNode = audioContext.createGain();
+      destinationNode = audioContext.createMediaStreamDestination();
+      gainNode.gain.value = micVolume;
+      connectLocalAudioGraph(sourceNode);
+      localAudioStream = destinationNode.stream;
+
+      startLocalMetering(localOutputAnalyser);
+
+      logVoiceDebug("local-audio:pipeline-create:success", {
+        sourceTracks: localMicSourceStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+        outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+        audioContextState: audioContext?.state || "",
+        echoCancellationEnabled,
+      });
+
+      return localAudioStream;
+    } catch (error) {
+      stopLocalMic();
+      throw error;
+    }
   };
 
   const ensureAudioPipeline = async () => {
@@ -689,44 +798,18 @@ export function createVoiceRoomClient({
       return localAudioStream;
     }
 
-    logVoiceDebug("local-audio:pipeline-create:start", {
-      selectedInputDeviceId,
-      noiseSuppressionMode,
-      echoCancellationEnabled,
-      micVolume,
-    });
-
-    localMicSourceStream = await navigator.mediaDevices.getUserMedia({
-      audio: getMicConstraints(),
-    });
-    const [capturedMicTrack] = localMicSourceStream.getAudioTracks();
-    if (capturedMicTrack) {
-      capturedMicTrack.contentHint = "speech";
-    }
-    await emitAudioDevices().catch(() => {});
-
-    audioContext = createPreferredAudioContext();
-    if (!audioContext) {
-      throw new Error("Unable to initialize audio context.");
+    if (!localAudioPipelinePromise) {
+      localAudioPipelinePromise = createLocalAudioPipeline().finally(() => {
+        localAudioPipelinePromise = null;
+      });
+    } else {
+      logVoiceDebug("local-audio:pipeline-create:await-existing", {
+        selectedInputDeviceId,
+        noiseSuppressionMode,
+      });
     }
 
-    const sourceNode = audioContext.createMediaStreamSource(localMicSourceStream);
-    gainNode = audioContext.createGain();
-    destinationNode = audioContext.createMediaStreamDestination();
-    gainNode.gain.value = micVolume;
-    connectLocalAudioGraph(sourceNode);
-    localAudioStream = destinationNode.stream;
-
-    startLocalMetering(localOutputAnalyser);
-
-    logVoiceDebug("local-audio:pipeline-create:success", {
-      sourceTracks: localMicSourceStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
-      outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
-      audioContextState: audioContext?.state || "",
-      echoCancellationEnabled,
-    });
-
-    return localAudioStream;
+    return localAudioPipelinePromise;
   };
 
   const parseParticipantMetadata = (participant) => {

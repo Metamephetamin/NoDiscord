@@ -2960,6 +2960,16 @@ export default function MenuMain({
       }
     } catch (error) {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
+        const errorName = String(error?.name || "").trim();
+        const isMicrophoneStartError = errorName === "NotReadableError" || errorName === "TrackStartError";
+        if (isMicrophoneStartError) {
+          const message = error?.message || "Микрофон не удалось запустить. Закройте приложения, которые могут использовать микрофон, или выберите другой вход в настройках голоса.";
+          showServerInviteFeedback(message);
+          console.error("Ошибка входа в голосовой канал:", error);
+          setCurrentVoiceChannel(null);
+          return;
+        }
+
         try {
           await voiceClientRef.current.leaveChannel();
         } catch {

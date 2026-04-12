@@ -712,15 +712,35 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 16px rgba(69, 58, 185, 0.18);
 }
 
+.animated-emoji-glyph {
+  width: 1em;
+  height: 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.12em;
+  flex: 0 0 auto;
+}
+
+.animated-emoji-glyph img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .message-reaction--active {
   background: linear-gradient(135deg, rgba(124, 116, 255, 0.46), rgba(188, 178, 255, 0.34));
   border-color: rgba(164, 152, 255, 0.34);
 }
 
 .message-reaction__glyph {
+  width: 18px;
+  height: 18px;
   font-size: 16px;
   line-height: 1;
-  display: inline-block;
+  display: inline-flex;
   transition: transform 0.18s ease, filter 0.18s ease;
 }
 
@@ -1109,11 +1129,16 @@
 }
 
 .message-reaction-picker__item span {
-  display: inline-block;
+  display: inline-flex;
   font-size: 19px;
   line-height: 1;
   animation: reactionFloat 2.8s ease-in-out infinite;
   transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.message-reaction-picker__item .animated-emoji-glyph {
+  width: 26px;
+  height: 26px;
 }
 
 .message-reaction-picker__item:nth-child(2n) span {
@@ -1213,6 +1238,8 @@
 }
 
 .message-reaction-picker__sticker-glyph {
+  width: 26px;
+  height: 26px;
   font-size: 20px;
   line-height: 1;
 }
@@ -1747,6 +1774,8 @@
 }
 
 .composer-tool__emoji {
+  width: 24px;
+  height: 24px;
   font-size: 21px;
   line-height: 1;
   filter: saturate(1.04);
@@ -1867,6 +1896,11 @@
 .composer-emoji-picker__item:hover {
   transform: translateY(-1px);
   background: rgba(255, 255, 255, 0.09);
+}
+
+.composer-emoji-picker__item .animated-emoji-glyph {
+  width: 32px;
+  height: 32px;
 }
 
 .mention-suggestions {

@@ -1,3 +1,4 @@
+import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
 import { segmentMessageTextByMentions } from "../utils/messageMentions";
@@ -394,7 +395,7 @@ export default function TextChatMessageList({
                                 }}
                                 aria-label={`${reaction.glyph} ${reaction.count}`}
                               >
-                                <span className="message-reaction__glyph" aria-hidden="true">{reaction.glyph}</span>
+                                <AnimatedEmojiGlyph emoji={reaction} className="message-reaction__glyph" />
                                 <span className="message-reaction__count">{reaction.count}</span>
                                 <span className="message-reaction__avatars" aria-hidden="true">
                                   {reaction.users.slice(0, 2).map((reactor) => (

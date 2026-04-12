@@ -1,3 +1,5 @@
+import lottiefilesEmojiCatalog from "./lottiefilesEmojiCatalog.json";
+import { resolveStaticAssetUrl } from "./media";
 import { formatVoiceMessageDuration, normalizeVoiceMessageMetadata, restoreRussianSpeechPunctuation } from "./voiceMessages";
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 export const MESSAGE_SEND_COOLDOWN_MS = 1500;
@@ -15,7 +17,7 @@ export const SPEECH_RECOGNITION_RESTART_DELAY_MS = 240;
 export const AUTO_PUNCTUATE_TYPED_MESSAGES = true;
 export const ENABLE_VOICE_MESSAGE_BUTTON = true; // flip to false to hide the simple voice-message record button
 export const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
-export const COMPOSER_EMOJI_OPTIONS = [
+const LEGACY_COMPOSER_EMOJI_OPTIONS = [
   { key: "grinning", glyph: "😀", label: "Улыбка" },
   { key: "smile", glyph: "😄", label: "Радость" },
   { key: "beaming", glyph: "😁", label: "Счастье" },
@@ -33,7 +35,7 @@ export const COMPOSER_EMOJI_OPTIONS = [
   { key: "heart", glyph: "❤️", label: "Любовь" },
   { key: "thumbs_up", glyph: "👍", label: "Нравится" },
 ];
-export const MESSAGE_REACTION_OPTIONS = [
+const LEGACY_MESSAGE_REACTION_OPTIONS = [
   { key: "grinning", glyph: "😀", label: "Улыбка" },
   { key: "smile", glyph: "😄", label: "Радость" },
   { key: "beaming", glyph: "😁", label: "Сияю" },
@@ -51,8 +53,25 @@ export const MESSAGE_REACTION_OPTIONS = [
   { key: "party", glyph: "🥳", label: "Праздник" },
   { key: "fire", glyph: "🔥", label: "Огонь" },
 ];
+export const COMPOSER_EMOJI_OPTIONS = lottiefilesEmojiCatalog.map((emojiOption) => ({
+  ...emojiOption,
+  assetUrl: resolveStaticAssetUrl(emojiOption.assetPath),
+}));
+export const MESSAGE_REACTION_OPTIONS = COMPOSER_EMOJI_OPTIONS;
 export const PRIMARY_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(0, 8);
 export const STICKER_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(8);
+
+const LEGACY_EMOJI_OPTIONS = [...LEGACY_COMPOSER_EMOJI_OPTIONS, ...LEGACY_MESSAGE_REACTION_OPTIONS];
+const ANIMATED_EMOJI_BY_KEY = new Map(MESSAGE_REACTION_OPTIONS.map((emojiOption) => [emojiOption.key, emojiOption]));
+const ANIMATED_EMOJI_BY_GLYPH = new Map(
+  [...LEGACY_EMOJI_OPTIONS, ...MESSAGE_REACTION_OPTIONS].map((emojiOption) => [emojiOption.glyph, emojiOption])
+);
+
+export function getAnimatedEmojiOption(reaction) {
+  const key = String(reaction?.key || "");
+  const glyph = String(reaction?.glyph || "");
+  return ANIMATED_EMOJI_BY_KEY.get(key) || ANIMATED_EMOJI_BY_GLYPH.get(glyph) || null;
+}
 
 export function getMentionQueryContext(text, caretPosition) {
   const normalizedText = String(text || "");
@@ -307,23 +326,28 @@ export function isMissingHubMethodError(error, methodName) {
 export function normalizeReactions(reactions) {
   return Array.isArray(reactions)
     ? reactions
-      .map((reaction) => ({
-        key: String(reaction?.key || ""),
-        glyph: String(reaction?.glyph || ""),
-        count: Number(reaction?.count || 0),
-        reactorUserIds: Array.isArray(reaction?.reactorUserIds)
-          ? reaction.reactorUserIds.map((item) => String(item || "")).filter(Boolean)
-          : [],
-        users: Array.isArray(reaction?.users)
-          ? reaction.users
-            .map((user) => ({
-              userId: String(user?.userId || ""),
-              displayName: String(user?.displayName || user?.userId || "User"),
-              avatarUrl: String(user?.avatarUrl || user?.avatar_url || ""),
-            }))
-            .filter((user) => user.userId)
-          : [],
-      }))
+      .map((reaction) => {
+        const emojiOption = getAnimatedEmojiOption(reaction);
+        return {
+          key: String(reaction?.key || ""),
+          glyph: String(reaction?.glyph || emojiOption?.glyph || ""),
+          label: String(emojiOption?.label || ""),
+          assetUrl: String(emojiOption?.assetUrl || ""),
+          count: Number(reaction?.count || 0),
+          reactorUserIds: Array.isArray(reaction?.reactorUserIds)
+            ? reaction.reactorUserIds.map((item) => String(item || "")).filter(Boolean)
+            : [],
+          users: Array.isArray(reaction?.users)
+            ? reaction.users
+              .map((user) => ({
+                userId: String(user?.userId || ""),
+                displayName: String(user?.displayName || user?.userId || "User"),
+                avatarUrl: String(user?.avatarUrl || user?.avatar_url || ""),
+              }))
+              .filter((user) => user.userId)
+            : [],
+        };
+      })
       .filter((reaction) => reaction.key && reaction.glyph && reaction.count > 0)
     : [];
 }

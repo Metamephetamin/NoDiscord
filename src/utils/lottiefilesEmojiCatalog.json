@@ -1,0 +1,502 @@
+[
+  {
+    "key": "grinning",
+    "glyph": "😀",
+    "label": "Smile",
+    "assetPath": "/emoji/lottiefiles/lf-001-grinning.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-happy-UMwhHPsYK3",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Gio",
+    "sourceName": "Emoji - Happy"
+  },
+  {
+    "key": "smile",
+    "glyph": "😄",
+    "label": "Happy",
+    "assetPath": "/emoji/lottiefiles/lf-002-smile.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/smile-T77Ixyzox3",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Gio",
+    "sourceName": "Smile"
+  },
+  {
+    "key": "beaming",
+    "glyph": "😁",
+    "label": "Beaming",
+    "assetPath": "/emoji/lottiefiles/lf-022-lf-022-emoji-bouncing-animation.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-bouncing-animation-WxaBPZIokt",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Abdul Latif",
+    "sourceName": "Emoji bouncing animation"
+  },
+  {
+    "key": "laugh",
+    "glyph": "😂",
+    "label": "Laugh",
+    "assetPath": "/emoji/lottiefiles/lf-010-wow.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/wow-emoji-Giqfr1YwHT",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Domitoru",
+    "sourceName": "WOW Emoji"
+  },
+  {
+    "key": "rofl",
+    "glyph": "🤣",
+    "label": "ROFL",
+    "assetPath": "/emoji/lottiefiles/lf-140-lf-140-joy-laugh-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/joy-laugh-emoji-GpqG61o6QD",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Lottie Creator",
+    "sourceName": "Joy Laugh Emoji"
+  },
+  {
+    "key": "wink",
+    "glyph": "😉",
+    "label": "Wink",
+    "assetPath": "/emoji/lottiefiles/lf-200-lf-200-winking-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/winking-emoji-2eKiT4rX6D",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Neon Agency",
+    "sourceName": "Winking Emoji"
+  },
+  {
+    "key": "heart_eyes",
+    "glyph": "😍",
+    "label": "Love",
+    "assetPath": "/emoji/lottiefiles/lf-131-lf-131-green-heart-json.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/green-heart-json-tbgQZ6UdtA",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Lena  Tsybulenko",
+    "sourceName": "green_heart.json"
+  },
+  {
+    "key": "cool",
+    "glyph": "😎",
+    "label": "Cool",
+    "assetPath": "/emoji/lottiefiles/lf-106-lf-106-smiley.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/smiley-CFs0yZkH7N",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Celcea  Tifani",
+    "sourceName": "Smiley"
+  },
+  {
+    "key": "thinking",
+    "glyph": "🤔",
+    "label": "Thinking",
+    "assetPath": "/emoji/lottiefiles/lf-074-lf-074-thinking-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/thinking-emoji-mqdt55xVCe",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Lottie Creator",
+    "sourceName": "Thinking Emoji"
+  },
+  {
+    "key": "wow",
+    "glyph": "😮",
+    "label": "Wow",
+    "assetPath": "/emoji/lottiefiles/lf-162-lf-162-confused-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/confused-emoji-wq3xxVGpb4",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Restful Designs",
+    "sourceName": "Confused Emoji"
+  },
+  {
+    "key": "pleading",
+    "glyph": "🥺",
+    "label": "Please",
+    "assetPath": "/emoji/lottiefiles/lf-025-lf-025-emoji-sad.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-sad-amOYZnPvoN",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Gio",
+    "sourceName": "Emoji - Sad"
+  },
+  {
+    "key": "cry",
+    "glyph": "😭",
+    "label": "Crying",
+    "assetPath": "/emoji/lottiefiles/lf-012-cry.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/crying-emoji-2mGWc6v5n5",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Shubh Dubey",
+    "sourceName": "Crying emoji"
+  },
+  {
+    "key": "angry",
+    "glyph": "😡",
+    "label": "Angry",
+    "assetPath": "/emoji/lottiefiles/lf-013-angry.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/angry-M1R1YqRYKA",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "DEEPAK SHARMA",
+    "sourceName": "Angry"
+  },
+  {
+    "key": "mind_blown",
+    "glyph": "🤯",
+    "label": "Mind blown",
+    "assetPath": "/emoji/lottiefiles/lf-014-mind-blown.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/exploding-emoji-uArpqR0eaR",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "SM Rony",
+    "sourceName": "Exploding Emoji"
+  },
+  {
+    "key": "party",
+    "glyph": "🥳",
+    "label": "Party",
+    "assetPath": "/emoji/lottiefiles/lf-015-party.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/celebration-and-birthday-emoji-PbPAzivZTt",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Hamza Arif",
+    "sourceName": "celebration and birthday  emoji"
+  },
+  {
+    "key": "fire",
+    "glyph": "🔥",
+    "label": "Fire",
+    "assetPath": "/emoji/lottiefiles/lf-029-lf-029-confetti-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/confetti-emoji-llZaMHC1mA",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "P Muthama",
+    "sourceName": "Confetti emoji"
+  },
+  {
+    "key": "heart",
+    "glyph": "❤️",
+    "label": "Heart",
+    "assetPath": "/emoji/lottiefiles/lf-195-lf-195-hearth-eye.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/hearth-eye-oMlHNZcBY0",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Permadi Creative",
+    "sourceName": "Hearth Eye"
+  },
+  {
+    "key": "thumbs_up",
+    "glyph": "👍",
+    "label": "Like",
+    "assetPath": "/emoji/lottiefiles/lf-082-lf-082-wavinghand.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/wavinghand-q9VGvsLB0v",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Tw1x",
+    "sourceName": "WavingHand"
+  },
+  {
+    "key": "lf_020_money",
+    "glyph": "🤑",
+    "label": "Money",
+    "assetPath": "/emoji/lottiefiles/lf-020-lf-020-money.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/money-I5xc55P5Rd",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Ахмад Темирхан",
+    "sourceName": "Money"
+  },
+  {
+    "key": "lf_028_emoji",
+    "glyph": "🙂",
+    "label": "Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-028-lf-028-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-qgFPfc3TdE",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "LanaNguyen",
+    "sourceName": "Emoji"
+  },
+  {
+    "key": "lf_030_frustration-sticker",
+    "glyph": "😡",
+    "label": "Frustration Sticker",
+    "assetPath": "/emoji/lottiefiles/lf-030-lf-030-frustration-sticker.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/frustration-sticker-aTcVAl23XL",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Restful Designs",
+    "sourceName": "Frustration Sticker"
+  },
+  {
+    "key": "lf_032_emoji",
+    "glyph": "🙂",
+    "label": "Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-032-lf-032-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-S7hqSH9OGv",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Musa Adanur",
+    "sourceName": "Emoji"
+  },
+  {
+    "key": "lf_037_sad-emoji",
+    "glyph": "😢",
+    "label": "Sad Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-037-lf-037-sad-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/sad-emoji-1LoIza1XfT",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Neon Agency",
+    "sourceName": "Sad Emoji"
+  },
+  {
+    "key": "lf_047_emoji-meh",
+    "glyph": "😐",
+    "label": "Emoji - Meh",
+    "assetPath": "/emoji/lottiefiles/lf-047-lf-047-emoji-meh.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-meh-wrvk6CeK5O",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Gio",
+    "sourceName": "Emoji - Meh"
+  },
+  {
+    "key": "lf_050_rate-us-face-animation-step-5",
+    "glyph": "🙂",
+    "label": "Rate us - Face Animation (Step 5)",
+    "assetPath": "/emoji/lottiefiles/lf-050-lf-050-rate-us-face-animation-step-5.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/rate-us-face-animation-step-5-lH8a5V48pB",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Di Smolskii",
+    "sourceName": "Rate us - Face Animation (Step 5)"
+  },
+  {
+    "key": "lf_051_angry-emoji",
+    "glyph": "😡",
+    "label": "Angry Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-051-lf-051-angry-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/angry-emoji-8iOdUadm9P",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Gio",
+    "sourceName": "Angry Emoji"
+  },
+  {
+    "key": "lf_056_sad-failed",
+    "glyph": "😢",
+    "label": "Sad - Failed",
+    "assetPath": "/emoji/lottiefiles/lf-056-lf-056-sad-failed.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/sad-failed-bvW4kvMB7k",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Oyinloluwa Adedoyin",
+    "sourceName": "Sad - Failed"
+  },
+  {
+    "key": "lf_102_angry-emoji-lottie-json-animation",
+    "glyph": "😡",
+    "label": "Angry emoji Lottie JSON animation",
+    "assetPath": "/emoji/lottiefiles/lf-102-lf-102-angry-emoji-lottie-json-animati.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/angry-emoji-lottie-json-animation-vAUxLSDdeo",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Weblodge",
+    "sourceName": "Angry emoji Lottie JSON animation"
+  },
+  {
+    "key": "lf_114_emoji-wow-happy-halloween-day",
+    "glyph": "😄",
+    "label": "Emoji(wow) Happy Halloween Day",
+    "assetPath": "/emoji/lottiefiles/lf-114-lf-114-emoji-wow-happy-halloween-day.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-wow-happy-halloween-day-gTTeeQbAjU",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Y Kos",
+    "sourceName": "Emoji(wow) Happy Halloween Day"
+  },
+  {
+    "key": "lf_116_rate-us-face-animation-step-3",
+    "glyph": "🙂",
+    "label": "Rate us - Face Animation (Step 3)",
+    "assetPath": "/emoji/lottiefiles/lf-116-lf-116-rate-us-face-animation-step-3.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/rate-us-face-animation-step-3-wnBiAyHimn",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Di Smolskii",
+    "sourceName": "Rate us - Face Animation (Step 3)"
+  },
+  {
+    "key": "lf_143_smile-05",
+    "glyph": "😄",
+    "label": "smile_05",
+    "assetPath": "/emoji/lottiefiles/lf-143-lf-143-smile-05.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/smile-05-ZyuVN1bEjU",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Scoach D",
+    "sourceName": "smile_05"
+  },
+  {
+    "key": "lf_145_waving-hand",
+    "glyph": "👋",
+    "label": "Waving hand",
+    "assetPath": "/emoji/lottiefiles/lf-145-lf-145-waving-hand.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/waving-hand-bSrNDbCydB",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Jitu Raut",
+    "sourceName": "Waving hand"
+  },
+  {
+    "key": "lf_149_pointing-up-hand",
+    "glyph": "👋",
+    "label": "Pointing up hand",
+    "assetPath": "/emoji/lottiefiles/lf-149-lf-149-pointing-up-hand.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/pointing-up-hand-dDmt1uLRVQ",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Jitu Raut",
+    "sourceName": "Pointing up hand"
+  },
+  {
+    "key": "lf_167_rate-us-face-animation-step-1",
+    "glyph": "🙂",
+    "label": "Rate us - Face Animation (Step 1)",
+    "assetPath": "/emoji/lottiefiles/lf-167-lf-167-rate-us-face-animation-step-1.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/rate-us-face-animation-step-1-GgMzQ51KeO",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Di Smolskii",
+    "sourceName": "Rate us - Face Animation (Step 1)"
+  },
+  {
+    "key": "lf_171_smiley-emoji",
+    "glyph": "😄",
+    "label": "Smiley Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-171-lf-171-smiley-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/smiley-emoji-kjlRLzlEEB",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Lottie Creator",
+    "sourceName": "Smiley Emoji"
+  },
+  {
+    "key": "lf_172_nap-emoji",
+    "glyph": "😴",
+    "label": "Nap Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-172-lf-172-nap-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/nap-emoji-VjMN0LMffA",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Bashir Ahmad",
+    "sourceName": "Nap Emoji"
+  },
+  {
+    "key": "lf_176_laughing-3d-emoji",
+    "glyph": "😂",
+    "label": "Laughing 3D Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-176-lf-176-laughing-3d-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/laughing-3d-emoji-CkcZKSYBDP",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Permadi Creative",
+    "sourceName": "Laughing 3D Emoji"
+  },
+  {
+    "key": "lf_182_happy-emoji",
+    "glyph": "😄",
+    "label": "Happy Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-182-lf-182-happy-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/happy-emoji-CtXrRGe9VP",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Oyinloluwa Adedoyin",
+    "sourceName": "Happy Emoji"
+  },
+  {
+    "key": "lf_189_cry-3d-emoji",
+    "glyph": "😭",
+    "label": "Cry 3D Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-189-lf-189-cry-3d-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/cry-3d-emoji-0rJ14RkTrY",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Permadi Creative",
+    "sourceName": "Cry 3D Emoji"
+  },
+  {
+    "key": "lf_208_angel-emoji-lottie-json-animation",
+    "glyph": "😇",
+    "label": "Angel emoji Lottie JSON animation",
+    "assetPath": "/emoji/lottiefiles/lf-208-lf-208-angel-emoji-lottie-json-animati.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/angel-emoji-lottie-json-animation-zzecxnMtUW",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Weblodge",
+    "sourceName": "Angel emoji Lottie JSON animation"
+  },
+  {
+    "key": "lf_214_pointing-down-hand",
+    "glyph": "👋",
+    "label": "Pointing down hand",
+    "assetPath": "/emoji/lottiefiles/lf-214-lf-214-pointing-down-hand.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/pointing-down-hand-lsT1pROq0l",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Jitu Raut",
+    "sourceName": "Pointing down hand"
+  },
+  {
+    "key": "lf_216_cry-emoji",
+    "glyph": "😭",
+    "label": "Cry Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-216-lf-216-cry-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/cry-emoji-cxRedfWldn",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Neon Agency",
+    "sourceName": "Cry Emoji"
+  },
+  {
+    "key": "lf_218_heart-love",
+    "glyph": "😍",
+    "label": "Heart Love",
+    "assetPath": "/emoji/lottiefiles/lf-218-lf-218-heart-love.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/heart-love-J6vpJ348H3",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Oyinloluwa Adedoyin",
+    "sourceName": "Heart Love"
+  },
+  {
+    "key": "lf_227_pointing-right-hand",
+    "glyph": "👋",
+    "label": "Pointing right hand",
+    "assetPath": "/emoji/lottiefiles/lf-227-lf-227-pointing-right-hand.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/pointing-right-hand-lGcOeGahQH",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Jitu Raut",
+    "sourceName": "Pointing right hand"
+  },
+  {
+    "key": "lf_228_smile-03",
+    "glyph": "😄",
+    "label": "smile_03",
+    "assetPath": "/emoji/lottiefiles/lf-228-lf-228-smile-03.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/smile-03-70zLYHVaI4",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Scoach D",
+    "sourceName": "smile_03"
+  },
+  {
+    "key": "lf_232_dizzy-3d-emoji",
+    "glyph": "😮",
+    "label": "Dizzy 3D Emoji",
+    "assetPath": "/emoji/lottiefiles/lf-232-lf-232-dizzy-3d-emoji.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/dizzy-3d-emoji-uRSzIWqsYJ",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Permadi Creative",
+    "sourceName": "Dizzy 3D Emoji"
+  },
+  {
+    "key": "lf_233_thumbs-up",
+    "glyph": "👍",
+    "label": "Thumbs up",
+    "assetPath": "/emoji/lottiefiles/lf-233-lf-233-thumbs-up.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/thumbs-up-Zr1m6NptHq",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Jitu Raut",
+    "sourceName": "Thumbs up"
+  },
+  {
+    "key": "lf_235_emoji-17",
+    "glyph": "🙂",
+    "label": "Emoji 17",
+    "assetPath": "/emoji/lottiefiles/lf-235-lf-235-emoji-17.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-17-TxGB5QLatg",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Neon Agency",
+    "sourceName": "Emoji 17"
+  },
+  {
+    "key": "lf_239_purple-face",
+    "glyph": "🙂",
+    "label": "Purple Face",
+    "assetPath": "/emoji/lottiefiles/lf-239-lf-239-purple-face.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/purple-face-dDjewxnu9m",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "Samer Odeh",
+    "sourceName": "Purple Face"
+  },
+  {
+    "key": "lf_244_emoji-3",
+    "glyph": "🙂",
+    "label": "Emoji 3",
+    "assetPath": "/emoji/lottiefiles/lf-244-lf-244-emoji-3.gif",
+    "sourceUrl": "https://lottiefiles.com/free-animation/emoji-3-8rly1yH6S0",
+    "licenseUrl": "https://lottiefiles.com/page/license",
+    "creator": "john ope",
+    "sourceName": "Emoji 3"
+  }
+]

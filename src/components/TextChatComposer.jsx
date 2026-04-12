@@ -1,3 +1,4 @@
+import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import {
   buildVoiceMessageLabel,
@@ -134,7 +135,7 @@ export default function TextChatComposer({
               aria-label="Открыть смайлики"
               aria-expanded={composerEmojiPickerOpen}
             >
-              <span className="composer-tool__emoji" aria-hidden="true">🙂</span>
+              <AnimatedEmojiGlyph emoji={COMPOSER_EMOJI_OPTIONS[0]} className="composer-tool__emoji" />
             </button>
 
             {ENABLE_SPEECH_INPUT_BUTTON ? (
@@ -164,7 +165,7 @@ export default function TextChatComposer({
                       title={emojiOption.label}
                       aria-label={emojiOption.label}
                     >
-                      <span aria-hidden="true">{emojiOption.glyph}</span>
+                      <AnimatedEmojiGlyph emoji={emojiOption} />
                     </button>
                   ))}
                 </div>
