@@ -1,19 +1,15 @@
-import * as signalR from "@microsoft/signalr";
+﻿import * as signalR from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import {
   AudioPresets,
-  ExternalE2EEKeyProvider,
   Room,
   RoomEvent,
   ScreenSharePresets,
   Track,
   VideoPreset,
   VideoQuality,
-  isE2EESupported,
 } from "livekit-client";
 import { API_BASE_URL, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION } from "../config/runtime";
-import { ensureDailySharedChannelKey, ensureE2eeDeviceIdentity } from "../e2ee/chatEncryption";
-import { createVoiceChannelPassphrase, unwrapVoiceChannelPassphrase, wrapVoiceChannelPassphrase } from "../e2ee/voiceEncryption";
 import {
   authFetch,
   getApiErrorMessage,
@@ -46,7 +42,6 @@ const MICROPHONE_TRACK_NAME = "microphone";
 const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
-const ENABLE_VOICE_E2EE = false;
 const VOICE_DEBUG_PREFIX = "[voice]";
 const AUDIO_SAMPLE_RATE = 48_000;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
@@ -272,11 +267,6 @@ export function createVoiceRoomClient({
   let isIntentionalRoomDisconnect = false;
   let isSelfMicMuted = false;
   let isSelfDeafened = false;
-  let currentVoiceChannelPassphrase = "";
-  let currentVoiceChannelE2eeEnabled = false;
-  let voiceE2eeWorker = null;
-  let voiceE2eeKeyProvider = null;
-  let pendingVoiceE2eeEnvelopeRequest = null;
   let preferredRemoteShareUserId = "";
 
   const remoteScreenShares = new Map();
@@ -367,7 +357,7 @@ export function createVoiceRoomClient({
       participants.push({
         ...getParticipantSnapshot(room.localParticipant),
         userId: String(currentUser?.id || room.localParticipant.identity || ""),
-        name: getDisplayName(currentUser || {}) || room.localParticipant.name || "Вы",
+        name: getDisplayName(currentUser || {}) || room.localParticipant.name || "Р’С‹",
         avatar: getAvatar(currentUser || {}) || DEFAULT_AVATAR,
         isSelf: true,
       });
@@ -1022,7 +1012,6 @@ export function createVoiceRoomClient({
     micPublication = null;
     localShareVideoPublication = null;
     localShareAudioPublication = null;
-    disposeVoiceEncryptionState();
     roomActiveSpeakerIds.clear();
     emitSpeakingUsers();
     clearRemoteScreens();
@@ -1084,101 +1073,6 @@ export function createVoiceRoomClient({
 
     emitLocalScreenState();
     await updateScreenShareStatus(false).catch(() => {});
-  };
-
-  const clearPendingVoiceE2eeEnvelopeRequest = (reason = "") => {
-    if (!pendingVoiceE2eeEnvelopeRequest) {
-      return;
-    }
-
-    const { timeoutId, reject } = pendingVoiceE2eeEnvelopeRequest;
-    window.clearTimeout(timeoutId);
-    pendingVoiceE2eeEnvelopeRequest = null;
-    if (reason) {
-      reject(new Error(reason));
-    }
-  };
-
-  const disposeVoiceEncryptionState = ({ clearPassphrase = true } = {}) => {
-    clearPendingVoiceE2eeEnvelopeRequest();
-
-    if (voiceE2eeWorker) {
-      voiceE2eeWorker.terminate();
-      voiceE2eeWorker = null;
-    }
-
-    voiceE2eeKeyProvider = null;
-    currentVoiceChannelE2eeEnabled = false;
-
-    if (clearPassphrase) {
-      currentVoiceChannelPassphrase = "";
-    }
-  };
-
-  const createVoiceE2eeWorker = () =>
-    new Worker(new URL("../workers/livekitE2ee.worker.js", import.meta.url), { type: "module" });
-
-  const setupVoiceEncryptionOptions = async (passphrase) => {
-    disposeVoiceEncryptionState({ clearPassphrase: false });
-    const keyProvider = new ExternalE2EEKeyProvider();
-    const worker = createVoiceE2eeWorker();
-    await keyProvider.setKey(String(passphrase || ""));
-    voiceE2eeWorker = worker;
-    voiceE2eeKeyProvider = keyProvider;
-    currentVoiceChannelPassphrase = String(passphrase || "");
-    currentVoiceChannelE2eeEnabled = Boolean(passphrase);
-    return {
-      keyProvider,
-      worker,
-    };
-  };
-
-  const waitForVoiceE2eeEnvelope = (channelName, timeoutMs = 4000) =>
-    new Promise((resolve, reject) => {
-      clearPendingVoiceE2eeEnvelopeRequest();
-      const timeoutId = window.setTimeout(() => {
-        pendingVoiceE2eeEnvelopeRequest = null;
-        reject(new Error("No encrypted LiveKit room key was received from current participants."));
-      }, timeoutMs);
-
-      pendingVoiceE2eeEnvelopeRequest = {
-        channelName: String(channelName || ""),
-        resolve,
-        reject,
-        timeoutId,
-      };
-    });
-
-  const resolveVoiceChannelPassphrase = async (channelName, user, existingParticipants = []) => {
-    if (!ENABLE_VOICE_E2EE) {
-      return "";
-    }
-
-    if (!isE2EESupported()) {
-      return "";
-    }
-
-    try {
-      const sharedKey = await ensureDailySharedChannelKey({
-        channelId: channelName,
-        user,
-        scope: "voice",
-      });
-      return bytesToBase64(sharedKey.rawKey);
-    } catch (dailyKeyError) {
-      console.warn("Voice daily E2EE fallback:", dailyKeyError?.message || dailyKeyError);
-    }
-
-    await ensureE2eeDeviceIdentity(user);
-
-    if (!Array.isArray(existingParticipants) || existingParticipants.length === 0) {
-      return createVoiceChannelPassphrase();
-    }
-
-    const envelopePromise = waitForVoiceE2eeEnvelope(channelName);
-    await signalConnection.invoke("RequestVoiceE2eeKey", channelName);
-    const envelope = await envelopePromise;
-    return unwrapVoiceChannelPassphrase({ envelope, user });
   };
 
   const applyPublishedAudioState = async () => {
@@ -1566,22 +1460,6 @@ export function createVoiceRoomClient({
       }
 
       const session = await fetchLiveKitSession(channelName, user);
-      let encryptionOptions = null;
-
-      if (ENABLE_VOICE_E2EE) {
-        try {
-          const voicePassphrase = await resolveVoiceChannelPassphrase(channelName, user, existingParticipants);
-          if (voicePassphrase) {
-            encryptionOptions = await setupVoiceEncryptionOptions(voicePassphrase);
-          }
-        } catch (error) {
-          console.warn("Voice E2EE fallback:", error?.message || error);
-          disposeVoiceEncryptionState();
-        }
-      } else {
-        disposeVoiceEncryptionState();
-      }
-
       let nextRoom = null;
       try {
         nextRoom = new Room({
@@ -1589,7 +1467,6 @@ export function createVoiceRoomClient({
           dynacast: true,
           disconnectOnPageLeave: false,
           stopLocalTrackOnUnpublish: false,
-          ...(encryptionOptions ? { encryption: encryptionOptions } : {}),
         });
         bindRoomEvents(nextRoom);
 
@@ -1604,10 +1481,6 @@ export function createVoiceRoomClient({
           remoteParticipants: nextRoom.remoteParticipants.size,
           roomState: nextRoom.state,
         });
-
-        if (encryptionOptions) {
-          await nextRoom.setE2EEEnabled(true).catch(() => {});
-        }
 
         await nextRoom.startAudio()
           .then(() => {
@@ -1634,7 +1507,6 @@ export function createVoiceRoomClient({
 
         return nextRoom;
       } catch (error) {
-        disposeVoiceEncryptionState();
         if (room === nextRoom) {
           room = null;
         }
@@ -1683,52 +1555,6 @@ export function createVoiceRoomClient({
           isMicForced: Boolean(payload?.isMicForced ?? payload?.IsMicForced),
           isDeafenedForced: Boolean(payload?.isDeafenedForced ?? payload?.IsDeafenedForced),
         });
-      });
-
-      signalConnection.on("voice:e2ee-key-request", (payload) => {
-        void (async () => {
-          if (!currentUser?.id || !currentVoiceChannelPassphrase || !currentChannel || !currentVoiceChannelE2eeEnabled) {
-            return;
-          }
-
-          const requesterUserId = String(payload?.requesterUserId || "");
-          const requestedChannel = String(payload?.channel || "");
-          const requesterPublicKeyJwk = String(payload?.requesterPublicKeyJwk || "");
-          if (!requesterUserId || requesterUserId === String(currentUser.id) || requestedChannel !== currentChannel || !requesterPublicKeyJwk) {
-            return;
-          }
-
-          try {
-            const identity = await ensureE2eeDeviceIdentity(currentUser);
-            const envelope = await wrapVoiceChannelPassphrase({
-              passphrase: currentVoiceChannelPassphrase,
-              recipientPublicKeyJwk: requesterPublicKeyJwk,
-              senderIdentity: identity,
-            });
-            await signalConnection.invoke("SubmitVoiceE2eeEnvelope", requestedChannel, requesterUserId, {
-              wrapIv: envelope.wrapIv,
-              wrappedKey: envelope.wrappedKey,
-            });
-          } catch (error) {
-            console.warn("Failed to share voice E2EE key:", error?.message || error);
-          }
-        })();
-      });
-
-      signalConnection.on("voice:e2ee-key-envelope", (payload) => {
-        if (!pendingVoiceE2eeEnvelopeRequest) {
-          return;
-        }
-
-        const requestedChannel = pendingVoiceE2eeEnvelopeRequest.channelName;
-        if (String(payload?.channel || "") !== requestedChannel) {
-          return;
-        }
-
-        const { resolve, timeoutId } = pendingVoiceE2eeEnvelopeRequest;
-        window.clearTimeout(timeoutId);
-        pendingVoiceE2eeEnvelopeRequest = null;
-        resolve(payload);
       });
 
       signalConnection.onreconnected(async () => {

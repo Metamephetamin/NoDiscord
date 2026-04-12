@@ -1,0 +1,618 @@
+﻿import { useMemo } from "react";
+import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
+import { API_URL } from "../config/runtime";
+import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
+import { authFetch, getStoredToken } from "../utils/auth";
+import { copyTextToClipboard } from "../utils/clipboard";
+import { resolveMediaUrl } from "../utils/media";
+import {
+  buildDownloadFileName,
+  clampNumber,
+  getTargetDisplayName,
+  MAX_PINNED_MESSAGES,
+  MEDIA_PREVIEW_MAX_ZOOM,
+  MEDIA_PREVIEW_MIN_ZOOM,
+  saveBlobWithBrowser,
+  shouldUseAuthenticatedDownload,
+} from "../utils/textChatHelpers";
+import {
+  COMPAT_FORWARD_DELAY_MS,
+  createPinnedSnapshot,
+  getChatErrorMessage,
+  getDownloadLabel,
+  getMessagePreview,
+  getUserName,
+  isMissingHubMethodError,
+  normalizeAttachmentItems,
+  normalizeReactions,
+  PRIMARY_MESSAGE_REACTION_OPTIONS,
+  sleep,
+  STICKER_MESSAGE_REACTION_OPTIONS,
+} from "../utils/textChatModel";
+
+export default function useTextChatMessageActions({
+  searchQuery,
+  messages,
+  messageRefs,
+  setHighlightedMessageId,
+  selectedMessageIds,
+  setSelectedMessageIds,
+  selectionMode,
+  setSelectionMode,
+  pinnedMessages,
+  setPinnedMessages,
+  forwardModal,
+  setForwardModal,
+  directTargets,
+  setMessageContextMenu,
+  setReactionStickerPanelOpen,
+  setMediaPreview,
+  mediaPreviewVideoRef,
+  messageContextMenu,
+  pinnedMessageIdSet,
+  setErrorMessage,
+  user,
+  scopedChannelId,
+  buildForwardPayloadForTargetChannel,
+  startEditingMessage,
+  currentUserId,
+}) {
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const searchResults = useMemo(() => {
+    if (normalizedSearchQuery.length < 2) {
+      return [];
+    }
+
+    return messages
+      .filter((messageItem) => {
+        const messageText = String(messageItem.message || "").toLowerCase();
+        const attachmentName = normalizeAttachmentItems(messageItem)
+          .map((attachment) => String(attachment.attachmentName || "").toLowerCase())
+          .join(" ");
+        return messageText.includes(normalizedSearchQuery) || attachmentName.includes(normalizedSearchQuery);
+      })
+      .map((messageItem) => ({
+        id: messageItem.id,
+        username: messageItem.username,
+        timestamp: messageItem.timestamp,
+        preview: getMessagePreview(messageItem),
+      }));
+  }, [messages, normalizedSearchQuery]);
+
+  const normalizedForwardQuery = forwardModal.query.trim().toLowerCase();
+  const availableForwardTargets = useMemo(() => {
+    if (!normalizedForwardQuery) {
+      return directTargets;
+    }
+
+    return directTargets.filter((target) => {
+      const displayName = getTargetDisplayName(target).toLowerCase();
+      const email = String(target?.email || "").toLowerCase();
+      return displayName.includes(normalizedForwardQuery) || email.includes(normalizedForwardQuery);
+    });
+  }, [directTargets, normalizedForwardQuery]);
+
+  const forwardableMessages = useMemo(() => {
+    const messageIds = new Set((forwardModal.messageIds || []).map((id) => String(id)));
+    return messages
+      .filter((messageItem) => messageIds.has(String(messageItem.id)))
+      .sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
+  }, [forwardModal.messageIds, messages]);
+
+  const scrollToMessage = (messageId) => {
+    const element = messageRefs.current.get(messageId);
+    if (!element) {
+      return;
+    }
+
+    setHighlightedMessageId(String(messageId));
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === String(messageId) ? "" : current));
+    }, 2200);
+  };
+
+  const toggleMessageSelection = (messageId) => {
+    const normalizedMessageId = String(messageId);
+    setSelectedMessageIds((previous) => {
+      const exists = previous.some((itemId) => String(itemId) === normalizedMessageId);
+      return exists ? previous.filter((itemId) => String(itemId) !== normalizedMessageId) : [...previous, messageId];
+    });
+  };
+
+  const openSelectionMode = (messageId) => {
+    setSelectionMode(true);
+    setSelectedMessageIds((previous) => {
+      const normalizedMessageId = String(messageId);
+      return previous.some((itemId) => String(itemId) === normalizedMessageId) ? previous : [...previous, messageId];
+    });
+    setMessageContextMenu(null);
+  };
+
+  const clearSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedMessageIds([]);
+  };
+
+  const togglePinnedMessage = (messageItem) => {
+    if (!messageItem?.id) {
+      return;
+    }
+
+    const normalizedMessageId = String(messageItem.id);
+    setPinnedMessages((previous) => {
+      const exists = previous.some((item) => String(item.id) === normalizedMessageId);
+      return exists
+        ? previous.filter((item) => String(item.id) !== normalizedMessageId)
+        : [createPinnedSnapshot(messageItem), ...previous].slice(0, MAX_PINNED_MESSAGES);
+    });
+    setMessageContextMenu(null);
+  };
+
+  const openForwardModal = (messageIds) => {
+    const normalizedIds = Array.from(new Set((messageIds || []).map((id) => String(id))));
+    if (!normalizedIds.length) {
+      return;
+    }
+
+    setForwardModal({
+      open: true,
+      messageIds: normalizedIds,
+      targetIds: [],
+      query: "",
+      submitting: false,
+    });
+    setMessageContextMenu(null);
+  };
+
+  const closeForwardModal = () => {
+    setForwardModal({
+      open: false,
+      messageIds: [],
+      targetIds: [],
+      query: "",
+      submitting: false,
+    });
+  };
+
+  const toggleForwardTarget = (targetId) => {
+    const normalizedTargetId = String(targetId);
+    setForwardModal((previous) => {
+      const exists = previous.targetIds.some((itemId) => String(itemId) === normalizedTargetId);
+      return {
+        ...previous,
+        targetIds: exists
+          ? previous.targetIds.filter((itemId) => String(itemId) !== normalizedTargetId)
+          : [...previous.targetIds, normalizedTargetId],
+      };
+    });
+  };
+
+  const openMediaPreview = (type, url, name, contentType = "", messageId = "", attachmentEncryption = null, sourceUrl = "", attachmentIndex = 0, galleryItems = []) => {
+    if (!url) {
+      return;
+    }
+
+    const fallbackItem = {
+      type,
+      url,
+      name: name || (type === "image" ? "РР·РѕР±СЂР°Р¶РµРЅРёРµ" : "Р’РёРґРµРѕ"),
+      contentType,
+      messageId: String(messageId || ""),
+      attachmentIndex: Number(attachmentIndex) || 0,
+      attachmentEncryption,
+      sourceUrl: sourceUrl || url,
+    };
+    const items = Array.isArray(galleryItems) && galleryItems.length ? galleryItems : [fallbackItem];
+    const matchingIndex = items.findIndex((item) =>
+      String(item.messageId || "") === String(messageId || "")
+      && Number(item.attachmentIndex || 0) === Number(attachmentIndex || 0));
+    const activeIndex = matchingIndex >= 0 ? matchingIndex : 0;
+    const activeItem = items[activeIndex] || fallbackItem;
+
+    setMediaPreview({
+      ...activeItem,
+      items,
+      activeIndex,
+      zoom: 1,
+    });
+  };
+
+  const updateMediaPreviewIndex = (direction) => {
+    setMediaPreview((current) => {
+      if (!current?.items?.length || current.items.length < 2) {
+        return current;
+      }
+
+      const itemCount = current.items.length;
+      const nextIndex = (Number(current.activeIndex || 0) + direction + itemCount) % itemCount;
+      const nextItem = current.items[nextIndex] || current.items[0];
+      return {
+        ...current,
+        ...nextItem,
+        activeIndex: nextIndex,
+        zoom: 1,
+      };
+    });
+  };
+
+  const updateMediaPreviewZoom = (delta) => {
+    setMediaPreview((current) => (
+      current
+        ? { ...current, zoom: clampNumber((Number(current.zoom) || 1) + delta, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_MAX_ZOOM) }
+        : current
+    ));
+  };
+
+  const resetMediaPreviewZoom = () => {
+    setMediaPreview((current) => (current ? { ...current, zoom: 1 } : current));
+  };
+
+  const openMessageContextMenu = (event, messageItem, isOwnMessage) => {
+    event.preventDefault();
+
+    const resolvedAttachmentContentType = messageItem?.attachmentContentType || "";
+    const attachmentKind = resolvedAttachmentContentType.startsWith("image/")
+      ? "image"
+      : resolvedAttachmentContentType.startsWith("video/")
+        ? "video"
+        : messageItem?.attachmentUrl
+          ? "file"
+          : "";
+    const hasAttachment = Boolean(messageItem?.attachmentUrl);
+    const hasText = Boolean(String(messageItem?.message || messageItem?.attachmentName || "").trim());
+    const canEdit = Boolean(isOwnMessage) && Boolean(String(messageItem?.message || "").trim());
+    const enabledActionCount = 7 + (hasAttachment ? 1 : 0);
+    const menuWidth = 224;
+    const reactionPanelHeight = 58;
+    const menuHeight = reactionPanelHeight + 16 + enabledActionCount * 46;
+    const padding = 12;
+    const nextX = Math.min(event.clientX, window.innerWidth - menuWidth - padding);
+    const nextY = Math.min(event.clientY, window.innerHeight - menuHeight - padding);
+
+    setReactionStickerPanelOpen(false);
+    setMessageContextMenu({
+      x: Math.max(padding, nextX),
+      y: Math.max(padding, nextY),
+      messageId: messageItem.id,
+      text: String(messageItem.message || messageItem.attachmentName || "").trim(),
+      attachmentKind,
+      attachmentUrl: messageItem?.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : "",
+      attachmentSourceUrl: messageItem?.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : "",
+      attachmentName: messageItem?.attachmentName || "",
+      attachmentContentType: resolvedAttachmentContentType,
+      attachmentEncryption: null,
+      hasAttachment,
+      hasText,
+      canEdit,
+      isPinned: pinnedMessageIdSet.has(String(messageItem.id)),
+      canDelete: Boolean(isOwnMessage),
+    });
+  };
+
+  const handleCopyMessageText = async () => {
+    if (!messageContextMenu?.text) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(messageContextMenu.text);
+      setErrorMessage("");
+    } catch {
+      setErrorMessage("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ С‚РµРєСЃС‚ РІ Р±СѓС„РµСЂ РѕР±РјРµРЅР°.");
+    } finally {
+      setMessageContextMenu(null);
+    }
+  };
+
+  const handleDeleteMessage = async () => {
+    if (!messageContextMenu?.canDelete || !messageContextMenu?.messageId) {
+      return;
+    }
+
+    try {
+      await chatConnection.invoke("DeleteMessage", messageContextMenu.messageId);
+      setErrorMessage("");
+    } catch (error) {
+      console.error("DeleteMessage error:", error);
+      setErrorMessage(getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ."));
+    } finally {
+      setMessageContextMenu(null);
+    }
+  };
+
+  const handleStartEditingMessage = () => {
+    if (!messageContextMenu?.canEdit || !messageContextMenu?.messageId) {
+      return;
+    }
+
+    const messageItem = messages.find((item) => String(item.id) === String(messageContextMenu.messageId));
+    if (!messageItem) {
+      setMessageContextMenu(null);
+      return;
+    }
+
+    startEditingMessage(messageItem);
+  };
+
+  const handleDownloadAttachment = async (attachment = messageContextMenu) => {
+    if (!attachment?.attachmentUrl) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      const sourceAttachmentUrl = attachment.attachmentSourceUrl || attachment.attachmentUrl;
+      let resolvedContentType = attachment.attachmentContentType || "";
+      let fileName = buildDownloadFileName({
+        type: attachment.attachmentKind,
+        url: sourceAttachmentUrl,
+        name: attachment.attachmentName,
+        contentType: resolvedContentType,
+      });
+      let fileBytes = null;
+
+      if (window?.electronDownloads?.fetchAndSave) {
+        const headers = shouldUseAuthenticatedDownload(sourceAttachmentUrl, API_URL) && getStoredToken()
+          ? { Authorization: `Bearer ${getStoredToken()}` }
+          : {};
+        const result = await window.electronDownloads.fetchAndSave({
+          url: sourceAttachmentUrl,
+          defaultFileName: fileName,
+          headers,
+        });
+
+        if (!result?.canceled) {
+          setMessageContextMenu(null);
+        }
+        return;
+      } else {
+        const response = shouldUseAuthenticatedDownload(sourceAttachmentUrl, API_URL)
+          ? await authFetch(sourceAttachmentUrl)
+          : await fetch(sourceAttachmentUrl);
+
+        if (!response.ok) {
+          throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С„Р°Р№Р» РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ.");
+        }
+
+        resolvedContentType = response.headers.get("content-type") || attachment.attachmentContentType || "";
+        fileName = buildDownloadFileName({
+          type: attachment.attachmentKind,
+          url: sourceAttachmentUrl,
+          name: attachment.attachmentName,
+          contentType: resolvedContentType,
+        });
+        fileBytes = new Uint8Array(await response.arrayBuffer());
+      }
+
+      if (window?.electronDownloads?.saveFile) {
+        const result = await window.electronDownloads.saveFile({
+          defaultFileName: fileName,
+          bytes: Array.from(fileBytes),
+        });
+
+        if (!result?.canceled) {
+          setMessageContextMenu(null);
+        }
+        return;
+      }
+
+      await saveBlobWithBrowser(new Blob([fileBytes], { type: resolvedContentType || "application/octet-stream" }), fileName);
+      setMessageContextMenu(null);
+    } catch (error) {
+      console.error("Download attachment error:", error);
+      setErrorMessage(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ С„Р°Р№Р».");
+      setMessageContextMenu(null);
+    }
+  };
+
+  const handleToggleReaction = async (messageId, reactionOption) => {
+    if (!messageId || !reactionOption?.key || !reactionOption?.glyph) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      await chatConnection.invoke("ToggleReaction", messageId, reactionOption.key, reactionOption.glyph);
+      setMessageContextMenu(null);
+    } catch (error) {
+      console.error("ToggleReaction error:", error);
+      setErrorMessage(getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕСЃС‚Р°РІРёС‚СЊ СЂРµР°РєС†РёСЋ."));
+    }
+  };
+
+  const handleOpenMediaPreviewFullscreen = async () => {
+    const mediaElement = mediaPreviewVideoRef.current;
+    const requestFullscreen =
+      mediaElement?.requestFullscreen
+      || mediaElement?.webkitRequestFullscreen
+      || mediaElement?.mozRequestFullScreen
+      || mediaElement?.msRequestFullscreen;
+
+    if (!requestFullscreen) {
+      return;
+    }
+
+    try {
+      await requestFullscreen.call(mediaElement);
+    } catch (error) {
+      console.error("Fullscreen preview error:", error);
+    }
+  };
+
+  const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
+    const normalizedPayload = Array.isArray(payload)
+      ? payload.filter((item) => {
+          const attachments = Array.isArray(item?.attachments) ? item.attachments : [];
+          return String(item?.message || "").trim()
+            || String(item?.attachmentUrl || "").trim()
+            || item?.voiceMessage
+            || attachments.some((attachment) => String(attachment?.attachmentUrl || "").trim() || attachment?.voiceMessage);
+        })
+      : [];
+
+    if (!normalizedPayload.length) {
+      throw new Error("РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РѕС‚РїСЂР°РІРєРё.");
+    }
+
+    const containsTextPayload = normalizedPayload.some((item) => String(item?.message || "").trim());
+
+    if (allowBatch && normalizedPayload.length > 1 && !containsTextPayload) {
+      try {
+        await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, normalizedPayload);
+        return;
+      } catch (error) {
+        if (!isMissingHubMethodError(error, "ForwardMessages")) {
+          throw error;
+        }
+      }
+    }
+
+    for (let index = 0; index < normalizedPayload.length; index += 1) {
+      const item = normalizedPayload[index];
+      const preparedTextPayload = await prepareOutgoingTextPayload({
+        text: String(item.message || ""),
+      });
+      const attachmentList = Array.isArray(item.attachments) ? item.attachments : [];
+      const primaryAttachment = attachmentList[0] || null;
+
+      await chatConnection.invoke(
+        "SendMessage",
+        targetChannelId,
+        getUserName(user),
+        preparedTextPayload.message,
+        avatar,
+        primaryAttachment?.attachmentUrl || item.attachmentUrl || null,
+        primaryAttachment?.attachmentName || item.attachmentName || null,
+        primaryAttachment?.attachmentSize || item.attachmentSize || null,
+        primaryAttachment?.attachmentContentType || item.attachmentContentType || null,
+        preparedTextPayload.encryption || null,
+        null,
+        Array.isArray(item.mentions) ? item.mentions : [],
+        primaryAttachment?.voiceMessage || item.voiceMessage || null,
+        attachmentList
+      );
+
+      if (index < normalizedPayload.length - 1) {
+        await sleep(COMPAT_FORWARD_DELAY_MS);
+      }
+    }
+  };
+
+  const handleForwardSubmit = async () => {
+    if (!forwardModal.targetIds.length) {
+      setErrorMessage("Р’С‹Р±РµСЂРёС‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ С‡Р°С‚ РїРѕР»СѓС‡Р°С‚РµР»СЏ.");
+      return;
+    }
+
+    if (!forwardableMessages.length) {
+      setErrorMessage("РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё СЃРѕРѕР±С‰РµРЅРёСЏ РґР»СЏ РїРµСЂРµСЃС‹Р»РєРё.");
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      setForwardModal((previous) => ({ ...previous, submitting: true }));
+
+      const connection = await startChatConnection();
+      if (!connection) {
+        throw new Error("РЎРµСЃСЃРёСЏ РЅРµРґРµР№СЃС‚РІРёС‚РµР»СЊРЅР°. Р’РѕР№РґРёС‚Рµ СЃРЅРѕРІР°.");
+      }
+
+      const avatar = user?.avatarUrl || user?.avatar || "";
+      const targetChannels = directTargets
+        .filter((target) => forwardModal.targetIds.some((targetId) => String(target.id) === String(targetId)))
+        .map((target) => ({
+          id: String(target.id),
+          channelId: String(target.directChannelId || ""),
+        }))
+        .filter((target) => target.channelId);
+
+      if (!targetChannels.length) {
+        throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ С‡Р°С‚С‹ РїРѕР»СѓС‡Р°С‚РµР»РµР№.");
+      }
+
+      for (const target of targetChannels) {
+        const payload = await buildForwardPayloadForTargetChannel(target.channelId, forwardableMessages);
+        if (!payload.length) {
+          throw new Error("РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РїРµСЂРµСЃС‹Р»РєРё.");
+        }
+
+        await sendMessagesCompat(target.channelId, avatar, payload, { allowBatch: false });
+      }
+
+      if (selectionMode) {
+        clearSelectionMode();
+      }
+
+      closeForwardModal();
+    } catch (error) {
+      console.error("Forward messages error:", error);
+      setErrorMessage(getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµСЃР»Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёСЏ."));
+      setForwardModal((previous) => ({ ...previous, submitting: false }));
+    }
+  };
+
+  const contextMenuActions = [
+    { id: "edit", label: "Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ", icon: "вњЋ", disabled: !messageContextMenu?.canEdit, hidden: false, onClick: handleStartEditingMessage },
+    { id: "reply", label: "РћС‚РІРµС‚РёС‚СЊ", icon: "в†©", disabled: true, hidden: false, onClick: () => {} },
+    {
+      id: "pin",
+      label: messageContextMenu?.isPinned ? "РћС‚РєСЂРµРїРёС‚СЊ" : "Р—Р°РєСЂРµРїРёС‚СЊ",
+      icon: "рџ“Њ",
+      disabled: false,
+      hidden: false,
+      onClick: () => {
+        const messageItem = messages.find((item) => String(item.id) === String(messageContextMenu?.messageId));
+        if (messageItem) {
+          togglePinnedMessage(messageItem);
+        }
+      },
+    },
+    {
+      id: "download",
+      label: getDownloadLabel(messageContextMenu?.attachmentKind),
+      icon: "v",
+      disabled: !messageContextMenu?.hasAttachment,
+      hidden: !messageContextMenu?.hasAttachment,
+      onClick: () => handleDownloadAttachment(),
+    },
+    { id: "copy", label: "РљРѕРїРёСЂРѕРІР°С‚СЊ С‚РµРєСЃС‚", icon: "в§‰", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
+    { id: "forward", label: "РџРµСЂРµСЃР»Р°С‚СЊ", icon: "в†—", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
+    { id: "delete", label: "РЈРґР°Р»РёС‚СЊ", icon: "рџ—‘", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
+    { id: "select", label: "Р’С‹Р±СЂР°С‚СЊ", icon: "вњ“", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
+  ].filter((action) => !action.hidden);
+
+  const contextMenuMessage = messageContextMenu
+    ? messages.find((item) => String(item.id) === String(messageContextMenu.messageId))
+    : null;
+  const contextMenuReactions = normalizeReactions(contextMenuMessage?.reactions);
+  const isContextReactionActive = (reactionOption) => contextMenuReactions.some((reaction) =>
+    reaction.key === reactionOption.key
+    && reaction.reactorUserIds.some((userId) => String(userId) === currentUserId));
+
+  return {
+    searchResults,
+    availableForwardTargets,
+    forwardableMessages,
+    scrollToMessage,
+    toggleMessageSelection,
+    openForwardModal,
+    clearSelectionMode,
+    closeForwardModal,
+    toggleForwardTarget,
+    openMediaPreview,
+    updateMediaPreviewIndex,
+    updateMediaPreviewZoom,
+    resetMediaPreviewZoom,
+    openMessageContextMenu,
+    handleDownloadAttachment,
+    handleToggleReaction,
+    handleOpenMediaPreviewFullscreen,
+    handleForwardSubmit,
+    contextMenuActions,
+    isContextReactionActive,
+    primaryReactions: PRIMARY_MESSAGE_REACTION_OPTIONS,
+    stickerReactions: STICKER_MESSAGE_REACTION_OPTIONS,
+  };
+}

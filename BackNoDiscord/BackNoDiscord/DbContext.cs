@@ -291,73 +291,6 @@ public class MessageReactionRecord
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-[Table("user_e2ee_keys")]
-public class UserE2eeKeyRecord
-{
-    [Column("id")]
-    public int Id { get; set; }
-
-    [Column("user_id")]
-    public int UserId { get; set; }
-
-    [Column("algorithm")]
-    public string Algorithm { get; set; } = "ECDH-P256";
-
-    [Column("public_key_jwk")]
-    public string PublicKeyJwk { get; set; } = "{}";
-
-    [Column("fingerprint")]
-    public string Fingerprint { get; set; } = string.Empty;
-
-    [Column("private_key_jwk_encrypted")]
-    public string? PrivateKeyJwkEncrypted { get; set; }
-
-    [Column("created_at")]
-    public DateTimeOffset CreatedAt { get; set; }
-
-    [Column("updated_at")]
-    public DateTimeOffset UpdatedAt { get; set; }
-}
-
-[Table("channel_e2ee_daily_keys")]
-public class ChannelE2eeDailyKeyRecord
-{
-    [Column("id")]
-    public int Id { get; set; }
-
-    [Column("scope")]
-    public string Scope { get; set; } = "text";
-
-    [Column("channel_id")]
-    public string ChannelId { get; set; } = string.Empty;
-
-    [Column("key_date")]
-    public string KeyDate { get; set; } = string.Empty;
-
-    [Column("recipient_user_id")]
-    public int RecipientUserId { get; set; }
-
-    [Column("creator_user_id")]
-    public int CreatorUserId { get; set; }
-
-    [Column("creator_fingerprint")]
-    public string CreatorFingerprint { get; set; } = string.Empty;
-
-    [Column("creator_public_key_jwk")]
-    public string CreatorPublicKeyJwk { get; set; } = "{}";
-
-    [Column("wrap_iv")]
-    public string WrapIv { get; set; } = string.Empty;
-
-    [Column("wrapped_key")]
-    public string WrappedKey { get; set; } = string.Empty;
-
-    [Column("created_at")]
-    public DateTimeOffset CreatedAt { get; set; }
-
-    [Column("updated_at")]
-    public DateTimeOffset UpdatedAt { get; set; }
-}
 
 public class AppDbContext : DbContext
 {
@@ -375,8 +308,6 @@ public class AppDbContext : DbContext
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
-    public DbSet<UserE2eeKeyRecord> UserE2eeKeys => Set<UserE2eeKeyRecord>();
-    public DbSet<ChannelE2eeDailyKeyRecord> ChannelE2eeDailyKeys => Set<ChannelE2eeDailyKeyRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -403,32 +334,6 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ReactionGlyph).IsRequired();
         });
 
-        modelBuilder.Entity<UserE2eeKeyRecord>(entity =>
-        {
-            entity.ToTable("user_e2ee_keys");
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.UserId).IsUnique();
-            entity.HasIndex(x => x.Fingerprint);
-            entity.Property(x => x.Algorithm).IsRequired();
-            entity.Property(x => x.PublicKeyJwk).IsRequired();
-            entity.Property(x => x.Fingerprint).IsRequired();
-            entity.Property(x => x.PrivateKeyJwkEncrypted).IsRequired(false);
-        });
-
-        modelBuilder.Entity<ChannelE2eeDailyKeyRecord>(entity =>
-        {
-            entity.ToTable("channel_e2ee_daily_keys");
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.Scope, x.ChannelId, x.KeyDate, x.RecipientUserId }).IsUnique();
-            entity.HasIndex(x => new { x.Scope, x.ChannelId, x.KeyDate });
-            entity.Property(x => x.Scope).IsRequired();
-            entity.Property(x => x.ChannelId).IsRequired();
-            entity.Property(x => x.KeyDate).IsRequired();
-            entity.Property(x => x.CreatorFingerprint).IsRequired();
-            entity.Property(x => x.CreatorPublicKeyJwk).IsRequired();
-            entity.Property(x => x.WrapIv).IsRequired();
-            entity.Property(x => x.WrappedKey).IsRequired();
-        });
 
         modelBuilder.Entity<User>(entity =>
         {

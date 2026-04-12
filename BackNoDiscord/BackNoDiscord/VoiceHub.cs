@@ -1,4 +1,4 @@
-using BackNoDiscord;
+﻿using BackNoDiscord;
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -199,99 +199,6 @@ public class VoiceHub : Hub
                 IsDeafenedForced = updatedParticipant.IsDeafenedForced
             });
         }
-    }
-
-    public async Task RequestVoiceE2eeKey(string channelName)
-    {
-        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
-        {
-            return;
-        }
-
-        var normalizedChannelName = UploadPolicies.TrimToLength(channelName, MaxChannelNameLength);
-        if (string.IsNullOrWhiteSpace(normalizedChannelName) ||
-            !string.Equals(_channels.GetChannelForUser(currentUser.UserId), normalizedChannelName, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var requesterKeyRecord = await ResolveUserE2eeKeyAsync(currentUser.UserId);
-        if (requesterKeyRecord is null)
-        {
-            throw new HubException("Current user has not published an E2EE key yet.");
-        }
-
-        var recipients = _channels
-            .GetParticipantsInChannel(normalizedChannelName)
-            .Where(item => !string.Equals(item.UserId, currentUser.UserId, StringComparison.Ordinal))
-            .Select(item => item.UserId)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        foreach (var recipientUserId in recipients)
-        {
-            if (_channels.TryGetConnectionId(recipientUserId, out var recipientConnectionId))
-            {
-                await Clients.Client(recipientConnectionId).SendAsync("voice:e2ee-key-request", new VoiceE2eeKeyRequestPayload
-                {
-                    Channel = normalizedChannelName,
-                    RequesterUserId = currentUser.UserId,
-                    RequesterName = currentUser.DisplayName,
-                    RequesterFingerprint = requesterKeyRecord.Fingerprint,
-                    RequesterPublicKeyJwk = requesterKeyRecord.PublicKeyJwk
-                });
-            }
-        }
-    }
-
-    public async Task SubmitVoiceE2eeEnvelope(string channelName, string targetUserId, VoiceE2eeKeyEnvelopeSubmission payload)
-    {
-        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
-        {
-            return;
-        }
-
-        var normalizedChannelName = UploadPolicies.TrimToLength(channelName, MaxChannelNameLength);
-        var normalizedTargetUserId = UploadPolicies.TrimToLength(targetUserId, 64);
-        if (string.IsNullOrWhiteSpace(normalizedChannelName) || string.IsNullOrWhiteSpace(normalizedTargetUserId))
-        {
-            return;
-        }
-
-        if (!string.Equals(_channels.GetChannelForUser(currentUser.UserId), normalizedChannelName, StringComparison.Ordinal) ||
-            !string.Equals(_channels.GetChannelForUser(normalizedTargetUserId), normalizedChannelName, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (!_channels.TryGetConnectionId(normalizedTargetUserId, out var targetConnectionId))
-        {
-            return;
-        }
-
-        var senderKeyRecord = await ResolveUserE2eeKeyAsync(currentUser.UserId);
-        if (senderKeyRecord is null)
-        {
-            throw new HubException("Current user has not published an E2EE key yet.");
-        }
-
-        var wrappedKey = UploadPolicies.TrimToLength(payload?.WrappedKey, 4096);
-        var wrapIv = UploadPolicies.TrimToLength(payload?.WrapIv, 256);
-        if (string.IsNullOrWhiteSpace(wrappedKey) || string.IsNullOrWhiteSpace(wrapIv))
-        {
-            return;
-        }
-
-        await Clients.Client(targetConnectionId).SendAsync("voice:e2ee-key-envelope", new VoiceE2eeKeyEnvelopePayload
-        {
-            Channel = normalizedChannelName,
-            SenderUserId = currentUser.UserId,
-            SenderName = currentUser.DisplayName,
-            SenderFingerprint = senderKeyRecord.Fingerprint,
-            SenderPublicKeyJwk = senderKeyRecord.PublicKeyJwk,
-            WrapIv = wrapIv,
-            WrappedKey = wrappedKey
-        });
     }
 
     public async Task RequestScreenShareOffer(string targetUserId)
@@ -501,17 +408,6 @@ public class VoiceHub : Hub
         return string.IsNullOrWhiteSpace(sanitized) ? fallback : sanitized;
     }
 
-    private Task<UserE2eeKeyRecord?> ResolveUserE2eeKeyAsync(string userId)
-    {
-        if (!int.TryParse(userId, out var numericUserId) || numericUserId <= 0)
-        {
-            return Task.FromResult<UserE2eeKeyRecord?>(null);
-        }
-
-        return _context.UserE2eeKeys
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.UserId == numericUserId);
-    }
 }
 
 public class JoinChannelResponse
@@ -564,28 +460,3 @@ public class ScreenShareChunkPayload
     public bool HasAudio { get; set; }
 }
 
-public class VoiceE2eeKeyRequestPayload
-{
-    public string Channel { get; set; } = string.Empty;
-    public string RequesterUserId { get; set; } = string.Empty;
-    public string RequesterName { get; set; } = string.Empty;
-    public string RequesterFingerprint { get; set; } = string.Empty;
-    public string RequesterPublicKeyJwk { get; set; } = string.Empty;
-}
-
-public class VoiceE2eeKeyEnvelopeSubmission
-{
-    public string WrapIv { get; set; } = string.Empty;
-    public string WrappedKey { get; set; } = string.Empty;
-}
-
-public class VoiceE2eeKeyEnvelopePayload
-{
-    public string Channel { get; set; } = string.Empty;
-    public string SenderUserId { get; set; } = string.Empty;
-    public string SenderName { get; set; } = string.Empty;
-    public string SenderFingerprint { get; set; } = string.Empty;
-    public string SenderPublicKeyJwk { get; set; } = string.Empty;
-    public string WrapIv { get; set; } = string.Empty;
-    public string WrappedKey { get; set; } = string.Empty;
-}
