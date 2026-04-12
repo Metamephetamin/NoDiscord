@@ -1,4 +1,4 @@
-﻿using BackNoDiscord.Security;
+using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Http;
@@ -211,12 +211,12 @@ public class AuthController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
         if (user == null)
         {
-            return BadRequest(new { message = "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРѕР№ РїРѕС‡С‚РѕР№ РЅРµ РЅР°Р№РґРµРЅ." });
+            return BadRequest(new { message = "Пользователь с такой почтой не найден." });
         }
 
         if (user.is_email_verified)
         {
-            return BadRequest(new { message = "РџРѕС‡С‚Р° СѓР¶Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅР°." });
+            return BadRequest(new { message = "Почта уже подтверждена." });
         }
 
         try
@@ -266,7 +266,7 @@ public class AuthController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
         if (user == null)
         {
-            return BadRequest(new { message = "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРѕР№ РїРѕС‡С‚РѕР№ РЅРµ РЅР°Р№РґРµРЅ." });
+            return BadRequest(new { message = "Пользователь с такой почтой не найден." });
         }
 
         if (user.is_email_verified)

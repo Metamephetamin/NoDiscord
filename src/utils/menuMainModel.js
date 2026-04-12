@@ -3,6 +3,7 @@ import { normalizeMediaFrame, parseMediaFrame } from "./mediaFrames";
 export const SERVERS_STORAGE_KEY = "nd_servers_v2";
 export const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
 export const NOISE_SUPPRESSION_STORAGE_KEY = "nd_noise_suppression_mode";
+export const ECHO_CANCELLATION_STORAGE_KEY = "nd_echo_cancellation_enabled";
 export const DIRECT_NOTIFICATIONS_STORAGE_KEY = "nd_direct_notifications";
 export const SERVER_NOTIFICATIONS_STORAGE_KEY = "nd_server_notifications";
 export const NOTIFICATION_SOUND_ENABLED_STORAGE_KEY = "nd_notification_sound_enabled";
@@ -13,7 +14,7 @@ export const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 export const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 export const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 export const MAX_PROFILE_NAME_LENGTH = 32;
-export const VOICE_INPUT_MODES = ["broadcast", "voice_isolation", "transparent"];
+export const VOICE_INPUT_MODES = ["broadcast", "voice_isolation", "krisp", "transparent"];
 export const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "general" },
   { id: "2", name: "gaming" },
@@ -173,6 +174,7 @@ export const getCanonicalSharedServerId = (serverId, ownerUserId) => {
   return suffix ? `server-${suffix}` : normalizedServerId;
 };
 export const getNoiseSuppressionStorageKey = (user) => `${NOISE_SUPPRESSION_STORAGE_KEY}:${getUserStorageScope(user)}`;
+export const getEchoCancellationStorageKey = (user) => `${ECHO_CANCELLATION_STORAGE_KEY}:${getUserStorageScope(user)}`;
 export const getDirectNotificationsStorageKey = (user) => `${DIRECT_NOTIFICATIONS_STORAGE_KEY}:${getUserStorageScope(user)}`;
 export const getServerNotificationsStorageKey = (user) => `${SERVER_NOTIFICATIONS_STORAGE_KEY}:${getUserStorageScope(user)}`;
 export const getNotificationSoundEnabledStorageKey = (user) => `${NOTIFICATION_SOUND_ENABLED_STORAGE_KEY}:${getUserStorageScope(user)}`;

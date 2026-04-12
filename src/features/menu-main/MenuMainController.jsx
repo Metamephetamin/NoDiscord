@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import MobileProfileScreen from "../../components/MobileProfileScreen";
@@ -85,6 +85,7 @@ import {
   getCurrentUserId,
   getDirectNotificationsStorageKey,
   getDisplayName,
+  getEchoCancellationStorageKey,
   getFriendSearchModeForQuery,
   getMeterActiveBars,
   getNoiseSuppressionStorageKey,
@@ -154,6 +155,7 @@ export default function MenuMain({
   const [outputSelectionSupported, setOutputSelectionSupported] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [noiseSuppressionMode, setNoiseSuppressionMode] = useState("transparent");
+  const [echoCancellationEnabled, setEchoCancellationEnabled] = useState(true);
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -299,6 +301,7 @@ export default function MenuMain({
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
   const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
   const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
+  const echoCancellationStorageKey = useMemo(() => getEchoCancellationStorageKey(user), [user?.id, user?.email]);
   const directNotificationsStorageKey = useMemo(() => getDirectNotificationsStorageKey(user), [user?.id, user?.email]);
   const serverNotificationsStorageKey = useMemo(() => getServerNotificationsStorageKey(user), [user?.id, user?.email]);
   const directMessageSoundEnabledStorageKey = useMemo(() => getDirectMessageSoundEnabledStorageKey(user), [user?.id, user?.email]);
@@ -468,7 +471,7 @@ export default function MenuMain({
       (server.textChannels || []).forEach((channel) => {
         nextMap.set(getScopedChatChannelId(server.id, channel.id), {
           serverId: server.id,
-          serverName: server.name || "РЎРµСЂРІРµСЂ",
+          serverName: server.name || "Сервер",
           channelId: channel.id,
           channelName: normalizeTextChannelName(channel.name, "channel"),
         });
@@ -541,14 +544,14 @@ export default function MenuMain({
   const localSharePreviewMeta = useMemo(() => {
     if (localSharePreview?.mode === "camera") {
       return {
-        title: "Р’Р°С€Рµ РІРёРґРµРѕ",
-        subtitle: "РўР°Рє РєР°РјРµСЂР° РІС‹РіР»СЏРґРёС‚ РґР»СЏ СѓС‡Р°СЃС‚РЅРёРєРѕРІ РіРѕР»РѕСЃРѕРІРѕРіРѕ РєР°РЅР°Р»Р°.",
+        title: "Ваше видео",
+        subtitle: "Так камера выглядит для участников голосового канала.",
       };
     }
 
     return {
-      title: "Р’Р°С€ СЃС‚СЂРёРј",
-      subtitle: "РўР°Рє СѓС‡Р°СЃС‚РЅРёРєРё РІРёРґСЏС‚ РІР°С€ СЌРєСЂР°РЅ РІ СЌС„РёСЂРµ.",
+      title: "Ваш стрим",
+      subtitle: "Так участники видят ваш экран в эфире.",
     };
   }, [localSharePreview?.mode]);
   const mobileVoiceStageMode = useMemo(() => {
@@ -631,7 +634,7 @@ export default function MenuMain({
 
         return {
           userId,
-          name: memberNameByUserId.get(userId) || fallbackName || "РЈС‡Р°СЃС‚РЅРёРє",
+          name: memberNameByUserId.get(userId) || fallbackName || "Участник",
           avatar: participant?.avatar || participant?.Avatar || "",
           isSelf: userId === String(currentUserId),
           isSpeaking: speakingUserIds.some((id) => String(id) === userId),
@@ -659,10 +662,10 @@ export default function MenuMain({
   const mobileVoiceStageCopy = useMemo(() => {
     if (mobileVoiceStageMode === "remote") {
       return {
-        title: selectedStreamParticipant?.name || "РўСЂР°РЅСЃР»СЏС†РёСЏ СѓС‡Р°СЃС‚РЅРёРєР°",
+        title: selectedStreamParticipant?.name || "Трансляция участника",
         subtitle: selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length
-          ? "РРґС‘С‚ СЌС„РёСЂ СЃРѕ Р·РІСѓРєРѕРј"
-          : "РРґС‘С‚ СЌС„РёСЂ Р±РµР· Р·РІСѓРєР°",
+          ? "Идёт эфир со звуком"
+          : "Идёт эфир без звука",
         badge: "LIVE",
       };
     }
@@ -676,14 +679,14 @@ export default function MenuMain({
     }
 
     return {
-      title: spotlightVoiceParticipant?.name || "Р“РѕР»РѕСЃРѕРІРѕР№ РєР°РЅР°Р»",
+      title: spotlightVoiceParticipant?.name || "Голосовой канал",
       subtitle:
         spotlightVoiceParticipant?.isSpeaking
-          ? "РЎРµР№С‡Р°СЃ РіРѕРІРѕСЂРёС‚"
+          ? "Сейчас говорит"
           : spotlightVoiceParticipant?.isLive
-            ? "РРґС‘С‚ СЌС„РёСЂ"
-            : `${currentVoiceParticipants.length} СѓС‡Р°СЃС‚РЅРёРєРѕРІ РІ РєРѕРјРЅР°С‚Рµ`,
-      badge: spotlightVoiceParticipant?.isLive ? "LIVE" : spotlightVoiceParticipant?.isSelf ? "Р’С‹" : "",
+            ? "Идёт эфир"
+            : `${currentVoiceParticipants.length} участников в комнате`,
+      badge: spotlightVoiceParticipant?.isLive ? "LIVE" : spotlightVoiceParticipant?.isSelf ? "Вы" : "",
     };
   }, [
     currentVoiceParticipants.length,
@@ -693,8 +696,8 @@ export default function MenuMain({
     selectedStream,
     selectedStreamParticipant?.name,
     spotlightVoiceParticipant?.isLive,
-    spotlightVoiceParticipant?.isSelf,
     spotlightVoiceParticipant?.isSpeaking,
+    spotlightVoiceParticipant?.isSelf,
     spotlightVoiceParticipant?.name,
   ]);
   const friendQueryMode = getFriendSearchModeForQuery(friendEmail);
@@ -719,7 +722,7 @@ export default function MenuMain({
       ...NOTIFICATION_SOUND_OPTIONS,
       {
         id: "custom",
-        label: customNotificationSoundName ? `РЎРІРѕР№ С„Р°Р№Р»: ${customNotificationSoundName}` : "РЎРІРѕР№ С„Р°Р№Р»",
+        label: customNotificationSoundName ? `Свой файл: ${customNotificationSoundName}` : "Свой файл",
         path: customNotificationSoundData,
       },
     ];
@@ -845,7 +848,7 @@ export default function MenuMain({
       fileType === "audio/x-wav";
 
     if (!isSupportedType) {
-      throw new Error("РњРѕР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С‚РѕР»СЊРєРѕ MP3 РёР»Рё WAV С„Р°Р№Р».");
+      throw new Error("Можно выбрать только MP3 или WAV файл.");
     }
 
     const objectUrl = URL.createObjectURL(file);
@@ -857,18 +860,18 @@ export default function MenuMain({
         audio.onloadedmetadata = () => {
           const duration = Number(audio.duration || 0);
           if (!Number.isFinite(duration) || duration <= 0) {
-            reject(new Error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ Р·РІСѓРєР°."));
+            reject(new Error("Не удалось определить длительность звука."));
             return;
           }
 
           resolve(duration);
         };
-        audio.onerror = () => reject(new Error("РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ Р°СѓРґРёРѕС„Р°Р№Р»."));
+        audio.onerror = () => reject(new Error("Не удалось прочитать выбранный аудиофайл."));
         audio.src = objectUrl;
       });
 
       if (durationSeconds > 3) {
-        throw new Error("Р—РІСѓРє СѓРІРµРґРѕРјР»РµРЅРёСЏ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ 3 СЃРµРєСѓРЅРґ.");
+        throw new Error("Звук уведомления должен быть не длиннее 3 секунд.");
       }
     } finally {
       URL.revokeObjectURL(objectUrl);
@@ -877,7 +880,7 @@ export default function MenuMain({
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ Р°СѓРґРёРѕС„Р°Р№Р»."));
+      reader.onerror = () => reject(new Error("Не удалось сохранить выбранный аудиофайл."));
       reader.readAsDataURL(file);
     });
 
@@ -901,7 +904,7 @@ export default function MenuMain({
       setCustomNotificationSoundName(validatedSound.name);
       setNotificationSoundId("custom");
     } catch (error) {
-      setNotificationSoundError(error.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРјРµРЅРёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ Р·РІСѓРє СѓРІРµРґРѕРјР»РµРЅРёСЏ.");
+      setNotificationSoundError(error.message || "Не удалось применить выбранный звук уведомления.");
     }
   };
   const logVoiceHubError = (label, error) => {
@@ -1078,10 +1081,10 @@ export default function MenuMain({
           if (response.ok && Array.isArray(data)) {
             nextServers = mergePersistedServers(localServers, data, user);
           } else if (response.status !== 404) {
-            console.warn("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРµСЂРІРµСЂС‹ РёР· backend, РёСЃРїРѕР»СЊР·СѓРµРј Р»РѕРєР°Р»СЊРЅС‹Р№ РєСЌС€:", data);
+            console.warn("Не удалось загрузить серверы из backend, используем локальный кэш:", data);
           }
         } catch (remoteError) {
-          console.warn("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃРµСЂРІРµСЂС‹ РёР· backend, РёСЃРїРѕР»СЊР·СѓРµРј Р»РѕРєР°Р»СЊРЅС‹Р№ РєСЌС€:", remoteError);
+          console.warn("Не удалось загрузить серверы из backend, используем локальный кэш:", remoteError);
         }
 
         if (isDisposed) {
@@ -1098,7 +1101,7 @@ export default function MenuMain({
         setActiveServerId(nextActiveServerId);
         setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
       } catch (error) {
-        console.error("РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… СЃРµСЂРІРµСЂРѕРІ:", error);
+        console.error("Ошибка загрузки пользовательских серверов:", error);
         if (isDisposed) {
           return;
         }
@@ -1109,7 +1112,7 @@ export default function MenuMain({
     };
 
     loadPersistedServers().catch((error) => {
-      console.error("РћС€РёР±РєР° РёРЅРёС†РёР°Р»РёР·Р°С†РёРё СЃРїРёСЃРєР° СЃРµСЂРІРµСЂРѕРІ:", error);
+      console.error("Ошибка инициализации списка серверов:", error);
     });
 
     return () => {
@@ -1352,6 +1355,29 @@ export default function MenuMain({
       // ignore storage failures
     }
   }, [noiseSuppressionMode, noiseSuppressionStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setEchoCancellationEnabled(true);
+      return;
+    }
+
+    try {
+      setEchoCancellationEnabled(localStorage.getItem(echoCancellationStorageKey) !== "false");
+    } catch {
+      setEchoCancellationEnabled(true);
+    }
+  }, [echoCancellationStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    try {
+      localStorage.setItem(echoCancellationStorageKey, echoCancellationEnabled ? "true" : "false");
+    } catch {
+      // ignore storage failures
+    }
+  }, [echoCancellationEnabled, echoCancellationStorageKey, user]);
 
   useEffect(() => {
     if (!user) {
@@ -1921,7 +1947,7 @@ export default function MenuMain({
       }
 
       const preview = await resolveIncomingMessagePreview(messageItem, user, {
-        fallbackText: "РќРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ",
+        fallbackText: "Новое сообщение",
         channelId,
         scope: "direct",
       });
@@ -1964,7 +1990,7 @@ export default function MenuMain({
         fallbackServer && fallbackChannel
           ? {
               serverId: fallbackServer.id,
-              serverName: fallbackServer.name || "РЎРµСЂРІРµСЂ",
+              serverName: fallbackServer.name || "Сервер",
               channelId: fallbackChannel.id,
               channelName: normalizeTextChannelName(fallbackChannel.name, "channel"),
             }
@@ -1992,7 +2018,7 @@ export default function MenuMain({
 
       const currentUserMentioned = isUserMentioned(messageItem?.mentions, currentUserId);
       const messagePreview = await resolveIncomingMessagePreview(messageItem, user, {
-        fallbackText: "РќРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ",
+        fallbackText: "Новое сообщение",
         channelId: scopedChannelId,
         scope: "text",
       });
@@ -2006,7 +2032,7 @@ export default function MenuMain({
         channelName: channelInfo.channelName,
         authorName: String(messageItem?.username || "User"),
         preview: currentUserMentioned
-          ? `Р’Р°СЃ СѓРїРѕРјСЏРЅСѓР»Рё: ${messagePreview}`
+          ? `Вас упомянули: ${messagePreview}`
           : messagePreview,
       });
     };
@@ -2246,27 +2272,30 @@ export default function MenuMain({
     if (selectedInputDeviceId) {
       appliedInputDeviceRef.current = selectedInputDeviceId;
       client.setInputDevice(selectedInputDeviceId).catch((error) => {
-        console.error("РћС€РёР±РєР° РїСЂРёРјРµРЅРµРЅРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР° РІРІРѕРґР°:", error);
+        console.error("Ошибка применения устройства ввода:", error);
       });
     }
     if (selectedOutputDeviceId) {
       appliedOutputDeviceRef.current = selectedOutputDeviceId;
       client.setOutputDevice(selectedOutputDeviceId).catch((error) => {
-        console.error("РћС€РёР±РєР° РїСЂРёРјРµРЅРµРЅРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР° РІС‹РІРѕРґР°:", error);
+        console.error("Ошибка применения устройства вывода:", error);
       });
     }
     client.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
-      console.error("РћС€РёР±РєР° РїСЂРёРјРµРЅРµРЅРёСЏ СЃС‚Р°СЂС‚РѕРІРѕРіРѕ СЂРµР¶РёРјР° С€СѓРјРѕРїРѕРґР°РІР»РµРЅРёСЏ:", error);
+      console.error("Ошибка применения стартового режима шумоподавления:", error);
     });
-    client.connect(user).catch((error) => logVoiceHubError("РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє РіРѕР»РѕСЃРѕРІРѕРјСѓ С…Р°Р±Сѓ:", error));
+    client.setEchoCancellationEnabled(echoCancellationEnabled).catch((error) => {
+      console.error("Ошибка применения стартового эхоподавления:", error);
+    });
+    client.connect(user).catch((error) => logVoiceHubError("Ошибка подключения к голосовому хабу:", error));
     return () => {
-      client.disconnect().catch((error) => logVoiceHubError("РћС€РёР±РєР° РѕС‚РєР»СЋС‡РµРЅРёСЏ РѕС‚ РіРѕР»РѕСЃРѕРІРѕРіРѕ С…Р°Р±Р°:", error));
+      client.disconnect().catch((error) => logVoiceHubError("Ошибка отключения от голосового хаба:", error));
       if (voiceClientRef.current === client) voiceClientRef.current = null;
     };
   }, [user?.id]);
   useEffect(() => {
     if (!user?.id || !voiceClientRef.current) return;
-    voiceClientRef.current.connect(user).catch((error) => logVoiceHubError("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РІ РіРѕР»РѕСЃРѕРІРѕРј С…Р°Р±Рµ:", error));
+    voiceClientRef.current.connect(user).catch((error) => logVoiceHubError("Ошибка обновления пользователя в голосовом хабе:", error));
   }, [user?.id, user?.firstName, user?.first_name, user?.avatarUrl, user?.avatar]);
   useEffect(() => {
     const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : micVolume) : micVolume;
@@ -2274,7 +2303,7 @@ export default function MenuMain({
   }, [currentVoiceChannel, micVolume, isMicMuted, isSoundMuted]);
   useEffect(() => {
     voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: isMicMuted || isSoundMuted, isDeafened: isSoundMuted }).catch((error) => {
-      console.error("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ РјРёРєСЂРѕС„РѕРЅР°:", error);
+      console.error("Ошибка обновления состояния микрофона:", error);
     });
   }, [isMicMuted, isSoundMuted]);
   useEffect(() => {
@@ -2284,9 +2313,16 @@ export default function MenuMain({
     if (!voiceClientRef.current) return;
 
     voiceClientRef.current.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
-      console.error("РћС€РёР±РєР° РїРµСЂРµРєР»СЋС‡РµРЅРёСЏ СЂРµР¶РёРјР° С€СѓРјРѕРїРѕРґР°РІР»РµРЅРёСЏ:", error);
+      console.error("Ошибка переключения режима шумоподавления:", error);
     });
   }, [noiseSuppressionMode]);
+  useEffect(() => {
+    if (!voiceClientRef.current) return;
+
+    voiceClientRef.current.setEchoCancellationEnabled(echoCancellationEnabled).catch((error) => {
+      console.error("Ошибка переключения эхоподавления:", error);
+    });
+  }, [echoCancellationEnabled]);
   useEffect(() => {
     if (!voiceClientRef.current || !selectedInputDeviceId) {
       return;
@@ -2298,7 +2334,7 @@ export default function MenuMain({
 
     appliedInputDeviceRef.current = selectedInputDeviceId;
     voiceClientRef.current.setInputDevice(selectedInputDeviceId).catch((error) => {
-      console.error("РћС€РёР±РєР° РїРµСЂРµРєР»СЋС‡РµРЅРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР° РІРІРѕРґР°:", error);
+      console.error("Ошибка переключения устройства ввода:", error);
     });
   }, [selectedInputDeviceId]);
   useEffect(() => {
@@ -2312,7 +2348,7 @@ export default function MenuMain({
 
     appliedOutputDeviceRef.current = selectedOutputDeviceId;
     voiceClientRef.current.setOutputDevice(selectedOutputDeviceId).catch((error) => {
-      console.error("РћС€РёР±РєР° РїРµСЂРµРєР»СЋС‡РµРЅРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР° РІС‹РІРѕРґР°:", error);
+      console.error("Ошибка переключения устройства вывода:", error);
     });
   }, [selectedOutputDeviceId]);
   useEffect(() => {
@@ -2325,23 +2361,23 @@ export default function MenuMain({
 
     if (!shouldLoadAudioDevices) {
       voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
-        console.error("РћС€РёР±РєР° РѕСЃС‚Р°РЅРѕРІРєРё РїСЂРµРґРїСЂРѕСЃРјРѕС‚СЂР° РјРёРєСЂРѕС„РѕРЅР°:", error);
+        console.error("Ошибка остановки предпросмотра микрофона:", error);
       });
       return;
     }
 
     if (shouldPreviewMicrophone) {
       voiceClientRef.current.ensureMicrophonePreview().catch((error) => {
-        console.error("РћС€РёР±РєР° Р·Р°РїСѓСЃРєР° РїСЂРµРґРїСЂРѕСЃРјРѕС‚СЂР° РјРёРєСЂРѕС„РѕРЅР°:", error);
+        console.error("Ошибка запуска предпросмотра микрофона:", error);
       });
       return;
     }
 
     voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
-      console.error("РћС€РёР±РєР° РѕСЃС‚Р°РЅРѕРІРєРё РїСЂРµРґРїСЂРѕСЃРјРѕС‚СЂР° РјРёРєСЂРѕС„РѕРЅР°:", error);
+      console.error("Ошибка остановки предпросмотра микрофона:", error);
     });
     voiceClientRef.current.getAudioDevices().catch((error) => {
-      console.error("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ СЃРїРёСЃРєР° Р°СѓРґРёРѕ-СѓСЃС‚СЂРѕР№СЃС‚РІ:", error);
+      console.error("Ошибка обновления списка аудио-устройств:", error);
     });
   }, [isMicTestActive, openSettings, settingsTab, showMicMenu, showSoundMenu, user?.id]);
   useEffect(() => {
@@ -2356,7 +2392,7 @@ export default function MenuMain({
     }
 
     loadCameraDevices(selectedVideoDeviceId).catch((error) => {
-      console.error("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ СЃРїРёСЃРєР° РєР°РјРµСЂ:", error);
+      console.error("Ошибка обновления списка камер:", error);
     });
   }, [isCameraShareActive, selectedVideoDeviceId, showCameraModal]);
   useEffect(() => () => {
@@ -2429,7 +2465,7 @@ export default function MenuMain({
         return data;
       }
     } catch (error) {
-      console.error("РћС€РёР±РєР° СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё СЃРµСЂРІРµСЂР°:", error);
+      console.error("Ошибка синхронизации сервера:", error);
     }
 
     return null;
@@ -2450,7 +2486,7 @@ export default function MenuMain({
 
       replaceServerSnapshot(snapshot);
     } catch (error) {
-      console.error("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ СЃРµСЂРІРµСЂР°:", error);
+      console.error("Ошибка обновления сервера:", error);
     }
   };
   const openSettingsPanel = (tab = "voice_video") => {
@@ -2517,8 +2553,8 @@ export default function MenuMain({
         return;
       }
     } catch (error) {
-      console.error("РћС€РёР±РєР° РїРѕРґРіРѕС‚РѕРІРєРё РёРєРѕРЅРєРё СЃРµСЂРІРµСЂР°:", error);
-      setCreateServerError(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёРєРѕРЅРєСѓ СЃРµСЂРІРµСЂР°.");
+      console.error("Ошибка подготовки иконки сервера:", error);
+      setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
       return;
     }
 
@@ -2527,14 +2563,14 @@ export default function MenuMain({
       target: "serverIcon",
       file,
       initialFrame: createServerIconFrame,
-      title: "РРєРѕРЅРєР° СЃРµСЂРІРµСЂР°",
+      title: "Иконка сервера",
     });
   };
   const handleCreateServerSubmit = (event) => {
     event?.preventDefault?.();
     const nextName = createServerName.trim();
     if (!nextName) {
-      setCreateServerError("Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ СЃРµСЂРІРµСЂР°.");
+      setCreateServerError("Введите название сервера.");
       return;
     }
 
@@ -2566,10 +2602,10 @@ export default function MenuMain({
 
         if (!response.ok && response.status !== 404) {
           const data = await parseApiResponse(response);
-          throw new Error(getApiErrorMessage(response, data, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СЃРµСЂРІРµСЂ."));
+          throw new Error(getApiErrorMessage(response, data, "Не удалось удалить сервер."));
         }
       } catch (error) {
-        setProfileStatus(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СЃРµСЂРІРµСЂ.");
+        setProfileStatus(error?.message || "Не удалось удалить сервер.");
         return;
       }
     }
@@ -2582,7 +2618,7 @@ export default function MenuMain({
     setActiveServerId(nextActiveId);
     setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
     setSelectedStreamUserId(null);
-    setProfileStatus("РЎРµСЂРІРµСЂ СѓРґР°Р»С‘РЅ.");
+    setProfileStatus("Сервер удалён.");
   };
   const handleDeleteTextChannel = (channelId) => {
     if (!canManageChannels) return;
@@ -2599,7 +2635,7 @@ export default function MenuMain({
   };
   const addTextChannel = () => {
     if (!canManageChannels || !activeServer) return;
-    const channel = { id: createId("text"), name: "РЅРѕРІС‹Р№-РєР°РЅР°Р»" };
+    const channel = { id: createId("text"), name: "новый-канал" };
     updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
     setCurrentTextChannelId(channel.id);
     setChannelRenameState({
@@ -2610,7 +2646,7 @@ export default function MenuMain({
   };
   const addVoiceChannel = () => {
     if (!canManageChannels || !activeServer) return;
-    const channel = { id: createId("voice"), name: "РіРѕР»РѕСЃРѕРІРѕР№-РєР°РЅР°Р»" };
+    const channel = { id: createId("voice"), name: "голосовой-канал" };
     updateServer((server) => ({ ...server, voiceChannels: [...server.voiceChannels, channel] }));
     setChannelRenameState({
       type: "voice",
@@ -2656,7 +2692,7 @@ export default function MenuMain({
     const response = await authFetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
     const data = await parseApiResponse(response);
     if (!response.ok) {
-      throw new Error(getApiErrorMessage(response, data, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ."));
+      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить аватар."));
     }
 
     const nextAvatarUrl = data?.avatarUrl || data?.avatar_url || "";
@@ -2674,7 +2710,7 @@ export default function MenuMain({
       refreshToken: getStoredRefreshToken(),
       accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
     });
-    setProfileStatus("РђРІР°С‚Р°СЂ СЃРѕС…СЂР°РЅС‘РЅ.");
+    setProfileStatus("Аватар сохранён.");
   };
   const uploadProfileBackgroundWithFrame = async (file, frame) => {
     const formData = new FormData();
@@ -2684,7 +2720,7 @@ export default function MenuMain({
     const response = await authFetch(`${API_URL}/api/user/upload-profile-background`, { method: "POST", body: formData });
     const data = await parseApiResponse(response);
     if (!response.ok) {
-      throw new Error(getApiErrorMessage(response, data, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С„РѕРЅ РїСЂРѕС„РёР»СЏ."));
+      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить фон профиля."));
     }
 
     const nextProfileBackgroundUrl = data?.profileBackgroundUrl || data?.profile_background_url || "";
@@ -2712,7 +2748,7 @@ export default function MenuMain({
       refreshToken: getStoredRefreshToken(),
       accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
     });
-    setProfileStatus("Р¤РѕРЅ РїСЂРѕС„РёР»СЏ СЃРѕС…СЂР°РЅС‘РЅ.");
+    setProfileStatus("Фон профиля сохранён.");
   };
   const uploadServerIconWithFrame = async (file, frame, { createDraft = false } = {}) => {
     const formData = new FormData();
@@ -2723,7 +2759,7 @@ export default function MenuMain({
     });
     const data = await parseApiResponse(response);
     if (!response.ok) {
-      throw new Error(getApiErrorMessage(response, data, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёРєРѕРЅРєСѓ СЃРµСЂРІРµСЂР°."));
+      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
     }
 
     const nextIconUrl = data?.iconUrl || data?.icon_url || "";
@@ -2736,7 +2772,7 @@ export default function MenuMain({
     }
 
     updateServer((server) => ({ ...server, icon: nextIconUrl, iconFrame: nextIconFrame }));
-    setProfileStatus("РРєРѕРЅРєР° СЃРµСЂРІРµСЂР° СЃРѕС…СЂР°РЅРµРЅР°.");
+    setProfileStatus("Иконка сервера сохранена.");
   };
   const handleMediaFrameConfirm = async (frame) => {
     const editorState = mediaFrameEditorState;
@@ -2757,11 +2793,11 @@ export default function MenuMain({
       }
     } catch (error) {
       if (editorState.kind === "createServerIcon") {
-        setCreateServerError(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёРєРѕРЅРєСѓ СЃРµСЂРІРµСЂР°.");
+        setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
       } else {
-        setProfileStatus(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РјРµРґРёР°.");
+        setProfileStatus(error?.message || "Не удалось сохранить медиа.");
       }
-      console.error("РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РјРµРґРёР° СЃ РєР°РґСЂРёСЂРѕРІР°РЅРёРµРј:", error);
+      console.error("Ошибка сохранения медиа с кадрированием:", error);
     } finally {
       revokeMediaEditorPreviewUrl(editorState);
       setMediaFrameEditorState(null);
@@ -2799,6 +2835,9 @@ export default function MenuMain({
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(mode) ? mode : "broadcast");
     setShowNoiseMenu(false);
   };
+  const toggleEchoCancellation = () => {
+    setEchoCancellationEnabled((previous) => !previous);
+  };
   const openMemberActionsMenu = (event, member) => {
     const triggerRect = event.currentTarget.getBoundingClientRect();
     setMemberRoleMenu({
@@ -2826,7 +2865,7 @@ export default function MenuMain({
     const targetMember = activeServer.members.find((member) => String(member.userId) === String(memberUserId));
     if (!targetMember) return;
 
-    const nextName = window.prompt("Р’РІРµРґРёС‚Рµ РЅРѕРІС‹Р№ РЅРёРє СѓС‡Р°СЃС‚РЅРёРєР°", targetMember.name || "");
+    const nextName = window.prompt("Введите новый ник участника", targetMember.name || "");
     if (typeof nextName !== "string") {
       return;
     }
@@ -2857,7 +2896,7 @@ export default function MenuMain({
       await voiceClientRef.current.updateParticipantVoiceState(memberUserId, nextState);
       setMemberRoleMenu(null);
     } catch (error) {
-      console.error("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ РіРѕР»РѕСЃРѕРІРѕРіРѕ СЃРѕСЃС‚РѕСЏРЅРёСЏ СѓС‡Р°СЃС‚РЅРёРєР°:", error);
+      console.error("Ошибка обновления голосового состояния участника:", error);
     }
   };
   const markServerAsShared = (serverId) => {
@@ -2935,9 +2974,9 @@ export default function MenuMain({
           }
           return;
         } catch (retryError) {
-          const message = retryError?.message || error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє РіРѕР»РѕСЃРѕРІРѕРјСѓ РєР°РЅР°Р»Сѓ.";
+          const message = retryError?.message || error?.message || "Не удалось подключиться к голосовому каналу.";
           showServerInviteFeedback(message);
-          console.error("РћС€РёР±РєР° РІС…РѕРґР° РІ РіРѕР»РѕСЃРѕРІРѕР№ РєР°РЅР°Р»:", retryError);
+          console.error("Ошибка входа в голосовой канал:", retryError);
           setCurrentVoiceChannel(null);
         }
       }
@@ -2958,11 +2997,11 @@ export default function MenuMain({
         setMobileServersPane("channels");
       }
     } catch (error) {
-      console.error("РћС€РёР±РєР° РІС‹С…РѕРґР° РёР· РіРѕР»РѕСЃРѕРІРѕРіРѕ РєР°РЅР°Р»Р°:", error);
+      console.error("Ошибка выхода из голосового канала:", error);
     }
   };
   const handleLogout = async () => {
-    try { await voiceClientRef.current?.disconnect(); } catch (error) { console.error("РћС€РёР±РєР° РїСЂРё РѕС‚РєР»СЋС‡РµРЅРёРё РїРµСЂРµРґ РІС‹С…РѕРґРѕРј:", error); }
+    try { await voiceClientRef.current?.disconnect(); } catch (error) { console.error("Ошибка при отключении перед выходом:", error); }
     finally {
       setOpenSettings(false);
       setShowModal(false);
@@ -2985,7 +3024,7 @@ export default function MenuMain({
       setSelectedStreamUserId(null);
       setIsLocalSharePreviewVisible(true);
     } catch (error) {
-      const message = error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ С‚СЂР°РЅСЃР»СЏС†РёСЋ СЌРєСЂР°РЅР°.";
+      const message = error?.message || "Не удалось запустить трансляцию экрана.";
       setScreenShareError(message);
       showServerInviteFeedback(message);
       throw error;
@@ -3003,7 +3042,7 @@ export default function MenuMain({
       setShowModal(false);
       setIsLocalSharePreviewVisible(false);
     } catch (error) {
-      const message = error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РѕСЃС‚Р°РЅРѕРІРёС‚СЊ С‚СЂР°РЅСЃР»СЏС†РёСЋ СЌРєСЂР°РЅР°.";
+      const message = error?.message || "Не удалось остановить трансляцию экрана.";
       setScreenShareError(message);
       showServerInviteFeedback(message);
       throw error;
@@ -3016,7 +3055,7 @@ export default function MenuMain({
     }
 
     if (!currentVoiceChannel) {
-      showServerInviteFeedback("РЎРЅР°С‡Р°Р»Р° РїРѕРґРєР»СЋС‡РёС‚РµСЃСЊ Рє РіРѕР»РѕСЃРѕРІРѕРјСѓ РєР°РЅР°Р»Сѓ.");
+      showServerInviteFeedback("Сначала подключитесь к голосовому каналу.");
       return;
     }
 
@@ -3032,7 +3071,7 @@ export default function MenuMain({
   };
   const openLocalSharePreview = () => {
     if (!hasLocalSharePreview) {
-      showServerInviteFeedback("РЎРЅР°С‡Р°Р»Р° Р·Р°РїСѓСЃС‚РёС‚Рµ РєР°РјРµСЂСѓ РёР»Рё СЃС‚СЂРёРј.");
+      showServerInviteFeedback("Сначала запустите камеру или стрим.");
       return;
     }
 
@@ -3059,7 +3098,7 @@ export default function MenuMain({
         videoElement.webkitEnterFullscreen();
       }
     } catch (error) {
-      console.error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ СЌС„РёСЂ РЅР° РІРµСЃСЊ СЌРєСЂР°РЅ:", error);
+      console.error("Не удалось открыть эфир на весь экран:", error);
     }
   };
   const startCameraShare = async () => {
@@ -3078,7 +3117,7 @@ export default function MenuMain({
       setSelectedStreamUserId(null);
       setIsLocalSharePreviewVisible(true);
     } catch (error) {
-      setCameraError(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ С‚СЂР°РЅСЃР»СЏС†РёСЋ РєР°РјРµСЂС‹.");
+      setCameraError(error?.message || "Не удалось запустить трансляцию камеры.");
       startCameraPreview(selectedVideoDeviceId).catch(() => {});
     }
   };
@@ -3092,7 +3131,7 @@ export default function MenuMain({
       setIsLocalSharePreviewVisible(false);
       stopCameraPreview();
     } catch (error) {
-      setCameraError(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РѕСЃС‚Р°РЅРѕРІРёС‚СЊ С‚СЂР°РЅСЃР»СЏС†РёСЋ РєР°РјРµСЂС‹.");
+      setCameraError(error?.message || "Не удалось остановить трансляцию камеры.");
     }
   };
   const stopCameraPreview = () => {
@@ -3121,7 +3160,7 @@ export default function MenuMain({
       .filter((device) => device.kind === "videoinput")
       .map((device, index) => ({
         id: device.deviceId || `camera-${index + 1}`,
-        label: String(device.label || "").trim() || `РљР°РјРµСЂР° ${index + 1}`,
+        label: String(device.label || "").trim() || `Камера ${index + 1}`,
       }));
 
     setCameraDevices(devices);
@@ -3140,7 +3179,7 @@ export default function MenuMain({
   };
   const startCameraPreview = async (deviceId = selectedVideoDeviceId) => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Р­С‚Р° СЃРёСЃС‚РµРјР° РЅРµ РґР°Р»Р° РїСЂРёР»РѕР¶РµРЅРёСЋ РґРѕСЃС‚СѓРї Рє РІРёРґРµРѕСѓСЃС‚СЂРѕР№СЃС‚РІР°Рј.");
+      setCameraError("Эта система не дала приложению доступ к видеоустройствам.");
       return;
     }
 
@@ -3180,14 +3219,14 @@ export default function MenuMain({
       }
 
       if (!devices.length) {
-        setCameraError("РљР°РјРµСЂС‹ РЅРµ РЅР°Р№РґРµРЅС‹. РџРѕРґРєР»СЋС‡РёС‚Рµ РІРµР±-РєР°РјРµСЂСѓ РёР»Рё РІРёСЂС‚СѓР°Р»СЊРЅСѓСЋ РєР°РјРµСЂСѓ РІСЂРѕРґРµ Camo.");
+        setCameraError("Камеры не найдены. Подключите веб-камеру или виртуальную камеру вроде Camo.");
         setHasCameraPreview(false);
       }
     } catch (error) {
       await loadCameraDevices(deviceId).catch(() => {});
-      setCameraError("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ РєР°РјРµСЂСѓ. РџСЂРѕРІРµСЂСЊС‚Рµ РґРѕСЃС‚СѓРї Рє РЅРµР№ Рё РІС‹Р±СЂР°РЅРЅРѕРµ СѓСЃС‚СЂРѕР№СЃС‚РІРѕ.");
+      setCameraError("Не удалось открыть камеру. Проверьте доступ к ней и выбранное устройство.");
       setHasCameraPreview(false);
-      console.error("РћС€РёР±РєР° Р·Р°РїСѓСЃРєР° РєР°РјРµСЂС‹:", error);
+      console.error("Ошибка запуска камеры:", error);
     }
   };
   const openCameraModal = () => {
@@ -3213,7 +3252,7 @@ export default function MenuMain({
     if (isMobileViewport) {
       setMobileServersPane("voice");
     }
-    voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("РћС€РёР±РєР° Р·Р°РїСЂРѕСЃР° РїСЂРѕСЃРјРѕС‚СЂР° С‚СЂР°РЅСЃР»СЏС†РёРё:", error));
+    voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
   };
   const handleImportServer = (snapshot) => {
     if (!snapshot) return;
@@ -3269,12 +3308,12 @@ export default function MenuMain({
 
       try {
         await requestServerInviteLink(server);
-        showServerInviteFeedback(`РЎСЃС‹Р»РєР° РЅР° ${server.name || "СЃРµСЂРІРµСЂ"} СЃРєРѕРїРёСЂРѕРІР°РЅР°.`);
+        showServerInviteFeedback(`Ссылка на ${server.name || "сервер"} скопирована.`);
         if (typeof navigator?.vibrate === "function") {
           navigator.vibrate(16);
         }
       } catch (error) {
-        showServerInviteFeedback(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ СЃСЃС‹Р»РєСѓ.");
+        showServerInviteFeedback(error?.message || "Не удалось скопировать ссылку.");
       } finally {
         serverLongPressTimeoutRef.current = null;
       }
@@ -3357,7 +3396,7 @@ export default function MenuMain({
       target: "avatar",
       file,
       initialFrame: getUserAvatarFrame(user),
-      title: "РђРІР°С‚Р°СЂ",
+      title: "Аватар",
     });
   };
   const handleProfileBackgroundChange = async (event) => {
@@ -3376,7 +3415,7 @@ export default function MenuMain({
       target: "profileBackground",
       file,
       initialFrame: profileDraft.profileBackgroundFrame,
-      title: "Р¤РѕРЅ РїСЂРѕС„РёР»СЏ",
+      title: "Фон профиля",
     });
   };
   const handleServerIconChange = async (event) => {
@@ -3396,11 +3435,11 @@ export default function MenuMain({
         target: "serverIcon",
         file,
         initialFrame: getServerIconFrame(activeServer),
-        title: "РРєРѕРЅРєР° СЃРµСЂРІРµСЂР°",
+        title: "Иконка сервера",
       });
     } catch (error) {
-      console.error("РћС€РёР±РєР° СЃРјРµРЅС‹ РёРєРѕРЅРєРё СЃРµСЂРІРµСЂР°:", error);
-      setProfileStatus(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РёРєРѕРЅРєСѓ СЃРµСЂРІРµСЂР°.");
+      console.error("Ошибка смены иконки сервера:", error);
+      setProfileStatus(error?.message || "Не удалось загрузить иконку сервера.");
     }
   };
   const updateProfileDraft = (field, value) => {
@@ -3432,7 +3471,7 @@ export default function MenuMain({
     const nextFirstName = profileDraft.firstName.trim();
     const nextLastName = profileDraft.lastName.trim();
     if (!nextFirstName) {
-      setProfileStatus("РРјСЏ РЅРµ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј.");
+      setProfileStatus("Имя не должно быть пустым.");
       return;
     }
 
@@ -3440,21 +3479,21 @@ export default function MenuMain({
       nextFirstName.length > MAX_PROFILE_NAME_LENGTH ||
       nextLastName.length > MAX_PROFILE_NAME_LENGTH
     ) {
-      setProfileStatus("РРјСЏ Рё С„Р°РјРёР»РёСЏ РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ 32 СЃРёРјРІРѕР»РѕРІ.");
+      setProfileStatus("Имя и фамилия должны быть не длиннее 32 символов.");
       return;
     }
 
     if (!isValidProfileName(nextFirstName) || (nextLastName && !isValidProfileName(nextLastName))) {
-      setProfileStatus("РРјСЏ Рё С„Р°РјРёР»РёСЏ РґРѕР»Р¶РЅС‹ СЃРѕСЃС‚РѕСЏС‚СЊ РёР· РѕРґРЅРѕРіРѕ СЃР»РѕРІР° Рё РјРѕРіСѓС‚ СЃРѕРґРµСЂР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ Р±СѓРєРІС‹, РґРµС„РёСЃ Рё Р°РїРѕСЃС‚СЂРѕС„.");
+      setProfileStatus("Имя и фамилия должны состоять из одного слова и могут содержать только буквы, дефис и апостроф.");
       return;
     }
 
     if (nextLastName && !areNamesUsingSameScript(nextFirstName, nextLastName)) {
-      setProfileStatus("РРјСЏ Рё С„Р°РјРёР»РёСЏ РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РїРѕР»РЅРѕСЃС‚СЊСЋ РЅР° РѕРґРЅРѕРј СЏР·С‹РєРµ: Р»РёР±Рѕ РЅР° СЂСѓСЃСЃРєРѕРј, Р»РёР±Рѕ РЅР° Р°РЅРіР»РёР№СЃРєРѕРј.");
+      setProfileStatus("Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.");
       return;
     }
 
-    setProfileStatus("РЎРѕС…СЂР°РЅСЏРµРј РїСЂРѕС„РёР»СЊ...");
+    setProfileStatus("Сохраняем профиль...");
 
     try {
       const response = await authFetch(`${API_URL}/api/user/profile`, {
@@ -3470,7 +3509,7 @@ export default function MenuMain({
       });
       const data = await parseApiResponse(response);
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(response, data, "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїСЂРѕС„РёР»СЊ."));
+        throw new Error(getApiErrorMessage(response, data, "Не удалось сохранить профиль."));
       }
 
       const nextUser = {
@@ -3508,10 +3547,10 @@ export default function MenuMain({
         refreshToken: getStoredRefreshToken(),
         accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
       });
-      setProfileStatus("РР·РјРµРЅРµРЅРёСЏ РїСЂРѕС„РёР»СЏ СЃРѕС…СЂР°РЅРµРЅС‹.");
+      setProfileStatus("Изменения профиля сохранены.");
     } catch (error) {
-      console.error("РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РїСЂРѕС„РёР»СЏ:", error);
-      setProfileStatus(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїСЂРѕС„РёР»СЊ.");
+      console.error("Ошибка сохранения профиля:", error);
+      setProfileStatus(error?.message || "Не удалось сохранить профиль.");
     }
   };
 
@@ -3535,11 +3574,11 @@ export default function MenuMain({
   const deviceInputLabel =
     audioInputDevices.find((device) => device.id === selectedInputDeviceId)?.label ||
     audioInputDevices[0]?.label ||
-    "РЎРёСЃС‚РµРјРЅС‹Р№ РјРёРєСЂРѕС„РѕРЅ";
+    "Системный микрофон";
   const deviceOutputLabel =
     audioOutputDevices.find((device) => device.id === selectedOutputDeviceId)?.label ||
     audioOutputDevices[0]?.label ||
-    "РЎРёСЃС‚РµРјРЅС‹Р№ РІС‹РІРѕРґ";
+    "Системный вывод";
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
   const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
   const outputSelectionAvailable = outputSelectionSupported && audioOutputDevices.length > 0;
@@ -3547,23 +3586,28 @@ export default function MenuMain({
     {
       id: "broadcast",
       title: "Broadcast",
-      description: "РћРїС‚РёРјР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј РґР»СЏ Р·РІРѕРЅРєРѕРІ: СЌС…РѕРїРѕРґР°РІР»РµРЅРёРµ, РјСЏРіРєРёР№ EQ Рё РєРѕРјРїСЂРµСЃСЃРёСЏ РіРѕР»РѕСЃР°.",
+      description: "Оптимальный режим для звонков: мягкий EQ и компрессия голоса.",
     },
     {
       id: "voice_isolation",
-      title: "РР·РѕР»СЏС†РёСЏ РіРѕР»РѕСЃР°",
-      description: "РўРѕР»СЊРєРѕ РІР°С€ РіРѕР»РѕСЃ: С„РѕРЅ СЂРµР¶РµС‚СЃСЏ СЃРёР»СЊРЅРµРµ Рё СЂРµС‡СЊ РІС‹С…РѕРґРёС‚ РІРїРµСЂРµРґ.",
+      title: "Изоляция голоса",
+      description: "Только ваш голос: фон режется сильнее и речь выходит вперед.",
+    },
+    {
+      id: "krisp",
+      title: "Krisp",
+      description: "Фильтр Krisp для фонового шума и клавиатуры, если браузер его поддерживает.",
     },
     {
       id: "transparent",
-      title: "РЎС‚СѓРґРёСЏ",
-      description: "Р§РёСЃС‚С‹Р№ РµСЃС‚РµСЃС‚РІРµРЅРЅС‹Р№ Р·РІСѓРє СЃ РјРёРЅРёРјР°Р»СЊРЅРѕР№ РѕР±СЂР°Р±РѕС‚РєРѕР№.",
+      title: "Студия",
+      description: "Чистый естественный звук с минимальной обработкой.",
     },
   ];
   const activeNoiseProfile =
     noiseProfileOptions.find((option) => option.id === noiseSuppressionMode) || noiseProfileOptions[0];
   const pingTone = getPingTone(pingMs);
-  const pingTooltip = Number.isFinite(Number(pingMs)) && Number(pingMs) > 0 ? `РџРёРЅРі: ${pingMs} РјСЃ` : "РџРёРЅРі РЅРµРґРѕСЃС‚СѓРїРµРЅ";
+  const pingTooltip = Number.isFinite(Number(pingMs)) && Number(pingMs) > 0 ? `Пинг: ${pingMs} мс` : "Пинг недоступен";
 
   const toggleMicrophoneTestPreview = () => {
     setIsMicTestActive((previous) => !previous);
@@ -3577,7 +3621,7 @@ export default function MenuMain({
     }
 
     startCameraPreview(deviceId).catch((error) => {
-      console.error("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ РїСЂРµРґРїСЂРѕСЃРјРѕС‚СЂР° РєР°РјРµСЂС‹:", error);
+      console.error("Ошибка обновления предпросмотра камеры:", error);
     });
   };
 
@@ -3605,6 +3649,7 @@ export default function MenuMain({
     noiseProfileOptions,
     noiseSuppressionMode,
     activeNoiseProfile,
+    echoCancellationEnabled,
     autoInputSensitivity,
     handleInputDeviceChange,
     handleOutputDeviceChange,
@@ -3612,6 +3657,7 @@ export default function MenuMain({
     updateAudioVolume,
     toggleMicrophoneTestPreview,
     handleNoiseSuppressionModeChange,
+    toggleEchoCancellation,
     setAutoInputSensitivity,
     directNotificationsEnabled,
     serverNotificationsEnabled,
@@ -3694,6 +3740,7 @@ export default function MenuMain({
     noiseProfileOptions,
     noiseSuppressionMode,
     activeNoiseProfile,
+    echoCancellationEnabled,
     micVolume,
     audioVolume,
     activeMicMenuBars,
@@ -3710,6 +3757,7 @@ export default function MenuMain({
     handleInputDeviceChange,
     handleOutputDeviceChange,
     handleNoiseSuppressionModeChange,
+    toggleEchoCancellation,
     updateMicVolume,
     updateAudioVolume,
     suppressTooltipOnClick,

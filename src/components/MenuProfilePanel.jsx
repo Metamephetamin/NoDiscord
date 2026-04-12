@@ -7,6 +7,21 @@ const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   </button>
 );
 
+const DeviceToggleButton = ({ active, title, description, onClick }) => (
+  <button
+    type="button"
+    className={`device-menu__toggle ${active ? "device-menu__toggle--active" : ""}`}
+    onClick={onClick}
+    aria-pressed={active}
+  >
+    <span className="device-menu__toggle-copy">
+      <span className="device-menu__label">{title}</span>
+      <span className="device-menu__value">{description}</span>
+    </span>
+    <span className="device-menu__toggle-state">{active ? "Вкл" : "Выкл"}</span>
+  </button>
+);
+
 const MicMenuPanel = ({
   audioInputDevices,
   selectedInputDeviceId,
@@ -14,11 +29,13 @@ const MicMenuPanel = ({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
+  echoCancellationEnabled,
   micVolume,
   activeMicMenuBars,
   settingsIcon,
   onInputDeviceChange,
   onNoiseProfileChange,
+  onToggleEchoCancellation,
   onMicVolumeChange,
   onOpenVoiceSettings,
 }) => (
@@ -43,6 +60,13 @@ const MicMenuPanel = ({
         </select>
         <span className="device-menu__value">{activeNoiseProfile.description}</span>
       </label>
+
+      <DeviceToggleButton
+        active={echoCancellationEnabled}
+        title="Эхоподавление"
+        description="Отдельно убирает звук из динамиков, который попадает обратно в микрофон."
+        onClick={onToggleEchoCancellation}
+      />
     </div>
 
     <div className="device-menu__slider">
@@ -123,6 +147,7 @@ export default function MenuProfilePanel({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
+  echoCancellationEnabled,
   micVolume,
   audioVolume,
   activeMicMenuBars,
@@ -141,6 +166,7 @@ export default function MenuProfilePanel({
   onInputDeviceChange,
   onOutputDeviceChange,
   onNoiseProfileChange,
+  onToggleEchoCancellation,
   onMicVolumeChange,
   onAudioVolumeChange,
   onSuppressTooltip,
@@ -248,11 +274,13 @@ export default function MenuProfilePanel({
                   noiseProfileOptions={noiseProfileOptions}
                   noiseSuppressionMode={noiseSuppressionMode}
                   activeNoiseProfile={activeNoiseProfile}
+                  echoCancellationEnabled={echoCancellationEnabled}
                   micVolume={micVolume}
                   activeMicMenuBars={activeMicMenuBars}
                   settingsIcon={icons.settings}
                   onInputDeviceChange={onInputDeviceChange}
                   onNoiseProfileChange={onNoiseProfileChange}
+                  onToggleEchoCancellation={onToggleEchoCancellation}
                   onMicVolumeChange={onMicVolumeChange}
                   onOpenVoiceSettings={onOpenVoiceSettings}
                 />

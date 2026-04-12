@@ -1,4 +1,4 @@
-﻿export const MAX_AVATAR_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_AVATAR_SIZE_BYTES = 50 * 1024 * 1024;
 export const MAX_AVATAR_DURATION_SECONDS = 15;
 export const MAX_PROFILE_BACKGROUND_SIZE_BYTES = 60 * 1024 * 1024;
 export const MAX_PROFILE_BACKGROUND_DURATION_SECONDS = 20;
@@ -352,23 +352,23 @@ export async function readAvatarMediaDuration(file) {
 
 export async function validateAvatarFile(file) {
   if (!file) {
-    return "Р¤Р°Р№Р» Р°РІР°С‚Р°СЂР° РЅРµ РІС‹Р±СЂР°РЅ.";
+    return "Файл аватара не выбран.";
   }
 
   const fileExtension = getAvatarFileExtension(file.name);
   const normalizedType = String(file.type || "").toLowerCase().trim();
   if (!ALLOWED_AVATAR_EXTENSIONS.includes(fileExtension) || (normalizedType && !ALLOWED_AVATAR_MIME_TYPES.includes(normalizedType))) {
-    return "Р”Р»СЏ Р°РІР°С‚Р°СЂР° СЂР°Р·СЂРµС€РµРЅС‹ JPG, PNG, WEBP, GIF Рё MP4.";
+    return "Для аватара разрешены JPG, PNG, WEBP, GIF и MP4.";
   }
 
   if (file.size > MAX_AVATAR_SIZE_BYTES) {
-    return "РђРІР°С‚Р°СЂ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ Р±РѕР»СЊС€Рµ 50 РњР‘.";
+    return "Аватар должен быть не больше 50 МБ.";
   }
 
   if (fileExtension === ".gif" || fileExtension === ".mp4") {
     const durationSeconds = await readAvatarMediaDuration(file);
     if (Number.isFinite(durationSeconds) && durationSeconds > MAX_AVATAR_DURATION_SECONDS) {
-      return "РђРЅРёРјРёСЂРѕРІР°РЅРЅС‹Р№ Р°РІР°С‚Р°СЂ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ 15 СЃРµРєСѓРЅРґ.";
+      return "Анимированный аватар должен быть не длиннее 15 секунд.";
     }
   }
 
@@ -405,13 +405,13 @@ export async function validateProfileBackgroundFile(file) {
 
 export async function validateServerIconFile(file) {
   if (!file) {
-    return "Р¤Р°Р№Р» РёРєРѕРЅРєРё СЃРµСЂРІРµСЂР° РЅРµ РІС‹Р±СЂР°РЅ.";
+    return "Файл иконки сервера не выбран.";
   }
 
   const fileExtension = getAvatarFileExtension(file.name);
   const normalizedType = String(file.type || "").toLowerCase().trim();
   if (!ALLOWED_SERVER_ICON_EXTENSIONS.includes(fileExtension) || (normalizedType && !ALLOWED_SERVER_ICON_MIME_TYPES.includes(normalizedType))) {
-    return "Р”Р»СЏ РёРєРѕРЅРєРё СЃРµСЂРІРµСЂР° СЂР°Р·СЂРµС€РµРЅС‹ PNG, JPG, JPEG, HEIF, GIF Рё MP4.";
+    return "Для иконки сервера разрешены PNG, JPG, JPEG, HEIF, GIF и MP4.";
   }
 
   const isAnimatedIcon = fileExtension === ".gif" || fileExtension === ".mp4";
@@ -419,14 +419,14 @@ export async function validateServerIconFile(file) {
 
   if (file.size > maxAllowedSize) {
     return isAnimatedIcon
-      ? "GIF РёР»Рё MP4 РґР»СЏ РёРєРѕРЅРєРё СЃРµСЂРІРµСЂР° РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РЅРµ Р±РѕР»СЊС€Рµ 30 РњР‘."
-      : "РЎС‚Р°С‚РёС‡РЅР°СЏ РёРєРѕРЅРєР° СЃРµСЂРІРµСЂР° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РЅРµ Р±РѕР»СЊС€Рµ 15 РњР‘.";
+      ? "GIF или MP4 для иконки сервера должны быть не больше 30 МБ."
+      : "Статичная иконка сервера должна быть не больше 15 МБ.";
   }
 
   if (isAnimatedIcon) {
     const durationSeconds = await readAvatarMediaDuration(file);
     if (Number.isFinite(durationSeconds) && durationSeconds > MAX_SERVER_ICON_DURATION_SECONDS) {
-      return "РђРЅРёРјРёСЂРѕРІР°РЅРЅР°СЏ РёРєРѕРЅРєР° СЃРµСЂРІРµСЂР° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РЅРµ РґР»РёРЅРЅРµРµ 5 СЃРµРєСѓРЅРґ.";
+      return "Анимированная иконка сервера должна быть не длиннее 5 секунд.";
     }
   }
 

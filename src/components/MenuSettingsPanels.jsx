@@ -103,6 +103,7 @@ export const VoiceSettingsPanel = ({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
+  echoCancellationEnabled,
   autoInputSensitivity,
   onInputDeviceChange,
   onOutputDeviceChange,
@@ -110,6 +111,7 @@ export const VoiceSettingsPanel = ({
   onAudioVolumeChange,
   onToggleMicTest,
   onNoiseProfileChange,
+  onToggleEchoCancellation,
   onToggleAutoSensitivity,
 }) => (
   <div className="settings-shell__content">
@@ -173,6 +175,14 @@ export const VoiceSettingsPanel = ({
 
     <section className="voice-settings-card">
       <div className="voice-settings-card__title">Профиль ввода</div>
+      <div className="voice-toggle-row voice-toggle-row--first">
+        <div>
+          <strong>Эхоподавление</strong>
+          <span>Убирает обратный звук из динамиков и теперь включается отдельно от шумоподавления.</span>
+        </div>
+        <VoiceSwitch active={echoCancellationEnabled} onClick={onToggleEchoCancellation} label="Эхоподавление" />
+      </div>
+
       <div className="voice-profile-list">
         {noiseProfileOptions.map((option) => (
           <label key={option.id} className="voice-profile-option">

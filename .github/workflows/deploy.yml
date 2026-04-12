@@ -53,6 +53,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Check encoding
+        run: npm run check:encoding
+
       - name: Build frontend
         run: npm run build:frontend
 

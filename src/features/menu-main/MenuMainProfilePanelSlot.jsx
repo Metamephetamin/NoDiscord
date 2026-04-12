@@ -32,6 +32,7 @@ export default function MenuMainProfilePanelSlot({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
+  echoCancellationEnabled,
   micVolume,
   audioVolume,
   activeMicMenuBars,
@@ -48,6 +49,7 @@ export default function MenuMainProfilePanelSlot({
   handleInputDeviceChange,
   handleOutputDeviceChange,
   handleNoiseSuppressionModeChange,
+  toggleEchoCancellation,
   updateMicVolume,
   updateAudioVolume,
   suppressTooltipOnClick,
@@ -83,6 +85,7 @@ export default function MenuMainProfilePanelSlot({
       noiseProfileOptions={noiseProfileOptions}
       noiseSuppressionMode={noiseSuppressionMode}
       activeNoiseProfile={activeNoiseProfile}
+      echoCancellationEnabled={echoCancellationEnabled}
       micVolume={micVolume}
       audioVolume={audioVolume}
       activeMicMenuBars={activeMicMenuBars}
@@ -101,6 +104,7 @@ export default function MenuMainProfilePanelSlot({
       onInputDeviceChange={handleInputDeviceChange}
       onOutputDeviceChange={handleOutputDeviceChange}
       onNoiseProfileChange={handleNoiseSuppressionModeChange}
+      onToggleEchoCancellation={toggleEchoCancellation}
       onMicVolumeChange={updateMicVolume}
       onAudioVolumeChange={updateAudioVolume}
       onSuppressTooltip={suppressTooltipOnClick}

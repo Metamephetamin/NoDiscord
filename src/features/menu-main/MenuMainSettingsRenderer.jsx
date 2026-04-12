@@ -45,6 +45,7 @@ export function MenuMainSettingsContent({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
+  echoCancellationEnabled,
   autoInputSensitivity,
   handleInputDeviceChange,
   handleOutputDeviceChange,
@@ -52,6 +53,7 @@ export function MenuMainSettingsContent({
   updateAudioVolume,
   toggleMicrophoneTestPreview,
   handleNoiseSuppressionModeChange,
+  toggleEchoCancellation,
   setAutoInputSensitivity,
   directNotificationsEnabled,
   serverNotificationsEnabled,
@@ -195,6 +197,7 @@ export function MenuMainSettingsContent({
           noiseProfileOptions={noiseProfileOptions}
           noiseSuppressionMode={noiseSuppressionMode}
           activeNoiseProfile={activeNoiseProfile}
+          echoCancellationEnabled={echoCancellationEnabled}
           autoInputSensitivity={autoInputSensitivity}
           onInputDeviceChange={handleInputDeviceChange}
           onOutputDeviceChange={handleOutputDeviceChange}
@@ -202,6 +205,7 @@ export function MenuMainSettingsContent({
           onAudioVolumeChange={updateAudioVolume}
           onToggleMicTest={toggleMicrophoneTestPreview}
           onNoiseProfileChange={handleNoiseSuppressionModeChange}
+          onToggleEchoCancellation={toggleEchoCancellation}
           onToggleAutoSensitivity={() => setAutoInputSensitivity((previous) => !previous)}
         />
       );

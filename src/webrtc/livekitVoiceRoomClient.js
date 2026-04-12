@@ -2,6 +2,7 @@
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import {
   AudioPresets,
+  LocalAudioTrack,
   Room,
   RoomEvent,
   ScreenSharePresets,
@@ -21,6 +22,7 @@ import {
 import {
   DEFAULT_AVATAR,
   NOISE_SUPPRESSION_MODE_BROADCAST,
+  NOISE_SUPPRESSION_MODE_KRISP,
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
   NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
   createPreferredAudioContext,
@@ -175,6 +177,22 @@ function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) 
   };
 }
 
+function normalizeNoiseSuppressionMode(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) {
+  if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
+    return NOISE_SUPPRESSION_MODE_BROADCAST;
+  }
+
+  if (mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
+    return NOISE_SUPPRESSION_MODE_VOICE_ISOLATION;
+  }
+
+  if (mode === NOISE_SUPPRESSION_MODE_KRISP) {
+    return NOISE_SUPPRESSION_MODE_KRISP;
+  }
+
+  return NOISE_SUPPRESSION_MODE_TRANSPARENT;
+}
+
 function getScreenShareAudioPublishOptions() {
   return {
     audioPreset: HIGH_QUALITY_SCREEN_AUDIO_PRESET,
@@ -256,6 +274,9 @@ export function createVoiceRoomClient({
   let micVolume = 0.7;
   let remoteVolume = 0.7;
   let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_TRANSPARENT;
+  let echoCancellationEnabled = true;
+  let krispNoiseFilterModulePromise = null;
+  let krispNoiseProcessor = null;
   let localScreenStream = null;
   let localLiveShareMode = null;
   let selectedInputDeviceId = "";
@@ -357,7 +378,7 @@ export function createVoiceRoomClient({
       participants.push({
         ...getParticipantSnapshot(room.localParticipant),
         userId: String(currentUser?.id || room.localParticipant.identity || ""),
-        name: getDisplayName(currentUser || {}) || room.localParticipant.name || "Р’С‹",
+        name: getDisplayName(currentUser || {}) || room.localParticipant.name || "Вы",
         avatar: getAvatar(currentUser || {}) || DEFAULT_AVATAR,
         isSelf: true,
       });
@@ -453,16 +474,74 @@ export function createVoiceRoomClient({
       selectedInputDeviceId && selectedInputDeviceId !== "default"
         ? { exact: selectedInputDeviceId }
         : undefined,
-    echoCancellation:
-      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    echoCancellation: echoCancellationEnabled,
     noiseSuppression:
       mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
+      mode === NOISE_SUPPRESSION_MODE_KRISP,
     autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     channelCount: 1,
     sampleRate: AUDIO_SAMPLE_RATE,
   });
+
+  const loadKrispNoiseFilterModule = () => {
+    if (!krispNoiseFilterModulePromise) {
+      krispNoiseFilterModulePromise = import("@livekit/krisp-noise-filter");
+    }
+
+    return krispNoiseFilterModulePromise;
+  };
+
+  const stopKrispNoiseFilter = async () => {
+    const localAudioTrack = micPublication?.track;
+    krispNoiseProcessor = null;
+
+    if (localAudioTrack?.getProcessor?.()?.name === "livekit-noise-filter" && typeof localAudioTrack.stopProcessor === "function") {
+      await localAudioTrack.stopProcessor();
+      logVoiceDebug("local-audio:krisp-stopped");
+    }
+  };
+
+  const syncKrispNoiseFilter = async () => {
+    const localAudioTrack = micPublication?.track;
+    if (noiseSuppressionMode !== NOISE_SUPPRESSION_MODE_KRISP) {
+      await stopKrispNoiseFilter();
+      return;
+    }
+
+    if (!(localAudioTrack instanceof LocalAudioTrack) || typeof localAudioTrack.setProcessor !== "function") {
+      logVoiceDebug("local-audio:krisp-skipped-no-local-track", {
+        publicationSid: micPublication?.trackSid || "",
+      });
+      return;
+    }
+
+    try {
+      const { KrispNoiseFilter, isKrispNoiseFilterSupported } = await loadKrispNoiseFilterModule();
+      if (!isKrispNoiseFilterSupported()) {
+        logVoiceDebug("local-audio:krisp-unsupported");
+        return;
+      }
+
+      if (localAudioTrack.getProcessor?.()?.name !== "livekit-noise-filter") {
+        krispNoiseProcessor = KrispNoiseFilter({ quality: "medium" });
+        await localAudioTrack.setProcessor(krispNoiseProcessor);
+      } else {
+        krispNoiseProcessor = localAudioTrack.getProcessor();
+      }
+
+      await krispNoiseProcessor?.setEnabled?.(true);
+      logVoiceDebug("local-audio:krisp-enabled", {
+        isEnabled: krispNoiseProcessor?.isEnabled?.(),
+      });
+    } catch (error) {
+      krispNoiseProcessor = null;
+      logVoiceDebug("local-audio:krisp-failed", {
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+    }
+  };
 
   const startLocalMetering = (analyser) => {
     if (!analyser) {
@@ -613,6 +692,7 @@ export function createVoiceRoomClient({
     logVoiceDebug("local-audio:pipeline-create:start", {
       selectedInputDeviceId,
       noiseSuppressionMode,
+      echoCancellationEnabled,
       micVolume,
     });
 
@@ -643,6 +723,7 @@ export function createVoiceRoomClient({
       sourceTracks: localMicSourceStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
       outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
       audioContextState: audioContext?.state || "",
+      echoCancellationEnabled,
     });
 
     return localAudioStream;
@@ -1007,6 +1088,7 @@ export function createVoiceRoomClient({
     }
 
     const activeRoom = room;
+    await stopKrispNoiseFilter().catch(() => {});
     room = null;
     roomConnectPromise = null;
     micPublication = null;
@@ -1141,8 +1223,12 @@ export function createVoiceRoomClient({
     nextTrack.enabled = !(isSelfMicMuted || isSelfDeafened);
 
     if (micPublication?.track?.replaceTrack) {
+      if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_KRISP) {
+        await stopKrispNoiseFilter();
+      }
       await micPublication.track.replaceTrack(nextTrack, true);
       await applyPublishedAudioState();
+      await syncKrispNoiseFilter();
       logVoiceDebug("local-audio:track-replaced", {
         publicationSid: micPublication.trackSid,
         track: getTrackDebugInfo(nextTrack),
@@ -1157,6 +1243,7 @@ export function createVoiceRoomClient({
       ...getMicrophonePublishOptions(noiseSuppressionMode),
     });
     await applyPublishedAudioState();
+    await syncKrispNoiseFilter();
     logVoiceDebug("local-audio:published", {
       publicationSid: micPublication?.trackSid || "",
       publicationMuted: micPublication?.isMuted,
@@ -1167,6 +1254,7 @@ export function createVoiceRoomClient({
 
   const rebuildLocalAudioPipeline = async () => {
     const hadMicTrack = Boolean(localMicSourceStream || localAudioStream);
+    await stopKrispNoiseFilter();
     stopLocalMic();
 
     if (!hadMicTrack) {
@@ -1194,6 +1282,7 @@ export function createVoiceRoomClient({
     }
 
     await applyPublishedAudioState();
+    await syncKrispNoiseFilter();
     publishVoiceDebugSnapshot("local-audio:rebuild-complete");
 
     return nextStream;
@@ -1882,16 +1971,23 @@ export function createVoiceRoomClient({
     },
 
     async setNoiseSuppressionMode(mode) {
-      const nextMode =
-        mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
-          ? NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
-          : NOISE_SUPPRESSION_MODE_TRANSPARENT;
+      const nextMode = normalizeNoiseSuppressionMode(mode);
 
       if (noiseSuppressionMode === nextMode) {
         return;
       }
 
       noiseSuppressionMode = nextMode;
+      await rebuildLocalAudioPipeline();
+    },
+
+    async setEchoCancellationEnabled(enabled) {
+      const nextEnabled = Boolean(enabled);
+      if (echoCancellationEnabled === nextEnabled) {
+        return;
+      }
+
+      echoCancellationEnabled = nextEnabled;
       await rebuildLocalAudioPipeline();
     },
 

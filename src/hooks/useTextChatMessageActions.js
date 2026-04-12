@@ -1,4 +1,4 @@
-﻿import { useMemo } from "react";
+import { useMemo } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import { API_URL } from "../config/runtime";
 import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
@@ -196,7 +196,7 @@ export default function useTextChatMessageActions({
     const fallbackItem = {
       type,
       url,
-      name: name || (type === "image" ? "РР·РѕР±СЂР°Р¶РµРЅРёРµ" : "Р’РёРґРµРѕ"),
+      name: name || (type === "image" ? "Изображение" : "Видео"),
       contentType,
       messageId: String(messageId || ""),
       attachmentIndex: Number(attachmentIndex) || 0,
@@ -299,7 +299,7 @@ export default function useTextChatMessageActions({
       await copyTextToClipboard(messageContextMenu.text);
       setErrorMessage("");
     } catch {
-      setErrorMessage("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ С‚РµРєСЃС‚ РІ Р±СѓС„РµСЂ РѕР±РјРµРЅР°.");
+      setErrorMessage("Не удалось скопировать текст в буфер обмена.");
     } finally {
       setMessageContextMenu(null);
     }
@@ -315,7 +315,7 @@ export default function useTextChatMessageActions({
       setErrorMessage("");
     } catch (error) {
       console.error("DeleteMessage error:", error);
-      setErrorMessage(getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ."));
+      setErrorMessage(getChatErrorMessage(error, "Не удалось удалить сообщение."));
     } finally {
       setMessageContextMenu(null);
     }
@@ -372,7 +372,7 @@ export default function useTextChatMessageActions({
           : await fetch(sourceAttachmentUrl);
 
         if (!response.ok) {
-          throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С„Р°Р№Р» РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ.");
+          throw new Error("Не удалось загрузить файл для скачивания.");
         }
 
         resolvedContentType = response.headers.get("content-type") || attachment.attachmentContentType || "";
@@ -401,7 +401,7 @@ export default function useTextChatMessageActions({
       setMessageContextMenu(null);
     } catch (error) {
       console.error("Download attachment error:", error);
-      setErrorMessage(error?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ С„Р°Р№Р».");
+      setErrorMessage(error?.message || "Не удалось скачать файл.");
       setMessageContextMenu(null);
     }
   };
@@ -417,7 +417,7 @@ export default function useTextChatMessageActions({
       setMessageContextMenu(null);
     } catch (error) {
       console.error("ToggleReaction error:", error);
-      setErrorMessage(getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕСЃС‚Р°РІРёС‚СЊ СЂРµР°РєС†РёСЋ."));
+      setErrorMessage(getChatErrorMessage(error, "Не удалось поставить реакцию."));
     }
   };
 
@@ -452,7 +452,7 @@ export default function useTextChatMessageActions({
       : [];
 
     if (!normalizedPayload.length) {
-      throw new Error("РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РѕС‚РїСЂР°РІРєРё.");
+      throw new Error("Нет данных для отправки.");
     }
 
     const containsTextPayload = normalizedPayload.some((item) => String(item?.message || "").trim());
@@ -501,12 +501,12 @@ export default function useTextChatMessageActions({
 
   const handleForwardSubmit = async () => {
     if (!forwardModal.targetIds.length) {
-      setErrorMessage("Р’С‹Р±РµСЂРёС‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ С‡Р°С‚ РїРѕР»СѓС‡Р°С‚РµР»СЏ.");
+      setErrorMessage("Выберите хотя бы один чат получателя.");
       return;
     }
 
     if (!forwardableMessages.length) {
-      setErrorMessage("РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё СЃРѕРѕР±С‰РµРЅРёСЏ РґР»СЏ РїРµСЂРµСЃС‹Р»РєРё.");
+      setErrorMessage("Не удалось найти сообщения для пересылки.");
       return;
     }
 
@@ -516,7 +516,7 @@ export default function useTextChatMessageActions({
 
       const connection = await startChatConnection();
       if (!connection) {
-        throw new Error("РЎРµСЃСЃРёСЏ РЅРµРґРµР№СЃС‚РІРёС‚РµР»СЊРЅР°. Р’РѕР№РґРёС‚Рµ СЃРЅРѕРІР°.");
+        throw new Error("Сессия недействительна. Войдите снова.");
       }
 
       const avatar = user?.avatarUrl || user?.avatar || "";
@@ -529,13 +529,13 @@ export default function useTextChatMessageActions({
         .filter((target) => target.channelId);
 
       if (!targetChannels.length) {
-        throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ С‡Р°С‚С‹ РїРѕР»СѓС‡Р°С‚РµР»РµР№.");
+        throw new Error("Не удалось определить чаты получателей.");
       }
 
       for (const target of targetChannels) {
         const payload = await buildForwardPayloadForTargetChannel(target.channelId, forwardableMessages);
         if (!payload.length) {
-          throw new Error("РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РїРµСЂРµСЃС‹Р»РєРё.");
+          throw new Error("Нет данных для пересылки.");
         }
 
         await sendMessagesCompat(target.channelId, avatar, payload, { allowBatch: false });
@@ -548,18 +548,18 @@ export default function useTextChatMessageActions({
       closeForwardModal();
     } catch (error) {
       console.error("Forward messages error:", error);
-      setErrorMessage(getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµСЃР»Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёСЏ."));
+      setErrorMessage(getChatErrorMessage(error, "Не удалось переслать сообщения."));
       setForwardModal((previous) => ({ ...previous, submitting: false }));
     }
   };
 
   const contextMenuActions = [
-    { id: "edit", label: "Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ", icon: "вњЋ", disabled: !messageContextMenu?.canEdit, hidden: false, onClick: handleStartEditingMessage },
-    { id: "reply", label: "РћС‚РІРµС‚РёС‚СЊ", icon: "в†©", disabled: true, hidden: false, onClick: () => {} },
+    { id: "edit", label: "Редактировать", icon: "✎", disabled: !messageContextMenu?.canEdit, hidden: false, onClick: handleStartEditingMessage },
+    { id: "reply", label: "Ответить", icon: "↩", disabled: true, hidden: false, onClick: () => {} },
     {
       id: "pin",
-      label: messageContextMenu?.isPinned ? "РћС‚РєСЂРµРїРёС‚СЊ" : "Р—Р°РєСЂРµРїРёС‚СЊ",
-      icon: "рџ“Њ",
+      label: messageContextMenu?.isPinned ? "Открепить" : "Закрепить",
+      icon: "📌",
       disabled: false,
       hidden: false,
       onClick: () => {
@@ -577,10 +577,10 @@ export default function useTextChatMessageActions({
       hidden: !messageContextMenu?.hasAttachment,
       onClick: () => handleDownloadAttachment(),
     },
-    { id: "copy", label: "РљРѕРїРёСЂРѕРІР°С‚СЊ С‚РµРєСЃС‚", icon: "в§‰", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
-    { id: "forward", label: "РџРµСЂРµСЃР»Р°С‚СЊ", icon: "в†—", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
-    { id: "delete", label: "РЈРґР°Р»РёС‚СЊ", icon: "рџ—‘", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
-    { id: "select", label: "Р’С‹Р±СЂР°С‚СЊ", icon: "вњ“", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
+    { id: "copy", label: "Копировать текст", icon: "⧉", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
+    { id: "forward", label: "Переслать", icon: "↗", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
+    { id: "delete", label: "Удалить", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
+    { id: "select", label: "Выбрать", icon: "✓", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
   ].filter((action) => !action.hidden);
 
   const contextMenuMessage = messageContextMenu

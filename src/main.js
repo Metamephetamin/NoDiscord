@@ -1069,9 +1069,9 @@ app.whenReady().then(async () => {
     const fileName = sanitizeDownloadFileName(payload?.defaultFileName);
     const targetPath = path.join(app.getPath("downloads"), fileName);
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: "РЎРѕС…СЂР°РЅРёС‚СЊ С„Р°Р№Р»",
+      title: "Сохранить файл",
       defaultPath: targetPath,
-      buttonLabel: "РЎРєР°С‡Р°С‚СЊ",
+      buttonLabel: "Скачать",
     });
 
     if (canceled || !filePath) {

@@ -3641,7 +3641,8 @@
 
 .device-menu__item,
 .device-menu__field,
-.device-menu__settings {
+.device-menu__settings,
+.device-menu__toggle {
   width: 100%;
   display: flex;
   align-items: center;
@@ -3656,7 +3657,8 @@
 }
 
 .device-menu__item,
-.device-menu__field {
+.device-menu__field,
+.device-menu__toggle {
   flex-direction: column;
   align-items: flex-start;
 }
@@ -3664,6 +3666,36 @@
 .device-menu__field {
   gap: 8px;
   cursor: default;
+}
+
+.device-menu__toggle {
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.device-menu__toggle:hover,
+.device-menu__toggle--active {
+  background: rgba(108, 99, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(126, 113, 255, 0.28);
+}
+
+.device-menu__toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-menu__toggle-state {
+  align-self: flex-end;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .device-menu__label {
@@ -4149,6 +4181,10 @@
   justify-content: space-between;
   gap: 18px;
   padding: 20px 0;
+}
+
+.voice-toggle-row--first {
+  padding-top: 0;
 }
 
 .voice-toggle-row strong {
