@@ -1,6 +1,7 @@
 import AnimatedAvatar from "./AnimatedAvatar";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
+import VoiceRoomStage from "./VoiceRoomStage";
 import VoiceChannelList from "./VoiceChannelList";
 
 export const ServersSidebar = ({
@@ -264,6 +265,9 @@ export const ServersSidebar = ({
 export const ServerMain = ({
   activeServer,
   currentTextChannel,
+  currentVoiceChannelName,
+  currentVoiceParticipants,
+  remoteScreenShares,
   activeServerUnreadCount,
   hasLocalSharePreview,
   isLocalSharePreviewVisible,
@@ -280,6 +284,7 @@ export const ServerMain = ({
   directConversationTargets,
   serverMembers,
   onOpenLocalSharePreview,
+  onWatchStream,
   onChannelSearchChange,
   onAddServer,
   onCloseSelectedStream,
@@ -287,85 +292,107 @@ export const ServerMain = ({
   onStopScreenShare,
   onCloseLocalSharePreview,
   getChannelDisplayName,
-}) => (
-  <main className="chat__wrapper chat__wrapper--servers">
-    <div className="chat__box chat__box--servers">
-      {activeServer ? (
-        <div className="chat__topbar">
-          <div className="chat__topbar-title">
-            <div className="chat__topbar-copy">
-              <strong>
-                <span>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
-                {activeServerUnreadCount > 0 ? <span className="chat__topbar-badge">{Math.min(activeServerUnreadCount, 99)}</span> : null}
-              </strong>
-              <span>Текстовый канал сервера</span>
+}) => {
+  const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName);
+
+  return (
+    <main className="chat__wrapper chat__wrapper--servers">
+      <div className={`chat__box chat__box--servers ${isVoiceStageVisible ? "chat__box--voice-stage" : ""}`}>
+        {activeServer && !isVoiceStageVisible ? (
+          <div className="chat__topbar">
+            <div className="chat__topbar-title">
+              <div className="chat__topbar-copy">
+                <strong>
+                  <span>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
+                  {activeServerUnreadCount > 0 ? <span className="chat__topbar-badge">{Math.min(activeServerUnreadCount, 99)}</span> : null}
+                </strong>
+                <span>Текстовый канал сервера</span>
+              </div>
+            </div>
+            <div className="chat__topbar-actions">
+              {hasLocalSharePreview ? (
+                <button type="button" className={`chat__topbar-action ${isLocalSharePreviewVisible ? "chat__topbar-action--active" : ""}`} onClick={onOpenLocalSharePreview}>
+                  {localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим"}
+                </button>
+              ) : null}
+              <label className="chat__topbar-search-wrap">
+                <img src={searchIcon} alt="" />
+                <input
+                  className="chat__topbar-search"
+                  type="text"
+                  value={channelSearchQuery}
+                  onChange={(event) => onChannelSearchChange(event.target.value)}
+                  placeholder={`Искать в ${getChannelDisplayName(currentTextChannel?.name || "канал", "text")}`}
+                />
+              </label>
             </div>
           </div>
-          <div className="chat__topbar-actions">
-            {hasLocalSharePreview ? (
-              <button type="button" className={`chat__topbar-action ${isLocalSharePreviewVisible ? "chat__topbar-action--active" : ""}`} onClick={onOpenLocalSharePreview}>
-                {localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим"}
-              </button>
-            ) : null}
-            <label className="chat__topbar-search-wrap">
-              <img src={searchIcon} alt="" />
-              <input
-                className="chat__topbar-search"
-                type="text"
-                value={channelSearchQuery}
-                onChange={(event) => onChannelSearchChange(event.target.value)}
-                placeholder={`Искать в ${getChannelDisplayName(currentTextChannel?.name || "канал", "text")}`}
-              />
-            </label>
+        ) : null}
+
+        {!activeServer ? (
+          <div className="server-empty-state">
+            <div className="server-empty-state__badge">Серверы</div>
+            <h1>У вас пока нет серверов</h1>
+            <p>После регистрации список пустой. Создайте свой первый сервер вручную, и здесь появятся каналы и чат.</p>
+            <button type="button" className="server-empty-state__button" onClick={onAddServer}>Создать первый сервер</button>
           </div>
-        </div>
-      ) : null}
-
-      {!activeServer ? (
-        <div className="server-empty-state">
-          <div className="server-empty-state__badge">Серверы</div>
-          <h1>У вас пока нет серверов</h1>
-          <p>После регистрации список пустой. Создайте свой первый сервер вручную, и здесь появятся каналы и чат.</p>
-          <button type="button" className="server-empty-state__button" onClick={onAddServer}>Создать первый сервер</button>
-        </div>
-      ) : selectedStreamUserId ? (
-        <ScreenShareViewer
-          stream={selectedStream?.stream || null}
-          videoSrc={selectedStream?.videoSrc || ""}
-          imageSrc={selectedStream?.imageSrc || ""}
-          hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
-          title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`}
-          subtitle="Просмотр видеопотока участника"
-          onClose={onCloseSelectedStream}
-          debugInfo={selectedStreamDebugInfo}
-        />
-      ) : isLocalSharePreviewVisible && hasLocalSharePreview ? (
-        <ScreenShareViewer
-          stream={localSharePreview?.stream || null}
-          title={localSharePreviewMeta.title}
-          subtitle={localSharePreviewMeta.subtitle}
-          onAction={localSharePreview?.mode === "camera" ? onStopCameraShare : onStopScreenShare}
-          actionLabel={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
-          actionVariant="danger"
-          onClose={onCloseLocalSharePreview}
-          debugInfo={localSharePreviewDebugInfo}
-        />
-      ) : (
-        currentTextChannel ? (
-          <TextChat
-            serverId={activeServer?.id}
-            channelId={currentTextChannel.id}
-            user={user}
-            searchQuery={channelSearchQuery}
-            directTargets={directConversationTargets}
-            serverMembers={serverMembers}
+        ) : isVoiceStageVisible ? (
+          <VoiceRoomStage
+            activeServerName={activeServer?.name || "Сервер"}
+            channelName={currentVoiceChannelName}
+            participants={currentVoiceParticipants}
+            remoteShares={remoteScreenShares}
+            selectedStreamUserId={selectedStreamUserId}
+            selectedStream={selectedStream}
+            selectedStreamParticipant={selectedStreamParticipant}
+            hasLocalSharePreview={hasLocalSharePreview}
+            isLocalSharePreviewVisible={isLocalSharePreviewVisible}
+            localSharePreview={localSharePreview}
+            onWatchStream={onWatchStream}
+            onOpenLocalSharePreview={onOpenLocalSharePreview}
+            onCloseSelectedStream={onCloseSelectedStream}
+            onCloseLocalSharePreview={onCloseLocalSharePreview}
+            onStopScreenShare={onStopScreenShare}
+            onStopCameraShare={onStopCameraShare}
           />
-        ) : null
-      )}
-    </div>
-  </main>
-);
-
+        ) : selectedStreamUserId ? (
+          <ScreenShareViewer
+            stream={selectedStream?.stream || null}
+            videoSrc={selectedStream?.videoSrc || ""}
+            imageSrc={selectedStream?.imageSrc || ""}
+            hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
+            title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`}
+            subtitle="Просмотр видеопотока участника"
+            onClose={onCloseSelectedStream}
+            debugInfo={selectedStreamDebugInfo}
+          />
+        ) : isLocalSharePreviewVisible && hasLocalSharePreview ? (
+          <ScreenShareViewer
+            stream={localSharePreview?.stream || null}
+            title={localSharePreviewMeta.title}
+            subtitle={localSharePreviewMeta.subtitle}
+            onAction={localSharePreview?.mode === "camera" ? onStopCameraShare : onStopScreenShare}
+            actionLabel={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
+            actionVariant="danger"
+            onClose={onCloseLocalSharePreview}
+            debugInfo={localSharePreviewDebugInfo}
+          />
+        ) : (
+          currentTextChannel ? (
+            <TextChat
+              serverId={activeServer?.id}
+              channelId={currentTextChannel.id}
+              user={user}
+              searchQuery={channelSearchQuery}
+              directTargets={directConversationTargets}
+              serverMembers={serverMembers}
+            />
+          ) : null
+        )}
+      </div>
+    </main>
+  );
+};
 export const DesktopServerRail = ({
   servers,
   workspaceMode,

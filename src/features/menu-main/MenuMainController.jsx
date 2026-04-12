@@ -3888,6 +3888,9 @@ export default function MenuMain({
     <ServerMain
       activeServer={activeServer}
       currentTextChannel={currentTextChannel}
+      currentVoiceChannelName={currentVoiceChannelName}
+      currentVoiceParticipants={currentVoiceParticipants}
+      remoteScreenShares={remoteScreenShares}
       activeServerUnreadCount={activeServerUnreadCount}
       hasLocalSharePreview={hasLocalSharePreview}
       isLocalSharePreviewVisible={isLocalSharePreviewVisible}
@@ -3904,6 +3907,7 @@ export default function MenuMain({
       directConversationTargets={directConversationTargets}
       serverMembers={activeServer?.members || []}
       onOpenLocalSharePreview={openLocalSharePreview}
+      onWatchStream={handleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}
       onAddServer={handleAddServer}
       onCloseSelectedStream={() => setSelectedStreamUserId(null)}

@@ -65,6 +65,11 @@ export default function useTextChatVoiceSpeech({
   const speechShouldRestartRef = useRef(false);
   const speechRestartTimeoutRef = useRef(0);
   const speechSessionIdRef = useRef(0);
+  const speechTransientErrorCountRef = useRef(0);
+  const speechLastResultAtRef = useRef(0);
+
+  const SPEECH_RECOGNITION_MAX_RESTART_DELAY_MS = 4000;
+  const SPEECH_RECOGNITION_NETWORK_WARNING_DELAY_MS = 7000;
 
   const stopVoiceLevelLoop = () => {
     if (voiceLevelFrameRef.current) {
@@ -444,6 +449,8 @@ export default function useTextChatVoiceSpeech({
         speechFinalTranscriptRef.current = "";
         speechDisplayedTranscriptRef.current = "";
         speechShouldRestartRef.current = true;
+        speechTransientErrorCountRef.current = 0;
+        speechLastResultAtRef.current = 0;
       }
       recognition.lang = "ru-RU";
       recognition.continuous = true;
@@ -451,6 +458,11 @@ export default function useTextChatVoiceSpeech({
       recognition.maxAlternatives = 1;
       recognition.__shouldFinalize = true;
       recognition.__sessionId = nextSessionId;
+      recognition.__restartDelayMs = SPEECH_RECOGNITION_RESTART_DELAY_MS;
+
+      recognition.onstart = () => {
+        setSpeechRecognitionActive(true);
+      };
 
       recognition.onresult = (event) => {
         let finalTranscript = speechFinalTranscriptRef.current;
@@ -466,6 +478,9 @@ export default function useTextChatVoiceSpeech({
         }
 
         speechFinalTranscriptRef.current = finalTranscript;
+        speechLastResultAtRef.current = Date.now();
+        speechTransientErrorCountRef.current = 0;
+        recognition.__restartDelayMs = SPEECH_RECOGNITION_RESTART_DELAY_MS;
         const composedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
         const formattedTranscript = formatSpeechTranscriptDraft(composedTranscript, false);
         speechDisplayedTranscriptRef.current = formattedTranscript;
@@ -492,6 +507,20 @@ export default function useTextChatVoiceSpeech({
           return;
         }
 
+        if (errorCode === "network") {
+          speechTransientErrorCountRef.current += 1;
+          recognition.__restartDelayMs = Math.min(
+            SPEECH_RECOGNITION_RESTART_DELAY_MS * (2 ** Math.max(0, speechTransientErrorCountRef.current - 1)),
+            SPEECH_RECOGNITION_MAX_RESTART_DELAY_MS
+          );
+
+          const hasRecentTranscript = Date.now() - (speechLastResultAtRef.current || 0) <= SPEECH_RECOGNITION_NETWORK_WARNING_DELAY_MS;
+          if (!hasRecentTranscript && speechTransientErrorCountRef.current >= 3) {
+            setErrorMessage("Голосовой ввод временно нестабилен. Попробую переподключить распознавание.");
+          }
+          return;
+        }
+
         console.warn("Speech recognition error:", event);
       };
 
@@ -512,7 +541,10 @@ export default function useTextChatVoiceSpeech({
             }
 
             startSpeechRecognition({ preserveDraft: true, sessionId: recognition.__sessionId });
-          }, SPEECH_RECOGNITION_RESTART_DELAY_MS);
+          }, Math.max(
+            SPEECH_RECOGNITION_RESTART_DELAY_MS,
+            Number(recognition.__restartDelayMs) || SPEECH_RECOGNITION_RESTART_DELAY_MS
+          ));
           return;
         }
 
@@ -570,9 +602,30 @@ export default function useTextChatVoiceSpeech({
       speechRecognitionRef.current = recognition;
       setSpeechRecognitionActive(true);
       recognition.start();
-    } catch {
+    } catch (error) {
+      const shouldRetry = preserveDraft && speechShouldRestartRef.current;
       setSpeechRecognitionActive(false);
       speechRecognitionRef.current = null;
+
+      if (shouldRetry) {
+        speechTransientErrorCountRef.current += 1;
+        const retryDelayMs = Math.min(
+          SPEECH_RECOGNITION_RESTART_DELAY_MS * (2 ** Math.max(0, speechTransientErrorCountRef.current - 1)),
+          SPEECH_RECOGNITION_MAX_RESTART_DELAY_MS
+        );
+        clearSpeechRecognitionRestartTimer();
+        speechRestartTimeoutRef.current = window.setTimeout(() => {
+          speechRestartTimeoutRef.current = 0;
+          if (!speechShouldRestartRef.current || speechSessionIdRef.current !== nextSessionId) {
+            return;
+          }
+
+          startSpeechRecognition({ preserveDraft: true, sessionId: nextSessionId });
+        }, retryDelayMs);
+        return;
+      }
+
+      console.warn("Speech recognition start error:", error);
       setErrorMessage("Не удалось запустить голосовой ввод текста.");
     }
   };
