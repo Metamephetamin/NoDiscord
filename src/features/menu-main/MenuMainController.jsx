@@ -1340,7 +1340,8 @@ export default function MenuMain({
 
     try {
       const storedMode = localStorage.getItem(noiseSuppressionStorageKey);
-      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(storedMode) ? storedMode : "broadcast");
+      const normalizedStoredMode = storedMode === "krisp" ? "rnnoise" : storedMode;
+      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "broadcast");
     } catch {
       setNoiseSuppressionMode("transparent");
     }
@@ -3604,9 +3605,9 @@ export default function MenuMain({
       description: "Только ваш голос: фон режется сильнее и речь выходит вперед.",
     },
     {
-      id: "krisp",
-      title: "Krisp",
-      description: "Фильтр Krisp для фонового шума и клавиатуры, если браузер его поддерживает.",
+      id: "rnnoise",
+      title: "RNNoise",
+      description: "Бесплатное подавление фонового шума и клавиатуры на RNNoise, если Electron/Chromium его поддерживает.",
     },
     {
       id: "transparent",

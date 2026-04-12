@@ -50,9 +50,9 @@
     "vite": "^7.2.6"
   },
   "dependencies": {
-    "@livekit/krisp-noise-filter": "^0.4.1",
     "@microsoft/signalr": "^9.0.6",
     "@microsoft/signalr-protocol-msgpack": "^10.0.0",
+    "@shiguredo/noise-suppression": "^2025.1.0",
     "@vitejs/plugin-react": "^5.1.0",
     "axios": "^1.13.1",
     "electron-squirrel-startup": "^1.0.1",
