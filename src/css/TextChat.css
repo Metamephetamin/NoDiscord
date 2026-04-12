@@ -1773,12 +1773,58 @@
   text-transform: lowercase;
 }
 
-.composer-tool__emoji {
-  width: 24px;
-  height: 24px;
-  font-size: 21px;
-  line-height: 1;
-  filter: saturate(1.04);
+.composer-tool__emoji-icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.composer-tool__emoji-face {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.composer-tool__emoji-face::before,
+.composer-tool__emoji-face::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.composer-tool__emoji-face::before {
+  left: 4px;
+}
+
+.composer-tool__emoji-face::after {
+  right: 4px;
+}
+
+.composer-tool__emoji-face::before,
+.composer-tool__emoji-face::after {
+  box-shadow: none;
+}
+
+.composer-tool__emoji-icon::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 4px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  transform: translateY(4px);
 }
 
 .composer-tool__lock {
@@ -1838,24 +1884,29 @@
 
 .composer-send-button__icon {
   position: relative;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   display: inline-block;
-  border-top: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-  transform: translateX(-1px) rotate(45deg);
+  transform: translateX(1px);
 }
 
 .composer-send-button__icon::before {
   content: "";
   position: absolute;
-  right: -1px;
-  top: 5px;
-  width: 10px;
-  height: 2px;
+  inset: 0;
   background: currentColor;
-  transform: rotate(-45deg);
-  transform-origin: right center;
+  clip-path: polygon(0 8%, 100% 50%, 0 92%, 24% 52%);
+}
+
+.composer-send-button__icon::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 7px;
+  width: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .composer-emoji-picker {

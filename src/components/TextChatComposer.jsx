@@ -135,7 +135,9 @@ export default function TextChatComposer({
               aria-label="Открыть смайлики"
               aria-expanded={composerEmojiPickerOpen}
             >
-              <AnimatedEmojiGlyph emoji={COMPOSER_EMOJI_OPTIONS[0]} className="composer-tool__emoji" />
+              <span className="composer-tool__emoji-icon" aria-hidden="true">
+                <span className="composer-tool__emoji-face" />
+              </span>
             </button>
 
             {ENABLE_SPEECH_INPUT_BUTTON ? (
