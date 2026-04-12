@@ -5,8 +5,8 @@ import {
 } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import { extractMentionsFromText } from "../utils/messageMentions";
+import { punctuateTypedMessageText } from "../utils/speechPunctuation";
 import {
-  formatTypedMessageText,
   getChatErrorMessage,
   MAX_FILE_SIZE_BYTES,
   MESSAGE_SEND_COOLDOWN_MS,
@@ -40,7 +40,7 @@ export default function useTextChatSendActions({
 }) {
   const send = async () => {
     const rawMessageText = message.trim();
-    const messageText = formatTypedMessageText(rawMessageText);
+    const messageText = await punctuateTypedMessageText(rawMessageText);
     const filesToSend = selectedFiles;
 
     if (messageEditState && filesToSend.length) {

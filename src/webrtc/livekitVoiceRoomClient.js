@@ -470,29 +470,24 @@ export function createVoiceRoomClient({
     emitAudioDevices().catch(() => {});
   };
 
-  const getMicConstraints = (mode = noiseSuppressionMode) => ({
+  const buildMicConstraints = ({ deviceId = selectedInputDeviceId, mode = noiseSuppressionMode, relaxed = false } = {}) => ({
     deviceId:
-      selectedInputDeviceId && selectedInputDeviceId !== "default"
-        ? { exact: selectedInputDeviceId }
+      deviceId && deviceId !== "default"
+        ? { exact: deviceId }
         : undefined,
     echoCancellation: echoCancellationEnabled,
-    noiseSuppression:
+    noiseSuppression: true,
+    autoGainControl:
       mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
       mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
       mode === NOISE_SUPPRESSION_MODE_KRISP,
-    autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
-    channelCount: 1,
-    sampleRate: AUDIO_SAMPLE_RATE,
+    channelCount: relaxed ? undefined : 1,
+    sampleRate: relaxed ? undefined : AUDIO_SAMPLE_RATE,
   });
 
-  const getRelaxedMicConstraints = (mode = noiseSuppressionMode) => ({
-    echoCancellation: echoCancellationEnabled,
-    noiseSuppression:
-      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
-      mode === NOISE_SUPPRESSION_MODE_KRISP,
-    autoGainControl: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
-  });
+  const getMicConstraints = (mode = noiseSuppressionMode) => buildMicConstraints({ mode });
+
+  const getRelaxedMicConstraints = (mode = noiseSuppressionMode) => buildMicConstraints({ mode, relaxed: true, deviceId: "" });
 
   const isAudioCaptureStartError = (error) => {
     const errorName = String(error?.name || "").trim();
@@ -525,6 +520,47 @@ export function createVoiceRoomClient({
 
       if (!isAudioCaptureStartError(error)) {
         throw buildMicrophoneAccessError(error);
+      }
+
+      if (navigator.mediaDevices?.enumerateDevices) {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const alternativeInputs = devices
+            .filter((device) => device.kind === "audioinput")
+            .map((device, index) => ({
+              id: device.deviceId || (index === 0 ? "default" : `input-${index}`),
+              label: normalizeDeviceLabel(device, index, "Microphone"),
+            }))
+            .filter((device) => device.id && device.id !== selectedInputDeviceId);
+
+          for (const input of alternativeInputs) {
+            const deviceConstraints = buildMicConstraints({ deviceId: input.id, relaxed: true });
+            try {
+              const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: deviceConstraints });
+              selectedInputDeviceId = input.id;
+              await emitAudioDevices().catch(() => {});
+              logVoiceDebug("local-audio:capture-device-fallback-success", {
+                selectedInputDeviceId,
+                label: input.label,
+                constraints: deviceConstraints,
+                tracks: fallbackStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+              });
+              return fallbackStream;
+            } catch (deviceError) {
+              logVoiceDebug("local-audio:capture-device-fallback-failed", {
+                attemptedDeviceId: input.id,
+                label: input.label,
+                errorName: deviceError?.name || "",
+                error: deviceError?.message || String(deviceError),
+              });
+            }
+          }
+        } catch (enumerateError) {
+          logVoiceDebug("local-audio:capture-enumerate-failed", {
+            errorName: enumerateError?.name || "",
+            error: enumerateError?.message || String(enumerateError),
+          });
+        }
       }
 
       const relaxedConstraints = getRelaxedMicConstraints();
@@ -588,7 +624,7 @@ export function createVoiceRoomClient({
       }
 
       if (localAudioTrack.getProcessor?.()?.name !== "livekit-noise-filter") {
-        krispNoiseProcessor = KrispNoiseFilter({ quality: "medium" });
+        krispNoiseProcessor = KrispNoiseFilter({ quality: "high" });
         await localAudioTrack.setProcessor(krispNoiseProcessor);
       } else {
         krispNoiseProcessor = localAudioTrack.getProcessor();
@@ -627,76 +663,159 @@ export function createVoiceRoomClient({
     }, 120);
   };
 
-  const buildBroadcastVoiceChain = (sourceNode) => {
+  const buildSpeechPolishChain = (
+    sourceNode,
+    {
+      highPassFrequency = 92,
+      highPassQ = 0.75,
+      mudCutFrequency = 240,
+      mudCutQ = 1.05,
+      mudCutGain = -2.2,
+      boxCutFrequency = 560,
+      boxCutQ = 1.15,
+      boxCutGain = -1.2,
+      presenceFrequency = 2550,
+      presenceQ = 1.05,
+      presenceGain = 2.3,
+      airFrequency = 5600,
+      airGain = 1.3,
+      lowPassFrequency = 9000,
+      lowPassQ = 0.7,
+      threshold = -25,
+      knee = 18,
+      ratio = 4.8,
+      attack = 0.004,
+      release = 0.19,
+    } = {}
+  ) => {
     const highPassFilter = audioContext.createBiquadFilter();
     highPassFilter.type = "highpass";
-    highPassFilter.frequency.value = 85;
-    highPassFilter.Q.value = 0.7;
+    highPassFilter.frequency.value = highPassFrequency;
+    highPassFilter.Q.value = highPassQ;
 
     const mudCutFilter = audioContext.createBiquadFilter();
     mudCutFilter.type = "peaking";
-    mudCutFilter.frequency.value = 260;
-    mudCutFilter.Q.value = 1.0;
-    mudCutFilter.gain.value = -1.8;
+    mudCutFilter.frequency.value = mudCutFrequency;
+    mudCutFilter.Q.value = mudCutQ;
+    mudCutFilter.gain.value = mudCutGain;
+
+    const boxCutFilter = audioContext.createBiquadFilter();
+    boxCutFilter.type = "peaking";
+    boxCutFilter.frequency.value = boxCutFrequency;
+    boxCutFilter.Q.value = boxCutQ;
+    boxCutFilter.gain.value = boxCutGain;
 
     const presenceFilter = audioContext.createBiquadFilter();
     presenceFilter.type = "peaking";
-    presenceFilter.frequency.value = 2400;
-    presenceFilter.Q.value = 1.0;
-    presenceFilter.gain.value = 2.4;
+    presenceFilter.frequency.value = presenceFrequency;
+    presenceFilter.Q.value = presenceQ;
+    presenceFilter.gain.value = presenceGain;
 
     const airFilter = audioContext.createBiquadFilter();
     airFilter.type = "highshelf";
-    airFilter.frequency.value = 5200;
-    airFilter.gain.value = 1.5;
-
-    const compressor = audioContext.createDynamicsCompressor();
-    compressor.threshold.value = -24;
-    compressor.knee.value = 18;
-    compressor.ratio.value = 4.2;
-    compressor.attack.value = 0.004;
-    compressor.release.value = 0.18;
-
-    sourceNode.connect(highPassFilter);
-    highPassFilter.connect(mudCutFilter);
-    mudCutFilter.connect(presenceFilter);
-    presenceFilter.connect(airFilter);
-    airFilter.connect(compressor);
-
-    return compressor;
-  };
-
-  const buildNoiseIsolationChain = (sourceNode) => {
-    const highPassFilter = audioContext.createBiquadFilter();
-    highPassFilter.type = "highpass";
-    highPassFilter.frequency.value = 120;
-    highPassFilter.Q.value = 0.82;
-
-    const voicePresenceFilter = audioContext.createBiquadFilter();
-    voicePresenceFilter.type = "peaking";
-    voicePresenceFilter.frequency.value = 2200;
-    voicePresenceFilter.Q.value = 1.15;
-    voicePresenceFilter.gain.value = 3.2;
+    airFilter.frequency.value = airFrequency;
+    airFilter.gain.value = airGain;
 
     const lowPassFilter = audioContext.createBiquadFilter();
     lowPassFilter.type = "lowpass";
-    lowPassFilter.frequency.value = 7200;
-    lowPassFilter.Q.value = 0.7;
+    lowPassFilter.frequency.value = lowPassFrequency;
+    lowPassFilter.Q.value = lowPassQ;
 
     const compressor = audioContext.createDynamicsCompressor();
-    compressor.threshold.value = -28;
-    compressor.knee.value = 24;
-    compressor.ratio.value = 12;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.17;
+    compressor.threshold.value = threshold;
+    compressor.knee.value = knee;
+    compressor.ratio.value = ratio;
+    compressor.attack.value = attack;
+    compressor.release.value = release;
 
     sourceNode.connect(highPassFilter);
-    highPassFilter.connect(voicePresenceFilter);
-    voicePresenceFilter.connect(lowPassFilter);
+    highPassFilter.connect(mudCutFilter);
+    mudCutFilter.connect(boxCutFilter);
+    boxCutFilter.connect(presenceFilter);
+    presenceFilter.connect(airFilter);
+    airFilter.connect(lowPassFilter);
     lowPassFilter.connect(compressor);
 
     return compressor;
   };
+
+  const buildBroadcastVoiceChain = (sourceNode) => {
+    return buildSpeechPolishChain(sourceNode, {
+      highPassFrequency: 88,
+      mudCutFrequency: 250,
+      mudCutGain: -2.4,
+      boxCutFrequency: 520,
+      boxCutGain: -1.4,
+      presenceFrequency: 2480,
+      presenceGain: 2.7,
+      airFrequency: 5400,
+      airGain: 1.6,
+      lowPassFrequency: 9200,
+      threshold: -24,
+      knee: 20,
+      ratio: 4.6,
+      attack: 0.004,
+      release: 0.17,
+    });
+  };
+
+  const buildNoiseIsolationChain = (sourceNode) => {
+    return buildSpeechPolishChain(sourceNode, {
+      highPassFrequency: 120,
+      highPassQ: 0.82,
+      mudCutFrequency: 230,
+      mudCutGain: -3.1,
+      boxCutFrequency: 620,
+      boxCutGain: -1.8,
+      presenceFrequency: 2200,
+      presenceQ: 1.15,
+      presenceGain: 3.1,
+      airFrequency: 5000,
+      airGain: 0.8,
+      lowPassFrequency: 7100,
+      threshold: -28,
+      knee: 24,
+      ratio: 8.5,
+      attack: 0.003,
+      release: 0.16,
+    });
+  };
+
+  const buildTransparentVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
+    highPassFrequency: 84,
+    mudCutFrequency: 235,
+    mudCutGain: -1.5,
+    boxCutFrequency: 520,
+    boxCutGain: -0.8,
+    presenceFrequency: 2450,
+    presenceGain: 1.8,
+    airFrequency: 5600,
+    airGain: 0.9,
+    lowPassFrequency: 9800,
+    threshold: -23,
+    knee: 16,
+    ratio: 3.2,
+    attack: 0.005,
+    release: 0.2,
+  });
+
+  const buildKrispVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
+    highPassFrequency: 96,
+    mudCutFrequency: 220,
+    mudCutGain: -2.6,
+    boxCutFrequency: 560,
+    boxCutGain: -1.4,
+    presenceFrequency: 2600,
+    presenceGain: 2.5,
+    airFrequency: 5400,
+    airGain: 1.2,
+    lowPassFrequency: 8400,
+    threshold: -25,
+    knee: 20,
+    ratio: 5.4,
+    attack: 0.003,
+    release: 0.18,
+  });
 
   const connectLocalAudioGraph = (sourceNode) => {
     let inputNode = sourceNode;
@@ -704,6 +823,10 @@ export function createVoiceRoomClient({
       inputNode = buildNoiseIsolationChain(sourceNode);
     } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       inputNode = buildBroadcastVoiceChain(sourceNode);
+    } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_KRISP) {
+      inputNode = buildKrispVoiceChain(sourceNode);
+    } else {
+      inputNode = buildTransparentVoiceChain(sourceNode);
     }
 
     inputNode.connect(gainNode);

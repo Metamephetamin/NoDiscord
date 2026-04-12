@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { API_URL } from "../config/runtime";
 import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
-import { authFetch } from "../utils/auth";
+import { punctuateTextOnServer } from "../utils/speechPunctuation";
 import {
   buildVoiceWaveform,
   getSupportedVoiceRecordingMimeType,
@@ -129,18 +128,8 @@ export default function useTextChatVoiceSpeech({
       return "";
     }
 
-    const response = await authFetch(`${API_URL}/api/speech/punctuate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: normalizedTranscript }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Не удалось проставить пунктуацию на сервере.");
-    }
-
-    const payload = await response.json().catch(() => ({}));
-    return formatSpeechTranscriptDraft(String(payload?.text || normalizedTranscript).trim(), true);
+    const punctuatedTranscript = await punctuateTextOnServer(normalizedTranscript);
+    return formatSpeechTranscriptDraft(punctuatedTranscript, true);
   };
 
   const sampleVoiceLevel = () => {

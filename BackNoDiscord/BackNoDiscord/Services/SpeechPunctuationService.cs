@@ -42,6 +42,15 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
     private static readonly Regex ClauseStartRegex = new(
         "^(я|мы|ты|вы|он|она|оно|они|это|тот|та|те|кто|все|всё|мне|нам|ему|ей|им|меня|тебя|его|её|их|[а-яё-]+(?:л|ла|ло|ли|ет|ют|ут|ит|ат|ят|ем|им|ешь|ишь|ете|ите|ался|алась|алось|ались|ется|ются|утся|ится|ятся))$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex FiniteVerbRegex = new(
+        "^[а-яё-]+(?:л|ла|ло|ли|ет|ют|ут|ит|ат|ят|ем|им|ешь|ишь|ете|ите|ался|алась|алось|ались|ется|ются|утся|ится|ятся|будет|будут|был|была|было|были|можно|нужно|стоит|получится|выйдет)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex InlineParentheticalPhraseRegex = new(
+        "\\s+(к счастью|к сожалению|честно говоря|если честно|по правде говоря|между прочим|как ни странно|как правило|судя по всему|по сути|безусловно|разумеется|наверное|возможно|кажется|пожалуй|кстати|например|вообще-то|по моему мнению)\\s+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex SentenceOpeningParentheticalRegex = new(
+        "(^|[.!?]\\s+)(ну|в общем|короче|слушай|смотри|кстати|например|честно говоря|если честно|по правде говоря|к счастью|к сожалению|как ни странно|как правило|безусловно|разумеется|наверное|возможно|кажется|пожалуй|вообще-то)\\s+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly IReadOnlyList<(Regex Regex, string Replacement)> SpokenPunctuationRules =
     [
@@ -92,6 +101,29 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "по сути",
         "как правило",
     ];
+    private static readonly string[] LeadingSubordinatePhrases =
+    [
+        "если",
+        "когда",
+        "хотя",
+        "пока",
+        "раз",
+        "поскольку",
+        "как только",
+        "едва",
+        "перед тем как",
+        "после того как",
+        "несмотря на то что",
+    ];
+    private static readonly HashSet<string> ClauseLeadTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "я", "мы", "ты", "вы", "он", "она", "оно", "они", "это", "то",
+        "все", "всё", "мне", "нам", "ему", "ей", "им", "значит", "тогда", "потом",
+    };
+    private static readonly HashSet<string> CompoundClauseConjunctions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "и", "или", "либо", "да",
+    };
 
     private readonly ILogger<SpeechPunctuationService> _logger;
     private readonly IWebHostEnvironment _environment;
@@ -120,7 +152,12 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         var modelResult = await TryPunctuateWithPythonModelAsync(normalizedInput, cancellationToken);
         if (modelResult is not null)
         {
-            return modelResult;
+            return new SpeechPunctuationResult
+            {
+                Text = ApplyRuleBasedPolish(modelResult.Text, inferTerminalPunctuation: true),
+                Provider = modelResult.Provider,
+                UsedModel = true,
+            };
         }
 
         return new SpeechPunctuationResult
@@ -139,10 +176,28 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             return string.Empty;
         }
 
+        return ApplyRuleBasedPolish(normalizedText, inferTerminalPunctuation: true);
+    }
+
+    private static string ApplyRuleBasedPolish(string text, bool inferTerminalPunctuation)
+    {
+        var normalizedText = NormalizeInput(text);
+        if (string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return string.Empty;
+        }
+
         foreach (var regex in CommaBeforeRules)
         {
             normalizedText = regex.Replace(normalizedText, ", $1 ");
         }
+
+        normalizedText = SentenceOpeningParentheticalRegex.Replace(normalizedText, static match =>
+        {
+            var prefix = match.Groups[1].Value;
+            var phrase = match.Groups[2].Value;
+            return $"{prefix}{phrase}, ";
+        });
 
         normalizedText = IntroductoryPhrasesRegex.Replace(normalizedText, static match =>
         {
@@ -156,12 +211,21 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             normalizedText = regex.Replace(normalizedText, replacement);
         }
 
+        normalizedText = InsertInlineParentheticalPhraseCommas(normalizedText);
         normalizedText = InsertIntroductoryWordCommas(normalizedText);
+        normalizedText = InsertConditionalPairComma(normalizedText);
+        normalizedText = InsertLeadingSubordinateClauseComma(normalizedText);
+        normalizedText = InsertCompoundClauseCommas(normalizedText);
         normalizedText = InsertInitialGerundComma(normalizedText);
         normalizedText = NormalizeSpacing(normalizedText);
         normalizedText = CapitalizeSentences(normalizedText);
 
         if (Regex.IsMatch(normalizedText, "[.!?…]$"))
+        {
+            return normalizedText;
+        }
+
+        if (!inferTerminalPunctuation)
         {
             return normalizedText;
         }
@@ -347,6 +411,117 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         return normalizedText;
     }
 
+    private static string InsertInlineParentheticalPhraseCommas(string text)
+    {
+        return InlineParentheticalPhraseRegex.Replace(text, static match =>
+        {
+            var phrase = match.Groups[1].Value.Trim();
+            return $", {phrase}, ";
+        });
+    }
+
+    private static string InsertConditionalPairComma(string text)
+    {
+        return Regex.Replace(
+            text,
+            "\\b(если\\b.*?)(\\s+)то\\b",
+            static match =>
+            {
+                var prefix = match.Groups[1].Value.TrimEnd();
+                if (prefix.EndsWith(",", StringComparison.Ordinal))
+                {
+                    return $"{prefix} то";
+                }
+
+                return $"{prefix}, то";
+            },
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    }
+
+    private static string InsertLeadingSubordinateClauseComma(string text)
+    {
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length < 5)
+        {
+            return text;
+        }
+
+        foreach (var phrase in LeadingSubordinatePhrases.OrderByDescending(static item => item.Length))
+        {
+            var phraseWords = phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (!StartsWithWords(words, phraseWords))
+            {
+                continue;
+            }
+
+            for (var index = phraseWords.Length + 2; index < words.Length; index += 1)
+            {
+                var current = TrimWordToken(words[index]);
+                if (string.IsNullOrWhiteSpace(current))
+                {
+                    continue;
+                }
+
+                if (current.Equals("то", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!EndsWithComma(words[index - 1]))
+                    {
+                        words[index - 1] = $"{words[index - 1]},";
+                    }
+
+                    return string.Join(" ", words);
+                }
+
+                if (!ClauseLeadTokens.Contains(current))
+                {
+                    continue;
+                }
+
+                if (!EndsWithComma(words[index - 1]))
+                {
+                    words[index - 1] = $"{words[index - 1]},";
+                }
+
+                return string.Join(" ", words);
+            }
+        }
+
+        return text;
+    }
+
+    private static string InsertCompoundClauseCommas(string text)
+    {
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length < 4)
+        {
+            return text;
+        }
+
+        for (var index = 1; index < words.Length - 1; index += 1)
+        {
+            var conjunction = TrimWordToken(words[index]);
+            if (!CompoundClauseConjunctions.Contains(conjunction))
+            {
+                continue;
+            }
+
+            var previousToken = TrimWordToken(words[index - 1]);
+            var nextToken = TrimWordToken(words[index + 1]);
+            var nextNextToken = index + 2 < words.Length ? TrimWordToken(words[index + 2]) : string.Empty;
+            var nextStartsClause = ClauseLeadTokens.Contains(nextToken)
+                || (!string.IsNullOrWhiteSpace(nextToken) && !LooksLikeFiniteVerb(nextToken) && LooksLikeFiniteVerb(nextNextToken));
+
+            if (!LooksLikeFiniteVerb(previousToken) || !nextStartsClause || EndsWithComma(words[index - 1]))
+            {
+                continue;
+            }
+
+            words[index - 1] = $"{words[index - 1]},";
+        }
+
+        return string.Join(" ", words);
+    }
+
     private static string InsertInitialGerundComma(string text)
     {
         return Regex.Replace(
@@ -410,5 +585,38 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         }
 
         return builder.ToString().Trim();
+    }
+
+    private static bool StartsWithWords(IReadOnlyList<string> sourceWords, IReadOnlyList<string> prefixWords)
+    {
+        if (sourceWords.Count < prefixWords.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < prefixWords.Count; index += 1)
+        {
+            if (!TrimWordToken(sourceWords[index]).Equals(prefixWords[index], StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool LooksLikeFiniteVerb(string token)
+    {
+        return !string.IsNullOrWhiteSpace(token) && FiniteVerbRegex.IsMatch(token);
+    }
+
+    private static bool EndsWithComma(string token)
+    {
+        return token.EndsWith(",", StringComparison.Ordinal);
+    }
+
+    private static string TrimWordToken(string token)
+    {
+        return string.Concat(token ?? string.Empty).Trim().Trim(',', '.', '!', '?', ':', ';', '…', '"', '\'');
     }
 }
