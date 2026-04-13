@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 
 const formatParticipantCount = (count) => {
@@ -41,6 +41,129 @@ const getResolutionBadge = (stage) => {
   const quality = height >= 1080 ? "1080p" : height >= 720 ? "720p" : `${height}p`;
   return fps > 0 ? `${quality} ${Math.round(fps)} fps` : quality;
 };
+
+const clampChannel = (value) => Math.max(0, Math.min(255, Math.round(value)));
+
+const createFallbackAccent = (seed = "") => {
+  let hash = 0;
+  const normalizedSeed = String(seed || "voice-stage");
+
+  for (let index = 0; index < normalizedSeed.length; index += 1) {
+    hash = normalizedSeed.charCodeAt(index) + ((hash << 5) - hash);
+  }
+
+  const hue = Math.abs(hash) % 360;
+  const saturation = 58 + (Math.abs(hash) % 18);
+  const lightness = 52 + (Math.abs(hash) % 10);
+  const chroma = ((100 - Math.abs((2 * lightness) / 100 - 1)) * saturation) / 100;
+  const huePrime = hue / 60;
+  const secondComponent = chroma * (1 - Math.abs((huePrime % 2) - 1));
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (huePrime >= 0 && huePrime < 1) {
+    red = chroma;
+    green = secondComponent;
+  } else if (huePrime < 2) {
+    red = secondComponent;
+    green = chroma;
+  } else if (huePrime < 3) {
+    green = chroma;
+    blue = secondComponent;
+  } else if (huePrime < 4) {
+    green = secondComponent;
+    blue = chroma;
+  } else if (huePrime < 5) {
+    red = secondComponent;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = secondComponent;
+  }
+
+  const match = lightness / 100 - chroma / 2;
+  return {
+    r: clampChannel((red + match) * 255),
+    g: clampChannel((green + match) * 255),
+    b: clampChannel((blue + match) * 255),
+  };
+};
+
+const buildAccentVariables = (accent) => ({
+  "--voice-stage-accent-rgb": `${accent.r}, ${accent.g}, ${accent.b}`,
+});
+
+const extractAccentFromImage = (src, seed) =>
+  new Promise((resolve) => {
+    if (!src) {
+      resolve(createFallbackAccent(seed));
+      return;
+    }
+
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const size = 24;
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+
+        if (!context) {
+          resolve(createFallbackAccent(seed || src));
+          return;
+        }
+
+        context.drawImage(image, 0, 0, size, size);
+        const { data } = context.getImageData(0, 0, size, size);
+        let red = 0;
+        let green = 0;
+        let blue = 0;
+        let weightTotal = 0;
+
+        for (let index = 0; index < data.length; index += 4) {
+          const alpha = data[index + 3] / 255;
+          if (alpha < 0.45) {
+            continue;
+          }
+
+          const pixelRed = data[index];
+          const pixelGreen = data[index + 1];
+          const pixelBlue = data[index + 2];
+          const brightness = (pixelRed + pixelGreen + pixelBlue) / 3;
+          const maxChannel = Math.max(pixelRed, pixelGreen, pixelBlue);
+          const minChannel = Math.min(pixelRed, pixelGreen, pixelBlue);
+          const saturation = maxChannel - minChannel;
+          const weight = alpha * (0.35 + saturation / 255) * (0.75 + brightness / 255);
+
+          red += pixelRed * weight;
+          green += pixelGreen * weight;
+          blue += pixelBlue * weight;
+          weightTotal += weight;
+        }
+
+        if (weightTotal <= 0) {
+          resolve(createFallbackAccent(seed || src));
+          return;
+        }
+
+        resolve({
+          r: clampChannel(red / weightTotal),
+          g: clampChannel(green / weightTotal),
+          b: clampChannel(blue / weightTotal),
+        });
+      } catch {
+        resolve(createFallbackAccent(seed || src));
+      }
+    };
+
+    image.onerror = () => resolve(createFallbackAccent(seed || src));
+    image.src = src;
+  });
 
 function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain = false }) {
   const videoRef = useRef(null);
@@ -172,6 +295,7 @@ export default function VoiceRoomStage({
   pendingParticipant = null,
 }) {
   const shellRef = useRef(null);
+  const [avatarAccentMap, setAvatarAccentMap] = useState({});
   const remoteShareByUserId = useMemo(
     () => new Map((remoteShares || []).map((share) => [String(share.userId || ""), share])),
     [remoteShares]
@@ -264,6 +388,70 @@ export default function VoiceRoomStage({
     stageCards,
   ]);
 
+  useEffect(() => {
+    const avatarEntries = [
+      ...stageCards.map((participant) => ({
+        key: String(participant.userId || participant.name || participant.avatar || ""),
+        src: participant.avatar || "",
+        seed: participant.name || participant.userId || participant.avatar || "",
+      })),
+      ...(activeStage?.avatar
+        ? [{
+            key: `active:${activeStage.avatar}`,
+            src: activeStage.avatar,
+            seed: activeStage.name || activeStage.avatar,
+          }]
+        : []),
+      ...(pendingParticipant?.avatar
+        ? [{
+            key: `pending:${pendingParticipant.avatar}`,
+            src: pendingParticipant.avatar,
+            seed: pendingParticipant.name || pendingParticipant.avatar,
+          }]
+        : []),
+    ].filter((entry) => entry.key);
+
+    const unresolvedEntries = avatarEntries.filter((entry) => !avatarAccentMap[entry.key]);
+    if (!unresolvedEntries.length) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    Promise.all(
+      unresolvedEntries.map(async (entry) => ({
+        key: entry.key,
+        accent: await extractAccentFromImage(entry.src, entry.seed),
+      }))
+    ).then((resolvedEntries) => {
+      if (isCancelled) {
+        return;
+      }
+
+      setAvatarAccentMap((previous) => {
+        const next = { ...previous };
+        resolvedEntries.forEach(({ key, accent }) => {
+          next[key] = accent;
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeStage?.avatar, activeStage?.name, avatarAccentMap, pendingParticipant?.avatar, pendingParticipant?.name, stageCards]);
+
+  const getParticipantAccent = (participant) =>
+    avatarAccentMap[String(participant?.userId || participant?.name || participant?.avatar || "")]
+    || createFallbackAccent(participant?.name || participant?.userId || participant?.avatar || "");
+
+  const activeStageAccent = activeStage?.avatar
+    ? avatarAccentMap[`active:${activeStage.avatar}`] || createFallbackAccent(activeStage.name || activeStage.avatar)
+    : pendingParticipant?.avatar
+      ? avatarAccentMap[`pending:${pendingParticipant.avatar}`] || createFallbackAccent(pendingParticipant.name || pendingParticipant.avatar)
+      : createFallbackAccent(activeStage?.name || pendingParticipant?.name || "voice-stage");
+
   const requestFullscreen = async () => {
     try {
       await shellRef.current?.requestFullscreen?.();
@@ -302,7 +490,7 @@ export default function VoiceRoomStage({
         </span>
       </div>
       <div className="voice-room-stage__card-flags">
-        <span className="voice-room-stage__card-role" style={{ backgroundColor: participant.roleColor || "#7b89a8" }} aria-hidden="true" />
+        <span className="voice-room-stage__card-role" style={buildAccentVariables(getParticipantAccent(participant))} aria-hidden="true" />
         {participant.isMicMuted ? <span className="voice-room-stage__card-flag">Микрофон выкл.</span> : null}
         {participant.isDeafened ? <span className="voice-room-stage__card-flag">Без звука</span> : null}
       </div>
@@ -318,6 +506,7 @@ export default function VoiceRoomStage({
           className={`voice-room-stage__strip-card ${participant.isSelected ? "voice-room-stage__strip-card--active" : ""} ${participant.isSpeaking ? "voice-room-stage__strip-card--speaking" : ""}`}
           onClick={() => handleCardClick(participant)}
           disabled={!participant.canOpen}
+          style={buildAccentVariables(getParticipantAccent(participant))}
         >
           <div className="voice-room-stage__strip-media">
             {participant.share ? (
@@ -329,7 +518,7 @@ export default function VoiceRoomStage({
                 className="voice-room-stage__strip-video"
               />
             ) : (
-              <div className="voice-room-stage__strip-avatar-shell" style={{ backgroundColor: participant.roleColor || "#2f3545" }}>
+              <div className="voice-room-stage__strip-avatar-shell">
                 <AnimatedAvatar className="voice-room-stage__strip-avatar" src={participant.avatar} alt={participant.name} />
               </div>
             )}
@@ -366,7 +555,7 @@ export default function VoiceRoomStage({
       </div>
 
       {activeStage ? (
-        <div className="voice-room-stage__hero" ref={shellRef}>
+        <div className="voice-room-stage__hero" ref={shellRef} style={buildAccentVariables(activeStageAccent)}>
           <VoiceStageMedia
             stream={activeStage.stream}
             videoSrc={activeStage.videoSrc}
@@ -434,6 +623,7 @@ export default function VoiceRoomStage({
               className={`voice-room-stage__card ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""}`}
               onClick={() => handleCardClick(participant)}
               disabled={!participant.canOpen}
+              style={buildAccentVariables(getParticipantAccent(participant))}
             >
               <div className="voice-room-stage__card-media">
                 {participant.share ? (
@@ -448,7 +638,7 @@ export default function VoiceRoomStage({
                     <div className="voice-room-stage__card-scrim" aria-hidden="true" />
                   </>
                 ) : (
-                  <div className="voice-room-stage__card-placeholder" style={{ backgroundColor: participant.roleColor || "#2f3545" }}>
+                  <div className="voice-room-stage__card-placeholder">
                     <AnimatedAvatar className="voice-room-stage__card-avatar" src={participant.avatar} alt={participant.name} />
                   </div>
                 )}

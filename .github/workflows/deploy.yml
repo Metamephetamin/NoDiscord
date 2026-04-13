@@ -59,12 +59,6 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
-      - name: Pack frontend artifact
-        shell: bash
-        run: |
-          mkdir -p artifacts
-          tar -C dist -czf artifacts/frontend-dist.tar.gz .
-
       - name: Restore backend
         run: dotnet restore BackNoDiscord/BackNoDiscord.sln
 
@@ -75,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: artifacts/frontend-dist.tar.gz
+          path: dist
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v4
@@ -161,22 +155,20 @@ jobs:
           FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
           FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          FRONTEND_ARCHIVE="$TEMP_ROOT/frontend-dist.tar.gz"
           SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Frontend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH"
           echo "Creating frontend directories on server"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/frontend' '$FRONTEND_PATH'"
 
-          echo "Uploading packed frontend artifact"
-          rsync -az --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" ./frontend/frontend-dist.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_ARCHIVE"
+          echo "Uploading changed frontend files via rsync"
+          rsync -az --delete --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/frontend/"
 
           echo "Applying frontend artifact on server"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 15m bash -lc '
             set -e
             FRONTEND_PATH='$FRONTEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
-            FRONTEND_ARCHIVE='$FRONTEND_ARCHIVE'
             FRONTEND_OWNER='$FRONTEND_OWNER'
             case \"\$FRONTEND_PATH\" in
               /var/www/*) ;;
@@ -185,10 +177,6 @@ jobs:
                 exit 1
                 ;;
             esac
-            echo \"Extracting frontend archive on server\"
-            rm -rf \"\$TEMP_ROOT/frontend\"
-            mkdir -p \"\$TEMP_ROOT/frontend\"
-            tar -xzf \"\$FRONTEND_ARCHIVE\" -C \"\$TEMP_ROOT/frontend\"
             echo \"Server-side frontend rsync starting\"
             rsync -az --delete \"\$TEMP_ROOT/frontend/\" \"\$FRONTEND_PATH/\"
             echo \"Server-side frontend rsync finished\"

@@ -276,7 +276,7 @@
   border-radius: 28px;
   background: rgba(216, 216, 216, 0.548);
   /* box-shadow: 0 24px 60px rgba(4, 13, 27, 0.22); */
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
   transform: translate(var(--auth-card-shift-x), var(--auth-card-shift-y));
   margin-top: -80px;
   margin-right: -20px;
@@ -306,6 +306,7 @@
 
 .auth-page--lite .auth-card {
   background: rgba(224, 224, 228, 0.42);
+  backdrop-filter: none;
 }
 
 .auth-page--lite .auth-loading__spinner,
