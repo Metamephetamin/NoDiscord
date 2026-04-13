@@ -63,6 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p ./artifacts
           tar -C ./dist -czf ./artifacts/frontend-dist.tar.gz .
           echo "Frontend dist directory size:"
           du -sh ./dist
@@ -79,6 +80,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p ./artifacts
           tar -C ./artifacts/backend -czf ./artifacts/backend-publish.tar.gz .
           echo "Backend publish directory size:"
           du -sh ./artifacts/backend
