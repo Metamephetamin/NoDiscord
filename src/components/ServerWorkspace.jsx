@@ -291,6 +291,8 @@ export const ServerMain = ({
   user,
   directConversationTargets,
   serverMembers,
+  textChatNavigationRequest,
+  onTextChatNavigationIndexChange,
   onOpenLocalSharePreview,
   onWatchStream,
   onChannelSearchChange,
@@ -397,6 +399,8 @@ export const ServerMain = ({
               searchQuery={channelSearchQuery}
               directTargets={directConversationTargets}
               serverMembers={serverMembers}
+              navigationRequest={textChatNavigationRequest}
+              onNavigationIndexChange={onTextChatNavigationIndexChange}
             />
           ) : null
         )}
@@ -486,7 +490,15 @@ export const MobileServerStrip = ({
   </div>
 );
 
-export const MobileDirectChat = ({ currentDirectFriend, currentDirectChannelId, user, directConversationTargets, getDisplayName }) => (
+export const MobileDirectChat = ({
+  currentDirectFriend,
+  currentDirectChannelId,
+  user,
+  directConversationTargets,
+  getDisplayName,
+  textChatNavigationRequest,
+  onTextChatNavigationIndexChange,
+}) => (
   <main className="chat__wrapper chat__wrapper--friends chat__wrapper--mobile-direct">
     <div className="chat__box chat__box--servers">
       <div className="chat__topbar chat__topbar--mobile-direct">
@@ -497,7 +509,13 @@ export const MobileDirectChat = ({ currentDirectFriend, currentDirectChannelId, 
           </div>
         </div>
       </div>
-      <TextChat resolvedChannelId={currentDirectChannelId} user={user} directTargets={directConversationTargets} />
+      <TextChat
+        resolvedChannelId={currentDirectChannelId}
+        user={user}
+        directTargets={directConversationTargets}
+        navigationRequest={textChatNavigationRequest}
+        onNavigationIndexChange={onTextChatNavigationIndexChange}
+      />
     </div>
   </main>
 );

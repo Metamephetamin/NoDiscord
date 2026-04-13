@@ -46,6 +46,7 @@ import {
   detectNameScript,
   normalizeSingleWordNameInput,
 } from "../../utils/nameScripts";
+import { getPinnedStorageKey, readPinnedMessages } from "../../utils/textChatHelpers";
 import { createVoiceRoomClient } from "../../webrtc/voiceRoomClient";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
@@ -249,6 +250,10 @@ export default function MenuMain({
   const [cameraError, setCameraError] = useState("");
   const [hasCameraPreview, setHasCameraPreview] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [quickSwitcherQuery, setQuickSwitcherQuery] = useState("");
+  const [textChatNavigationIndex, setTextChatNavigationIndex] = useState(null);
+  const [textChatNavigationRequest, setTextChatNavigationRequest] = useState(null);
   const [chatSyncTick, setChatSyncTick] = useState(0);
   const [profileDraft, setProfileDraft] = useState({
     firstName: user?.first_name || user?.firstName || "",
@@ -302,6 +307,8 @@ export default function MenuMain({
   const suppressedServerClickRef = useRef("");
   const appliedInputDeviceRef = useRef("");
   const appliedOutputDeviceRef = useRef("");
+  const navigationHistoryRef = useRef({ back: [], forward: [] });
+  const lastNavigationSnapshotRef = useRef(null);
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
   const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
   const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
@@ -421,6 +428,64 @@ export default function MenuMain({
     () => currentDirectFriend?.directChannelId || buildDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
     [currentDirectFriend?.directChannelId, currentDirectFriend?.id, currentUserId]
   );
+  const buildNavigationSnapshot = () => ({
+    workspaceMode,
+    activeServerId: String(activeServerId || ""),
+    currentTextChannelId: String(currentTextChannelId || ""),
+    activeDirectFriendId: String(activeDirectFriendId || ""),
+    desktopServerPane: String(desktopServerPane || "text"),
+    selectedStreamUserId: selectedStreamUserId ? String(selectedStreamUserId) : "",
+    mobileSection: String(mobileSection || "servers"),
+    mobileServersPane: String(mobileServersPane || "channels"),
+  });
+  const applyNavigationSnapshot = (snapshot) => {
+    if (!snapshot) {
+      return;
+    }
+
+    setWorkspaceMode(snapshot.workspaceMode === "friends" ? "friends" : "servers");
+    setActiveServerId(String(snapshot.activeServerId || ""));
+    setCurrentTextChannelId(String(snapshot.currentTextChannelId || ""));
+    setActiveDirectFriendId(String(snapshot.activeDirectFriendId || ""));
+    setDesktopServerPane(snapshot.desktopServerPane === "voice" ? "voice" : "text");
+    setSelectedStreamUserId(snapshot.selectedStreamUserId ? String(snapshot.selectedStreamUserId) : null);
+    if (isMobileViewport) {
+      setMobileSection(snapshot.mobileSection || "servers");
+      setMobileServersPane(snapshot.mobileServersPane || "channels");
+    }
+  };
+  const pushNavigationHistory = (nextSnapshotFactory) => {
+    const currentSnapshot = buildNavigationSnapshot();
+    const currentKey = JSON.stringify(currentSnapshot);
+    const lastKey = JSON.stringify(lastNavigationSnapshotRef.current);
+    if (currentKey !== lastKey) {
+      navigationHistoryRef.current.back = [...navigationHistoryRef.current.back.slice(-39), currentSnapshot];
+      lastNavigationSnapshotRef.current = currentSnapshot;
+    }
+
+    navigationHistoryRef.current.forward = [];
+    nextSnapshotFactory();
+  };
+  const navigateHistoryBack = () => {
+    const previousSnapshot = navigationHistoryRef.current.back.pop();
+    if (!previousSnapshot) {
+      return;
+    }
+
+    navigationHistoryRef.current.forward = [...navigationHistoryRef.current.forward.slice(-39), buildNavigationSnapshot()];
+    applyNavigationSnapshot(previousSnapshot);
+    lastNavigationSnapshotRef.current = previousSnapshot;
+  };
+  const navigateHistoryForward = () => {
+    const nextSnapshot = navigationHistoryRef.current.forward.pop();
+    if (!nextSnapshot) {
+      return;
+    }
+
+    navigationHistoryRef.current.back = [...navigationHistoryRef.current.back.slice(-39), buildNavigationSnapshot()];
+    applyNavigationSnapshot(nextSnapshot);
+    lastNavigationSnapshotRef.current = nextSnapshot;
+  };
   useEffect(() => {
     const allowedFps = SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"];
     if (!allowedFps.includes(fps)) {
@@ -458,6 +523,18 @@ export default function MenuMain({
       return workspaceMode === "friends" ? "friends" : "servers";
     });
   }, [isMobileViewport, workspaceMode]);
+  useEffect(() => {
+    lastNavigationSnapshotRef.current = buildNavigationSnapshot();
+  }, [
+    activeDirectFriendId,
+    activeServerId,
+    currentTextChannelId,
+    desktopServerPane,
+    mobileSection,
+    mobileServersPane,
+    selectedStreamUserId,
+    workspaceMode,
+  ]);
   useEffect(() => {
     if (!isMobileViewport || currentVoiceChannel || mobileServersPane !== "voice") {
       return;
@@ -717,6 +794,148 @@ export default function MenuMain({
     spotlightVoiceParticipant?.isSelf,
     spotlightVoiceParticipant?.name,
   ]);
+  const activeTextNavigationChannelId = useMemo(() => {
+    if (workspaceMode === "friends") {
+      return currentDirectChannelId;
+    }
+
+    return activeServer?.id && currentTextChannel?.id
+      ? getScopedChatChannelId(activeServer.id, currentTextChannel.id)
+      : "";
+  }, [activeServer?.id, currentDirectChannelId, currentTextChannel?.id, workspaceMode]);
+  const quickSwitcherItems = useMemo(() => {
+    const normalizedQuery = String(quickSwitcherQuery || "").trim().toLowerCase();
+    const currentPinnedMessages = activeTextNavigationChannelId
+      ? readPinnedMessages(getPinnedStorageKey(currentUserId, activeTextNavigationChannelId))
+      : [];
+
+    const baseItems = [
+      ...(textChatNavigationIndex?.firstUnreadMessageId ? [{
+        id: "chat:first-unread",
+        kind: "chatAction",
+        kindLabel: "Chat",
+        shortLabel: "U",
+        title: "Первое непрочитанное",
+        subtitle: "Перейти к первой новой точке в текущем чате",
+        action: "firstUnread",
+        channelId: activeTextNavigationChannelId,
+      }] : []),
+      ...(textChatNavigationIndex?.canReturnToJumpPoint ? [{
+        id: "chat:jump-back",
+        kind: "chatAction",
+        kindLabel: "Chat",
+        shortLabel: "B",
+        title: "Вернуться назад",
+        subtitle: "Назад после перехода к сообщению",
+        action: "jumpBack",
+        channelId: activeTextNavigationChannelId,
+      }] : []),
+      ...servers.map((server) => ({
+        id: `server:${server.id}`,
+        kind: "server",
+        kindLabel: "Server",
+        shortLabel: "S",
+        title: server.name || "Server",
+        subtitle: `${(server.textChannels || []).length} текстовых • ${(server.voiceChannels || []).length} голосовых`,
+        serverId: server.id,
+      })),
+      ...servers.flatMap((server) => (server.textChannels || []).map((channel) => ({
+        id: `text:${server.id}:${channel.id}`,
+        kind: "channel",
+        kindLabel: "Text",
+        shortLabel: "#",
+        title: `${server.name || "Server"} / ${getChannelDisplayName(channel.name, "text")}`,
+        subtitle: "Текстовый канал",
+        serverId: server.id,
+        channelId: channel.id,
+      }))),
+      ...servers.flatMap((server) => (server.voiceChannels || []).map((channel) => ({
+        id: `voice:${server.id}:${channel.id}`,
+        kind: "voice",
+        kindLabel: "Voice",
+        shortLabel: "V",
+        title: `${server.name || "Server"} / ${getChannelDisplayName(channel.name, "voice")}`,
+        subtitle: "Голосовой канал",
+        serverId: server.id,
+        channelId: channel.id,
+      }))),
+      ...directConversationTargets.map((friend) => ({
+        id: `dm:${friend.id}`,
+        kind: "dm",
+        kindLabel: "DM",
+        shortLabel: "@",
+        title: getDisplayName(friend),
+        subtitle: friend.isSelf ? "Личные заметки" : "Личный чат",
+        friendId: friend.id,
+      })),
+      ...currentPinnedMessages.map((messageItem) => ({
+        id: `pin:${messageItem.id}`,
+        kind: "pin",
+        kindLabel: "Pin",
+        shortLabel: "P",
+        title: messageItem.username || "User",
+        subtitle: messageItem.preview || "Закреплённое сообщение",
+        channelId: activeTextNavigationChannelId,
+        messageId: messageItem.id,
+      })),
+      ...((textChatNavigationIndex?.searchResults || []).slice(0, 10).map((messageItem) => ({
+        id: `search:${messageItem.id}`,
+        kind: "message",
+        kindLabel: "Find",
+        shortLabel: "F",
+        title: messageItem.username || "User",
+        subtitle: messageItem.preview || "Найденное сообщение",
+        channelId: activeTextNavigationChannelId,
+        messageId: messageItem.id,
+      }))),
+      ...((textChatNavigationIndex?.mentionMessages || []).slice(-6).reverse().map((messageItem) => ({
+        id: `mention:${messageItem.id}`,
+        kind: "mention",
+        kindLabel: "Mention",
+        shortLabel: "@",
+        title: messageItem.username || "User",
+        subtitle: messageItem.message || "Упоминание",
+        channelId: activeTextNavigationChannelId,
+        messageId: messageItem.id,
+      }))),
+      ...((textChatNavigationIndex?.replyMessages || []).slice(-6).reverse().map((messageItem) => ({
+        id: `reply:${messageItem.id}`,
+        kind: "reply",
+        kindLabel: "Reply",
+        shortLabel: "R",
+        title: messageItem.username || "User",
+        subtitle: messageItem.replyPreview || messageItem.message || "Ответ",
+        channelId: activeTextNavigationChannelId,
+        messageId: messageItem.id,
+      }))),
+      ...(currentVoiceParticipants || []).map((participant) => ({
+        id: `focus:${participant.userId}`,
+        kind: "focus",
+        kindLabel: "Stage",
+        shortLabel: "L",
+        title: participant.name || "Участник",
+        subtitle: participant.isLive ? "Фокус на эфире" : participant.isSpeaking ? "Фокус на говорящем" : "Фокус на участнике",
+        userId: participant.userId,
+      })),
+    ];
+
+    if (!normalizedQuery) {
+      return baseItems.slice(0, 24);
+    }
+
+    return baseItems
+      .filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(normalizedQuery))
+      .slice(0, 28);
+  }, [
+    activeTextNavigationChannelId,
+    currentUserId,
+    currentVoiceParticipants,
+    directConversationTargets,
+    getChannelDisplayName,
+    quickSwitcherQuery,
+    servers,
+    textChatNavigationIndex,
+  ]);
   const friendQueryMode = getFriendSearchModeForQuery(friendEmail);
   const filteredFriends = useMemo(() => {
     const query = friendsSidebarQuery.trim().toLowerCase();
@@ -933,21 +1152,25 @@ export default function MenuMain({
   };
 
   const openServersWorkspace = () => {
-    setWorkspaceMode("servers");
-    setActiveDirectFriendId("");
-    setSelectedStreamUserId(null);
-    if (isMobileViewport) {
-      setMobileSection("servers");
-      setMobileServersPane(currentVoiceChannel ? "voice" : "channels");
-    }
+    pushNavigationHistory(() => {
+      setWorkspaceMode("servers");
+      setActiveDirectFriendId("");
+      setSelectedStreamUserId(null);
+      if (isMobileViewport) {
+        setMobileSection("servers");
+        setMobileServersPane(currentVoiceChannel ? "voice" : "channels");
+      }
+    });
   };
 
   const openFriendsWorkspace = () => {
-    setWorkspaceMode("friends");
-    setSelectedStreamUserId(null);
-    if (isMobileViewport) {
-      setMobileSection("friends");
-    }
+    pushNavigationHistory(() => {
+      setWorkspaceMode("friends");
+      setSelectedStreamUserId(null);
+      if (isMobileViewport) {
+        setMobileSection("friends");
+      }
+    });
   };
 
   const selectServer = (server) => {
@@ -955,37 +1178,43 @@ export default function MenuMain({
       return;
     }
 
-    setWorkspaceMode("servers");
-    setActiveServerId(server.id);
-    setCurrentTextChannelId(server.textChannels[0]?.id || "");
-    setDesktopServerPane("text");
-    setActiveDirectFriendId("");
-    setSelectedStreamUserId(null);
-    if (isMobileViewport) {
-      setMobileSection("servers");
-      setMobileServersPane("channels");
-    }
+    pushNavigationHistory(() => {
+      setWorkspaceMode("servers");
+      setActiveServerId(server.id);
+      setCurrentTextChannelId(server.textChannels[0]?.id || "");
+      setDesktopServerPane("text");
+      setActiveDirectFriendId("");
+      setSelectedStreamUserId(null);
+      if (isMobileViewport) {
+        setMobileSection("servers");
+        setMobileServersPane("channels");
+      }
+    });
   };
 
   const selectServerTextChannel = (channelId) => {
-    setWorkspaceMode("servers");
-    setCurrentTextChannelId(channelId);
-    setDesktopServerPane("text");
-    setActiveDirectFriendId("");
-    if (isMobileViewport) {
-      setMobileSection("servers");
-      setMobileServersPane("chat");
-    }
+    pushNavigationHistory(() => {
+      setWorkspaceMode("servers");
+      setCurrentTextChannelId(channelId);
+      setDesktopServerPane("text");
+      setActiveDirectFriendId("");
+      if (isMobileViewport) {
+        setMobileSection("servers");
+        setMobileServersPane("chat");
+      }
+    });
   };
 
   const openDirectChat = (friendId) => {
-    setActiveDirectFriendId(String(friendId || ""));
-    setWorkspaceMode("friends");
-    setFriendsPageSection("friends");
-    setSelectedStreamUserId(null);
-    if (isMobileViewport) {
-      setMobileSection("friends");
-    }
+    pushNavigationHistory(() => {
+      setActiveDirectFriendId(String(friendId || ""));
+      setWorkspaceMode("friends");
+      setFriendsPageSection("friends");
+      setSelectedStreamUserId(null);
+      if (isMobileViewport) {
+        setMobileSection("friends");
+      }
+    });
   };
 
   const openServerChannelFromToast = (toast) => {
@@ -993,17 +1222,151 @@ export default function MenuMain({
       return;
     }
 
-    setWorkspaceMode("servers");
-    setActiveDirectFriendId("");
-    setActiveServerId(String(toast.serverId));
-    setCurrentTextChannelId(String(toast.channelId));
-    setDesktopServerPane("text");
-    if (isMobileViewport) {
-      setMobileSection("servers");
-      setMobileServersPane("chat");
-    }
+    pushNavigationHistory(() => {
+      setWorkspaceMode("servers");
+      setActiveDirectFriendId("");
+      setActiveServerId(String(toast.serverId));
+      setCurrentTextChannelId(String(toast.channelId));
+      setDesktopServerPane("text");
+      if (isMobileViewport) {
+        setMobileSection("servers");
+        setMobileServersPane("chat");
+      }
+    });
     dismissServerToast(toast.id);
   };
+
+  const closeQuickSwitcher = () => {
+    setQuickSwitcherOpen(false);
+    setQuickSwitcherQuery("");
+  };
+
+  const sendTextChatNavigationRequest = (request) => {
+    setTextChatNavigationRequest({
+      ...request,
+      nonce: Date.now(),
+    });
+  };
+
+  const handleQuickSwitcherSelect = (item) => {
+    if (!item) {
+      return;
+    }
+
+    closeQuickSwitcher();
+
+    if (item.kind === "server") {
+      const server = servers.find((entry) => String(entry.id) === String(item.serverId));
+      if (server) {
+        selectServer(server);
+      }
+      return;
+    }
+
+    if (item.kind === "channel") {
+      const targetServer = servers.find((entry) => String(entry.id) === String(item.serverId));
+      if (!targetServer) {
+        return;
+      }
+
+      pushNavigationHistory(() => {
+        setWorkspaceMode("servers");
+        setActiveDirectFriendId("");
+        setActiveServerId(String(item.serverId));
+        setCurrentTextChannelId(String(item.channelId));
+        setDesktopServerPane("text");
+        setSelectedStreamUserId(null);
+        if (isMobileViewport) {
+          setMobileSection("servers");
+          setMobileServersPane("chat");
+        }
+      });
+      return;
+    }
+
+    if (item.kind === "voice") {
+      const targetServer = servers.find((entry) => String(entry.id) === String(item.serverId));
+      const targetChannel = targetServer?.voiceChannels?.find((entry) => String(entry.id) === String(item.channelId));
+      if (targetServer) {
+        setActiveServerId(String(targetServer.id));
+      }
+      if (targetChannel) {
+        void joinVoiceChannel(targetChannel);
+      }
+      return;
+    }
+
+    if (item.kind === "dm") {
+      openDirectChat(item.friendId);
+      return;
+    }
+
+    if (item.kind === "chatAction" && item.action && item.channelId) {
+      sendTextChatNavigationRequest({
+        type: item.action,
+        channelId: item.channelId,
+      });
+      return;
+    }
+
+    if ((item.kind === "message" || item.kind === "pin" || item.kind === "mention" || item.kind === "reply") && item.channelId && item.messageId) {
+      sendTextChatNavigationRequest({
+        type: "message",
+        channelId: item.channelId,
+        messageId: item.messageId,
+      });
+      return;
+    }
+
+    if (item.kind === "focus" && item.userId) {
+      handleWatchStream(item.userId);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+      const isEditableTarget =
+        target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target?.isContentEditable;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setQuickSwitcherOpen((previous) => !previous);
+        if (quickSwitcherOpen) {
+          setQuickSwitcherQuery("");
+        }
+        return;
+      }
+
+      if (quickSwitcherOpen && event.key === "Escape") {
+        event.preventDefault();
+        closeQuickSwitcher();
+        return;
+      }
+
+      if (isEditableTarget) {
+        return;
+      }
+
+      if (event.altKey && event.key === "ArrowLeft") {
+        event.preventDefault();
+        navigateHistoryBack();
+        return;
+      }
+
+      if (event.altKey && event.key === "ArrowRight") {
+        event.preventDefault();
+        navigateHistoryForward();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [quickSwitcherOpen, quickSwitcherQuery]);
 
   const dismissDirectToast = (toastId) => {
     const timeoutId = directToastTimeoutsRef.current.get(toastId);
@@ -2977,14 +3340,15 @@ export default function MenuMain({
     voiceJoinInFlightRef.current = true;
     pendingVoiceChannelTargetRef.current = scopedChannelId;
     setJoiningVoiceChannelId(scopedChannelId);
-    setDesktopServerPane("voice");
-    setCurrentVoiceChannel(scopedChannelId);
-    try {
+    pushNavigationHistory(() => {
+      setDesktopServerPane("voice");
+      setCurrentVoiceChannel(scopedChannelId);
       if (isMobileViewport) {
         setMobileSection("servers");
         setMobileServersPane("voice");
       }
-
+    });
+    try {
       await voiceClientRef.current.joinChannel(scopedChannelId, user);
     } catch (error) {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
@@ -3030,11 +3394,13 @@ export default function MenuMain({
       voiceJoinInFlightRef.current = false;
       pendingVoiceChannelTargetRef.current = "";
       setJoiningVoiceChannelId("");
-      setDesktopServerPane("text");
+      pushNavigationHistory(() => {
+        setDesktopServerPane("text");
+        if (isMobileViewport) {
+          setMobileServersPane("channels");
+        }
+      });
       await voiceClientRef.current.leaveChannel();
-      if (isMobileViewport) {
-        setMobileServersPane("channels");
-      }
     } catch (error) {
       console.error("Ошибка выхода из голосового канала:", error);
     }
@@ -3114,9 +3480,11 @@ export default function MenuMain({
       return;
     }
 
-    setSelectedStreamUserId(null);
-    setDesktopServerPane("voice");
-    setIsLocalSharePreviewVisible(true);
+    pushNavigationHistory(() => {
+      setSelectedStreamUserId(null);
+      setDesktopServerPane("voice");
+      setIsLocalSharePreviewVisible(true);
+    });
   };
   const closeLocalSharePreview = () => {
     setIsLocalSharePreviewVisible(false);
@@ -3283,15 +3651,20 @@ export default function MenuMain({
   };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
-    setIsLocalSharePreviewVisible(false);
-    setDesktopServerPane("voice");
+    pushNavigationHistory(() => {
+      setIsLocalSharePreviewVisible(false);
+      setDesktopServerPane("voice");
+      if (String(selectedStreamUserId || "") === normalizedUserId && selectedStream) {
+        setSelectedStreamUserId(null);
+        return;
+      }
+      setSelectedStreamUserId(normalizedUserId);
+      if (isMobileViewport) {
+        setMobileServersPane("voice");
+      }
+    });
     if (String(selectedStreamUserId || "") === normalizedUserId && selectedStream) {
-      setSelectedStreamUserId(null);
       return;
-    }
-    setSelectedStreamUserId(normalizedUserId);
-    if (isMobileViewport) {
-      setMobileServersPane("voice");
     }
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
   };
@@ -3940,6 +4313,8 @@ export default function MenuMain({
       user={user}
       directConversationTargets={directConversationTargets}
       serverMembers={activeServer?.members || []}
+      textChatNavigationRequest={textChatNavigationRequest}
+      onTextChatNavigationIndexChange={setTextChatNavigationIndex}
       onOpenLocalSharePreview={openLocalSharePreview}
       onWatchStream={handleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}
@@ -3989,6 +4364,8 @@ export default function MenuMain({
       user={user}
       directConversationTargets={directConversationTargets}
       getDisplayName={getDisplayName}
+      textChatNavigationRequest={textChatNavigationRequest}
+      onTextChatNavigationIndexChange={setTextChatNavigationIndex}
     />
   );
   const renderMobileVoiceRoom = () => (
@@ -4166,6 +4543,12 @@ export default function MenuMain({
       serverMessageToasts={serverMessageToasts}
       openServerChannelFromToast={openServerChannelFromToast}
       dismissServerToast={dismissServerToast}
+      quickSwitcherOpen={quickSwitcherOpen}
+      quickSwitcherQuery={quickSwitcherQuery}
+      quickSwitcherItems={quickSwitcherItems}
+      setQuickSwitcherQuery={setQuickSwitcherQuery}
+      handleQuickSwitcherSelect={handleQuickSwitcherSelect}
+      closeQuickSwitcher={closeQuickSwitcher}
     >
       {mainContent}
     </MenuMainOverlayLayer>

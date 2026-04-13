@@ -28,7 +28,10 @@ public class ChatHub : Hub
     private const int MaxVoiceMimeTypeLength = 120;
     private const int MaxVoiceFileNameLength = 160;
     private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan ForwardCooldown = TimeSpan.FromMilliseconds(900);
+    private static readonly TimeSpan MessageMutationCooldown = TimeSpan.FromMilliseconds(350);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
+    private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
 
     private readonly AppDbContext _context;
     private readonly CryptoService _crypto;
@@ -92,14 +95,16 @@ public class ChatHub : Hub
             attachmentEncryption,
             voiceMessage);
 
+        var replyReference = await ResolveReplyReferenceAsync(normalizedChannelId, replyToMessageId, currentUser, allowMissing: false);
+
         var payload = new ChatMessagePayload
         {
             AuthorUserId = currentUser.UserId,
             Message = UploadPolicies.TrimToLength(message, MaxMessageLength),
             Encryption = NormalizeEncryptionEnvelope(encryption),
-            ReplyToMessageId = UploadPolicies.TrimToLength(replyToMessageId, 32),
-            ReplyToUsername = UploadPolicies.TrimToLength(replyToUsername, 160),
-            ReplyPreview = UploadPolicies.TrimToLength(replyPreview, 220),
+            ReplyToMessageId = replyReference?.MessageId,
+            ReplyToUsername = replyReference?.Username,
+            ReplyPreview = replyReference?.Preview,
             Attachments = normalizedAttachments,
             Mentions = NormalizeMentions(normalizedChannelId, mentions),
             VoiceMessage = normalizedAttachments.FirstOrDefault(static item => item.VoiceMessage is not null)?.VoiceMessage
@@ -173,12 +178,15 @@ public class ChatHub : Hub
             throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
         }
 
+        EnsureActionCooldown(currentUser.UserId, "forward", ForwardCooldown, "Подождите немного перед следующей пересылкой.");
+
         var authorPhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(photoUrl, "/avatars/");
         var timestampBase = DateTime.UtcNow;
         var forwardedMessages = new List<(Message Entity, ChatMessagePayload Payload)>();
 
         foreach (var item in sourceItems.Take(MaxForwardBatchSize))
         {
+            var replyReference = await ResolveReplyReferenceAsync(normalizedChannelId, item.ReplyToMessageId, currentUser, allowMissing: true);
             var normalizedAttachments = NormalizeAttachments(
                 item.Attachments,
                 item.AttachmentUrl,
@@ -194,9 +202,9 @@ public class ChatHub : Hub
                 Message = UploadPolicies.TrimToLength(item.Message, MaxMessageLength),
                 ForwardedFromUserId = UploadPolicies.TrimToLength(item.ForwardedFromUserId, 64),
                 ForwardedFromUsername = UploadPolicies.TrimToLength(item.ForwardedFromUsername, 160),
-                ReplyToMessageId = UploadPolicies.TrimToLength(item.ReplyToMessageId, 32),
-                ReplyToUsername = UploadPolicies.TrimToLength(item.ReplyToUsername, 160),
-                ReplyPreview = UploadPolicies.TrimToLength(item.ReplyPreview, 220),
+                ReplyToMessageId = replyReference?.MessageId,
+                ReplyToUsername = replyReference?.Username,
+                ReplyPreview = replyReference?.Preview,
                 Attachments = normalizedAttachments,
                 Mentions = [],
                 VoiceMessage = normalizedAttachments.FirstOrDefault(static attachment => attachment.VoiceMessage is not null)?.VoiceMessage
@@ -244,6 +252,7 @@ public class ChatHub : Hub
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(forwardedMessage.Entity, forwardedMessage.Payload));
         }
 
+        _logger.LogInformation("User {UserId} forwarded {Count} messages to channel {ChannelId}", currentUser.UserId, forwardedMessages.Count, normalizedChannelId);
         LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
     }
 
@@ -329,6 +338,8 @@ public class ChatHub : Hub
             throw new HubException("Unauthorized");
         }
 
+        EnsureActionCooldown(currentUser.UserId, "delete", MessageMutationCooldown, "Слишком частое удаление сообщений.");
+
         var msg = await _context.Messages.FirstOrDefaultAsync(message => message.Id == messageId);
         if (msg == null)
         {
@@ -351,6 +362,7 @@ public class ChatHub : Hub
         msg.IsDeleted = true;
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("User {UserId} deleted message {MessageId} in channel {ChannelId}", currentUser.UserId, messageId, msg.ChannelId);
         await Clients.Group(msg.ChannelId).SendAsync("MessageDeleted", messageId);
     }
 
@@ -364,6 +376,8 @@ public class ChatHub : Hub
         {
             throw new HubException("Unauthorized");
         }
+
+        EnsureActionCooldown(currentUser.UserId, "edit", MessageMutationCooldown, "Слишком частое редактирование сообщений.");
 
         var msg = await _context.Messages.FirstOrDefaultAsync(item => item.Id == messageId && !item.IsDeleted);
         if (msg == null)
@@ -399,6 +413,7 @@ public class ChatHub : Hub
 
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("User {UserId} edited message {MessageId} in channel {ChannelId}", currentUser.UserId, messageId, msg.ChannelId);
         var reactionsByMessageId = await BuildReactionMapAsync([messageId]);
         await Clients.Group(msg.ChannelId).SendAsync(
             "MessageUpdated",
@@ -414,6 +429,8 @@ public class ChatHub : Hub
         {
             throw new HubException("Unauthorized");
         }
+
+        EnsureActionCooldown(currentUser.UserId, "reaction", MessageMutationCooldown, "Слишком частое изменение реакций.");
 
         var message = await _context.Messages
             .AsNoTracking()
@@ -460,6 +477,7 @@ public class ChatHub : Hub
 
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("User {UserId} toggled reaction {ReactionKey} for message {MessageId} in channel {ChannelId}", currentUser.UserId, normalizedReactionKey, messageId, message.ChannelId);
         var reactionsByMessageId = await BuildReactionMapAsync([messageId]);
         await Clients.Group(message.ChannelId).SendAsync("MessageReactionsUpdated", new MessageReactionsUpdatedDto
         {
@@ -816,6 +834,87 @@ public class ChatHub : Hub
                     .ToList());
     }
 
+    private static void EnsureActionCooldown(string userId, string actionName, TimeSpan cooldown, string message)
+    {
+        var actionKey = $"{userId}:{actionName}";
+        if (LastActionAtByUserAndName.TryGetValue(actionKey, out var lastActionAtUtc)
+            && DateTime.UtcNow - lastActionAtUtc < cooldown)
+        {
+            throw new HubException(message);
+        }
+
+        LastActionAtByUserAndName[actionKey] = DateTime.UtcNow;
+    }
+
+    private async Task<ReplyReferenceDto?> ResolveReplyReferenceAsync(string channelId, string? replyToMessageId, AuthenticatedUser currentUser, bool allowMissing)
+    {
+        var normalizedReplyToMessageId = UploadPolicies.TrimToLength(replyToMessageId, 32);
+        if (string.IsNullOrWhiteSpace(normalizedReplyToMessageId))
+        {
+            return null;
+        }
+
+        if (!int.TryParse(normalizedReplyToMessageId, out var replyMessageId) || replyMessageId <= 0)
+        {
+            if (allowMissing)
+            {
+                return null;
+            }
+
+            throw new HubException("Некорректная ссылка на исходное сообщение.");
+        }
+
+        var replyMessage = await _context.Messages
+            .AsNoTracking()
+            .FirstOrDefaultAsync(message => message.Id == replyMessageId && message.ChannelId == channelId && !message.IsDeleted);
+
+        if (replyMessage is null)
+        {
+            if (allowMissing)
+            {
+                return null;
+            }
+
+            throw new HubException("Исходное сообщение для ответа не найдено.");
+        }
+
+        if (!TryAuthorizeChannelAccess(replyMessage.ChannelId, currentUser))
+        {
+            if (allowMissing)
+            {
+                return null;
+            }
+
+            throw new HubException("Нет доступа к сообщению, на которое вы отвечаете.");
+        }
+
+        var replyPayload = DeserializePayload(GetRawPayload(replyMessage));
+        return new ReplyReferenceDto
+        {
+            MessageId = replyMessage.Id.ToString(),
+            Username = UploadPolicies.TrimToLength(replyMessage.Username, 160),
+            Preview = UploadPolicies.TrimToLength(BuildMessagePreview(replyPayload), 220)
+        };
+    }
+
+    private static string BuildMessagePreview(ChatMessagePayload payload)
+    {
+        var normalizedMessage = UploadPolicies.TrimToLength(payload.Message, 220).Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedMessage))
+        {
+            return normalizedMessage;
+        }
+
+        var firstAttachment = payload.Attachments.FirstOrDefault();
+        if (firstAttachment?.VoiceMessage is not null)
+        {
+            return "Голосовое сообщение";
+        }
+
+        var attachmentName = UploadPolicies.TrimToLength(firstAttachment?.AttachmentName, 220).Trim();
+        return string.IsNullOrWhiteSpace(attachmentName) ? "Сообщение без текста" : attachmentName;
+    }
+
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
     {
         if (DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out _))
@@ -1026,6 +1125,13 @@ public class MessageReactionsUpdatedDto
 {
     public int MessageId { get; set; }
     public List<MessageReactionDto> Reactions { get; set; } = [];
+}
+
+public class ReplyReferenceDto
+{
+    public string MessageId { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string Preview { get; set; } = string.Empty;
 }
 
 public class ChatMessagePayload

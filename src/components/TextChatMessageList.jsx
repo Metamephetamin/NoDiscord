@@ -278,9 +278,14 @@ function MessageAttachmentCollection(props) {
 
 export default function TextChatMessageList({
   messages,
+  visibleMessages = messages,
   messagesListRef,
   messagesEndRef,
   messageRefs,
+  virtualizationEnabled = false,
+  topSpacerHeight = 0,
+  bottomSpacerHeight = 0,
+  registerMeasuredNode,
   floatingDateLabel,
   decryptedAttachmentsByMessageId,
   selectedMessageIdSet,
@@ -341,7 +346,9 @@ export default function TextChatMessageList({
       {floatingDateLabel ? <div className="messages-floating-date">{floatingDateLabel}</div> : null}
 
       <div ref={messagesListRef} className="messages-list">
-        {messages.map((messageItem, messageIndex) => {
+        {virtualizationEnabled && topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
+        {visibleMessages.map((messageItem) => {
+          const messageIndex = messages.findIndex((item) => String(item.id) === String(messageItem.id));
           const previousMessage = messages[messageIndex - 1] || null;
           const nextMessage = messages[messageIndex + 1] || null;
           const attachments = resolveRenderedAttachments(messageItem);
@@ -369,6 +376,7 @@ export default function TextChatMessageList({
             <div
               key={messageItem.id}
               ref={(node) => {
+                registerMeasuredNode?.(messageItem.id, node);
                 if (node) {
                   messageRefs.current.set(messageItem.id, node);
                 } else {
@@ -520,6 +528,7 @@ export default function TextChatMessageList({
             </div>
           );
         })}
+        {virtualizationEnabled && bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}
         <div ref={messagesEndRef} />
       </div>
     </div>

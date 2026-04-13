@@ -9,16 +9,21 @@ export default function useTextChatScrollManager({
   messageRefs,
   setHighlightedMessageId,
   forceScrollToBottomRef,
+  estimateMessageOffsetById,
 }) {
   const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const [pendingNewMessagesCount, setPendingNewMessagesCount] = useState(0);
+  const [firstUnreadMessageId, setFirstUnreadMessageId] = useState("");
+  const [canReturnToJumpPoint, setCanReturnToJumpPoint] = useState(false);
   const previousChannelIdRef = useRef("");
   const pendingInitialScrollChannelRef = useRef("");
   const previousMessageCountRef = useRef(0);
   const nearBottomRef = useRef(true);
+  const jumpSnapshotRef = useRef(null);
 
   const clearUnreadBelow = useCallback(() => {
     setPendingNewMessagesCount(0);
+    setFirstUnreadMessageId("");
   }, []);
 
   const scheduleClearUnreadBelow = useCallback(() => {
@@ -40,18 +45,82 @@ export default function useTextChatScrollManager({
     end.scrollIntoView({ behavior, block: "end" });
   }, [clearUnreadBelow, messagesEndRef, messagesListRef]);
 
-  const scrollToMessage = useCallback((messageId, { behavior = "smooth", block = "center" } = {}) => {
-    const element = messageRefs.current.get(messageId);
-    if (!element) {
-      return;
+  const captureJumpSnapshot = useCallback(() => {
+    const list = messagesListRef.current;
+    if (!list) {
+      return null;
     }
 
+    return {
+      channelId: scopedChannelId,
+      scrollTop: list.scrollTop,
+    };
+  }, [messagesListRef, scopedChannelId]);
+
+  const applyHighlight = useCallback((messageId) => {
     setHighlightedMessageId(String(messageId));
-    element.scrollIntoView({ behavior, block });
     window.setTimeout(() => {
       setHighlightedMessageId((current) => (current === String(messageId) ? "" : current));
     }, 2200);
-  }, [messageRefs, setHighlightedMessageId]);
+  }, [setHighlightedMessageId]);
+
+  const scrollToMessage = useCallback((messageId, { behavior = "smooth", block = "center", rememberCurrent = true } = {}) => {
+    const normalizedMessageId = String(messageId || "");
+    const list = messagesListRef.current;
+    if (!normalizedMessageId || !list) {
+      return;
+    }
+
+    if (rememberCurrent) {
+      jumpSnapshotRef.current = captureJumpSnapshot();
+      setCanReturnToJumpPoint(Boolean(jumpSnapshotRef.current));
+    }
+
+    const attemptScroll = (attempt = 0) => {
+      const element = messageRefs.current.get(normalizedMessageId);
+      if (element) {
+        applyHighlight(normalizedMessageId);
+        element.scrollIntoView({ behavior, block });
+        return;
+      }
+
+      if (attempt === 0 && typeof estimateMessageOffsetById === "function") {
+        const estimatedOffset = estimateMessageOffsetById(normalizedMessageId);
+        list.scrollTop = Math.max(0, estimatedOffset - Math.max(96, Math.round(list.clientHeight * 0.35)));
+      }
+
+      if (attempt >= 5) {
+        return;
+      }
+
+      window.requestAnimationFrame(() => attemptScroll(attempt + 1));
+    };
+
+    attemptScroll();
+  }, [applyHighlight, captureJumpSnapshot, estimateMessageOffsetById, messageRefs, messagesListRef]);
+
+  const returnToJumpPoint = useCallback(() => {
+    const list = messagesListRef.current;
+    const snapshot = jumpSnapshotRef.current;
+    if (!list || !snapshot || snapshot.channelId !== scopedChannelId) {
+      return;
+    }
+
+    list.scrollTo({
+      top: Math.max(0, snapshot.scrollTop || 0),
+      behavior: "smooth",
+    });
+    jumpSnapshotRef.current = null;
+    setCanReturnToJumpPoint(false);
+  }, [messagesListRef, scopedChannelId]);
+
+  const jumpToFirstUnread = useCallback(() => {
+    if (!firstUnreadMessageId) {
+      return;
+    }
+
+    scrollToMessage(firstUnreadMessageId, { behavior: "smooth", block: "center", rememberCurrent: false });
+  }, [firstUnreadMessageId, scrollToMessage]);
 
   useEffect(() => {
     const updateFloatingDate = () => {
@@ -121,6 +190,10 @@ export default function useTextChatScrollManager({
     if (channelChanged) {
       nearBottomRef.current = true;
       scheduleClearUnreadBelow();
+      jumpSnapshotRef.current = null;
+      window.requestAnimationFrame(() => {
+        setCanReturnToJumpPoint(false);
+      });
       forceScrollToBottomRef.current = false;
       pendingInitialScrollChannelRef.current = scopedChannelId;
       list.scrollTop = list.scrollHeight;
@@ -168,11 +241,17 @@ export default function useTextChatScrollManager({
     }
 
     if (messages.length > previousMessageCount) {
+      const firstNewMessage = messages[previousMessageCount];
+      if (firstNewMessage?.id && !firstUnreadMessageId) {
+        setFirstUnreadMessageId(String(firstNewMessage.id));
+      }
       setPendingNewMessagesCount((current) => current + (messages.length - previousMessageCount));
     }
   }, [
     clearUnreadBelow,
+    firstUnreadMessageId,
     forceScrollToBottomRef,
+    messages,
     messages.length,
     messagesEndRef,
     messagesListRef,
@@ -183,7 +262,11 @@ export default function useTextChatScrollManager({
   return {
     floatingDateLabel,
     pendingNewMessagesCount,
+    firstUnreadMessageId,
+    canReturnToJumpPoint,
     scrollToLatest,
     scrollToMessage,
+    jumpToFirstUnread,
+    returnToJumpPoint,
   };
 }

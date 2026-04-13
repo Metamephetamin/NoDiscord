@@ -35,6 +35,7 @@ import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers
 import useTextChatMessageActions from "../../hooks/useTextChatMessageActions";
 import useTextChatSendActions from "../../hooks/useTextChatSendActions";
 import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
+import useTextChatVirtualizer from "../../hooks/useTextChatVirtualizer";
 import useTextChatVoiceSpeech from "../../hooks/useTextChatVoiceSpeech";
 
 const deferEffectState = (callback) => {
@@ -46,7 +47,17 @@ const deferEffectState = (callback) => {
   setTimeout(callback, 0);
 };
 
-export default function TextChat({ serverId, channelId, user, resolvedChannelId = "", searchQuery = "", directTargets = [], serverMembers = [] }) {
+export default function TextChat({
+  serverId,
+  channelId,
+  user,
+  resolvedChannelId = "",
+  searchQuery = "",
+  directTargets = [],
+  serverMembers = [],
+  navigationRequest = null,
+  onNavigationIndexChange = null,
+}) {
   const [message, setMessage] = useState("");
   const [messageEditState, setMessageEditState] = useState(null);
   const [messagesByChannel, setMessagesByChannel] = useState({});
@@ -98,6 +109,17 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const messages = messagesByChannel[scopedChannelId] || [];
+  const {
+    virtualizationEnabled,
+    visibleMessages,
+    topSpacerHeight,
+    bottomSpacerHeight,
+    registerMeasuredNode,
+    estimateOffsetForMessageId,
+  } = useTextChatVirtualizer({
+    messages,
+    messagesListRef,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) {
@@ -386,8 +408,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const {
     floatingDateLabel,
     pendingNewMessagesCount,
+    firstUnreadMessageId,
+    canReturnToJumpPoint,
     scrollToLatest,
     scrollToMessage,
+    jumpToFirstUnread,
+    returnToJumpPoint,
   } = useTextChatScrollManager({
     messages,
     scopedChannelId,
@@ -396,6 +422,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     messageRefs,
     setHighlightedMessageId,
     forceScrollToBottomRef,
+    estimateMessageOffsetById: estimateOffsetForMessageId,
   });
 
   useEffect(() => {
@@ -881,6 +908,65 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     setReplyState,
     currentUserId,
   });
+
+  const mentionMessages = useMemo(
+    () => messages.filter((messageItem) => Array.isArray(messageItem.mentions) && messageItem.mentions.some((mention) => String(mention?.userId || "") === currentUserId)),
+    [currentUserId, messages]
+  );
+  const replyMessages = useMemo(
+    () => messages.filter((messageItem) => String(messageItem.replyToMessageId || "").trim()),
+    [messages]
+  );
+
+  useEffect(() => {
+    if (typeof onNavigationIndexChange !== "function") {
+      return;
+    }
+
+    onNavigationIndexChange({
+      channelId: scopedChannelId,
+      pinnedMessages,
+      searchResults,
+      mentionMessages,
+      replyMessages,
+      firstUnreadMessageId,
+      canReturnToJumpPoint,
+    });
+  }, [
+    canReturnToJumpPoint,
+    firstUnreadMessageId,
+    mentionMessages,
+    onNavigationIndexChange,
+    pinnedMessages,
+    replyMessages,
+    scopedChannelId,
+    searchResults,
+  ]);
+
+  useEffect(() => {
+    if (!navigationRequest || String(navigationRequest?.channelId || "") !== String(scopedChannelId)) {
+      return;
+    }
+
+    if (navigationRequest.type === "message" && navigationRequest.messageId) {
+      scrollToMessage(navigationRequest.messageId, { behavior: "smooth", block: "center", rememberCurrent: true });
+      return;
+    }
+
+    if (navigationRequest.type === "firstUnread") {
+      jumpToFirstUnread();
+      return;
+    }
+
+    if (navigationRequest.type === "latest") {
+      scrollToLatest("smooth");
+      return;
+    }
+
+    if (navigationRequest.type === "jumpBack") {
+      returnToJumpPoint();
+    }
+  }, [jumpToFirstUnread, navigationRequest, returnToJumpPoint, scopedChannelId, scrollToLatest, scrollToMessage]);
   useEffect(() => {
     if (!forwardModal.open) {
       return undefined;
@@ -971,6 +1057,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       scrollToMessage={scrollToMessage}
       scrollToLatest={scrollToLatest}
       pendingNewMessagesCount={pendingNewMessagesCount}
+      firstUnreadMessageId={firstUnreadMessageId}
+      canReturnToJumpPoint={canReturnToJumpPoint}
+      onJumpToFirstUnread={jumpToFirstUnread}
+      onReturnToJumpPoint={returnToJumpPoint}
+      mentionMessages={mentionMessages}
+      replyMessages={replyMessages}
       actionFeedback={actionFeedback}
       pinnedMessages={pinnedMessages}
       setPinnedMessages={setPinnedMessages}
@@ -980,9 +1072,14 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       openForwardModal={openForwardModal}
       clearSelectionMode={clearSelectionMode}
       messages={messages}
+      visibleMessages={visibleMessages}
       messagesListRef={messagesListRef}
       messagesEndRef={messagesEndRef}
       messageRefs={messageRefs}
+      virtualizationEnabled={virtualizationEnabled}
+      topSpacerHeight={topSpacerHeight}
+      bottomSpacerHeight={bottomSpacerHeight}
+      registerMeasuredNode={registerMeasuredNode}
       floatingDateLabel={floatingDateLabel}
       decryptedAttachmentsByMessageId={{}}
       selectedMessageIdSet={selectedMessageIdSet}

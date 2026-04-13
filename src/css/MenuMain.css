@@ -6727,3 +6727,113 @@
     padding: 12px 10px;
   }
 }
+
+.quick-switcher-backdrop {
+  z-index: 1200;
+}
+
+.quick-switcher {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(72vh, 760px);
+  margin: 8vh auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(17, 20, 29, 0.98), rgba(13, 15, 22, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+}
+
+.quick-switcher__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #dfe7f8;
+}
+
+.quick-switcher__header span {
+  color: #95a0b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quick-switcher__input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3f7ff;
+  font-size: 15px;
+}
+
+.quick-switcher__list {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.quick-switcher__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e7eefc;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.quick-switcher__item:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(129, 147, 255, 0.18);
+}
+
+.quick-switcher__badge {
+  min-width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(121, 139, 255, 0.16);
+  color: #dfe7ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quick-switcher__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.quick-switcher__copy strong {
+  color: #f7faff;
+  font-size: 14px;
+}
+
+.quick-switcher__copy span {
+  color: #9ba8c4;
+  font-size: 12px;
+}
+
+.quick-switcher__empty {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #9ba8c4;
+  text-align: center;
+}

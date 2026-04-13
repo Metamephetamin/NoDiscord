@@ -3,6 +3,7 @@ import {
   CreateServerModal,
   DirectToastStack,
   MediaFrameEditorOverlay,
+  QuickSwitcherModal,
   ScreenShareModal,
   ServerToastStack,
   SettingsOverlay,
@@ -84,6 +85,12 @@ export default function MenuMainOverlayLayer({
   serverMessageToasts,
   openServerChannelFromToast,
   dismissServerToast,
+  quickSwitcherOpen,
+  quickSwitcherQuery,
+  quickSwitcherItems,
+  setQuickSwitcherQuery,
+  handleQuickSwitcherSelect,
+  closeQuickSwitcher,
 }) {
   const availableFpsOptions =
     STREAM_FPS_OPTIONS.filter((option) => (SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"]).includes(option.value));
@@ -111,6 +118,15 @@ export default function MenuMainOverlayLayer({
       ) : null}
 
       {children}
+
+      <QuickSwitcherModal
+        open={quickSwitcherOpen}
+        query={quickSwitcherQuery}
+        items={quickSwitcherItems}
+        onClose={closeQuickSwitcher}
+        onQueryChange={setQuickSwitcherQuery}
+        onSelect={handleQuickSwitcherSelect}
+      />
 
       <SettingsOverlay
         open={openSettings}

@@ -1,5 +1,6 @@
 import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
+import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
 
 export const SettingsOverlay = ({
@@ -388,3 +389,5 @@ export const ServerToastStack = ({ toasts, onOpenToast, onDismiss }) => {
     </div>
   );
 };
+
+export { QuickSwitcherModal };

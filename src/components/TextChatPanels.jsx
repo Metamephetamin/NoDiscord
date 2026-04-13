@@ -107,6 +107,57 @@ export function JumpToLatestBar({ pendingCount, onJump }) {
   );
 }
 
+export function ChatNavigationBar({
+  firstUnreadMessageId,
+  mentionMessages = [],
+  replyMessages = [],
+  pinnedMessages = [],
+  canReturnToJumpPoint = false,
+  onJumpToFirstUnread,
+  onOpenMention,
+  onOpenReply,
+  onOpenPinned,
+  onReturnToJumpPoint,
+}) {
+  const latestMention = mentionMessages[mentionMessages.length - 1] || null;
+  const latestReply = replyMessages[replyMessages.length - 1] || null;
+  const latestPinned = pinnedMessages[0] || null;
+
+  if (!firstUnreadMessageId && !latestMention && !latestReply && !latestPinned && !canReturnToJumpPoint) {
+    return null;
+  }
+
+  return (
+    <div className="chat-nav-bar">
+      {firstUnreadMessageId ? (
+        <button type="button" className="chat-nav-bar__pill" onClick={onJumpToFirstUnread}>
+          Непрочитанное
+        </button>
+      ) : null}
+      {latestMention ? (
+        <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenMention(latestMention.id)}>
+          Упоминания {mentionMessages.length}
+        </button>
+      ) : null}
+      {latestReply ? (
+        <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenReply(latestReply.id)}>
+          Ответы {replyMessages.length}
+        </button>
+      ) : null}
+      {latestPinned ? (
+        <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenPinned(latestPinned.id)}>
+          Закрепы {pinnedMessages.length}
+        </button>
+      ) : null}
+      {canReturnToJumpPoint ? (
+        <button type="button" className="chat-nav-bar__pill chat-nav-bar__pill--ghost" onClick={onReturnToJumpPoint}>
+          Назад
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function ChatActionStatus({ feedback }) {
   if (!feedback?.message) {
     return null;

@@ -2,7 +2,7 @@ import { Suspense, lazy } from "react";
 import TextChatContextMenu from "../../components/TextChatContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
-import { ChatActionStatus, ChatSelectionBar, JumpToLatestBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
 
 const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
 const TextChatMediaPreview = lazy(() => import("../../components/TextChatMediaPreview"));
@@ -14,6 +14,12 @@ export default function TextChatView(props) {
     scrollToMessage,
     scrollToLatest,
     pendingNewMessagesCount,
+    firstUnreadMessageId,
+    canReturnToJumpPoint,
+    onJumpToFirstUnread,
+    onReturnToJumpPoint,
+    mentionMessages,
+    replyMessages,
     actionFeedback,
     pinnedMessages,
     setPinnedMessages,
@@ -23,9 +29,14 @@ export default function TextChatView(props) {
     openForwardModal,
     clearSelectionMode,
     messages,
+    visibleMessages,
     messagesListRef,
     messagesEndRef,
     messageRefs,
+    virtualizationEnabled,
+    topSpacerHeight,
+    bottomSpacerHeight,
+    registerMeasuredNode,
     floatingDateLabel,
     decryptedAttachmentsByMessageId,
     selectedMessageIdSet,
@@ -116,12 +127,29 @@ export default function TextChatView(props) {
         />
       ) : null}
       <ChatActionStatus feedback={actionFeedback} />
+      <ChatNavigationBar
+        firstUnreadMessageId={firstUnreadMessageId}
+        mentionMessages={mentionMessages}
+        replyMessages={replyMessages}
+        pinnedMessages={pinnedMessages}
+        canReturnToJumpPoint={canReturnToJumpPoint}
+        onJumpToFirstUnread={onJumpToFirstUnread}
+        onOpenMention={scrollToMessage}
+        onOpenReply={scrollToMessage}
+        onOpenPinned={scrollToMessage}
+        onReturnToJumpPoint={onReturnToJumpPoint}
+      />
       <JumpToLatestBar pendingCount={pendingNewMessagesCount} onJump={() => scrollToLatest("smooth")} />
       <TextChatMessageList
         messages={messages}
+        visibleMessages={visibleMessages}
         messagesListRef={messagesListRef}
         messagesEndRef={messagesEndRef}
         messageRefs={messageRefs}
+        virtualizationEnabled={virtualizationEnabled}
+        topSpacerHeight={topSpacerHeight}
+        bottomSpacerHeight={bottomSpacerHeight}
+        registerMeasuredNode={registerMeasuredNode}
         floatingDateLabel={floatingDateLabel}
         decryptedAttachmentsByMessageId={decryptedAttachmentsByMessageId}
         selectedMessageIdSet={selectedMessageIdSet}

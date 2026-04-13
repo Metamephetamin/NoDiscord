@@ -340,6 +340,14 @@ export default function VoiceRoomStage({
     () => stageCards.find((participant) => participant.isSelf) || null,
     [stageCards]
   );
+  const activeSpeakerParticipant = useMemo(
+    () => stageCards.find((participant) => participant.isSpeaking) || null,
+    [stageCards]
+  );
+  const activeLiveParticipant = useMemo(
+    () => stageCards.find((participant) => participant.isLive && !participant.isSelf) || null,
+    [stageCards]
+  );
 
   const activeStage = useMemo(() => {
     if (isRemoteStage) {
@@ -542,6 +550,24 @@ export default function VoiceRoomStage({
           <span>{formatParticipantCount(participants.length)}</span>
         </div>
         <div className="voice-room-stage__header-actions">
+          {activeSpeakerParticipant ? (
+            <button
+              type="button"
+              className="voice-room-stage__header-button"
+              onClick={() => handleCardClick(activeSpeakerParticipant)}
+            >
+              Фокус: говорит
+            </button>
+          ) : null}
+          {activeLiveParticipant ? (
+            <button
+              type="button"
+              className="voice-room-stage__header-button"
+              onClick={() => handleCardClick(activeLiveParticipant)}
+            >
+              Фокус: эфир
+            </button>
+          ) : null}
           {hasLocalSharePreview ? (
             <button
               type="button"
