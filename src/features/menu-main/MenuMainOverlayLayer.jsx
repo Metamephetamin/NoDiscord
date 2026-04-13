@@ -18,6 +18,7 @@ import {
   STREAM_FPS_OPTIONS,
   STREAM_RESOLUTION_OPTIONS,
 } from "../../utils/menuMainModel";
+import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 
 export default function MenuMainOverlayLayer({
   children,
@@ -84,6 +85,9 @@ export default function MenuMainOverlayLayer({
   openServerChannelFromToast,
   dismissServerToast,
 }) {
+  const availableFpsOptions =
+    STREAM_FPS_OPTIONS.filter((option) => (SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"]).includes(option.value));
+
   return (
     <>
       <input
@@ -148,7 +152,7 @@ export default function MenuMainOverlayLayer({
         fps={fps}
         shareStreamAudio={shareStreamAudio}
         resolutionOptions={STREAM_RESOLUTION_OPTIONS}
-        fpsOptions={STREAM_FPS_OPTIONS}
+        fpsOptions={availableFpsOptions}
         isScreenShareActive={isScreenShareActive}
         isCameraShareActive={isCameraShareActive}
         currentVoiceChannel={currentVoiceChannel}

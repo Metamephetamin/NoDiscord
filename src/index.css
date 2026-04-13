@@ -121,6 +121,48 @@ body {
   color: #f8fafc;
 }
 
+body,
+body button,
+body a,
+body span,
+body div,
+body p,
+body h1,
+body h2,
+body h3,
+body h4,
+body h5,
+body h6,
+body label,
+body strong,
+body small,
+body li,
+body ul,
+body ol {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body input,
+body textarea,
+body select,
+body option,
+body [contenteditable="true"],
+body [contenteditable="plaintext-only"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+body img,
+body video,
+body svg,
+body canvas {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
 .app-update-banner {
   position: fixed;
   top: 18px;

@@ -26,6 +26,7 @@ export const ServersSidebar = ({
   liveUserIds,
   speakingUserIds,
   watchedStreamUserId,
+  joiningVoiceChannelId,
   icons,
   onOpenServerSettings,
   onOpenMemberActions,
@@ -245,6 +246,7 @@ export const ServersSidebar = ({
               liveUserIds={liveUserIds}
               speakingUserIds={speakingUserIds}
               watchedStreamUserId={watchedStreamUserId}
+              joiningChannelId={joiningVoiceChannelId}
               onWatchStream={onWatchStream}
               canManageChannels={canManageChannels}
               editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
@@ -267,6 +269,7 @@ export const ServerMain = ({
   currentTextChannel,
   currentVoiceChannelName,
   currentVoiceParticipants,
+  joiningVoiceChannelId,
   remoteScreenShares,
   activeServerUnreadCount,
   hasLocalSharePreview,
@@ -294,6 +297,7 @@ export const ServerMain = ({
   getChannelDisplayName,
 }) => {
   const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName);
+  const isJoiningVoiceChannel = Boolean(joiningVoiceChannelId && currentVoiceChannelName);
 
   return (
     <main className="chat__wrapper chat__wrapper--servers">
@@ -341,6 +345,8 @@ export const ServerMain = ({
             activeServerName={activeServer?.name || "Сервер"}
             channelName={currentVoiceChannelName}
             participants={currentVoiceParticipants}
+            isJoining={isJoiningVoiceChannel}
+            pendingParticipant={user ? { name: user.firstName || user.first_name || user.email || "Вы", avatar: user.avatarUrl || user.avatar || "" } : null}
             remoteShares={remoteScreenShares}
             selectedStreamUserId={selectedStreamUserId}
             selectedStream={selectedStream}

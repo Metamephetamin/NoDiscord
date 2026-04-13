@@ -1507,6 +1507,7 @@
   gap: 16px;
   padding: 18px;
   background: #06080d;
+  overflow: auto;
 }
 
 .voice-room-stage__header {
@@ -1572,8 +1573,9 @@
 
 .voice-room-stage__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 460px));
+  justify-content: center;
+  gap: 16px;
   flex: 1;
   min-height: 0;
   align-content: start;
@@ -1582,7 +1584,9 @@
 .voice-room-stage__card {
   display: flex;
   flex-direction: column;
-  min-height: 260px;
+  width: min(100%, 460px);
+  min-height: 0;
+  aspect-ratio: 16 / 10;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -1729,8 +1733,11 @@
 
 .voice-room-stage__hero {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  width: min(100%, 1180px);
+  align-self: center;
+  flex: 0 0 auto;
+  min-height: clamp(400px, 60vh, 720px);
+  max-height: calc(100vh - 176px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   overflow: hidden;
@@ -1794,6 +1801,7 @@
   flex-wrap: wrap;
 }
 
+
 .voice-room-stage__pill {
   min-height: 30px;
   padding: 0 10px;
@@ -1841,13 +1849,13 @@
 .voice-room-stage__strip {
   display: flex;
   gap: 10px;
-  padding-bottom: 2px;
   overflow-x: auto;
+  width: 100%;
 }
 
 .voice-room-stage__strip-card {
-  width: 200px;
-  min-width: 200px;
+  width: 176px;
+  min-width: 176px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -1864,7 +1872,7 @@
 
 .voice-room-stage__strip-media {
   position: relative;
-  height: 112px;
+  height: 100px;
   overflow: hidden;
   background: #0a0d14;
 }
@@ -1903,6 +1911,48 @@
   background: #090c11;
   text-align: center;
 }
+
+.voice-room-stage__empty--pending {
+  gap: 12px;
+}
+
+.voice-room-stage__hero-dock {
+  position: absolute;
+  left: 50%;
+  right: auto;
+  bottom: 18px;
+  width: min(calc(100% - 32px), 820px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transform: translate(-50%, 18px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.voice-room-stage__hero:hover .voice-room-stage__hero-dock,
+.voice-room-stage__hero:focus-within .voice-room-stage__hero-dock {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.voice-room-stage__hero-dock .voice-room-stage__strip {
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(9, 12, 18, 0.92);
+  backdrop-filter: blur(16px);
+}
+
+.voice-room-stage__dock-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
 
 .voice-room-stage__empty strong {
   color: #ffffff;

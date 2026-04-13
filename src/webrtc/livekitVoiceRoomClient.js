@@ -53,16 +53,16 @@ const LEGACY_NOISE_SUPPRESSION_MODE_KRISP = "krisp";
 const REMOTE_BACKGROUND_SHARE_TARGET = { width: 960, height: 540, fps: 15 };
 const REMOTE_CAMERA_TARGET = { width: 640, height: 360, fps: 15 };
 const CAMERA_VIDEO_QUALITY_TARGETS = {
-  "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000, 120: 6_200_000 } },
-  "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000, 120: 10_000_000 } },
-  "1440p": { width: 2560, height: 1440, bitrate: { 30: 7_500_000, 60: 11_500_000, 120: 16_000_000 } },
-  "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000, 120: 30_000_000 } },
+  "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 7_500_000, 60: 11_500_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000 } },
 };
 const SCREEN_SHARE_QUALITY_TARGETS = {
-  "720p": { width: 1280, height: 720, bitrate: { 30: 5_500_000, 60: 8_000_000, 120: 10_500_000 } },
-  "1080p": { width: 1920, height: 1080, bitrate: { 30: 10_000_000, 60: 14_000_000, 120: 18_000_000 } },
-  "1440p": { width: 2560, height: 1440, bitrate: { 30: 14_000_000, 60: 20_000_000, 120: 27_000_000 } },
-  "2160p": { width: 3840, height: 2160, bitrate: { 30: 22_000_000, 60: 32_000_000, 120: 40_000_000 } },
+  "720p": { width: 1280, height: 720, bitrate: { 30: 5_500_000, 60: 8_000_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 10_000_000, 60: 14_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 14_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 22_000_000 } },
 };
 
 function normalizePublishFps(value, fallback = 30) {
@@ -71,16 +71,12 @@ function normalizePublishFps(value, fallback = 30) {
     return fallback;
   }
 
-  return Math.max(15, Math.min(Math.round(numericValue), 120));
+  return Math.max(15, Math.min(Math.round(numericValue), 60));
 }
 
 function resolveBitrate(targets, fps) {
-  if (fps >= 120) {
-    return targets[120];
-  }
-
   if (fps >= 60) {
-    return targets[60];
+    return targets[60] || targets[30];
   }
 
   return targets[30];

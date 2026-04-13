@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
 import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
@@ -56,6 +56,11 @@ const initialEmailVerificationModal = {
 };
 
 const sloganWords = ["жизни", "связи", "работы", "роста"];
+
+const TYPING_FORWARD_DELAY_MS = 280;
+const TYPING_BACKWARD_DELAY_MS = 180;
+const TYPING_HOLD_FULL_MS = 1100;
+const TYPING_HOLD_EMPTY_MS = 360;
 
 const formatCardNumber = (value) =>
   value
@@ -241,6 +246,8 @@ export default function Auth({ onAuthSuccess }) {
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
   const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
+  const [typedSloganLength, setTypedSloganLength] = useState(0);
+  const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const authVideoRef = useRef(null);
 
@@ -290,6 +297,10 @@ export default function Auth({ onAuthSuccess }) {
     () => detectNameScript(registerForm.firstName) || detectNameScript(registerForm.lastName),
     [registerForm.firstName, registerForm.lastName]
   );
+  const activeSloganWord = useMemo(
+    () => sloganWords[activeSloganWordIndex % sloganWords.length] || "",
+    [activeSloganWordIndex]
+  );
 
   const resetPhoneVerification = () => {
     setPhoneVerificationCode("");
@@ -304,12 +315,37 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setActiveSloganWordIndex((previous) => previous + 1);
-    }, 2200);
+    const currentWordLength = activeSloganWord.length;
+    let timeoutMs = isDeletingSlogan ? TYPING_BACKWARD_DELAY_MS : TYPING_FORWARD_DELAY_MS;
 
-    return () => window.clearInterval(intervalId);
-  }, []);
+    if (!isDeletingSlogan && typedSloganLength >= currentWordLength) {
+      timeoutMs = TYPING_HOLD_FULL_MS;
+    } else if (isDeletingSlogan && typedSloganLength <= 0) {
+      timeoutMs = TYPING_HOLD_EMPTY_MS;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!isDeletingSlogan && typedSloganLength < currentWordLength) {
+        setTypedSloganLength((previous) => Math.min(previous + 1, currentWordLength));
+        return;
+      }
+
+      if (!isDeletingSlogan && typedSloganLength >= currentWordLength) {
+        setIsDeletingSlogan(true);
+        return;
+      }
+
+      if (isDeletingSlogan && typedSloganLength > 0) {
+        setTypedSloganLength((previous) => Math.max(previous - 1, 0));
+        return;
+      }
+
+      setIsDeletingSlogan(false);
+      setActiveSloganWordIndex((previous) => (previous + 1) % sloganWords.length);
+    }, timeoutMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeSloganWord, isDeletingSlogan, typedSloganLength]);
 
   useEffect(() => {
     const updateVisualMode = () => {
@@ -732,7 +768,7 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   return (
-    <div className="auth-page">
+    <div className={`auth-page ${mode === "login" ? "auth-page--login" : "auth-page--register"}`}>
       <video
         ref={authVideoRef}
         className="auth-video-bg"
@@ -764,28 +800,17 @@ export default function Auth({ onAuthSuccess }) {
           <h1 className="auth-brand__title">
             <span className="auth-brand__title-static">- симум возможностей для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">
-              {isLiteVisualMode ? (
-                <span className="auth-brand__title-lite-word">
-                  {sloganWords[activeSloganWordIndex % sloganWords.length]}
+              <span className={`auth-brand__title-typewriter ${isDeletingSlogan ? "auth-brand__title-typewriter--deleting" : ""}`}>
+                <span className="auth-brand__title-typewriter-sizer" aria-hidden="true">
+                  {sloganWords.reduce((longest, word) => (word.length > longest.length ? word : longest), sloganWords[0] || "")}
                 </span>
-              ) : (
-                <span
-                  className="auth-brand__title-prism"
-                  style={{
-                    "--active-slogan-word-index": activeSloganWordIndex,
-                  }}
-                >
-                  {sloganWords.map((word, index) => (
-                    <span
-                      key={word}
-                      className="auth-brand__title-face"
-                      style={{ "--face-index": index }}
-                    >
-                      {word}
-                    </span>
-                  ))}
+                <span className="auth-brand__title-typewriter-live">
+                  <span className="auth-brand__title-typewriter-word">
+                    {activeSloganWord.slice(0, typedSloganLength)}
+                  </span>
+                  <span className="auth-brand__title-typewriter-caret" aria-hidden="true" />
                 </span>
-              )}
+              </span>
             </span>
           </h1>
         </div>

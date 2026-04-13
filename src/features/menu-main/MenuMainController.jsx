@@ -47,6 +47,7 @@ import {
   normalizeSingleWordNameInput,
 } from "../../utils/nameScripts";
 import { createVoiceRoomClient } from "../../webrtc/voiceRoomClient";
+import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
 import {
@@ -143,6 +144,7 @@ export default function MenuMain({
   );
   const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "");
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
+  const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
@@ -166,7 +168,7 @@ export default function MenuMain({
   const [createServerIconFrame, setCreateServerIconFrame] = useState(() => getDefaultMediaFrame());
   const [createServerError, setCreateServerError] = useState("");
   const [resolution, setResolution] = useState("1080p");
-  const [fps, setFps] = useState(30);
+  const [fps, setFps] = useState(60);
   const [shareStreamAudio, setShareStreamAudio] = useState(false);
   const [remoteScreenShares, setRemoteScreenShares] = useState([]);
   const [announcedLiveUserIds, setAnnouncedLiveUserIds] = useState([]);
@@ -410,6 +412,12 @@ export default function MenuMain({
     () => currentDirectFriend?.directChannelId || buildDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
     [currentDirectFriend?.directChannelId, currentDirectFriend?.id, currentUserId]
   );
+  useEffect(() => {
+    const allowedFps = SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"];
+    if (!allowedFps.includes(fps)) {
+      setFps(allowedFps[0] || 30);
+    }
+  }, [fps, resolution]);
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return undefined;
@@ -2225,6 +2233,7 @@ export default function MenuMain({
         }
 
         setCurrentVoiceChannel(nextChannel);
+        setJoiningVoiceChannelId((previous) => (String(previous || "") === String(nextChannel || "") ? "" : previous));
       },
       onRemoteScreenStreamsChanged: setRemoteScreenShares,
       onLocalScreenShareChanged: setIsSharingScreen,
@@ -2953,12 +2962,15 @@ export default function MenuMain({
     voiceJoinAttemptRef.current = joinAttemptId;
     voiceJoinInFlightRef.current = true;
     pendingVoiceChannelTargetRef.current = scopedChannelId;
+    setJoiningVoiceChannelId(scopedChannelId);
+    setCurrentVoiceChannel(scopedChannelId);
     try {
-      await voiceClientRef.current.joinChannel(scopedChannelId, user);
       if (isMobileViewport) {
         setMobileSection("servers");
         setMobileServersPane("voice");
       }
+
+      await voiceClientRef.current.joinChannel(scopedChannelId, user);
     } catch (error) {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
         const errorName = String(error?.name || "").trim();
@@ -2968,6 +2980,7 @@ export default function MenuMain({
           showServerInviteFeedback(message);
           console.error("Ошибка входа в голосовой канал:", error);
           setCurrentVoiceChannel(null);
+          setJoiningVoiceChannelId("");
           return;
         }
 
@@ -2979,22 +2992,20 @@ export default function MenuMain({
 
         try {
           await voiceClientRef.current.joinChannel(scopedChannelId, user);
-          if (isMobileViewport) {
-            setMobileSection("servers");
-            setMobileServersPane("voice");
-          }
           return;
         } catch (retryError) {
           const message = retryError?.message || error?.message || "Не удалось подключиться к голосовому каналу.";
           showServerInviteFeedback(message);
           console.error("Ошибка входа в голосовой канал:", retryError);
           setCurrentVoiceChannel(null);
+          setJoiningVoiceChannelId("");
         }
       }
     } finally {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
         voiceJoinInFlightRef.current = false;
         pendingVoiceChannelTargetRef.current = "";
+        setJoiningVoiceChannelId("");
       }
     }
   };
@@ -3003,6 +3014,7 @@ export default function MenuMain({
     try {
       voiceJoinInFlightRef.current = false;
       pendingVoiceChannelTargetRef.current = "";
+      setJoiningVoiceChannelId("");
       await voiceClientRef.current.leaveChannel();
       if (isMobileViewport) {
         setMobileServersPane("channels");
@@ -3817,6 +3829,7 @@ export default function MenuMain({
       liveUserIds={liveUserIds}
       speakingUserIds={speakingUserIds}
       watchedStreamUserId={selectedStreamUserId}
+      joiningVoiceChannelId={joiningVoiceChannelId}
       icons={{ pencil: PENCIL_ICON_URL, microphone: MICROPHONE_ICON_URL, headphones: HEADPHONES_ICON_URL, settings: SETTINGS_ICON_URL }}
       onOpenServerSettings={() => openSettingsPanel("server")}
       onUpdateMemberNickname={updateMemberNickname}
@@ -3890,6 +3903,7 @@ export default function MenuMain({
       currentTextChannel={currentTextChannel}
       currentVoiceChannelName={currentVoiceChannelName}
       currentVoiceParticipants={currentVoiceParticipants}
+      joiningVoiceChannelId={joiningVoiceChannelId}
       remoteScreenShares={remoteScreenShares}
       activeServerUnreadCount={activeServerUnreadCount}
       hasLocalSharePreview={hasLocalSharePreview}

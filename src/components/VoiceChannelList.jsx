@@ -37,6 +37,7 @@ const VoiceChannelList = ({
   watchedStreamUserId = null,
   onWatchStream,
   canManageChannels = true,
+  joiningChannelId = "",
 }) => {
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
   const speakingUsers = useMemo(() => new Set(speakingUserIds), [speakingUserIds]);
@@ -76,9 +77,10 @@ const VoiceChannelList = ({
         const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
+        const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
 
         return (
-          <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""}`}>
+          <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""}`}>
             <div className="voice-channel__row">
               {isEditing ? (
                 <input
@@ -104,8 +106,9 @@ const VoiceChannelList = ({
                   }}
                 />
               ) : (
-                <button type="button" className="voice-channel__button" onClick={() => onJoinChannel?.(channel)}>
+                <button type="button" className="voice-channel__button" onClick={() => onJoinChannel?.(channel)} disabled={isJoining}>
                   <span className="voice-channel__title">{channel.name}</span>
+                  {isJoining ? <span className="voice-channel__status">Подключаемся...</span> : null}
                 </button>
               )}
 

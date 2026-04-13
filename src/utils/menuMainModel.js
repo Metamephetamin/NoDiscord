@@ -31,11 +31,11 @@ export const STREAM_RESOLUTION_OPTIONS = [
   { value: "720p", label: "720p" },
   { value: "1080p", label: "1080p" },
   { value: "1440p", label: "1440p" },
+  { value: "2160p", label: "2160p" },
 ];
 export const STREAM_FPS_OPTIONS = [
   { value: 30, label: "30 FPS" },
   { value: 60, label: "60 FPS" },
-  { value: 120, label: "120 FPS" },
 ];
 export const NOTIFICATION_SOUND_OPTIONS = [
   { id: "soft", label: "Мягкий", path: resolveStaticAssetUrl("/sounds/notification-soft.ogg") },

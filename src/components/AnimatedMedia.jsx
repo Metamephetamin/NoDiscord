@@ -44,6 +44,7 @@ export default function AnimatedMedia({
         muted
         playsInline
         preload="metadata"
+        draggable={false}
         aria-label={alt}
         onError={() => setFailedVideoSrc(resolvedSrc)}
       />
@@ -58,6 +59,7 @@ export default function AnimatedMedia({
       style={mediaStyle}
       src={resolvedSrc || resolvedFallback}
       alt={alt}
+      draggable={false}
       loading="lazy"
       onError={(event) => {
         if (resolvedFallback && event.currentTarget.src !== resolvedFallback) {

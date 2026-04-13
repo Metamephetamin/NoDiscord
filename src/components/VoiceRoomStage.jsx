@@ -168,6 +168,8 @@ export default function VoiceRoomStage({
   onCloseLocalSharePreview,
   onStopScreenShare,
   onStopCameraShare,
+  isJoining = false,
+  pendingParticipant = null,
 }) {
   const shellRef = useRef(null);
   const remoteShareByUserId = useMemo(
@@ -249,7 +251,18 @@ export default function VoiceRoomStage({
     }
 
     return null;
-  }, [isLocalStage, isRemoteStage, localSharePreview, localStageParticipant?.avatar, localStageParticipant?.name, selectedStream, selectedStreamParticipant?.avatar, selectedStreamParticipant?.name, selectedUserId, stageCards]);
+  }, [
+    isLocalStage,
+    isRemoteStage,
+    localSharePreview,
+    localStageParticipant?.avatar,
+    localStageParticipant?.name,
+    selectedStream,
+    selectedStreamParticipant?.avatar,
+    selectedStreamParticipant?.name,
+    selectedUserId,
+    stageCards,
+  ]);
 
   const requestFullscreen = async () => {
     try {
@@ -296,6 +309,41 @@ export default function VoiceRoomStage({
     </div>
   );
 
+  const renderStripCards = () => (
+    <div className="voice-room-stage__strip" role="list" aria-label="Участники голосового канала">
+      {stageCards.map((participant) => (
+        <button
+          key={participant.userId || participant.name}
+          type="button"
+          className={`voice-room-stage__strip-card ${participant.isSelected ? "voice-room-stage__strip-card--active" : ""} ${participant.isSpeaking ? "voice-room-stage__strip-card--speaking" : ""}`}
+          onClick={() => handleCardClick(participant)}
+          disabled={!participant.canOpen}
+        >
+          <div className="voice-room-stage__strip-media">
+            {participant.share ? (
+              <VoiceStageMedia
+                stream={participant.share.stream || null}
+                videoSrc={participant.share.videoSrc || ""}
+                imageSrc={participant.share.imageSrc || ""}
+                alt={participant.name}
+                className="voice-room-stage__strip-video"
+              />
+            ) : (
+              <div className="voice-room-stage__strip-avatar-shell" style={{ backgroundColor: participant.roleColor || "#2f3545" }}>
+                <AnimatedAvatar className="voice-room-stage__strip-avatar" src={participant.avatar} alt={participant.name} />
+              </div>
+            )}
+            {participant.isLive ? <span className="voice-room-stage__strip-badge">В ЭФИРЕ</span> : null}
+          </div>
+          <div className="voice-room-stage__strip-copy">
+            <strong>{participant.name}</strong>
+            <span>{participant.isLive ? "Открыть эфир" : participant.isSelf ? "Это вы" : "В комнате"}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <section className="voice-room-stage">
       <div className="voice-room-stage__header">
@@ -318,96 +366,65 @@ export default function VoiceRoomStage({
       </div>
 
       {activeStage ? (
-        <>
-          <div className="voice-room-stage__hero" ref={shellRef}>
-            <VoiceStageMedia
-              stream={activeStage.stream}
-              videoSrc={activeStage.videoSrc}
-              imageSrc={activeStage.imageSrc}
-              alt={activeStage.name}
-              className="voice-room-stage__hero-media"
-              contain
-            />
-            {!activeStage.stream && !activeStage.videoSrc && !activeStage.imageSrc ? (
-              <div className="voice-room-stage__hero-empty">
-                <AnimatedAvatar className="voice-room-stage__hero-empty-avatar" src={activeStage.avatar} alt={activeStage.name} />
-                <strong>{activeStage.name}</strong>
-                <span>Поток ещё подключается</span>
-              </div>
-            ) : null}
+        <div className="voice-room-stage__hero" ref={shellRef}>
+          <VoiceStageMedia
+            stream={activeStage.stream}
+            videoSrc={activeStage.videoSrc}
+            imageSrc={activeStage.imageSrc}
+            alt={activeStage.name}
+            className="voice-room-stage__hero-media"
+            contain
+          />
+          {!activeStage.stream && !activeStage.videoSrc && !activeStage.imageSrc ? (
+            <div className="voice-room-stage__hero-empty">
+              <AnimatedAvatar className="voice-room-stage__hero-empty-avatar" src={activeStage.avatar} alt={activeStage.name} />
+              <strong>{activeStage.name}</strong>
+              <span>Поток ещё подключается</span>
+            </div>
+          ) : null}
 
-            <div className="voice-room-stage__hero-top">
-              <div className="voice-room-stage__hero-badges">
-                <span className="voice-room-stage__pill">{getStreamBadge(activeStage)}</span>
-                {getResolutionBadge(activeStage) ? <span className="voice-room-stage__pill">{getResolutionBadge(activeStage)}</span> : null}
+          <div className="voice-room-stage__hero-top">
+            <div className="voice-room-stage__hero-badges">
+              <span className="voice-room-stage__pill">{getStreamBadge(activeStage)}</span>
+              {getResolutionBadge(activeStage) ? <span className="voice-room-stage__pill">{getResolutionBadge(activeStage)}</span> : null}
+            </div>
+          </div>
+
+          <div className="voice-room-stage__hero-bottom">
+            <div className="voice-room-stage__hero-person">
+              <AnimatedAvatar className="voice-room-stage__hero-avatar" src={activeStage.avatar} alt={activeStage.name} />
+              <div className="voice-room-stage__hero-copy">
+                <strong>{activeStage.name}</strong>
+                <span>{activeStage.subtitle}</span>
               </div>
-              <div className="voice-room-stage__hero-actions">
-                <button type="button" className="voice-room-stage__overlay-button" onClick={requestFullscreen}>
-                  На весь экран
-                </button>
-                {activeStage.kind === "local" ? (
-                  <button
-                    type="button"
-                    className="voice-room-stage__overlay-button voice-room-stage__overlay-button--danger"
-                    onClick={activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare}
-                  >
-                    {activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
-                  </button>
-                ) : null}
+            </div>
+          </div>
+
+          <div className="voice-room-stage__hero-dock">
+            {renderStripCards()}
+            <div className="voice-room-stage__dock-actions">
+              <button type="button" className="voice-room-stage__overlay-button" onClick={requestFullscreen}>
+                На весь экран
+              </button>
+              {activeStage.kind === "local" ? (
                 <button
                   type="button"
-                  className="voice-room-stage__overlay-button"
-                  onClick={activeStage.kind === "local" ? onCloseLocalSharePreview : onCloseSelectedStream}
+                  className="voice-room-stage__overlay-button voice-room-stage__overlay-button--danger"
+                  onClick={activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare}
                 >
-                  Закрыть
+                  {activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
                 </button>
-              </div>
-            </div>
-
-            <div className="voice-room-stage__hero-bottom">
-              <div className="voice-room-stage__hero-person">
-                <AnimatedAvatar className="voice-room-stage__hero-avatar" src={activeStage.avatar} alt={activeStage.name} />
-                <div className="voice-room-stage__hero-copy">
-                  <strong>{activeStage.name}</strong>
-                  <span>{activeStage.subtitle}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="voice-room-stage__strip" role="list" aria-label="Участники голосового канала">
-            {stageCards.map((participant) => (
+              ) : null}
               <button
-                key={participant.userId || participant.name}
                 type="button"
-                className={`voice-room-stage__strip-card ${participant.isSelected ? "voice-room-stage__strip-card--active" : ""} ${participant.isSpeaking ? "voice-room-stage__strip-card--speaking" : ""}`}
-                onClick={() => handleCardClick(participant)}
-                disabled={!participant.canOpen}
+                className="voice-room-stage__overlay-button"
+                onClick={activeStage.kind === "local" ? onCloseLocalSharePreview : onCloseSelectedStream}
               >
-                <div className="voice-room-stage__strip-media">
-                  {participant.share ? (
-                    <VoiceStageMedia
-                      stream={participant.share.stream || null}
-                      videoSrc={participant.share.videoSrc || ""}
-                      imageSrc={participant.share.imageSrc || ""}
-                      alt={participant.name}
-                      className="voice-room-stage__strip-video"
-                    />
-                  ) : (
-                    <div className="voice-room-stage__strip-avatar-shell" style={{ backgroundColor: participant.roleColor || "#2f3545" }}>
-                      <AnimatedAvatar className="voice-room-stage__strip-avatar" src={participant.avatar} alt={participant.name} />
-                    </div>
-                  )}
-                  {participant.isLive ? <span className="voice-room-stage__strip-badge">В ЭФИРЕ</span> : null}
-                </div>
-                <div className="voice-room-stage__strip-copy">
-                  <strong>{participant.name}</strong>
-                  <span>{participant.isLive ? "Открыть эфир" : participant.isSelf ? "Это вы" : "В комнате"}</span>
-                </div>
+                Закрыть
               </button>
-            ))}
+            </div>
           </div>
-        </>
+        </div>
       ) : stageCards.length ? (
         <div className="voice-room-stage__grid">
           {stageCards.map((participant) => (
@@ -445,6 +462,16 @@ export default function VoiceRoomStage({
               {renderParticipantMeta(participant)}
             </button>
           ))}
+        </div>
+      ) : isJoining ? (
+        <div className="voice-room-stage__empty voice-room-stage__empty--pending">
+          <AnimatedAvatar
+            className="voice-room-stage__hero-empty-avatar"
+            src={pendingParticipant?.avatar || ""}
+            alt={pendingParticipant?.name || "Вы"}
+          />
+          <strong>Подключаемся к каналу...</strong>
+          <span>Сцена откроется сразу, как только сервер подтвердит подключение.</span>
         </div>
       ) : (
         <div className="voice-room-stage__empty">

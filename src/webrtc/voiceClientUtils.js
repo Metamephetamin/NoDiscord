@@ -11,6 +11,12 @@ const SCREEN_SHARE_PRESETS = {
   "1440p": { width: 2560, height: 1440 },
   "2160p": { width: 3840, height: 2160 },
 };
+const SCREEN_SHARE_ALLOWED_FPS = {
+  "720p": [30, 60],
+  "1080p": [30, 60],
+  "1440p": [30],
+  "2160p": [30],
+};
 
 const getDisplayName = (user) =>
   user?.firstName || user?.first_name || user?.name || user?.email || "User";
@@ -44,7 +50,15 @@ const normalizeParticipantsMap = (data) => {
 
 const getScreenSharePreset = (resolution = "1080p", fps = 60) => {
   const preset = SCREEN_SHARE_PRESETS[resolution] || SCREEN_SHARE_PRESETS["1080p"];
-  const normalizedFps = Math.max(15, Math.min(Number(fps) || 30, 120));
+  const allowedFps = SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"];
+  const requestedFps = Math.round(Number(fps) || allowedFps[0] || 30);
+  const normalizedFps = allowedFps.includes(requestedFps)
+    ? requestedFps
+    : allowedFps.reduce(
+        (closest, current) =>
+          Math.abs(current - requestedFps) < Math.abs(closest - requestedFps) ? current : closest,
+        allowedFps[0] || 30
+      );
 
   return {
     width: preset.width,
@@ -189,4 +203,5 @@ export {
   normalizeParticipantsMap,
   tuneDisplayStream,
   createPreferredAudioContext,
+  SCREEN_SHARE_ALLOWED_FPS,
 };

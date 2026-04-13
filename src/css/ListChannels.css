@@ -22,6 +22,11 @@
   border-color: rgba(91, 124, 255, 0.28);
 }
 
+.list__items--joining {
+  background: rgba(91, 124, 255, 0.08);
+  border-color: rgba(91, 124, 255, 0.18);
+}
+
 .list__items--editing {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(255, 255, 255, 0.14);
@@ -50,6 +55,11 @@
   font-style: normal;
 }
 
+.voice-channel__button:disabled {
+  cursor: default;
+  opacity: 0.94;
+}
+
 .voice-channel__title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -58,6 +68,20 @@
   font-weight: 600;
   font-family: var(--font-heading);
   font-style: normal;
+}
+
+.voice-channel__status {
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d7deef;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .voice-channel__count {
