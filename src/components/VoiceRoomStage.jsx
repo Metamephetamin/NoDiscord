@@ -274,6 +274,116 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
   return null;
 }
 
+function VoiceStageIcon({ name }) {
+  const commonProps = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.9",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+    className: "voice-room-stage__toolbar-icon",
+  };
+
+  switch (name) {
+    case "mic":
+      return (
+        <svg {...commonProps}>
+          <path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3Z" />
+          <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0" />
+          <path d="M12 17v3" />
+          <path d="M9 20h6" />
+        </svg>
+      );
+    case "headphones":
+      return (
+        <svg {...commonProps}>
+          <path d="M4 13a8 8 0 0 1 16 0" />
+          <path d="M5 13h2a2 2 0 0 1 2 2v2.5A1.5 1.5 0 0 1 7.5 19h-1A2.5 2.5 0 0 1 4 16.5V14a1 1 0 0 1 1-1Z" />
+          <path d="M19 13h-2a2 2 0 0 0-2 2v2.5a1.5 1.5 0 0 0 1.5 1.5h1a2.5 2.5 0 0 0 2.5-2.5V14a1 1 0 0 0-1-1Z" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg {...commonProps}>
+          <path d="M6 7.5h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H11l-4 3v-3H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z" />
+        </svg>
+      );
+    case "screen":
+      return (
+        <svg {...commonProps}>
+          <rect x="4" y="5" width="16" height="11" rx="2" />
+          <path d="M9 19h6" />
+          <path d="M12 16v3" />
+        </svg>
+      );
+    case "camera":
+      return (
+        <svg {...commonProps}>
+          <path d="M8 8h7a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z" />
+          <path d="m17 11 3-2v8l-3-2" />
+        </svg>
+      );
+    case "focus":
+      return (
+        <svg {...commonProps}>
+          <path d="M9 4H5a1 1 0 0 0-1 1v4" />
+          <path d="M15 4h4a1 1 0 0 1 1 1v4" />
+          <path d="M20 15v4a1 1 0 0 1-1 1h-4" />
+          <path d="M4 15v4a1 1 0 0 0 1 1h4" />
+          <circle cx="12" cy="12" r="2.5" />
+        </svg>
+      );
+    case "live":
+      return (
+        <svg {...commonProps}>
+          <path d="M5 12a7 7 0 0 1 7-7" />
+          <path d="M19 12a7 7 0 0 0-7-7" />
+          <path d="M7.5 12a4.5 4.5 0 0 1 4.5-4.5" />
+          <path d="M16.5 12A4.5 4.5 0 0 0 12 7.5" />
+          <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "preview":
+      return (
+        <svg {...commonProps}>
+          <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+          <circle cx="12" cy="12" r="2.8" />
+        </svg>
+      );
+    case "fullscreen":
+      return (
+        <svg {...commonProps}>
+          <path d="M9 4H4v5" />
+          <path d="m4 4 6 6" />
+          <path d="M15 4h5v5" />
+          <path d="m20 4-6 6" />
+          <path d="M9 20H4v-5" />
+          <path d="m4 20 6-6" />
+          <path d="M15 20h5v-5" />
+          <path d="m20 20-6-6" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg {...commonProps}>
+          <path d="m7 7 10 10" />
+          <path d="M17 7 7 17" />
+        </svg>
+      );
+    case "leave":
+      return (
+        <svg {...commonProps}>
+          <path d="M9 8c-4 0-6 2.5-6 4v2h4v-2c0-.5.7-1.5 2-1.5h6c1.3 0 2 1 2 1.5v2h4v-2c0-1.5-2-4-6-4H9Z" />
+          <path d="M12 12v5" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function VoiceRoomStage({
   activeServerName,
   channelName,
@@ -291,6 +401,16 @@ export default function VoiceRoomStage({
   onCloseLocalSharePreview,
   onStopScreenShare,
   onStopCameraShare,
+  isMicMuted = false,
+  isSoundMuted = false,
+  isScreenShareActive = false,
+  isCameraShareActive = false,
+  onToggleMic,
+  onToggleSound,
+  onOpenTextChat,
+  onScreenShareAction,
+  onOpenCamera,
+  onLeave,
   isJoining = false,
   pendingParticipant = null,
 }) {
@@ -460,14 +580,6 @@ export default function VoiceRoomStage({
       ? avatarAccentMap[`pending:${pendingParticipant.avatar}`] || createFallbackAccent(pendingParticipant.name || pendingParticipant.avatar)
       : createFallbackAccent(activeStage?.name || pendingParticipant?.name || "voice-stage");
 
-  const requestFullscreen = async () => {
-    try {
-      await shellRef.current?.requestFullscreen?.();
-    } catch (error) {
-      console.error("Ошибка перехода в полноэкранный режим голосовой сцены:", error);
-    }
-  };
-
   const handleCardClick = (participant) => {
     if (!participant) {
       return;
@@ -541,6 +653,148 @@ export default function VoiceRoomStage({
     </div>
   );
 
+  const renderToolbarButton = ({
+    key,
+    icon,
+    label,
+    onClick,
+    active = false,
+    danger = false,
+    disabled = false,
+  }) => (
+    <button
+      key={key}
+      type="button"
+      className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""}`.trim()}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+    >
+      <VoiceStageIcon name={icon} />
+    </button>
+  );
+
+  const stageToolbar = (
+    <div className="voice-room-stage__toolbar-shell">
+      {activeStage ? <div className="voice-room-stage__toolbar-strip">{renderStripCards()}</div> : null}
+
+      <div className="voice-room-stage__toolbar" role="toolbar" aria-label="Управление голосовой комнатой">
+        <div className="voice-room-stage__toolbar-group">
+          {renderToolbarButton({
+            key: "mic",
+            icon: "mic",
+            label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
+            onClick: onToggleMic,
+            active: !isMicMuted,
+          })}
+          {renderToolbarButton({
+            key: "headphones",
+            icon: "headphones",
+            label: isSoundMuted ? "Включить звук" : "Отключить звук",
+            onClick: onToggleSound,
+            active: !isSoundMuted,
+          })}
+        </div>
+
+        <div className="voice-room-stage__toolbar-group">
+          {renderToolbarButton({
+            key: "chat",
+            icon: "chat",
+            label: "Перейти в чат канала",
+            onClick: onOpenTextChat,
+          })}
+          {renderToolbarButton({
+            key: "screen",
+            icon: "screen",
+            label: isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана",
+            onClick: onScreenShareAction,
+            active: isScreenShareActive,
+          })}
+          {renderToolbarButton({
+            key: "camera",
+            icon: "camera",
+            label: isCameraShareActive ? "Управление камерой" : "Включить камеру",
+            onClick: onOpenCamera,
+            active: isCameraShareActive,
+          })}
+        </div>
+
+        <div className="voice-room-stage__toolbar-group">
+          {activeSpeakerParticipant
+            ? renderToolbarButton({
+                key: "focus-speaker",
+                icon: "focus",
+                label: `Сфокусироваться на ${activeSpeakerParticipant.name || "говорящем участнике"}`,
+                onClick: () => handleCardClick(activeSpeakerParticipant),
+              })
+            : null}
+          {activeLiveParticipant
+            ? renderToolbarButton({
+                key: "focus-live",
+                icon: "live",
+                label: `Открыть эфир ${activeLiveParticipant.name || "участника"}`,
+                onClick: () => handleCardClick(activeLiveParticipant),
+              })
+            : null}
+          {hasLocalSharePreview
+            ? renderToolbarButton({
+                key: "preview",
+                icon: "preview",
+                label: isLocalStage ? "Скрыть мой эфир" : localSharePreview?.mode === "camera" ? "Открыть моё видео" : "Открыть мой эфир",
+                onClick: isLocalStage ? onCloseLocalSharePreview : onOpenLocalSharePreview,
+                active: isLocalStage,
+              })
+            : null}
+          {activeStage ? (
+            <button
+              type="button"
+              className="voice-room-stage__toolbar-button"
+              aria-label="Открыть сцену на весь экран"
+              title="Открыть сцену на весь экран"
+              onClick={async () => {
+                try {
+                  await shellRef.current?.requestFullscreen?.();
+                } catch (error) {
+                  console.error("Ошибка перехода в полноэкранный режим голосовой сцены:", error);
+                }
+              }}
+            >
+              <VoiceStageIcon name="fullscreen" />
+            </button>
+          ) : null}
+          {activeStage
+            ? renderToolbarButton({
+                key: "close-stage",
+                icon: "close",
+                label: activeStage.kind === "local" ? "Скрыть предпросмотр" : "Закрыть эфир",
+                onClick: activeStage.kind === "local" ? onCloseLocalSharePreview : onCloseSelectedStream,
+              })
+            : null}
+        </div>
+
+        <div className="voice-room-stage__toolbar-group voice-room-stage__toolbar-group--danger">
+          {activeStage?.kind === "local"
+            ? renderToolbarButton({
+                key: "stop-local",
+                icon: "close",
+                label: activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим",
+                onClick: activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare,
+                danger: true,
+              })
+            : null}
+          {renderToolbarButton({
+            key: "leave",
+            icon: "leave",
+            label: "Отключиться от голосового канала",
+            onClick: onLeave,
+            danger: true,
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <section className="voice-room-stage">
       <div className="voice-room-stage__header">
@@ -548,35 +802,6 @@ export default function VoiceRoomStage({
           <span>{activeServerName || "Сервер"}</span>
           <strong>{channelName || "Голосовой канал"}</strong>
           <span>{formatParticipantCount(participants.length)}</span>
-        </div>
-        <div className="voice-room-stage__header-actions">
-          {activeSpeakerParticipant ? (
-            <button
-              type="button"
-              className="voice-room-stage__header-button"
-              onClick={() => handleCardClick(activeSpeakerParticipant)}
-            >
-              Фокус: говорит
-            </button>
-          ) : null}
-          {activeLiveParticipant ? (
-            <button
-              type="button"
-              className="voice-room-stage__header-button"
-              onClick={() => handleCardClick(activeLiveParticipant)}
-            >
-              Фокус: эфир
-            </button>
-          ) : null}
-          {hasLocalSharePreview ? (
-            <button
-              type="button"
-              className={`voice-room-stage__header-button ${isLocalStage ? "voice-room-stage__header-button--active" : ""}`}
-              onClick={isLocalStage ? onCloseLocalSharePreview : onOpenLocalSharePreview}
-            >
-              {isLocalStage ? "Скрыть мой эфир" : localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим"}
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -612,31 +837,6 @@ export default function VoiceRoomStage({
                 <strong>{activeStage.name}</strong>
                 <span>{activeStage.subtitle}</span>
               </div>
-            </div>
-          </div>
-
-          <div className="voice-room-stage__hero-dock">
-            {renderStripCards()}
-            <div className="voice-room-stage__dock-actions">
-              <button type="button" className="voice-room-stage__overlay-button" onClick={requestFullscreen}>
-                На весь экран
-              </button>
-              {activeStage.kind === "local" ? (
-                <button
-                  type="button"
-                  className="voice-room-stage__overlay-button voice-room-stage__overlay-button--danger"
-                  onClick={activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare}
-                >
-                  {activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="voice-room-stage__overlay-button"
-                onClick={activeStage.kind === "local" ? onCloseLocalSharePreview : onCloseSelectedStream}
-              >
-                Закрыть
-              </button>
             </div>
           </div>
         </div>
@@ -695,6 +895,8 @@ export default function VoiceRoomStage({
           <span>Как только участники зайдут в канал, здесь появятся их карточки.</span>
         </div>
       )}
+
+      {stageCards.length || isJoining ? stageToolbar : null}
     </section>
   );
 }

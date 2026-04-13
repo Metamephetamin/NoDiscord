@@ -301,6 +301,16 @@ export const ServerMain = ({
   onStopCameraShare,
   onStopScreenShare,
   onCloseLocalSharePreview,
+  isMicMuted = false,
+  isSoundMuted = false,
+  isScreenShareActive = false,
+  isCameraShareActive = false,
+  onToggleMic,
+  onToggleSound,
+  onOpenTextChat,
+  onScreenShareAction,
+  onOpenCamera,
+  onLeave,
   getChannelDisplayName,
 }) => {
   const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName && desktopServerPane === "voice");
@@ -367,6 +377,16 @@ export const ServerMain = ({
             onCloseLocalSharePreview={onCloseLocalSharePreview}
             onStopScreenShare={onStopScreenShare}
             onStopCameraShare={onStopCameraShare}
+            isMicMuted={isMicMuted}
+            isSoundMuted={isSoundMuted}
+            isScreenShareActive={isScreenShareActive}
+            isCameraShareActive={isCameraShareActive}
+            onToggleMic={onToggleMic}
+            onToggleSound={onToggleSound}
+            onOpenTextChat={onOpenTextChat}
+            onScreenShareAction={onScreenShareAction}
+            onOpenCamera={onOpenCamera}
+            onLeave={onLeave}
           />
         ) : selectedStreamUserId ? (
           <ScreenShareViewer

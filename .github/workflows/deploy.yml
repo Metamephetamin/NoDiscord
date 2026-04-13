@@ -59,23 +59,43 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
+      - name: Pack frontend artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C ./dist -czf ./artifacts/frontend-dist.tar.gz .
+          echo "Frontend dist directory size:"
+          du -sh ./dist
+          echo "Frontend archive size:"
+          du -sh ./artifacts/frontend-dist.tar.gz
+
       - name: Restore backend
         run: dotnet restore BackNoDiscord/BackNoDiscord.sln
 
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --no-restore --output ./artifacts/backend
 
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: dist
+      - name: Pack backend artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C ./artifacts/backend -czf ./artifacts/backend-publish.tar.gz .
+          echo "Backend publish directory size:"
+          du -sh ./artifacts/backend
+          echo "Backend archive size:"
+          du -sh ./artifacts/backend-publish.tar.gz
 
-      - name: Upload backend artifact
+      - name: Upload frontend archive
         uses: actions/upload-artifact@v4
         with:
-          name: backend-publish
-          path: artifacts/backend
+          name: frontend-dist-archive
+          path: artifacts/frontend-dist.tar.gz
+
+      - name: Upload backend archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-publish-archive
+          path: artifacts/backend-publish.tar.gz
 
   deploy:
     name: Deploy to Server
@@ -88,17 +108,17 @@ jobs:
       deploy_ready: ${{ steps.validate.outputs.ready }}
 
     steps:
-      - name: Download frontend artifact
+      - name: Download frontend archive
         uses: actions/download-artifact@v4
         with:
-          name: frontend-dist
-          path: frontend
+          name: frontend-dist-archive
+          path: frontend-package
 
-      - name: Download backend artifact
+      - name: Download backend archive
         uses: actions/download-artifact@v4
         with:
-          name: backend-publish
-          path: backend
+          name: backend-publish-archive
+          path: backend-package
 
       - name: Validate deploy secrets
         id: validate
@@ -155,20 +175,27 @@ jobs:
           FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
           FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          TEMP_FRONTEND_ARCHIVE="$TEMP_ROOT/frontend-dist.tar.gz"
+          FRONTEND_ARCHIVE="./frontend-package/frontend-dist.tar.gz"
           SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Frontend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH"
+          if [ ! -f "$FRONTEND_ARCHIVE" ]; then
+            echo "Frontend archive is missing: $FRONTEND_ARCHIVE" >&2
+            exit 1
+          fi
           echo "Creating frontend directories on server"
-          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/frontend' '$FRONTEND_PATH'"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT' '$FRONTEND_PATH'"
 
-          echo "Uploading changed frontend files via rsync"
-          rsync -az --delete --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" ./frontend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/frontend/"
+          echo "Uploading frontend archive"
+          rsync -az --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" "$FRONTEND_ARCHIVE" "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_FRONTEND_ARCHIVE"
 
           echo "Applying frontend artifact on server"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 15m bash -lc '
             set -e
             FRONTEND_PATH='$FRONTEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
+            TEMP_FRONTEND_ARCHIVE='$TEMP_FRONTEND_ARCHIVE'
             FRONTEND_OWNER='$FRONTEND_OWNER'
             case \"\$FRONTEND_PATH\" in
               /var/www/*) ;;
@@ -177,11 +204,12 @@ jobs:
                 exit 1
                 ;;
             esac
+            mkdir -p \"\$TEMP_ROOT/frontend-extracted\"
+            echo \"Extracting frontend archive\"
+            tar -xzf \"\$TEMP_FRONTEND_ARCHIVE\" -C \"\$TEMP_ROOT/frontend-extracted\"
             echo \"Server-side frontend rsync starting\"
-            rsync -az --delete \"\$TEMP_ROOT/frontend/\" \"\$FRONTEND_PATH/\"
+            rsync -az --delete --chown=\"\$FRONTEND_OWNER\" \"\$TEMP_ROOT/frontend-extracted/\" \"\$FRONTEND_PATH/\"
             echo \"Server-side frontend rsync finished\"
-            echo \"Running chown on frontend path\"
-            chown -R \"\$FRONTEND_OWNER\" \"\$FRONTEND_PATH\"
             echo \"Frontend deploy apply completed\"
           '"
 
@@ -202,14 +230,20 @@ jobs:
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
+          TEMP_ARCHIVE_FILE="$TEMP_ROOT/backend-publish.tar.gz"
+          BACKEND_ARCHIVE="./backend-package/backend-publish.tar.gz"
           SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Backend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_PATH"
+          if [ ! -f "$BACKEND_ARCHIVE" ]; then
+            echo "Backend archive is missing: $BACKEND_ARCHIVE" >&2
+            exit 1
+          fi
           echo "Creating backend directories on server"
-          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/backend' '$BACKEND_PATH'"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT' '$BACKEND_PATH'"
 
-          echo "Uploading backend artifact via rsync"
-          rsync -az --delete --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" ./backend/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/backend/"
+          echo "Uploading backend archive"
+          rsync -az --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" "$BACKEND_ARCHIVE" "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ARCHIVE_FILE"
           if [ -n "$BACKEND_ENV_FILE" ]; then
             echo "Uploading backend .env file"
             printf '%s\n' "$BACKEND_ENV_FILE" | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
@@ -221,6 +255,7 @@ jobs:
             BACKEND_PATH='$BACKEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
             TEMP_ENV_FILE='$TEMP_ENV_FILE'
+            TEMP_ARCHIVE_FILE='$TEMP_ARCHIVE_FILE'
             BACKEND_OWNER='$BACKEND_OWNER'
             case \"\$BACKEND_PATH\" in
               /opt/nodiscord/*) ;;
@@ -229,8 +264,11 @@ jobs:
                 exit 1
                 ;;
             esac
+            mkdir -p \"\$TEMP_ROOT/backend-extracted\"
+            echo \"Extracting backend archive\"
+            tar -xzf \"\$TEMP_ARCHIVE_FILE\" -C \"\$TEMP_ROOT/backend-extracted\"
             echo \"Server-side backend rsync starting\"
-            rsync -az --delete --exclude='.env' \"\$TEMP_ROOT/backend/\" \"\$BACKEND_PATH/\"
+            rsync -az --delete --chown=\"\$BACKEND_OWNER\" --exclude='.env' \"\$TEMP_ROOT/backend-extracted/\" \"\$BACKEND_PATH/\"
             echo \"Server-side backend rsync finished\"
             if [ -f \"\$TEMP_ENV_FILE\" ]; then
               mv \"\$TEMP_ENV_FILE\" \"\$BACKEND_PATH/.env\"
@@ -241,8 +279,6 @@ jobs:
             else
               chmod 600 \"\$BACKEND_PATH/.env\"
             fi
-            echo \"Running chown on backend path\"
-            chown -R \"\$BACKEND_OWNER\" \"\$BACKEND_PATH\"
             echo \"Backend deploy apply completed\"
           '"
 

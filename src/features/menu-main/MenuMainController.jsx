@@ -4323,6 +4323,16 @@ export default function MenuMain({
       onStopCameraShare={stopCameraShare}
       onStopScreenShare={stopScreenShare}
       onCloseLocalSharePreview={closeLocalSharePreview}
+      isMicMuted={isMicMuted}
+      isSoundMuted={isSoundMuted}
+      isScreenShareActive={isScreenShareActive}
+      isCameraShareActive={isCameraShareActive}
+      onToggleMic={toggleMicMute}
+      onToggleSound={toggleSoundMute}
+      onOpenTextChat={() => setDesktopServerPane("text")}
+      onScreenShareAction={handleScreenShareAction}
+      onOpenCamera={openCameraModal}
+      onLeave={leaveVoiceChannel}
       getChannelDisplayName={getChannelDisplayName}
     />
   );
