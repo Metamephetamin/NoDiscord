@@ -61,8 +61,8 @@ export async function buildForwardPayloadForTargetChannel({
 
     payload.push({
       message: String(messageItem.message || ""),
-      forwardedFromUserId: String(messageItem.authorUserId || ""),
-      forwardedFromUsername: String(messageItem.username || ""),
+      forwardedFromUserId: String(messageItem.forwardedFromUserId || messageItem.authorUserId || ""),
+      forwardedFromUsername: String(messageItem.forwardedFromUsername || messageItem.username || ""),
       voiceMessage: forwardedAttachments[0]?.voiceMessage || messageItem.voiceMessage || null,
       attachments: forwardedAttachments,
       attachmentUrl: forwardedAttachments[0]?.attachmentUrl || "",

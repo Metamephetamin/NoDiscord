@@ -620,7 +620,7 @@ export default function VoiceRoomStage({
             <button
               key={participant.userId || participant.name}
               type="button"
-              className={`voice-room-stage__card ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""}`}
+              className={`voice-room-stage__card ${participant.isSelf ? "voice-room-stage__card--self" : ""} ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""}`}
               onClick={() => handleCardClick(participant)}
               disabled={!participant.canOpen}
               style={buildAccentVariables(getParticipantAccent(participant))}

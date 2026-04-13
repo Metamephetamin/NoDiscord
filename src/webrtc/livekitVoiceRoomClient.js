@@ -1944,7 +1944,12 @@ export function createVoiceRoomClient({
         room = nextRoom;
         currentChannel = channelName;
         emitRoomParticipants();
-        await syncPublishedMicrophoneTrack();
+        void syncPublishedMicrophoneTrack().catch((error) => {
+          logVoiceDebug("local-audio:publish-after-connect-failed", {
+            errorName: error?.name || "",
+            error: error?.message || String(error),
+          });
+        });
         Array.from(nextRoom.remoteParticipants.values()).forEach((participant) => {
           attachExistingRemoteAudioTracks(participant);
         });
@@ -2068,7 +2073,6 @@ export function createVoiceRoomClient({
         currentChannel,
       });
       await ensureSignalConnection(user);
-      await ensureAudioPipeline();
 
       if (currentChannel === channelName && room) {
         publishVoiceDebugSnapshot("join:already-connected");

@@ -268,6 +268,7 @@ export const ServerMain = ({
   activeServer,
   currentTextChannel,
   currentVoiceChannelName,
+  desktopServerPane = "text",
   currentVoiceParticipants,
   joiningVoiceChannelId,
   remoteScreenShares,
@@ -296,8 +297,8 @@ export const ServerMain = ({
   onCloseLocalSharePreview,
   getChannelDisplayName,
 }) => {
-  const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName);
-  const isJoiningVoiceChannel = Boolean(joiningVoiceChannelId && currentVoiceChannelName);
+  const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName && desktopServerPane === "voice");
+  const isJoiningVoiceChannel = Boolean(joiningVoiceChannelId && desktopServerPane === "voice");
 
   return (
     <main className="chat__wrapper chat__wrapper--servers">

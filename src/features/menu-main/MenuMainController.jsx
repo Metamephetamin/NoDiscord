@@ -145,6 +145,7 @@ export default function MenuMain({
   const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "");
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
+  const [desktopServerPane, setDesktopServerPane] = useState("text");
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
@@ -653,8 +654,8 @@ export default function MenuMain({
         };
       })
       .sort((left, right) => {
-        const leftWeight = (left.isSpeaking ? 4 : 0) + (left.isLive ? 2 : 0) + (left.isSelf ? 1 : 0);
-        const rightWeight = (right.isSpeaking ? 4 : 0) + (right.isLive ? 2 : 0) + (right.isSelf ? 1 : 0);
+        const leftWeight = (left.isLive ? 2 : 0) + (left.isSelf ? 1 : 0);
+        const rightWeight = (right.isLive ? 2 : 0) + (right.isSelf ? 1 : 0);
         return rightWeight - leftWeight;
       });
   }, [activeVoiceParticipantsMap, currentUserId, currentVoiceChannel, liveUserIds, memberNameByUserId, memberRoleColorByUserId, roomVoiceParticipants, speakingUserIds]);
@@ -949,6 +950,7 @@ export default function MenuMain({
     setWorkspaceMode("servers");
     setActiveServerId(server.id);
     setCurrentTextChannelId(server.textChannels[0]?.id || "");
+    setDesktopServerPane("text");
     setActiveDirectFriendId("");
     setSelectedStreamUserId(null);
     if (isMobileViewport) {
@@ -960,6 +962,7 @@ export default function MenuMain({
   const selectServerTextChannel = (channelId) => {
     setWorkspaceMode("servers");
     setCurrentTextChannelId(channelId);
+    setDesktopServerPane("text");
     setActiveDirectFriendId("");
     if (isMobileViewport) {
       setMobileSection("servers");
@@ -986,6 +989,7 @@ export default function MenuMain({
     setActiveDirectFriendId("");
     setActiveServerId(String(toast.serverId));
     setCurrentTextChannelId(String(toast.channelId));
+    setDesktopServerPane("text");
     if (isMobileViewport) {
       setMobileSection("servers");
       setMobileServersPane("chat");
@@ -2592,6 +2596,7 @@ export default function MenuMain({
     setWorkspaceMode("servers");
     setActiveServerId(server.id);
     setCurrentTextChannelId(server.textChannels[0]?.id || "");
+    setDesktopServerPane("text");
     setActiveDirectFriendId("");
     setShowCreateServerModal(false);
     setCreateServerName("");
@@ -2648,6 +2653,7 @@ export default function MenuMain({
     const channel = { id: createId("text"), name: "новый-канал" };
     updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
     setCurrentTextChannelId(channel.id);
+    setDesktopServerPane("text");
     setChannelRenameState({
       type: "text",
       channelId: channel.id,
@@ -2963,6 +2969,7 @@ export default function MenuMain({
     voiceJoinInFlightRef.current = true;
     pendingVoiceChannelTargetRef.current = scopedChannelId;
     setJoiningVoiceChannelId(scopedChannelId);
+    setDesktopServerPane("voice");
     setCurrentVoiceChannel(scopedChannelId);
     try {
       if (isMobileViewport) {
@@ -3015,6 +3022,7 @@ export default function MenuMain({
       voiceJoinInFlightRef.current = false;
       pendingVoiceChannelTargetRef.current = "";
       setJoiningVoiceChannelId("");
+      setDesktopServerPane("text");
       await voiceClientRef.current.leaveChannel();
       if (isMobileViewport) {
         setMobileServersPane("channels");
@@ -3099,6 +3107,7 @@ export default function MenuMain({
     }
 
     setSelectedStreamUserId(null);
+    setDesktopServerPane("voice");
     setIsLocalSharePreviewVisible(true);
   };
   const closeLocalSharePreview = () => {
@@ -3267,6 +3276,7 @@ export default function MenuMain({
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
     setIsLocalSharePreviewVisible(false);
+    setDesktopServerPane("voice");
     if (String(selectedStreamUserId || "") === normalizedUserId && selectedStream) {
       setSelectedStreamUserId(null);
       return;
@@ -3902,6 +3912,7 @@ export default function MenuMain({
       activeServer={activeServer}
       currentTextChannel={currentTextChannel}
       currentVoiceChannelName={currentVoiceChannelName}
+      desktopServerPane={desktopServerPane}
       currentVoiceParticipants={currentVoiceParticipants}
       joiningVoiceChannelId={joiningVoiceChannelId}
       remoteScreenShares={remoteScreenShares}

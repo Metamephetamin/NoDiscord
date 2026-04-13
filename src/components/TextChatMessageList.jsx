@@ -56,6 +56,28 @@ function MessageText({ text, mentions, currentUserId }) {
   ));
 }
 
+function isAnimatedEmojiAttachment(messageItem, attachmentItem, galleryAttachments) {
+  const messageText = String(messageItem?.message || "").trim();
+  const attachmentName = String(attachmentItem?.attachmentName || "").trim().toLowerCase();
+  const attachmentContentType = String(attachmentItem?.attachmentContentType || "").trim().toLowerCase();
+  const hasSingleVisualAttachment = Array.isArray(galleryAttachments) && galleryAttachments.length === 1;
+
+  if (messageText || !hasSingleVisualAttachment) {
+    return false;
+  }
+
+  if (!attachmentItem?.attachmentUrl || attachmentItem?.voiceMessage) {
+    return false;
+  }
+
+  const isGif = attachmentContentType.includes("gif") || attachmentName.endsWith(".gif");
+  if (!isGif) {
+    return false;
+  }
+
+  return attachmentName.startsWith("lf-") || attachmentName.startsWith("emoji-") || attachmentName.startsWith("emoji_");
+}
+
 function MessageAttachmentCard({
   messageItem,
   attachmentItem,
@@ -103,6 +125,19 @@ function MessageAttachmentCard({
   }
 
   if (attachmentItem.attachmentUrl) {
+    if (isAnimatedEmojiAttachment(messageItem, attachmentItem, galleryAttachments)) {
+      return (
+        <button
+          type="button"
+          className="message-inline-emoji message-inline-emoji--button"
+          onClick={handlePreviewClick}
+          aria-label={`Открыть смайлик ${attachmentItem.attachmentName || ""}`.trim()}
+        >
+          <img className="message-inline-emoji__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "emoji"} />
+        </button>
+      );
+    }
+
     if (attachmentItem.isImage) {
       return (
         <button
@@ -340,7 +375,9 @@ export default function TextChatMessageList({
 
                 {messageItem.forwardedFromUsername ? (
                   <div className="message-forwarded">
-                    <span className="message-forwarded__label">Переслано от</span>
+                    <span className="message-forwarded__label">Переслал</span>
+                    <strong>{messageItem.username}</strong>
+                    <span className="message-forwarded__label">Автор</span>
                     <strong>{messageItem.forwardedFromUsername}</strong>
                   </div>
                 ) : null}

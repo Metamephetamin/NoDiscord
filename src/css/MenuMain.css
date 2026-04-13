@@ -1725,6 +1725,7 @@
   flex: 0 0 auto;
   background: rgb(var(--voice-stage-accent-rgb, 123, 137, 168));
   box-shadow: 0 0 0 4px rgba(var(--voice-stage-accent-rgb, 123, 137, 168), 0.14);
+  display: none;
 }
 
 .voice-room-stage__card-flag {
@@ -1738,6 +1739,14 @@
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.voice-room-stage__card-flags:empty {
+  display: none;
+}
+
+.voice-room-stage__card--self .voice-room-stage__card-copy span {
+  display: none;
 }
 
 .voice-room-stage__hero {

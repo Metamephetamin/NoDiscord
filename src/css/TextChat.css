@@ -556,6 +556,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
   margin-top: 2px;
   margin-bottom: 4px;
   min-width: 0;
@@ -713,6 +714,7 @@
 }
 
 .animated-emoji-glyph {
+  --animated-emoji-size: 1em;
   width: 1em;
   height: 1em;
   display: inline-flex;
@@ -720,6 +722,9 @@
   justify-content: center;
   vertical-align: -0.12em;
   flex: 0 0 auto;
+  width: var(--animated-emoji-size);
+  height: var(--animated-emoji-size);
+  overflow: hidden;
 }
 
 .animated-emoji-glyph img {
@@ -916,6 +921,40 @@
   border-radius: 18px;
 }
 
+.message-inline-emoji {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.message-inline-emoji--button {
+  cursor: pointer;
+  transition: transform 0.14s ease, filter 0.14s ease;
+}
+
+.message-inline-emoji--button:hover {
+  transform: scale(1.06);
+  filter: saturate(1.05);
+}
+
+.message-inline-emoji__image {
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+}
+
 .message-media__play {
   position: absolute;
   left: 50%;
@@ -1098,19 +1137,19 @@
   z-index: 1650;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .message-reaction-picker,
 .message-context-menu {
-  width: min(220px, calc(100vw - 24px));
-  padding: 7px;
-  border-radius: 16px;
+  width: min(264px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(17, 22, 31, 0.98);
-  box-shadow: 0 24px 46px rgba(0, 0, 0, 0.36);
-  backdrop-filter: blur(12px);
-  animation: uiFadeIn 0.14s ease;
+  background: linear-gradient(180deg, rgba(20, 25, 34, 0.985), rgba(13, 17, 24, 0.995));
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(16px);
+  animation: uiFadeIn 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .message-reaction-picker {
@@ -1149,8 +1188,7 @@
 }
 
 .message-reaction-picker__item .animated-emoji-glyph {
-  width: 26px;
-  height: 26px;
+  --animated-emoji-size: 28px;
 }
 
 .message-reaction-picker__item:nth-child(2n) span {
@@ -1250,8 +1288,7 @@
 }
 
 .message-reaction-picker__sticker-glyph {
-  width: 26px;
-  height: 26px;
+  --animated-emoji-size: 28px;
   font-size: 20px;
   line-height: 1;
 }
@@ -1265,22 +1302,22 @@
 .message-context-menu__item {
   width: 100%;
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 11px 12px;
+  gap: 14px;
+  min-height: 48px;
+  padding: 0 14px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
-  color: #f1f4fb;
+  color: #f4f7ff;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  transition: background-color 0.14s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .message-context-menu__item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-1px);
+  background: rgba(63, 83, 112, 0.42);
 }
 
 .forward-modal__backdrop {
@@ -1444,15 +1481,14 @@
 
 .message-context-menu__item:disabled:hover {
   background: transparent;
-  transform: none;
 }
 
 .message-context-menu__item--danger:not(:disabled) {
-  color: #ffb7b7;
+  color: #f3b7be;
 }
 
 .message-context-menu__item--danger:hover:not(:disabled) {
-  background: rgba(255, 97, 97, 0.12);
+  background: rgba(173, 53, 66, 0.16);
   color: #ffd0d0;
 }
 
@@ -1460,16 +1496,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   font-size: 18px;
   line-height: 1;
-  opacity: 0.94;
+  opacity: 0.96;
 }
 
 .message-context-menu__label {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -1964,8 +2000,7 @@
 }
 
 .composer-emoji-picker__item .animated-emoji-glyph {
-  width: 32px;
-  height: 32px;
+  --animated-emoji-size: 30px;
 }
 
 .composer-emoji-picker__item .animated-emoji-glyph__fallback {

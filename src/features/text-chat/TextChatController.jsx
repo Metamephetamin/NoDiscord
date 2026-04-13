@@ -424,6 +424,15 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       forceScrollToBottomRef.current = false;
       pendingInitialScrollChannelRef.current = scopedChannelId;
       list.scrollTop = list.scrollHeight;
+      window.requestAnimationFrame(() => {
+        const nextList = messagesListRef.current;
+        const nextEnd = messagesEndRef.current;
+        if (!nextList || !nextEnd || previousChannelIdRef.current !== scopedChannelId) {
+          return;
+        }
+        nextList.scrollTop = nextList.scrollHeight;
+        nextEnd.scrollIntoView({ behavior: "auto", block: "end" });
+      });
       return;
     }
 
@@ -434,6 +443,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
       pendingInitialScrollChannelRef.current = "";
       list.scrollTop = list.scrollHeight;
+      end.scrollIntoView({ behavior: "auto", block: "end" });
       return;
     }
 
@@ -988,16 +998,24 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       setMessageContextMenu(null);
     };
 
+    const handleViewportScroll = (event) => {
+      if (contextMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setMessageContextMenu(null);
+    };
+
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
     window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
+    window.addEventListener("scroll", handleViewportScroll, true);
 
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
       window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("scroll", handleViewportScroll, true);
     };
   }, [messageContextMenu, speechRecognitionActive, voiceRecordingState]);
 
