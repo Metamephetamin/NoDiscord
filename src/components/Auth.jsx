@@ -768,7 +768,7 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   return (
-    <div className={`auth-page ${mode === "login" ? "auth-page--login" : "auth-page--register"}`}>
+    <div className="auth-page">
       <video
         ref={authVideoRef}
         className="auth-video-bg"

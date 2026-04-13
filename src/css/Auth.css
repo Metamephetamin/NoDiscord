@@ -227,16 +227,21 @@
   display: inline-flex;
   align-items: center;
   grid-area: 1 / 1;
+  align-self: center;
 }
 
 .auth-brand__title-typewriter-word {
   display: inline-block;
   min-width: 0;
+  line-height: 1;
 }
 
 .auth-brand__title-typewriter-caret {
+  display: inline-block;
+  align-self: center;
+  vertical-align: middle;
   width: 0.08em;
-  height: 0.92em;
+  height: 0.88em;
   margin-left: 0.08em;
   border-radius: 999px;
   background: currentColor;
