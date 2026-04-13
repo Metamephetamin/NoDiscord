@@ -21,7 +21,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:ci": "eslint . --quiet",
-    "check:encoding": "node ./scripts/check-encoding.mjs"
+    "check:encoding": "node ./scripts/check-encoding.mjs",
+    "audit:public-assets": "node ./scripts/audit-public-assets.mjs"
   },
   "keywords": [],
   "author": {

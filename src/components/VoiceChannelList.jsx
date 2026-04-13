@@ -26,6 +26,7 @@ const VoiceChannelList = ({
   serverRoles = [],
   onJoinChannel,
   onLeaveChannel,
+  onPrewarmChannel,
   onRenameChannel,
   editingChannelId = "",
   editingChannelValue = "",
@@ -106,7 +107,15 @@ const VoiceChannelList = ({
                   }}
                 />
               ) : (
-                <button type="button" className="voice-channel__button" onClick={() => onJoinChannel?.(channel)} disabled={isJoining}>
+                <button
+                  type="button"
+                  className="voice-channel__button"
+                  onMouseEnter={() => onPrewarmChannel?.(channel.id)}
+                  onFocus={() => onPrewarmChannel?.(channel.id)}
+                  onPointerDown={() => onPrewarmChannel?.(channel.id)}
+                  onClick={() => onJoinChannel?.(channel)}
+                  disabled={isJoining}
+                >
                   <span className="voice-channel__title">{channel.name}</span>
                   {isJoining ? <span className="voice-channel__status">Подключаемся...</span> : null}
                 </button>

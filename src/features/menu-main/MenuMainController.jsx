@@ -50,6 +50,7 @@ import { createVoiceRoomClient } from "../../webrtc/voiceRoomClient";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
+import useVoiceRoomWarmup from "../../hooks/useVoiceRoomWarmup";
 import {
   MenuMainMobileSettingsShell,
   MenuMainSettingsContent,
@@ -321,6 +322,13 @@ export default function MenuMain({
 
   const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
+  const { prewarmVoiceChannel } = useVoiceRoomWarmup({
+    voiceClientRef,
+    user,
+    activeServerId: activeServer?.id || "",
+    voiceChannels: activeServer?.voiceChannels || [],
+    getScopedVoiceChannelId,
+  });
   const activeVoiceParticipantsMap = useMemo(() => {
     if (!activeServer?.id) {
       return {};
@@ -3856,6 +3864,7 @@ export default function MenuMain({
       onCancelChannelRename={cancelChannelRename}
       onJoinVoiceChannel={joinVoiceChannel}
       onLeaveVoiceChannel={leaveVoiceChannel}
+      onPrewarmVoiceChannel={prewarmVoiceChannel}
       onWatchStream={handleWatchStream}
       canManageTargetMember={canManageTargetMember}
       canAssignRoleToMember={canAssignRoleToMember}

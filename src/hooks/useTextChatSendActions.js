@@ -27,7 +27,10 @@ export default function useTextChatSendActions({
   uploadingFile,
   setUploadingFile,
   setErrorMessage,
+  setActionFeedback,
   setIsChannelReady,
+  replyState,
+  setReplyState,
   voiceRecordingState,
   ensureChannelJoined,
   focusComposerToEnd,
@@ -114,6 +117,7 @@ export default function useTextChatSendActions({
         if (!preservedDraft) {
           clearChatDraft(user, scopedChannelId);
         }
+        setActionFeedback({ tone: "success", message: "Изменения сохранены" });
         setIsChannelReady(true);
         focusComposerToEnd();
         return;
@@ -144,6 +148,9 @@ export default function useTextChatSendActions({
       const payload = [{
         message: messageText,
         mentions: outgoingMentions,
+        replyToMessageId: replyState?.messageId || "",
+        replyToUsername: replyState?.username || "",
+        replyPreview: replyState?.preview || "",
         attachments: attachments.map(buildUploadedAttachmentPayload),
         attachmentUrl: attachments[0]?.fileUrl || "",
         attachmentName: attachments[0]?.fileName || "",
@@ -158,9 +165,11 @@ export default function useTextChatSendActions({
       forceScrollToBottomRef.current = true;
       lastSendAtRef.current = Date.now();
       setMessage("");
+      setReplyState(null);
       clearChatDraft(user, scopedChannelId);
       setSelectedFiles([]);
       setIsChannelReady(true);
+      setActionFeedback(null);
       if (isDirectChat) {
         playDirectMessageSound("send");
       }
@@ -227,6 +236,9 @@ export default function useTextChatSendActions({
       const payload = [{
         message: "",
         mentions: [],
+        replyToMessageId: replyState?.messageId || "",
+        replyToUsername: replyState?.username || "",
+        replyPreview: replyState?.preview || "",
         attachments: [buildUploadedAttachmentPayload(attachment)],
         attachmentUrl: attachment.fileUrl || "",
         attachmentName: attachment.fileName || "",
@@ -240,7 +252,9 @@ export default function useTextChatSendActions({
 
       forceScrollToBottomRef.current = true;
       lastSendAtRef.current = Date.now();
+      setReplyState(null);
       setIsChannelReady(true);
+      setActionFeedback(null);
       if (isDirectChat) {
         playDirectMessageSound("send");
       }

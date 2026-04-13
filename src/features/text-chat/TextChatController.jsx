@@ -1,9 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TextChatView from "./TextChatView";
 import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/TextChat.css";
 import { readIncomingMessageText } from "../../security/chatPayloadCrypto";
-import { getStoredToken } from "../../utils/auth";
 import { uploadChatAttachment } from "../../utils/chatAttachmentUpload";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
 import { isDirectMessageChannelId } from "../../utils/directMessageChannels";
@@ -13,8 +12,6 @@ import {
   normalizeMentionAlias,
 } from "../../utils/messageMentions";
 import {
-  formatDayLabel,
-  formatTimestamp,
   getPinnedStorageKey,
   readPinnedMessages,
   writePinnedMessages,
@@ -37,6 +34,7 @@ import useMediaPreviewKeyboardControls from "../../hooks/useMediaPreviewKeyboard
 import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers";
 import useTextChatMessageActions from "../../hooks/useTextChatMessageActions";
 import useTextChatSendActions from "../../hooks/useTextChatSendActions";
+import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import useTextChatVoiceSpeech from "../../hooks/useTextChatVoiceSpeech";
 
 const deferEffectState = (callback) => {
@@ -62,10 +60,11 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const [selectedMentionSuggestionIndex, setSelectedMentionSuggestionIndex] = useState(0);
   const [composerSelection, setComposerSelection] = useState({ start: 0, end: 0 });
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
-  const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
   const [reactionStickerPanelOpen, setReactionStickerPanelOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [replyState, setReplyState] = useState(null);
+  const [actionFeedback, setActionFeedback] = useState(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
   const [preferExplicitSend, setPreferExplicitSend] = useState(() => (
@@ -92,10 +91,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
   const joinedChannelRef = useRef("");
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
-  const previousChannelIdRef = useRef("");
   const editDraftBackupRef = useRef("");
   const forceScrollToBottomRef = useRef(false);
-  const pendingInitialScrollChannelRef = useRef("");
   const hasInitializedVisibleChannelRef = useRef(false);
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
   const currentUserId = String(user?.id || "");
@@ -119,6 +116,20 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     mediaQuery.addListener(syncPreference);
     return () => mediaQuery.removeListener(syncPreference);
   }, []);
+
+  useEffect(() => {
+    if (!actionFeedback?.message) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setActionFeedback(null);
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [actionFeedback]);
 
   const pinnedStorageKey = useMemo(() => getPinnedStorageKey(currentUserId, scopedChannelId), [currentUserId, scopedChannelId]);
   const selectedMessageIdSet = useMemo(() => new Set(selectedMessageIds.map((id) => String(id))), [selectedMessageIds]);
@@ -186,6 +197,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       attachmentContentType: primaryAttachment?.attachmentContentType || messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "",
       voiceMessage: primaryAttachment?.voiceMessage || normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage),
       editedAt: messageItem?.editedAt || messageItem?.EditedAt || null,
+      replyToMessageId: String(messageItem?.replyToMessageId || messageItem?.ReplyToMessageId || "").trim(),
+      replyToUsername: String(messageItem?.replyToUsername || messageItem?.ReplyToUsername || "").trim(),
+      replyPreview: String(messageItem?.replyPreview || messageItem?.ReplyPreview || "").trim(),
       encryptionState: decrypted.encryptionState,
       reactions: normalizeReactions(messageItem?.reactions),
       mentions: Array.isArray(messageItem?.mentions)
@@ -226,6 +240,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       composerSelectionRef.current = { start: nextLength, end: nextLength };
       setComposerSelection({ start: nextLength, end: nextLength });
     });
+  };
+
+  const stopReplyingToMessage = () => {
+    setReplyState(null);
   };
 
   const syncComposerSelection = () => {
@@ -365,102 +383,20 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     scopedChannelId,
   });
 
-  useEffect(() => {
-    const updateFloatingDate = () => {
-      const list = messagesListRef.current;
-      if (!list || messages.length === 0) {
-        setFloatingDateLabel("");
-        return;
-      }
-
-      const scrollTop = list.scrollTop;
-      const probeLine = scrollTop + 24;
-      let nextVisibleMessage = messages[0];
-
-      for (const messageItem of messages) {
-        const node = messageRefs.current.get(messageItem.id);
-        if (!node) {
-          continue;
-        }
-
-        const nodeBottom = node.offsetTop + node.offsetHeight;
-        if (nodeBottom >= probeLine) {
-          nextVisibleMessage = messageItem;
-          break;
-        }
-      }
-
-      const nextLabel = nextVisibleMessage?.timestamp ? formatDayLabel(nextVisibleMessage.timestamp) : "";
-      setFloatingDateLabel((current) => (current === nextLabel ? current : nextLabel));
-    };
-
-    updateFloatingDate();
-    const list = messagesListRef.current;
-    if (!list) {
-      return undefined;
-    }
-
-    list.addEventListener("scroll", updateFloatingDate, { passive: true });
-    window.addEventListener("resize", updateFloatingDate);
-
-    return () => {
-      list.removeEventListener("scroll", updateFloatingDate);
-      window.removeEventListener("resize", updateFloatingDate);
-    };
-  }, [messages, scopedChannelId]);
-
-  useLayoutEffect(() => {
-    const list = messagesListRef.current;
-    const end = messagesEndRef.current;
-    if (!list || !end) {
-      previousChannelIdRef.current = scopedChannelId;
-      return;
-    }
-
-    const channelChanged = previousChannelIdRef.current !== scopedChannelId;
-    previousChannelIdRef.current = scopedChannelId;
-
-    if (channelChanged) {
-      forceScrollToBottomRef.current = false;
-      pendingInitialScrollChannelRef.current = scopedChannelId;
-      list.scrollTop = list.scrollHeight;
-      window.requestAnimationFrame(() => {
-        const nextList = messagesListRef.current;
-        const nextEnd = messagesEndRef.current;
-        if (!nextList || !nextEnd || previousChannelIdRef.current !== scopedChannelId) {
-          return;
-        }
-        nextList.scrollTop = nextList.scrollHeight;
-        nextEnd.scrollIntoView({ behavior: "auto", block: "end" });
-      });
-      return;
-    }
-
-    if (pendingInitialScrollChannelRef.current === scopedChannelId) {
-      if (messages.length === 0) {
-        return;
-      }
-
-      pendingInitialScrollChannelRef.current = "";
-      list.scrollTop = list.scrollHeight;
-      end.scrollIntoView({ behavior: "auto", block: "end" });
-      return;
-    }
-
-    if (forceScrollToBottomRef.current) {
-      forceScrollToBottomRef.current = false;
-      end.scrollIntoView({ behavior: "smooth", block: "end" });
-      return;
-    }
-
-    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-    const shouldStickToBottom = distanceFromBottom < 96;
-    if (!shouldStickToBottom) {
-      return;
-    }
-
-    end.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, scopedChannelId]);
+  const {
+    floatingDateLabel,
+    pendingNewMessagesCount,
+    scrollToLatest,
+    scrollToMessage,
+  } = useTextChatScrollManager({
+    messages,
+    scopedChannelId,
+    messagesListRef,
+    messagesEndRef,
+    messageRefs,
+    setHighlightedMessageId,
+    forceScrollToBottomRef,
+  });
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -487,6 +423,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       }
 
       setPinnedMessages(readPinnedMessages(pinnedStorageKey));
+      setActionFeedback(null);
+      setReplyState(null);
       setSelectionMode(false);
       setSelectedMessageIds([]);
       setMessageEditState(null);
@@ -614,6 +552,8 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       if (String(messageEditState?.messageId || "") === String(deletedId)) {
         stopEditingMessage();
       }
+
+      setReplyState((current) => (String(current?.messageId || "") === String(deletedId) ? null : current));
 
       setMessageContextMenu((current) => (String(current?.messageId || "") === String(deletedId) ? null : current));
       setPinnedMessages((previous) => previous.filter((item) => String(item.id) !== String(deletedId)));
@@ -839,6 +779,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     uploadingFile,
     setUploadingFile,
     setErrorMessage,
+    setActionFeedback,
     setIsChannelReady,
     forceScrollToBottomRef,
     lastSendAtRef,
@@ -868,7 +809,10 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     uploadingFile,
     setUploadingFile,
     setErrorMessage,
+    setActionFeedback,
     setIsChannelReady,
+    replyState,
+    setReplyState,
     voiceRecordingState,
     ensureChannelJoined,
     focusComposerToEnd,
@@ -890,7 +834,6 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     searchResults,
     availableForwardTargets,
     forwardableMessages,
-    scrollToMessage,
     toggleMessageSelection,
     openForwardModal,
     clearSelectionMode,
@@ -930,10 +873,12 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
     messageContextMenu,
     pinnedMessageIdSet,
     setErrorMessage,
+    setActionFeedback,
     user,
     scopedChannelId,
     buildForwardPayloadForTargetChannel,
     startEditingMessage,
+    setReplyState,
     currentUserId,
   });
   useEffect(() => {
@@ -1024,6 +969,9 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       searchQuery={searchQuery}
       searchResults={searchResults}
       scrollToMessage={scrollToMessage}
+      scrollToLatest={scrollToLatest}
+      pendingNewMessagesCount={pendingNewMessagesCount}
+      actionFeedback={actionFeedback}
       pinnedMessages={pinnedMessages}
       setPinnedMessages={setPinnedMessages}
       selectionMode={selectionMode}
@@ -1049,6 +997,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       selectedFiles={selectedFiles}
       setSelectedFiles={setSelectedFiles}
       uploadingFile={uploadingFile}
+      replyState={replyState}
       messageEditState={messageEditState}
       voiceRecordingState={voiceRecordingState}
       voiceRecordingDurationMs={voiceRecordingDurationMs}
@@ -1064,6 +1013,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       message={message}
       preferExplicitSend={preferExplicitSend}
       handleFileChange={handleFileChange}
+      stopReplyingToMessage={stopReplyingToMessage}
       stopEditingMessage={stopEditingMessage}
       handleCancelVoiceRecording={handleCancelVoiceRecording}
       handleSpeechRecognitionToggle={handleSpeechRecognitionToggle}

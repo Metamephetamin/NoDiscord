@@ -776,7 +776,7 @@ export default function Auth({ onAuthSuccess }) {
         muted
         loop
         playsInline
-        preload="auto"
+        preload="metadata"
         disablePictureInPicture
         disableRemotePlayback
         aria-hidden="true"

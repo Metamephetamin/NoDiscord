@@ -63,7 +63,10 @@ export async function sendMessagesCompat({
       primaryAttachment?.attachmentEncryption || item.attachmentEncryption || null,
       Array.isArray(item.mentions) ? item.mentions : [],
       primaryAttachment?.voiceMessage || item.voiceMessage || null,
-      attachmentList
+      attachmentList,
+      item.replyToMessageId || null,
+      item.replyToUsername || null,
+      item.replyPreview || null
     );
 
     if (index < normalizedPayload.length - 1) {

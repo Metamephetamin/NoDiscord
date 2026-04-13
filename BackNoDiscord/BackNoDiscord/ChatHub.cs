@@ -56,7 +56,10 @@ public class ChatHub : Hub
         ChatAttachmentEncryptionEnvelope? attachmentEncryption = null,
         List<ChatMentionInput>? mentions = null,
         ChatVoiceMessageInput? voiceMessage = null,
-        List<ChatAttachmentInput>? attachments = null)
+        List<ChatAttachmentInput>? attachments = null,
+        string? replyToMessageId = null,
+        string? replyToUsername = null,
+        string? replyPreview = null)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -94,6 +97,9 @@ public class ChatHub : Hub
             AuthorUserId = currentUser.UserId,
             Message = UploadPolicies.TrimToLength(message, MaxMessageLength),
             Encryption = NormalizeEncryptionEnvelope(encryption),
+            ReplyToMessageId = UploadPolicies.TrimToLength(replyToMessageId, 32),
+            ReplyToUsername = UploadPolicies.TrimToLength(replyToUsername, 160),
+            ReplyPreview = UploadPolicies.TrimToLength(replyPreview, 220),
             Attachments = normalizedAttachments,
             Mentions = NormalizeMentions(normalizedChannelId, mentions),
             VoiceMessage = normalizedAttachments.FirstOrDefault(static item => item.VoiceMessage is not null)?.VoiceMessage
@@ -188,6 +194,9 @@ public class ChatHub : Hub
                 Message = UploadPolicies.TrimToLength(item.Message, MaxMessageLength),
                 ForwardedFromUserId = UploadPolicies.TrimToLength(item.ForwardedFromUserId, 64),
                 ForwardedFromUsername = UploadPolicies.TrimToLength(item.ForwardedFromUsername, 160),
+                ReplyToMessageId = UploadPolicies.TrimToLength(item.ReplyToMessageId, 32),
+                ReplyToUsername = UploadPolicies.TrimToLength(item.ReplyToUsername, 160),
+                ReplyPreview = UploadPolicies.TrimToLength(item.ReplyPreview, 220),
                 Attachments = normalizedAttachments,
                 Mentions = [],
                 VoiceMessage = normalizedAttachments.FirstOrDefault(static attachment => attachment.VoiceMessage is not null)?.VoiceMessage
@@ -471,6 +480,9 @@ public class ChatHub : Hub
             Encryption = payload.Encryption,
             ForwardedFromUserId = payload.ForwardedFromUserId,
             ForwardedFromUsername = payload.ForwardedFromUsername,
+            ReplyToMessageId = payload.ReplyToMessageId,
+            ReplyToUsername = payload.ReplyToUsername,
+            ReplyPreview = payload.ReplyPreview,
             PhotoUrl = message.PhotoUrl,
             AttachmentEncryption = payload.AttachmentEncryption,
             AttachmentUrl = payload.AttachmentUrl,
@@ -960,6 +972,9 @@ public class MessageDto
     public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? ForwardedFromUserId { get; set; }
     public string? ForwardedFromUsername { get; set; }
+    public string? ReplyToMessageId { get; set; }
+    public string? ReplyToUsername { get; set; }
+    public string? ReplyPreview { get; set; }
     public string? PhotoUrl { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
@@ -1021,6 +1036,9 @@ public class ChatMessagePayload
     public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? ForwardedFromUserId { get; set; }
     public string? ForwardedFromUsername { get; set; }
+    public string? ReplyToMessageId { get; set; }
+    public string? ReplyToUsername { get; set; }
+    public string? ReplyPreview { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }
@@ -1115,6 +1133,9 @@ public class ForwardMessageInput
     public string Message { get; set; } = string.Empty;
     public string? ForwardedFromUserId { get; set; }
     public string? ForwardedFromUsername { get; set; }
+    public string? ReplyToMessageId { get; set; }
+    public string? ReplyToUsername { get; set; }
+    public string? ReplyPreview { get; set; }
     public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }

@@ -16,6 +16,7 @@ import {
   shouldUseAuthenticatedDownload,
 } from "../utils/textChatHelpers";
 import {
+  buildReplySnapshot,
   COMPAT_FORWARD_DELAY_MS,
   createPinnedSnapshot,
   getChatErrorMessage,
@@ -51,10 +52,12 @@ export default function useTextChatMessageActions({
   messageContextMenu,
   pinnedMessageIdSet,
   setErrorMessage,
+  setActionFeedback,
   user,
   scopedChannelId,
   buildForwardPayloadForTargetChannel,
   startEditingMessage,
+  setReplyState,
   currentUserId,
 }) {
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -140,11 +143,16 @@ export default function useTextChatMessageActions({
     }
 
     const normalizedMessageId = String(messageItem.id);
+    const wasPinned = pinnedMessageIdSet.has(normalizedMessageId);
     setPinnedMessages((previous) => {
       const exists = previous.some((item) => String(item.id) === normalizedMessageId);
       return exists
         ? previous.filter((item) => String(item.id) !== normalizedMessageId)
         : [createPinnedSnapshot(messageItem), ...previous].slice(0, MAX_PINNED_MESSAGES);
+    });
+    setActionFeedback({
+      tone: "success",
+      message: wasPinned ? "Сообщение откреплено" : "Сообщение закреплено",
     });
     setMessageContextMenu(null);
   };
@@ -298,6 +306,7 @@ export default function useTextChatMessageActions({
     try {
       await copyTextToClipboard(messageContextMenu.text);
       setErrorMessage("");
+      setActionFeedback({ tone: "success", message: "Текст скопирован" });
     } catch {
       setErrorMessage("Не удалось скопировать текст в буфер обмена.");
     } finally {
@@ -313,6 +322,7 @@ export default function useTextChatMessageActions({
     try {
       await chatConnection.invoke("DeleteMessage", messageContextMenu.messageId);
       setErrorMessage("");
+      setActionFeedback({ tone: "success", message: "Сообщение удалено" });
     } catch (error) {
       console.error("DeleteMessage error:", error);
       setErrorMessage(getChatErrorMessage(error, "Не удалось удалить сообщение."));
@@ -333,6 +343,26 @@ export default function useTextChatMessageActions({
     }
 
     startEditingMessage(messageItem);
+  };
+
+  const handleReplyToMessage = () => {
+    if (!messageContextMenu?.messageId) {
+      return;
+    }
+
+    const messageItem = messages.find((item) => String(item.id) === String(messageContextMenu.messageId));
+    if (!messageItem) {
+      setMessageContextMenu(null);
+      return;
+    }
+
+    const replySnapshot = buildReplySnapshot(messageItem);
+    if (replySnapshot) {
+      setReplyState(replySnapshot);
+      setActionFeedback({ tone: "info", message: "Ответ привязан к сообщению" });
+    }
+
+    setMessageContextMenu(null);
   };
 
   const handleDownloadAttachment = async (attachment = messageContextMenu) => {
@@ -490,7 +520,10 @@ export default function useTextChatMessageActions({
         null,
         Array.isArray(item.mentions) ? item.mentions : [],
         primaryAttachment?.voiceMessage || item.voiceMessage || null,
-        attachmentList
+        attachmentList,
+        item.replyToMessageId || null,
+        item.replyToUsername || null,
+        item.replyPreview || null
       );
 
       if (index < normalizedPayload.length - 1) {
@@ -546,6 +579,7 @@ export default function useTextChatMessageActions({
       }
 
       closeForwardModal();
+      setActionFeedback({ tone: "success", message: "Сообщения пересланы" });
     } catch (error) {
       console.error("Forward messages error:", error);
       setErrorMessage(getChatErrorMessage(error, "Не удалось переслать сообщения."));
@@ -586,6 +620,11 @@ export default function useTextChatMessageActions({
   const contextMenuMessage = messageContextMenu
     ? messages.find((item) => String(item.id) === String(messageContextMenu.messageId))
     : null;
+  const resolvedContextMenuActions = contextMenuActions.map((action) => (
+    action.id === "reply"
+      ? { ...action, disabled: false, onClick: handleReplyToMessage }
+      : action
+  ));
   const contextMenuReactions = normalizeReactions(contextMenuMessage?.reactions);
   const isContextReactionActive = (reactionOption) => contextMenuReactions.some((reaction) =>
     reaction.key === reactionOption.key
@@ -610,7 +649,7 @@ export default function useTextChatMessageActions({
     handleToggleReaction,
     handleOpenMediaPreviewFullscreen,
     handleForwardSubmit,
-    contextMenuActions,
+    contextMenuActions: resolvedContextMenuActions,
     isContextReactionActive,
     primaryReactions: PRIMARY_MESSAGE_REACTION_OPTIONS,
     stickerReactions: STICKER_MESSAGE_REACTION_OPTIONS,

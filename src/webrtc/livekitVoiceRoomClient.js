@@ -44,6 +44,7 @@ const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
 const VOICE_DEBUG_PREFIX = "[voice]";
+const PREWARMED_SESSION_TTL_MS = 20_000;
 const AUDIO_SAMPLE_RATE = 48_000;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
@@ -300,6 +301,7 @@ export function createVoiceRoomClient({
   let isSelfMicMuted = false;
   let isSelfDeafened = false;
   let preferredRemoteShareUserId = "";
+  let prewarmedSession = null;
 
   const remoteScreenShares = new Map();
   const remoteAudioElements = new Map();
@@ -1645,7 +1647,36 @@ export function createVoiceRoomClient({
     return nextStream;
   };
 
-  const fetchLiveKitSession = async (channelName, user) => {
+  const getCachedPrewarmedSession = (channelName, user) => {
+    if (!prewarmedSession) {
+      return null;
+    }
+
+    const isExpired = Date.now() - prewarmedSession.createdAt > PREWARMED_SESSION_TTL_MS;
+    const sameChannel = prewarmedSession.channelName === channelName;
+    const sameUser = prewarmedSession.userId === String(user?.id || "");
+    if (isExpired || !sameChannel || !sameUser) {
+      prewarmedSession = null;
+      return null;
+    }
+
+    const cachedValue = prewarmedSession.value;
+    prewarmedSession = null;
+    return cachedValue;
+  };
+
+  const fetchLiveKitSession = async (channelName, user, { preferPrewarmed = true } = {}) => {
+    if (preferPrewarmed) {
+      const cachedSession = getCachedPrewarmedSession(channelName, user);
+      if (cachedSession) {
+        logVoiceDebug("livekit-session:reuse-prewarmed", {
+          channelName,
+          userId: user?.id || "",
+        });
+        return cachedSession;
+      }
+    }
+
     const response = await authFetch(`${API_BASE_URL}/voice/livekit-session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1661,6 +1692,25 @@ export function createVoiceRoomClient({
     }
 
     return data;
+  };
+
+  const prewarmLiveKitSession = async (channelName, user) => {
+    if (!channelName || !user?.id) {
+      return null;
+    }
+
+    const nextSession = await fetchLiveKitSession(channelName, user, { preferPrewarmed: false });
+    prewarmedSession = {
+      channelName,
+      userId: String(user.id || ""),
+      createdAt: Date.now(),
+      value: nextSession,
+    };
+    logVoiceDebug("livekit-session:prewarmed", {
+      channelName,
+      userId: user.id || "",
+    });
+    return nextSession;
   };
 
   const bindRoomEvents = (nextRoom) => {
@@ -2063,6 +2113,14 @@ export function createVoiceRoomClient({
   return {
     async connect(user) {
       await ensureSignalConnection(user);
+    },
+
+    async prewarmChannel(channelName, user) {
+      await ensureSignalConnection(user);
+      await Promise.allSettled([
+        prewarmLiveKitSession(channelName, user),
+        ensureAudioPipeline(),
+      ]);
     },
 
     async joinChannel(channelName, user) {

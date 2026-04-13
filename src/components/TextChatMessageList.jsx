@@ -56,6 +56,31 @@ function MessageText({ text, mentions, currentUserId }) {
   ));
 }
 
+function areMessagesInSameForwardGroup(currentMessage, adjacentMessage) {
+  if (!currentMessage?.forwardedFromUsername || !adjacentMessage?.forwardedFromUsername) {
+    return false;
+  }
+
+  const sameForwardAuthor =
+    String(currentMessage.forwardedFromUserId || "") === String(adjacentMessage.forwardedFromUserId || "")
+    && String(currentMessage.forwardedFromUsername || "") === String(adjacentMessage.forwardedFromUsername || "");
+  const sameSender =
+    String(currentMessage.authorUserId || "") === String(adjacentMessage.authorUserId || "")
+    && String(currentMessage.username || "") === String(adjacentMessage.username || "");
+
+  if (!sameForwardAuthor || !sameSender) {
+    return false;
+  }
+
+  const currentTimestamp = new Date(currentMessage.timestamp || 0).getTime();
+  const adjacentTimestamp = new Date(adjacentMessage.timestamp || 0).getTime();
+  if (!Number.isFinite(currentTimestamp) || !Number.isFinite(adjacentTimestamp)) {
+    return false;
+  }
+
+  return Math.abs(currentTimestamp - adjacentTimestamp) <= 10 * 60 * 1000;
+}
+
 function isAnimatedEmojiAttachment(messageItem, attachmentItem, galleryAttachments) {
   const messageText = String(messageItem?.message || "").trim();
   const attachmentName = String(attachmentItem?.attachmentName || "").trim().toLowerCase();
@@ -268,6 +293,7 @@ export default function TextChatMessageList({
   onOpenContextMenu,
   onOpenMediaPreview,
   onToggleReaction,
+  onJumpToReply,
 }) {
   const resolveRenderedAttachments = (messageItem) =>
     normalizeAttachmentItems(messageItem).map((attachmentItem, attachmentIndex) => {
@@ -315,7 +341,9 @@ export default function TextChatMessageList({
       {floatingDateLabel ? <div className="messages-floating-date">{floatingDateLabel}</div> : null}
 
       <div ref={messagesListRef} className="messages-list">
-        {messages.map((messageItem) => {
+        {messages.map((messageItem, messageIndex) => {
+          const previousMessage = messages[messageIndex - 1] || null;
+          const nextMessage = messages[messageIndex + 1] || null;
           const attachments = resolveRenderedAttachments(messageItem);
           const hasRenderableAttachments = attachments.length > 0;
           const reactions = normalizeReactions(messageItem.reactions);
@@ -325,11 +353,15 @@ export default function TextChatMessageList({
             String(messageItem.authorUserId || "") === currentUserId ||
             (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase());
           const isSelectedMessage = selectedMessageIdSet.has(String(messageItem.id));
+          const isForwardGroupFollow = areMessagesInSameForwardGroup(messageItem, previousMessage);
+          const isForwardGroupStart = !isForwardGroupFollow && areMessagesInSameForwardGroup(messageItem, nextMessage);
+          const isForwardGroupEnd = isForwardGroupFollow && !areMessagesInSameForwardGroup(messageItem, nextMessage);
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
             && !hasRenderableAttachments
             && !reactions.length
             && !messageItem.forwardedFromUsername
+            && !messageItem.replyToMessageId
             && !messageText.includes("\n")
             && messageText.trim().length <= 14;
 
@@ -343,7 +375,7 @@ export default function TextChatMessageList({
                   messageRefs.current.delete(messageItem.id);
                 }
               }}
-              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""}`}
+              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
               onClick={selectionMode ? () => onToggleSelection(messageItem.id) : undefined}
             >
@@ -363,7 +395,7 @@ export default function TextChatMessageList({
               <AnimatedAvatar src={messageItem.photoUrl} alt="avatar" className="msg-avatar" />
 
               <div className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""}`}>
-                {!isDirectChat ? (
+                {!isDirectChat && !isForwardGroupFollow ? (
                   <div className="message-author">
                     <span>{messageItem.username}</span>
                     <span className="message-meta">
@@ -373,13 +405,30 @@ export default function TextChatMessageList({
                   </div>
                 ) : null}
 
-                {messageItem.forwardedFromUsername ? (
+                {messageItem.forwardedFromUsername && !isForwardGroupFollow ? (
                   <div className="message-forwarded">
                     <span className="message-forwarded__label">Переслал</span>
                     <strong>{messageItem.username}</strong>
                     <span className="message-forwarded__label">Автор</span>
                     <strong>{messageItem.forwardedFromUsername}</strong>
                   </div>
+                ) : null}
+
+                {messageItem.replyToMessageId ? (
+                  <button
+                    type="button"
+                    className="message-reply-chip"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onJumpToReply?.(messageItem.replyToMessageId);
+                    }}
+                  >
+                    <span className="message-reply-chip__line" aria-hidden="true" />
+                    <span className="message-reply-chip__copy">
+                      <strong>{messageItem.replyToUsername || "User"}</strong>
+                      <span>{messageItem.replyPreview || "Сообщение без текста"}</span>
+                    </span>
+                  </button>
                 ) : null}
 
                 {messageText ? (

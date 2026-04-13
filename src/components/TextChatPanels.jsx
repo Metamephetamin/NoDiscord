@@ -89,3 +89,32 @@ export function ChatSelectionBar({ selectedCount, canForward, onForward, onCance
     </div>
   );
 }
+
+export function JumpToLatestBar({ pendingCount, onJump }) {
+  if (pendingCount <= 0) {
+    return null;
+  }
+
+  return (
+    <div className="chat-jump-bar">
+      <span className="chat-jump-bar__copy">
+        {pendingCount === 1 ? "Новое сообщение" : `Новых сообщений: ${pendingCount}`}
+      </span>
+      <button type="button" className="chat-jump-bar__button" onClick={onJump}>
+        Перейти вниз
+      </button>
+    </div>
+  );
+}
+
+export function ChatActionStatus({ feedback }) {
+  if (!feedback?.message) {
+    return null;
+  }
+
+  return (
+    <div className={`chat-action-status chat-action-status--${feedback.tone || "info"}`}>
+      <span className="chat-action-status__message">{feedback.message}</span>
+    </div>
+  );
+}

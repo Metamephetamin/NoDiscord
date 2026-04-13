@@ -13,6 +13,7 @@ export default function TextChatComposer({
   selectedFiles,
   setSelectedFiles,
   uploadingFile,
+  replyState,
   messageEditState,
   voiceRecordingState,
   voiceRecordingDurationMs,
@@ -28,6 +29,7 @@ export default function TextChatComposer({
   message,
   preferExplicitSend,
   onFileChange,
+  onStopReplying,
   onStopEditing,
   onCancelVoiceRecording,
   onSpeechRecognitionToggle,
@@ -78,8 +80,21 @@ export default function TextChatComposer({
           </div>
         ) : null}
 
-        {messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") || speechRecognitionActive ? (
+        {replyState || messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") || speechRecognitionActive ? (
           <div className="composer-status-strip">
+            {replyState ? (
+              <div className="composer-status composer-status--reply">
+                <span className="composer-status__dot" aria-hidden="true" />
+                <div className="composer-status__copy">
+                  <strong>{`Ответ ${replyState.username || "User"}`}</strong>
+                  <span>{replyState.preview || "Сообщение без текста"}</span>
+                </div>
+                <button type="button" className="composer-status__action" onClick={onStopReplying}>
+                  Отмена
+                </button>
+              </div>
+            ) : null}
+
             {messageEditState ? (
               <div className="composer-status composer-status--edit">
                 <span className="composer-status__dot" aria-hidden="true" />

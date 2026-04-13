@@ -1,8 +1,10 @@
+import { Suspense, lazy } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
-import VoiceRoomStage from "./VoiceRoomStage";
 import VoiceChannelList from "./VoiceChannelList";
+
+const VoiceRoomStage = lazy(() => import("./VoiceRoomStage"));
 
 export const ServersSidebar = ({
   includeProfilePanel = true,
@@ -44,6 +46,7 @@ export const ServersSidebar = ({
   onCancelChannelRename,
   onJoinVoiceChannel,
   onLeaveVoiceChannel,
+  onPrewarmVoiceChannel,
   onWatchStream,
   canManageTargetMember,
   canAssignRoleToMember,
@@ -242,6 +245,7 @@ export const ServersSidebar = ({
               serverRoles={activeServer?.roles || []}
               onJoinChannel={onJoinVoiceChannel}
               onLeaveChannel={onLeaveVoiceChannel}
+              onPrewarmChannel={onPrewarmVoiceChannel}
               onRenameChannel={onStartChannelRename}
               liveUserIds={liveUserIds}
               speakingUserIds={speakingUserIds}

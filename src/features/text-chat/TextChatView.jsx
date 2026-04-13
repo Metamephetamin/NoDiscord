@@ -1,15 +1,20 @@
+import { Suspense, lazy } from "react";
 import TextChatContextMenu from "../../components/TextChatContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
-import TextChatForwardModal from "../../components/TextChatForwardModal";
-import TextChatMediaPreview from "../../components/TextChatMediaPreview";
 import TextChatMessageList from "../../components/TextChatMessageList";
-import { ChatSelectionBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+import { ChatActionStatus, ChatSelectionBar, JumpToLatestBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+
+const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
+const TextChatMediaPreview = lazy(() => import("../../components/TextChatMediaPreview"));
 
 export default function TextChatView(props) {
   const {
     searchQuery,
     searchResults,
     scrollToMessage,
+    scrollToLatest,
+    pendingNewMessagesCount,
+    actionFeedback,
     pinnedMessages,
     setPinnedMessages,
     selectionMode,
@@ -35,6 +40,7 @@ export default function TextChatView(props) {
     selectedFiles,
     setSelectedFiles,
     uploadingFile,
+    replyState,
     messageEditState,
     voiceRecordingState,
     voiceRecordingDurationMs,
@@ -50,6 +56,7 @@ export default function TextChatView(props) {
     message,
     preferExplicitSend,
     handleFileChange,
+    stopReplyingToMessage,
     stopEditingMessage,
     handleCancelVoiceRecording,
     handleSpeechRecognitionToggle,
@@ -108,6 +115,8 @@ export default function TextChatView(props) {
           onCancel={clearSelectionMode}
         />
       ) : null}
+      <ChatActionStatus feedback={actionFeedback} />
+      <JumpToLatestBar pendingCount={pendingNewMessagesCount} onJump={() => scrollToLatest("smooth")} />
       <TextChatMessageList
         messages={messages}
         messagesListRef={messagesListRef}
@@ -125,11 +134,13 @@ export default function TextChatView(props) {
         onOpenContextMenu={openMessageContextMenu}
         onOpenMediaPreview={openMediaPreview}
         onToggleReaction={handleToggleReaction}
+        onJumpToReply={scrollToMessage}
       />
       <TextChatComposer
         selectedFiles={selectedFiles}
         setSelectedFiles={setSelectedFiles}
         uploadingFile={uploadingFile}
+        replyState={replyState}
         messageEditState={messageEditState}
         voiceRecordingState={voiceRecordingState}
         voiceRecordingDurationMs={voiceRecordingDurationMs}
@@ -145,6 +156,7 @@ export default function TextChatView(props) {
         message={message}
         preferExplicitSend={preferExplicitSend}
         onFileChange={handleFileChange}
+        onStopReplying={stopReplyingToMessage}
         onStopEditing={stopEditingMessage}
         onCancelVoiceRecording={handleCancelVoiceRecording}
         onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
@@ -164,27 +176,29 @@ export default function TextChatView(props) {
         onSend={send}
       />
       {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
-      <TextChatMediaPreview
-        mediaPreview={mediaPreview}
-        videoRef={mediaPreviewVideoRef}
-        onClose={() => setMediaPreview(null)}
-        onDownload={() =>
-          handleDownloadAttachment({
-            attachmentKind: mediaPreview.type,
-            attachmentUrl: mediaPreview.url,
-            attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
-            attachmentName: mediaPreview.name,
-            attachmentContentType: mediaPreview.contentType || "",
-            attachmentEncryption: mediaPreview.attachmentEncryption || null,
-            messageId: mediaPreview.messageId || "",
-            attachmentIndex: mediaPreview.attachmentIndex || 0,
-          })
-        }
-        onFullscreen={handleOpenMediaPreviewFullscreen}
-        onNavigate={updateMediaPreviewIndex}
-        onZoom={updateMediaPreviewZoom}
-        onResetZoom={resetMediaPreviewZoom}
-      />
+      <Suspense fallback={null}>
+        <TextChatMediaPreview
+          mediaPreview={mediaPreview}
+          videoRef={mediaPreviewVideoRef}
+          onClose={() => setMediaPreview(null)}
+          onDownload={() =>
+            handleDownloadAttachment({
+              attachmentKind: mediaPreview.type,
+              attachmentUrl: mediaPreview.url,
+              attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
+              attachmentName: mediaPreview.name,
+              attachmentContentType: mediaPreview.contentType || "",
+              attachmentEncryption: mediaPreview.attachmentEncryption || null,
+              messageId: mediaPreview.messageId || "",
+              attachmentIndex: mediaPreview.attachmentIndex || 0,
+            })
+          }
+          onFullscreen={handleOpenMediaPreviewFullscreen}
+          onNavigate={updateMediaPreviewIndex}
+          onZoom={updateMediaPreviewZoom}
+          onResetZoom={resetMediaPreviewZoom}
+        />
+      </Suspense>
       <TextChatContextMenu
         menuRef={contextMenuRef}
         menu={messageContextMenu}
@@ -196,15 +210,17 @@ export default function TextChatView(props) {
         isReactionActive={isContextReactionActive}
         onToggleReaction={handleToggleReaction}
       />
-      <TextChatForwardModal
-        forwardModal={forwardModal}
-        forwardableCount={forwardableMessages.length}
-        targets={availableForwardTargets}
-        onClose={closeForwardModal}
-        onQueryChange={(query) => setForwardModal((previous) => ({ ...previous, query }))}
-        onToggleTarget={toggleForwardTarget}
-        onSubmit={handleForwardSubmit}
-      />
+      <Suspense fallback={null}>
+        <TextChatForwardModal
+          forwardModal={forwardModal}
+          forwardableCount={forwardableMessages.length}
+          targets={availableForwardTargets}
+          onClose={closeForwardModal}
+          onQueryChange={(query) => setForwardModal((previous) => ({ ...previous, query }))}
+          onToggleTarget={toggleForwardTarget}
+          onSubmit={handleForwardSubmit}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -94,6 +94,7 @@ typings/
 .tmp/
 .artifacts/
 dist/
+scripts/public-asset-audit.json
 
 .node_modules/
 
