@@ -166,7 +166,7 @@ export default function MenuMain({
   const [createServerIconFrame, setCreateServerIconFrame] = useState(() => getDefaultMediaFrame());
   const [createServerError, setCreateServerError] = useState("");
   const [resolution, setResolution] = useState("1080p");
-  const [fps, setFps] = useState(60);
+  const [fps, setFps] = useState(30);
   const [shareStreamAudio, setShareStreamAudio] = useState(false);
   const [remoteScreenShares, setRemoteScreenShares] = useState([]);
   const [announcedLiveUserIds, setAnnouncedLiveUserIds] = useState([]);

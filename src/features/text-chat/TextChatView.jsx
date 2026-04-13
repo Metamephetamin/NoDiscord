@@ -56,6 +56,7 @@ export default function TextChatView(props) {
     syncComposerSelection,
     setComposerEmojiPickerOpen,
     insertComposerEmoji,
+    sendAnimatedEmoji,
     applyMentionSuggestion,
     setSelectedMentionSuggestionIndex,
     setMentionSuggestionsOpen,
@@ -153,6 +154,7 @@ export default function TextChatView(props) {
           setComposerEmojiPickerOpen((previous) => (typeof nextValue === "boolean" ? nextValue : !previous));
         }}
         onInsertEmoji={insertComposerEmoji}
+        onSendAnimatedEmoji={sendAnimatedEmoji}
         onApplyMentionSuggestion={applyMentionSuggestion}
         onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
         onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}

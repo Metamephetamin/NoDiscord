@@ -1,6 +1,14 @@
 const CHAT_DRAFT_STORAGE_PREFIX = "nd:chat-draft";
 const CHAT_DRAFT_UPDATED_EVENT = "nd-chat-draft-updated";
 
+function getDraftStorage() {
+  try {
+    return window?.sessionStorage || null;
+  } catch {
+    return null;
+  }
+}
+
 function getUserStorageScope(user) {
   return String(user?.id || user?.email || "guest").trim() || "guest";
 }
@@ -18,7 +26,7 @@ export function readChatDraft(user, channelId) {
   }
 
   try {
-    return String(localStorage.getItem(storageKey) || "");
+    return String(getDraftStorage()?.getItem(storageKey) || "");
   } catch {
     return "";
   }
@@ -39,10 +47,15 @@ export function writeChatDraft(user, channelId, value) {
   const normalizedValue = String(value || "");
 
   try {
+    const storage = getDraftStorage();
+    if (!storage) {
+      return;
+    }
+
     if (normalizedValue.trim()) {
-      localStorage.setItem(storageKey, normalizedValue);
+      storage.setItem(storageKey, normalizedValue);
     } else {
-      localStorage.removeItem(storageKey);
+      storage.removeItem(storageKey);
     }
   } catch {
     return;
@@ -58,7 +71,7 @@ export function clearChatDraft(user, channelId) {
   }
 
   try {
-    localStorage.removeItem(storageKey);
+    getDraftStorage()?.removeItem(storageKey);
   } catch {
     return;
   }

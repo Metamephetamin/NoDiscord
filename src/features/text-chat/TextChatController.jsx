@@ -841,6 +841,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
 
   const {
     send,
+    sendAnimatedEmoji,
     handleFileChange,
   } = useTextChatSendActions({
     message,
@@ -1051,6 +1052,7 @@ export default function TextChat({ serverId, channelId, user, resolvedChannelId 
       syncComposerSelection={syncComposerSelection}
       setComposerEmojiPickerOpen={setComposerEmojiPickerOpen}
       insertComposerEmoji={insertComposerEmoji}
+      sendAnimatedEmoji={sendAnimatedEmoji}
       applyMentionSuggestion={applyMentionSuggestion}
       setSelectedMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
       setMentionSuggestionsOpen={setMentionSuggestionsOpen}

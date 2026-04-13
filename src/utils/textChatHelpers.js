@@ -115,13 +115,21 @@ export function getPinnedStorageKey(userId, channelId) {
   return normalizedUserId && normalizedChannelId ? `nd:pinned:${normalizedUserId}:${normalizedChannelId}` : "";
 }
 
+function getPinnedStorage() {
+  try {
+    return window?.sessionStorage || null;
+  } catch {
+    return null;
+  }
+}
+
 export function readPinnedMessages(storageKey) {
   if (!storageKey) {
     return [];
   }
 
   try {
-    const raw = localStorage.getItem(storageKey);
+    const raw = getPinnedStorage()?.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -135,7 +143,12 @@ export function writePinnedMessages(storageKey, pinnedMessages) {
   }
 
   try {
-    localStorage.setItem(storageKey, JSON.stringify(Array.isArray(pinnedMessages) ? pinnedMessages : []));
+    const storage = getPinnedStorage();
+    if (!storage) {
+      return;
+    }
+
+    storage.setItem(storageKey, JSON.stringify(Array.isArray(pinnedMessages) ? pinnedMessages : []));
   } catch {
     // ignore storage failures
   }

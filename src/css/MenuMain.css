@@ -2818,6 +2818,11 @@
   object-fit: contain;
 }
 
+.mobile-voice-room__control-icon-image--headphones {
+  filter: grayscale(1) brightness(1.62);
+  opacity: 0.96;
+}
+
 .mobile-voice-room__control-label {
   font-size: 10px;
   font-weight: 700;
@@ -2973,6 +2978,10 @@
   height: 18px;
   filter: grayscale(1) brightness(1.48);
   opacity: 0.96;
+}
+
+.mobile-voice-room__control-icon-image--headphones {
+  filter: grayscale(1) brightness(1.7);
 }
 
 .mobile-voice-room__control-label {

@@ -38,6 +38,34 @@ export default function useTextChatSendActions({
   sendMessagesCompat,
   playDirectMessageSound,
 }) {
+  const buildUploadedAttachmentPayload = (attachment) => ({
+    attachmentUrl: attachment.fileUrl || "",
+    attachmentName: attachment.fileName || "",
+    attachmentSize: attachment.size || null,
+    attachmentContentType: attachment.contentType || "",
+    attachmentEncryption: attachment.attachmentEncryption || null,
+    voiceMessage: null,
+  });
+
+  const fetchAnimatedEmojiFile = async (emojiOption) => {
+    const assetUrl = String(emojiOption?.assetUrl || "").trim();
+    if (!assetUrl) {
+      throw new Error("У этого смайлика нет доступного анимированного файла.");
+    }
+
+    const response = await fetch(assetUrl, { cache: "force-cache" });
+    if (!response.ok) {
+      throw new Error("Не удалось загрузить анимированный смайлик.");
+    }
+
+    const blob = await response.blob();
+    const normalizedUrl = assetUrl.split(/[?#]/, 1)[0];
+    const rawFileName = normalizedUrl.split("/").filter(Boolean).pop() || `${String(emojiOption?.key || "emoji").trim() || "emoji"}.gif`;
+    const fileType = blob.type || "image/gif";
+
+    return new File([blob], rawFileName, { type: fileType });
+  };
+
   const send = async () => {
     const rawMessageText = message.trim();
     const messageText = await punctuateTypedMessageText(rawMessageText);
@@ -116,14 +144,7 @@ export default function useTextChatSendActions({
       const payload = [{
         message: messageText,
         mentions: outgoingMentions,
-        attachments: attachments.map((attachment) => ({
-          attachmentUrl: attachment.fileUrl || "",
-          attachmentName: attachment.fileName || "",
-          attachmentSize: attachment.size || null,
-          attachmentContentType: attachment.contentType || "",
-          attachmentEncryption: attachment.attachmentEncryption || null,
-          voiceMessage: null,
-        })),
+        attachments: attachments.map(buildUploadedAttachmentPayload),
         attachmentUrl: attachments[0]?.fileUrl || "",
         attachmentName: attachments[0]?.fileName || "",
         attachmentSize: attachments[0]?.size || null,
@@ -155,6 +176,81 @@ export default function useTextChatSendActions({
           ? "Не удалось сохранить изменения сообщения."
           : "Не удалось отправить сообщение."
       ));
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const sendAnimatedEmoji = async (emojiOption) => {
+    if (!emojiOption?.assetUrl || !scopedChannelId || uploadingFile || voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+      return false;
+    }
+
+    if (messageEditState) {
+      setErrorMessage("Во время редактирования нельзя отправлять анимированные смайлики.");
+      return false;
+    }
+
+    const now = Date.now();
+    const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
+    if (!message.trim() && !selectedFiles.length && cooldownLeft > 0) {
+      setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
+      return false;
+    }
+
+    try {
+      setErrorMessage("");
+      const emojiFile = await fetchAnimatedEmojiFile(emojiOption);
+
+      if (message.trim() || selectedFiles.length) {
+        setSelectedFiles((previous) => [...previous, emojiFile]);
+        focusComposerToEnd();
+        return true;
+      }
+
+      setUploadingFile(true);
+      await ensureChannelJoined();
+
+      const uploaded = await uploadAttachment({
+        blob: emojiFile,
+        fileName: emojiFile.name,
+      });
+
+      const attachment = {
+        fileUrl: uploaded?.fileUrl || "",
+        fileName: uploaded?.fileName || emojiFile.name,
+        size: uploaded?.size || emojiFile.size || null,
+        contentType: uploaded?.contentType || emojiFile.type || "image/gif",
+        attachmentEncryption: null,
+      };
+      const avatar = user?.avatarUrl || user?.avatar || "";
+      const payload = [{
+        message: "",
+        mentions: [],
+        attachments: [buildUploadedAttachmentPayload(attachment)],
+        attachmentUrl: attachment.fileUrl || "",
+        attachmentName: attachment.fileName || "",
+        attachmentSize: attachment.size || null,
+        attachmentContentType: attachment.contentType || "",
+        attachmentEncryption: null,
+        voiceMessage: null,
+      }];
+
+      await sendMessagesCompat(scopedChannelId, avatar, payload);
+
+      forceScrollToBottomRef.current = true;
+      lastSendAtRef.current = Date.now();
+      setIsChannelReady(true);
+      if (isDirectChat) {
+        playDirectMessageSound("send");
+      }
+      return true;
+    } catch (error) {
+      console.error("Send animated emoji error:", error);
+      joinedChannelRef.current = "";
+      setIsChannelReady(false);
+      setErrorMessage(getChatErrorMessage(error, "Не удалось отправить анимированный смайлик."));
+      return false;
     } finally {
       setUploadingFile(false);
     }
@@ -196,6 +292,7 @@ export default function useTextChatSendActions({
 
   return {
     send,
+    sendAnimatedEmoji,
     handleFileChange,
   };
 }

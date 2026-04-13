@@ -1,5 +1,6 @@
-import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
+import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
+import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import {
   buildVoiceMessageLabel,
   COMPOSER_EMOJI_OPTIONS,
@@ -33,6 +34,7 @@ export default function TextChatComposer({
   onSyncComposerSelection,
   onToggleEmojiPicker,
   onInsertEmoji,
+  onSendAnimatedEmoji,
   onApplyMentionSuggestion,
   onSelectMentionSuggestionIndex,
   onCloseMentionSuggestions,
@@ -41,6 +43,19 @@ export default function TextChatComposer({
   onStartEditingLatestOwnMessage,
   onSend,
 }) {
+  const [emojiPreviewCount, setEmojiPreviewCount] = useState(12);
+
+  const loadMoreEmojiPreviews = () => {
+    setEmojiPreviewCount((previous) => Math.min(previous + 12, COMPOSER_EMOJI_OPTIONS.length));
+  };
+
+  const handleEmojiPickerScroll = (event) => {
+    const target = event.currentTarget;
+    if (target.scrollHeight - target.scrollTop - target.clientHeight <= 72) {
+      loadMoreEmojiPreviews();
+    }
+  };
+
   return (
     <div className="input-area">
       <div className="input-area__editor">
@@ -128,7 +143,11 @@ export default function TextChatComposer({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onSyncComposerSelection();
-                onToggleEmojiPicker();
+                const nextOpen = !composerEmojiPickerOpen;
+                if (nextOpen) {
+                  setEmojiPreviewCount(12);
+                }
+                onToggleEmojiPicker(nextOpen);
               }}
               disabled={uploadingFile || voiceRecordingState === "sending"}
               title="Смайлики"
@@ -155,19 +174,50 @@ export default function TextChatComposer({
             ) : null}
 
             {composerEmojiPickerOpen ? (
-              <div ref={composerEmojiPickerRef} className="composer-emoji-picker" role="dialog" aria-label="Выбор смайлика">
+              <div
+                ref={composerEmojiPickerRef}
+                className="composer-emoji-picker"
+                role="dialog"
+                aria-label="Выбор анимированного смайлика"
+                onScroll={handleEmojiPickerScroll}
+              >
                 <div className="composer-emoji-picker__grid">
-                  {COMPOSER_EMOJI_OPTIONS.map((emojiOption) => (
+                  {COMPOSER_EMOJI_OPTIONS.map((emojiOption, index) => (
                     <button
                       key={emojiOption.key}
                       type="button"
                       className="composer-emoji-picker__item"
                       onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => onInsertEmoji(emojiOption.glyph)}
+                      onMouseEnter={() => {
+                        if (index + 1 > emojiPreviewCount) {
+                          loadMoreEmojiPreviews();
+                        }
+                      }}
+                      onFocus={() => {
+                        if (index + 1 > emojiPreviewCount) {
+                          loadMoreEmojiPreviews();
+                        }
+                      }}
+                      onClick={async () => {
+                        if (emojiOption.assetUrl) {
+                          const handled = await onSendAnimatedEmoji?.(emojiOption);
+                          if (handled) {
+                            onToggleEmojiPicker(false);
+                          }
+                          return;
+                        }
+
+                        onInsertEmoji(emojiOption.glyph);
+                        onToggleEmojiPicker(false);
+                      }}
                       title={emojiOption.label}
                       aria-label={emojiOption.label}
                     >
-                      <AnimatedEmojiGlyph emoji={emojiOption} />
+                      <AnimatedEmojiGlyph
+                        emoji={emojiOption}
+                        showAsset={index < emojiPreviewCount}
+                        fallbackText={String(emojiOption.label || "").trim().slice(0, 1).toUpperCase()}
+                      />
                     </button>
                   ))}
                 </div>
@@ -175,7 +225,7 @@ export default function TextChatComposer({
             ) : null}
 
             {mentionSuggestionsOpen && mentionSuggestions.length ? (
-              <div ref={mentionSuggestionsRef} className="mention-suggestions" role="listbox" aria-label="Server mention suggestions">
+              <div ref={mentionSuggestionsRef} className="mention-suggestions" role="listbox" aria-label="Подсказки упоминаний">
                 {mentionSuggestions.map((suggestion, index) => (
                   <button
                     key={`${suggestion.userId}-${suggestion.handle}`}

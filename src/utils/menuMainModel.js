@@ -1,5 +1,6 @@
 import { DEFAULT_SERVER_ICON, resolveStaticAssetUrl } from "./media";
 import { normalizeMediaFrame, parseMediaFrame } from "./mediaFrames";
+import { getStoredUser } from "./auth";
 export const SERVERS_STORAGE_KEY = "nd_servers_v2";
 export const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
 export const NOISE_SUPPRESSION_STORAGE_KEY = "nd_noise_suppression_mode";
@@ -214,12 +215,7 @@ export const isPersonalDefaultServer = (server, user) => {
   return String(server.id || "") === getScopedDefaultServerId(user) || (!server.isShared && isReservedDefaultServerId(server.id));
 };
 export const readSessionUser = () => {
-  try {
-    const raw = localStorage.getItem("user");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  return getStoredUser();
 };
 export const createDefaultRoles = () => DEFAULT_SERVER_ROLES.map((role) => ({ ...role, permissions: [...role.permissions] }));
 export const createServerMember = (user, roleId = "owner") => ({

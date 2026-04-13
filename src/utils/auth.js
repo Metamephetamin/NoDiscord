@@ -49,15 +49,33 @@ function isElectronSecureSessionAvailable() {
   return Boolean(window?.electronSecureSession?.get);
 }
 
-function readLegacySession() {
+function getWebSessionStorage() {
   try {
-    const rawUser = localStorage.getItem(USER_STORAGE_KEY);
+    return window?.sessionStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function readSessionFromStorage(storage) {
+  if (!storage) {
+    return {
+      user: null,
+      accessToken: "",
+      refreshToken: "",
+      accessTokenExpiresAt: "",
+      updatedAt: "",
+    };
+  }
+
+  try {
+    const rawUser = storage.getItem(USER_STORAGE_KEY);
     return {
       user: rawUser ? JSON.parse(rawUser) : null,
-      accessToken: normalizeStoredValue(localStorage.getItem(TOKEN_STORAGE_KEY)),
-      refreshToken: normalizeStoredValue(localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)),
-      accessTokenExpiresAt: normalizeStoredValue(localStorage.getItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY)),
-      updatedAt: normalizeSessionUpdatedAt(localStorage.getItem(`${USER_STORAGE_KEY}_updated_at`)),
+      accessToken: normalizeStoredValue(storage.getItem(TOKEN_STORAGE_KEY)),
+      refreshToken: normalizeStoredValue(storage.getItem(REFRESH_TOKEN_STORAGE_KEY)),
+      accessTokenExpiresAt: normalizeStoredValue(storage.getItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY)),
+      updatedAt: normalizeSessionUpdatedAt(storage.getItem(`${USER_STORAGE_KEY}_updated_at`)),
     };
   } catch {
     return {
@@ -70,49 +88,91 @@ function readLegacySession() {
   }
 }
 
-function writeLegacySession({ user, accessToken, refreshToken, accessTokenExpiresAt, updatedAt }) {
+function writeSessionToStorage(storage, { user, accessToken, refreshToken, accessTokenExpiresAt, updatedAt }) {
+  if (!storage) {
+    return;
+  }
+
   try {
     if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+      storage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     } else {
-      localStorage.removeItem(USER_STORAGE_KEY);
+      storage.removeItem(USER_STORAGE_KEY);
     }
 
     if (accessToken) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+      storage.setItem(TOKEN_STORAGE_KEY, accessToken);
     } else {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      storage.removeItem(TOKEN_STORAGE_KEY);
     }
 
     if (refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+      storage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
     } else {
-      localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+      storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
     }
 
     if (accessTokenExpiresAt) {
-      localStorage.setItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY, accessTokenExpiresAt);
+      storage.setItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY, accessTokenExpiresAt);
     } else {
-      localStorage.removeItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY);
+      storage.removeItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY);
     }
 
     if (updatedAt) {
-      localStorage.setItem(`${USER_STORAGE_KEY}_updated_at`, updatedAt);
+      storage.setItem(`${USER_STORAGE_KEY}_updated_at`, updatedAt);
     } else {
-      localStorage.removeItem(`${USER_STORAGE_KEY}_updated_at`);
+      storage.removeItem(`${USER_STORAGE_KEY}_updated_at`);
     }
   } catch {
     // ignore storage failures
   }
 }
 
+function readTransientSession() {
+  return readSessionFromStorage(getWebSessionStorage());
+}
+
+function writeTransientSession(payload) {
+  writeSessionToStorage(getWebSessionStorage(), payload);
+}
+
+function readLegacySession() {
+  try {
+    return readSessionFromStorage(window?.localStorage || null);
+  } catch {
+    return {
+      user: null,
+      accessToken: "",
+      refreshToken: "",
+      accessTokenExpiresAt: "",
+      updatedAt: "",
+    };
+  }
+}
+
+function clearStorageSession(storage) {
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.removeItem(USER_STORAGE_KEY);
+    storage.removeItem(TOKEN_STORAGE_KEY);
+    storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+    storage.removeItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY);
+    storage.removeItem(`${USER_STORAGE_KEY}_updated_at`);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function clearTransientSession() {
+  clearStorageSession(getWebSessionStorage());
+}
+
 function clearLegacySession() {
   try {
-    localStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    localStorage.removeItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY);
-    localStorage.removeItem(`${USER_STORAGE_KEY}_updated_at`);
+    clearStorageSession(window?.localStorage || null);
   } catch {
     // ignore storage failures
   }
@@ -173,11 +233,25 @@ export async function hydrateStoredSession() {
     };
   }
 
+  const transientSession = readTransientSession();
   const legacySession = readLegacySession();
+  const baseSession = transientSession.accessToken || transientSession.user ? transientSession : legacySession;
 
   if (!isElectronSecureSessionAvailable()) {
-    applySessionCache(legacySession);
-    return legacySession;
+    const resolvedSession =
+      legacySession.accessToken || legacySession.user
+        ? {
+            ...baseSession,
+            updatedAt: normalizeSessionUpdatedAt(baseSession.updatedAt) || new Date().toISOString(),
+          }
+        : baseSession;
+
+    applySessionCache(resolvedSession);
+    if (legacySession.accessToken || legacySession.user) {
+      writeTransientSession(resolvedSession);
+      clearLegacySession();
+    }
+    return resolvedSession;
   }
 
   try {
@@ -191,27 +265,28 @@ export async function hydrateStoredSession() {
             accessTokenExpiresAt: normalizeStoredValue(secureSession.accessTokenExpiresAt),
             updatedAt: normalizeSessionUpdatedAt(secureSession.updatedAt),
           }
-        : legacySession;
+        : baseSession;
 
-    const legacyUpdatedAtMs = getSessionUpdatedAtMs(legacySession.updatedAt);
+    const legacyUpdatedAtMs = getSessionUpdatedAtMs(baseSession.updatedAt);
     const secureUpdatedAtMs = getSessionUpdatedAtMs(normalizedSession.updatedAt);
-    const hasLegacySession = Boolean(legacySession.accessToken || legacySession.user);
+    const hasLegacySession = Boolean(baseSession.accessToken || baseSession.user);
     const hasSecureSession = Boolean(normalizedSession.accessToken || normalizedSession.user);
     const shouldPreferLegacy =
       hasLegacySession
       && (!hasSecureSession || legacyUpdatedAtMs > secureUpdatedAtMs);
     const resolvedSession = shouldPreferLegacy ? {
-      ...legacySession,
-      updatedAt: normalizeSessionUpdatedAt(legacySession.updatedAt) || new Date(legacyUpdatedAtMs || Date.now()).toISOString(),
+      ...baseSession,
+      updatedAt: normalizeSessionUpdatedAt(baseSession.updatedAt) || new Date(legacyUpdatedAtMs || Date.now()).toISOString(),
     } : normalizedSession;
 
     applySessionCache(resolvedSession);
 
-    if (shouldPreferLegacy || ((legacySession.accessToken || legacySession.user) && !normalizedSession.accessToken)) {
+    if (shouldPreferLegacy || ((baseSession.accessToken || baseSession.user) && !normalizedSession.accessToken)) {
       await window.electronSecureSession.set(resolvedSession);
       applySessionCache(resolvedSession);
     }
 
+    clearTransientSession();
     clearLegacySession();
     return {
       user: sessionCache.user,
@@ -221,8 +296,12 @@ export async function hydrateStoredSession() {
       updatedAt: sessionCache.updatedAt,
     };
   } catch {
-    applySessionCache(legacySession);
-    return legacySession;
+    applySessionCache(baseSession);
+    if (legacySession.accessToken || legacySession.user) {
+      writeTransientSession(baseSession);
+      clearLegacySession();
+    }
+    return baseSession;
   }
 }
 
@@ -231,7 +310,7 @@ export function getStoredToken() {
     return sessionCache.accessToken;
   }
 
-  return readLegacySession().accessToken;
+  return readTransientSession().accessToken;
 }
 
 export function hasStoredToken() {
@@ -243,7 +322,7 @@ export function getStoredUser() {
     return sessionCache.user;
   }
 
-  return readLegacySession().user;
+  return readTransientSession().user;
 }
 
 export function getStoredRefreshToken() {
@@ -251,7 +330,7 @@ export function getStoredRefreshToken() {
     return sessionCache.refreshToken;
   }
 
-  return readLegacySession().refreshToken;
+  return readTransientSession().refreshToken;
 }
 
 export function getStoredAccessTokenExpiresAt() {
@@ -259,28 +338,32 @@ export function getStoredAccessTokenExpiresAt() {
     return sessionCache.accessTokenExpiresAt;
   }
 
-  return readLegacySession().accessTokenExpiresAt;
+  return readTransientSession().accessTokenExpiresAt;
 }
 
 export async function storeSession(user, tokenOrSession, refreshToken = "", accessTokenExpiresAt = "") {
   const nextSession = buildSessionPayload(user, tokenOrSession, refreshToken, accessTokenExpiresAt);
   applySessionCache(nextSession);
-  writeLegacySession(nextSession);
 
   if (!isElectronSecureSessionAvailable()) {
+    writeTransientSession(nextSession);
+    clearLegacySession();
     return;
   }
 
   try {
     await window.electronSecureSession.set(nextSession);
+    clearTransientSession();
     clearLegacySession();
   } catch {
-    // keep local fallback if secure storage write fails
+    writeTransientSession(nextSession);
+    clearLegacySession();
   }
 }
 
 export async function clearStoredSession() {
   applySessionCache();
+  clearTransientSession();
   clearLegacySession();
 
   if (!isElectronSecureSessionAvailable()) {

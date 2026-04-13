@@ -50,8 +50,8 @@ const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
 const VIDEO_ENCODING_PRIORITY = "high";
 const LEGACY_NOISE_SUPPRESSION_MODE_KRISP = "krisp";
-const REMOTE_BACKGROUND_SHARE_TARGET = { width: 1280, height: 720, fps: 24 };
-const REMOTE_CAMERA_TARGET = { width: 960, height: 540, fps: 24 };
+const REMOTE_BACKGROUND_SHARE_TARGET = { width: 960, height: 540, fps: 15 };
+const REMOTE_CAMERA_TARGET = { width: 640, height: 360, fps: 15 };
 const CAMERA_VIDEO_QUALITY_TARGETS = {
   "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000, 120: 6_200_000 } },
   "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000, 120: 10_000_000 } },
@@ -59,10 +59,10 @@ const CAMERA_VIDEO_QUALITY_TARGETS = {
   "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000, 120: 30_000_000 } },
 };
 const SCREEN_SHARE_QUALITY_TARGETS = {
-  "720p": { width: 1280, height: 720, bitrate: { 30: 4_500_000, 60: 6_800_000, 120: 9_000_000 } },
-  "1080p": { width: 1920, height: 1080, bitrate: { 30: 8_000_000, 60: 12_500_000, 120: 16_500_000 } },
-  "1440p": { width: 2560, height: 1440, bitrate: { 30: 12_000_000, 60: 18_000_000, 120: 24_000_000 } },
-  "2160p": { width: 3840, height: 2160, bitrate: { 30: 18_000_000, 60: 27_000_000, 120: 36_000_000 } },
+  "720p": { width: 1280, height: 720, bitrate: { 30: 5_500_000, 60: 8_000_000, 120: 10_500_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 10_000_000, 60: 14_000_000, 120: 18_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 14_000_000, 60: 20_000_000, 120: 27_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 22_000_000, 60: 32_000_000, 120: 40_000_000 } },
 };
 
 function normalizePublishFps(value, fallback = 30) {
@@ -155,6 +155,15 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
           maxBitrate: Math.max(1_200_000, Math.round(maxBitrate * 0.32)),
           maxFramerate: Math.min(30, normalizedFps),
         });
+  const useSingleLayerQualityMode = normalizedResolution !== "720p" || normalizedFps > 30;
+
+  if (useSingleLayerQualityMode) {
+    return {
+      simulcast: false,
+      degradationPreference: "maintain-resolution",
+      screenShareEncoding,
+    };
+  }
 
   return {
     simulcast: true,
@@ -1320,6 +1329,7 @@ export function createVoiceRoomClient({
       (count, state) => count + (state.screenVideoPublication || state.cameraPublication ? 1 : 0),
       0
     );
+    const isSpecificRemoteShareFocused = Boolean(preferredRemoteShareUserId);
 
     remoteParticipantMedia.forEach((state, userId) => {
       const isFocused =
@@ -1327,12 +1337,18 @@ export function createVoiceRoomClient({
         || (!preferredRemoteShareUserId && activeVideoPublicationCount === 1);
       const hasScreenShare = Boolean(state.screenVideoPublication);
 
+      if (state.screenAudioPublication?.isManualOperationAllowed?.()) {
+        const shouldSubscribeScreenAudio = !isSpecificRemoteShareFocused || isFocused;
+        state.screenAudioPublication.setSubscribed(shouldSubscribeScreenAudio);
+        state.screenAudioPublication.setEnabled(shouldSubscribeScreenAudio);
+      }
+
       if (state.screenVideoPublication) {
         const focusedScreenTarget = getPublicationVideoTarget(state.screenVideoPublication, REMOTE_BACKGROUND_SHARE_TARGET);
         applyRemotePublicationPreferences(state.screenVideoPublication, {
           enabled: true,
           subscribed: true,
-          quality: isFocused ? VideoQuality.HIGH : VideoQuality.MEDIUM,
+          quality: isFocused ? VideoQuality.HIGH : VideoQuality.LOW,
           width: isFocused ? focusedScreenTarget.width : Math.min(focusedScreenTarget.width, REMOTE_BACKGROUND_SHARE_TARGET.width),
           height: isFocused ? focusedScreenTarget.height : Math.min(focusedScreenTarget.height, REMOTE_BACKGROUND_SHARE_TARGET.height),
           fps: isFocused ? focusedScreenTarget.fps : Math.min(focusedScreenTarget.fps, REMOTE_BACKGROUND_SHARE_TARGET.fps),
@@ -1341,9 +1357,10 @@ export function createVoiceRoomClient({
 
       if (state.cameraPublication) {
         const focusedCameraTarget = getPublicationVideoTarget(state.cameraPublication, REMOTE_CAMERA_TARGET);
+        const shouldSubscribeCamera = !isSpecificRemoteShareFocused;
         applyRemotePublicationPreferences(state.cameraPublication, {
-          enabled: true,
-          subscribed: true,
+          enabled: shouldSubscribeCamera,
+          subscribed: shouldSubscribeCamera,
           quality: !hasScreenShare && isFocused ? VideoQuality.HIGH : VideoQuality.LOW,
           width: !hasScreenShare && isFocused ? focusedCameraTarget.width : Math.min(focusedCameraTarget.width, REMOTE_CAMERA_TARGET.width),
           height: !hasScreenShare && isFocused ? focusedCameraTarget.height : Math.min(focusedCameraTarget.height, REMOTE_CAMERA_TARGET.height),
@@ -2244,11 +2261,8 @@ export function createVoiceRoomClient({
     setFocusedRemoteShareUser(targetUserId) {
       preferredRemoteShareUserId = String(targetUserId || "").trim();
       applyRemoteSharePreferences();
-      if (preferredRemoteShareUserId && room) {
-        const participant = room.remoteParticipants.get(preferredRemoteShareUserId);
-        if (participant) {
-          syncRemoteShareForParticipant(participant);
-        }
+      if (room) {
+        syncAllRemoteShares();
       }
     },
 
