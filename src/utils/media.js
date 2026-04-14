@@ -30,31 +30,46 @@ export const DEFAULT_SERVER_ICON = resolveStaticAssetUrl("/image/image.png");
 export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   if (!value) return fallback;
 
-  if (
-    value.startsWith("http://") ||
-    value.startsWith("https://") ||
-    value.startsWith("data:") ||
-    value.startsWith("blob:") ||
-    value.startsWith("file:")
-  ) {
-    return value;
+  const normalizedValue = String(value).trim();
+  if (!normalizedValue) {
+    return fallback;
   }
 
-  if (value.startsWith("/")) {
+  if (
+    normalizedValue.startsWith("http://") ||
+    normalizedValue.startsWith("https://") ||
+    normalizedValue.startsWith("data:") ||
+    normalizedValue.startsWith("blob:") ||
+    normalizedValue.startsWith("file:")
+  ) {
+    return normalizedValue;
+  }
+
+  if (
+    normalizedValue.startsWith("avatars/") ||
+    normalizedValue.startsWith("api/profile-backgrounds/") ||
+    normalizedValue.startsWith("profile-backgrounds/") ||
+    normalizedValue.startsWith("chat-files/") ||
+    normalizedValue.startsWith("server-icons/")
+  ) {
+    return `${API_URL}/${normalizedValue.replace(/^\/+/, "")}`;
+  }
+
+  if (normalizedValue.startsWith("/")) {
     if (
-      value.startsWith("/avatars/")
-      || value.startsWith("/api/profile-backgrounds/")
-      || value.startsWith("/profile-backgrounds/")
-      || value.startsWith("/chat-files/")
-      || value.startsWith("/server-icons/")
+      normalizedValue.startsWith("/avatars/")
+      || normalizedValue.startsWith("/api/profile-backgrounds/")
+      || normalizedValue.startsWith("/profile-backgrounds/")
+      || normalizedValue.startsWith("/chat-files/")
+      || normalizedValue.startsWith("/server-icons/")
     ) {
-      return `${API_URL}${value}`;
+      return `${API_URL}${normalizedValue}`;
     }
 
-    return resolveStaticAssetUrl(value);
+    return resolveStaticAssetUrl(normalizedValue);
   }
 
-  return value;
+  return normalizedValue;
 }
 
 export function readFileAsDataUrl(file) {
