@@ -1589,6 +1589,7 @@ export default function MenuMain({
 
       const nextFirstName = String(payload?.first_name || payload?.firstName || "").trim();
       const nextLastName = String(payload?.last_name || payload?.lastName || "").trim();
+      const nextNickname = String(payload?.nickname || payload?.nick_name || "").trim();
       const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
       const nextProfileBackground = String(
         payload?.profile_background_url || payload?.profileBackgroundUrl || payload?.profileBackground || ""
@@ -1599,12 +1600,13 @@ export default function MenuMain({
         payload?.profileBackgroundFrame
       );
       const nextEmail = String(payload?.email || "").trim();
-      const nextDisplayName = `${nextFirstName} ${nextLastName}`.trim();
+      const nextDisplayName = nextNickname || `${nextFirstName} ${nextLastName}`.trim();
 
       updateFriendProfile(updatedUserId, (friend) => ({
         ...friend,
         firstName: nextFirstName || friend.firstName || "",
         lastName: nextLastName || friend.lastName || "",
+        nickname: nextNickname || friend.nickname || "",
         name: nextDisplayName || friend.name || "",
         email: nextEmail || friend.email || "",
         avatar: nextAvatar || friend.avatar || "",
@@ -1618,6 +1620,7 @@ export default function MenuMain({
                   ...toast.friend,
                   firstName: nextFirstName || toast.friend?.firstName || "",
                   lastName: nextLastName || toast.friend?.lastName || "",
+                  nickname: nextNickname || toast.friend?.nickname || "",
                   name: nextDisplayName || toast.friend?.name || "",
                   email: nextEmail || toast.friend?.email || "",
                   avatar: nextAvatar || toast.friend?.avatar || "",
@@ -1672,6 +1675,7 @@ export default function MenuMain({
           firstName: nextFirstName || user.firstName || user.first_name || "",
           last_name: nextLastName || user.last_name || user.lastName || "",
           lastName: nextLastName || user.lastName || user.last_name || "",
+          nickname: nextNickname || user.nickname || "",
           email: nextEmail || user.email || "",
           avatarUrl: nextAvatar || user.avatarUrl || user.avatar || "",
           avatar: nextAvatar || user.avatar || user.avatarUrl || "",
@@ -2553,6 +2557,7 @@ export default function MenuMain({
     const handleClick = (event) => {
       const target = event.target;
       const insidePopup = popupRef.current?.contains(target);
+      const insideMediaFrameEditor = target instanceof Element && Boolean(target.closest(".media-frame-editor"));
       const insideServerPanel = serverMembersRef.current?.contains(target);
       const insideMemberMenu = memberRoleMenuRef.current?.contains(target);
       const insideServerContextMenu = serverContextMenuRef.current?.contains(target);
@@ -2560,7 +2565,7 @@ export default function MenuMain({
       const insideMicMenu = micMenuRef.current?.contains(target);
       const insideSoundMenu = soundMenuRef.current?.contains(target);
 
-      if (popupRef.current && !insidePopup) setOpenSettings(false);
+      if (popupRef.current && !insidePopup && !insideMediaFrameEditor) setOpenSettings(false);
       if (serverMembersRef.current && !insideServerPanel && !insideMemberMenu) setShowServerMembersPanel(false);
       if (!insideMemberMenu) setMemberRoleMenu(null);
       if (!insideServerContextMenu) setServerContextMenu(null);
@@ -2953,8 +2958,8 @@ export default function MenuMain({
   };
   const handleCreateServerSubmit = (event) => {
     event?.preventDefault?.();
-    const nextName = createServerName.trim();
-    if (!nextName) {
+    const nextName = String(createServerName || "");
+    if (!nextName.trim()) {
       setCreateServerError("Введите название сервера.");
       return;
     }
@@ -4207,6 +4212,7 @@ export default function MenuMain({
       includeProfilePanel={includeProfilePanel}
       profilePanel={renderProfilePanel()}
       activeServer={activeServer}
+      desktopServerPane={desktopServerPane}
       servers={servers}
       serverMembersRef={serverMembersRef}
       memberRoleMenu={memberRoleMenu}
@@ -4441,6 +4447,112 @@ export default function MenuMain({
       onLogout={handleLogout}
     />
   );
+  const canNavigateBack = navigationHistoryRef.current.back.length > 0;
+  const canNavigateForward = navigationHistoryRef.current.forward.length > 0;
+  const desktopTitlebarContext = useMemo(() => {
+    if (openSettings) {
+      return {
+        title: activeSettingsTabMeta?.label || "Настройки",
+        iconType: "glyph",
+        iconGlyph: "⚙",
+      };
+    }
+
+    if (workspaceMode === "friends") {
+      if (currentDirectFriend) {
+        return {
+          title: getDisplayName(currentDirectFriend),
+          iconType: currentDirectFriend?.avatar ? "image" : "glyph",
+          iconSrc: currentDirectFriend?.avatar || "",
+          iconAlt: getDisplayName(currentDirectFriend),
+          iconGlyph: currentDirectFriend?.isSelf ? "В" : "ЛС",
+        };
+      }
+
+      if (friendsPageSection === "add") {
+        return {
+          title: "Добавить друзей",
+          iconType: "glyph",
+          iconGlyph: "+",
+        };
+      }
+
+      return {
+        title: "Друзья",
+        iconType: "image",
+        iconSrc: SMS_ICON_URL,
+        iconAlt: "Друзья",
+      };
+    }
+
+    if (activeServer) {
+      return {
+        title: activeServer.name || "Сервер",
+        iconType: activeServer.icon ? "image" : "glyph",
+        iconSrc: activeServer.icon ? resolveMediaUrl(activeServer.icon, DEFAULT_SERVER_ICON) : "",
+        iconAlt: activeServer.name || "Сервер",
+        iconGlyph: String(activeServer.name || "S").trim().charAt(0).toUpperCase() || "S",
+      };
+    }
+
+    return {
+      title: "Tend",
+      iconType: "glyph",
+      iconGlyph: "T",
+    };
+  }, [
+    activeServer,
+    activeSettingsTabMeta?.label,
+    currentDirectFriend,
+    friendsPageSection,
+    getDisplayName,
+    openSettings,
+    workspaceMode,
+  ]);
+  const renderDesktopTitlebar = () => (
+    <div className="desktop-app-topbar">
+      <div className="desktop-app-topbar__drag" aria-hidden="true" />
+      <div className="desktop-app-topbar__left">
+        <button
+          type="button"
+          className="desktop-app-topbar__nav"
+          onClick={navigateHistoryBack}
+          disabled={!canNavigateBack}
+          aria-label="Назад"
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          className="desktop-app-topbar__nav"
+          onClick={navigateHistoryForward}
+          disabled={!canNavigateForward}
+          aria-label="Вперед"
+        >
+          →
+        </button>
+      </div>
+      <div className="desktop-app-topbar__center">
+        <div className="desktop-app-topbar__title">
+          {desktopTitlebarContext.iconType === "image" && desktopTitlebarContext.iconSrc ? (
+            <img
+              className="desktop-app-topbar__title-icon desktop-app-topbar__title-icon--image"
+              src={desktopTitlebarContext.iconSrc}
+              alt={desktopTitlebarContext.iconAlt || desktopTitlebarContext.title}
+            />
+          ) : (
+            <span className="desktop-app-topbar__title-icon" aria-hidden="true">
+              {desktopTitlebarContext.iconGlyph}
+            </span>
+          )}
+          <div className="desktop-app-topbar__title-copy">
+            <strong>{desktopTitlebarContext.title}</strong>
+          </div>
+        </div>
+      </div>
+      <div className="desktop-app-topbar__right" />
+    </div>
+  );
   const renderMobileShell = () => (
     <MenuMainMobileLayout
       mobileSection={mobileSection}
@@ -4488,10 +4600,15 @@ export default function MenuMain({
   const mainContent = isMobileViewport ? (
     renderMobileShell()
   ) : (
-    <div className="menu__main">
-      {renderDesktopServerRail()}
-      {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
-      {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}
+    <div className="menu-shell">
+      {renderDesktopTitlebar()}
+      <div className="menu-shell__content">
+        <div className="menu__main">
+          {renderDesktopServerRail()}
+          {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
+          {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}
+        </div>
+      </div>
     </div>
   );
 

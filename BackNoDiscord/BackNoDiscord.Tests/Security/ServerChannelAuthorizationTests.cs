@@ -30,7 +30,7 @@ public class ServerChannelAuthorizationTests
     [Fact]
     public void CanAccessServer_AllowsPersonalAndPrivateScopedServersForOwner()
     {
-        var user = new AuthenticatedUser("73", "user@example.com", "Ivan", "Petrov");
+        var user = new AuthenticatedUser("73", "user@example.com", "Ivan Petrov", "Ivan", "Petrov");
 
         Assert.True(ServerChannelAuthorization.CanAccessServer("server-main-73", user, snapshot: null));
         Assert.True(ServerChannelAuthorization.CanAccessServer("server-73-my-room", user, snapshot: null));
@@ -56,8 +56,8 @@ public class ServerChannelAuthorizationTests
             ]
         };
 
-        var member = new AuthenticatedUser("73", "user@example.com", "Ivan", "Petrov");
-        var outsider = new AuthenticatedUser("74", "outsider@example.com", "Petr", "Sidorov");
+        var member = new AuthenticatedUser("73", "user@example.com", "Ivan Petrov", "Ivan", "Petrov");
+        var outsider = new AuthenticatedUser("74", "outsider@example.com", "Petr Sidorov", "Petr", "Sidorov");
 
         Assert.True(ServerChannelAuthorization.CanAccessServer(snapshot.Id, member, snapshot));
         Assert.False(ServerChannelAuthorization.CanAccessServer(snapshot.Id, outsider, snapshot));

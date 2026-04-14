@@ -77,6 +77,7 @@ export default function TextChat({
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
   const [userContextMenu, setUserContextMenu] = useState(null);
+  const [profileModal, setProfileModal] = useState(null);
   const [reactionStickerPanelOpen, setReactionStickerPanelOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyState, setReplyState] = useState(null);
@@ -255,6 +256,9 @@ export default function TextChat({
     const matchedDirectTarget = directTargets.find((target) => String(target?.id || "") === userId) || null;
     const username = String(messageItem?.username || matchedDirectTarget?.name || matchedDirectTarget?.firstName || "User").trim() || "User";
     const avatarUrl = String(messageItem?.photoUrl || matchedDirectTarget?.avatar || matchedDirectTarget?.avatarUrl || "").trim();
+    const avatarFrame = matchedDirectTarget?.avatarFrame || null;
+    const backgroundUrl = String(matchedDirectTarget?.profileBackgroundUrl || matchedDirectTarget?.profile_background_url || "").trim();
+    const backgroundFrame = matchedDirectTarget?.profileBackgroundFrame || matchedDirectTarget?.profile_background_frame || null;
 
     setMessageContextMenu(null);
     setReactionStickerPanelOpen(false);
@@ -264,6 +268,9 @@ export default function TextChat({
       userId,
       username,
       avatarUrl,
+      avatarFrame,
+      backgroundUrl,
+      backgroundFrame,
       isSelf: userId === currentUserId,
       isFriend: Boolean(matchedDirectTarget && !matchedDirectTarget?.isSelf),
       canOpenDirectChat: typeof onOpenDirectChat === "function" && userId !== currentUserId,
@@ -273,6 +280,10 @@ export default function TextChat({
 
   const closeUserContextMenu = () => {
     setUserContextMenu(null);
+  };
+
+  const closeProfileModal = () => {
+    setProfileModal(null);
   };
 
   const handleCopyUserId = async () => {
@@ -297,6 +308,16 @@ export default function TextChat({
     onOpenDirectChat(userContextMenu.userId);
     setActionFeedback({ tone: "info", message: `Открываем чат с ${userContextMenu.username}` });
     setUserContextMenu(null);
+  };
+
+  const handleOpenDirectChatFromProfileModal = () => {
+    if (!profileModal?.userId || typeof onOpenDirectChat !== "function" || profileModal.isSelf) {
+      return;
+    }
+
+    onOpenDirectChat(profileModal.userId);
+    setActionFeedback({ tone: "info", message: `Открываем чат с ${profileModal.username}` });
+    setProfileModal(null);
   };
 
   const handleAddFriendFromUserMenu = async () => {
@@ -331,6 +352,72 @@ export default function TextChat({
     } catch (error) {
       setErrorMessage(error?.message || "Не удалось отправить заявку в друзья.");
     }
+  };
+
+  const handleAddFriendFromProfileModal = async () => {
+    if (!profileModal?.userId || profileModal.isSelf || profileModal.isFriend) {
+      return;
+    }
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/friends/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: Number(profileModal.userId) }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось отправить заявку в друзья."));
+      }
+
+      const status = String(data?.status || "").trim().toLowerCase();
+      const nextMessage =
+        status === "already_friends"
+          ? "Этот пользователь уже у вас в друзьях"
+          : status === "already_requested"
+            ? "Заявка уже отправлена"
+            : status === "auto_accepted"
+              ? "Друг добавлен автоматически"
+              : "Заявка в друзья отправлена";
+
+      setActionFeedback({ tone: "success", message: nextMessage });
+      setProfileModal((current) => (current ? { ...current, isFriend: true } : current));
+    } catch (error) {
+      setErrorMessage(error?.message || "Не удалось отправить заявку в друзья.");
+    }
+  };
+
+  const handleCopyUserIdFromProfileModal = async () => {
+    if (!profileModal?.userId) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(profileModal.userId);
+      setActionFeedback({ tone: "success", message: "ID пользователя скопирован" });
+    } catch {
+      setErrorMessage("Не удалось скопировать ID пользователя.");
+    }
+  };
+
+  const handleOpenProfileFromUserMenu = () => {
+    if (!userContextMenu) {
+      return;
+    }
+
+    setProfileModal({
+      userId: userContextMenu.userId,
+      username: userContextMenu.username,
+      avatarUrl: userContextMenu.avatarUrl,
+      avatarFrame: userContextMenu.avatarFrame || null,
+      backgroundUrl: userContextMenu.backgroundUrl || "",
+      backgroundFrame: userContextMenu.backgroundFrame || null,
+      isSelf: userContextMenu.isSelf,
+      isFriend: userContextMenu.isFriend,
+      canOpenDirectChat: userContextMenu.canOpenDirectChat,
+    });
+    setUserContextMenu(null);
   };
 
   const handleUserMenuPlaceholder = (message) => {
@@ -396,6 +483,9 @@ export default function TextChat({
       },
     ],
   ];
+  if (userContextMenuSections[0]?.[0]) {
+    userContextMenuSections[0][0].onClick = handleOpenProfileFromUserMenu;
+  }
 
   const isEditableMessage = (messageItem) => {
     if (!messageItem) {
@@ -908,8 +998,9 @@ export default function TextChat({
 
       const nextFirstName = String(payload?.first_name || payload?.firstName || "").trim();
       const nextLastName = String(payload?.last_name || payload?.lastName || "").trim();
+      const nextNickname = String(payload?.nickname || payload?.nick_name || "").trim();
       const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
-      const nextUsername = `${nextFirstName} ${nextLastName}`.trim();
+      const nextUsername = nextNickname || `${nextFirstName} ${nextLastName}`.trim();
 
       setMessagesByChannel((previous) =>
         Object.fromEntries(
@@ -1145,6 +1236,23 @@ export default function TextChat({
     };
   }, [forwardModal.open]);
 
+  useEffect(() => {
+    if (!profileModal) {
+      return undefined;
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setProfileModal(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [profileModal]);
+
   useMediaPreviewKeyboardControls({
     mediaPreview,
     setMediaPreview,
@@ -1315,6 +1423,11 @@ export default function TextChat({
       userContextMenu={userContextMenu}
       userContextMenuSections={userContextMenuSections}
       closeUserContextMenu={closeUserContextMenu}
+      profileModal={profileModal}
+      closeProfileModal={closeProfileModal}
+      handleProfileModalDirectChat={handleOpenDirectChatFromProfileModal}
+      handleProfileModalAddFriend={handleAddFriendFromProfileModal}
+      handleProfileModalCopyUserId={handleCopyUserIdFromProfileModal}
       primaryReactions={primaryReactions}
       stickerReactions={stickerReactions}
       reactionStickerPanelOpen={reactionStickerPanelOpen}

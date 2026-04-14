@@ -49,6 +49,9 @@ public class User
     [Column("last_name")]
     public string last_name { get; set; } = null!;
 
+    [Column("nickname")]
+    public string nickname { get; set; } = null!;
+
     [Column("email")]
     public string? email { get; set; }
 
@@ -343,6 +346,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.phone_number).IsUnique();
             entity.Property(x => x.first_name).IsRequired();
             entity.Property(x => x.last_name).IsRequired();
+            entity.Property(x => x.nickname).IsRequired();
             entity.Property(x => x.email).IsRequired(false);
             entity.Property(x => x.is_email_verified).HasDefaultValue(true);
             entity.Property(x => x.phone_number).IsRequired(false);

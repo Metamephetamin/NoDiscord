@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import TextChatContextMenu from "../../components/TextChatContextMenu";
+import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
@@ -100,6 +101,11 @@ export default function TextChatView(props) {
     userContextMenu,
     userContextMenuSections,
     closeUserContextMenu,
+    profileModal,
+    closeProfileModal,
+    handleProfileModalDirectChat,
+    handleProfileModalAddFriend,
+    handleProfileModalCopyUserId,
     primaryReactions,
     stickerReactions,
     reactionStickerPanelOpen,
@@ -250,6 +256,13 @@ export default function TextChatView(props) {
         menu={userContextMenu}
         sections={userContextMenuSections}
         onClose={closeUserContextMenu}
+      />
+      <TextChatProfileModal
+        profile={profileModal}
+        onClose={closeProfileModal}
+        onOpenDirectChat={handleProfileModalDirectChat}
+        onAddFriend={handleProfileModalAddFriend}
+        onCopyUserId={handleProfileModalCopyUserId}
       />
       <Suspense fallback={null}>
         <TextChatForwardModal

@@ -20,7 +20,7 @@ const SCREEN_SHARE_ALLOWED_FPS = {
 };
 
 const getDisplayName = (user) =>
-  user?.firstName || user?.first_name || user?.name || user?.email || "User";
+  user?.nickname || user?.firstName || user?.first_name || user?.name || user?.email || "User";
 
 const getAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 

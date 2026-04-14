@@ -146,6 +146,8 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS profile_background_frame_json text NULL;
             ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS nickname character varying(50) NULL;
+            ALTER TABLE IF EXISTS users
                 ALTER COLUMN email DROP NOT NULL;
             ALTER TABLE IF EXISTS chatmessages
                 ALTER COLUMN message DROP NOT NULL;
@@ -161,6 +163,14 @@ public static class DatabaseSchemaInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone_number ON users (phone_number) WHERE phone_number IS NOT NULL;
             UPDATE users SET is_email_verified = true WHERE is_email_verified IS NULL;
             UPDATE users SET email = NULL WHERE TRIM(COALESCE(email, '')) = '';
+            UPDATE users
+            SET nickname = TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))
+            WHERE nickname IS NULL OR TRIM(COALESCE(nickname, '')) = '';
+            UPDATE users
+            SET nickname = COALESCE(NULLIF(TRIM(nickname), ''), COALESCE(email, 'User'))
+            WHERE TRIM(COALESCE(nickname, '')) = '';
+            ALTER TABLE IF EXISTS users
+                ALTER COLUMN nickname SET NOT NULL;
             """);
     }
 }

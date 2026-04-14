@@ -359,6 +359,7 @@ export default function Renderer() {
           id: data.id,
           firstName: data.first_name || savedUser.firstName || "",
           lastName: data.last_name || savedUser.lastName || "",
+          nickname: data.nickname || savedUser.nickname || "",
           email: data.email || savedUser.email || "",
           isEmailVerified: Boolean(data.is_email_verified ?? savedUser.isEmailVerified ?? true),
           phoneNumber: data.phone_number || savedUser.phoneNumber || "",

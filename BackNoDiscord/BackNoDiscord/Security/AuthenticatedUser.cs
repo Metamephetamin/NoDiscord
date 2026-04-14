@@ -5,6 +5,7 @@ namespace BackNoDiscord.Security;
 public sealed record AuthenticatedUser(
     string UserId,
     string Email,
+    string Nickname,
     string FirstName,
     string LastName)
 {
@@ -12,6 +13,11 @@ public sealed record AuthenticatedUser(
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(Nickname))
+            {
+                return Nickname.Trim();
+            }
+
             var fullName = string.Join(
                 " ",
                 new[] { FirstName, LastName }
@@ -27,7 +33,7 @@ public static class AuthenticatedUserAccessor
 {
     public static bool TryGetAuthenticatedUser(ClaimsPrincipal? principal, out AuthenticatedUser user)
     {
-        user = new AuthenticatedUser(string.Empty, string.Empty, string.Empty, string.Empty);
+        user = new AuthenticatedUser(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
 
         if (principal?.Identity?.IsAuthenticated != true)
         {
@@ -48,6 +54,7 @@ public static class AuthenticatedUserAccessor
         user = new AuthenticatedUser(
             userId.Trim(),
             string.IsNullOrWhiteSpace(email) ? phoneNumber?.Trim() ?? string.Empty : email.Trim(),
+            principal.FindFirstValue("nickname")?.Trim() ?? string.Empty,
             principal.FindFirstValue("first_name")?.Trim() ?? string.Empty,
             principal.FindFirstValue("last_name")?.Trim() ?? string.Empty);
 

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
@@ -17,6 +18,39 @@ export const SettingsOverlay = ({
   renderMobileSettingsShell,
   renderSettingsContent,
 }) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredSections = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return Object.entries(settingsNavSections);
+    }
+
+    return Object.entries(settingsNavSections)
+      .map(([section, items]) => {
+        const matchedItems = items.filter((item) => {
+          const itemLabel = String(item.label || "").toLowerCase();
+          const sectionLabel = String(section || "").toLowerCase();
+          return itemLabel.includes(normalizedSearchQuery) || sectionLabel.includes(normalizedSearchQuery);
+        });
+        return [section, matchedItems];
+      })
+      .filter(([, items]) => items.length > 0);
+  }, [normalizedSearchQuery, settingsNavSections]);
+
+  useEffect(() => {
+    if (!normalizedSearchQuery) {
+      return;
+    }
+
+    const hasActiveTab = filteredSections.some(([, items]) => items.some((item) => item.id === settingsTab));
+    if (!hasActiveTab) {
+      const firstMatch = filteredSections[0]?.[1]?.[0];
+      if (firstMatch?.id) {
+        onSelectSettingsTab(firstMatch.id);
+      }
+    }
+  }, [filteredSections, normalizedSearchQuery, onSelectSettingsTab, settingsTab]);
+
   if (!open) {
     return null;
   }
@@ -42,9 +76,15 @@ export const SettingsOverlay = ({
                   </button>
                 </div>
               </div>
-              <input className="settings-shell__search" type="text" placeholder="Поиск" />
+              <input
+                className="settings-shell__search"
+                type="text"
+                placeholder="Поиск"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
 
-              {Object.entries(settingsNavSections).map(([section, items]) => (
+              {filteredSections.map(([section, items]) => (
                 <div key={section} className="settings-shell__nav-group">
                   <span className="settings-shell__nav-label">{section}</span>
                   <div className="settings-shell__nav-list">
@@ -61,6 +101,9 @@ export const SettingsOverlay = ({
                   </div>
                 </div>
               ))}
+              {normalizedSearchQuery && filteredSections.length === 0 ? (
+                <div className="settings-shell__search-empty">Ничего не найдено</div>
+              ) : null}
             </aside>
 
             <div className="settings-shell__main">
@@ -316,6 +359,8 @@ export const MediaFrameEditorOverlay = ({
   defaultServerIcon,
   fallbackProfileBackground,
   fallbackAvatar,
+  avatarFrame,
+  avatarAlt,
   onCancel,
   onConfirm,
 }) => (
@@ -331,6 +376,9 @@ export const MediaFrameEditorOverlay = ({
     }
     frame={state?.frame}
     target={state?.target || "avatar"}
+    avatarSource={fallbackAvatar}
+    avatarFrame={avatarFrame}
+    avatarAlt={avatarAlt}
     onCancel={onCancel}
     onConfirm={onConfirm}
   />

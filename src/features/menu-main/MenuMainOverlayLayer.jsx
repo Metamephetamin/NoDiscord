@@ -206,6 +206,8 @@ export default function MenuMainOverlayLayer({
         defaultServerIcon={DEFAULT_SERVER_ICON}
         fallbackProfileBackground={getUserProfileBackground(user)}
         fallbackAvatar={getUserAvatar(user)}
+        avatarFrame={getUserAvatarFrame(user)}
+        avatarAlt={getDisplayName(user)}
         onCancel={closeMediaFrameEditor}
         onConfirm={handleMediaFrameConfirm}
       />

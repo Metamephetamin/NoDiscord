@@ -40,7 +40,7 @@ export const PersonalProfileSettings = ({
 
     <section className="voice-settings-card voice-settings-card--profile">
       <form className="profile-settings-form" onSubmit={onSubmit}>
-        <div className="profile-settings-form__hero">
+        <div className="profile-settings-form__preview-card">
           <div className="profile-settings-form__cover">
             {profileBackgroundSrc ? (
               <AnimatedMedia
@@ -57,10 +57,18 @@ export const PersonalProfileSettings = ({
             </button>
           </div>
 
-          <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={onChangeAvatar}>
-            <AnimatedAvatar className="profile-settings-form__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
-          </button>
+          <div className="profile-settings-form__preview-body">
+            <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={onChangeAvatar}>
+              <AnimatedAvatar className="profile-settings-form__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+            </button>
+            <div className="profile-settings-form__identity">
+              <strong>{displayName}</strong>
+              <span>{email}</span>
+            </div>
+          </div>
+        </div>
 
+        <div className="profile-settings-form__fields">
           <div className="profile-settings-form__grid">
             <label className="voice-settings-field voice-settings-field--stacked">
               <span>Имя</span>

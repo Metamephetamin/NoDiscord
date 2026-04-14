@@ -1,3 +1,5 @@
+import AnimatedAvatar from "./AnimatedAvatar";
+
 export default function TextChatUserContextMenu({
   menuRef,
   menu,
@@ -17,7 +19,11 @@ export default function TextChatUserContextMenu({
     >
       <div className="chat-user-menu__header">
         <div className="chat-user-menu__avatar">
-          {menu.avatarUrl ? <img src={menu.avatarUrl} alt={menu.username} /> : <span>{String(menu.username || "U").trim().charAt(0) || "U"}</span>}
+          {menu.avatarUrl ? (
+            <AnimatedAvatar className="chat-user-menu__avatar-media" src={menu.avatarUrl} alt={menu.username} />
+          ) : (
+            <span>{String(menu.username || "U").trim().charAt(0) || "U"}</span>
+          )}
         </div>
         <div className="chat-user-menu__copy">
           <strong>{menu.username || "User"}</strong>

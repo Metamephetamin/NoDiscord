@@ -14,10 +14,12 @@ export default function AnimatedMedia({
 }) {
   const resolvedSrc = useMemo(() => resolveMediaUrl(src, fallback), [fallback, src]);
   const [failedVideoSrc, setFailedVideoSrc] = useState("");
+  const [readyVideoSrc, setReadyVideoSrc] = useState("");
   const resolvedFallback = resolveMediaUrl(fallback, "");
   const shouldRenderVideo = isVideoAvatarUrl(resolvedSrc) && failedVideoSrc !== resolvedSrc;
   const hasVisualSource = Boolean(resolvedSrc || resolvedFallback);
   const mediaStyle = useMemo(() => getMediaFrameStyle(frame, style), [frame, style]);
+  const isVideoReady = readyVideoSrc === resolvedSrc;
 
   if (!hasVisualSource) {
     return (
@@ -36,17 +38,30 @@ export default function AnimatedMedia({
         key={resolvedSrc}
         {...rest}
         className={className}
-        style={mediaStyle}
+        style={{
+          ...mediaStyle,
+          backgroundColor: "rgba(16, 18, 24, 0.58)",
+          opacity: isVideoReady ? 1 : 0.999,
+        }}
         src={resolvedSrc}
         poster={resolvedFallback || undefined}
         autoPlay
         loop
         muted
         playsInline
-        preload="metadata"
+        preload="auto"
         draggable={false}
         aria-label={alt}
-        onError={() => setFailedVideoSrc(resolvedSrc)}
+        onLoadedMetadata={() => setReadyVideoSrc(resolvedSrc)}
+        onLoadedData={() => setReadyVideoSrc(resolvedSrc)}
+        onCanPlay={() => setReadyVideoSrc(resolvedSrc)}
+        onPlaying={() => setReadyVideoSrc(resolvedSrc)}
+        onError={() => {
+          if (readyVideoSrc === resolvedSrc) {
+            setReadyVideoSrc("");
+          }
+          setFailedVideoSrc(resolvedSrc);
+        }}
       />
     );
   }

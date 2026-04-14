@@ -5,7 +5,7 @@ import { copyTextToClipboard } from "../utils/clipboard";
 import { buildServerInviteLink } from "../utils/serverInviteLinks";
 
 const getDisplayName = (user) =>
-  user?.firstName || user?.first_name || user?.name || user?.email || "User";
+  user?.nickname || user?.firstName || user?.first_name || user?.name || user?.email || "User";
 
 export default function ServerInvitesPanel({
   activeServer,

@@ -8,6 +8,7 @@ namespace BackNoDiscord.Security;
 public static partial class AuthInputPolicies
 {
     private const int MaxNameLength = 32;
+    private const int MaxNicknameLength = 50;
     private const int MaxEmailLength = 50;
     private enum PersonNameScript
     {
@@ -30,6 +31,9 @@ public static partial class AuthInputPolicies
 
     [GeneratedRegex(@"^[\p{L}\p{M}'-]+$", RegexOptions.Compiled)]
     private static partial Regex PersonNameRegex();
+
+    [GeneratedRegex(@"^[\p{L}\p{M}\p{N} ]+$", RegexOptions.Compiled)]
+    private static partial Regex NicknameRegex();
 
     public static bool TryNormalizeEmail(string? value, out string normalizedEmail, out string error)
     {
@@ -152,6 +156,32 @@ public static partial class AuthInputPolicies
         }
 
         return TryNormalizeProfileName(normalizedName, fieldName, out normalizedName, out error);
+    }
+
+    public static bool TryNormalizeNickname(string? value, out string normalizedNickname, out string error)
+    {
+        normalizedNickname = Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+        error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(normalizedNickname))
+        {
+            error = "Никнейм не должен быть пустым.";
+            return false;
+        }
+
+        if (normalizedNickname.Length > MaxNicknameLength)
+        {
+            error = $"Никнейм должен быть не длиннее {MaxNicknameLength} символов.";
+            return false;
+        }
+
+        if (!NicknameRegex().IsMatch(normalizedNickname))
+        {
+            error = "Никнейм может содержать только буквы, цифры и пробелы.";
+            return false;
+        }
+
+        return true;
     }
 
     public static bool TryEnsureMatchingProfileNameScripts(string firstName, string lastName, out string error)

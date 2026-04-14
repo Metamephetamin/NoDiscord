@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedMedia from "./AnimatedMedia";
 import { getDefaultMediaFrame, normalizeMediaFrame } from "../utils/mediaFrames";
 
@@ -27,6 +28,9 @@ export default function MediaFrameEditorModal({
   fallback = "",
   frame = null,
   target = "avatar",
+  avatarSource = "",
+  avatarFrame = null,
+  avatarAlt = "",
   onCancel,
   onConfirm,
 }) {
@@ -118,21 +122,54 @@ export default function MediaFrameEditorModal({
 
         <div className="media-frame-editor__body">
           <div className={`media-frame-editor__preview media-frame-editor__preview--${target}`}>
-            <div
-              ref={previewFrameRef}
-              className={`media-frame-editor__frame media-frame-editor__frame--${target}`}
-              onPointerDown={handlePointerDown}
-            >
-              <AnimatedMedia
-                className="media-frame-editor__media"
-                src={source}
-                fallback={fallback}
-                alt={copy.title}
-                frame={normalizedDraftFrame}
-                draggable={false}
-              />
-              <div className="media-frame-editor__grid" aria-hidden="true" />
-            </div>
+            {target === "profileBackground" ? (
+              <div className="media-frame-editor__profile-card">
+                <div
+                  ref={previewFrameRef}
+                  className="media-frame-editor__frame media-frame-editor__frame--profileBackground"
+                  onPointerDown={handlePointerDown}
+                >
+                  <AnimatedMedia
+                    className="media-frame-editor__media"
+                    src={source}
+                    fallback={fallback}
+                    alt={copy.title}
+                    frame={normalizedDraftFrame}
+                    draggable={false}
+                  />
+                  <div className="media-frame-editor__grid" aria-hidden="true" />
+                </div>
+                <div className="media-frame-editor__profile-card-body">
+                  <AnimatedAvatar
+                    className="media-frame-editor__profile-avatar"
+                    src={avatarSource}
+                    fallback={avatarSource}
+                    alt={avatarAlt}
+                    frame={avatarFrame}
+                  />
+                  <div className="media-frame-editor__profile-copy">
+                    <strong>{avatarAlt || "Ваш профиль"}</strong>
+                    <span>Так фон будет выглядеть в карточке профиля</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                ref={previewFrameRef}
+                className={`media-frame-editor__frame media-frame-editor__frame--${target}`}
+                onPointerDown={handlePointerDown}
+              >
+                <AnimatedMedia
+                  className="media-frame-editor__media"
+                  src={source}
+                  fallback={fallback}
+                  alt={copy.title}
+                  frame={normalizedDraftFrame}
+                  draggable={false}
+                />
+                <div className="media-frame-editor__grid" aria-hidden="true" />
+              </div>
+            )}
           </div>
 
           <div className="media-frame-editor__controls">

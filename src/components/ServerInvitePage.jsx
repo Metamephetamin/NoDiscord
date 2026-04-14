@@ -8,7 +8,7 @@ import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
 import { parseMediaFrame } from "../utils/mediaFrames";
 
 const getDisplayName = (user) =>
-  user?.firstName || user?.first_name || user?.name || user?.email || "User";
+  user?.nickname || user?.firstName || user?.first_name || user?.name || user?.email || "User";
 
 function getServerTypeLabel(preview) {
   const textCount = Number(preview?.textChannelCount || 0);

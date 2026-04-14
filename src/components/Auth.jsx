@@ -13,6 +13,7 @@ import {
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 const MAX_AUTH_NAME_LENGTH = 32;
+const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
@@ -22,6 +23,7 @@ const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
 const initialRegisterForm = {
   firstName: "",
   lastName: "",
+  nickname: "",
   contact: "",
   password: "",
   cardNumber: "",
@@ -55,7 +57,10 @@ const initialEmailVerificationModal = {
   resendAvailableAt: "",
 };
 
-const sloganWords = ["жизни", "связи", "работы", "роста"];
+const sloganWords = ["жизни", "связи", "своих", "роста"];
+const SLOGAN_SPECIAL_PAUSE_WORD = "своих";
+const SLOGAN_SPECIAL_PAUSE_LENGTH = 3;
+const SLOGAN_SPECIAL_PAUSE_MS = 2400;
 
 const TYPING_FORWARD_DELAY_MS = 280;
 const TYPING_BACKWARD_DELAY_MS = 180;
@@ -186,6 +191,7 @@ function mapAuthUser(data) {
     id: data?.id,
     firstName: data?.first_name || "",
     lastName: data?.last_name || "",
+    nickname: data?.nickname || "",
     email: data?.email || "",
     isEmailVerified: Boolean(data?.is_email_verified),
     phoneNumber: data?.phone_number || "",
@@ -199,6 +205,14 @@ function mapAuthUser(data) {
     profileBackgroundFrame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
     profile_background_frame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
   };
+}
+
+function normalizeNicknameInput(value) {
+  return String(value || "")
+    .replace(/[^\p{L}\p{M}\p{N} ]+/gu, "")
+    .replace(/\s+/g, " ")
+    .slice(0, MAX_AUTH_NICKNAME_LENGTH)
+    .trimStart();
 }
 
 function mapAuthSession(data) {
@@ -317,8 +331,14 @@ export default function Auth({ onAuthSuccess }) {
   useEffect(() => {
     const currentWordLength = activeSloganWord.length;
     let timeoutMs = isDeletingSlogan ? TYPING_BACKWARD_DELAY_MS : TYPING_FORWARD_DELAY_MS;
+    const shouldUseSpecialPause =
+      !isDeletingSlogan
+      && activeSloganWord === SLOGAN_SPECIAL_PAUSE_WORD
+      && typedSloganLength === SLOGAN_SPECIAL_PAUSE_LENGTH;
 
-    if (!isDeletingSlogan && typedSloganLength >= currentWordLength) {
+    if (shouldUseSpecialPause) {
+      timeoutMs = SLOGAN_SPECIAL_PAUSE_MS;
+    } else if (!isDeletingSlogan && typedSloganLength >= currentWordLength) {
       timeoutMs = TYPING_HOLD_FULL_MS;
     } else if (isDeletingSlogan && typedSloganLength <= 0) {
       timeoutMs = TYPING_HOLD_EMPTY_MS;
@@ -446,6 +466,8 @@ export default function Auth({ onAuthSuccess }) {
       return;
     } else if (field === "contact") {
       nextValue = normalizeContactInput(nextValue);
+    } else if (field === "nickname") {
+      nextValue = normalizeNicknameInput(nextValue);
     } else if (field === "password") {
       nextValue = nextValue.slice(0, MAX_AUTH_PASSWORD_LENGTH);
     }
@@ -601,6 +623,7 @@ export default function Auth({ onAuthSuccess }) {
     const payload = {
       first_name: registerForm.firstName.trim(),
       last_name: registerForm.lastName.trim(),
+      nickname: registerForm.nickname.trim(),
       password: registerForm.password,
       ...(registerContactKind === "email" ? { email: normalizedRegisterEmail } : {}),
       ...(registerContactKind === "phone"
@@ -611,7 +634,7 @@ export default function Auth({ onAuthSuccess }) {
         : {}),
     };
 
-    if (!payload.first_name || !registerForm.contact.trim()) {
+    if (!payload.first_name || !payload.nickname || !registerForm.contact.trim()) {
       setMessage("Заполните обязательные поля.");
       return;
     }
@@ -873,6 +896,16 @@ export default function Auth({ onAuthSuccess }) {
                   maxLength={MAX_AUTH_NAME_LENGTH}
                 />
               </div>
+
+              <input
+                className="auth-input"
+                placeholder="Никнейм"
+                type="text"
+                value={registerForm.nickname}
+                onChange={handleRegisterFieldChange("nickname")}
+                maxLength={MAX_AUTH_NICKNAME_LENGTH}
+                required
+              />
 
               <input
                 className="auth-input"

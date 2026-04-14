@@ -94,6 +94,7 @@ public class FriendsController : ControllerBase
                 id = item.id,
                 first_name = item.first_name,
                 last_name = item.last_name,
+                nickname = item.nickname,
                 email = item.email,
                 avatar_url = item.avatar_url ?? string.Empty,
                 directChannelId = BuildDirectChannelId(currentUserId, item.id)
@@ -105,8 +106,10 @@ public class FriendsController : ControllerBase
                 .ToListAsync()
             : await usersQuery
                 .Where(item =>
+                    item.nickname.ToLower().Contains(normalizedQuery) ||
                     item.first_name.ToLower().Contains(normalizedQuery) ||
                     item.last_name.ToLower().Contains(normalizedQuery) ||
+                    (item.nickname + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
                     (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery) ||
                     (item.last_name + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
                     (item.first_name + item.last_name).ToLower().Contains(condensedQuery) ||
@@ -291,6 +294,7 @@ public class FriendsController : ControllerBase
             id = friend.id,
             first_name = friend.first_name,
             last_name = friend.last_name,
+            nickname = friend.nickname,
             email = friend.email,
             avatar_url = friend.avatar_url ?? string.Empty,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id)
@@ -309,6 +313,7 @@ public class FriendsController : ControllerBase
                 id = sender.id,
                 first_name = sender.first_name,
                 last_name = sender.last_name,
+                nickname = sender.nickname,
                 email = sender.email,
                 avatar_url = sender.avatar_url ?? string.Empty
             }

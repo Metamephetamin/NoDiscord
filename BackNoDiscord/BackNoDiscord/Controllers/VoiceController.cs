@@ -67,6 +67,7 @@ public class VoiceController : ControllerBase
         var currentUserSnapshot = new AuthenticatedUser(
             currentUser.UserId,
             currentUser.Email,
+            currentUser.Nickname,
             currentUser.FirstName,
             currentUser.LastName);
         var serverSnapshot = HttpContext.RequestServices
@@ -147,6 +148,7 @@ public class VoiceController : ControllerBase
         var currentUserSnapshot = new AuthenticatedUser(
             currentUser.UserId,
             currentUser.Email,
+            currentUser.Nickname,
             currentUser.FirstName,
             currentUser.LastName);
         var serverSnapshot = HttpContext.RequestServices

@@ -10,6 +10,7 @@ export const ServersSidebar = ({
   includeProfilePanel = true,
   profilePanel,
   activeServer,
+  desktopServerPane = "text",
   servers,
   serverMembersRef,
   memberRoleMenu,
@@ -190,9 +191,10 @@ export const ServersSidebar = ({
                 const scopedChannelId = getScopedChatChannelId(activeServer?.id || "", channel.id);
                 const unreadCount = Number(serverUnreadCounts[scopedChannelId] || 0);
                 const hasDraft = Boolean(chatDraftPresence[scopedChannelId]);
+                const isTextChannelActive = desktopServerPane !== "voice" && currentTextChannel?.id === channel.id;
 
                 return (
-                  <li key={channel.id} className={`channel-item ${currentTextChannel?.id === channel.id ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
+                  <li key={channel.id} className={`channel-item ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
                     {isEditing ? (
                       <input
                         className="channel-inline-input"
@@ -364,7 +366,7 @@ export const ServerMain = ({
             channelName={currentVoiceChannelName}
             participants={currentVoiceParticipants}
             isJoining={isJoiningVoiceChannel}
-            pendingParticipant={user ? { name: user.firstName || user.first_name || user.email || "Вы", avatar: user.avatarUrl || user.avatar || "" } : null}
+            pendingParticipant={user ? { name: user.nickname || user.firstName || user.first_name || user.email || "Вы", avatar: user.avatarUrl || user.avatar || "" } : null}
             remoteShares={remoteScreenShares}
             selectedStreamUserId={selectedStreamUserId}
             selectedStream={selectedStream}

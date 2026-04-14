@@ -784,7 +784,9 @@ public class ChatHub : Hub
             user => user.id.ToString(),
             user =>
             {
-                var displayName = $"{user.first_name} {user.last_name}".Trim();
+                var displayName = string.IsNullOrWhiteSpace(user.nickname)
+                    ? $"{user.first_name} {user.last_name}".Trim()
+                    : user.nickname.Trim();
                 return new MessageReactionUserDto
                 {
                     UserId = user.id.ToString(),

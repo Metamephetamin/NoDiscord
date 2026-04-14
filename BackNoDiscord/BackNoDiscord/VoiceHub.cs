@@ -398,7 +398,7 @@ public class VoiceHub : Hub
         }
 
         var snapshot = _serverState.GetSnapshot(serverId);
-        var currentUser = new AuthenticatedUser(userId, string.Empty, string.Empty, string.Empty);
+        var currentUser = new AuthenticatedUser(userId, string.Empty, string.Empty, string.Empty, string.Empty);
         return ServerChannelAuthorization.CanAccessServer(serverId, currentUser, snapshot);
     }
 

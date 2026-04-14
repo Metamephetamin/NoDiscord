@@ -167,7 +167,7 @@ export function getMentionQueryContext(text, caretPosition) {
   };
 }
 
-export const getUserName = (user) => user?.firstName || user?.first_name || user?.name || "User";
+export const getUserName = (user) => user?.nickname || user?.firstName || user?.first_name || user?.name || "User";
 export const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
 

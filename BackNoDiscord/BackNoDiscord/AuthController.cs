@@ -344,6 +344,11 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = lastNameError });
         }
 
+        if (!AuthInputPolicies.TryNormalizeNickname(dto.nickname, out var nickname, out var nicknameError))
+        {
+            return BadRequest(new { message = nicknameError });
+        }
+
         if (!AuthInputPolicies.TryEnsureMatchingProfileNameScripts(firstName, lastName, out var nameScriptError))
         {
             return BadRequest(new { message = nameScriptError });
@@ -429,6 +434,7 @@ public class AuthController : ControllerBase
         {
             first_name = firstName,
             last_name = lastName,
+            nickname = nickname,
             email = normalizedEmail,
             // Email verification is temporarily disabled until SMTP is stabilized.
             is_email_verified = true,
@@ -689,6 +695,7 @@ public class AuthController : ControllerBase
             user.id,
             user.first_name,
             user.last_name,
+            user.nickname,
             email = user.email ?? string.Empty,
             user.is_email_verified,
             user.phone_number,
@@ -711,6 +718,7 @@ public class AuthController : ControllerBase
             id = user.id,
             first_name = user.first_name,
             last_name = user.last_name,
+            nickname = user.nickname,
             email = user.email ?? string.Empty,
             is_email_verified = user.is_email_verified,
             phone_number = user.phone_number ?? string.Empty,
@@ -797,6 +805,7 @@ public class AuthController : ControllerBase
         {
             new(JwtRegisteredClaimNames.Sub, user.id.ToString()),
             new(ClaimTypes.NameIdentifier, user.id.ToString()),
+            new("nickname", user.nickname),
             new("first_name", user.first_name),
             new("last_name", user.last_name)
         };
@@ -901,6 +910,9 @@ public class RegisterDto
     public string first_name { get; set; } = string.Empty;
 
     public string last_name { get; set; } = string.Empty;
+
+    [Required]
+    public string nickname { get; set; } = string.Empty;
 
     public string? email { get; set; }
 

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 
-const DEFAULT_PRODUCTION_API_URL = "https://api.85.198.68.187.sslip.io";
-const DEFAULT_PRODUCTION_LIVEKIT_URL = "wss://live.85.198.68.187.sslip.io";
+const DEFAULT_PRODUCTION_API_URL = "https://tendsec.ru";
+const DEFAULT_PRODUCTION_LIVEKIT_URL = "wss://tendsec.ru/livekit";
 
 const targetScript = String(process.argv[2] || "").trim();
 

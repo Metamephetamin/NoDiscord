@@ -1,4 +1,4 @@
-import { DEFAULT_SERVER_ICON, resolveStaticAssetUrl } from "./media";
+﻿import { DEFAULT_SERVER_ICON, resolveStaticAssetUrl } from "./media";
 import { normalizeMediaFrame, parseMediaFrame } from "./mediaFrames";
 import { getStoredUser } from "./auth";
 export const SERVERS_STORAGE_KEY = "nd_servers_v2";
@@ -89,6 +89,11 @@ export const createId = (prefix) => `${prefix}-${Math.random().toString(36).slic
 export const getDisplayName = (user) => {
   if (user?.isSelf) {
     return "Избранное";
+  }
+
+  const nickname = String(user?.nickname || user?.nick_name || "").trim();
+  if (nickname) {
+    return nickname;
   }
 
   const firstName = String(user?.firstName || user?.first_name || "").trim();
@@ -544,10 +549,20 @@ export const normalizeFriend = (friend) => ({
   id: String(friend?.id || ""),
   firstName: String(friend?.first_name || friend?.firstName || ""),
   lastName: String(friend?.last_name || friend?.lastName || ""),
+  nickname: String(friend?.nickname || friend?.nick_name || ""),
   name:
-    `${String(friend?.first_name || friend?.firstName || "").trim()} ${String(friend?.last_name || friend?.lastName || "").trim()}`.trim(),
+    String(friend?.nickname || friend?.nick_name || "").trim()
+    || `${String(friend?.first_name || friend?.firstName || "").trim()} ${String(friend?.last_name || friend?.lastName || "").trim()}`.trim(),
   email: String(friend?.email || ""),
   avatar: String(friend?.avatar_url || friend?.avatarUrl || friend?.avatar || ""),
+  avatarFrame: parseMediaFrame(friend?.avatarFrame, friend?.avatar_frame, friend?.avatarFrameJson, friend?.avatar_frame_json),
+  profileBackgroundUrl: String(friend?.profile_background_url || friend?.profileBackgroundUrl || friend?.profileBackground || ""),
+  profileBackgroundFrame: parseMediaFrame(
+    friend?.profileBackgroundFrame,
+    friend?.profile_background_frame,
+    friend?.profileBackgroundFrameJson,
+    friend?.profile_background_frame_json
+  ),
   directChannelId: String(friend?.directChannelId || ""),
   isSelf: Boolean(friend?.isSelf),
 });
@@ -582,4 +597,5 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
 ];
 export const uiSoundCache = new Map();
+
 

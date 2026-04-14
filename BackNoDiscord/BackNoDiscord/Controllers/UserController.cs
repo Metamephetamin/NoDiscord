@@ -25,6 +25,7 @@ public class UpdateProfileRequest
 {
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
+    public string? Nickname { get; set; }
     public string? ProfileBackgroundUrl { get; set; }
     public MediaFrameData? AvatarFrame { get; set; }
     public MediaFrameData? ProfileBackgroundFrame { get; set; }
@@ -73,6 +74,13 @@ public class UserController : ControllerBase
             return BadRequest(new { message = nameScriptError });
         }
 
+        var nicknameInput = request.Nickname;
+        var nickname = string.Empty;
+        if (nicknameInput != null && !AuthInputPolicies.TryNormalizeNickname(nicknameInput, out nickname, out var nicknameError))
+        {
+            return BadRequest(new { message = nicknameError });
+        }
+
         var user = await _dbContext.Users.FirstOrDefaultAsync(item => item.id == currentUserId, cancellationToken);
         if (user == null)
         {
@@ -81,6 +89,10 @@ public class UserController : ControllerBase
 
         user.first_name = firstName;
         user.last_name = lastName;
+        if (nicknameInput != null)
+        {
+            user.nickname = nickname;
+        }
         user.avatar_frame_json = MediaFrameSerializer.Serialize(request.AvatarFrame, allowNull: false);
         if (request.ProfileBackgroundUrl != null)
         {
@@ -96,6 +108,7 @@ public class UserController : ControllerBase
             id = user.id,
             first_name = user.first_name,
             last_name = user.last_name,
+            nickname = user.nickname,
             email = user.email,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
@@ -260,6 +273,7 @@ public class UserController : ControllerBase
             userId = user.id,
             first_name = user.first_name,
             last_name = user.last_name,
+            nickname = user.nickname,
             email = user.email ?? string.Empty,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),

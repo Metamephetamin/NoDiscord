@@ -20,7 +20,7 @@ const APP_PROTOCOL = "nodiscord";
 const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const APP_DISPLAY_NAME = "Tend";
 const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
-const DEFAULT_PACKAGED_API_URL = "https://api.85.198.68.187.sslip.io";
+const DEFAULT_PACKAGED_API_URL = "https://tendsec.ru";
 const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const resolveAppIconPath = () =>
@@ -834,12 +834,23 @@ const requestMediaAccess = async (mediaType) => {
 };
 
 const createWindow = () => {
+  const desktopTitleBarHeight = 28;
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     title: APP_DISPLAY_NAME,
     icon: resolveAppIconPath(),
     autoHideMenuBar: true,
+    titleBarStyle: "hidden",
+    ...(process.platform === "win32"
+      ? {
+          titleBarOverlay: {
+            color: "#111319",
+            symbolColor: "#dfe6f7",
+            height: desktopTitleBarHeight,
+          },
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

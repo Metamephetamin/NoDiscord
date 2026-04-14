@@ -500,6 +500,7 @@ export async function refreshAccessToken() {
             id: data.id,
             firstName: data.first_name || sessionCache.user?.firstName || "",
             lastName: data.last_name || sessionCache.user?.lastName || "",
+            nickname: data.nickname || sessionCache.user?.nickname || "",
             email: data.email || sessionCache.user?.email || "",
             isEmailVerified: Boolean(data.is_email_verified ?? sessionCache.user?.isEmailVerified ?? true),
             phoneNumber: data.phone_number || sessionCache.user?.phoneNumber || "",
