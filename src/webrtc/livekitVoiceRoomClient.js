@@ -21,6 +21,7 @@ import {
 import {
   DEFAULT_AVATAR,
   NOISE_SUPPRESSION_MODE_BROADCAST,
+  NOISE_SUPPRESSION_MODE_HARD_GATE,
   NOISE_SUPPRESSION_MODE_RNNOISE,
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
   NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
@@ -152,22 +153,16 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
           maxBitrate: Math.max(1_200_000, Math.round(maxBitrate * 0.32)),
           maxFramerate: Math.min(30, normalizedFps),
         });
-  const useSingleLayerQualityMode = normalizedResolution !== "720p" || normalizedFps > 30;
-
-  if (useSingleLayerQualityMode) {
-    return {
-      simulcast: false,
-      degradationPreference: "maintain-resolution",
-      screenShareEncoding,
-    };
-  }
+  const screenShareSimulcastLayers =
+    normalizedResolution === "720p"
+      ? [lowLayer]
+      : [lowLayer, mediumLayer];
 
   return {
     simulcast: true,
     degradationPreference: "maintain-resolution",
     screenShareEncoding,
-    screenShareSimulcastLayers:
-      normalizedResolution === "720p" ? [lowLayer] : [lowLayer, mediumLayer],
+    screenShareSimulcastLayers,
   };
 }
 
@@ -190,6 +185,10 @@ function normalizeNoiseSuppressionMode(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT
 
   if (mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
     return NOISE_SUPPRESSION_MODE_VOICE_ISOLATION;
+  }
+
+  if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
+    return NOISE_SUPPRESSION_MODE_HARD_GATE;
   }
 
   if (mode === NOISE_SUPPRESSION_MODE_RNNOISE || mode === LEGACY_NOISE_SUPPRESSION_MODE_KRISP) {
@@ -491,18 +490,17 @@ export function createVoiceRoomClient({
     noiseSuppression: true,
     autoGainControl:
       mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
-      mode === NOISE_SUPPRESSION_MODE_RNNOISE,
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     voiceIsolation:
       mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
-      mode === NOISE_SUPPRESSION_MODE_RNNOISE
+      mode === NOISE_SUPPRESSION_MODE_RNNOISE ||
+      mode === NOISE_SUPPRESSION_MODE_HARD_GATE
         ? true
         : undefined,
     googEchoCancellation: echoCancellationEnabled,
     googAutoGainControl:
       mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
-      mode === NOISE_SUPPRESSION_MODE_RNNOISE,
+      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     googNoiseSuppression: true,
     googHighpassFilter: true,
     googTypingNoiseDetection: true,
@@ -711,12 +709,23 @@ export function createVoiceRoomClient({
 
     if (mode === NOISE_SUPPRESSION_MODE_RNNOISE) {
       return {
-        openThreshold: 0.017,
-        closeThreshold: 0.009,
-        floorGain: 0.08,
-        attackTime: 0.01,
-        releaseTime: 0.13,
-        holdMs: 170,
+        openThreshold: 0.026,
+        closeThreshold: 0.014,
+        floorGain: 0.003,
+        attackTime: 0.006,
+        releaseTime: 0.075,
+        holdMs: 210,
+      };
+    }
+
+    if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
+      return {
+        openThreshold: 0.034,
+        closeThreshold: 0.019,
+        floorGain: 0.0008,
+        attackTime: 0.004,
+        releaseTime: 0.055,
+        holdMs: 240,
       };
     }
 
@@ -937,22 +946,51 @@ export function createVoiceRoomClient({
   });
 
   const buildRnnoiseVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 96,
-    mudCutFrequency: 220,
-    mudCutGain: -2.6,
-    boxCutFrequency: 560,
-    boxCutGain: -1.4,
-    presenceFrequency: 2600,
-    presenceGain: 2.5,
-    airFrequency: 5400,
-    airGain: 1.2,
-    lowPassFrequency: 8400,
-    threshold: -25,
-    knee: 20,
-    ratio: 5.4,
-    attack: 0.003,
-    release: 0.18,
+    highPassFrequency: 135,
+    highPassQ: 0.92,
+    mudCutFrequency: 250,
+    mudCutQ: 1.18,
+    mudCutGain: -3.8,
+    boxCutFrequency: 700,
+    boxCutQ: 1.35,
+    boxCutGain: -2.6,
+    presenceFrequency: 2100,
+    presenceQ: 1.22,
+    presenceGain: 3.8,
+    airFrequency: 4300,
+    airGain: 0.35,
+    lowPassFrequency: 6200,
+    lowPassQ: 0.82,
+    threshold: -31,
+    knee: 10,
+    ratio: 10.5,
+    attack: 0.002,
+    release: 0.11,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_RNNOISE),
+  });
+
+  const buildHardGateVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
+    highPassFrequency: 155,
+    highPassQ: 1.05,
+    mudCutFrequency: 290,
+    mudCutQ: 1.28,
+    mudCutGain: -4.6,
+    boxCutFrequency: 820,
+    boxCutQ: 1.45,
+    boxCutGain: -3.4,
+    presenceFrequency: 2050,
+    presenceQ: 1.28,
+    presenceGain: 4.4,
+    airFrequency: 3900,
+    airGain: -0.4,
+    lowPassFrequency: 5400,
+    lowPassQ: 0.95,
+    threshold: -34,
+    knee: 7,
+    ratio: 14,
+    attack: 0.0015,
+    release: 0.085,
+    noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
   });
 
   const connectLocalAudioGraph = (sourceNode) => {
@@ -961,6 +999,8 @@ export function createVoiceRoomClient({
       inputNode = buildNoiseIsolationChain(sourceNode);
     } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       inputNode = buildBroadcastVoiceChain(sourceNode);
+    } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
+      inputNode = buildHardGateVoiceChain(sourceNode);
     } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_RNNOISE) {
       inputNode = buildRnnoiseVoiceChain(sourceNode);
     } else {

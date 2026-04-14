@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import MobileProfileScreen from "../../components/MobileProfileScreen";
@@ -4005,12 +4005,17 @@ export default function MenuMain({
     {
       id: "voice_isolation",
       title: "Изоляция голоса",
-      description: "Только ваш голос: фон режется сильнее и речь выходит вперед.",
+      description: "Только ваш голос: фон режется сильнее и речь выходит вперёд.",
     },
     {
       id: "rnnoise",
       title: "RNNoise",
       description: "Бесплатное подавление фонового шума и клавиатуры на RNNoise, если Electron/Chromium его поддерживает.",
+    },
+    {
+      id: "hard_gate",
+      title: "Hard Gate",
+      description: "Максимально жёсткий speech-only режим: паузы почти полностью закрываются, а лишний фон режется агрессивнее.",
     },
     {
       id: "transparent",
@@ -4565,3 +4570,4 @@ export default function MenuMain({
     </MenuMainOverlayLayer>
   );
 }
+

@@ -15,7 +15,7 @@ export const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 export const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 export const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 export const MAX_PROFILE_NAME_LENGTH = 32;
-export const VOICE_INPUT_MODES = ["broadcast", "voice_isolation", "rnnoise", "transparent"];
+export const VOICE_INPUT_MODES = ["broadcast", "voice_isolation", "rnnoise", "hard_gate", "transparent"];
 export const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "general" },
   { id: "2", name: "gaming" },
