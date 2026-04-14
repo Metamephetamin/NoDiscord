@@ -1132,9 +1132,11 @@ export default function TextChat({
     openMediaPreview,
     updateMediaPreviewIndex,
     updateMediaPreviewZoom,
+    updateMediaPreviewPan,
     resetMediaPreviewZoom,
     openMessageContextMenu,
     handleDownloadAttachment,
+    handleDownloadAllMediaPreviewItems,
     handleToggleReaction,
     handleOpenMediaPreviewFullscreen,
     handleForwardSubmit,
@@ -1159,6 +1161,7 @@ export default function TextChat({
     setMessageContextMenu,
     setReactionStickerPanelOpen,
     setMediaPreview,
+    mediaPreview,
     mediaPreviewVideoRef,
     messageContextMenu,
     pinnedMessageIdSet,
@@ -1423,9 +1426,11 @@ export default function TextChat({
       mediaPreviewVideoRef={mediaPreviewVideoRef}
       setMediaPreview={setMediaPreview}
       handleDownloadAttachment={handleDownloadAttachment}
+      handleDownloadAllMediaPreviewItems={handleDownloadAllMediaPreviewItems}
       handleOpenMediaPreviewFullscreen={handleOpenMediaPreviewFullscreen}
       updateMediaPreviewIndex={updateMediaPreviewIndex}
       updateMediaPreviewZoom={updateMediaPreviewZoom}
+      updateMediaPreviewPan={updateMediaPreviewPan}
       resetMediaPreviewZoom={resetMediaPreviewZoom}
       contextMenuRef={contextMenuRef}
       messageContextMenu={messageContextMenu}

@@ -48,6 +48,7 @@ export default function useTextChatMessageActions({
   setMessageContextMenu,
   setReactionStickerPanelOpen,
   setMediaPreview,
+  mediaPreview,
   mediaPreviewVideoRef,
   messageContextMenu,
   pinnedMessageIdSet,
@@ -223,6 +224,8 @@ export default function useTextChatMessageActions({
       items,
       activeIndex,
       zoom: 1,
+      panX: 0,
+      panY: 0,
     });
   };
 
@@ -240,20 +243,44 @@ export default function useTextChatMessageActions({
         ...nextItem,
         activeIndex: nextIndex,
         zoom: 1,
+        panX: 0,
+        panY: 0,
       };
     });
   };
 
   const updateMediaPreviewZoom = (delta) => {
-    setMediaPreview((current) => (
-      current
-        ? { ...current, zoom: clampNumber((Number(current.zoom) || 1) + delta, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_MAX_ZOOM) }
-        : current
-    ));
+    setMediaPreview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextZoom = clampNumber((Number(current.zoom) || 1) + delta, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_MAX_ZOOM);
+      return {
+        ...current,
+        zoom: nextZoom,
+        panX: nextZoom <= 1 ? 0 : Number(current.panX) || 0,
+        panY: nextZoom <= 1 ? 0 : Number(current.panY) || 0,
+      };
+    });
   };
 
   const resetMediaPreviewZoom = () => {
-    setMediaPreview((current) => (current ? { ...current, zoom: 1 } : current));
+    setMediaPreview((current) => (current ? { ...current, zoom: 1, panX: 0, panY: 0 } : current));
+  };
+
+  const updateMediaPreviewPan = (deltaX, deltaY) => {
+    setMediaPreview((current) => {
+      if (!current || (Number(current.zoom) || 1) <= 1) {
+        return current;
+      }
+
+      return {
+        ...current,
+        panX: (Number(current.panX) || 0) + Number(deltaX || 0),
+        panY: (Number(current.panY) || 0) + Number(deltaY || 0),
+      };
+    });
   };
 
   const openMessageContextMenu = (event, messageItem, isOwnMessage) => {
@@ -470,6 +497,27 @@ export default function useTextChatMessageActions({
     }
   };
 
+  const handleDownloadAllMediaPreviewItems = async () => {
+    const previewItems = Array.isArray(mediaPreview?.items) ? mediaPreview.items : [];
+    if (previewItems.length < 2) {
+      return;
+    }
+
+    for (const item of previewItems) {
+      // eslint-disable-next-line no-await-in-loop
+      await handleDownloadAttachment({
+        attachmentKind: item.type,
+        attachmentUrl: item.url,
+        attachmentSourceUrl: item.sourceUrl || item.url,
+        attachmentName: item.name,
+        attachmentContentType: item.contentType || "",
+        attachmentEncryption: item.attachmentEncryption || null,
+        messageId: item.messageId || "",
+        attachmentIndex: item.attachmentIndex || 0,
+      });
+    }
+  };
+
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
     const normalizedPayload = Array.isArray(payload)
       ? payload.filter((item) => {
@@ -643,9 +691,11 @@ export default function useTextChatMessageActions({
     openMediaPreview,
     updateMediaPreviewIndex,
     updateMediaPreviewZoom,
+    updateMediaPreviewPan,
     resetMediaPreviewZoom,
     openMessageContextMenu,
     handleDownloadAttachment,
+    handleDownloadAllMediaPreviewItems,
     handleToggleReaction,
     handleOpenMediaPreviewFullscreen,
     handleForwardSubmit,

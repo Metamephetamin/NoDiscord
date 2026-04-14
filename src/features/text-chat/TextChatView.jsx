@@ -90,9 +90,11 @@ export default function TextChatView(props) {
     mediaPreviewVideoRef,
     setMediaPreview,
     handleDownloadAttachment,
+    handleDownloadAllMediaPreviewItems,
     handleOpenMediaPreviewFullscreen,
     updateMediaPreviewIndex,
     updateMediaPreviewZoom,
+    updateMediaPreviewPan,
     resetMediaPreviewZoom,
     contextMenuRef,
     messageContextMenu,
@@ -235,9 +237,11 @@ export default function TextChatView(props) {
               attachmentIndex: mediaPreview.attachmentIndex || 0,
             })
           }
+          onDownloadAll={handleDownloadAllMediaPreviewItems}
           onFullscreen={handleOpenMediaPreviewFullscreen}
           onNavigate={updateMediaPreviewIndex}
           onZoom={updateMediaPreviewZoom}
+          onPan={updateMediaPreviewPan}
           onResetZoom={resetMediaPreviewZoom}
         />
       </Suspense>

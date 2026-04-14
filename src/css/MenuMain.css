@@ -2611,6 +2611,14 @@
   min-height: 0;
 }
 
+.menu__main--mobile .mobile-shell__workspace--friends,
+.menu__main--mobile .chat__wrapper--friends,
+.menu__main--mobile .friends-main,
+.menu__main--mobile .friends-main__content {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .menu__main--mobile .friends-main__toolbar {
   padding: 8px 0 10px;
   border-bottom: 0;
