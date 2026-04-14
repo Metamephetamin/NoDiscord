@@ -18,6 +18,8 @@ export const FriendsSidebar = ({
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
+  onOpenUserContextMenu,
+  overlayContent = null,
   getDisplayName,
 }) => (
   <aside className="sidebar__channels sidebar__channels--friends">
@@ -71,6 +73,7 @@ export const FriendsSidebar = ({
                   type="button"
                   className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""}`}
                   onClick={() => onOpenDirectChat(friend.id)}
+                  onContextMenu={(event) => onOpenUserContextMenu?.(event, friend)}
                 >
                   <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
                   <span className="friends-directs__meta">
@@ -89,6 +92,7 @@ export const FriendsSidebar = ({
     </div>
 
     {profilePanel}
+    {overlayContent}
   </aside>
 );
 
@@ -116,6 +120,7 @@ export const FriendsMain = ({
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
+  onStartDirectCall,
   onFriendRequestAction,
   onFriendSearchSubmit,
   onFriendSearchChange,
@@ -151,6 +156,7 @@ export const FriendsMain = ({
               user={user}
               directTargets={directConversationTargets}
               onOpenDirectChat={onOpenDirectChat}
+              onStartDirectCall={onStartDirectCall}
             />
           </div>
         ) : friendsPageSection === "friends" ? (

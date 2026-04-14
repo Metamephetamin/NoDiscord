@@ -301,6 +301,13 @@
   bottom: calc(100% + 12px);
 }
 
+.avatar-shell {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+
 .avatar {
   width: 42px;
   height: 42px;
@@ -312,9 +319,22 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.avatar--speaking {
-  border-color: #8ef1a3;
-  box-shadow: none;
+.avatar-shell--speaking::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #65e48f;
+  border: 2px solid #101319;
+  box-shadow: 0 0 12px rgba(101, 228, 143, 0.42);
+}
+
+.avatar-shell--speaking .avatar {
+  border-color: rgba(101, 228, 143, 0.78);
+  box-shadow: 0 0 0 2px rgba(101, 228, 143, 0.12);
 }
 
 .profile__names {

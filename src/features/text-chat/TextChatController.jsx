@@ -61,6 +61,7 @@ export default function TextChat({
   navigationRequest = null,
   onNavigationIndexChange = null,
   onOpenDirectChat = null,
+  onStartDirectCall = null,
 }) {
   const [message, setMessage] = useState("");
   const [messageEditState, setMessageEditState] = useState(null);
@@ -254,7 +255,7 @@ export default function TextChat({
     }
 
     const matchedDirectTarget = directTargets.find((target) => String(target?.id || "") === userId) || null;
-    const username = String(messageItem?.username || matchedDirectTarget?.name || matchedDirectTarget?.firstName || "User").trim() || "User";
+    const username = String(messageItem?.username || getUserName(matchedDirectTarget) || "User").trim() || "User";
     const avatarUrl = String(messageItem?.photoUrl || matchedDirectTarget?.avatar || matchedDirectTarget?.avatarUrl || "").trim();
     const avatarFrame = matchedDirectTarget?.avatarFrame || null;
     const backgroundUrl = String(matchedDirectTarget?.profileBackgroundUrl || matchedDirectTarget?.profile_background_url || "").trim();
@@ -317,6 +318,16 @@ export default function TextChat({
 
     onOpenDirectChat(profileModal.userId);
     setActionFeedback({ tone: "info", message: `Открываем чат с ${profileModal.username}` });
+    setProfileModal(null);
+  };
+
+  const handleStartDirectCallFromProfileModal = () => {
+    if (!profileModal?.userId || typeof onStartDirectCall !== "function" || profileModal.isSelf) {
+      return;
+    }
+
+    onStartDirectCall(profileModal.userId);
+    setActionFeedback({ tone: "info", message: `Запускаем звонок с ${profileModal.username}` });
     setProfileModal(null);
   };
 
@@ -1426,6 +1437,7 @@ export default function TextChat({
       profileModal={profileModal}
       closeProfileModal={closeProfileModal}
       handleProfileModalDirectChat={handleOpenDirectChatFromProfileModal}
+      handleProfileModalStartCall={handleStartDirectCallFromProfileModal}
       handleProfileModalAddFriend={handleAddFriendFromProfileModal}
       handleProfileModalCopyUserId={handleCopyUserIdFromProfileModal}
       primaryReactions={primaryReactions}

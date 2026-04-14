@@ -73,7 +73,7 @@ public class VoiceHub : Hub
             throw new HubException("channelName is required");
         }
 
-        if (!TryAuthorizeChannelAccess(normalizedChannelName, participant.UserId))
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelName, participant.UserId))
         {
             throw new HubException("Forbidden");
         }
@@ -130,6 +130,91 @@ public class VoiceHub : Hub
         _channels.RemoveUser(currentUser.UserId);
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+    }
+
+    public async Task StartDirectCall(string targetUserId, string channelName, string avatar)
+    {
+        if (!TryBuildCurrentParticipant(avatar, out var participant) ||
+            string.IsNullOrWhiteSpace(targetUserId) ||
+            !await TryAuthorizeDirectCallAsync(channelName, participant.UserId, targetUserId))
+        {
+            return;
+        }
+
+        if (!_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+        {
+            await Clients.Caller.SendAsync("voice:direct-call-declined", new DirectCallSignalPayload
+            {
+                ChannelName = channelName,
+                FromUserId = targetUserId,
+                Reason = "offline"
+            });
+            return;
+        }
+
+        await Clients.Client(targetConnectionId).SendAsync("voice:direct-call-incoming", new DirectCallSignalPayload
+        {
+            ChannelName = channelName,
+            FromUserId = participant.UserId,
+            FromName = participant.Name,
+            FromAvatar = participant.Avatar
+        });
+    }
+
+    public async Task AcceptDirectCall(string targetUserId, string channelName, string avatar)
+    {
+        if (!TryBuildCurrentParticipant(avatar, out var participant) ||
+            string.IsNullOrWhiteSpace(targetUserId) ||
+            !await TryAuthorizeDirectCallAsync(channelName, participant.UserId, targetUserId) ||
+            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+        {
+            return;
+        }
+
+        await Clients.Client(targetConnectionId).SendAsync("voice:direct-call-accepted", new DirectCallSignalPayload
+        {
+            ChannelName = channelName,
+            FromUserId = participant.UserId,
+            FromName = participant.Name,
+            FromAvatar = participant.Avatar
+        });
+    }
+
+    public async Task DeclineDirectCall(string targetUserId, string channelName, string reason = "declined")
+    {
+        if (!TryBuildCurrentParticipant(string.Empty, out var participant) ||
+            string.IsNullOrWhiteSpace(targetUserId) ||
+            !await TryAuthorizeDirectCallAsync(channelName, participant.UserId, targetUserId) ||
+            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+        {
+            return;
+        }
+
+        await Clients.Client(targetConnectionId).SendAsync("voice:direct-call-declined", new DirectCallSignalPayload
+        {
+            ChannelName = channelName,
+            FromUserId = participant.UserId,
+            FromName = participant.Name,
+            Reason = UploadPolicies.TrimToLength(reason, 32)
+        });
+    }
+
+    public async Task EndDirectCall(string targetUserId, string channelName)
+    {
+        if (!TryBuildCurrentParticipant(string.Empty, out var participant) ||
+            string.IsNullOrWhiteSpace(targetUserId) ||
+            !await TryAuthorizeDirectCallAsync(channelName, participant.UserId, targetUserId) ||
+            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+        {
+            return;
+        }
+
+        await Clients.Client(targetConnectionId).SendAsync("voice:direct-call-ended", new DirectCallSignalPayload
+        {
+            ChannelName = channelName,
+            FromUserId = participant.UserId,
+            FromName = participant.Name
+        });
     }
 
     public async Task UpdateScreenShareStatus(string userId, bool isSharing)
@@ -390,16 +475,46 @@ public class VoiceHub : Hub
         return _serverState.GetSnapshot(serverId);
     }
 
-    private bool TryAuthorizeChannelAccess(string channelName, string userId)
+    private async Task<bool> TryAuthorizeChannelAccessAsync(string channelName, string userId)
     {
+        var currentUser = new AuthenticatedUser(userId, string.Empty, string.Empty, string.Empty, string.Empty);
+        if (await DirectCallAuthorization.CanAccessChannelAsync(_context, channelName, currentUser, Context.ConnectionAborted))
+        {
+            return true;
+        }
+
         if (!ServerChannelAuthorization.TryGetServerIdFromVoiceChannelName(channelName, out var serverId))
         {
             return false;
         }
 
         var snapshot = _serverState.GetSnapshot(serverId);
-        var currentUser = new AuthenticatedUser(userId, string.Empty, string.Empty, string.Empty, string.Empty);
         return ServerChannelAuthorization.CanAccessServer(serverId, currentUser, snapshot);
+    }
+
+    private async Task<bool> TryAuthorizeDirectCallAsync(string channelName, string currentUserId, string targetUserId)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser) ||
+            !string.Equals(currentUser.UserId, currentUserId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!DirectCallAuthorization.TryParseChannelName(channelName, out var lowUserId, out var highUserId) ||
+            !int.TryParse(currentUserId, out var currentUserNumericId) ||
+            !int.TryParse(targetUserId, out var targetUserNumericId))
+        {
+            return false;
+        }
+
+        var expectedLowUserId = Math.Min(currentUserNumericId, targetUserNumericId);
+        var expectedHighUserId = Math.Max(currentUserNumericId, targetUserNumericId);
+        if (lowUserId != expectedLowUserId || highUserId != expectedHighUserId)
+        {
+            return false;
+        }
+
+        return await DirectCallAuthorization.CanAccessChannelAsync(_context, channelName, currentUser, Context.ConnectionAborted);
     }
 
     private static string NormalizeMimeType(string mimeType, string fallback)
@@ -428,6 +543,15 @@ public class IceCandidatePayload
 {
     public string FromUserId { get; set; } = string.Empty;
     public string Candidate { get; set; } = string.Empty;
+}
+
+public class DirectCallSignalPayload
+{
+    public string ChannelName { get; set; } = string.Empty;
+    public string FromUserId { get; set; } = string.Empty;
+    public string FromName { get; set; } = string.Empty;
+    public string FromAvatar { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }
 
 public class VoiceStatePayload

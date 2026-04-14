@@ -155,6 +155,11 @@ export function writePinnedMessages(storageKey, pinnedMessages) {
 }
 
 export function getTargetDisplayName(target) {
+  const nickname = String(target?.nickname || target?.nick_name || "").trim();
+  if (nickname) {
+    return nickname;
+  }
+
   const displayName = String(target?.name || "").trim();
   if (displayName) {
     return displayName;

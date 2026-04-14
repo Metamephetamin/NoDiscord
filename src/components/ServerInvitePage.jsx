@@ -4,8 +4,9 @@ import "../css/ServerInvitePage.css";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode, writePendingInviteAcceptCode } from "../utils/inviteFlow";
-import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
+import { DEFAULT_SERVER_ICON } from "../utils/media";
 import { parseMediaFrame } from "../utils/mediaFrames";
+import AnimatedAvatar from "./AnimatedAvatar";
 
 const getDisplayName = (user) =>
   user?.nickname || user?.firstName || user?.first_name || user?.name || user?.email || "User";
@@ -67,7 +68,6 @@ export default function ServerInvitePage({ user, onInviteAccepted, inviteCode: i
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [hasBrokenServerIcon, setHasBrokenServerIcon] = useState(false);
   const autoAcceptAttemptedRef = useRef("");
 
   const normalizedInviteCode = useMemo(() => {
@@ -78,22 +78,17 @@ export default function ServerInvitePage({ user, onInviteAccepted, inviteCode: i
   const rawServerIconValue =
     preview?.serverIcon ||
     preview?.server_icon ||
+    preview?.iconUrl ||
+    preview?.icon_url ||
     preview?.icon ||
     preview?.Icon ||
     "";
-  const serverIconUrl = hasBrokenServerIcon
-    ? DEFAULT_SERVER_ICON
-    : resolveMediaUrl(rawServerIconValue, DEFAULT_SERVER_ICON);
   const serverIconFrame = useMemo(
     () => parseMediaFrame(preview?.serverIconFrame, preview?.server_icon_frame, preview?.iconFrame, preview?.icon_frame),
     [preview?.serverIconFrame, preview?.server_icon_frame, preview?.iconFrame, preview?.icon_frame]
   );
   const serverTypeLabel = useMemo(() => getServerTypeLabel(preview), [preview]);
   const serverDescription = useMemo(() => getServerDescription(preview), [preview]);
-
-  useEffect(() => {
-    setHasBrokenServerIcon(false);
-  }, [rawServerIconValue, normalizedInviteCode]);
 
   useEffect(() => {
     if (!normalizedInviteCode) {
@@ -281,12 +276,12 @@ export default function ServerInvitePage({ user, onInviteAccepted, inviteCode: i
         <div className="server-invite-card__badge">Приглашение</div>
 
         <div className="server-invite-card__server">
-          <img
+          <AnimatedAvatar
             className="server-invite-card__icon"
-            src={serverIconUrl}
-            onError={() => setHasBrokenServerIcon(true)}
+            src={rawServerIconValue}
+            fallback={DEFAULT_SERVER_ICON}
             alt={preview.serverName || "Сервер"}
-            style={serverIconFrame ? { objectPosition: `${serverIconFrame.x * 100}% ${serverIconFrame.y * 100}%` } : undefined}
+            frame={serverIconFrame}
           />
           <div className="server-invite-card__copy">
             <h1>{preview.serverName || "Без названия"}</h1>

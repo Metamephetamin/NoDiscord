@@ -139,7 +139,9 @@ const VoiceChannelList = ({
                     key={participant.userId}
                     className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}
                   >
-                    <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} />
+                    <span className="participant-item__avatar-shell" aria-hidden="true">
+                      <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} />
+                    </span>
                     <span className="participant-item__name">{participant.name}</span>
                     <span
                       className="participant-item__role-dot"

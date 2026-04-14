@@ -262,6 +262,10 @@ export function createVoiceRoomClient({
   onSelfVoiceStateChanged,
   onMicLevelChanged,
   onAudioDevicesChanged,
+  onIncomingDirectCall,
+  onDirectCallAccepted,
+  onDirectCallDeclined,
+  onDirectCallEnded,
 } = {}) {
   let signalConnection = null;
   let signalConnectPromise = null;
@@ -2098,6 +2102,42 @@ export function createVoiceRoomClient({
         });
       });
 
+      signalConnection.on("voice:direct-call-incoming", (payload) => {
+        onIncomingDirectCall?.({
+          channelName: payload?.channelName || payload?.ChannelName || "",
+          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+          fromName: payload?.fromName || payload?.FromName || "",
+          fromAvatar: payload?.fromAvatar || payload?.FromAvatar || "",
+          reason: payload?.reason || payload?.Reason || "",
+        });
+      });
+
+      signalConnection.on("voice:direct-call-accepted", (payload) => {
+        onDirectCallAccepted?.({
+          channelName: payload?.channelName || payload?.ChannelName || "",
+          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+          fromName: payload?.fromName || payload?.FromName || "",
+          fromAvatar: payload?.fromAvatar || payload?.FromAvatar || "",
+        });
+      });
+
+      signalConnection.on("voice:direct-call-declined", (payload) => {
+        onDirectCallDeclined?.({
+          channelName: payload?.channelName || payload?.ChannelName || "",
+          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+          fromName: payload?.fromName || payload?.FromName || "",
+          reason: payload?.reason || payload?.Reason || "",
+        });
+      });
+
+      signalConnection.on("voice:direct-call-ended", (payload) => {
+        onDirectCallEnded?.({
+          channelName: payload?.channelName || payload?.ChannelName || "",
+          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+          fromName: payload?.fromName || payload?.FromName || "",
+        });
+      });
+
       signalConnection.onreconnected(async () => {
         if (!currentUser) {
           return;
@@ -2221,6 +2261,45 @@ export function createVoiceRoomClient({
 
       currentChannel = null;
       onChannelChanged?.(null);
+    },
+
+    async startDirectCall(targetUserId, channelName, user) {
+      await ensureSignalConnection(user);
+      await signalConnection.invoke(
+        "StartDirectCall",
+        String(targetUserId || ""),
+        channelName,
+        getAvatar(user)
+      );
+    },
+
+    async acceptDirectCall(targetUserId, channelName, user) {
+      await ensureSignalConnection(user);
+      await signalConnection.invoke(
+        "AcceptDirectCall",
+        String(targetUserId || ""),
+        channelName,
+        getAvatar(user)
+      );
+    },
+
+    async declineDirectCall(targetUserId, channelName, reason = "declined", user = currentUser) {
+      await ensureSignalConnection(user);
+      await signalConnection.invoke(
+        "DeclineDirectCall",
+        String(targetUserId || ""),
+        channelName,
+        reason
+      );
+    },
+
+    async endDirectCall(targetUserId, channelName, user = currentUser) {
+      await ensureSignalConnection(user);
+      await signalConnection.invoke(
+        "EndDirectCall",
+        String(targetUserId || ""),
+        channelName
+      );
     },
 
     async startScreenShare({ resolution = "1080p", fps = 60, shareAudio = false } = {}) {

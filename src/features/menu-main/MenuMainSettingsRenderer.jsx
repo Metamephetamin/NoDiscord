@@ -25,7 +25,9 @@ export function MenuMainSettingsContent({
   settingsTab,
   profileBackgroundSrc,
   profileDraft,
+  profileDisplayName,
   profileStatus,
+  maxProfileNicknameLength,
   user,
   avatarInputRef,
   profileBackgroundInputRef,
@@ -103,11 +105,12 @@ export function MenuMainSettingsContent({
           profileBackgroundFrame={profileDraft.profileBackgroundFrame}
           avatarSrc={user?.avatarUrl || user?.avatar}
           avatarFrame={getUserAvatarFrame(user)}
-          displayName={getDisplayName(user)}
+          displayName={profileDisplayName || getDisplayName(user)}
           email={profileDraft.email}
           profileDraft={profileDraft}
           profileStatus={profileStatus}
           maxProfileNameLength={MAX_PROFILE_NAME_LENGTH}
+          maxNicknameLength={maxProfileNicknameLength}
           onSubmit={handleProfileSave}
           onChangeAvatar={() => avatarInputRef.current?.click()}
           onChangeBackground={() => profileBackgroundInputRef.current?.click()}

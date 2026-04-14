@@ -104,6 +104,7 @@ export default function TextChatView(props) {
     profileModal,
     closeProfileModal,
     handleProfileModalDirectChat,
+    handleProfileModalStartCall,
     handleProfileModalAddFriend,
     handleProfileModalCopyUserId,
     primaryReactions,
@@ -261,6 +262,7 @@ export default function TextChatView(props) {
         profile={profileModal}
         onClose={closeProfileModal}
         onOpenDirectChat={handleProfileModalDirectChat}
+        onStartDirectCall={handleProfileModalStartCall}
         onAddFriend={handleProfileModalAddFriend}
         onCopyUserId={handleProfileModalCopyUserId}
       />

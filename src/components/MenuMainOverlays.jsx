@@ -354,6 +354,82 @@ export const CameraModal = ({
   );
 };
 
+export const DirectCallOverlay = ({
+  call,
+  isMicMuted,
+  onAccept,
+  onDecline,
+  onEnd,
+  onToggleMic,
+}) => {
+  if (!call || call.status === "idle") {
+    return null;
+  }
+
+  const isIncoming = call.status === "incoming";
+  const isConnected = call.status === "connected";
+  const isConnecting = call.status === "connecting";
+  const statusLabel =
+    call.statusLabel
+    || (isIncoming
+      ? "Входящий звонок"
+      : isConnected
+        ? "Идёт разговор"
+        : isConnecting
+          ? "Подключаем звонок"
+          : "Ожидаем ответ");
+
+  return (
+    <div className="direct-call-overlay">
+      <div className="direct-call-overlay__backdrop" />
+      <div className="direct-call-overlay__card" role="dialog" aria-modal="true" aria-label={`Звонок с ${call.peerName || "пользователем"}`}>
+        <div className="direct-call-overlay__pulse" aria-hidden="true" />
+        <AnimatedAvatar
+          className={`direct-call-overlay__avatar ${isConnected ? "direct-call-overlay__avatar--connected" : ""}`}
+          src={call.peerAvatar || ""}
+          alt={call.peerName || "Аватар"}
+          frame={call.peerAvatarFrame}
+        />
+        <div className="direct-call-overlay__copy">
+          <strong>{call.peerName || "Пользователь"}</strong>
+          <span>{statusLabel}</span>
+        </div>
+
+        <div className="direct-call-overlay__actions">
+          {isIncoming ? (
+            <>
+              <button type="button" className="direct-call-overlay__button direct-call-overlay__button--decline" onClick={onDecline}>
+                Отклонить
+              </button>
+              <button type="button" className="direct-call-overlay__button direct-call-overlay__button--accept" onClick={onAccept}>
+                Ответить
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`direct-call-overlay__button direct-call-overlay__button--mute ${isMicMuted ? "direct-call-overlay__button--active" : ""}`}
+                onClick={onToggleMic}
+                disabled={!isConnected}
+              >
+                {isMicMuted ? "Микрофон выкл" : "Микрофон"}
+              </button>
+              <button
+                type="button"
+                className="direct-call-overlay__button direct-call-overlay__button--decline"
+                onClick={isConnected ? onEnd : onDecline}
+              >
+                {isConnected ? "Завершить" : "Отменить"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const MediaFrameEditorOverlay = ({
   state,
   defaultServerIcon,

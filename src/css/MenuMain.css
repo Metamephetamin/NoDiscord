@@ -7188,3 +7188,169 @@
   color: #9ba8c4;
   text-align: center;
 }
+
+.direct-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.direct-call-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top, rgba(54, 71, 120, 0.24), transparent 34%),
+    radial-gradient(circle at bottom, rgba(18, 23, 39, 0.64), transparent 42%),
+    rgba(7, 9, 15, 0.82);
+  backdrop-filter: blur(14px);
+}
+
+.direct-call-overlay__card {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  min-height: 420px;
+  padding: 42px 32px 30px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(19, 23, 35, 0.96), rgba(11, 13, 21, 0.98));
+  box-shadow: 0 32px 120px rgba(0, 0, 0, 0.48);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  overflow: hidden;
+}
+
+.direct-call-overlay__pulse {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(98, 122, 255, 0.28), rgba(98, 122, 255, 0.04) 55%, transparent 72%);
+  filter: blur(10px);
+  animation: direct-call-pulse 2.8s ease-in-out infinite;
+}
+
+.direct-call-overlay__avatar {
+  position: relative;
+  z-index: 1;
+  width: 132px;
+  height: 132px;
+  border-radius: 999px;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.36);
+}
+
+.direct-call-overlay__avatar--connected {
+  box-shadow: 0 0 0 8px rgba(92, 214, 141, 0.12), 0 18px 52px rgba(0, 0, 0, 0.36);
+}
+
+.direct-call-overlay__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.direct-call-overlay__copy strong {
+  color: #fff;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.direct-call-overlay__copy span {
+  color: #aeb8cf;
+  font-size: 15px;
+}
+
+.direct-call-overlay__actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.direct-call-overlay__button {
+  min-width: 132px;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  color: #f5f7ff;
+  cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+}
+
+.direct-call-overlay__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.direct-call-overlay__button:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
+.direct-call-overlay__button--accept {
+  background: linear-gradient(135deg, #31b86e, #239b59);
+  box-shadow: 0 16px 34px rgba(36, 155, 89, 0.28);
+}
+
+.direct-call-overlay__button--decline {
+  background: linear-gradient(135deg, #cf4754, #a92d3a);
+  box-shadow: 0 16px 34px rgba(169, 45, 58, 0.28);
+}
+
+.direct-call-overlay__button--mute {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.direct-call-overlay__button--active {
+  background: rgba(98, 122, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(98, 122, 255, 0.26);
+}
+
+@keyframes direct-call-pulse {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.78;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .direct-call-overlay {
+    padding: 16px;
+  }
+
+  .direct-call-overlay__card {
+    min-height: 360px;
+    padding: 34px 20px 24px;
+    border-radius: 24px;
+  }
+
+  .direct-call-overlay__copy strong {
+    font-size: 28px;
+  }
+
+  .direct-call-overlay__button {
+    min-width: 120px;
+  }
+}

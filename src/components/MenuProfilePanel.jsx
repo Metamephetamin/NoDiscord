@@ -232,7 +232,9 @@ export default function MenuProfilePanel({
       <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
         <div className="profile__identity-row">
           <button type="button" className="profile__identity" onClick={onOpenProfileSettings}>
-            <AnimatedAvatar className={`avatar ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar--speaking" : ""}`} src={userAvatarSrc} alt="avatar" frame={userAvatarFrame} />
+            <span className={`avatar-shell ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar-shell--speaking" : ""}`} aria-hidden="true">
+              <AnimatedAvatar className="avatar" src={userAvatarSrc} alt="avatar" frame={userAvatarFrame} />
+            </span>
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={onAvatarChange} />
             <input
               ref={serverIconInputRef}

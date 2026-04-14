@@ -189,18 +189,38 @@
   font-size: 13px;
 }
 
+.participant-item__avatar-shell {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
 .participant-item__avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid transparent;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-.participant-item--speaking img {
-  border-color: #43c46a;
-  box-shadow: 0 0 0 3px rgba(67, 196, 106, 0.22);
+.participant-item--speaking .participant-item__avatar {
+  border-color: rgba(86, 220, 124, 0.8);
+  box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.16);
+}
+
+.participant-item--speaking .participant-item__avatar-shell::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5ce28d;
+  border: 2px solid #171b26;
+  box-shadow: 0 0 10px rgba(92, 226, 141, 0.42);
 }
 
 .participant-item__name {

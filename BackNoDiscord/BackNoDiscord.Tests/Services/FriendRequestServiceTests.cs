@@ -112,11 +112,11 @@ public class FriendRequestServiceTests
     private static void SeedUsers(AppDbContext context)
     {
         context.Users.AddRange(
-            new User { id = 1, first_name = "Alpha", last_name = "One", email = "alpha@example.com", password_hash = "hash" },
-            new User { id = 2, first_name = "Beta", last_name = "Two", email = "beta@example.com", password_hash = "hash" },
-            new User { id = 3, first_name = "Gamma", last_name = "Three", email = "gamma@example.com", password_hash = "hash" },
-            new User { id = 4, first_name = "Delta", last_name = "Four", email = "delta@example.com", password_hash = "hash" },
-            new User { id = 5, first_name = "Epsilon", last_name = "Five", email = "epsilon@example.com", password_hash = "hash" });
+            new User { id = 1, first_name = "Alpha", last_name = "One", nickname = "Alpha One", email = "alpha@example.com", password_hash = "hash" },
+            new User { id = 2, first_name = "Beta", last_name = "Two", nickname = "Beta Two", email = "beta@example.com", password_hash = "hash" },
+            new User { id = 3, first_name = "Gamma", last_name = "Three", nickname = "Gamma Three", email = "gamma@example.com", password_hash = "hash" },
+            new User { id = 4, first_name = "Delta", last_name = "Four", nickname = "Delta Four", email = "delta@example.com", password_hash = "hash" },
+            new User { id = 5, first_name = "Epsilon", last_name = "Five", nickname = "Epsilon Five", email = "epsilon@example.com", password_hash = "hash" });
         context.SaveChanges();
     }
 }

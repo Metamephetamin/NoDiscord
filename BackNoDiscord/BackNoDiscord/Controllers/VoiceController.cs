@@ -37,12 +37,14 @@ public class VoiceController : ControllerBase
     private readonly ChannelService _channels;
     private readonly IHubContext<VoiceHub> _hub;
     private readonly ILiveKitTokenService _liveKitTokenService;
+    private readonly AppDbContext _context;
 
-    public VoiceController(ChannelService channels, IHubContext<VoiceHub> hub, ILiveKitTokenService liveKitTokenService)
+    public VoiceController(ChannelService channels, IHubContext<VoiceHub> hub, ILiveKitTokenService liveKitTokenService, AppDbContext context)
     {
         _channels = channels;
         _hub = hub;
         _liveKitTokenService = liveKitTokenService;
+        _context = context;
     }
 
     [HttpPost("join")]
@@ -105,18 +107,19 @@ public class VoiceController : ControllerBase
     }
 
     [HttpPost("livekit-session")]
-    public IActionResult CreateLiveKitSession([FromBody] LiveKitSessionDto dto)
+    public async Task<IActionResult> CreateLiveKitSession([FromBody] LiveKitSessionDto dto, CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
             return Unauthorized();
         }
 
-        if (!TryAuthorizeChannel(dto.Channel, currentUser, out var normalizedChannel))
+        if (!await TryAuthorizeChannelAsync(dto.Channel, currentUser, cancellationToken))
         {
             return Forbid();
         }
 
+        var normalizedChannel = UploadPolicies.TrimToLength(dto.Channel, 160);
         var avatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(dto.Avatar, "/avatars/");
         var session = _liveKitTokenService.CreateVoiceSession(normalizedChannel, currentUser, avatarUrl);
 
@@ -132,12 +135,17 @@ public class VoiceController : ControllerBase
         });
     }
 
-    private bool TryAuthorizeChannel(string? rawChannelName, AuthenticatedUser currentUser, out string normalizedChannel)
+    private async Task<bool> TryAuthorizeChannelAsync(string? rawChannelName, AuthenticatedUser currentUser, CancellationToken cancellationToken)
     {
-        normalizedChannel = UploadPolicies.TrimToLength(rawChannelName, 160);
+        var normalizedChannel = UploadPolicies.TrimToLength(rawChannelName, 160);
         if (string.IsNullOrWhiteSpace(normalizedChannel))
         {
             return false;
+        }
+
+        if (await DirectCallAuthorization.CanAccessChannelAsync(_context, normalizedChannel, currentUser, cancellationToken))
+        {
+            return true;
         }
 
         if (!ServerChannelAuthorization.TryGetServerIdFromVoiceChannelName(normalizedChannel, out var serverId))

@@ -24,6 +24,7 @@ export const PersonalProfileSettings = ({
   profileDraft,
   profileStatus,
   maxProfileNameLength,
+  maxNicknameLength,
   onSubmit,
   onChangeAvatar,
   onChangeBackground,
@@ -70,6 +71,16 @@ export const PersonalProfileSettings = ({
 
         <div className="profile-settings-form__fields">
           <div className="profile-settings-form__grid">
+            <label className="voice-settings-field voice-settings-field--stacked profile-settings-form__field--full">
+              <span>Никнейм</span>
+              <input
+                className="settings-input"
+                type="text"
+                value={profileDraft.nickname}
+                onChange={(event) => onUpdateDraft("nickname", event.target.value)}
+                maxLength={maxNicknameLength}
+              />
+            </label>
             <label className="voice-settings-field voice-settings-field--stacked">
               <span>Имя</span>
               <input className="settings-input" type="text" value={profileDraft.firstName} onChange={(event) => onUpdateDraft("firstName", event.target.value)} maxLength={maxProfileNameLength} />

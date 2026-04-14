@@ -296,6 +296,7 @@ export const ServerMain = ({
   textChatNavigationRequest,
   onTextChatNavigationIndexChange,
   onOpenDirectChat,
+  onStartDirectCall,
   onOpenLocalSharePreview,
   onWatchStream,
   onChannelSearchChange,
@@ -425,6 +426,7 @@ export const ServerMain = ({
               navigationRequest={textChatNavigationRequest}
               onNavigationIndexChange={onTextChatNavigationIndexChange}
               onOpenDirectChat={onOpenDirectChat}
+              onStartDirectCall={onStartDirectCall}
             />
           ) : null
         )}
@@ -522,6 +524,7 @@ export const MobileDirectChat = ({
   getDisplayName,
   textChatNavigationRequest,
   onTextChatNavigationIndexChange,
+  onStartDirectCall,
 }) => (
   <main className="chat__wrapper chat__wrapper--friends chat__wrapper--mobile-direct">
     <div className="chat__box chat__box--servers">
@@ -539,6 +542,7 @@ export const MobileDirectChat = ({
         directTargets={directConversationTargets}
         navigationRequest={textChatNavigationRequest}
         onNavigationIndexChange={onTextChatNavigationIndexChange}
+        onStartDirectCall={onStartDirectCall}
       />
     </div>
   </main>

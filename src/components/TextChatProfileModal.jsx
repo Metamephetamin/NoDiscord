@@ -24,6 +24,7 @@ export default function TextChatProfileModal({
   profile,
   onClose,
   onOpenDirectChat,
+  onStartDirectCall,
   onAddFriend,
   onCopyUserId,
 }) {
@@ -104,6 +105,14 @@ export default function TextChatProfileModal({
                 disabled={!profile.canOpenDirectChat}
               >
                 Сообщение
+              </button>
+              <button
+                type="button"
+                className="chat-profile-modal__action"
+                onClick={onStartDirectCall}
+                disabled={!profile.canOpenDirectChat || !profile.isFriend || typeof onStartDirectCall !== "function"}
+              >
+                Позвонить
               </button>
               <button
                 type="button"

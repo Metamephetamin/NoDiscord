@@ -1,6 +1,7 @@
 import {
   CameraModal,
   CreateServerModal,
+  DirectCallOverlay,
   DirectToastStack,
   MediaFrameEditorOverlay,
   QuickSwitcherModal,
@@ -91,6 +92,12 @@ export default function MenuMainOverlayLayer({
   setQuickSwitcherQuery,
   handleQuickSwitcherSelect,
   closeQuickSwitcher,
+  directCallState,
+  isMicMuted,
+  toggleMicMute,
+  acceptDirectCall,
+  declineDirectCall,
+  endDirectCall,
 }) {
   const availableFpsOptions =
     STREAM_FPS_OPTIONS.filter((option) => (SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"]).includes(option.value));
@@ -126,6 +133,15 @@ export default function MenuMainOverlayLayer({
         onClose={closeQuickSwitcher}
         onQueryChange={setQuickSwitcherQuery}
         onSelect={handleQuickSwitcherSelect}
+      />
+
+      <DirectCallOverlay
+        call={directCallState}
+        isMicMuted={isMicMuted}
+        onAccept={acceptDirectCall}
+        onDecline={declineDirectCall}
+        onEnd={endDirectCall}
+        onToggleMic={toggleMicMute}
       />
 
       <SettingsOverlay

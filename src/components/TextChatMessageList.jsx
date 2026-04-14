@@ -16,6 +16,7 @@ import {
   normalizeReactions,
 } from "../utils/textChatModel";
 import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
+import { parseMediaFrame } from "../utils/mediaFrames";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
 
@@ -160,7 +161,11 @@ function MessageInviteCard({ inviteCode }) {
     };
   }, [inviteCode]);
 
-  const serverIconUrl = useMemo(() => resolveMediaUrl(preview?.serverIcon, DEFAULT_SERVER_ICON), [preview?.serverIcon]);
+  const rawServerIconValue = preview?.serverIcon || preview?.server_icon || preview?.iconUrl || preview?.icon_url || preview?.icon || "";
+  const serverIconFrame = useMemo(
+    () => parseMediaFrame(preview?.serverIconFrame, preview?.server_icon_frame, preview?.iconFrame, preview?.icon_frame),
+    [preview?.serverIconFrame, preview?.server_icon_frame, preview?.iconFrame, preview?.icon_frame]
+  );
   const inviteHref = getInviteRoute(inviteCode);
   const onlineCount = Number(preview?.onlineMemberCount ?? preview?.onlineCount ?? 0);
   const memberCount = Number(preview?.memberCount || 0);
@@ -203,7 +208,7 @@ function MessageInviteCard({ inviteCode }) {
         <span className="message-invite-card__status">Код: {preview.inviteCode || inviteCode}</span>
       </div>
       <div className="message-invite-card__body">
-        <img className="message-invite-card__icon" src={serverIconUrl} alt={preview.serverName || "Сервер"} />
+        <AnimatedAvatar className="message-invite-card__icon" src={rawServerIconValue} fallback={DEFAULT_SERVER_ICON} alt={preview.serverName || "Сервер"} frame={serverIconFrame} />
         <div className="message-invite-card__copy">
           <strong>{preview.serverName || "Без названия"}</strong>
           <div className="message-invite-card__meta">
