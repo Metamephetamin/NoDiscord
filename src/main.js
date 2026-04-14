@@ -839,6 +839,7 @@ const createWindow = () => {
     height: 800,
     title: APP_DISPLAY_NAME,
     icon: resolveAppIconPath(),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -848,6 +849,8 @@ const createWindow = () => {
       allowRunningInsecureContent: false,
     },
   });
+
+  mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternalUrl(url)) {

@@ -146,7 +146,12 @@ export const FriendsMain = ({
               <h1>{getDisplayName(currentDirectFriend)}</h1>
               <span className="chat__subtitle">Личный чат между двумя пользователями</span>
             </div>
-            <TextChat resolvedChannelId={currentDirectChannelId} user={user} directTargets={directConversationTargets} />
+            <TextChat
+              resolvedChannelId={currentDirectChannelId}
+              user={user}
+              directTargets={directConversationTargets}
+              onOpenDirectChat={onOpenDirectChat}
+            />
           </div>
         ) : friendsPageSection === "friends" ? (
           <div className="friends-main__content">

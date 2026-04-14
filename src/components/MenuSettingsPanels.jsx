@@ -38,7 +38,7 @@ export const PersonalProfileSettings = ({
       </div>
     </div>
 
-    <section className="voice-settings-card">
+    <section className="voice-settings-card voice-settings-card--profile">
       <form className="profile-settings-form" onSubmit={onSubmit}>
         <div className="profile-settings-form__hero">
           <div className="profile-settings-form__cover">

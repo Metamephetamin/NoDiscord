@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import TextChatContextMenu from "../../components/TextChatContextMenu";
+import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
 import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
@@ -46,6 +47,7 @@ export default function TextChatView(props) {
     user,
     toggleMessageSelection,
     openMessageContextMenu,
+    openUserContextMenu,
     openMediaPreview,
     handleToggleReaction,
     selectedFiles,
@@ -94,6 +96,10 @@ export default function TextChatView(props) {
     contextMenuRef,
     messageContextMenu,
     contextMenuActions,
+    userContextMenuRef,
+    userContextMenu,
+    userContextMenuSections,
+    closeUserContextMenu,
     primaryReactions,
     stickerReactions,
     reactionStickerPanelOpen,
@@ -160,6 +166,7 @@ export default function TextChatView(props) {
         selectionMode={selectionMode}
         onToggleSelection={toggleMessageSelection}
         onOpenContextMenu={openMessageContextMenu}
+        onOpenUserContextMenu={openUserContextMenu}
         onOpenMediaPreview={openMediaPreview}
         onToggleReaction={handleToggleReaction}
         onJumpToReply={scrollToMessage}
@@ -237,6 +244,12 @@ export default function TextChatView(props) {
         onToggleStickerPanel={() => setReactionStickerPanelOpen((previous) => !previous)}
         isReactionActive={isContextReactionActive}
         onToggleReaction={handleToggleReaction}
+      />
+      <TextChatUserContextMenu
+        menuRef={userContextMenuRef}
+        menu={userContextMenu}
+        sections={userContextMenuSections}
+        onClose={closeUserContextMenu}
       />
       <Suspense fallback={null}>
         <TextChatForwardModal

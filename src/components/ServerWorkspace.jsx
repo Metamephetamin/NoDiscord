@@ -293,6 +293,7 @@ export const ServerMain = ({
   serverMembers,
   textChatNavigationRequest,
   onTextChatNavigationIndexChange,
+  onOpenDirectChat,
   onOpenLocalSharePreview,
   onWatchStream,
   onChannelSearchChange,
@@ -421,6 +422,7 @@ export const ServerMain = ({
               serverMembers={serverMembers}
               navigationRequest={textChatNavigationRequest}
               onNavigationIndexChange={onTextChatNavigationIndexChange}
+              onOpenDirectChat={onOpenDirectChat}
             />
           ) : null
         )}

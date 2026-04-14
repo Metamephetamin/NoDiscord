@@ -5,6 +5,7 @@ import AppUpdateBanner from "./components/AppUpdateBanner";
 import MenuMain from "./components/MenuMain";
 import ServerInvitePage from "./components/ServerInvitePage";
 import { API_BASE_URL } from "./config/runtime";
+import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./utils/inviteFlow";
 import "./index.css";
 import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
 import { parseMediaFrame } from "./utils/mediaFrames";
@@ -545,9 +546,16 @@ export default function Renderer() {
     setToken(accessToken);
     setSessionHydrated(true);
     void storeSession(nextUser, nextSession);
+
+    const pendingInviteCode = readPendingInviteAcceptCode();
+    if (pendingInviteCode) {
+      navigate(`/invite/${encodeURIComponent(pendingInviteCode)}`, { replace: true });
+      return;
+    }
   };
 
   const handleLogout = () => {
+    clearPendingInviteAcceptCode();
     setUser(null);
     setToken(null);
     setSessionHydrated(true);
@@ -591,7 +599,6 @@ export default function Renderer() {
         <ServerInvitePage
           user={user}
           inviteCode={location.pathname.replace(/^\/invite\//i, "")}
-          onAuthSuccess={handleAuthSuccess}
           onInviteAccepted={handleInviteAccepted}
         />
       </>

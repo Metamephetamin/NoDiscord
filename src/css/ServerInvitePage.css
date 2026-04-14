@@ -1,6 +1,8 @@
 .server-invite-page {
   min-height: 100vh;
   padding: 28px;
+  display: grid;
+  place-items: center;
   background:
     radial-gradient(circle at top left, rgba(76, 113, 194, 0.18), transparent 30%),
     radial-gradient(circle at bottom right, rgba(95, 113, 133, 0.16), transparent 28%),
@@ -8,18 +10,19 @@
 }
 
 .server-invite-page__shell {
-  width: min(1200px, 100%);
+  width: min(560px, 100%);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
+  gap: 18px;
+  justify-items: center;
 }
 
 .server-invite-page__intro {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   align-content: start;
+  justify-items: center;
+  text-align: center;
 }
 
 .server-invite-page__eyebrow {
@@ -47,6 +50,7 @@
 .server-invite-card {
   display: grid;
   gap: 18px;
+  width: min(100%, 460px);
   padding: 22px;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -225,24 +229,6 @@
   font-size: 14px;
 }
 
-.server-invite-page__auth {
-  min-width: 0;
-}
-
-.server-invite-page__auth .auth-page {
-  min-height: auto;
-}
-
-.server-invite-page__auth .auth-video-bg,
-.server-invite-page__auth .auth-brand {
-  display: none;
-}
-
-.server-invite-page__auth .auth-page {
-  background: transparent;
-  padding: 0;
-}
-
 @keyframes server-invite-pulse {
   0% {
     transform: scale(0.98);
@@ -262,7 +248,7 @@
 
 @media (max-width: 1024px) {
   .server-invite-page__shell {
-    grid-template-columns: 1fr;
+    width: min(560px, 100%);
   }
 }
 

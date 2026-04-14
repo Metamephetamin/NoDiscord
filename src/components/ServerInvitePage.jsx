@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import Auth from "./Auth";
-import AnimatedMedia from "./AnimatedMedia";
 import "../css/ServerInvitePage.css";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode, writePendingInviteAcceptCode } from "../utils/inviteFlow";
 import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
 import { parseMediaFrame } from "../utils/mediaFrames";
 
@@ -59,7 +58,7 @@ function resolveInviteCodeFromPath(pathname) {
   return match?.[1] ? decodeURIComponent(match[1]) : "";
 }
 
-export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted, inviteCode: inviteCodeProp = "" }) {
+export default function ServerInvitePage({ user, onInviteAccepted, inviteCode: inviteCodeProp = "" }) {
   const location = useLocation();
   const { inviteCode: inviteCodeParam = "" } = useParams();
   const navigate = useNavigate();
@@ -68,11 +67,13 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const autoAcceptAttemptedRef = useRef("");
 
   const normalizedInviteCode = useMemo(() => {
     const rawInviteCode = inviteCodeParam || inviteCodeProp || resolveInviteCodeFromPath(location.pathname);
     return String(rawInviteCode || "").trim().toUpperCase();
   }, [inviteCodeParam, inviteCodeProp, location.pathname]);
+
   const serverIconUrl = resolveMediaUrl(preview?.serverIcon, DEFAULT_SERVER_ICON);
   const serverIconFrame = useMemo(
     () => parseMediaFrame(preview?.serverIconFrame, preview?.server_icon_frame),
@@ -86,7 +87,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
       setPreview(null);
       setError("Ссылка-приглашение повреждена.");
       setIsLoading(false);
-      return;
+      return undefined;
     }
 
     let disposed = false;
@@ -128,7 +129,13 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
   }, [normalizedInviteCode, user]);
 
   const handleAcceptInvite = async () => {
-    if (!user || !preview || preview.isExpired) {
+    if (!preview || preview.isExpired) {
+      return;
+    }
+
+    if (!user) {
+      writePendingInviteAcceptCode(normalizedInviteCode);
+      navigate("/", { replace: true });
       return;
     }
 
@@ -155,6 +162,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
         throw new Error("Сервер не вернул данные приглашения.");
       }
 
+      clearPendingInviteAcceptCode();
       setStatus("Приглашение принято. Открываем сервер...");
       onInviteAccepted?.(snapshot);
     } catch (requestError) {
@@ -182,6 +190,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
         throw new Error(getApiErrorMessage(response, data, "Не удалось открыть сервер."));
       }
 
+      clearPendingInviteAcceptCode();
       setStatus("Открываем сервер...");
       onInviteAccepted?.(data);
     } catch (requestError) {
@@ -192,6 +201,8 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
   };
 
   const handleDeclineInvite = () => {
+    clearPendingInviteAcceptCode();
+
     if (typeof window !== "undefined" && window.history.length > 1) {
       navigate(-1);
       return;
@@ -199,6 +210,35 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
 
     navigate("/", { replace: true });
   };
+
+  useEffect(() => {
+    if (!user || !preview || !normalizedInviteCode) {
+      return;
+    }
+
+    const pendingInviteCode = readPendingInviteAcceptCode();
+    if (pendingInviteCode !== normalizedInviteCode) {
+      return;
+    }
+
+    if (autoAcceptAttemptedRef.current === normalizedInviteCode) {
+      return;
+    }
+
+    autoAcceptAttemptedRef.current = normalizedInviteCode;
+
+    if (preview.isExpired) {
+      clearPendingInviteAcceptCode();
+      return;
+    }
+
+    if (preview.currentUserAlreadyMember) {
+      void handleOpenServer();
+      return;
+    }
+
+    void handleAcceptInvite();
+  }, [normalizedInviteCode, preview, user]);
 
   const renderInviteCard = () => {
     if (isLoading) {
@@ -232,6 +272,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
             className="server-invite-card__icon"
             src={serverIconUrl}
             alt={preview.serverName || "Сервер"}
+            style={serverIconFrame ? { objectPosition: `${serverIconFrame.x * 100}% ${serverIconFrame.y * 100}%` } : undefined}
           />
           <div className="server-invite-card__copy">
             <h1>{preview.serverName || "Без названия"}</h1>
@@ -253,18 +294,7 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
           <span>Действует до: {new Date(preview.expiresAt).toLocaleString("ru-RU")}</span>
         </div>
 
-        {!user ? (
-          <div className="server-invite-card__actions">
-            <div className="server-invite-card__notice">
-              Войдите или зарегистрируйтесь ниже, после чего сможете принять приглашение.
-            </div>
-            <div className="server-invite-card__action-row">
-              <button type="button" className="server-invite-card__button server-invite-card__button--secondary" onClick={handleDeclineInvite}>
-                Отклонить
-              </button>
-            </div>
-          </div>
-        ) : preview.isExpired ? (
+        {preview.isExpired ? (
           <div className="server-invite-card__notice server-invite-card__notice--error">
             Срок действия приглашения истёк.
           </div>
@@ -282,12 +312,17 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
           </div>
         ) : (
           <div className="server-invite-card__actions">
+            {!user ? (
+              <div className="server-invite-card__notice">
+                После нажатия на кнопку мы переведём вас на авторизацию, а затем автоматически вернём к этому приглашению и сразу откроем нужный сервер.
+              </div>
+            ) : null}
             <div className="server-invite-card__action-row">
               <button type="button" className="server-invite-card__button server-invite-card__button--secondary" onClick={handleDeclineInvite} disabled={isSubmitting}>
                 Отклонить
               </button>
               <button type="button" className="server-invite-card__button" onClick={handleAcceptInvite} disabled={isSubmitting}>
-                {isSubmitting ? "Принимаем..." : "Принять приглашение"}
+                {isSubmitting ? "Принимаем..." : user ? "Принять приглашение" : "Войти и принять"}
               </button>
             </div>
           </div>
@@ -305,14 +340,8 @@ export default function ServerInvitePage({ user, onAuthSuccess, onInviteAccepted
           <div className="server-invite-page__eyebrow">MAX Invite</div>
           <h2>Приглашение на сервер</h2>
           <p>Откройте ссылку, посмотрите карточку сервера и решите, принимать приглашение или отклонить его.</p>
-          {renderInviteCard()}
         </div>
-
-        {!user ? (
-          <div className="server-invite-page__auth">
-            <Auth onAuthSuccess={onAuthSuccess} />
-          </div>
-        ) : null}
+        {renderInviteCard()}
       </div>
     </div>
   );

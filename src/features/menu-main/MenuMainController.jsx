@@ -4315,6 +4315,7 @@ export default function MenuMain({
       serverMembers={activeServer?.members || []}
       textChatNavigationRequest={textChatNavigationRequest}
       onTextChatNavigationIndexChange={setTextChatNavigationIndex}
+      onOpenDirectChat={openDirectChat}
       onOpenLocalSharePreview={openLocalSharePreview}
       onWatchStream={handleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}

@@ -7,6 +7,9 @@ import { uploadChatAttachment } from "../../utils/chatAttachmentUpload";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
 import { isDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
+import { API_BASE_URL } from "../../config/runtime";
+import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import {
   getMentionHandleForMember,
   normalizeMentionAlias,
@@ -57,6 +60,7 @@ export default function TextChat({
   serverMembers = [],
   navigationRequest = null,
   onNavigationIndexChange = null,
+  onOpenDirectChat = null,
 }) {
   const [message, setMessage] = useState("");
   const [messageEditState, setMessageEditState] = useState(null);
@@ -72,6 +76,7 @@ export default function TextChat({
   const [composerSelection, setComposerSelection] = useState({ start: 0, end: 0 });
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
+  const [userContextMenu, setUserContextMenu] = useState(null);
   const [reactionStickerPanelOpen, setReactionStickerPanelOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyState, setReplyState] = useState(null);
@@ -98,6 +103,7 @@ export default function TextChat({
   const mentionSuggestionsRef = useRef(null);
   const composerSelectionRef = useRef({ start: 0, end: 0 });
   const contextMenuRef = useRef(null);
+  const userContextMenuRef = useRef(null);
   const mediaPreviewVideoRef = useRef(null);
   const joinedChannelRef = useRef("");
   const messageRefs = useRef(new Map());
@@ -209,6 +215,7 @@ export default function TextChat({
     const primaryAttachment = attachments[0] || null;
     return {
       ...messageItem,
+      username: String(messageItem?.username || messageItem?.Username || messageItem?.name || messageItem?.Name || "User").trim() || "User",
       message: decrypted.text,
       encryption: null,
       attachments,
@@ -235,6 +242,160 @@ export default function TextChat({
         : [],
     };
   };
+
+  const openUserContextMenu = (event, messageItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const userId = String(messageItem?.authorUserId || messageItem?.userId || "").trim();
+    if (!userId) {
+      return;
+    }
+
+    const matchedDirectTarget = directTargets.find((target) => String(target?.id || "") === userId) || null;
+    const username = String(messageItem?.username || matchedDirectTarget?.name || matchedDirectTarget?.firstName || "User").trim() || "User";
+    const avatarUrl = String(messageItem?.photoUrl || matchedDirectTarget?.avatar || matchedDirectTarget?.avatarUrl || "").trim();
+
+    setMessageContextMenu(null);
+    setReactionStickerPanelOpen(false);
+    setUserContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      userId,
+      username,
+      avatarUrl,
+      isSelf: userId === currentUserId,
+      isFriend: Boolean(matchedDirectTarget && !matchedDirectTarget?.isSelf),
+      canOpenDirectChat: typeof onOpenDirectChat === "function" && userId !== currentUserId,
+      canInviteToServer: Boolean(serverId),
+    });
+  };
+
+  const closeUserContextMenu = () => {
+    setUserContextMenu(null);
+  };
+
+  const handleCopyUserId = async () => {
+    if (!userContextMenu?.userId) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(userContextMenu.userId);
+      setActionFeedback({ tone: "success", message: "ID пользователя скопирован" });
+      setUserContextMenu(null);
+    } catch {
+      setErrorMessage("Не удалось скопировать ID пользователя.");
+    }
+  };
+
+  const handleOpenDirectChatFromUserMenu = () => {
+    if (!userContextMenu?.userId || typeof onOpenDirectChat !== "function" || userContextMenu.isSelf) {
+      return;
+    }
+
+    onOpenDirectChat(userContextMenu.userId);
+    setActionFeedback({ tone: "info", message: `Открываем чат с ${userContextMenu.username}` });
+    setUserContextMenu(null);
+  };
+
+  const handleAddFriendFromUserMenu = async () => {
+    if (!userContextMenu?.userId || userContextMenu.isSelf || userContextMenu.isFriend) {
+      return;
+    }
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/friends/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: Number(userContextMenu.userId) }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось отправить заявку в друзья."));
+      }
+
+      const status = String(data?.status || "").trim().toLowerCase();
+      const nextMessage =
+        status === "already_friends"
+          ? "Этот пользователь уже у вас в друзьях"
+          : status === "already_requested"
+            ? "Заявка уже отправлена"
+            : status === "auto_accepted"
+              ? "Друг добавлен автоматически"
+              : "Заявка в друзья отправлена";
+
+      setActionFeedback({ tone: "success", message: nextMessage });
+      setUserContextMenu(null);
+    } catch (error) {
+      setErrorMessage(error?.message || "Не удалось отправить заявку в друзья.");
+    }
+  };
+
+  const handleUserMenuPlaceholder = (message) => {
+    setActionFeedback({ tone: "info", message });
+    setUserContextMenu(null);
+  };
+
+  const userContextMenuSections = [
+    [
+      {
+        id: "profile",
+        label: "Профиль",
+        icon: "◧",
+        disabled: false,
+        onClick: () => handleUserMenuPlaceholder("Полный профиль пользователя добьём следующим шагом."),
+      },
+      {
+        id: "direct-chat",
+        label: "Начать чат",
+        icon: "✉",
+        disabled: !userContextMenu?.canOpenDirectChat,
+        onClick: handleOpenDirectChatFromUserMenu,
+      },
+    ],
+    [
+      {
+        id: "invite",
+        label: "Пригласить на сервер",
+        icon: "↗",
+        disabled: !userContextMenu?.canInviteToServer,
+        onClick: () => handleUserMenuPlaceholder("Приглашение с этого меню подключу следующим проходом."),
+      },
+      {
+        id: "friend",
+        label: userContextMenu?.isFriend ? "Уже в друзьях" : "Добавить в друзья",
+        icon: "＋",
+        disabled: Boolean(userContextMenu?.isSelf || userContextMenu?.isFriend),
+        onClick: handleAddFriendFromUserMenu,
+      },
+      {
+        id: "ignore",
+        label: "Игнорировать",
+        icon: "◌",
+        disabled: false,
+        onClick: () => handleUserMenuPlaceholder("Игнор-лист добавим отдельным серверным действием."),
+      },
+      {
+        id: "block",
+        label: "Заблокировать",
+        icon: "⛔",
+        danger: true,
+        disabled: false,
+        onClick: () => handleUserMenuPlaceholder("Блокировку пользователя тоже подключу отдельным серверным действием."),
+      },
+    ],
+    [
+      {
+        id: "copy-id",
+        label: "Копировать ID пользователя",
+        icon: "ID",
+        disabled: false,
+        onClick: handleCopyUserId,
+      },
+    ],
+  ];
 
   const isEditableMessage = (messageItem) => {
     if (!messageItem) {
@@ -993,7 +1154,7 @@ export default function TextChat({
   });
 
   useEffect(() => {
-    if (!messageContextMenu) {
+    if (!messageContextMenu && !userContextMenu) {
       let cancelled = false;
       deferEffectState(() => {
         if (!cancelled) {
@@ -1010,12 +1171,18 @@ export default function TextChat({
         return;
       }
 
+      if (userContextMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
       setMessageContextMenu(null);
+      setUserContextMenu(null);
     };
 
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         setMessageContextMenu(null);
+        setUserContextMenu(null);
         if (speechRecognitionActive) {
           stopSpeechRecognition(false);
         }
@@ -1027,6 +1194,7 @@ export default function TextChat({
 
     const handleViewportChange = () => {
       setMessageContextMenu(null);
+      setUserContextMenu(null);
     };
 
     const handleViewportScroll = (event) => {
@@ -1034,7 +1202,12 @@ export default function TextChat({
         return;
       }
 
+      if (userContextMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
       setMessageContextMenu(null);
+      setUserContextMenu(null);
     };
 
     window.addEventListener("pointerdown", handlePointerDown);
@@ -1048,7 +1221,7 @@ export default function TextChat({
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportScroll, true);
     };
-  }, [messageContextMenu, speechRecognitionActive, voiceRecordingState]);
+  }, [messageContextMenu, speechRecognitionActive, userContextMenu, voiceRecordingState]);
 
   return (
     <TextChatView
@@ -1089,6 +1262,7 @@ export default function TextChat({
       user={user}
       toggleMessageSelection={toggleMessageSelection}
       openMessageContextMenu={openMessageContextMenu}
+      openUserContextMenu={openUserContextMenu}
       openMediaPreview={openMediaPreview}
       handleToggleReaction={handleToggleReaction}
       selectedFiles={selectedFiles}
@@ -1137,6 +1311,10 @@ export default function TextChat({
       contextMenuRef={contextMenuRef}
       messageContextMenu={messageContextMenu}
       contextMenuActions={contextMenuActions}
+      userContextMenuRef={userContextMenuRef}
+      userContextMenu={userContextMenu}
+      userContextMenuSections={userContextMenuSections}
+      closeUserContextMenu={closeUserContextMenu}
       primaryReactions={primaryReactions}
       stickerReactions={stickerReactions}
       reactionStickerPanelOpen={reactionStickerPanelOpen}

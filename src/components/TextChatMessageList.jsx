@@ -1,8 +1,12 @@
+import { useEffect, useMemo, useState } from "react";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
+import { API_BASE_URL } from "../config/runtime";
+import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { segmentMessageTextByMentions } from "../utils/messageMentions";
-import { resolveMediaUrl } from "../utils/media";
+import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
+import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
 import {
   getAttachmentCacheKey,
@@ -12,6 +16,8 @@ import {
   normalizeReactions,
 } from "../utils/textChatModel";
 import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
+
+const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
 
 const getPreviewableMediaItems = (messageItem, attachments) =>
   attachments
@@ -27,6 +33,20 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
       sourceUrl: attachmentItem.attachmentSourceUrl || attachmentItem.attachmentUrl,
     }));
 
+function normalizeTextLinkHref(value) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) {
+    return "";
+  }
+
+  const inviteCode = extractInviteCode(rawValue);
+  if (inviteCode) {
+    return getInviteRoute(inviteCode);
+  }
+
+  return /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
+}
+
 function EditedBadge({ message }) {
   if (!message?.editedAt) {
     return null;
@@ -41,19 +61,165 @@ function EditedBadge({ message }) {
 }
 
 function MessageText({ text, mentions, currentUserId }) {
-  return segmentMessageTextByMentions(text, mentions).map((segment, index) => (
-    segment.isMention ? (
-      <span
-        key={`mention-${index}-${segment.userId}`}
-        className={`message-text__mention ${String(segment.userId || "") === currentUserId ? "message-text__mention--self" : ""}`}
-        title={segment.displayName || segment.text}
-      >
-        {segment.text}
+  return segmentMessageTextByMentions(text, mentions).map((segment, index) => {
+    if (segment.isMention) {
+      return (
+        <span
+          key={`mention-${index}-${segment.userId}`}
+          className={`message-text__mention ${String(segment.userId || "") === currentUserId ? "message-text__mention--self" : ""}`}
+          title={segment.displayName || segment.text}
+        >
+          {segment.text}
+        </span>
+      );
+    }
+
+    const parts = String(segment.text || "").split(URL_PATTERN);
+    const matches = String(segment.text || "").match(URL_PATTERN) || [];
+
+    return (
+      <span key={`text-${index}`}>
+        {parts.map((part, partIndex) => {
+          const urlMatch = matches[partIndex];
+          const items = [];
+
+          if (part) {
+            items.push(<span key={`copy-${index}-${partIndex}`}>{part}</span>);
+          }
+
+          if (urlMatch) {
+            items.push(
+              <a
+                key={`url-${index}-${partIndex}`}
+                className="message-text__link"
+                href={normalizeTextLinkHref(urlMatch)}
+                target={extractInviteCode(urlMatch) ? undefined : "_blank"}
+                rel={extractInviteCode(urlMatch) ? undefined : "noreferrer"}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {urlMatch}
+              </a>
+            );
+          }
+
+          return items;
+        })}
       </span>
-    ) : (
-      <span key={`text-${index}`}>{segment.text}</span>
-    )
-  ));
+    );
+  });
+}
+
+function MessageInviteCard({ inviteCode }) {
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!inviteCode) {
+      setPreview(null);
+      setError("");
+      setIsLoading(false);
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const loadPreview = async () => {
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const response = await authFetch(`${API_BASE_URL}/server-invites/${encodeURIComponent(inviteCode)}`, {
+          method: "GET",
+        });
+        const data = await parseApiResponse(response);
+
+        if (!response.ok) {
+          throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить приглашение."));
+        }
+
+        if (!disposed) {
+          setPreview(data || null);
+        }
+      } catch (requestError) {
+        if (!disposed) {
+          setPreview(null);
+          setError(requestError?.message || "Приглашение недоступно.");
+        }
+      } finally {
+        if (!disposed) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPreview();
+
+    return () => {
+      disposed = true;
+    };
+  }, [inviteCode]);
+
+  const serverIconUrl = useMemo(() => resolveMediaUrl(preview?.serverIcon, DEFAULT_SERVER_ICON), [preview?.serverIcon]);
+  const inviteHref = getInviteRoute(inviteCode);
+  const onlineCount = Number(preview?.onlineMemberCount ?? preview?.onlineCount ?? 0);
+  const memberCount = Number(preview?.memberCount || 0);
+  const createdAt = preview?.serverCreatedAt || preview?.createdAt || "";
+  const foundedAtLabel = createdAt
+    ? new Date(createdAt).toLocaleDateString("ru-RU", { month: "long", year: "numeric" })
+    : "";
+
+  if (!inviteCode) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="message-invite-card message-invite-card--loading">
+        <div className="message-invite-card__header">
+          <span className="message-invite-card__badge">Invite</span>
+          <span className="message-invite-card__status">Загружаем приглашение…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !preview) {
+    return (
+      <a className="message-invite-card message-invite-card--error" href={inviteHref} onClick={(event) => event.stopPropagation()}>
+        <div className="message-invite-card__header">
+          <span className="message-invite-card__badge">Invite</span>
+          <span className="message-invite-card__status">{error || "Приглашение недоступно"}</span>
+        </div>
+        <span className="message-invite-card__button">Открыть приглашение</span>
+      </a>
+    );
+  }
+
+  return (
+    <a className="message-invite-card" href={inviteHref} onClick={(event) => event.stopPropagation()}>
+      <div className="message-invite-card__header">
+        <span className="message-invite-card__badge">Приглашение</span>
+        <span className="message-invite-card__status">Код: {preview.inviteCode || inviteCode}</span>
+      </div>
+      <div className="message-invite-card__body">
+        <img className="message-invite-card__icon" src={serverIconUrl} alt={preview.serverName || "Сервер"} />
+        <div className="message-invite-card__copy">
+          <strong>{preview.serverName || "Без названия"}</strong>
+          <div className="message-invite-card__meta">
+            <span className="message-invite-card__meta-dot message-invite-card__meta-dot--online" />
+            <span>{onlineCount} в сети</span>
+            <span className="message-invite-card__meta-separator">•</span>
+            <span>{memberCount} участников</span>
+          </div>
+          {foundedAtLabel ? <span className="message-invite-card__founded">Дата основания: {foundedAtLabel}</span> : null}
+        </div>
+      </div>
+      <span className="message-invite-card__button">
+        {preview.currentUserAlreadyMember ? "Открыть сервер" : "Перейти по приглашению"}
+      </span>
+    </a>
+  );
 }
 
 function areMessagesInSameForwardGroup(currentMessage, adjacentMessage) {
@@ -296,6 +462,7 @@ export default function TextChatMessageList({
   selectionMode,
   onToggleSelection,
   onOpenContextMenu,
+  onOpenUserContextMenu,
   onOpenMediaPreview,
   onToggleReaction,
   onJumpToReply,
@@ -355,6 +522,7 @@ export default function TextChatMessageList({
           const hasRenderableAttachments = attachments.length > 0;
           const reactions = normalizeReactions(messageItem.reactions);
           const messageText = String(messageItem.message || "");
+          const inviteCode = extractInviteCode(messageText);
           const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
           const isOwnMessage =
             String(messageItem.authorUserId || "") === currentUserId ||
@@ -400,12 +568,17 @@ export default function TextChatMessageList({
                   <span className="message-select-toggle__mark" aria-hidden="true" />
                 </button>
               ) : null}
-              <AnimatedAvatar src={messageItem.photoUrl} alt="avatar" className="msg-avatar" />
+              <AnimatedAvatar
+                src={messageItem.photoUrl}
+                alt="avatar"
+                className="msg-avatar"
+                onContextMenu={(event) => onOpenUserContextMenu?.(event, messageItem)}
+              />
 
               <div className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""}`}>
                 {!isDirectChat && !isForwardGroupFollow ? (
                   <div className="message-author">
-                    <span>{messageItem.username}</span>
+                    <span>{messageItem.username || "User"}</span>
                     <span className="message-meta">
                       <span className="message-time">{formatTime(messageItem.timestamp)}</span>
                       <EditedBadge message={messageItem} />
@@ -462,6 +635,8 @@ export default function TextChatMessageList({
                     </div>
                   )
                 ) : null}
+
+                {inviteCode ? <MessageInviteCard inviteCode={inviteCode} /> : null}
 
                 <MessageAttachmentCollection
                   messageItem={messageItem}
