@@ -1502,13 +1502,13 @@
 .voice-room-stage {
   display: flex;
   flex: 1;
+  height: 100%;
   min-height: 0;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px;
-  padding-bottom: 28px;
+  gap: 12px;
+  padding: 14px 18px 16px;
   background: #06080d;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .voice-room-stage__header {
@@ -1746,11 +1746,12 @@
 
 .voice-room-stage__hero {
   position: relative;
-  width: min(100%, 1180px);
+  width: min(100%, 1280px);
   align-self: center;
-  flex: 0 0 auto;
-  min-height: clamp(400px, 60vh, 720px);
-  max-height: calc(100vh - 176px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(62vh, calc(100vh - 244px));
+  aspect-ratio: 16 / 9;
   border: 1px solid rgba(var(--voice-stage-accent-rgb, 255, 255, 255), 0.22);
   border-radius: 8px;
   overflow: hidden;
@@ -1798,7 +1799,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px;
+  padding: 14px;
   pointer-events: none;
 }
 
@@ -1808,7 +1809,7 @@
 
 .voice-room-stage__hero-bottom {
   bottom: 0;
-  padding-bottom: 28px;
+  padding-bottom: 22px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.72));
 }
 
@@ -1848,8 +1849,8 @@
 .voice-room-stage__hero-person {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
   background: rgba(8, 10, 14, 0.66);
@@ -1874,14 +1875,15 @@
   display: flex;
   justify-content: center;
   gap: 12px;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow: hidden;
   width: min(100%, 860px);
-  padding: 0 4px;
+  padding: 0;
 }
 
 .voice-room-stage__strip-card {
-  width: 184px;
-  min-width: 184px;
+  width: 168px;
+  min-width: 168px;
   padding: 0;
   border: 1px solid rgba(var(--voice-stage-accent-rgb, 255, 255, 255), 0.22);
   border-radius: 16px;
@@ -1901,7 +1903,7 @@
 
 .voice-room-stage__strip-media {
   position: relative;
-  height: 112px;
+  height: 96px;
   overflow: hidden;
   background: #0a0d14;
 }
@@ -1924,29 +1926,29 @@
 .voice-room-stage__strip-copy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  gap: 3px;
+  padding: 10px 11px 11px;
 }
 
 .voice-room-stage__toolbar-shell {
-  position: sticky;
-  bottom: 12px;
+  position: relative;
   z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin-top: auto;
-  padding-top: 8px;
+  gap: 10px;
+  margin-top: 0;
+  padding-top: 0;
+  flex: 0 0 auto;
 }
 
 .voice-room-stage__toolbar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
   background: rgba(8, 10, 14, 0.88);
@@ -1973,8 +1975,8 @@
 }
 
 .voice-room-stage__toolbar-button {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2038,8 +2040,8 @@
 }
 
 .voice-room-stage__toolbar-icon {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
 }
 
 .voice-room-stage__empty {
