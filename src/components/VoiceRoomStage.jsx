@@ -680,7 +680,7 @@ export default function VoiceRoomStage({
 
   const stageToolbar = (
     <div className="voice-room-stage__toolbar-shell">
-      {activeStage ? <div className="voice-room-stage__toolbar-strip">{renderStripCards()}</div> : null}
+      {activeStage ? renderStripCards() : null}
 
       <div className="voice-room-stage__toolbar" role="toolbar" aria-label="Управление голосовой комнатой">
         <div className="voice-room-stage__toolbar-group">
