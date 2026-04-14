@@ -558,9 +558,9 @@ export const normalizeFriendRequest = (request) => ({
   sender: normalizeFriend(request?.sender || {}),
 });
 export const UI_SOUND_PATHS = {
-  join: resolveStaticAssetUrl("/sounds/discord-voice-join.mp3"),
-  leave: resolveStaticAssetUrl("/sounds/discord-voice-leave.mp3"),
-  share: resolveStaticAssetUrl("/sounds/ui-share.ogg"),
+  join: resolveStaticAssetUrl("/sounds/voice-input.wav"),
+  leave: resolveStaticAssetUrl("/sounds/voice-output.wav"),
+  share: resolveStaticAssetUrl("/sounds/screen-share.wav"),
 };
 export const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 export const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone.png");

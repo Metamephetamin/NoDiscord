@@ -1990,8 +1990,8 @@
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f4f7fd;
+  background: rgba(255, 255, 255, 0.07);
+  color: #e7ebf5;
   cursor: pointer;
   transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
@@ -2008,9 +2008,15 @@
 }
 
 .voice-room-stage__toolbar-button--active {
-  background: rgba(58, 176, 111, 0.16);
-  border-color: rgba(86, 222, 146, 0.36);
-  color: #8cf2b8;
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f4f7fd;
+}
+
+.voice-room-stage__toolbar-button--muted {
+  background: rgba(214, 57, 57, 0.92);
+  border-color: rgba(255, 126, 126, 0.24);
+  color: #ffffff;
 }
 
 .voice-room-stage__toolbar-button--danger {
@@ -2021,6 +2027,24 @@
 
 .voice-room-stage__toolbar-button--danger:hover {
   background: rgba(234, 71, 71, 0.96);
+}
+
+.voice-room-stage__toolbar-icon-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-room-stage__toolbar-icon-shell--slashed::after {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 2.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-45deg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 .voice-room-stage__toolbar-icon {

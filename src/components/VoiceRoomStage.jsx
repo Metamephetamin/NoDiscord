@@ -660,18 +660,21 @@ export default function VoiceRoomStage({
     onClick,
     active = false,
     danger = false,
+    muted = false,
     disabled = false,
   }) => (
     <button
       key={key}
       type="button"
-      className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""}`.trim()}
+      className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""} ${muted ? "voice-room-stage__toolbar-button--muted" : ""}`.trim()}
       onClick={onClick}
       aria-label={label}
       title={label}
       disabled={disabled}
     >
-      <VoiceStageIcon name={icon} />
+      <span className={`voice-room-stage__toolbar-icon-shell ${muted ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
+        <VoiceStageIcon name={icon} />
+      </span>
     </button>
   );
 
@@ -686,14 +689,14 @@ export default function VoiceRoomStage({
             icon: "mic",
             label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
             onClick: onToggleMic,
-            active: !isMicMuted,
+            muted: isMicMuted,
           })}
           {renderToolbarButton({
             key: "headphones",
             icon: "headphones",
             label: isSoundMuted ? "Включить звук" : "Отключить звук",
             onClick: onToggleSound,
-            active: !isSoundMuted,
+            muted: isSoundMuted,
           })}
         </div>
 
@@ -721,14 +724,6 @@ export default function VoiceRoomStage({
         </div>
 
         <div className="voice-room-stage__toolbar-group">
-          {activeSpeakerParticipant
-            ? renderToolbarButton({
-                key: "focus-speaker",
-                icon: "focus",
-                label: `Сфокусироваться на ${activeSpeakerParticipant.name || "говорящем участнике"}`,
-                onClick: () => handleCardClick(activeSpeakerParticipant),
-              })
-            : null}
           {activeLiveParticipant
             ? renderToolbarButton({
                 key: "focus-live",
