@@ -330,8 +330,8 @@
   flex-direction: column;
   gap: 10px;
   padding-top: 44px;
-  padding-left: 10px;
-  padding-right: 6px;
+  padding-left: 14px;
+  padding-right: 10px;
 }
 
 .messages-floating-date {
@@ -372,7 +372,7 @@
   width: 100%;
   max-width: 100%;
   gap: 12px;
-  padding: 0 18px 0 6px;
+  padding: 2px 20px 2px 10px;
 }
 
 .message-item--highlighted {
@@ -436,8 +436,8 @@
   box-shadow: none;
 }
 
-.message-item:not(.message-item--dm) .msg-content--media-only,
-.message-item:not(.message-item--dm) .msg-content:has(.message-attachments-stack) {
+.message-item:not(.message-item--dm) .msg-content--attachments,
+.message-item:not(.message-item--dm) .msg-content--media-only {
   width: auto;
   max-width: min(100%, 840px);
   flex: 0 1 auto;
@@ -505,7 +505,7 @@
 .message-item:not(.message-item--dm) .message-author {
   justify-content: flex-start;
   gap: 10px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .message-item:not(.message-item--dm) .message-text,
