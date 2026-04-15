@@ -503,18 +503,63 @@ export default function useTextChatMessageActions({
       return;
     }
 
-    for (const item of previewItems) {
-      // eslint-disable-next-line no-await-in-loop
-      await handleDownloadAttachment({
-        attachmentKind: item.type,
-        attachmentUrl: item.url,
-        attachmentSourceUrl: item.sourceUrl || item.url,
-        attachmentName: item.name,
-        attachmentContentType: item.contentType || "",
-        attachmentEncryption: item.attachmentEncryption || null,
-        messageId: item.messageId || "",
-        attachmentIndex: item.attachmentIndex || 0,
-      });
+    try {
+      setErrorMessage("");
+
+      if (window?.electronDownloads?.fetchAndSaveMany) {
+        const items = previewItems
+          .filter((item) => String(item?.url || "").trim())
+          .map((item) => {
+            const sourceAttachmentUrl = item.sourceUrl || item.url;
+            const fileName = buildDownloadFileName({
+              type: item.type,
+              url: sourceAttachmentUrl,
+              name: item.name,
+              contentType: item.contentType || "",
+            });
+
+            return {
+              url: sourceAttachmentUrl,
+              defaultFileName: fileName,
+              headers:
+                shouldUseAuthenticatedDownload(sourceAttachmentUrl, API_URL) && getStoredToken()
+                  ? { Authorization: `Bearer ${getStoredToken()}` }
+                  : {},
+            };
+          });
+
+        if (items.length) {
+          const result = await window.electronDownloads.fetchAndSaveMany({ items });
+          if (!result?.canceled) {
+            setMessageContextMenu(null);
+            setActionFeedback({
+              tone: "success",
+              message:
+                result.savedFiles?.length > 0
+                  ? `Скачано файлов: ${result.savedFiles.length}`
+                  : "Файлы сохранены",
+            });
+          }
+          return;
+        }
+      }
+
+      for (const item of previewItems) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleDownloadAttachment({
+          attachmentKind: item.type,
+          attachmentUrl: item.url,
+          attachmentSourceUrl: item.sourceUrl || item.url,
+          attachmentName: item.name,
+          attachmentContentType: item.contentType || "",
+          attachmentEncryption: item.attachmentEncryption || null,
+          messageId: item.messageId || "",
+          attachmentIndex: item.attachmentIndex || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Download all media preview items error:", error);
+      setErrorMessage(error?.message || "Не удалось скачать файлы.");
     }
   };
 

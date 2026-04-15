@@ -1,5 +1,4 @@
 ﻿import * as signalR from "@microsoft/signalr";
-import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import {
   AudioPresets,
   Room,
@@ -2155,7 +2154,6 @@ export function createVoiceRoomClient({
         accessTokenFactory: () => getStoredToken(),
       })
       .configureLogging(signalR.LogLevel.Error)
-      .withHubProtocol(new MessagePackHubProtocol())
       .withAutomaticReconnect([0, 1000, 3000, 5000])
       .build();
 

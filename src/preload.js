@@ -153,6 +153,9 @@ contextBridge.exposeInMainWorld("electronDownloads", {
   async fetchAndSave(payload) {
     return ipcRenderer.invoke("downloads:fetch-and-save", payload);
   },
+  async fetchAndSaveMany(payload) {
+    return ipcRenderer.invoke("downloads:fetch-and-save-many", payload);
+  },
   async fetchBytes(payload) {
     return ipcRenderer.invoke("downloads:fetch-bytes", payload);
   },

@@ -14,6 +14,7 @@ if (started) {
 const SESSION_STORE_FILE_NAME = "session.secure.json";
 const SECURE_KEY_VALUE_STORE_FILE_NAME = "secure-store.json";
 const APP_UPDATE_CACHE_FILE_NAME = "app-update-cache.json";
+const DOWNLOAD_PREFERENCES_STORE_KEY = "downloads.preferences";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 const APP_PROTOCOL = "nodiscord";
@@ -784,6 +785,162 @@ const sanitizeDownloadFileName = (value) => {
   return normalized || DOWNLOAD_FILE_NAME_FALLBACK;
 };
 
+const readDownloadPreferences = async () => {
+  const secureStore = await readSecureKeyValueStore();
+  const value = secureStore[DOWNLOAD_PREFERENCES_STORE_KEY];
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
+
+const writeDownloadPreferences = async (value) => {
+  const secureStore = await readSecureKeyValueStore();
+  secureStore[DOWNLOAD_PREFERENCES_STORE_KEY] = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  await writeSecureKeyValueStore(secureStore);
+};
+
+const normalizeDirectoryPath = (value) => String(value || "").trim();
+
+const ensureDirectoryExists = async (directoryPath) => {
+  const normalizedPath = normalizeDirectoryPath(directoryPath);
+  if (!normalizedPath) {
+    return "";
+  }
+
+  try {
+    const stats = await fs.stat(normalizedPath);
+    return stats.isDirectory() ? normalizedPath : "";
+  } catch {
+    return "";
+  }
+};
+
+const rememberDownloadDirectory = async (directoryPath) => {
+  const normalizedPath = await ensureDirectoryExists(directoryPath);
+  if (!normalizedPath) {
+    return "";
+  }
+
+  const currentPreferences = await readDownloadPreferences();
+  await writeDownloadPreferences({
+    ...currentPreferences,
+    directoryPath: normalizedPath,
+  });
+  return normalizedPath;
+};
+
+const getRememberedDownloadDirectory = async () => {
+  const currentPreferences = await readDownloadPreferences();
+  return ensureDirectoryExists(currentPreferences?.directoryPath);
+};
+
+const buildUniqueDownloadPath = async (directoryPath, fileName) => {
+  const safeDirectoryPath = normalizeDirectoryPath(directoryPath) || app.getPath("downloads");
+  const safeFileName = sanitizeDownloadFileName(fileName);
+  const parsedName = path.parse(safeFileName);
+  let attempt = 0;
+
+  while (attempt < 500) {
+    const candidateName =
+      attempt === 0
+        ? safeFileName
+        : `${parsedName.name || DOWNLOAD_FILE_NAME_FALLBACK} (${attempt})${parsedName.ext || ""}`;
+    const candidatePath = path.join(safeDirectoryPath, candidateName);
+
+    try {
+      await fs.access(candidatePath);
+      attempt += 1;
+    } catch {
+      return candidatePath;
+    }
+  }
+
+  return path.join(safeDirectoryPath, `${Date.now()}-${safeFileName}`);
+};
+
+const promptForDownloadDirectory = async () => {
+  const rememberedDirectory = await getRememberedDownloadDirectory();
+  const fallbackDirectory = rememberedDirectory || app.getPath("downloads");
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: "Выберите папку для загрузок",
+    defaultPath: fallbackDirectory,
+    buttonLabel: "Выбрать папку",
+    properties: ["openDirectory", "createDirectory"],
+  });
+
+  const selectedDirectory = !canceled && Array.isArray(filePaths) ? normalizeDirectoryPath(filePaths[0]) : "";
+  if (!selectedDirectory) {
+    return { canceled: true, directoryPath: "" };
+  }
+
+  const rememberedPath = await rememberDownloadDirectory(selectedDirectory);
+  return {
+    canceled: !rememberedPath,
+    directoryPath: rememberedPath,
+  };
+};
+
+const resolveDownloadTargetPath = async (defaultFileName, { forceDialog = false } = {}) => {
+  const fileName = sanitizeDownloadFileName(defaultFileName);
+  const rememberedDirectory = await getRememberedDownloadDirectory();
+
+  if (!forceDialog && rememberedDirectory) {
+    return {
+      canceled: false,
+      filePath: await buildUniqueDownloadPath(rememberedDirectory, fileName),
+      directoryPath: rememberedDirectory,
+      usedDialog: false,
+    };
+  }
+
+  const fallbackDirectory = rememberedDirectory || app.getPath("downloads");
+  const defaultPath = path.join(fallbackDirectory, fileName);
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: "Сохранить файл",
+    defaultPath,
+    buttonLabel: "Скачать",
+  });
+
+  if (canceled || !filePath) {
+    return { canceled: true, filePath: "", directoryPath: "", usedDialog: true };
+  }
+
+  const resolvedDirectory = path.dirname(filePath);
+  await rememberDownloadDirectory(resolvedDirectory);
+  return {
+    canceled: false,
+    filePath,
+    directoryPath: resolvedDirectory,
+    usedDialog: true,
+  };
+};
+
+const normalizeDownloadBytes = (bytes) => {
+  if (bytes instanceof Uint8Array) {
+    return Buffer.from(bytes);
+  }
+
+  if (ArrayBuffer.isView(bytes)) {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
+
+  if (bytes instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(bytes));
+  }
+
+  if (Array.isArray(bytes)) {
+    return Buffer.from(bytes);
+  }
+
+  if (bytes && typeof bytes === "object") {
+    const numericValues = Object.values(bytes)
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 255);
+    if (numericValues.length) {
+      return Buffer.from(numericValues);
+    }
+  }
+
+  return null;
+};
+
 const getMediaAccessStatus = (mediaType) => {
   const normalizedType = String(mediaType || "").trim().toLowerCase();
   if (typeof systemPreferences?.getMediaAccessStatus !== "function") {
@@ -1123,6 +1280,127 @@ app.whenReady().then(async () => {
     return {
       contentType: response.headers.get("content-type") || "",
       bytes: Array.from(new Uint8Array(await response.arrayBuffer())),
+    };
+  });
+
+  ipcMain.removeHandler("downloads:save-file");
+  ipcMain.handle("downloads:save-file", async (_event, payload) => {
+    const { canceled, filePath, directoryPath, usedDialog } = await resolveDownloadTargetPath(payload?.defaultFileName, {
+      forceDialog: payload?.forceDialog === true,
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true, filePath: "", directoryPath: "", usedDialog };
+    }
+
+    const buffer = normalizeDownloadBytes(payload?.bytes);
+    if (!buffer) {
+      throw new Error("No file bytes provided for download.");
+    }
+
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, buffer);
+    return { canceled: false, filePath, directoryPath, usedDialog };
+  });
+
+  ipcMain.removeHandler("downloads:fetch-and-save");
+  ipcMain.handle("downloads:fetch-and-save", async (_event, payload) => {
+    const sourceUrl = String(payload?.url || "").trim();
+    if (!sourceUrl) {
+      throw new Error("No download URL provided.");
+    }
+
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(payload?.headers || {})) {
+      const normalizedKey = String(key || "").trim();
+      const normalizedValue = String(value || "").trim();
+      if (normalizedKey && normalizedValue) {
+        headers.set(normalizedKey, normalizedValue);
+      }
+    }
+
+    const response = await fetch(sourceUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Download request failed with status ${response.status}.`);
+    }
+
+    const { canceled, filePath, directoryPath, usedDialog } = await resolveDownloadTargetPath(payload?.defaultFileName, {
+      forceDialog: payload?.forceDialog === true,
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true, filePath: "", directoryPath: "", usedDialog };
+    }
+
+    const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, buffer);
+    return {
+      canceled: false,
+      filePath,
+      directoryPath,
+      usedDialog,
+      contentType: response.headers.get("content-type") || "",
+    };
+  });
+
+  ipcMain.handle("downloads:fetch-and-save-many", async (_event, payload) => {
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (!items.length) {
+      return { canceled: true, directoryPath: "", savedFiles: [] };
+    }
+
+    const requestedDirectory = normalizeDirectoryPath(payload?.directoryPath);
+    const rememberedDirectory = await getRememberedDownloadDirectory();
+    const resolvedDirectory = requestedDirectory
+      ? await ensureDirectoryExists(requestedDirectory)
+      : rememberedDirectory;
+    const directorySelection = resolvedDirectory
+      ? { canceled: false, directoryPath: resolvedDirectory }
+      : await promptForDownloadDirectory();
+
+    if (directorySelection.canceled || !directorySelection.directoryPath) {
+      return { canceled: true, directoryPath: "", savedFiles: [] };
+    }
+
+    await fs.mkdir(directorySelection.directoryPath, { recursive: true });
+    const savedFiles = [];
+
+    for (const item of items) {
+      const sourceUrl = String(item?.url || "").trim();
+      if (!sourceUrl) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(item?.headers || {})) {
+        const normalizedKey = String(key || "").trim();
+        const normalizedValue = String(value || "").trim();
+        if (normalizedKey && normalizedValue) {
+          headers.set(normalizedKey, normalizedValue);
+        }
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const response = await fetch(sourceUrl, { headers });
+      if (!response.ok) {
+        throw new Error(`Download request failed with status ${response.status}.`);
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const nextFilePath = await buildUniqueDownloadPath(directorySelection.directoryPath, item?.defaultFileName);
+      const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+      // eslint-disable-next-line no-await-in-loop
+      await fs.writeFile(nextFilePath, buffer);
+      savedFiles.push(nextFilePath);
+    }
+
+    await rememberDownloadDirectory(directorySelection.directoryPath);
+    return {
+      canceled: false,
+      directoryPath: directorySelection.directoryPath,
+      savedFiles,
     };
   });
 
