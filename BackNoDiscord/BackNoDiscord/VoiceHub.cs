@@ -20,12 +20,14 @@ public class VoiceHub : Hub
     private readonly ChannelService _channels;
     private readonly ServerStateService _serverState;
     private readonly AppDbContext _context;
+    private readonly PushNotificationService _pushNotificationService;
 
-    public VoiceHub(ChannelService channels, ServerStateService serverState, AppDbContext context)
+    public VoiceHub(ChannelService channels, ServerStateService serverState, AppDbContext context, PushNotificationService pushNotificationService)
     {
         _channels = channels;
         _serverState = serverState;
         _context = context;
+        _pushNotificationService = pushNotificationService;
     }
 
     public override async Task OnConnectedAsync()
@@ -159,6 +161,26 @@ public class VoiceHub : Hub
             FromName = participant.Name,
             FromAvatar = participant.Avatar
         });
+
+        if (int.TryParse(targetUserId, out var targetUserNumericId))
+        {
+            await _pushNotificationService.SendToUsersAsync(
+                [targetUserNumericId],
+                new PushNotificationPayload
+                {
+                    Title = "Входящий звонок",
+                    Body = $"Вам звонит {participant.Name}",
+                    Tag = $"incoming-call:{channelName}",
+                    Url = "/",
+                    Type = "incoming_call",
+                    Data = new Dictionary<string, string>
+                    {
+                        ["channelName"] = channelName,
+                        ["fromUserId"] = participant.UserId,
+                    }
+                },
+                Context.ConnectionAborted);
+        }
     }
 
     public async Task AcceptDirectCall(string targetUserId, string channelName, string avatar)

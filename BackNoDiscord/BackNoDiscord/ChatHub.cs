@@ -37,13 +37,20 @@ public class ChatHub : Hub
     private readonly CryptoService _crypto;
     private readonly ILogger<ChatHub> _logger;
     private readonly ServerStateService _serverState;
+    private readonly PushNotificationService _pushNotificationService;
 
-    public ChatHub(AppDbContext context, CryptoService crypto, ILogger<ChatHub> logger, ServerStateService serverState)
+    public ChatHub(
+        AppDbContext context,
+        CryptoService crypto,
+        ILogger<ChatHub> logger,
+        ServerStateService serverState,
+        PushNotificationService pushNotificationService)
     {
         _context = context;
         _crypto = crypto;
         _logger = logger;
         _serverState = serverState;
+        _pushNotificationService = pushNotificationService;
     }
 
     public async Task SendMessage(
@@ -146,6 +153,7 @@ public class ChatHub : Hub
 
         await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
         LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+        await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, payload);
     }
 
     public async Task ForwardMessages(string channelId, string photoUrl, List<ForwardMessageInput>? items)
@@ -254,6 +262,11 @@ public class ChatHub : Hub
 
         _logger.LogInformation("User {UserId} forwarded {Count} messages to channel {ChannelId}", currentUser.UserId, forwardedMessages.Count, normalizedChannelId);
         LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+
+        if (forwardedMessages.Count > 0)
+        {
+            await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, forwardedMessages[^1].Payload);
+        }
     }
 
     public async Task<List<MessageDto>> JoinChannel(string channelId)
@@ -915,6 +928,39 @@ public class ChatHub : Hub
 
         var attachmentName = UploadPolicies.TrimToLength(firstAttachment?.AttachmentName, 220).Trim();
         return string.IsNullOrWhiteSpace(attachmentName) ? "Сообщение без текста" : attachmentName;
+    }
+
+    private async Task SendDirectMessagePushIfNeededAsync(string channelId, AuthenticatedUser currentUser, ChatMessagePayload payload)
+    {
+        if (!_pushNotificationService.IsConfigured ||
+            !DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out _) ||
+            !int.TryParse(currentUser.UserId, out var actorUserId))
+        {
+            return;
+        }
+
+        var recipientUserId = actorUserId == firstUserId ? secondUserId : firstUserId;
+        if (recipientUserId <= 0 || recipientUserId == actorUserId)
+        {
+            return;
+        }
+
+        await _pushNotificationService.SendToUsersAsync(
+            [recipientUserId],
+            new PushNotificationPayload
+            {
+                Title = currentUser.DisplayName,
+                Body = BuildMessagePreview(payload),
+                Tag = $"direct-message:{channelId}",
+                Url = "/",
+                Type = "direct_message",
+                Data = new Dictionary<string, string>
+                {
+                    ["channelId"] = channelId,
+                    ["authorUserId"] = currentUser.UserId,
+                }
+            },
+            Context.ConnectionAborted);
     }
 
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)

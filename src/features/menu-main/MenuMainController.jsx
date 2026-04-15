@@ -1625,6 +1625,22 @@ export default function MenuMain({
     serverToastTimeoutsRef.current.set(toast.id, timeoutId);
   };
 
+  const showElectronDesktopNotification = ({ title, body }) => {
+    if (!window?.electronDesktopNotifications?.show) {
+      return;
+    }
+
+    if (document.visibilityState !== "hidden" && document.hasFocus()) {
+      return;
+    }
+
+    window.electronDesktopNotifications.show({
+      title: String(title || "Tend"),
+      body: String(body || "").trim(),
+      route: "/",
+    }).catch(() => {});
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -2527,6 +2543,10 @@ export default function MenuMain({
         friend,
         preview,
       });
+      showElectronDesktopNotification({
+        title: getDisplayName(friend) || "Новое сообщение",
+        body: preview,
+      });
     };
 
     chatConnection.on("ReceiveMessage", handleReceiveDirectMessage);
@@ -2604,6 +2624,10 @@ export default function MenuMain({
         preview: currentUserMentioned
           ? `Вас упомянули: ${messagePreview}`
           : messagePreview,
+      });
+      showElectronDesktopNotification({
+        title: `${channelInfo.serverName} · ${channelInfo.channelName}`,
+        body: `${String(messageItem?.username || "User")}: ${currentUserMentioned ? `Вас упомянули: ${messagePreview}` : messagePreview}`,
       });
     };
 
@@ -2873,6 +2897,10 @@ export default function MenuMain({
           peerAvatarFrame: null,
         });
         showServerInviteFeedback(`Входящий звонок от ${String(fromName || "пользователя")}.`);
+        showElectronDesktopNotification({
+          title: "Входящий звонок",
+          body: `Вам звонит ${String(fromName || "пользователь")}.`,
+        });
       },
       onDirectCallAccepted: ({ channelName, fromUserId, fromName, fromAvatar }) => {
         if (!channelName || !fromUserId || directCallStateRef.current.channelId !== channelName) {

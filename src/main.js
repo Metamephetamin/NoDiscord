@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, safeStorage, session, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, safeStorage, session, shell, systemPreferences } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -15,6 +15,7 @@ const SESSION_STORE_FILE_NAME = "session.secure.json";
 const SECURE_KEY_VALUE_STORE_FILE_NAME = "secure-store.json";
 const APP_UPDATE_CACHE_FILE_NAME = "app-update-cache.json";
 const DOWNLOAD_PREFERENCES_STORE_KEY = "downloads.preferences";
+const BACKGROUND_PREFERENCES_STORE_KEY = "app.background.preferences";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 const APP_PROTOCOL = "nodiscord";
@@ -49,11 +50,17 @@ const resolveRendererDevServerUrl = () => {
 const RENDERER_DEV_SERVER_URL = resolveRendererDevServerUrl();
 
 let mainWindow = null;
+let appTray = null;
 let pendingRendererRoute = "";
 let appUpdateCheckPromise = null;
 let appUpdateDownloadPromise = null;
 let shouldInstallDownloadedUpdateOnQuit = false;
 let hasLaunchedDownloadedInstaller = false;
+let isAppQuitting = false;
+let backgroundPreferences = {
+  minimizeToTray: true,
+  launchOnStartup: true,
+};
 
 const createInitialAppUpdateState = () => ({
   status: app.isPackaged ? "idle" : "unsupported",
@@ -90,6 +97,92 @@ const focusMainWindow = () => {
   }
 
   mainWindow.focus();
+};
+
+const getDefaultBackgroundPreferences = () => ({
+  minimizeToTray: true,
+  launchOnStartup: app.isPackaged,
+});
+
+const normalizeBackgroundPreferences = (value) => {
+  const defaults = getDefaultBackgroundPreferences();
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+
+  return {
+    minimizeToTray: source.minimizeToTray !== false,
+    launchOnStartup: source.launchOnStartup == null ? defaults.launchOnStartup : source.launchOnStartup !== false,
+  };
+};
+
+const loadBackgroundPreferences = async () => {
+  const secureStore = await readSecureKeyValueStore();
+  backgroundPreferences = normalizeBackgroundPreferences(secureStore[BACKGROUND_PREFERENCES_STORE_KEY]);
+  return backgroundPreferences;
+};
+
+const saveBackgroundPreferences = async (value) => {
+  const secureStore = await readSecureKeyValueStore();
+  backgroundPreferences = normalizeBackgroundPreferences(value);
+  secureStore[BACKGROUND_PREFERENCES_STORE_KEY] = backgroundPreferences;
+  await writeSecureKeyValueStore(secureStore);
+  return backgroundPreferences;
+};
+
+const applyLaunchOnStartupPreference = () => {
+  if (process.platform !== "win32" && process.platform !== "darwin") {
+    return;
+  }
+
+  app.setLoginItemSettings({
+    openAtLogin: backgroundPreferences.launchOnStartup,
+    openAsHidden: backgroundPreferences.minimizeToTray,
+  });
+};
+
+const showDesktopNotification = ({ title = APP_DISPLAY_NAME, body = "", route = "/", silent = false } = {}) => {
+  if (!Notification.isSupported()) {
+    return false;
+  }
+
+  const notification = new Notification({
+    title: String(title || APP_DISPLAY_NAME).trim() || APP_DISPLAY_NAME,
+    body: String(body || "").trim(),
+    silent: Boolean(silent),
+    icon: resolveAppIconPath(),
+  });
+
+  notification.on("click", () => {
+    queueRendererRoute(route);
+  });
+  notification.show();
+  return true;
+};
+
+const createTray = () => {
+  if (appTray) {
+    return appTray;
+  }
+
+  appTray = new Tray(resolveAppIconPath());
+  appTray.setToolTip(APP_DISPLAY_NAME);
+  appTray.on("click", () => {
+    focusMainWindow();
+  });
+  appTray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: "Открыть Tend",
+      click: () => focusMainWindow(),
+    },
+    {
+      label: "Выход",
+      click: () => {
+        isAppQuitting = true;
+        app.quit();
+      },
+    },
+  ]));
+
+  return appTray;
 };
 
 const extractDeepLinkFromArgv = (argv = []) =>
@@ -1018,6 +1111,8 @@ const createWindow = () => {
     },
   });
 
+  createTray();
+
   mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1042,6 +1137,15 @@ const createWindow = () => {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+  });
+
+  mainWindow.on("close", (event) => {
+    if (isAppQuitting || !backgroundPreferences.minimizeToTray) {
+      return;
+    }
+
+    event.preventDefault();
+    mainWindow.hide();
   });
 
   mainWindow.webContents.on("did-finish-load", () => {
@@ -1089,6 +1193,8 @@ app.whenReady().then(async () => {
   }
 
   pendingRendererRoute = parseRendererRouteFromDeepLink(extractDeepLinkFromArgv(process.argv));
+  await loadBackgroundPreferences();
+  applyLaunchOnStartupPreference();
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     const allowedPermissions = new Set(["media", "display-capture", "microphone", "camera"]);
@@ -1156,6 +1262,24 @@ app.whenReady().then(async () => {
     clipboard.writeText(String(value ?? ""));
     return true;
   });
+  ipcMain.handle("background:get-preferences", async () => ({ ...backgroundPreferences }));
+  ipcMain.handle("background:set-preferences", async (_event, value) => {
+    const nextPreferences = await saveBackgroundPreferences(value);
+    applyLaunchOnStartupPreference();
+    return { ...nextPreferences };
+  });
+  ipcMain.handle("background:show-main-window", async (_event, route = "") => {
+    const normalizedRoute = String(route || "").trim();
+    if (normalizedRoute) {
+      queueRendererRoute(normalizedRoute);
+      return true;
+    }
+
+    focusMainWindow();
+    return true;
+  });
+  ipcMain.handle("desktop-notifications:show", async (_event, payload) =>
+    showDesktopNotification(payload && typeof payload === "object" ? payload : {}));
   ipcMain.handle("permissions:get-media-status", async (_event, mediaType) => getMediaAccessStatus(mediaType));
   ipcMain.handle("permissions:request-media-access", async (_event, mediaType) => requestMediaAccess(mediaType));
   ipcMain.handle("app-update:get-state", async () => getSanitizedAppUpdateState());
@@ -1440,7 +1564,11 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  isAppQuitting = true;
+
   if (!shouldInstallDownloadedUpdateOnQuit || !appUpdateState.downloadPath || hasLaunchedDownloadedInstaller) {
+    appTray?.destroy();
+    appTray = null;
     return;
   }
 
@@ -1448,7 +1576,7 @@ app.on("before-quit", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && !backgroundPreferences.minimizeToTray) {
     app.quit();
   }
 });

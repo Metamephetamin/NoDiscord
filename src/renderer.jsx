@@ -9,6 +9,7 @@ import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./uti
 import "./index.css";
 import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
 import { parseMediaFrame } from "./utils/mediaFrames";
+import { ensureBrowserPushSubscription, unregisterBrowserPushSubscription } from "./utils/pushNotifications";
 import {
   AUTH_UNAUTHORIZED_EVENT,
   clearStoredSession,
@@ -463,6 +464,28 @@ export default function Renderer() {
       .catch(() => {
         mediaPermissionBootstrapStartedRef.current = false;
       });
+
+    return () => {
+      disposed = true;
+    };
+  }, [sessionHydrated, token, user]);
+
+  useEffect(() => {
+    if (!sessionHydrated) {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    if (token && user) {
+      ensureBrowserPushSubscription().catch((error) => {
+        if (!disposed) {
+          console.warn("Browser push registration failed", error);
+        }
+      });
+    } else {
+      unregisterBrowserPushSubscription().catch(() => {});
+    }
 
     return () => {
       disposed = true;

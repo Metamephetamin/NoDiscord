@@ -294,6 +294,49 @@ public class MessageReactionRecord
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+[Table("push_subscriptions")]
+public class PushSubscriptionRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("user_id")]
+    public int UserId { get; set; }
+
+    [Column("endpoint")]
+    public string Endpoint { get; set; } = string.Empty;
+
+    [Column("p256dh_key")]
+    public string P256dhKey { get; set; } = string.Empty;
+
+    [Column("auth_key")]
+    public string AuthKey { get; set; } = string.Empty;
+
+    [Column("user_agent")]
+    public string UserAgent { get; set; } = string.Empty;
+
+    [Column("device_label")]
+    public string DeviceLabel { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    [Column("last_success_at")]
+    public DateTimeOffset? LastSuccessAt { get; set; }
+
+    [Column("last_failure_at")]
+    public DateTimeOffset? LastFailureAt { get; set; }
+
+    [Column("last_failure_reason")]
+    public string? LastFailureReason { get; set; }
+
+    [Column("is_active")]
+    public bool IsActive { get; set; }
+}
+
 
 public class AppDbContext : DbContext
 {
@@ -311,6 +354,7 @@ public class AppDbContext : DbContext
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
+    public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -335,6 +379,20 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ReactorUserId).IsRequired();
             entity.Property(x => x.ReactionKey).IsRequired();
             entity.Property(x => x.ReactionGlyph).IsRequired();
+        });
+
+        modelBuilder.Entity<PushSubscriptionRecord>(entity =>
+        {
+            entity.ToTable("push_subscriptions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Endpoint).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.IsActive, x.UpdatedAt });
+            entity.Property(x => x.Endpoint).IsRequired();
+            entity.Property(x => x.P256dhKey).IsRequired();
+            entity.Property(x => x.AuthKey).IsRequired();
+            entity.Property(x => x.UserAgent).IsRequired();
+            entity.Property(x => x.DeviceLabel).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
         });
 
 

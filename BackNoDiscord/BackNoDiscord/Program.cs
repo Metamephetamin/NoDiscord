@@ -172,6 +172,7 @@ builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<IClientUpdateService, ClientUpdateService>();
 builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
+builder.Services.AddScoped<PushNotificationService>();
 builder.Services.AddSingleton<UploadStoragePaths>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSender>();

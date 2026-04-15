@@ -167,6 +167,24 @@ contextBridge.exposeInMainWorld("electronClipboard", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronBackground", {
+  async getPreferences() {
+    return ipcRenderer.invoke("background:get-preferences");
+  },
+  async setPreferences(value) {
+    return ipcRenderer.invoke("background:set-preferences", value);
+  },
+  async showMainWindow(route = "") {
+    return ipcRenderer.invoke("background:show-main-window", route);
+  },
+});
+
+contextBridge.exposeInMainWorld("electronDesktopNotifications", {
+  async show(payload) {
+    return ipcRenderer.invoke("desktop-notifications:show", payload);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronPermissions", {
   async getMediaStatus(mediaType) {
     return ipcRenderer.invoke("permissions:get-media-status", mediaType);
