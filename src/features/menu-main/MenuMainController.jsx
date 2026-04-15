@@ -4533,10 +4533,16 @@ export default function MenuMain({
       return;
     }
 
+    const padding = 12;
+    const menuWidth = 260;
+    const menuHeight = 320;
+    const nextX = Math.max(padding, Math.min(Number(event.clientX || 0), window.innerWidth - menuWidth - padding));
+    const nextY = Math.max(padding, Math.min(Number(event.clientY || 0), window.innerHeight - menuHeight - padding));
+
     setFriendListProfileModal(null);
     setFriendListUserContextMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x: nextX,
+      y: nextY,
       userId: String(friend.id || ""),
       username: getDisplayName(friend),
       avatarUrl: String(friend.avatar || ""),

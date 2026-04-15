@@ -50,6 +50,11 @@ const deferEffectState = (callback) => {
   setTimeout(callback, 0);
 };
 
+const clampMenuPosition = (x, y, menuWidth = 260, menuHeight = 320, padding = 12) => ({
+  x: Math.max(padding, Math.min(Number(x || 0), window.innerWidth - menuWidth - padding)),
+  y: Math.max(padding, Math.min(Number(y || 0), window.innerHeight - menuHeight - padding)),
+});
+
 export default function TextChat({
   serverId,
   channelId,
@@ -260,12 +265,13 @@ export default function TextChat({
     const avatarFrame = matchedDirectTarget?.avatarFrame || null;
     const backgroundUrl = String(matchedDirectTarget?.profileBackgroundUrl || matchedDirectTarget?.profile_background_url || "").trim();
     const backgroundFrame = matchedDirectTarget?.profileBackgroundFrame || matchedDirectTarget?.profile_background_frame || null;
+    const { x, y } = clampMenuPosition(event.clientX, event.clientY);
 
     setMessageContextMenu(null);
     setReactionStickerPanelOpen(false);
     setUserContextMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x,
+      y,
       userId,
       username,
       avatarUrl,

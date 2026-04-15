@@ -1116,12 +1116,20 @@
   color: #dce2f2;
   cursor: pointer;
   text-align: left;
+  transition: transform 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
 }
 
 .friends-directs__item:hover,
 .friends-directs__item--active {
   background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
+}
+
+.friends-directs__item--pressing {
+  background: rgba(120, 132, 255, 0.14);
+  color: #ffffff;
+  transform: scale(0.988);
+  box-shadow: 0 10px 24px rgba(23, 29, 52, 0.22);
 }
 
 .friends-directs__avatar {

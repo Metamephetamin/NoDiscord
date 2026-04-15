@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { MEDIA_PREVIEW_MAX_ZOOM, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 
+const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+
 export default function TextChatMediaPreview({
   mediaPreview,
   videoRef,
@@ -63,6 +65,20 @@ export default function TextChatMediaPreview({
     dragStateRef.current = null;
     setIsDragging(false);
     event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  const handleWheelZoom = (event) => {
+    const deltaY = Number(event.deltaY || 0);
+    if (!deltaY) {
+      return;
+    }
+
+    event.preventDefault();
+    const adaptiveStep = Math.max(
+      MEDIA_PREVIEW_ZOOM_STEP,
+      Math.min(0.9, Math.abs(deltaY) * WHEEL_ZOOM_SENSITIVITY)
+    );
+    onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep);
   };
 
   return (
@@ -154,6 +170,7 @@ export default function TextChatMediaPreview({
             onPointerUp={handlePointerEnd}
             onPointerCancel={handlePointerEnd}
             onPointerLeave={handlePointerEnd}
+            onWheel={handleWheelZoom}
           >
             {mediaPreview.type === "image" ? (
               <img

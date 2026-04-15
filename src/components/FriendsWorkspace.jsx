@@ -1,6 +1,8 @@
+import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
+import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
 
 export const FriendsSidebar = ({
@@ -21,9 +23,13 @@ export const FriendsSidebar = ({
   onOpenUserContextMenu,
   overlayContent = null,
   getDisplayName,
-}) => (
-  <aside className="sidebar__channels sidebar__channels--friends">
-    <div className="channels__top">
+}) => {
+  const friendItemLongPress = useMobileLongPress();
+  const [pressedFriendId, setPressedFriendId] = useState("");
+
+  return (
+    <aside className="sidebar__channels sidebar__channels--friends">
+      <div className="channels__top">
       <input
         className="friends-search-input"
         type="text"
@@ -32,7 +38,7 @@ export const FriendsSidebar = ({
         onChange={(event) => onQueryChange(event.target.value)}
       />
 
-      <div className="friends-nav">
+        <div className="friends-nav">
         {navItems.map((item) => (
           <button
             key={item.id}
@@ -53,9 +59,9 @@ export const FriendsSidebar = ({
             <span>{item.label}</span>
           </button>
         ))}
-      </div>
+        </div>
 
-      <div className="friends-directs">
+        <div className="friends-directs">
         <div className="friends-directs__header">
           <span>Личные сообщения</span>
           <button type="button" onClick={() => { onResetDirect(); onSetFriendsSection("add"); }}>+</button>
@@ -71,9 +77,24 @@ export const FriendsSidebar = ({
                 <button
                   key={friend.id}
                   type="button"
-                  className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""}`}
-                  onClick={() => onOpenDirectChat(friend.id)}
+                  className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""} ${pressedFriendId === String(friend.id) ? "friends-directs__item--pressing" : ""}`}
+                  onClick={(event) => {
+                    if (friendItemLongPress.consumeSuppressedClick()) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      return;
+                    }
+
+                    onOpenDirectChat(friend.id);
+                  }}
                   onContextMenu={(event) => onOpenUserContextMenu?.(event, friend)}
+                  {...friendItemLongPress.bindLongPress(friend, (event, pressedFriend) => {
+                    onOpenUserContextMenu?.(event, pressedFriend);
+                  }, {
+                    onStart: (pressedFriend) => setPressedFriendId(String(pressedFriend?.id || "")),
+                    onCancel: () => setPressedFriendId(""),
+                    onTrigger: () => setPressedFriendId(""),
+                  })}
                 >
                   <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
                   <span className="friends-directs__meta">
@@ -88,13 +109,14 @@ export const FriendsSidebar = ({
             <div className="friends-panel__empty">Подходящих друзей пока нет.</div>
           )}
         </div>
+        </div>
       </div>
-    </div>
 
-    {profilePanel}
-    {overlayContent}
-  </aside>
-);
+      {profilePanel}
+      {overlayContent}
+    </aside>
+  );
+};
 
 export const FriendsMain = ({
   user,

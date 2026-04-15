@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
+import useMobileLongPress from "../hooks/useMobileLongPress";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { segmentMessageTextByMentions } from "../utils/messageMentions";
@@ -472,6 +473,11 @@ export default function TextChatMessageList({
   onToggleReaction,
   onJumpToReply,
 }) {
+  const messageLongPress = useMobileLongPress();
+  const avatarLongPress = useMobileLongPress();
+  const [pressedMessageId, setPressedMessageId] = useState("");
+  const [pressedAvatarMessageId, setPressedAvatarMessageId] = useState("");
+
   const resolveRenderedAttachments = (messageItem) =>
     normalizeAttachmentItems(messageItem).map((attachmentItem, attachmentIndex) => {
       const cacheKey = getAttachmentCacheKey(messageItem?.id, attachmentIndex);
@@ -545,6 +551,18 @@ export default function TextChatMessageList({
             && !messageText.includes("\n")
             && messageText.trim().length <= 14;
 
+          const handleMessageClick = selectionMode
+            ? (event) => {
+              if (messageLongPress.consumeSuppressedClick() || avatarLongPress.consumeSuppressedClick()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
+
+              onToggleSelection(messageItem.id);
+            }
+            : undefined;
+
           return (
             <div
               key={messageItem.id}
@@ -558,7 +576,7 @@ export default function TextChatMessageList({
               }}
               className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
-              onClick={selectionMode ? () => onToggleSelection(messageItem.id) : undefined}
+              onClick={handleMessageClick}
             >
               {selectionMode ? (
                 <button
@@ -576,11 +594,27 @@ export default function TextChatMessageList({
               <AnimatedAvatar
                 src={messageItem.photoUrl}
                 alt="avatar"
-                className="msg-avatar"
+                className={`msg-avatar ${pressedAvatarMessageId === String(messageItem.id) ? "msg-avatar--pressing" : ""}`}
                 onContextMenu={(event) => onOpenUserContextMenu?.(event, messageItem)}
+                {...avatarLongPress.bindLongPress(messageItem, (event, pressedMessageItem) => {
+                  onOpenUserContextMenu?.(event, pressedMessageItem);
+                }, {
+                  onStart: (pressedMessageItem) => setPressedAvatarMessageId(String(pressedMessageItem?.id || "")),
+                  onCancel: () => setPressedAvatarMessageId(""),
+                  onTrigger: () => setPressedAvatarMessageId(""),
+                })}
               />
 
-              <div className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""}`}>
+              <div
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
+                  onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
+                }, {
+                  onStart: (payload) => setPressedMessageId(String(payload?.messageItem?.id || "")),
+                  onCancel: () => setPressedMessageId(""),
+                  onTrigger: () => setPressedMessageId(""),
+                })}
+              >
                 {!isDirectChat && !isForwardGroupFollow ? (
                   <div className="message-author">
                     <span>{messageItem.username || "User"}</span>
