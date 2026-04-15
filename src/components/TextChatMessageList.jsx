@@ -419,15 +419,19 @@ function MessageAttachmentCollection(props) {
 
   const visualAttachments = attachments.filter((attachmentItem) => attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo);
   const fileAttachments = attachments.filter((attachmentItem) => !attachmentItem.isVoice && !attachmentItem.isImage && !attachmentItem.isVideo);
+  const hasThreeVisualTiles =
+    visualAttachments.length === 3
+    && !fileAttachments.length
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice);
 
   return (
     <div className="message-attachments-stack">
       {visualAttachments.length ? (
-        <div className="message-attachment-grid">
-          {visualAttachments.map((attachmentItem) => (
+        <div className={`message-attachment-grid ${hasThreeVisualTiles ? "message-attachment-grid--trio" : ""}`}>
+          {visualAttachments.map((attachmentItem, attachmentIndex) => (
             <div
               key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
-              className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""}`}
+              className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""} ${hasThreeVisualTiles && attachmentIndex === 0 ? "message-attachment-grid__item--trio-feature" : ""}`}
             >
               <MessageAttachmentCard {...props} attachmentItem={attachmentItem} galleryAttachments={galleryAttachments} />
             </div>
@@ -546,6 +550,13 @@ export default function TextChatMessageList({
           const isForwardGroupFollow = areMessagesInSameForwardGroup(messageItem, previousMessage);
           const isForwardGroupStart = !isForwardGroupFollow && areMessagesInSameForwardGroup(messageItem, nextMessage);
           const isForwardGroupEnd = isForwardGroupFollow && !areMessagesInSameForwardGroup(messageItem, nextMessage);
+          const isMediaOnlyMessage =
+            !messageText.trim()
+            && !inviteCode
+            && hasRenderableAttachments
+            && !reactions.length
+            && !messageItem.forwardedFromUsername
+            && !messageItem.replyToMessageId;
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
             && !hasRenderableAttachments
@@ -610,7 +621,7 @@ export default function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {

@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { MEDIA_PREVIEW_MAX_ZOOM, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+const WHEEL_NAVIGATION_COOLDOWN_MS = 180;
+const CLICK_CLOSE_DRAG_THRESHOLD = 6;
 
 export default function TextChatMediaPreview({
   mediaPreview,
@@ -16,6 +18,8 @@ export default function TextChatMediaPreview({
   onResetZoom,
 }) {
   const dragStateRef = useRef(null);
+  const dragDistanceRef = useRef(0);
+  const lastWheelNavigationAtRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
 
   if (!mediaPreview) {
@@ -28,11 +32,16 @@ export default function TextChatMediaPreview({
   const translateX = Number(mediaPreview.panX) || 0;
   const translateY = Number(mediaPreview.panY) || 0;
 
+  const stopEvent = (event) => {
+    event.stopPropagation();
+  };
+
   const handlePointerDown = (event) => {
     if (!canPan) {
       return;
     }
 
+    dragDistanceRef.current = 0;
     dragStateRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -49,6 +58,7 @@ export default function TextChatMediaPreview({
 
     const deltaX = event.clientX - dragStateRef.current.x;
     const deltaY = event.clientY - dragStateRef.current.y;
+    dragDistanceRef.current += Math.abs(deltaX) + Math.abs(deltaY);
     dragStateRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -67,35 +77,62 @@ export default function TextChatMediaPreview({
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  const handleWheelZoom = (event) => {
+  const handleViewportClick = (event) => {
+    if (dragDistanceRef.current > CLICK_CLOSE_DRAG_THRESHOLD) {
+      dragDistanceRef.current = 0;
+      event.stopPropagation();
+      return;
+    }
+
+    onClose?.();
+  };
+
+  const handleWheelAction = (event) => {
     const deltaY = Number(event.deltaY || 0);
     if (!deltaY) {
       return;
     }
 
+    if (event.ctrlKey) {
+      event.preventDefault();
+      const adaptiveStep = Math.max(
+        MEDIA_PREVIEW_ZOOM_STEP,
+        Math.min(0.9, Math.abs(deltaY) * WHEEL_ZOOM_SENSITIVITY)
+      );
+      onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep);
+      return;
+    }
+
+    if (!hasGallery) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastWheelNavigationAtRef.current < WHEEL_NAVIGATION_COOLDOWN_MS) {
+      event.preventDefault();
+      return;
+    }
+
+    lastWheelNavigationAtRef.current = now;
     event.preventDefault();
-    const adaptiveStep = Math.max(
-      MEDIA_PREVIEW_ZOOM_STEP,
-      Math.min(0.9, Math.abs(deltaY) * WHEEL_ZOOM_SENSITIVITY)
-    );
-    onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep);
+    onNavigate?.(deltaY > 0 ? 1 : -1);
   };
 
   return (
     <div className="media-preview" onClick={onClose} role="presentation">
-      <div className="media-preview__dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Предпросмотр файла">
+      <div className="media-preview__dialog" role="dialog" aria-modal="true" aria-label="Предпросмотр файла">
         <div className="media-preview__header">
-          <div className="media-preview__meta">
+          <div className="media-preview__meta" onClick={stopEvent}>
             <span>
               {mediaPreview.type === "image" ? "Изображение" : "Видео"}
               {hasGallery ? ` ${Number(mediaPreview.activeIndex || 0) + 1}/${mediaPreview.items.length}` : ""}
             </span>
           </div>
-          <div className="media-preview__actions">
+          <div className="media-preview__actions" onClick={stopEvent}>
             <button
               type="button"
               className="media-preview__action media-preview__action--compact"
-              onClick={() => onZoom(-MEDIA_PREVIEW_ZOOM_STEP)}
+              onClick={() => onZoom?.(-MEDIA_PREVIEW_ZOOM_STEP)}
               disabled={zoom <= MEDIA_PREVIEW_MIN_ZOOM}
               aria-label="Уменьшить"
             >
@@ -104,7 +141,7 @@ export default function TextChatMediaPreview({
             <button
               type="button"
               className="media-preview__action media-preview__action--compact"
-              onClick={() => onZoom(MEDIA_PREVIEW_ZOOM_STEP)}
+              onClick={() => onZoom?.(MEDIA_PREVIEW_ZOOM_STEP)}
               disabled={zoom >= MEDIA_PREVIEW_MAX_ZOOM}
               aria-label="Приблизить"
             >
@@ -113,42 +150,41 @@ export default function TextChatMediaPreview({
             <button
               type="button"
               className="media-preview__action media-preview__action--compact"
-              onClick={onResetZoom}
+              onClick={() => onResetZoom?.()}
               disabled={zoom === 1}
               aria-label="Сбросить масштаб"
             >
               {Math.round(zoom * 100)}%
             </button>
-            <button type="button" className="media-preview__action" onClick={onDownload}>
-              Скачать
-            </button>
-            {hasGallery ? (
-              <button type="button" className="media-preview__action" onClick={onDownloadAll}>
-                Скачать всё
-              </button>
-            ) : null}
             {mediaPreview.type === "video" ? (
-              <button type="button" className="media-preview__action" onClick={onFullscreen}>
+              <button type="button" className="media-preview__action" onClick={() => onFullscreen?.()}>
                 На весь экран
               </button>
             ) : null}
             <button
               type="button"
               className="media-preview__close"
-              onClick={onClose}
+              onClick={() => onClose?.()}
               aria-label="Закрыть предпросмотр"
             >
               <span className="media-preview__close-icon" aria-hidden="true" />
             </button>
           </div>
         </div>
+
         <div className="media-preview__content">
+          <div className="media-preview__side-fade media-preview__side-fade--left" aria-hidden="true" />
+          <div className="media-preview__side-fade media-preview__side-fade--right" aria-hidden="true" />
+
           {hasGallery ? (
             <>
               <button
                 type="button"
                 className="media-preview__nav media-preview__nav--prev"
-                onClick={() => onNavigate(-1)}
+                onClick={(event) => {
+                  stopEvent(event);
+                  onNavigate?.(-1);
+                }}
                 aria-label="Предыдущее вложение"
               >
                 ‹
@@ -156,13 +192,17 @@ export default function TextChatMediaPreview({
               <button
                 type="button"
                 className="media-preview__nav media-preview__nav--next"
-                onClick={() => onNavigate(1)}
+                onClick={(event) => {
+                  stopEvent(event);
+                  onNavigate?.(1);
+                }}
                 aria-label="Следующее вложение"
               >
                 ›
               </button>
             </>
           ) : null}
+
           <div
             className={`media-preview__viewport ${canPan ? "media-preview__viewport--pannable" : ""} ${isDragging ? "media-preview__viewport--dragging" : ""}`}
             onPointerDown={handlePointerDown}
@@ -170,7 +210,8 @@ export default function TextChatMediaPreview({
             onPointerUp={handlePointerEnd}
             onPointerCancel={handlePointerEnd}
             onPointerLeave={handlePointerEnd}
-            onWheel={handleWheelZoom}
+            onWheel={handleWheelAction}
+            onClick={handleViewportClick}
           >
             {mediaPreview.type === "image" ? (
               <img
@@ -185,12 +226,36 @@ export default function TextChatMediaPreview({
                 className="media-preview__video"
                 src={mediaPreview.url}
                 style={{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})` }}
+                onClick={stopEvent}
                 controls
                 autoPlay
                 playsInline
                 preload="metadata"
               />
             )}
+          </div>
+
+          <div className="media-preview__dock media-preview__dock--bottom-right" onClick={stopEvent}>
+            <button
+              type="button"
+              className="media-preview__icon-button"
+              onClick={() => onDownload?.()}
+              aria-label="Скачать текущее вложение"
+              title="Скачать текущее вложение"
+            >
+              <span className="media-preview__download-icon" aria-hidden="true" />
+            </button>
+            {hasGallery ? (
+              <button
+                type="button"
+                className="media-preview__icon-button media-preview__icon-button--stacked"
+                onClick={() => onDownloadAll?.()}
+                aria-label="Скачать все вложения"
+                title="Скачать все вложения"
+              >
+                <span className="media-preview__download-icon media-preview__download-icon--double" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

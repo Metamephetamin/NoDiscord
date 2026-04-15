@@ -72,14 +72,6 @@ export default function useTextChatScrollManager({
       const isNearBottom = distanceFromBottom < SCROLL_NEAR_BOTTOM_PX;
       nearBottomRef.current = isNearBottom;
 
-      if (!isProgrammaticScroll && isNearBottom) {
-        clearUnreadBelow();
-      }
-
-      if (isProgrammaticScroll) {
-        return;
-      }
-
       const probeLine = list.scrollTop + FLOATING_DATE_PROBE_OFFSET_PX;
       let nextVisibleMessage = messages[0] || null;
 
@@ -98,6 +90,14 @@ export default function useTextChatScrollManager({
 
       const nextLabel = nextVisibleMessage?.timestamp ? formatDayLabel(nextVisibleMessage.timestamp) : "";
       setFloatingDateLabel((current) => (current === nextLabel ? current : nextLabel));
+
+      if (!isProgrammaticScroll && isNearBottom) {
+        clearUnreadBelow();
+      }
+
+      if (isProgrammaticScroll) {
+        return;
+      }
     });
   }, [clearUnreadBelow, messageRefs, messages, messagesListRef]);
 

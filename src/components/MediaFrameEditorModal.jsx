@@ -38,6 +38,7 @@ export default function MediaFrameEditorModal({
   const dragStateRef = useRef(null);
   const [draftFrame, setDraftFrame] = useState(() => normalizeMediaFrame(frame));
   const copy = TARGET_COPY[target] || TARGET_COPY.avatar;
+  const previewTitle = avatarAlt || (target === "serverIcon" ? "Сервер" : "Ваш профиль");
 
   useEffect(() => {
     if (!open) {
@@ -67,8 +68,8 @@ export default function MediaFrameEditorModal({
       const deltaX = ((event.clientX - dragState.startX) / rect.width) * (100 / dragState.zoom);
       const deltaY = ((event.clientY - dragState.startY) / rect.height) * (100 / dragState.zoom);
       setDraftFrame({
-        x: clamp(dragState.frame.x + deltaX, 0, 100),
-        y: clamp(dragState.frame.y + deltaY, 0, 100),
+        x: clamp(dragState.frame.x - deltaX, 0, 100),
+        y: clamp(dragState.frame.y - deltaY, 0, 100),
         zoom: dragState.frame.zoom,
       });
     };
@@ -154,25 +155,81 @@ export default function MediaFrameEditorModal({
                 </div>
               </div>
             ) : (
-              <div
-                ref={previewFrameRef}
-                className={`media-frame-editor__frame media-frame-editor__frame--${target}`}
-                onPointerDown={handlePointerDown}
-              >
-                <AnimatedMedia
-                  className="media-frame-editor__media"
-                  src={source}
-                  fallback={fallback}
-                  alt={copy.title}
-                  frame={normalizedDraftFrame}
-                  draggable={false}
-                />
-                <div className="media-frame-editor__grid" aria-hidden="true" />
+              <div className="media-frame-editor__single-preview">
+                <div
+                  ref={previewFrameRef}
+                  className={`media-frame-editor__frame media-frame-editor__frame--${target}`}
+                  onPointerDown={handlePointerDown}
+                >
+                  <AnimatedMedia
+                    className="media-frame-editor__media"
+                    src={source}
+                    fallback={fallback}
+                    alt={copy.title}
+                    frame={normalizedDraftFrame}
+                    draggable={false}
+                  />
+                  <div className="media-frame-editor__grid" aria-hidden="true" />
+                </div>
+
+                <div className="media-frame-editor__live-preview">
+                  <span className="media-frame-editor__live-preview-label">Итоговый вид</span>
+                  {target === "serverIcon" ? (
+                    <div className="media-frame-editor__server-preview">
+                      <AnimatedAvatar
+                        className="media-frame-editor__server-preview-icon"
+                        src={source}
+                        fallback={fallback}
+                        alt={previewTitle}
+                        frame={normalizedDraftFrame}
+                      />
+                      <div className="media-frame-editor__server-preview-copy">
+                        <strong>{previewTitle}</strong>
+                        <span>Так иконка будет смотреться в списке серверов и в шапке</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="media-frame-editor__avatar-preview-card">
+                      <div className="media-frame-editor__avatar-preview-row">
+                        <AnimatedAvatar
+                          className="media-frame-editor__avatar-preview-large"
+                          src={source}
+                          fallback={fallback}
+                          alt={previewTitle}
+                          frame={normalizedDraftFrame}
+                        />
+                        <div className="media-frame-editor__avatar-preview-copy">
+                          <strong>{previewTitle}</strong>
+                          <span>Так аватарка будет выглядеть в профиле, чатах и компактных списках</span>
+                        </div>
+                      </div>
+                      <div className="media-frame-editor__avatar-preview-strip">
+                        <AnimatedAvatar
+                          className="media-frame-editor__avatar-preview-small"
+                          src={source}
+                          fallback={fallback}
+                          alt={previewTitle}
+                          frame={normalizedDraftFrame}
+                        />
+                        <AnimatedAvatar
+                          className="media-frame-editor__avatar-preview-small media-frame-editor__avatar-preview-small--tiny"
+                          src={source}
+                          fallback={fallback}
+                          alt={previewTitle}
+                          frame={normalizedDraftFrame}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           <div className="media-frame-editor__controls">
+            <div className="media-frame-editor__tip">
+              Тяните само изображение в нужную сторону, чтобы попасть в кадр. Масштаб регулируется ползунком.
+            </div>
             <label className="media-frame-editor__slider-field">
               <span>Масштаб</span>
               <input
