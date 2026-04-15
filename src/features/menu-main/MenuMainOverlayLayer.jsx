@@ -1,7 +1,7 @@
 import {
   CameraModal,
   CreateServerModal,
-  DirectCallOverlay,
+  DirectCallOverlayView,
   DirectToastStack,
   MediaFrameEditorOverlay,
   QuickSwitcherModal,
@@ -89,12 +89,26 @@ export default function MenuMainOverlayLayer({
   quickSwitcherOpen,
   quickSwitcherQuery,
   quickSwitcherItems,
+  quickSwitcherSelectedIndex,
+  setQuickSwitcherSelectedIndex,
   setQuickSwitcherQuery,
   handleQuickSwitcherSelect,
   closeQuickSwitcher,
   directCallState,
+  directCallHistory,
   isMicMuted,
+  audioInputDevices,
+  audioOutputDevices,
+  selectedInputDeviceId,
+  selectedOutputDeviceId,
+  outputSelectionSupported,
   toggleMicMute,
+  setSelectedInputDeviceId,
+  setSelectedOutputDeviceId,
+  setDirectCallMiniMode,
+  dismissDirectCallOverlay,
+  retryDirectCall,
+  onDirectCallHistoryRedial,
   acceptDirectCall,
   declineDirectCall,
   endDirectCall,
@@ -130,18 +144,32 @@ export default function MenuMainOverlayLayer({
         open={quickSwitcherOpen}
         query={quickSwitcherQuery}
         items={quickSwitcherItems}
+        selectedIndex={quickSwitcherSelectedIndex}
         onClose={closeQuickSwitcher}
         onQueryChange={setQuickSwitcherQuery}
+        onSelectIndex={setQuickSwitcherSelectedIndex}
         onSelect={handleQuickSwitcherSelect}
       />
 
-      <DirectCallOverlay
+      <DirectCallOverlayView
         call={directCallState}
+        history={directCallHistory}
         isMicMuted={isMicMuted}
+        audioInputDevices={audioInputDevices}
+        audioOutputDevices={audioOutputDevices}
+        selectedInputDeviceId={selectedInputDeviceId}
+        selectedOutputDeviceId={selectedOutputDeviceId}
+        outputSelectionSupported={outputSelectionSupported}
         onAccept={acceptDirectCall}
         onDecline={declineDirectCall}
         onEnd={endDirectCall}
         onToggleMic={toggleMicMute}
+        onSelectInputDevice={setSelectedInputDeviceId}
+        onSelectOutputDevice={setSelectedOutputDeviceId}
+        onToggleMiniMode={setDirectCallMiniMode}
+        onDismiss={dismissDirectCallOverlay}
+        onRetry={retryDirectCall}
+        onRedialHistoryItem={onDirectCallHistoryRedial}
       />
 
       <SettingsOverlay

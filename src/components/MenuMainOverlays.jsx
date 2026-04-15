@@ -3,6 +3,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
+import { formatTimestamp } from "../utils/textChatHelpers";
 
 export const SettingsOverlay = ({
   open,
@@ -450,6 +451,225 @@ export const DirectCallOverlay = ({
           )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+export const DirectCallOverlayView = ({
+  call,
+  history = [],
+  isMicMuted,
+  audioInputDevices = [],
+  audioOutputDevices = [],
+  selectedInputDeviceId = "",
+  selectedOutputDeviceId = "",
+  outputSelectionSupported = false,
+  onAccept,
+  onDecline,
+  onEnd,
+  onToggleMic,
+  onSelectInputDevice,
+  onSelectOutputDevice,
+  onToggleMiniMode,
+  onDismiss,
+  onRetry,
+  onRedialHistoryItem,
+}) => {
+  if (!call || call.phase === "idle") {
+    return null;
+  }
+
+  const isIncoming = call.phase === "incoming";
+  const isConnected = call.phase === "connected";
+  const isConnecting = call.phase === "connecting" || call.phase === "reconnecting";
+  const isFinished = call.phase === "ended" || call.phase === "declined" || call.phase === "disconnected";
+  const isMiniMode = Boolean(call.isMiniMode) && !isIncoming;
+  const callTitle = call.peerName || "Пользователь";
+  const statusLabel =
+    call.statusLabel
+    || (isIncoming
+      ? "Входящий звонок"
+      : isConnected
+        ? "Идёт разговор"
+        : isConnecting
+          ? "Подключаем звонок"
+          : "Ожидаем ответ");
+  const qualityLabel =
+    call.connectionQuality === "weak"
+      ? "Соединение слабое"
+      : call.connectionQuality === "reconnecting"
+        ? "Переподключение"
+        : call.connectionQuality === "stable"
+          ? "Связь стабильная"
+          : "Качество неизвестно";
+  const recentHistory = history
+    .filter((entry) => String(entry?.peerUserId || "") === String(call.peerUserId || ""))
+    .slice(0, 4);
+
+  return (
+    <div className={`direct-call-overlay direct-call-overlay--v2 ${isMiniMode ? "direct-call-overlay--mini" : ""}`}>
+      {!isMiniMode ? <div className="direct-call-overlay__backdrop" /> : null}
+      <div
+        className={`direct-call-overlay__workspace direct-call-overlay__workspace--v2 ${isMiniMode ? "direct-call-overlay__workspace--mini" : ""}`}
+        role="dialog"
+        aria-modal={isMiniMode ? undefined : "true"}
+        aria-label={`Звонок с ${callTitle.toLowerCase()}`}
+      >
+        <div className="direct-call-overlay__header">
+          <div className="direct-call-overlay__header-copy">
+            <span className="direct-call-overlay__eyebrow">
+              {isIncoming ? "Входящий звонок" : isConnected ? "Личный разговор" : "Личный звонок"}
+            </span>
+            <strong>{callTitle}</strong>
+            <span>{statusLabel}</span>
+          </div>
+          <div className="direct-call-overlay__header-actions">
+            {(isConnected || isFinished) ? (
+              <button type="button" className="direct-call-overlay__ghost" onClick={() => onToggleMiniMode?.(!isMiniMode)}>
+                {isMiniMode ? "Развернуть" : "Свернуть"}
+              </button>
+            ) : null}
+            {isFinished ? (
+              <button type="button" className="direct-call-overlay__ghost" onClick={onDismiss}>
+                Закрыть
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="direct-call-overlay__stage">
+          <div className="direct-call-overlay__pulse" aria-hidden="true" />
+          <div className="direct-call-overlay__stage-surface" />
+          <AnimatedAvatar
+            className={`direct-call-overlay__avatar ${isConnected ? "direct-call-overlay__avatar--connected" : ""}`}
+            src={call.peerAvatar || ""}
+            alt={callTitle}
+            frame={call.peerAvatarFrame}
+          />
+          <div className="direct-call-overlay__copy">
+            <strong>{callTitle}</strong>
+            <span>{statusLabel}</span>
+          </div>
+          <div className="direct-call-overlay__quality">
+            <span className={`direct-call-overlay__quality-dot direct-call-overlay__quality-dot--${call.connectionQuality || "unknown"}`} />
+            <strong>{qualityLabel}</strong>
+          </div>
+          {!isMiniMode ? (
+            <div className="direct-call-overlay__hint">
+              {isIncoming
+                ? "Примите звонок или отклоните его."
+                : isFinished
+                  ? "Вызов завершён. Можно закрыть карточку или сразу перезвонить."
+                  : isConnected
+                    ? "Звонок можно свернуть поверх переписки и продолжать чат без потери контекста."
+                    : "Соединяем звонок и держим переписку рядом, без ощущения другого приложения."}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="direct-call-overlay__dock">
+          {!isMiniMode ? (
+            <div className="direct-call-overlay__dock-meta">
+              <span className="direct-call-overlay__dock-label">Режим</span>
+              <strong>{isConnected ? "Голосовой разговор 1 на 1" : isIncoming ? "Входящий звонок" : isFinished ? "История вызова" : "Подключение"}</strong>
+            </div>
+          ) : null}
+          <div className="direct-call-overlay__actions">
+            {isIncoming ? (
+              <>
+                <button type="button" className="direct-call-overlay__button direct-call-overlay__button--decline" onClick={onDecline}>
+                  Отклонить
+                </button>
+                <button type="button" className="direct-call-overlay__button direct-call-overlay__button--accept" onClick={onAccept}>
+                  Принять
+                </button>
+              </>
+            ) : isFinished ? (
+              <>
+                {call.canRetry ? (
+                  <button type="button" className="direct-call-overlay__button direct-call-overlay__button--accept" onClick={onRetry}>
+                    Перезвонить
+                  </button>
+                ) : null}
+                <button type="button" className="direct-call-overlay__button direct-call-overlay__button--decline" onClick={onDismiss}>
+                  Закрыть
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={`direct-call-overlay__button direct-call-overlay__button--mute ${isMicMuted ? "direct-call-overlay__button--active" : ""}`}
+                  onClick={onToggleMic}
+                  disabled={!isConnected}
+                >
+                  {isMicMuted ? "Микрофон выкл" : "Микрофон"}
+                </button>
+                <button
+                  type="button"
+                  className="direct-call-overlay__button"
+                  onClick={() => onToggleMiniMode?.(!isMiniMode)}
+                  disabled={!isConnected}
+                >
+                  {isMiniMode ? "Развернуть" : "Свернуть"}
+                </button>
+                <button
+                  type="button"
+                  className="direct-call-overlay__button direct-call-overlay__button--decline"
+                  onClick={isConnected ? onEnd : onDecline}
+                >
+                  {isConnected ? "Завершить" : "Отменить"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {!isMiniMode && !isIncoming && (audioInputDevices.length || (outputSelectionSupported && audioOutputDevices.length)) ? (
+          <div className="direct-call-overlay__devices">
+            <label className="direct-call-overlay__device-field">
+              <span>Микрофон</span>
+              <select value={selectedInputDeviceId} onChange={(event) => onSelectInputDevice?.(event.target.value)}>
+                {audioInputDevices.map((device) => (
+                  <option key={device.id} value={device.id}>{device.label}</option>
+                ))}
+              </select>
+            </label>
+            {outputSelectionSupported ? (
+              <label className="direct-call-overlay__device-field">
+                <span>Вывод</span>
+                <select value={selectedOutputDeviceId} onChange={(event) => onSelectOutputDevice?.(event.target.value)}>
+                  {audioOutputDevices.map((device) => (
+                    <option key={device.id} value={device.id}>{device.label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!isMiniMode && recentHistory.length ? (
+          <div className="direct-call-overlay__history">
+            <span className="direct-call-overlay__dock-label">Последние вызовы</span>
+            <div className="direct-call-overlay__history-list">
+              {recentHistory.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className="direct-call-overlay__history-item"
+                  onClick={() => onRedialHistoryItem?.(entry.peerUserId)}
+                >
+                  <span className="direct-call-overlay__history-copy">
+                    <strong>{entry.peerName}</strong>
+                    <span>{formatTimestamp(entry.timestamp)} • {entry.outcome}</span>
+                  </span>
+                  <span className="direct-call-overlay__history-action">Перезвонить</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

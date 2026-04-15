@@ -90,6 +90,8 @@
   --font-body: "Sansation", "Segoe UI", Helvetica, Arial, sans-serif;
   --font-heading: "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
   --font-slogan: "Rubik Glitch", "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
+  --ui-font-size-base: 16px;
+  --ui-touch-target-multiplier: 1;
 }
 
 *,
@@ -107,6 +109,7 @@ body,
 
 html {
   scroll-behavior: smooth;
+  font-size: var(--ui-font-size-base);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -119,6 +122,31 @@ body {
   font-family: var(--font-body);
   background: #0f1115;
   color: #f8fafc;
+}
+
+html[data-ui-font-scale="sm"] {
+  --ui-font-size-base: 15px;
+}
+
+html[data-ui-font-scale="md"] {
+  --ui-font-size-base: 16px;
+}
+
+html[data-ui-font-scale="lg"] {
+  --ui-font-size-base: 17.5px;
+}
+
+html[data-ui-touch-targets="large"] {
+  --ui-touch-target-multiplier: 1.12;
+}
+
+html[data-ui-reduce-motion="true"] *,
+html[data-ui-reduce-motion="true"] *::before,
+html[data-ui-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 body,

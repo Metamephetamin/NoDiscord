@@ -146,7 +146,60 @@ const normalizeProfileNicknameInput = (value) =>
     .replace(/\s+/g, " ")
     .slice(0, MAX_PROFILE_NICKNAME_LENGTH)
     .trimStart();
+const getUiDensityStorageKey = (user) => `nd:ui-density:${getCurrentUserId(user) || "guest"}`;
+const getUiFontScaleStorageKey = (user) => `nd:ui-font-scale:${getCurrentUserId(user) || "guest"}`;
+const getUiReduceMotionStorageKey = (user) => `nd:ui-reduce-motion:${getCurrentUserId(user) || "guest"}`;
+const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUserId(user) || "guest"}`;
+const getDirectCallHistoryStorageKey = (user) => {
+  const userId = String(user?.id || user?.email || "").trim();
+  return userId ? `nd:direct-call-history:${userId}` : "";
+};
+
+const readDirectCallHistory = (storageKey) => {
+  if (!storageKey) {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeDirectCallHistory = (storageKey, history) => {
+  if (!storageKey) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(Array.isArray(history) ? history : []));
+  } catch {
+    // ignore storage failures
+  }
+};
+
+const getDirectCallConnectionQuality = (pingMs, phase) => {
+  if (phase === "reconnecting") {
+    return "reconnecting";
+  }
+
+  const numericPing = Number(pingMs);
+  if (!Number.isFinite(numericPing) || numericPing <= 0) {
+    return phase === "connected" ? "stable" : "unknown";
+  }
+
+  if (numericPing >= 240) {
+    return "weak";
+  }
+
+  return "stable";
+};
+
 const createDirectCallState = () => ({
+  phase: "idle",
   status: "idle",
   statusLabel: "",
   channelId: "",
@@ -154,7 +207,37 @@ const createDirectCallState = () => ({
   peerName: "",
   peerAvatar: "",
   peerAvatarFrame: null,
+  peer: null,
+  connectionQuality: "unknown",
+  canRetry: false,
+  isMiniMode: false,
+  direction: "",
+  startedAt: "",
+  endedAt: "",
+  lastReason: "",
 });
+
+const buildDirectCallState = (overrides = {}) => {
+  const phase = String(overrides.phase || overrides.status || "idle");
+  const peer = {
+    userId: String(overrides.peer?.userId || overrides.peerUserId || "").trim(),
+    name: String(overrides.peer?.name || overrides.peerName || "").trim(),
+    avatar: String(overrides.peer?.avatar || overrides.peerAvatar || "").trim(),
+    avatarFrame: overrides.peer?.avatarFrame ?? overrides.peerAvatarFrame ?? null,
+  };
+
+  return {
+    ...createDirectCallState(),
+    ...overrides,
+    phase,
+    status: phase,
+    peerUserId: peer.userId,
+    peerName: peer.name,
+    peerAvatar: peer.avatar,
+    peerAvatarFrame: peer.avatarFrame,
+    peer,
+  };
+};
 
 export default function MenuMain({
   user,
@@ -171,6 +254,7 @@ export default function MenuMain({
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
   const [directCallState, setDirectCallState] = useState(() => createDirectCallState());
+  const [directCallHistory, setDirectCallHistory] = useState([]);
   const [desktopServerPane, setDesktopServerPane] = useState("text");
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
@@ -278,6 +362,7 @@ export default function MenuMain({
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState("");
+  const [quickSwitcherSelectedIndex, setQuickSwitcherSelectedIndex] = useState(0);
   const [textChatNavigationIndex, setTextChatNavigationIndex] = useState(null);
   const [textChatNavigationRequest, setTextChatNavigationRequest] = useState(null);
   const [chatSyncTick, setChatSyncTick] = useState(0);
@@ -300,6 +385,10 @@ export default function MenuMain({
   });
   const [mobileSection, setMobileSection] = useState("servers");
   const [mobileServersPane, setMobileServersPane] = useState("channels");
+  const [uiDensity, setUiDensity] = useState("standard");
+  const [uiFontScale, setUiFontScale] = useState("md");
+  const [uiReduceMotion, setUiReduceMotion] = useState(false);
+  const [uiTouchTargetSize, setUiTouchTargetSize] = useState("standard");
 
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
@@ -357,6 +446,11 @@ export default function MenuMain({
   const audioOutputDeviceStorageKey = useMemo(() => getAudioOutputDeviceStorageKey(user), [user?.id, user?.email]);
   const videoInputDeviceStorageKey = useMemo(() => getVideoInputDeviceStorageKey(user), [user?.id, user?.email]);
   const currentUserId = useMemo(() => getCurrentUserId(user), [user?.id, user?.email]);
+  const directCallHistoryStorageKey = useMemo(() => getDirectCallHistoryStorageKey(user), [user?.id, user?.email]);
+  const uiDensityStorageKey = useMemo(() => getUiDensityStorageKey(user), [user?.id, user?.email]);
+  const uiFontScaleStorageKey = useMemo(() => getUiFontScaleStorageKey(user), [user?.id, user?.email]);
+  const uiReduceMotionStorageKey = useMemo(() => getUiReduceMotionStorageKey(user), [user?.id, user?.email]);
+  const uiTouchTargetStorageKey = useMemo(() => getUiTouchTargetStorageKey(user), [user?.id, user?.email]);
 
   const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
@@ -468,15 +562,78 @@ export default function MenuMain({
     directCallStateRef.current = directCallState;
   }, [directCallState]);
   useEffect(() => {
+    setDirectCallHistory(readDirectCallHistory(directCallHistoryStorageKey));
+  }, [directCallHistoryStorageKey]);
+  useEffect(() => {
+    writeDirectCallHistory(directCallHistoryStorageKey, directCallHistory);
+  }, [directCallHistory, directCallHistoryStorageKey]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextDensity = localStorage.getItem(uiDensityStorageKey) || "standard";
+    const nextFontScale = localStorage.getItem(uiFontScaleStorageKey) || "md";
+    const nextReduceMotion = localStorage.getItem(uiReduceMotionStorageKey) === "true";
+    const nextTouchTargetSize = localStorage.getItem(uiTouchTargetStorageKey) || "standard";
+
+    setUiDensity(nextDensity === "compact" ? "compact" : "standard");
+    setUiFontScale(["sm", "md", "lg"].includes(nextFontScale) ? nextFontScale : "md");
+    setUiReduceMotion(nextReduceMotion);
+    setUiTouchTargetSize(nextTouchTargetSize === "large" ? "large" : "standard");
+  }, [uiDensityStorageKey, uiFontScaleStorageKey, uiReduceMotionStorageKey, uiTouchTargetStorageKey]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    localStorage.setItem(uiDensityStorageKey, uiDensity);
+    localStorage.setItem(uiFontScaleStorageKey, uiFontScale);
+    localStorage.setItem(uiReduceMotionStorageKey, String(uiReduceMotion));
+    localStorage.setItem(uiTouchTargetStorageKey, uiTouchTargetSize);
+
+    const root = document.documentElement;
+    const body = document.body;
+    root.dataset.uiDensity = uiDensity;
+    root.dataset.uiFontScale = uiFontScale;
+    root.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
+    root.dataset.uiTouchTargets = uiTouchTargetSize;
+    body.dataset.uiDensity = uiDensity;
+    body.dataset.uiFontScale = uiFontScale;
+    body.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
+    body.dataset.uiTouchTargets = uiTouchTargetSize;
+  }, [
+    uiDensity,
+    uiDensityStorageKey,
+    uiFontScale,
+    uiFontScaleStorageKey,
+    uiReduceMotion,
+    uiReduceMotionStorageKey,
+    uiTouchTargetSize,
+    uiTouchTargetStorageKey,
+  ]);
+  useEffect(() => {
     currentVoiceChannelRef.current = currentVoiceChannel;
   }, [currentVoiceChannel]);
+  useEffect(() => {
+    setDirectCallState((previous) => {
+      if (previous.phase === "idle") {
+        return previous;
+      }
+
+      const nextQuality = getDirectCallConnectionQuality(pingMs, previous.phase);
+      return previous.connectionQuality === nextQuality
+        ? previous
+        : { ...previous, connectionQuality: nextQuality };
+    });
+  }, [pingMs]);
   useEffect(() => {
     let disposed = false;
 
     directCallToneStopRef.current?.();
     directCallToneStopRef.current = null;
 
-    if (directCallState.status !== "outgoing" && directCallState.status !== "incoming") {
+    if (directCallState.phase !== "outgoing" && directCallState.phase !== "incoming") {
       return () => {
         directCallToneStopRef.current?.();
         directCallToneStopRef.current = null;
@@ -484,7 +641,7 @@ export default function MenuMain({
     }
 
     void (async () => {
-      const stopTone = await startDirectCallTone(directCallState.status === "incoming" ? "incoming" : "outgoing");
+      const stopTone = await startDirectCallTone(directCallState.phase === "incoming" ? "incoming" : "outgoing");
       if (disposed) {
         stopTone?.();
         return;
@@ -498,7 +655,7 @@ export default function MenuMain({
       directCallToneStopRef.current?.();
       directCallToneStopRef.current = null;
     };
-  }, [directCallState.status]);
+  }, [directCallState.phase]);
   const buildNavigationSnapshot = () => ({
     workspaceMode,
     activeServerId: String(activeServerId || ""),
@@ -1007,6 +1164,15 @@ export default function MenuMain({
     servers,
     textChatNavigationIndex,
   ]);
+  useEffect(() => {
+    setQuickSwitcherSelectedIndex((previous) => {
+      if (!quickSwitcherItems.length) {
+        return 0;
+      }
+
+      return Math.max(0, Math.min(previous, quickSwitcherItems.length - 1));
+    });
+  }, [quickSwitcherItems]);
   const friendQueryMode = getFriendSearchModeForQuery(friendEmail);
   const filteredFriends = useMemo(() => {
     const query = friendsSidebarQuery.trim().toLowerCase();
@@ -1288,13 +1454,64 @@ export default function MenuMain({
     });
   };
 
+  const appendDirectCallHistoryEntry = ({
+    peerUserId,
+    peerName,
+    peerAvatar,
+    direction,
+    outcome,
+    timestamp = new Date().toISOString(),
+  }) => {
+    if (!peerUserId) {
+      return;
+    }
+
+    setDirectCallHistory((previous) => [
+      {
+        id: createId("direct-call-log"),
+        peerUserId: String(peerUserId),
+        peerName: String(peerName || "Пользователь"),
+        peerAvatar: String(peerAvatar || ""),
+        direction: String(direction || ""),
+        outcome: String(outcome || "ended"),
+        timestamp,
+      },
+      ...previous,
+    ].slice(0, 24));
+  };
+
+  const setDirectCallMiniMode = (isMiniMode) => {
+    setDirectCallState((previous) => (
+      previous.phase === "idle"
+        ? previous
+        : { ...previous, isMiniMode: Boolean(isMiniMode) }
+    ));
+  };
+
+  const dismissDirectCallOverlay = () => {
+    if (!["ended", "declined", "disconnected"].includes(String(directCallStateRef.current.phase || ""))) {
+      return;
+    }
+
+    setDirectCallState(createDirectCallState());
+  };
+
+  const retryDirectCall = async () => {
+    const targetUserId = String(directCallStateRef.current.peerUserId || "").trim();
+    if (!targetUserId) {
+      return;
+    }
+
+    await startDirectCallWithUser(targetUserId);
+  };
+
   const startDirectCallWithUser = async (targetUserId) => {
     const normalizedTargetUserId = String(targetUserId || "").trim();
     if (!normalizedTargetUserId || normalizedTargetUserId === currentUserId || !voiceClientRef.current || !user?.id) {
       return;
     }
 
-    if (directCallStateRef.current.status !== "idle") {
+    if (directCallStateRef.current.phase !== "idle") {
       showServerInviteFeedback("Сначала завершите текущий звонок.");
       return;
     }
@@ -1312,34 +1529,66 @@ export default function MenuMain({
         await voiceClientRef.current.leaveChannel();
       }
 
-      setDirectCallState({
-        status: "outgoing",
+      setDirectCallState(buildDirectCallState({
+        phase: "outgoing",
         statusLabel: "Ожидаем ответ",
         channelId,
         peerUserId: normalizedTargetUserId,
         peerName: getDisplayName(targetUser),
         peerAvatar: getUserAvatar(targetUser),
         peerAvatarFrame: getUserAvatarFrame(targetUser),
-      });
+        peer: {
+          userId: normalizedTargetUserId,
+          name: getDisplayName(targetUser),
+          avatar: getUserAvatar(targetUser),
+          avatarFrame: getUserAvatarFrame(targetUser),
+        },
+        connectionQuality: "unknown",
+        canRetry: true,
+        isMiniMode: false,
+        direction: "outgoing",
+        startedAt: new Date().toISOString(),
+      }));
       await voiceClientRef.current.startDirectCall(normalizedTargetUserId, channelId, user);
     } catch (error) {
       console.error("Не удалось начать личный звонок:", error);
-      setDirectCallState(createDirectCallState());
+      setDirectCallState(buildDirectCallState({
+        phase: "disconnected",
+        statusLabel: "Не удалось подключить звонок",
+        peerUserId: normalizedTargetUserId,
+        peerName: targetUser ? getDisplayName(targetUser) : "Пользователь",
+        peerAvatar: targetUser ? getUserAvatar(targetUser) : "",
+        peerAvatarFrame: targetUser ? getUserAvatarFrame(targetUser) : null,
+        canRetry: true,
+        isMiniMode: true,
+        direction: "outgoing",
+        lastReason: error?.message || "failed",
+        endedAt: new Date().toISOString(),
+      }));
+      appendDirectCallHistoryEntry({
+        peerUserId: normalizedTargetUserId,
+        peerName: targetUser ? getDisplayName(targetUser) : "Пользователь",
+        peerAvatar: targetUser ? getUserAvatar(targetUser) : "",
+        direction: "outgoing",
+        outcome: "failed",
+      });
       showServerInviteFeedback(error?.message || "Не удалось начать звонок.");
     }
   };
 
   const acceptDirectCall = async () => {
     const currentCall = directCallStateRef.current;
-    if (currentCall.status !== "incoming" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current || !user?.id) {
+    if (currentCall.phase !== "incoming" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current || !user?.id) {
       return;
     }
 
     try {
       setDirectCallState((previous) => ({
         ...previous,
+        phase: "connecting",
         status: "connecting",
         statusLabel: "Подключаем звонок",
+        canRetry: false,
       }));
       openDirectChat(currentCall.peerUserId);
 
@@ -1351,42 +1600,73 @@ export default function MenuMain({
       await voiceClientRef.current.joinChannel(currentCall.channelId, user);
       setDirectCallState((previous) => ({
         ...previous,
+        phase: "connected",
         status: "connected",
         statusLabel: "Идёт разговор",
+        isMiniMode: true,
+        canRetry: false,
+        connectionQuality: getDirectCallConnectionQuality(pingMs, "connected"),
       }));
     } catch (error) {
       console.error("Не удалось принять личный звонок:", error);
-      setDirectCallState(createDirectCallState());
+      appendDirectCallHistoryEntry({
+        peerUserId: currentCall.peerUserId,
+        peerName: currentCall.peerName,
+        peerAvatar: currentCall.peerAvatar,
+        direction: "incoming",
+        outcome: "failed",
+      });
+      setDirectCallState(buildDirectCallState({
+        phase: "disconnected",
+        statusLabel: "Не удалось подключить звонок",
+        peerUserId: currentCall.peerUserId,
+        peerName: currentCall.peerName,
+        peerAvatar: currentCall.peerAvatar,
+        peerAvatarFrame: currentCall.peerAvatarFrame,
+        canRetry: true,
+        isMiniMode: false,
+        direction: "incoming",
+        lastReason: error?.message || "failed",
+        endedAt: new Date().toISOString(),
+      }));
       showServerInviteFeedback(error?.message || "Не удалось принять звонок.");
     }
   };
 
   const declineDirectCall = async () => {
     const currentCall = directCallStateRef.current;
-    if (currentCall.status === "idle" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current) {
+    if (currentCall.phase === "idle" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current) {
       return;
     }
 
     try {
-      if (currentCall.status === "incoming") {
+      if (currentCall.phase === "incoming") {
         await voiceClientRef.current.declineDirectCall(currentCall.peerUserId, currentCall.channelId, "declined", user);
-      } else if (currentCall.status === "outgoing" || currentCall.status === "connecting") {
+      } else if (currentCall.phase === "outgoing" || currentCall.phase === "connecting" || currentCall.phase === "reconnecting") {
         await voiceClientRef.current.declineDirectCall(currentCall.peerUserId, currentCall.channelId, "cancelled", user);
       }
     } catch (error) {
       console.error("Не удалось отменить личный звонок:", error);
     } finally {
+      appendDirectCallHistoryEntry({
+        peerUserId: currentCall.peerUserId,
+        peerName: currentCall.peerName,
+        peerAvatar: currentCall.peerAvatar,
+        direction: currentCall.direction || (currentCall.phase === "incoming" ? "incoming" : "outgoing"),
+        outcome: currentCall.phase === "incoming" ? "declined" : "cancelled",
+      });
       setDirectCallState(createDirectCallState());
     }
   };
 
   const endDirectCall = async () => {
     const currentCall = directCallStateRef.current;
-    if (currentCall.status !== "connected" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current) {
+    if (currentCall.phase !== "connected" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current) {
       return;
     }
 
     try {
+      setDirectCallState((previous) => ({ ...previous, lastReason: "expected-end" }));
       await voiceClientRef.current.endDirectCall(currentCall.peerUserId, currentCall.channelId, user);
       if (currentVoiceChannelRef.current === currentCall.channelId) {
         await voiceClientRef.current.leaveChannel();
@@ -1394,7 +1674,25 @@ export default function MenuMain({
     } catch (error) {
       console.error("Не удалось завершить личный звонок:", error);
     } finally {
-      setDirectCallState(createDirectCallState());
+      appendDirectCallHistoryEntry({
+        peerUserId: currentCall.peerUserId,
+        peerName: currentCall.peerName,
+        peerAvatar: currentCall.peerAvatar,
+        direction: currentCall.direction || "outgoing",
+        outcome: "ended",
+      });
+      setDirectCallState(buildDirectCallState({
+        phase: "ended",
+        statusLabel: "Звонок завершён",
+        peerUserId: currentCall.peerUserId,
+        peerName: currentCall.peerName,
+        peerAvatar: currentCall.peerAvatar,
+        peerAvatarFrame: currentCall.peerAvatarFrame,
+        canRetry: true,
+        isMiniMode: true,
+        direction: currentCall.direction || "outgoing",
+        endedAt: new Date().toISOString(),
+      }));
     }
   };
 
@@ -1420,6 +1718,7 @@ export default function MenuMain({
   const closeQuickSwitcher = () => {
     setQuickSwitcherOpen(false);
     setQuickSwitcherQuery("");
+    setQuickSwitcherSelectedIndex(0);
   };
 
   const sendTextChatNavigationRequest = (request) => {
@@ -1514,10 +1813,16 @@ export default function MenuMain({
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setQuickSwitcherOpen((previous) => !previous);
-        if (quickSwitcherOpen) {
-          setQuickSwitcherQuery("");
-        }
+        setQuickSwitcherOpen((previous) => {
+          const nextOpen = !previous;
+          if (!nextOpen) {
+            setQuickSwitcherQuery("");
+            setQuickSwitcherSelectedIndex(0);
+          } else {
+            setQuickSwitcherSelectedIndex(0);
+          }
+          return nextOpen;
+        });
         return;
       }
 
@@ -1527,8 +1832,69 @@ export default function MenuMain({
         return;
       }
 
+      if (quickSwitcherOpen) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setQuickSwitcherSelectedIndex((previous) => (
+            quickSwitcherItems.length ? (previous + 1) % quickSwitcherItems.length : 0
+          ));
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setQuickSwitcherSelectedIndex((previous) => (
+            quickSwitcherItems.length ? (previous - 1 + quickSwitcherItems.length) % quickSwitcherItems.length : 0
+          ));
+          return;
+        }
+
+        if (event.key === "Enter") {
+          const selectedItem = quickSwitcherItems[quickSwitcherSelectedIndex] || quickSwitcherItems[0];
+          if (selectedItem) {
+            event.preventDefault();
+            handleQuickSwitcherSelect(selectedItem);
+          }
+          return;
+        }
+      }
+
       if (isEditableTarget) {
         return;
+      }
+
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        toggleMicMute();
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        toggleSoundMute();
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "a") {
+        if (directCallStateRef.current.phase === "incoming") {
+          event.preventDefault();
+          void acceptDirectCall();
+        }
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "e") {
+        if (directCallStateRef.current.phase === "connected") {
+          event.preventDefault();
+          void endDirectCall();
+          return;
+        }
+
+        if (directCallStateRef.current.phase !== "idle") {
+          event.preventDefault();
+          void declineDirectCall();
+          return;
+        }
       }
 
       if (event.altKey && event.key === "ArrowLeft") {
@@ -1547,7 +1913,20 @@ export default function MenuMain({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [quickSwitcherOpen, quickSwitcherQuery]);
+  }, [
+    acceptDirectCall,
+    closeQuickSwitcher,
+    declineDirectCall,
+    endDirectCall,
+    handleQuickSwitcherSelect,
+    navigateHistoryBack,
+    navigateHistoryForward,
+    quickSwitcherItems,
+    quickSwitcherOpen,
+    quickSwitcherSelectedIndex,
+    toggleMicMute,
+    toggleSoundMute,
+  ]);
 
   const dismissDirectToast = (toastId) => {
     const timeoutId = directToastTimeoutsRef.current.get(toastId);
@@ -2825,7 +3204,36 @@ export default function MenuMain({
         setCurrentVoiceChannel(nextChannel);
         setJoiningVoiceChannelId((previous) => (String(previous || "") === String(nextChannel || "") ? "" : previous));
         if (!nextChannel && isDirectCallChannelId(directCallStateRef.current.channelId)) {
-          setDirectCallState(createDirectCallState());
+          const currentCall = directCallStateRef.current;
+          if (currentCall.lastReason === "expected-end") {
+            return;
+          }
+
+          if (currentCall.phase === "connected" || currentCall.phase === "connecting" || currentCall.phase === "reconnecting") {
+            setDirectCallState(buildDirectCallState({
+              phase: "disconnected",
+              statusLabel: "Соединение прервано",
+              channelId: currentCall.channelId,
+              peerUserId: currentCall.peerUserId,
+              peerName: currentCall.peerName,
+              peerAvatar: currentCall.peerAvatar,
+              peerAvatarFrame: currentCall.peerAvatarFrame,
+              canRetry: true,
+              isMiniMode: true,
+              direction: currentCall.direction,
+              connectionQuality: "reconnecting",
+              endedAt: new Date().toISOString(),
+            }));
+            appendDirectCallHistoryEntry({
+              peerUserId: currentCall.peerUserId,
+              peerName: currentCall.peerName,
+              peerAvatar: currentCall.peerAvatar,
+              direction: currentCall.direction || "incoming",
+              outcome: "disconnected",
+            });
+          } else {
+            setDirectCallState(createDirectCallState());
+          }
         }
       },
       onRemoteScreenStreamsChanged: setRemoteScreenShares,
@@ -2878,7 +3286,7 @@ export default function MenuMain({
         const currentCall = directCallStateRef.current;
         const activeChannel = currentVoiceChannelRef.current;
         if (
-          (currentCall.status !== "idle" && currentCall.channelId !== channelName)
+          (currentCall.phase !== "idle" && currentCall.channelId !== channelName)
           || (activeChannel && activeChannel !== channelName && !isDirectCallChannelId(activeChannel))
         ) {
           voiceClientRef.current?.declineDirectCall(fromUserId, channelName, "busy").catch((error) => {
@@ -2887,15 +3295,26 @@ export default function MenuMain({
           return;
         }
 
-        setDirectCallState({
-          status: "incoming",
+        setDirectCallState(buildDirectCallState({
+          phase: "incoming",
           statusLabel: "Входящий звонок",
           channelId: channelName,
           peerUserId: String(fromUserId || ""),
           peerName: String(fromName || "Пользователь"),
           peerAvatar: String(fromAvatar || ""),
           peerAvatarFrame: null,
-        });
+          peer: {
+            userId: String(fromUserId || ""),
+            name: String(fromName || "Пользователь"),
+            avatar: String(fromAvatar || ""),
+            avatarFrame: null,
+          },
+          connectionQuality: "unknown",
+          canRetry: false,
+          isMiniMode: false,
+          direction: "incoming",
+          startedAt: new Date().toISOString(),
+        }));
         showServerInviteFeedback(`Входящий звонок от ${String(fromName || "пользователя")}.`);
         showElectronDesktopNotification({
           title: "Входящий звонок",
@@ -2909,11 +3328,19 @@ export default function MenuMain({
 
         setDirectCallState((previous) => ({
           ...previous,
+          phase: "connecting",
           status: "connecting",
           statusLabel: "Соединяем звонок",
           peerUserId: String(fromUserId || previous.peerUserId || ""),
           peerName: String(fromName || previous.peerName || "Пользователь"),
           peerAvatar: String(fromAvatar || previous.peerAvatar || ""),
+          peer: {
+            userId: String(fromUserId || previous.peerUserId || ""),
+            name: String(fromName || previous.peerName || "Пользователь"),
+            avatar: String(fromAvatar || previous.peerAvatar || ""),
+            avatarFrame: previous.peerAvatarFrame || null,
+          },
+          canRetry: false,
         }));
         openDirectChat(fromUserId);
 
@@ -2926,12 +3353,34 @@ export default function MenuMain({
             await voiceClientRef.current?.joinChannel(channelName, user);
             setDirectCallState((previous) => ({
               ...previous,
+              phase: "connected",
               status: "connected",
               statusLabel: "Идёт разговор",
+              isMiniMode: true,
+              connectionQuality: getDirectCallConnectionQuality(pingMs, "connected"),
             }));
           } catch (error) {
             console.error("Не удалось подключить исходящий звонок:", error);
-            setDirectCallState(createDirectCallState());
+            appendDirectCallHistoryEntry({
+              peerUserId: String(fromUserId || directCallStateRef.current.peerUserId || ""),
+              peerName: String(fromName || directCallStateRef.current.peerName || "Пользователь"),
+              peerAvatar: String(fromAvatar || directCallStateRef.current.peerAvatar || ""),
+              direction: "outgoing",
+              outcome: "failed",
+            });
+            setDirectCallState(buildDirectCallState({
+              phase: "disconnected",
+              statusLabel: "Не удалось подключить звонок",
+              peerUserId: String(fromUserId || directCallStateRef.current.peerUserId || ""),
+              peerName: String(fromName || directCallStateRef.current.peerName || "Пользователь"),
+              peerAvatar: String(fromAvatar || directCallStateRef.current.peerAvatar || ""),
+              peerAvatarFrame: directCallStateRef.current.peerAvatarFrame || null,
+              canRetry: true,
+              isMiniMode: false,
+              direction: "outgoing",
+              lastReason: error?.message || "failed",
+              endedAt: new Date().toISOString(),
+            }));
             showServerInviteFeedback(error?.message || "Не удалось подключить звонок.");
           }
         })();
@@ -2941,7 +3390,6 @@ export default function MenuMain({
           return;
         }
 
-        setDirectCallState(createDirectCallState());
         const normalizedReason = String(reason || "").trim().toLowerCase();
         const fallbackName = String(fromName || directCallStateRef.current.peerName || "Пользователь");
         const statusMessage =
@@ -2952,6 +3400,27 @@ export default function MenuMain({
               : normalizedReason === "cancelled"
                 ? `${fallbackName} отменил звонок.`
                 : `${fallbackName} отклонил звонок.`;
+        appendDirectCallHistoryEntry({
+          peerUserId: directCallStateRef.current.peerUserId,
+          peerName: fallbackName,
+          peerAvatar: directCallStateRef.current.peerAvatar,
+          direction: directCallStateRef.current.direction || "outgoing",
+          outcome: normalizedReason || "declined",
+        });
+        setDirectCallState(buildDirectCallState({
+          phase: "declined",
+          statusLabel: statusMessage,
+          channelId: channelName,
+          peerUserId: directCallStateRef.current.peerUserId,
+          peerName: fallbackName,
+          peerAvatar: directCallStateRef.current.peerAvatar,
+          peerAvatarFrame: directCallStateRef.current.peerAvatarFrame,
+          canRetry: true,
+          isMiniMode: true,
+          direction: directCallStateRef.current.direction || "outgoing",
+          lastReason: normalizedReason,
+          endedAt: new Date().toISOString(),
+        }));
         showServerInviteFeedback(statusMessage);
       },
       onDirectCallEnded: ({ channelName, fromName }) => {
@@ -2959,6 +3428,7 @@ export default function MenuMain({
           return;
         }
 
+        setDirectCallState((previous) => ({ ...previous, lastReason: "expected-end" }));
         void (async () => {
           try {
             if (currentVoiceChannelRef.current === channelName) {
@@ -2967,8 +3437,28 @@ export default function MenuMain({
           } catch (error) {
             console.error("Не удалось завершить личный звонок:", error);
           } finally {
-            setDirectCallState(createDirectCallState());
-            showServerInviteFeedback(`${String(fromName || directCallStateRef.current.peerName || "Пользователь")} завершил звонок.`);
+            const fallbackName = String(fromName || directCallStateRef.current.peerName || "Пользователь");
+            appendDirectCallHistoryEntry({
+              peerUserId: directCallStateRef.current.peerUserId,
+              peerName: fallbackName,
+              peerAvatar: directCallStateRef.current.peerAvatar,
+              direction: directCallStateRef.current.direction || "incoming",
+              outcome: "ended",
+            });
+            setDirectCallState(buildDirectCallState({
+              phase: "ended",
+              statusLabel: `${fallbackName} завершил звонок`,
+              channelId: channelName,
+              peerUserId: directCallStateRef.current.peerUserId,
+              peerName: fallbackName,
+              peerAvatar: directCallStateRef.current.peerAvatar,
+              peerAvatarFrame: directCallStateRef.current.peerAvatarFrame,
+              canRetry: true,
+              isMiniMode: true,
+              direction: directCallStateRef.current.direction || "incoming",
+              endedAt: new Date().toISOString(),
+            }));
+            showServerInviteFeedback(`${fallbackName} завершил звонок.`);
           }
         })();
       },
@@ -4443,6 +4933,14 @@ export default function MenuMain({
     setCustomNotificationSoundName,
     setNotificationSoundError,
     handleCustomNotificationSoundChange,
+    uiDensity,
+    uiFontScale,
+    uiReduceMotion,
+    uiTouchTargetSize,
+    setUiDensity,
+    setUiFontScale,
+    setUiReduceMotion,
+    setUiTouchTargetSize,
     activeServer,
     canManageServer,
     canInviteMembers,
@@ -4952,7 +5450,7 @@ export default function MenuMain({
   const canNavigateBack = navigationHistoryRef.current.back.length > 0;
   const canNavigateForward = navigationHistoryRef.current.forward.length > 0;
   const desktopTitlebarContext = useMemo(() => {
-    if (directCallState.status !== "idle") {
+    if (directCallState.phase !== "idle") {
       return {
         title: directCallState.peerName || "Личный звонок",
         iconType: directCallState.peerAvatar ? "image" : "glyph",
@@ -5192,12 +5690,26 @@ export default function MenuMain({
       quickSwitcherOpen={quickSwitcherOpen}
       quickSwitcherQuery={quickSwitcherQuery}
       quickSwitcherItems={quickSwitcherItems}
+      quickSwitcherSelectedIndex={quickSwitcherSelectedIndex}
+      setQuickSwitcherSelectedIndex={setQuickSwitcherSelectedIndex}
       setQuickSwitcherQuery={setQuickSwitcherQuery}
       handleQuickSwitcherSelect={handleQuickSwitcherSelect}
       closeQuickSwitcher={closeQuickSwitcher}
       directCallState={directCallState}
+      directCallHistory={directCallHistory}
       isMicMuted={isMicMuted}
+      audioInputDevices={audioInputDevices}
+      audioOutputDevices={audioOutputDevices}
+      selectedInputDeviceId={selectedInputDeviceId}
+      selectedOutputDeviceId={selectedOutputDeviceId}
+      outputSelectionSupported={outputSelectionSupported}
       toggleMicMute={toggleMicMute}
+      setSelectedInputDeviceId={setSelectedInputDeviceId}
+      setSelectedOutputDeviceId={setSelectedOutputDeviceId}
+      setDirectCallMiniMode={setDirectCallMiniMode}
+      dismissDirectCallOverlay={dismissDirectCallOverlay}
+      retryDirectCall={retryDirectCall}
+      onDirectCallHistoryRedial={startDirectCallWithUser}
       acceptDirectCall={acceptDirectCall}
       declineDirectCall={declineDirectCall}
       endDirectCall={endDirectCall}

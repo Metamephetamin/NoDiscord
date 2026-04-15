@@ -353,6 +353,89 @@ export const NotificationsSettings = ({
   </div>
 );
 
+export const AppearanceAccessibilitySettings = ({
+  uiDensity,
+  uiFontScale,
+  uiReduceMotion,
+  uiTouchTargetSize,
+  onDensityChange,
+  onFontScaleChange,
+  onReduceMotionChange,
+  onTouchTargetSizeChange,
+}) => (
+  <div className="settings-shell__content">
+    <div className="settings-shell__content-header">
+      <div>
+        <h2>Внешний вид и доступность</h2>
+        <p>Настройте плотность интерфейса, размер шрифта, размеры зон попадания и уровень анимаций под свой ритм работы.</p>
+      </div>
+    </div>
+
+    <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Плотность интерфейса</div>
+      <div className="voice-profile-list">
+        {[
+          { id: "standard", title: "Стандартно", description: "Обычная плотность блоков и отступов." },
+          { id: "compact", title: "Компактно", description: "Больше информации на экране и быстрее для ПК-навигации." },
+        ].map((option) => (
+          <label key={option.id} className="voice-profile-option">
+            <input type="radio" name="uiDensity" checked={uiDensity === option.id} onChange={() => onDensityChange(option.id)} />
+            <span className="voice-profile-option__copy">
+              <strong>{option.title}</strong>
+              <span>{option.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+
+    <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Размер текста</div>
+      <div className="voice-profile-list">
+        {[
+          { id: "sm", title: "Чуть меньше", description: "Компактнее и плотнее для больших списков." },
+          { id: "md", title: "Стандартный", description: "Сбалансированный базовый размер." },
+          { id: "lg", title: "Крупнее", description: "Лучше читается и легче воспринимается." },
+        ].map((option) => (
+          <label key={option.id} className="voice-profile-option">
+            <input type="radio" name="uiFontScale" checked={uiFontScale === option.id} onChange={() => onFontScaleChange(option.id)} />
+            <span className="voice-profile-option__copy">
+              <strong>{option.title}</strong>
+              <span>{option.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+
+    <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Взаимодействие</div>
+      <div className="voice-toggle-row voice-toggle-row--first">
+        <div>
+          <strong>Уменьшить анимации</strong>
+          <span>Снижает движение интерфейса и делает переходы спокойнее.</span>
+        </div>
+        <VoiceSwitch active={uiReduceMotion} onClick={() => onReduceMotionChange((previous) => !previous)} label="Уменьшить анимации" />
+      </div>
+
+      <div className="voice-profile-list">
+        {[
+          { id: "standard", title: "Обычные зоны попадания", description: "Стандартные размеры кнопок и контролов." },
+          { id: "large", title: "Увеличенные зоны попадания", description: "Кнопки и поля становятся чуть удобнее для касания." },
+        ].map((option) => (
+          <label key={option.id} className="voice-profile-option">
+            <input type="radio" name="uiTouchTargetSize" checked={uiTouchTargetSize === option.id} onChange={() => onTouchTargetSizeChange(option.id)} />
+            <span className="voice-profile-option__copy">
+              <strong>{option.title}</strong>
+              <span>{option.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+  </div>
+);
+
 export const RolesSettings = ({ activeServer, currentServerRole, rolePermissionLabels }) => (
   <div className="settings-shell__content">
     <div className="settings-shell__content-header">

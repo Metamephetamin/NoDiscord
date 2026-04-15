@@ -4,6 +4,7 @@ import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/TextChat.css";
 import { readIncomingMessageText } from "../../security/chatPayloadCrypto";
 import { uploadChatAttachment } from "../../utils/chatAttachmentUpload";
+import { revokePendingUploadPreviews } from "../../utils/chatPendingUploads";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
 import { isDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
@@ -74,6 +75,7 @@ export default function TextChat({
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [composerDropActive, setComposerDropActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
   const [composerEmojiPickerOpen, setComposerEmojiPickerOpen] = useState(false);
@@ -118,10 +120,16 @@ export default function TextChat({
   const editDraftBackupRef = useRef("");
   const forceScrollToBottomRef = useRef(false);
   const hasInitializedVisibleChannelRef = useRef(false);
+  const composerDropDepthRef = useRef(0);
+  const selectedFilesRef = useRef([]);
   const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const messages = messagesByChannel[scopedChannelId] || [];
+
+  useEffect(() => {
+    selectedFilesRef.current = selectedFiles;
+  }, [selectedFiles]);
   const {
     virtualizationEnabled,
     visibleMessages,
@@ -1090,6 +1098,11 @@ export default function TextChat({
     send,
     sendAnimatedEmoji,
     handleFileChange,
+    queueFiles,
+    removePendingUpload,
+    retryPendingUpload,
+    clearPendingUploads,
+    updatePendingUploadCompressionMode,
   } = useTextChatSendActions({
     message,
     setMessage,
@@ -1119,6 +1132,63 @@ export default function TextChat({
     sendMessagesCompat,
     playDirectMessageSound,
   });
+
+  useEffect(() => () => {
+    revokePendingUploadPreviews(selectedFilesRef.current);
+  }, []);
+
+  useEffect(() => {
+    composerDropDepthRef.current = 0;
+    setComposerDropActive(false);
+  }, [scopedChannelId]);
+
+  const handleComposerDragEnter = (event) => {
+    const transferTypes = Array.from(event.dataTransfer?.types || []);
+    if (!transferTypes.includes("Files")) {
+      return;
+    }
+
+    event.preventDefault();
+    composerDropDepthRef.current += 1;
+    setComposerDropActive(true);
+  };
+
+  const handleComposerDragOver = (event) => {
+    const transferTypes = Array.from(event.dataTransfer?.types || []);
+    if (!transferTypes.includes("Files")) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+  };
+
+  const handleComposerDragLeave = (event) => {
+    const transferTypes = Array.from(event.dataTransfer?.types || []);
+    if (!transferTypes.includes("Files")) {
+      return;
+    }
+
+    event.preventDefault();
+    composerDropDepthRef.current = Math.max(0, composerDropDepthRef.current - 1);
+    if (composerDropDepthRef.current === 0) {
+      setComposerDropActive(false);
+    }
+  };
+
+  const handleComposerDrop = (event) => {
+    const droppedFiles = Array.from(event.dataTransfer?.files || []);
+    if (!droppedFiles.length) {
+      return;
+    }
+
+    event.preventDefault();
+    composerDropDepthRef.current = 0;
+    setComposerDropActive(false);
+    queueFiles(droppedFiles);
+  };
 
   const buildForwardPayloadForTargetChannel = (targetChannelId, sourceMessages) => buildForwardPayloadForTargetChannelCore({
     targetChannelId,
@@ -1394,8 +1464,8 @@ export default function TextChat({
       openMediaPreview={openMediaPreview}
       handleToggleReaction={handleToggleReaction}
       selectedFiles={selectedFiles}
-      setSelectedFiles={setSelectedFiles}
       uploadingFile={uploadingFile}
+      composerDropActive={composerDropActive}
       replyState={replyState}
       messageEditState={messageEditState}
       voiceRecordingState={voiceRecordingState}
@@ -1412,6 +1482,15 @@ export default function TextChat({
       message={message}
       preferExplicitSend={preferExplicitSend}
       handleFileChange={handleFileChange}
+      queueFiles={queueFiles}
+      removePendingUpload={removePendingUpload}
+      retryPendingUpload={retryPendingUpload}
+      clearPendingUploads={clearPendingUploads}
+      updatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+      onComposerDragEnter={handleComposerDragEnter}
+      onComposerDragOver={handleComposerDragOver}
+      onComposerDragLeave={handleComposerDragLeave}
+      onComposerDrop={handleComposerDrop}
       stopReplyingToMessage={stopReplyingToMessage}
       stopEditingMessage={stopEditingMessage}
       handleCancelVoiceRecording={handleCancelVoiceRecording}

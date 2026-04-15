@@ -4,6 +4,11 @@ import {
   prepareOutgoingTextPayload,
 } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
+import {
+  createPendingUpload,
+  preparePendingUploadForSend,
+  revokePendingUploadPreviews,
+} from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
 import { punctuateTypedMessageText } from "../utils/speechPunctuation";
 import {
@@ -41,6 +46,84 @@ export default function useTextChatSendActions({
   sendMessagesCompat,
   playDirectMessageSound,
 }) {
+  const appendPendingFiles = (files, { replace = false } = {}) => {
+    const validFiles = Array.isArray(files) ? files.filter((file) => file instanceof File) : [];
+    if (!validFiles.length) {
+      return false;
+    }
+
+    const nextUploads = validFiles.map(createPendingUpload);
+    setSelectedFiles((previous) => {
+      if (replace) {
+        revokePendingUploadPreviews(previous);
+        return nextUploads;
+      }
+
+      return [...previous, ...nextUploads];
+    });
+    return true;
+  };
+
+  const updatePendingUpload = (uploadId, updater) => {
+    const normalizedId = String(uploadId || "");
+    if (!normalizedId) {
+      return;
+    }
+
+    setSelectedFiles((previous) =>
+      previous.map((item) => {
+        if (String(item?.id || "") !== normalizedId) {
+          return item;
+        }
+
+        return typeof updater === "function" ? updater(item) : { ...item, ...updater };
+      })
+    );
+  };
+
+  const removePendingUpload = (uploadId) => {
+    const normalizedId = String(uploadId || "");
+    if (!normalizedId) {
+      return;
+    }
+
+    setSelectedFiles((previous) => {
+      const nextUploads = [];
+      previous.forEach((item) => {
+        if (String(item?.id || "") === normalizedId) {
+          revokePendingUploadPreviews([item]);
+          return;
+        }
+
+        nextUploads.push(item);
+      });
+      return nextUploads;
+    });
+  };
+
+  const clearPendingUploads = () => {
+    setSelectedFiles((previous) => {
+      revokePendingUploadPreviews(previous);
+      return [];
+    });
+  };
+
+  const retryPendingUpload = (uploadId) => {
+    updatePendingUpload(uploadId, {
+      status: "queued",
+      progress: 0,
+      error: "",
+      retryable: false,
+    });
+  };
+
+  const updatePendingUploadCompressionMode = (uploadId, compressionMode) => {
+    const normalizedMode = ["compressed", "original", "file"].includes(String(compressionMode || ""))
+      ? compressionMode
+      : "original";
+    updatePendingUpload(uploadId, { compressionMode: normalizedMode });
+  };
+
   const buildUploadedAttachmentPayload = (attachment) => ({
     attachmentUrl: attachment.fileUrl || "",
     attachmentName: attachment.fileName || "",
@@ -72,7 +155,7 @@ export default function useTextChatSendActions({
   const send = async () => {
     const rawMessageText = message.trim();
     const messageText = await punctuateTypedMessageText(rawMessageText);
-    const filesToSend = selectedFiles;
+    const filesToSend = selectedFiles.filter((item) => item?.status !== "cancelled");
 
     if (messageEditState && filesToSend.length) {
       setErrorMessage("Во время редактирования нельзя добавлять новые вложения.");
@@ -92,6 +175,7 @@ export default function useTextChatSendActions({
 
     const avatar = user?.avatarUrl || user?.avatar || "";
     const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers) : [];
+    let activeUploadId = "";
 
     try {
       setErrorMessage("");
@@ -127,19 +211,48 @@ export default function useTextChatSendActions({
       if (filesToSend.length) {
         setUploadingFile(true);
         for (let index = 0; index < filesToSend.length; index += 1) {
-          const fileItem = filesToSend[index];
-          const preparedAttachment = await prepareOutgoingAttachmentPayload({
-            file: fileItem,
+          const pendingUpload = filesToSend[index];
+          activeUploadId = String(pendingUpload?.id || "");
+
+          updatePendingUpload(activeUploadId, {
+            status: "preparing",
+            progress: 0.1,
+            error: "",
+            retryable: false,
           });
+
+          const fileForUpload = await preparePendingUploadForSend(pendingUpload);
+          const preparedAttachment = await prepareOutgoingAttachmentPayload({
+            file: fileForUpload,
+          });
+
+          updatePendingUpload(activeUploadId, {
+            status: "uploading",
+            progress: 0.28,
+          });
+
           const uploaded = await uploadAttachment({
             blob: preparedAttachment.uploadBlob,
-            fileName: preparedAttachment.uploadFileName || fileItem.name || `attachment-${Date.now()}-${index}`,
+            fileName: preparedAttachment.uploadFileName || fileForUpload.name || pendingUpload.name || `attachment-${Date.now()}-${index}`,
+            onProgress: (progressValue) => {
+              updatePendingUpload(activeUploadId, {
+                status: "uploading",
+                progress: 0.28 + (Math.max(0, Math.min(1, Number(progressValue) || 0)) * 0.68),
+              });
+            },
           });
+
+          updatePendingUpload(activeUploadId, {
+            status: "done",
+            progress: 1,
+            retryable: false,
+          });
+
           attachments.push({
             fileUrl: uploaded?.fileUrl || null,
-            fileName: uploaded?.fileName || fileItem.name || "attachment",
+            fileName: uploaded?.fileName || fileForUpload.name || pendingUpload.name || "attachment",
             size: uploaded?.size || preparedAttachment.uploadBlob.size || null,
-            contentType: uploaded?.contentType || fileItem.type || "application/octet-stream",
+            contentType: uploaded?.contentType || fileForUpload.type || pendingUpload.type || "application/octet-stream",
             attachmentEncryption: null,
           });
         }
@@ -167,7 +280,7 @@ export default function useTextChatSendActions({
       setMessage("");
       setReplyState(null);
       clearChatDraft(user, scopedChannelId);
-      setSelectedFiles([]);
+      clearPendingUploads();
       setIsChannelReady(true);
       setActionFeedback(null);
       if (isDirectChat) {
@@ -175,10 +288,31 @@ export default function useTextChatSendActions({
       }
     } catch (error) {
       console.error(messageEditState ? "EditMessage error:" : "SendMessage error:", error);
+
       if (!messageEditState) {
+        if (activeUploadId) {
+          updatePendingUpload(activeUploadId, {
+            status: "error",
+            progress: 0,
+            error: getChatErrorMessage(error, "Не удалось загрузить вложение."),
+            retryable: true,
+          });
+        }
+
+        filesToSend
+          .filter((item) => String(item?.id || "") !== activeUploadId)
+          .forEach((item) => {
+            updatePendingUpload(item.id, (current) => (
+              current?.status === "done"
+                ? { ...current, status: "queued", progress: 0 }
+                : current
+            ));
+          });
+
         joinedChannelRef.current = "";
         setIsChannelReady(false);
       }
+
       setErrorMessage(getChatErrorMessage(
         error,
         messageEditState
@@ -212,7 +346,7 @@ export default function useTextChatSendActions({
       const emojiFile = await fetchAnimatedEmojiFile(emojiOption);
 
       if (message.trim() || selectedFiles.length) {
-        setSelectedFiles((previous) => [...previous, emojiFile]);
+        appendPendingFiles([emojiFile]);
         focusComposerToEnd();
         return true;
       }
@@ -270,18 +404,11 @@ export default function useTextChatSendActions({
     }
   };
 
-  const handleFileChange = (event) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
-
-    if (!files.length) {
-      return;
-    }
-
+  const queueFiles = (files) => {
     const validFiles = [];
     let hasOversizedFile = false;
 
-    for (const file of files) {
+    for (const file of Array.isArray(files) ? files : []) {
       if (file.size > MAX_FILE_SIZE_BYTES) {
         hasOversizedFile = true;
         continue;
@@ -301,12 +428,29 @@ export default function useTextChatSendActions({
       setErrorMessage("");
     }
 
-    setSelectedFiles((previous) => [...previous, ...validFiles]);
+    appendPendingFiles(validFiles);
+  };
+
+  const handleFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+
+    if (!files.length) {
+      return;
+    }
+
+    queueFiles(files);
   };
 
   return {
     send,
     sendAnimatedEmoji,
     handleFileChange,
+    queueFiles,
+    appendPendingFiles,
+    removePendingUpload,
+    retryPendingUpload,
+    clearPendingUploads,
+    updatePendingUploadCompressionMode,
   };
 }

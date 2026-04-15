@@ -11,8 +11,8 @@ import { formatFileSize } from "../utils/textChatHelpers";
 
 export default function TextChatComposer({
   selectedFiles,
-  setSelectedFiles,
   uploadingFile,
+  composerDropActive,
   replyState,
   messageEditState,
   voiceRecordingState,
@@ -29,6 +29,14 @@ export default function TextChatComposer({
   message,
   preferExplicitSend,
   onFileChange,
+  onRemovePendingUpload,
+  onRetryPendingUpload,
+  onClearPendingUploads,
+  onUpdatePendingUploadCompressionMode,
+  onDragEnter,
+  onDragOver,
+  onDragLeave,
+  onDrop,
   onStopReplying,
   onStopEditing,
   onCancelVoiceRecording,
@@ -58,25 +66,115 @@ export default function TextChatComposer({
     }
   };
 
+  const getPendingUploadStatusLabel = (selectedFile) => {
+    if (selectedFile?.status === "uploading") {
+      return `Загрузка ${Math.round((Number(selectedFile?.progress) || 0) * 100)}%`;
+    }
+
+    if (selectedFile?.status === "preparing") {
+      return "Подготовка";
+    }
+
+    if (selectedFile?.status === "done") {
+      return "Готово";
+    }
+
+    if (selectedFile?.status === "error") {
+      return selectedFile?.error || "Ошибка";
+    }
+
+    return selectedFile?.kind === "image" ? "Изображение" : selectedFile?.kind === "video" ? "Видео" : "Файл";
+  };
+
   return (
-    <div className="input-area">
+    <div
+      className={`input-area ${composerDropActive ? "input-area--drag-active" : ""}`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div className="input-area__editor">
         {selectedFiles.length ? (
-          <div className="chat-file-list">
-            {selectedFiles.map((selectedFile, index) => (
-              <div key={`${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}-${index}`} className="chat-file-pill">
-                <span className="chat-file-pill__name">{selectedFile.name}</span>
-                <span className="chat-file-pill__size">{formatFileSize(selectedFile.size)}</span>
-                <button
-                  type="button"
-                  className="chat-file-pill__remove"
-                  onClick={() => setSelectedFiles((previous) => previous.filter((_, fileIndex) => fileIndex !== index))}
-                  disabled={uploadingFile}
-                >
-                  x
+          <div className="chat-file-list chat-file-list--rich">
+            <div className="chat-file-list__header">
+              <strong>Вложения</strong>
+              {selectedFiles.length > 1 ? (
+                <button type="button" className="chat-file-list__clear" onClick={onClearPendingUploads} disabled={uploadingFile}>
+                  Очистить
                 </button>
-              </div>
-            ))}
+              ) : null}
+            </div>
+            <div className="chat-file-list__grid">
+              {selectedFiles.map((selectedFile) => (
+                <div
+                  key={selectedFile.id || `${selectedFile.name}-${selectedFile.size}`}
+                  className={`chat-file-pill chat-file-pill--${selectedFile.kind || "file"} chat-file-pill--${selectedFile.status || "queued"}`}
+                >
+                  <div className="chat-file-pill__preview">
+                    {selectedFile.previewUrl && selectedFile.kind === "image" ? (
+                      <img src={selectedFile.previewUrl} alt={selectedFile.name} />
+                    ) : selectedFile.previewUrl && selectedFile.kind === "video" ? (
+                      <video src={selectedFile.previewUrl} muted playsInline preload="metadata" />
+                    ) : (
+                      <span className="chat-file-pill__fallback" aria-hidden="true">
+                        {selectedFile.kind === "video" ? "VID" : selectedFile.kind === "image" ? "IMG" : "FILE"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="chat-file-pill__body">
+                    <div className="chat-file-pill__meta">
+                      <span className="chat-file-pill__name">{selectedFile.name}</span>
+                      <span className="chat-file-pill__size">{formatFileSize(selectedFile.size)}</span>
+                    </div>
+                    <div className="chat-file-pill__status-row">
+                      <span className={`chat-file-pill__status chat-file-pill__status--${selectedFile.status || "queued"}`}>
+                        {getPendingUploadStatusLabel(selectedFile)}
+                      </span>
+                      {selectedFile.kind === "image" ? (
+                        <select
+                          className="chat-file-pill__mode"
+                          value={selectedFile.compressionMode || "original"}
+                          onChange={(event) => onUpdatePendingUploadCompressionMode(selectedFile.id, event.target.value)}
+                          disabled={uploadingFile}
+                        >
+                          <option value="compressed">Сжать</option>
+                          <option value="original">Оригинал</option>
+                          <option value="file">Как файл</option>
+                        </select>
+                      ) : null}
+                    </div>
+                    <div className="chat-file-pill__progress">
+                      <span style={{ width: `${Math.max(6, Math.round((Number(selectedFile.progress) || 0) * 100))}%` }} />
+                    </div>
+                    <div className="chat-file-pill__actions">
+                      {selectedFile.retryable ? (
+                        <button type="button" className="chat-file-pill__action" onClick={() => onRetryPendingUpload(selectedFile.id)} disabled={uploadingFile}>
+                          Повторить
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="chat-file-pill__remove"
+                        onClick={() => onRemovePendingUpload(selectedFile.id)}
+                        disabled={uploadingFile && selectedFile.status === "uploading"}
+                      >
+                        Убрать
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {composerDropActive ? (
+          <div className="chat-drop-overlay" aria-hidden="true">
+            <div className="chat-drop-overlay__panel">
+              <strong>Перетащите файлы сюда</strong>
+              <span>Изображения, видео и документы добавятся в очередь перед отправкой</span>
+            </div>
           </div>
         ) : null}
 

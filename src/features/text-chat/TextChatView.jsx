@@ -52,8 +52,8 @@ export default function TextChatView(props) {
     openMediaPreview,
     handleToggleReaction,
     selectedFiles,
-    setSelectedFiles,
     uploadingFile,
+    composerDropActive,
     replyState,
     messageEditState,
     voiceRecordingState,
@@ -70,6 +70,14 @@ export default function TextChatView(props) {
     message,
     preferExplicitSend,
     handleFileChange,
+    removePendingUpload,
+    retryPendingUpload,
+    clearPendingUploads,
+    updatePendingUploadCompressionMode,
+    onComposerDragEnter,
+    onComposerDragOver,
+    onComposerDragLeave,
+    onComposerDrop,
     stopReplyingToMessage,
     stopEditingMessage,
     handleCancelVoiceRecording,
@@ -182,8 +190,8 @@ export default function TextChatView(props) {
       />
       <TextChatComposer
         selectedFiles={selectedFiles}
-        setSelectedFiles={setSelectedFiles}
         uploadingFile={uploadingFile}
+        composerDropActive={composerDropActive}
         replyState={replyState}
         messageEditState={messageEditState}
         voiceRecordingState={voiceRecordingState}
@@ -200,6 +208,14 @@ export default function TextChatView(props) {
         message={message}
         preferExplicitSend={preferExplicitSend}
         onFileChange={handleFileChange}
+        onRemovePendingUpload={removePendingUpload}
+        onRetryPendingUpload={retryPendingUpload}
+        onClearPendingUploads={clearPendingUploads}
+        onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+        onDragEnter={onComposerDragEnter}
+        onDragOver={onComposerDragOver}
+        onDragLeave={onComposerDragLeave}
+        onDrop={onComposerDrop}
         onStopReplying={stopReplyingToMessage}
         onStopEditing={stopEditingMessage}
         onCancelVoiceRecording={handleCancelVoiceRecording}

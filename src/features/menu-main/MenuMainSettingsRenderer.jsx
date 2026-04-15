@@ -1,4 +1,5 @@
 import {
+  AppearanceAccessibilitySettings,
   MobileSettingsShell,
   NotificationsSettings,
   PersonalProfileSettings,
@@ -80,6 +81,14 @@ export function MenuMainSettingsContent({
   setCustomNotificationSoundName,
   setNotificationSoundError,
   handleCustomNotificationSoundChange,
+  uiDensity,
+  uiFontScale,
+  uiReduceMotion,
+  uiTouchTargetSize,
+  setUiDensity,
+  setUiFontScale,
+  setUiReduceMotion,
+  setUiTouchTargetSize,
   activeServer,
   canManageServer,
   canInviteMembers,
@@ -150,6 +159,19 @@ export function MenuMainSettingsContent({
             setNotificationSoundError("");
           }}
           onCustomNotificationSoundChange={handleCustomNotificationSoundChange}
+        />
+      );
+    case "appearance_accessibility":
+      return (
+        <AppearanceAccessibilitySettings
+          uiDensity={uiDensity}
+          uiFontScale={uiFontScale}
+          uiReduceMotion={uiReduceMotion}
+          uiTouchTargetSize={uiTouchTargetSize}
+          onDensityChange={setUiDensity}
+          onFontScaleChange={setUiFontScale}
+          onReduceMotionChange={setUiReduceMotion}
+          onTouchTargetSizeChange={setUiTouchTargetSize}
         />
       );
     case "server":
