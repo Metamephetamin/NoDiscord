@@ -369,6 +369,7 @@ export const DirectCallOverlay = ({
   const isIncoming = call.status === "incoming";
   const isConnected = call.status === "connected";
   const isConnecting = call.status === "connecting";
+  const callTitle = call.peerName || "Пользователь";
   const statusLabel =
     call.statusLabel
     || (isIncoming
@@ -382,20 +383,43 @@ export const DirectCallOverlay = ({
   return (
     <div className="direct-call-overlay">
       <div className="direct-call-overlay__backdrop" />
-      <div className="direct-call-overlay__card" role="dialog" aria-modal="true" aria-label={`Звонок с ${call.peerName || "пользователем"}`}>
-        <div className="direct-call-overlay__pulse" aria-hidden="true" />
-        <AnimatedAvatar
-          className={`direct-call-overlay__avatar ${isConnected ? "direct-call-overlay__avatar--connected" : ""}`}
-          src={call.peerAvatar || ""}
-          alt={call.peerName || "Аватар"}
-          frame={call.peerAvatarFrame}
-        />
-        <div className="direct-call-overlay__copy">
-          <strong>{call.peerName || "Пользователь"}</strong>
-          <span>{statusLabel}</span>
+      <div className="direct-call-overlay__workspace" role="dialog" aria-modal="true" aria-label={`Звонок с ${callTitle.toLowerCase()}`}>
+        <div className="direct-call-overlay__header">
+          <div className="direct-call-overlay__header-copy">
+            <span className="direct-call-overlay__eyebrow">{isConnected ? "Личный разговор" : "Личный звонок"}</span>
+            <strong>{callTitle}</strong>
+            <span>{statusLabel}</span>
+          </div>
         </div>
 
-        <div className="direct-call-overlay__actions">
+        <div className="direct-call-overlay__stage">
+          <div className="direct-call-overlay__pulse" aria-hidden="true" />
+          <div className="direct-call-overlay__stage-surface" />
+          <AnimatedAvatar
+            className={`direct-call-overlay__avatar ${isConnected ? "direct-call-overlay__avatar--connected" : ""}`}
+            src={call.peerAvatar || ""}
+            alt={callTitle}
+            frame={call.peerAvatarFrame}
+          />
+          <div className="direct-call-overlay__copy">
+            <strong>{callTitle}</strong>
+            <span>{statusLabel}</span>
+          </div>
+          <div className="direct-call-overlay__hint">
+            {isIncoming
+              ? "Ответьте на звонок или отклоните его."
+              : isConnected
+                ? "Разговор идёт в отдельном пространстве и не выглядит как маленькое всплывающее окно."
+                : "Ждём, пока второй пользователь подключится к разговору."}
+          </div>
+        </div>
+
+        <div className="direct-call-overlay__dock">
+          <div className="direct-call-overlay__dock-meta">
+            <span className="direct-call-overlay__dock-label">Режим</span>
+            <strong>{isConnected ? "Голосовой разговор" : "Подготовка звонка"}</strong>
+          </div>
+          <div className="direct-call-overlay__actions">
           {isIncoming ? (
             <>
               <button type="button" className="direct-call-overlay__button direct-call-overlay__button--decline" onClick={onDecline}>
@@ -424,6 +448,7 @@ export const DirectCallOverlay = ({
               </button>
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

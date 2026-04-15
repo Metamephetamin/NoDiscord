@@ -2071,6 +2071,168 @@ export function createVoiceRoomClient({
     }
   };
 
+  const bindSignalConnectionEvents = (connection) => {
+    connection.on("voice:update", (data) => {
+      emitParticipants(data);
+    });
+
+    connection.on("voice:self-state", (payload) => {
+      onSelfVoiceStateChanged?.({
+        userId: payload?.userId || payload?.UserId || "",
+        isMicMuted: Boolean(payload?.isMicMuted ?? payload?.IsMicMuted),
+        isDeafened: Boolean(payload?.isDeafened ?? payload?.IsDeafened),
+        isMicForced: Boolean(payload?.isMicForced ?? payload?.IsMicForced),
+        isDeafenedForced: Boolean(payload?.isDeafenedForced ?? payload?.IsDeafenedForced),
+      });
+    });
+
+    connection.on("voice:direct-call-incoming", (payload) => {
+      onIncomingDirectCall?.({
+        channelName: payload?.channelName || payload?.ChannelName || "",
+        fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+        fromName: payload?.fromName || payload?.FromName || "",
+        fromAvatar: payload?.fromAvatar || payload?.FromAvatar || "",
+        reason: payload?.reason || payload?.Reason || "",
+      });
+    });
+
+    connection.on("voice:direct-call-accepted", (payload) => {
+      onDirectCallAccepted?.({
+        channelName: payload?.channelName || payload?.ChannelName || "",
+        fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+        fromName: payload?.fromName || payload?.FromName || "",
+        fromAvatar: payload?.fromAvatar || payload?.FromAvatar || "",
+      });
+    });
+
+    connection.on("voice:direct-call-declined", (payload) => {
+      onDirectCallDeclined?.({
+        channelName: payload?.channelName || payload?.ChannelName || "",
+        fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+        fromName: payload?.fromName || payload?.FromName || "",
+        reason: payload?.reason || payload?.Reason || "",
+      });
+    });
+
+    connection.on("voice:direct-call-ended", (payload) => {
+      onDirectCallEnded?.({
+        channelName: payload?.channelName || payload?.ChannelName || "",
+        fromUserId: payload?.fromUserId || payload?.FromUserId || "",
+        fromName: payload?.fromName || payload?.FromName || "",
+      });
+    });
+
+    connection.onreconnected(async () => {
+      if (!currentUser) {
+        return;
+      }
+
+      await registerCurrentUser(currentUser);
+
+      if (currentChannel && connection.state === signalR.HubConnectionState.Connected) {
+        await connection.invoke(
+          "JoinChannel",
+          currentChannel,
+          String(currentUser.id),
+          getDisplayName(currentUser),
+          getAvatar(currentUser)
+        );
+      }
+
+      if (localScreenStream && currentUser?.id) {
+        await updateScreenShareStatus(true).catch(() => {});
+      }
+    });
+
+    connection.onclose(() => {
+      signalConnectPromise = null;
+    });
+  };
+
+  const createSignalConnection = () => {
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(VOICE_HUB_URL, {
+        accessTokenFactory: () => getStoredToken(),
+      })
+      .configureLogging(signalR.LogLevel.Error)
+      .withHubProtocol(new MessagePackHubProtocol())
+      .withAutomaticReconnect([0, 1000, 3000, 5000])
+      .build();
+
+    bindSignalConnectionEvents(connection);
+    return connection;
+  };
+
+  const stopSignalConnection = async (connection = signalConnection) => {
+    if (!connection) {
+      return;
+    }
+
+    if (signalConnection === connection) {
+      signalConnection = null;
+      signalConnectPromise = null;
+    }
+
+    try {
+      if (connection.state !== signalR.HubConnectionState.Disconnected) {
+        await connection.stop();
+      }
+    } catch {
+      // ignore connection stop errors while rebuilding the socket
+    }
+  };
+
+  const waitForSignalConnectionToSettle = async (timeoutMs = 5_000) => {
+    const startedAt = Date.now();
+
+    while (
+      signalConnection
+      && (signalConnection.state === signalR.HubConnectionState.Connecting
+        || signalConnection.state === signalR.HubConnectionState.Reconnecting)
+    ) {
+      if (Date.now() - startedAt >= timeoutMs) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 160));
+    }
+
+    return signalConnection?.state === signalR.HubConnectionState.Connected;
+  };
+
+  const startSignalConnection = async ({ allowRetry = true } = {}) => {
+    if (!signalConnection) {
+      signalConnection = createSignalConnection();
+    }
+
+    const connection = signalConnection;
+
+    try {
+      await connection.start();
+    } catch (error) {
+      if (isUnauthorizedError(error)) {
+        notifyUnauthorizedSession("voice_signalr_401");
+        throw new Error("Session expired. Sign in again.");
+      }
+
+      logVoiceDebug("signal:start-failed", {
+        state: connection.state,
+        allowRetry,
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+
+      await stopSignalConnection(connection);
+
+      if (allowRetry) {
+        signalConnection = createSignalConnection();
+        return startSignalConnection({ allowRetry: false });
+      }
+
+      throw new Error(error?.message || "Не удалось установить сигнальное соединение.");
+    }
+  };
+
   const ensureSignalConnection = async (user) => {
     currentUser = user;
 
@@ -2079,104 +2241,26 @@ export function createVoiceRoomClient({
     }
 
     if (!signalConnection) {
-      signalConnection = new signalR.HubConnectionBuilder()
-        .withUrl(VOICE_HUB_URL, {
-          accessTokenFactory: () => getStoredToken(),
-        })
-        .configureLogging(signalR.LogLevel.Error)
-        .withHubProtocol(new MessagePackHubProtocol())
-        .withAutomaticReconnect([0, 1000, 3000, 5000])
-        .build();
-
-      signalConnection.on("voice:update", (data) => {
-        emitParticipants(data);
-      });
-
-      signalConnection.on("voice:self-state", (payload) => {
-        onSelfVoiceStateChanged?.({
-          userId: payload?.userId || payload?.UserId || "",
-          isMicMuted: Boolean(payload?.isMicMuted ?? payload?.IsMicMuted),
-          isDeafened: Boolean(payload?.isDeafened ?? payload?.IsDeafened),
-          isMicForced: Boolean(payload?.isMicForced ?? payload?.IsMicForced),
-          isDeafenedForced: Boolean(payload?.isDeafenedForced ?? payload?.IsDeafenedForced),
-        });
-      });
-
-      signalConnection.on("voice:direct-call-incoming", (payload) => {
-        onIncomingDirectCall?.({
-          channelName: payload?.channelName || payload?.ChannelName || "",
-          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
-          fromName: payload?.fromName || payload?.FromName || "",
-          fromAvatar: payload?.fromAvatar || payload?.FromAvatar || "",
-          reason: payload?.reason || payload?.Reason || "",
-        });
-      });
-
-      signalConnection.on("voice:direct-call-accepted", (payload) => {
-        onDirectCallAccepted?.({
-          channelName: payload?.channelName || payload?.ChannelName || "",
-          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
-          fromName: payload?.fromName || payload?.FromName || "",
-          fromAvatar: payload?.fromAvatar || payload?.FromAvatar || "",
-        });
-      });
-
-      signalConnection.on("voice:direct-call-declined", (payload) => {
-        onDirectCallDeclined?.({
-          channelName: payload?.channelName || payload?.ChannelName || "",
-          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
-          fromName: payload?.fromName || payload?.FromName || "",
-          reason: payload?.reason || payload?.Reason || "",
-        });
-      });
-
-      signalConnection.on("voice:direct-call-ended", (payload) => {
-        onDirectCallEnded?.({
-          channelName: payload?.channelName || payload?.ChannelName || "",
-          fromUserId: payload?.fromUserId || payload?.FromUserId || "",
-          fromName: payload?.fromName || payload?.FromName || "",
-        });
-      });
-
-      signalConnection.onreconnected(async () => {
-        if (!currentUser) {
-          return;
-        }
-
-        await registerCurrentUser(currentUser);
-
-        if (currentChannel) {
-          await signalConnection.invoke(
-            "JoinChannel",
-            currentChannel,
-            String(currentUser.id),
-            getDisplayName(currentUser),
-            getAvatar(currentUser)
-          );
-        }
-
-        if (localScreenStream && currentUser?.id) {
-          await updateScreenShareStatus(true).catch(() => {});
-        }
-      });
-
-      signalConnection.onclose(() => {
-        signalConnectPromise = null;
-      });
+      signalConnection = createSignalConnection();
     }
 
-    if (signalConnection.state === signalR.HubConnectionState.Disconnected) {
+    if (
+      signalConnection.state === signalR.HubConnectionState.Connecting
+      || signalConnection.state === signalR.HubConnectionState.Reconnecting
+    ) {
+      const didRecover = await waitForSignalConnectionToSettle();
+
+      if (!didRecover && signalConnection && signalConnection.state !== signalR.HubConnectionState.Connected) {
+        await stopSignalConnection(signalConnection);
+        signalConnection = createSignalConnection();
+      }
+    }
+
+    if (signalConnection.state !== signalR.HubConnectionState.Connected) {
       if (!signalConnectPromise) {
         signalConnectPromise = (async () => {
           try {
-            await signalConnection.start();
-          } catch (error) {
-            if (isUnauthorizedError(error)) {
-              notifyUnauthorizedSession("voice_signalr_401");
-              throw new Error("Session expired. Sign in again.");
-            }
-
-            throw error;
+            await startSignalConnection({ allowRetry: true });
           } finally {
             signalConnectPromise = null;
           }
@@ -2557,13 +2641,7 @@ export function createVoiceRoomClient({
       currentChannel = null;
       onChannelChanged?.(null);
 
-      if (signalConnection) {
-        try {
-          await signalConnection.stop();
-        } catch {
-          // ignore stop errors during shutdown
-        }
-      }
+      await stopSignalConnection();
 
       if (hasDeviceChangeListener && navigator.mediaDevices?.removeEventListener) {
         navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
