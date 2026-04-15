@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
+import TextChatBatchUploadSheet from "./TextChatBatchUploadSheet";
 import {
   buildVoiceMessageLabel,
   COMPOSER_EMOJI_OPTIONS,
@@ -27,12 +28,16 @@ export default function TextChatComposer({
   selectedMentionSuggestionIndex,
   textareaRef,
   message,
+  batchUploadOptions,
   preferExplicitSend,
   onFileChange,
   onRemovePendingUpload,
   onRetryPendingUpload,
   onClearPendingUploads,
   onUpdatePendingUploadCompressionMode,
+  onToggleBatchUploadGrouping,
+  onToggleBatchUploadSendAsDocuments,
+  onToggleBatchUploadRememberChoice,
   onDragEnter,
   onDragOver,
   onDragLeave,
@@ -66,6 +71,8 @@ export default function TextChatComposer({
     }
   };
 
+  const hasBatchUploadSheet = selectedFiles.length > 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image");
+
   const getPendingUploadStatusLabel = (selectedFile) => {
     if (selectedFile?.status === "uploading") {
       return `Загрузка ${Math.round((Number(selectedFile?.progress) || 0) * 100)}%`;
@@ -95,8 +102,25 @@ export default function TextChatComposer({
       onDrop={onDrop}
     >
       <div className="input-area__editor">
-        {selectedFiles.length ? (
-          <div className="chat-file-list chat-file-list--rich">
+        {hasBatchUploadSheet ? (
+          <TextChatBatchUploadSheet
+            selectedFiles={selectedFiles}
+            uploadingFile={uploadingFile}
+            message={message}
+            onMessageChange={onMessageChange}
+            batchOptions={batchUploadOptions}
+            onToggleGroupItems={onToggleBatchUploadGrouping}
+            onToggleSendAsDocuments={onToggleBatchUploadSendAsDocuments}
+            onToggleRememberChoice={onToggleBatchUploadRememberChoice}
+            onRemovePendingUpload={onRemovePendingUpload}
+            onClearPendingUploads={onClearPendingUploads}
+            onFileChange={onFileChange}
+            onSend={onSend}
+          />
+        ) : null}
+
+        {selectedFiles.length && !hasBatchUploadSheet ? (
+          <div className={`chat-file-list chat-file-list--rich ${hasBatchUploadSheet ? "chat-file-list--hidden" : ""}`}>
             <div className="chat-file-list__header">
               <strong>Вложения</strong>
               {selectedFiles.length > 1 ? (
@@ -242,7 +266,7 @@ export default function TextChatComposer({
           </div>
         ) : null}
 
-        <div className="input-area__controls">
+        <div className={`input-area__controls ${hasBatchUploadSheet ? "input-area__controls--batch" : ""}`}>
           <div className="message-composer">
             <label className="attach-button" aria-label="Прикрепить файл" title="Прикрепить файл">
               <input type="file" className="attach-button__input" onChange={onFileChange} disabled={uploadingFile} multiple />

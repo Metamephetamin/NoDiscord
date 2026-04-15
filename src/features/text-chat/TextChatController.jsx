@@ -56,6 +56,30 @@ const clampMenuPosition = (x, y, menuWidth = 260, menuHeight = 320, padding = 12
   y: Math.max(padding, Math.min(Number(y || 0), window.innerHeight - menuHeight - padding)),
 });
 
+const BATCH_UPLOAD_PREFERENCES_KEY = "textchat-batch-upload-preferences";
+
+function readBatchUploadPreferences() {
+  if (typeof window === "undefined") {
+    return { groupItems: true, sendAsDocuments: false, rememberChoice: false };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(BATCH_UPLOAD_PREFERENCES_KEY);
+    if (!rawValue) {
+      return { groupItems: true, sendAsDocuments: false, rememberChoice: false };
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    return {
+      groupItems: parsedValue?.groupItems !== false,
+      sendAsDocuments: Boolean(parsedValue?.sendAsDocuments),
+      rememberChoice: true,
+    };
+  } catch {
+    return { groupItems: true, sendAsDocuments: false, rememberChoice: false };
+  }
+}
+
 export default function TextChat({
   serverId,
   channelId,
@@ -73,6 +97,7 @@ export default function TextChat({
   const [messageEditState, setMessageEditState] = useState(null);
   const [messagesByChannel, setMessagesByChannel] = useState({});
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [batchUploadOptions, setBatchUploadOptions] = useState(() => readBatchUploadPreferences());
   const [mediaPreview, setMediaPreview] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [composerDropActive, setComposerDropActive] = useState(false);
@@ -130,6 +155,25 @@ export default function TextChat({
   useEffect(() => {
     selectedFilesRef.current = selectedFiles;
   }, [selectedFiles]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (batchUploadOptions.rememberChoice) {
+      window.localStorage.setItem(
+        BATCH_UPLOAD_PREFERENCES_KEY,
+        JSON.stringify({
+          groupItems: batchUploadOptions.groupItems !== false,
+          sendAsDocuments: Boolean(batchUploadOptions.sendAsDocuments),
+        })
+      );
+      return;
+    }
+
+    window.localStorage.removeItem(BATCH_UPLOAD_PREFERENCES_KEY);
+  }, [batchUploadOptions]);
   const {
     virtualizationEnabled,
     visibleMessages,
@@ -1103,11 +1147,13 @@ export default function TextChat({
     retryPendingUpload,
     clearPendingUploads,
     updatePendingUploadCompressionMode,
+    setPendingUploadsDocumentMode,
   } = useTextChatSendActions({
     message,
     setMessage,
     selectedFiles,
     setSelectedFiles,
+    batchUploadOptions,
     messageEditState,
     setMessageEditState,
     editDraftBackupRef,
@@ -1132,6 +1178,29 @@ export default function TextChat({
     sendMessagesCompat,
     playDirectMessageSound,
   });
+
+  const toggleBatchUploadGrouping = (value) => {
+    setBatchUploadOptions((previous) => ({
+      ...previous,
+      groupItems: Boolean(value),
+    }));
+  };
+
+  const toggleBatchUploadSendAsDocuments = (value) => {
+    const enabled = Boolean(value);
+    setBatchUploadOptions((previous) => ({
+      ...previous,
+      sendAsDocuments: enabled,
+    }));
+    setPendingUploadsDocumentMode(enabled);
+  };
+
+  const toggleBatchUploadRememberChoice = (value) => {
+    setBatchUploadOptions((previous) => ({
+      ...previous,
+      rememberChoice: Boolean(value),
+    }));
+  };
 
   useEffect(() => () => {
     revokePendingUploadPreviews(selectedFilesRef.current);
@@ -1480,6 +1549,7 @@ export default function TextChat({
       selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
       textareaRef={textareaRef}
       message={message}
+      batchUploadOptions={batchUploadOptions}
       preferExplicitSend={preferExplicitSend}
       handleFileChange={handleFileChange}
       queueFiles={queueFiles}
@@ -1487,6 +1557,9 @@ export default function TextChat({
       retryPendingUpload={retryPendingUpload}
       clearPendingUploads={clearPendingUploads}
       updatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+      toggleBatchUploadGrouping={toggleBatchUploadGrouping}
+      toggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
+      toggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
       onComposerDragEnter={handleComposerDragEnter}
       onComposerDragOver={handleComposerDragOver}
       onComposerDragLeave={handleComposerDragLeave}

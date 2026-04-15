@@ -68,12 +68,16 @@ export default function TextChatView(props) {
     selectedMentionSuggestionIndex,
     textareaRef,
     message,
+    batchUploadOptions,
     preferExplicitSend,
     handleFileChange,
     removePendingUpload,
     retryPendingUpload,
     clearPendingUploads,
     updatePendingUploadCompressionMode,
+    toggleBatchUploadGrouping,
+    toggleBatchUploadSendAsDocuments,
+    toggleBatchUploadRememberChoice,
     onComposerDragEnter,
     onComposerDragOver,
     onComposerDragLeave,
@@ -206,12 +210,16 @@ export default function TextChatView(props) {
         selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
         textareaRef={textareaRef}
         message={message}
+        batchUploadOptions={batchUploadOptions}
         preferExplicitSend={preferExplicitSend}
         onFileChange={handleFileChange}
         onRemovePendingUpload={removePendingUpload}
         onRetryPendingUpload={retryPendingUpload}
         onClearPendingUploads={clearPendingUploads}
         onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+        onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
+        onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
+        onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
         onDragEnter={onComposerDragEnter}
         onDragOver={onComposerDragOver}
         onDragLeave={onComposerDragLeave}

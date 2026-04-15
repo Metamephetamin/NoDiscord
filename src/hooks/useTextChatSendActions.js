@@ -1,3 +1,4 @@
+import { startTransition, useEffect, useRef } from "react";
 import chatConnection from "../SignalR/ChatConnect";
 import {
   prepareOutgoingAttachmentPayload,
@@ -5,6 +6,7 @@ import {
 } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
+  createPendingUploadPreview,
   createPendingUpload,
   preparePendingUploadForSend,
   revokePendingUploadPreviews,
@@ -22,6 +24,7 @@ export default function useTextChatSendActions({
   setMessage,
   selectedFiles,
   setSelectedFiles,
+  batchUploadOptions,
   messageEditState,
   setMessageEditState,
   editDraftBackupRef,
@@ -46,21 +49,87 @@ export default function useTextChatSendActions({
   sendMessagesCompat,
   playDirectMessageSound,
 }) {
+  const previewHydrationTimersRef = useRef(new Map());
+
+  const cancelPendingPreviewHydration = (uploadId) => {
+    const normalizedId = String(uploadId || "");
+    const timerId = previewHydrationTimersRef.current.get(normalizedId);
+    if (timerId) {
+      window.clearTimeout(timerId);
+      previewHydrationTimersRef.current.delete(normalizedId);
+    }
+  };
+
+  const schedulePreviewHydration = (uploads) => {
+    (Array.isArray(uploads) ? uploads : []).forEach((upload, index) => {
+      const uploadId = String(upload?.id || "");
+      if (!uploadId || upload?.previewUrl || (upload?.kind !== "image" && upload?.kind !== "video")) {
+        return;
+      }
+
+      cancelPendingPreviewHydration(uploadId);
+
+      const timerId = window.setTimeout(() => {
+        previewHydrationTimersRef.current.delete(uploadId);
+        const previewUrl = createPendingUploadPreview(upload);
+        if (!previewUrl) {
+          return;
+        }
+
+        startTransition(() => {
+          setSelectedFiles((previous) =>
+            previous.map((item) => {
+              if (String(item?.id || "") !== uploadId || item?.previewUrl) {
+                return item;
+              }
+
+              return { ...item, previewUrl };
+            })
+          );
+        });
+      }, index * 24);
+
+      previewHydrationTimersRef.current.set(uploadId, timerId);
+    });
+  };
+
+  useEffect(() => () => {
+    previewHydrationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    previewHydrationTimersRef.current.clear();
+  }, []);
+
   const appendPendingFiles = (files, { replace = false } = {}) => {
     const validFiles = Array.isArray(files) ? files.filter((file) => file instanceof File) : [];
     if (!validFiles.length) {
       return false;
     }
 
-    const nextUploads = validFiles.map(createPendingUpload);
-    setSelectedFiles((previous) => {
-      if (replace) {
-        revokePendingUploadPreviews(previous);
-        return nextUploads;
+    const shouldSendAsDocuments = Boolean(batchUploadOptions?.sendAsDocuments);
+    const nextUploads = validFiles.map((file) => {
+      const nextUpload = createPendingUpload(file);
+      if (shouldSendAsDocuments && nextUpload.kind === "image") {
+        return {
+          ...nextUpload,
+          compressionMode: "file",
+        };
       }
 
-      return [...previous, ...nextUploads];
+      return nextUpload;
     });
+    startTransition(() => {
+      setSelectedFiles((previous) => {
+        if (replace) {
+          previewHydrationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+          previewHydrationTimersRef.current.clear();
+          revokePendingUploadPreviews(previous);
+          return nextUploads;
+        }
+
+        return [...previous, ...nextUploads];
+      });
+    });
+
+    schedulePreviewHydration(nextUploads);
     return true;
   };
 
@@ -87,6 +156,8 @@ export default function useTextChatSendActions({
       return;
     }
 
+    cancelPendingPreviewHydration(normalizedId);
+
     setSelectedFiles((previous) => {
       const nextUploads = [];
       previous.forEach((item) => {
@@ -102,6 +173,9 @@ export default function useTextChatSendActions({
   };
 
   const clearPendingUploads = () => {
+    previewHydrationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    previewHydrationTimersRef.current.clear();
+
     setSelectedFiles((previous) => {
       revokePendingUploadPreviews(previous);
       return [];
@@ -122,6 +196,16 @@ export default function useTextChatSendActions({
       ? compressionMode
       : "original";
     updatePendingUpload(uploadId, { compressionMode: normalizedMode });
+  };
+
+  const setPendingUploadsDocumentMode = (enabled) => {
+    setSelectedFiles((previous) =>
+      previous.map((item) => (
+        item?.kind === "image"
+          ? { ...item, compressionMode: enabled ? "file" : "original" }
+          : item
+      ))
+    );
   };
 
   const buildUploadedAttachmentPayload = (attachment) => ({
@@ -258,20 +342,36 @@ export default function useTextChatSendActions({
         }
       }
 
-      const payload = [{
-        message: messageText,
-        mentions: outgoingMentions,
-        replyToMessageId: replyState?.messageId || "",
-        replyToUsername: replyState?.username || "",
-        replyPreview: replyState?.preview || "",
-        attachments: attachments.map(buildUploadedAttachmentPayload),
-        attachmentUrl: attachments[0]?.fileUrl || "",
-        attachmentName: attachments[0]?.fileName || "",
-        attachmentSize: attachments[0]?.size || null,
-        attachmentContentType: attachments[0]?.contentType || "",
-        attachmentEncryption: attachments[0]?.attachmentEncryption || null,
-        voiceMessage: null,
-      }];
+      const shouldGroupItems = batchUploadOptions?.groupItems !== false;
+      const payload = shouldGroupItems
+        ? [{
+            message: messageText,
+            mentions: outgoingMentions,
+            replyToMessageId: replyState?.messageId || "",
+            replyToUsername: replyState?.username || "",
+            replyPreview: replyState?.preview || "",
+            attachments: attachments.map(buildUploadedAttachmentPayload),
+            attachmentUrl: attachments[0]?.fileUrl || "",
+            attachmentName: attachments[0]?.fileName || "",
+            attachmentSize: attachments[0]?.size || null,
+            attachmentContentType: attachments[0]?.contentType || "",
+            attachmentEncryption: attachments[0]?.attachmentEncryption || null,
+            voiceMessage: null,
+          }]
+        : attachments.map((attachment, index) => ({
+            message: index === 0 ? messageText : "",
+            mentions: index === 0 ? outgoingMentions : [],
+            replyToMessageId: index === 0 ? (replyState?.messageId || "") : "",
+            replyToUsername: index === 0 ? (replyState?.username || "") : "",
+            replyPreview: index === 0 ? (replyState?.preview || "") : "",
+            attachments: [buildUploadedAttachmentPayload(attachment)],
+            attachmentUrl: attachment.fileUrl || "",
+            attachmentName: attachment.fileName || "",
+            attachmentSize: attachment.size || null,
+            attachmentContentType: attachment.contentType || "",
+            attachmentEncryption: attachment.attachmentEncryption || null,
+            voiceMessage: null,
+          }));
 
       await sendMessagesCompat(scopedChannelId, avatar, payload);
 
@@ -452,5 +552,6 @@ export default function useTextChatSendActions({
     retryPendingUpload,
     clearPendingUploads,
     updatePendingUploadCompressionMode,
+    setPendingUploadsDocumentMode,
   };
 }

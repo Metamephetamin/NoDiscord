@@ -22,6 +22,21 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function PreviewMedia({ className, src, fallback, alt, frame, mediaType }) {
+  return (
+    <AnimatedAvatar
+      className={className}
+      src={src}
+      fallback={fallback}
+      alt={alt}
+      frame={frame}
+      mediaType={mediaType}
+      loading="eager"
+      decoding="sync"
+    />
+  );
+}
+
 export default function MediaFrameEditorModal({
   open,
   source,
@@ -31,6 +46,7 @@ export default function MediaFrameEditorModal({
   avatarSource = "",
   avatarFrame = null,
   avatarAlt = "",
+  mediaType = "",
   onCancel,
   onConfirm,
 }) {
@@ -81,6 +97,7 @@ export default function MediaFrameEditorModal({
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerUp);
+
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
@@ -116,7 +133,12 @@ export default function MediaFrameEditorModal({
             <h3>{copy.title}</h3>
             <p>{copy.subtitle}</p>
           </div>
-          <button type="button" className="stream-modal__close" onClick={onCancel} aria-label="Закрыть редактор кадра">
+          <button
+            type="button"
+            className="stream-modal__close"
+            onClick={onCancel}
+            aria-label="Закрыть редактор кадра"
+          >
             x
           </button>
         </div>
@@ -136,18 +158,23 @@ export default function MediaFrameEditorModal({
                     fallback={fallback}
                     alt={copy.title}
                     frame={normalizedDraftFrame}
+                    mediaType={mediaType}
+                    loading="eager"
+                    decoding="sync"
                     draggable={false}
                   />
                   <div className="media-frame-editor__grid" aria-hidden="true" />
                 </div>
                 <div className="media-frame-editor__profile-card-body">
-                  <AnimatedAvatar
-                    className="media-frame-editor__profile-avatar"
-                    src={avatarSource}
-                    fallback={avatarSource}
-                    alt={avatarAlt}
-                    frame={avatarFrame}
-                  />
+                  <div className="media-frame-editor__profile-avatar">
+                    <AnimatedAvatar
+                      className="media-frame-editor__preview-media"
+                      src={avatarSource}
+                      fallback={avatarSource}
+                      alt={avatarAlt}
+                      frame={avatarFrame}
+                    />
+                  </div>
                   <div className="media-frame-editor__profile-copy">
                     <strong>{avatarAlt || "Ваш профиль"}</strong>
                     <span>Так фон будет выглядеть в карточке профиля</span>
@@ -167,6 +194,9 @@ export default function MediaFrameEditorModal({
                     fallback={fallback}
                     alt={copy.title}
                     frame={normalizedDraftFrame}
+                    mediaType={mediaType}
+                    loading="eager"
+                    decoding="sync"
                     draggable={false}
                   />
                   <div className="media-frame-editor__grid" aria-hidden="true" />
@@ -176,13 +206,16 @@ export default function MediaFrameEditorModal({
                   <span className="media-frame-editor__live-preview-label">Итоговый вид</span>
                   {target === "serverIcon" ? (
                     <div className="media-frame-editor__server-preview">
-                      <AnimatedAvatar
-                        className="media-frame-editor__server-preview-icon"
-                        src={source}
-                        fallback={fallback}
-                        alt={previewTitle}
-                        frame={normalizedDraftFrame}
-                      />
+                      <div className="media-frame-editor__server-preview-icon">
+                        <PreviewMedia
+                          className="media-frame-editor__preview-media"
+                          src={source}
+                          fallback={fallback}
+                          alt={previewTitle}
+                          frame={normalizedDraftFrame}
+                          mediaType={mediaType}
+                        />
+                      </div>
                       <div className="media-frame-editor__server-preview-copy">
                         <strong>{previewTitle}</strong>
                         <span>Так иконка будет смотреться в списке серверов и в шапке</span>
@@ -191,33 +224,42 @@ export default function MediaFrameEditorModal({
                   ) : (
                     <div className="media-frame-editor__avatar-preview-card">
                       <div className="media-frame-editor__avatar-preview-row">
-                        <AnimatedAvatar
-                          className="media-frame-editor__avatar-preview-large"
-                          src={source}
-                          fallback={fallback}
-                          alt={previewTitle}
-                          frame={normalizedDraftFrame}
-                        />
+                        <div className="media-frame-editor__avatar-preview-large">
+                          <PreviewMedia
+                            className="media-frame-editor__preview-media"
+                            src={source}
+                            fallback={fallback}
+                            alt={previewTitle}
+                            frame={normalizedDraftFrame}
+                            mediaType={mediaType}
+                          />
+                        </div>
                         <div className="media-frame-editor__avatar-preview-copy">
                           <strong>{previewTitle}</strong>
                           <span>Так аватарка будет выглядеть в профиле, чатах и компактных списках</span>
                         </div>
                       </div>
                       <div className="media-frame-editor__avatar-preview-strip">
-                        <AnimatedAvatar
-                          className="media-frame-editor__avatar-preview-small"
-                          src={source}
-                          fallback={fallback}
-                          alt={previewTitle}
-                          frame={normalizedDraftFrame}
-                        />
-                        <AnimatedAvatar
-                          className="media-frame-editor__avatar-preview-small media-frame-editor__avatar-preview-small--tiny"
-                          src={source}
-                          fallback={fallback}
-                          alt={previewTitle}
-                          frame={normalizedDraftFrame}
-                        />
+                        <div className="media-frame-editor__avatar-preview-small">
+                          <PreviewMedia
+                            className="media-frame-editor__preview-media"
+                            src={source}
+                            fallback={fallback}
+                            alt={previewTitle}
+                            frame={normalizedDraftFrame}
+                            mediaType={mediaType}
+                          />
+                        </div>
+                        <div className="media-frame-editor__avatar-preview-small media-frame-editor__avatar-preview-small--tiny">
+                          <PreviewMedia
+                            className="media-frame-editor__preview-media"
+                            src={source}
+                            fallback={fallback}
+                            alt={previewTitle}
+                            frame={normalizedDraftFrame}
+                            mediaType={mediaType}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}

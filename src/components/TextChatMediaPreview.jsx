@@ -36,6 +36,20 @@ export default function TextChatMediaPreview({
     event.stopPropagation();
   };
 
+  const buildZoomAnchor = (event) => {
+    const rect = event?.currentTarget?.getBoundingClientRect?.();
+    if (!rect?.width || !rect?.height) {
+      return null;
+    }
+
+    return {
+      viewportWidth: rect.width,
+      viewportHeight: rect.height,
+      offsetXRatio: (event.clientX - rect.left) / rect.width,
+      offsetYRatio: (event.clientY - rect.top) / rect.height,
+    };
+  };
+
   const handlePointerDown = (event) => {
     if (!canPan) {
       return;
@@ -99,7 +113,7 @@ export default function TextChatMediaPreview({
         MEDIA_PREVIEW_ZOOM_STEP,
         Math.min(0.9, Math.abs(deltaY) * WHEEL_ZOOM_SENSITIVITY)
       );
-      onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep);
+      onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep, buildZoomAnchor(event));
       return;
     }
 

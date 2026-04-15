@@ -249,18 +249,49 @@ export default function useTextChatMessageActions({
     });
   };
 
-  const updateMediaPreviewZoom = (delta) => {
+  const updateMediaPreviewZoom = (delta, anchor = null) => {
     setMediaPreview((current) => {
       if (!current) {
         return current;
       }
 
-      const nextZoom = clampNumber((Number(current.zoom) || 1) + delta, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_MAX_ZOOM);
+      const currentZoom = Number(current.zoom) || 1;
+      const nextZoom = clampNumber(currentZoom + delta, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_MAX_ZOOM);
+      const currentPanX = Number(current.panX) || 0;
+      const currentPanY = Number(current.panY) || 0;
+
+      if (Math.abs(nextZoom - currentZoom) < 0.001) {
+        return current;
+      }
+
+      if (
+        !anchor
+        || !Number.isFinite(anchor.viewportWidth)
+        || !Number.isFinite(anchor.viewportHeight)
+        || !Number.isFinite(anchor.offsetXRatio)
+        || !Number.isFinite(anchor.offsetYRatio)
+      ) {
+        return {
+          ...current,
+          zoom: nextZoom,
+          panX: nextZoom <= 1.001 ? 0 : currentPanX,
+          panY: nextZoom <= 1.001 ? 0 : currentPanY,
+        };
+      }
+
+      const viewportWidth = Math.max(1, Number(anchor.viewportWidth) || 1);
+      const viewportHeight = Math.max(1, Number(anchor.viewportHeight) || 1);
+      const offsetX = (clampNumber(anchor.offsetXRatio, 0, 1) - 0.5) * viewportWidth;
+      const offsetY = (clampNumber(anchor.offsetYRatio, 0, 1) - 0.5) * viewportHeight;
+      const zoomRatio = nextZoom / currentZoom;
+      const nextPanX = offsetX - ((offsetX - currentPanX) * zoomRatio);
+      const nextPanY = offsetY - ((offsetY - currentPanY) * zoomRatio);
+
       return {
         ...current,
         zoom: nextZoom,
-        panX: nextZoom <= 1 ? 0 : Number(current.panX) || 0,
-        panY: nextZoom <= 1 ? 0 : Number(current.panY) || 0,
+        panX: nextZoom <= 1.001 ? 0 : nextPanX,
+        panY: nextZoom <= 1.001 ? 0 : nextPanY,
       };
     });
   };

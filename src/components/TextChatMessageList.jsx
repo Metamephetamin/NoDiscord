@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
@@ -419,19 +419,26 @@ function MessageAttachmentCollection(props) {
 
   const visualAttachments = attachments.filter((attachmentItem) => attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo);
   const fileAttachments = attachments.filter((attachmentItem) => !attachmentItem.isVoice && !attachmentItem.isImage && !attachmentItem.isVideo);
-  const hasThreeVisualTiles =
-    visualAttachments.length === 3
+  const featureStackCount = (
+    (visualAttachments.length === 3 || visualAttachments.length === 4)
     && !fileAttachments.length
-    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice);
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
+  )
+    ? visualAttachments.length
+    : 0;
 
   return (
     <div className="message-attachments-stack">
       {visualAttachments.length ? (
-        <div className={`message-attachment-grid ${hasThreeVisualTiles ? "message-attachment-grid--trio" : ""}`}>
+        <div
+          className={`message-attachment-grid ${featureStackCount ? "message-attachment-grid--feature-stack" : ""} ${
+            featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
+          }`}
+        >
           {visualAttachments.map((attachmentItem, attachmentIndex) => (
             <div
               key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
-              className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""} ${hasThreeVisualTiles && attachmentIndex === 0 ? "message-attachment-grid__item--trio-feature" : ""}`}
+              className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""} ${featureStackCount && attachmentIndex === 0 ? "message-attachment-grid__item--feature-primary" : ""}`}
             >
               <MessageAttachmentCard {...props} attachmentItem={attachmentItem} galleryAttachments={galleryAttachments} />
             </div>
@@ -452,7 +459,7 @@ function MessageAttachmentCollection(props) {
   );
 }
 
-export default function TextChatMessageList({
+function TextChatMessageList({
   messages,
   visibleMessages = messages,
   messagesListRef,
@@ -557,6 +564,7 @@ export default function TextChatMessageList({
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
+          const showFloatingMediaFooter = hasRenderableAttachments && !messageText.trim() && !reactions.length;
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
             && !hasRenderableAttachments
@@ -700,7 +708,7 @@ export default function TextChatMessageList({
                   onOpenMediaPreview={onOpenMediaPreview}
                 />
 
-                {((isDirectChat && !useInlineFooter) || reactions.length) ? (
+                {((isDirectChat && !useInlineFooter) || reactions.length || showFloatingMediaFooter) ? (
                   <div className="message-bottom-row">
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
@@ -739,8 +747,8 @@ export default function TextChatMessageList({
                       <span />
                     )}
 
-                    {isDirectChat && !useInlineFooter ? (
-                      <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
+                    {(isDirectChat && !useInlineFooter) || showFloatingMediaFooter ? (
+                      <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""} ${showFloatingMediaFooter ? "message-footer--media-hover" : ""}`}>
                         <span className="message-time">{formatTime(messageItem.timestamp)}</span>
                         <EditedBadge message={messageItem} />
                         {isOwnMessage ? (
@@ -763,3 +771,35 @@ export default function TextChatMessageList({
     </div>
   );
 }
+
+function areTextChatMessageListPropsEqual(previousProps, nextProps) {
+  return (
+    previousProps.messages === nextProps.messages
+    && previousProps.visibleMessages === nextProps.visibleMessages
+    && previousProps.messagesListRef === nextProps.messagesListRef
+    && previousProps.messagesEndRef === nextProps.messagesEndRef
+    && previousProps.messageRefs === nextProps.messageRefs
+    && previousProps.virtualizationEnabled === nextProps.virtualizationEnabled
+    && previousProps.topSpacerHeight === nextProps.topSpacerHeight
+    && previousProps.bottomSpacerHeight === nextProps.bottomSpacerHeight
+    && previousProps.registerMeasuredNode === nextProps.registerMeasuredNode
+    && previousProps.floatingDateLabel === nextProps.floatingDateLabel
+    && previousProps.decryptedAttachmentsByMessageId === nextProps.decryptedAttachmentsByMessageId
+    && previousProps.selectedMessageIdSet === nextProps.selectedMessageIdSet
+    && previousProps.highlightedMessageId === nextProps.highlightedMessageId
+    && previousProps.isDirectChat === nextProps.isDirectChat
+    && previousProps.currentUserId === nextProps.currentUserId
+    && previousProps.user === nextProps.user
+    && previousProps.selectionMode === nextProps.selectionMode
+    && previousProps.onToggleSelection === nextProps.onToggleSelection
+    && previousProps.onOpenContextMenu === nextProps.onOpenContextMenu
+    && previousProps.onOpenUserContextMenu === nextProps.onOpenUserContextMenu
+    && previousProps.onOpenMediaPreview === nextProps.onOpenMediaPreview
+    && previousProps.onToggleReaction === nextProps.onToggleReaction
+    && previousProps.onJumpToReply === nextProps.onJumpToReply
+  );
+}
+
+TextChatMessageList.displayName = "TextChatMessageList";
+
+export default memo(TextChatMessageList, areTextChatMessageListPropsEqual);

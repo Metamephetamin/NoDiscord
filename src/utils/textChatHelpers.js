@@ -1,4 +1,4 @@
-export const MEDIA_PREVIEW_MIN_ZOOM = 1;
+export const MEDIA_PREVIEW_MIN_ZOOM = 0.25;
 export const MEDIA_PREVIEW_MAX_ZOOM = 10;
 export const MEDIA_PREVIEW_ZOOM_STEP = 0.25;
 export const MAX_PINNED_MESSAGES = 8;

@@ -9,6 +9,7 @@ export default function AnimatedMedia({
   alt = "",
   className = "",
   frame = null,
+  mediaType = "",
   style = undefined,
   ...rest
 }) {
@@ -16,7 +17,9 @@ export default function AnimatedMedia({
   const [failedVideoSrc, setFailedVideoSrc] = useState("");
   const [readyVideoSrc, setReadyVideoSrc] = useState("");
   const resolvedFallback = resolveMediaUrl(fallback, "");
-  const shouldRenderVideo = isVideoAvatarUrl(resolvedSrc) && failedVideoSrc !== resolvedSrc;
+  const normalizedMediaType = String(mediaType || "").toLowerCase().trim();
+  const shouldPreferVideo = normalizedMediaType.startsWith("video/");
+  const shouldRenderVideo = (shouldPreferVideo || isVideoAvatarUrl(resolvedSrc)) && failedVideoSrc !== resolvedSrc;
   const hasVisualSource = Boolean(resolvedSrc || resolvedFallback);
   const mediaStyle = useMemo(() => getMediaFrameStyle(frame, style), [frame, style]);
   const isVideoReady = readyVideoSrc === resolvedSrc;

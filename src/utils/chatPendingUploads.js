@@ -32,10 +32,6 @@ export function isCompressibleImageUpload(upload) {
 
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
-  const previewUrl =
-    kind === "image" || kind === "video"
-      ? URL.createObjectURL(file)
-      : "";
 
   return {
     id: buildUploadId(),
@@ -44,13 +40,24 @@ export function createPendingUpload(file) {
     size: Number(file?.size) || 0,
     type: String(file?.type || "").trim(),
     kind,
-    previewUrl,
+    previewUrl: "",
     status: "queued",
     progress: 0,
     error: "",
     retryable: false,
-    compressionMode: kind === "image" && isCompressibleImageUpload({ file, type: file?.type }) ? "compressed" : "original",
+    compressionMode: "original",
   };
+}
+
+export function createPendingUploadPreview(fileOrUpload) {
+  const file = fileOrUpload?.file instanceof File ? fileOrUpload.file : fileOrUpload;
+  const kind = getPendingUploadKind(file);
+
+  if (!(file instanceof File) || (kind !== "image" && kind !== "video")) {
+    return "";
+  }
+
+  return URL.createObjectURL(file);
 }
 
 export function revokePendingUploadPreview(upload) {
