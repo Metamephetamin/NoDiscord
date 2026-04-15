@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 const DEFAULT_ESTIMATED_MESSAGE_HEIGHT = 132;
 const VIRTUALIZATION_OVERSCAN_PX = 720;
 const MIN_MESSAGES_FOR_VIRTUALIZATION = 40;
+const MIN_MEASURED_MESSAGE_HEIGHT = 72;
+const SIZE_CHANGE_EPSILON_PX = 2;
+const SCROLL_METRIC_EPSILON_PX = 1;
 
 function findStartIndex(offsets, scrollTop) {
   let low = 0;
@@ -26,32 +29,63 @@ export default function useTextChatVirtualizer({
   estimatedMessageHeight = DEFAULT_ESTIMATED_MESSAGE_HEIGHT,
 }) {
   const observerByMessageIdRef = useRef(new Map());
+  const scrollMetricsRafRef = useRef(0);
+  const pendingSizeFlushRafRef = useRef(0);
+  const pendingSizeByMessageIdRef = useRef(new Map());
+  const measurementsRef = useRef({
+    offsets: [0],
+    totalHeight: 0,
+    messageIndexById: new Map(),
+  });
+  const sizeByMessageIdRef = useRef({});
   const [sizeByMessageId, setSizeByMessageId] = useState({});
   const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, viewportHeight: 0 });
   const virtualizationEnabled = messages.length >= MIN_MESSAGES_FOR_VIRTUALIZATION;
 
+  const scheduleMetricsUpdate = useCallback(() => {
+    if (scrollMetricsRafRef.current) {
+      return;
+    }
+
+    scrollMetricsRafRef.current = window.requestAnimationFrame(() => {
+      scrollMetricsRafRef.current = 0;
+      const list = messagesListRef.current;
+      if (!list) {
+        return;
+      }
+
+      const nextMetrics = {
+        scrollTop: Math.max(0, list.scrollTop),
+        viewportHeight: Math.max(0, list.clientHeight),
+      };
+
+      setScrollMetrics((previous) => {
+        const sameScrollTop = Math.abs((previous.scrollTop || 0) - nextMetrics.scrollTop) < SCROLL_METRIC_EPSILON_PX;
+        const sameViewportHeight = Math.abs((previous.viewportHeight || 0) - nextMetrics.viewportHeight) < SCROLL_METRIC_EPSILON_PX;
+        return sameScrollTop && sameViewportHeight ? previous : nextMetrics;
+      });
+    });
+  }, [messagesListRef]);
+
   useEffect(() => {
+    scheduleMetricsUpdate();
     const list = messagesListRef.current;
     if (!list) {
       return undefined;
     }
 
-    const updateMetrics = () => {
-      setScrollMetrics({
-        scrollTop: list.scrollTop,
-        viewportHeight: list.clientHeight,
-      });
-    };
-
-    updateMetrics();
-    list.addEventListener("scroll", updateMetrics, { passive: true });
-    window.addEventListener("resize", updateMetrics);
+    list.addEventListener("scroll", scheduleMetricsUpdate, { passive: true });
+    window.addEventListener("resize", scheduleMetricsUpdate);
 
     return () => {
-      list.removeEventListener("scroll", updateMetrics);
-      window.removeEventListener("resize", updateMetrics);
+      list.removeEventListener("scroll", scheduleMetricsUpdate);
+      window.removeEventListener("resize", scheduleMetricsUpdate);
+      if (scrollMetricsRafRef.current) {
+        window.cancelAnimationFrame(scrollMetricsRafRef.current);
+        scrollMetricsRafRef.current = 0;
+      }
     };
-  }, [messagesListRef]);
+  }, [messagesListRef, scheduleMetricsUpdate]);
 
   useEffect(() => {
     const messageIdSet = new Set(messages.map((messageItem) => String(messageItem.id)));
@@ -62,16 +96,29 @@ export default function useTextChatVirtualizer({
 
       observerByMessageIdRef.current.get(messageId)?.disconnect();
       observerByMessageIdRef.current.delete(messageId);
-      setSizeByMessageId((previous) => {
-        if (!(messageId in previous)) {
-          return previous;
-        }
-
-        const next = { ...previous };
-        delete next[messageId];
-        return next;
-      });
     });
+
+    const pruneTimeoutId = window.setTimeout(() => {
+      setSizeByMessageId((previous) => {
+        const next = {};
+        let changed = false;
+
+        Object.entries(previous).forEach(([messageId, size]) => {
+          if (messageIdSet.has(messageId)) {
+            next[messageId] = size;
+            return;
+          }
+
+          changed = true;
+        });
+
+        return changed ? next : previous;
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(pruneTimeoutId);
+    };
   }, [messages]);
 
   const measurements = useMemo(() => {
@@ -89,6 +136,73 @@ export default function useTextChatVirtualizer({
       messageIndexById: new Map(messages.map((messageItem, index) => [String(messageItem.id), index])),
     };
   }, [estimatedMessageHeight, messages, sizeByMessageId]);
+
+  useEffect(() => {
+    measurementsRef.current = measurements;
+    sizeByMessageIdRef.current = sizeByMessageId;
+  }, [measurements, sizeByMessageId]);
+
+  const flushPendingSizeChanges = useCallback(() => {
+    pendingSizeFlushRafRef.current = 0;
+
+    const pendingEntries = Array.from(pendingSizeByMessageIdRef.current.entries());
+    pendingSizeByMessageIdRef.current.clear();
+    if (!pendingEntries.length) {
+      return;
+    }
+
+    const list = messagesListRef.current;
+    const currentScrollTop = Math.max(0, list?.scrollTop || 0);
+    const currentMeasurements = measurementsRef.current;
+    let deltaAboveViewport = 0;
+
+    setSizeByMessageId((previous) => {
+      let changed = false;
+      const next = { ...previous };
+
+      pendingEntries.forEach(([messageId, nextHeight]) => {
+        const previousHeight = previous[messageId] || estimatedMessageHeight;
+        if (Math.abs(previousHeight - nextHeight) < SIZE_CHANGE_EPSILON_PX) {
+          return;
+        }
+
+        next[messageId] = nextHeight;
+        changed = true;
+
+        const messageIndex = currentMeasurements.messageIndexById.get(messageId);
+        if (!Number.isInteger(messageIndex)) {
+          return;
+        }
+
+        const estimatedTop = currentMeasurements.offsets[messageIndex] || 0;
+        if (estimatedTop + SIZE_CHANGE_EPSILON_PX < currentScrollTop) {
+          deltaAboveViewport += nextHeight - previousHeight;
+        }
+      });
+
+      return changed ? next : previous;
+    });
+
+    if (list && Math.abs(deltaAboveViewport) >= SIZE_CHANGE_EPSILON_PX) {
+      list.scrollTop = Math.max(0, currentScrollTop + deltaAboveViewport);
+      scheduleMetricsUpdate();
+    }
+  }, [estimatedMessageHeight, messagesListRef, scheduleMetricsUpdate]);
+
+  const scheduleSizeFlush = useCallback(() => {
+    if (pendingSizeFlushRafRef.current) {
+      return;
+    }
+
+    pendingSizeFlushRafRef.current = window.requestAnimationFrame(flushPendingSizeChanges);
+  }, [flushPendingSizeChanges]);
+
+  useEffect(() => () => {
+    if (pendingSizeFlushRafRef.current) {
+      window.cancelAnimationFrame(pendingSizeFlushRafRef.current);
+      pendingSizeFlushRafRef.current = 0;
+    }
+  }, []);
 
   const visibleRange = useMemo(() => {
     if (!virtualizationEnabled) {
@@ -127,31 +241,28 @@ export default function useTextChatVirtualizer({
       return;
     }
 
-    const applyHeight = () => {
-      const nextHeight = Math.max(72, Math.round(node.getBoundingClientRect().height || 0));
+    const measureNodeHeight = () => {
+      const nextHeight = Math.max(MIN_MEASURED_MESSAGE_HEIGHT, Math.round(node.getBoundingClientRect().height || 0));
       if (!nextHeight) {
         return;
       }
 
-      setSizeByMessageId((previous) => (
-        previous[normalizedMessageId] === nextHeight
-          ? previous
-          : { ...previous, [normalizedMessageId]: nextHeight }
-      ));
+      pendingSizeByMessageIdRef.current.set(normalizedMessageId, nextHeight);
+      scheduleSizeFlush();
     };
 
-    applyHeight();
+    measureNodeHeight();
 
     if (typeof ResizeObserver !== "function") {
       return;
     }
 
     const observer = new ResizeObserver(() => {
-      applyHeight();
+      measureNodeHeight();
     });
     observer.observe(node);
     observerByMessageIdRef.current.set(normalizedMessageId, observer);
-  }, []);
+  }, [scheduleSizeFlush]);
 
   const estimateOffsetForMessageId = useCallback((messageId) => {
     const normalizedMessageId = String(messageId || "");

@@ -477,6 +477,10 @@ export default function TextChatMessageList({
   const avatarLongPress = useMobileLongPress();
   const [pressedMessageId, setPressedMessageId] = useState("");
   const [pressedAvatarMessageId, setPressedAvatarMessageId] = useState("");
+  const messageIndexById = useMemo(
+    () => new Map(messages.map((messageItem, index) => [String(messageItem.id), index])),
+    [messages]
+  );
 
   const resolveRenderedAttachments = (messageItem) =>
     normalizeAttachmentItems(messageItem).map((attachmentItem, attachmentIndex) => {
@@ -526,7 +530,7 @@ export default function TextChatMessageList({
       <div ref={messagesListRef} className="messages-list">
         {virtualizationEnabled && topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
         {visibleMessages.map((messageItem) => {
-          const messageIndex = messages.findIndex((item) => String(item.id) === String(messageItem.id));
+          const messageIndex = messageIndexById.get(String(messageItem.id)) ?? -1;
           const previousMessage = messages[messageIndex - 1] || null;
           const nextMessage = messages[messageIndex + 1] || null;
           const attachments = resolveRenderedAttachments(messageItem);
