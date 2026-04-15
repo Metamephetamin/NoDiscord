@@ -42,7 +42,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .desktop-app-topbar__left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   -webkit-app-region: no-drag;
 }
 
@@ -59,24 +59,31 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .desktop-app-topbar__nav {
-  width: calc(22px * var(--ui-touch-target-multiplier, 1));
-  height: calc(22px * var(--ui-touch-target-multiplier, 1));
+  width: calc(28px * var(--ui-touch-target-multiplier, 1));
+  height: calc(28px * var(--ui-touch-target-multiplier, 1));
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   color: #b9c3d9;
-  font-size: 12px;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+  transition: background-color 0.16s ease, color 0.16s ease, opacity 0.16s ease, transform 0.16s ease;
 }
 
 .desktop-app-topbar__nav:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
   color: #f4f7ff;
+  transform: translateY(-1px);
+}
+
+.desktop-app-topbar__nav:active:not(:disabled) {
+  transform: translateY(0);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .desktop-app-topbar__nav:disabled {

@@ -4567,7 +4567,7 @@ export default function MenuMain({
 
     selectServer(server);
   };
-  const toggleMicMute = () => {
+  function toggleMicMute() {
     setIsMicMuted((previous) => {
       if (previous && (isMicForced || isSoundForced)) {
         return previous;
@@ -4575,8 +4575,8 @@ export default function MenuMain({
 
       return !previous;
     });
-  };
-  const toggleSoundMute = () => {
+  }
+  function toggleSoundMute() {
     setIsSoundMuted((previous) => {
       if (previous && isSoundForced) {
         return previous;
@@ -4584,7 +4584,7 @@ export default function MenuMain({
 
       return !previous;
     });
-  };
+  }
   const suppressTooltipOnClick = (event) => {
     const target = event?.currentTarget;
     if (!target?.dataset) {
