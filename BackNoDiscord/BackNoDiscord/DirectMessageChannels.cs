@@ -63,4 +63,35 @@ public static class DirectMessageChannels
         isSelfChannel = firstUserId == secondUserId;
         return true;
     }
+
+    public static string NormalizeChannelId(string? channelId)
+    {
+        return TryParse(channelId, out var firstUserId, out var secondUserId, out _)
+            ? BuildChannelId(firstUserId, secondUserId)
+            : (channelId?.Trim() ?? string.Empty);
+    }
+
+    public static IReadOnlyCollection<string> GetEquivalentChannelIds(string? channelId)
+    {
+        var normalizedChannelId = channelId?.Trim() ?? string.Empty;
+        if (!TryParse(normalizedChannelId, out var firstUserId, out var secondUserId, out var isSelfChannel))
+        {
+            return string.IsNullOrWhiteSpace(normalizedChannelId)
+                ? Array.Empty<string>()
+                : new[] { normalizedChannelId };
+        }
+
+        var equivalentIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            BuildChannelId(firstUserId, secondUserId),
+            $"{Prefix}{firstUserId}:{secondUserId}"
+        };
+
+        if (!isSelfChannel)
+        {
+            equivalentIds.Add($"{Prefix}{secondUserId}:{firstUserId}");
+        }
+
+        return equivalentIds.ToArray();
+    }
 }

@@ -57,3 +57,12 @@ export function parseDirectMessageChannelId(channelId) {
 export function isDirectMessageChannelId(channelId) {
   return parseDirectMessageChannelId(channelId) !== null;
 }
+
+export function normalizeDirectMessageChannelId(channelId) {
+  const parsedChannel = parseDirectMessageChannelId(channelId);
+  if (!parsedChannel) {
+    return String(channelId || "").trim();
+  }
+
+  return buildDirectMessageChannelId(parsedChannel.firstUserId, parsedChannel.secondUserId);
+}

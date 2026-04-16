@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
@@ -20,6 +20,7 @@ import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
 import { parseMediaFrame } from "../utils/mediaFrames";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
+const invitePreviewCache = new Map();
 
 const getPreviewableMediaItems = (messageItem, attachments) =>
   attachments
@@ -62,7 +63,7 @@ function EditedBadge({ message }) {
   );
 }
 
-function MessageText({ text, mentions, currentUserId }) {
+const MessageText = memo(function MessageText({ text, mentions, currentUserId }) {
   return segmentMessageTextByMentions(text, mentions).map((segment, index) => {
     if (segment.isMention) {
       return (
@@ -109,9 +110,11 @@ function MessageText({ text, mentions, currentUserId }) {
       </span>
     );
   });
-}
+});
 
-function MessageInviteCard({ inviteCode }) {
+MessageText.displayName = "MessageText";
+
+function MessageInviteCardBase({ inviteCode }) {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -127,6 +130,13 @@ function MessageInviteCard({ inviteCode }) {
     let disposed = false;
 
     const loadPreview = async () => {
+      if (invitePreviewCache.has(inviteCode)) {
+        setPreview(invitePreviewCache.get(inviteCode) || null);
+        setError("");
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setError("");
 
@@ -141,6 +151,7 @@ function MessageInviteCard({ inviteCode }) {
         }
 
         if (!disposed) {
+          invitePreviewCache.set(inviteCode, data || null);
           setPreview(data || null);
         }
       } catch (requestError) {
@@ -228,6 +239,9 @@ function MessageInviteCard({ inviteCode }) {
   );
 }
 
+const MessageInviteCard = memo(MessageInviteCardBase);
+MessageInviteCard.displayName = "MessageInviteCard";
+
 function areMessagesInSameForwardGroup(currentMessage, adjacentMessage) {
   if (!currentMessage?.forwardedFromUsername || !adjacentMessage?.forwardedFromUsername) {
     return false;
@@ -273,6 +287,12 @@ function isAnimatedEmojiAttachment(messageItem, attachmentItem, galleryAttachmen
   }
 
   return attachmentName.startsWith("lf-") || attachmentName.startsWith("emoji-") || attachmentName.startsWith("emoji_");
+}
+
+function getNormalizedMessageAttachments(messageItem) {
+  return Array.isArray(messageItem?.attachments) && messageItem.attachments.length
+    ? messageItem.attachments
+    : normalizeAttachmentItems(messageItem);
 }
 
 function MessageAttachmentCard({
@@ -406,7 +426,7 @@ function MessageAttachmentCard({
   );
 }
 
-function MessageAttachmentCollection(props) {
+const MessageAttachmentCollection = memo(function MessageAttachmentCollection(props) {
   const { messageItem, attachments, galleryAttachments = attachments } = props;
 
   if (!attachments.length) {
@@ -426,6 +446,21 @@ function MessageAttachmentCollection(props) {
   )
     ? visualAttachments.length
     : 0;
+  const useFiveTileLayout = (
+    visualAttachments.length === 5
+    && !fileAttachments.length
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
+  );
+  const useSixTileLayout = (
+    visualAttachments.length === 6
+    && !fileAttachments.length
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
+  );
+  const useWideTopMosaicLayout = (
+    visualAttachments.length >= 7
+    && !fileAttachments.length
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
+  );
 
   return (
     <div className="message-attachments-stack">
@@ -433,6 +468,9 @@ function MessageAttachmentCollection(props) {
         <div
           className={`message-attachment-grid ${featureStackCount ? "message-attachment-grid--feature-stack" : ""} ${
             featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
+          } ${useFiveTileLayout ? "message-attachment-grid--five-tile" : ""
+          } ${useSixTileLayout ? "message-attachment-grid--six-tile" : ""
+          } ${useWideTopMosaicLayout ? "message-attachment-grid--wide-top-mosaic" : ""
           }`}
         >
           {visualAttachments.map((attachmentItem, attachmentIndex) => (
@@ -457,7 +495,9 @@ function MessageAttachmentCollection(props) {
       ) : null}
     </div>
   );
-}
+});
+
+MessageAttachmentCollection.displayName = "MessageAttachmentCollection";
 
 function TextChatMessageList({
   messages,
@@ -488,51 +528,71 @@ function TextChatMessageList({
   const avatarLongPress = useMobileLongPress();
   const [pressedMessageId, setPressedMessageId] = useState("");
   const [pressedAvatarMessageId, setPressedAvatarMessageId] = useState("");
+  const currentUserName = useMemo(() => getUserName(user).toLowerCase(), [user]);
   const messageIndexById = useMemo(
     () => new Map(messages.map((messageItem, index) => [String(messageItem.id), index])),
     [messages]
   );
+  const registerMessageNode = useCallback((messageId, node) => {
+    registerMeasuredNode?.(messageId, node);
+    if (node) {
+      messageRefs.current.set(messageId, node);
+      return;
+    }
 
-  const resolveRenderedAttachments = (messageItem) =>
-    normalizeAttachmentItems(messageItem).map((attachmentItem, attachmentIndex) => {
-      const cacheKey = getAttachmentCacheKey(messageItem?.id, attachmentIndex);
-      const attachmentView = decryptedAttachmentsByMessageId[cacheKey] || null;
-      const attachmentUnavailable = Boolean(attachmentView?.unavailable);
-      const attachmentUrl = attachmentView?.objectUrl || (
-        attachmentItem.attachmentEncryption
-          ? ""
-          : attachmentItem.attachmentUrl
-            ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
-            : ""
-      );
-      const attachmentName = attachmentView?.name || attachmentItem.attachmentName || "";
-      const attachmentContentType = attachmentView?.contentType || attachmentItem.attachmentContentType || "";
-      const attachmentSize = attachmentView?.size || attachmentItem.attachmentSize || null;
-      const voiceMessage = normalizeVoiceMessageMetadata(attachmentItem.voiceMessage);
+    messageRefs.current.delete(messageId);
+  }, [messageRefs, registerMeasuredNode]);
 
-      return {
-        ...attachmentItem,
-        attachmentIndex,
-        cacheKey,
-        attachmentView,
-        attachmentUnavailable,
-        attachmentUrl,
-        attachmentSourceUrl: attachmentItem.attachmentUrl
-          ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
-          : attachmentUrl,
-        attachmentName,
-        attachmentContentType,
-        attachmentSize,
-        voiceMessage,
-        isImage: String(attachmentContentType).startsWith("image/"),
-        isVideo: String(attachmentContentType).startsWith("video/"),
-        isVoice: isVoiceMessage({
+  const renderedAttachmentsByMessageId = useMemo(() => new Map(
+    visibleMessages.map((messageItem) => [
+      String(messageItem?.id || ""),
+      getNormalizedMessageAttachments(messageItem).map((attachmentItem, attachmentIndex) => {
+        const cacheKey = getAttachmentCacheKey(messageItem?.id, attachmentIndex);
+        const attachmentView = decryptedAttachmentsByMessageId[cacheKey] || null;
+        const attachmentUnavailable = Boolean(attachmentView?.unavailable);
+        const attachmentUrl = attachmentView?.objectUrl || (
+          attachmentItem.attachmentEncryption
+            ? ""
+            : attachmentItem.attachmentUrl
+              ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+              : ""
+        );
+        const attachmentName = attachmentView?.name || attachmentItem.attachmentName || "";
+        const attachmentContentType = attachmentView?.contentType || attachmentItem.attachmentContentType || "";
+        const attachmentSize = attachmentView?.size || attachmentItem.attachmentSize || null;
+        const voiceMessage = normalizeVoiceMessageMetadata(attachmentItem.voiceMessage);
+
+        return {
+          ...attachmentItem,
+          attachmentIndex,
+          cacheKey,
+          attachmentView,
+          attachmentUnavailable,
           attachmentUrl,
-          attachmentEncryption: attachmentItem.attachmentEncryption,
+          attachmentSourceUrl: attachmentItem.attachmentUrl
+            ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+            : attachmentUrl,
+          attachmentName,
+          attachmentContentType,
+          attachmentSize,
           voiceMessage,
-        }) && !attachmentUnavailable,
-      };
-    });
+          isImage: String(attachmentContentType).startsWith("image/"),
+          isVideo: String(attachmentContentType).startsWith("video/"),
+          isVoice: isVoiceMessage({
+            attachmentUrl,
+            attachmentEncryption: attachmentItem.attachmentEncryption,
+            voiceMessage,
+          }) && !attachmentUnavailable,
+        };
+      }),
+    ])
+  ), [decryptedAttachmentsByMessageId, visibleMessages]);
+  const normalizedReactionsByMessageId = useMemo(() => new Map(
+    visibleMessages.map((messageItem) => [
+      String(messageItem?.id || ""),
+      normalizeReactions(messageItem?.reactions),
+    ])
+  ), [visibleMessages]);
 
   return (
     <div className="messages-list-shell">
@@ -544,15 +604,15 @@ function TextChatMessageList({
           const messageIndex = messageIndexById.get(String(messageItem.id)) ?? -1;
           const previousMessage = messages[messageIndex - 1] || null;
           const nextMessage = messages[messageIndex + 1] || null;
-          const attachments = resolveRenderedAttachments(messageItem);
+          const attachments = renderedAttachmentsByMessageId.get(String(messageItem.id)) || [];
           const hasRenderableAttachments = attachments.length > 0;
-          const reactions = normalizeReactions(messageItem.reactions);
+          const reactions = normalizedReactionsByMessageId.get(String(messageItem.id)) || [];
           const messageText = String(messageItem.message || "");
           const inviteCode = extractInviteCode(messageText);
           const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
           const isOwnMessage =
             String(messageItem.authorUserId || "") === currentUserId ||
-            (!messageItem.authorUserId && messageItem.username?.toLowerCase() === getUserName(user).toLowerCase());
+            (!messageItem.authorUserId && messageItem.username?.toLowerCase() === currentUserName);
           const isSelectedMessage = selectedMessageIdSet.has(String(messageItem.id));
           const isForwardGroupFollow = areMessagesInSameForwardGroup(messageItem, previousMessage);
           const isForwardGroupStart = !isForwardGroupFollow && areMessagesInSameForwardGroup(messageItem, nextMessage);
@@ -589,14 +649,7 @@ function TextChatMessageList({
           return (
             <div
               key={messageItem.id}
-              ref={(node) => {
-                registerMeasuredNode?.(messageItem.id, node);
-                if (node) {
-                  messageRefs.current.set(messageItem.id, node);
-                } else {
-                  messageRefs.current.delete(messageItem.id);
-                }
-              }}
+              ref={(node) => registerMessageNode(messageItem.id, node)}
               className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
               onClick={handleMessageClick}

@@ -5,6 +5,7 @@ import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
+import { performance } from "node:perf_hooks";
 import started from "electron-squirrel-startup";
 
 if (started) {
@@ -25,6 +26,8 @@ const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
 const DEFAULT_PACKAGED_API_URL = "https://tendsec.ru";
 const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
+const MAX_PERF_EVENTS = 500;
+const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
 const resolveAppIconPath = () =>
   app.isPackaged
     ? path.join(app.getAppPath(), "assets", "app-icon.png")
@@ -61,6 +64,91 @@ let backgroundPreferences = {
   minimizeToTray: true,
   launchOnStartup: true,
 };
+const perfEvents = [];
+const activePerfTraces = new Map();
+let perfSequence = 0;
+
+const appendPerfEvent = (event) => {
+  if (!PERF_ENABLED) {
+    return event;
+  }
+
+  perfEvents.push(event);
+  if (perfEvents.length > MAX_PERF_EVENTS) {
+    perfEvents.splice(0, perfEvents.length - MAX_PERF_EVENTS);
+  }
+
+  console.debug("[perf:main]", event);
+  return event;
+};
+
+const startPerfTrace = (area, action, extra = {}) => {
+  if (!PERF_ENABLED) {
+    return "";
+  }
+
+  perfSequence += 1;
+  const traceId = `${String(area || "electron-main")}:${String(action || "unknown")}:${Date.now()}:${perfSequence}`;
+  activePerfTraces.set(traceId, {
+    traceId,
+    area: String(area || "electron-main"),
+    action: String(action || "unknown"),
+    extra: extra && typeof extra === "object" && !Array.isArray(extra) ? extra : {},
+    route: "",
+    startedAt: new Date().toISOString(),
+    startedAtMs: performance.now(),
+  });
+  return traceId;
+};
+
+const finishPerfTrace = (traceId, extra = {}) => {
+  if (!traceId || !PERF_ENABLED) {
+    return null;
+  }
+
+  const trace = activePerfTraces.get(traceId);
+  if (!trace) {
+    return null;
+  }
+
+  activePerfTraces.delete(traceId);
+  return appendPerfEvent({
+    traceId,
+    area: trace.area,
+    action: trace.action,
+    startedAt: trace.startedAt,
+    durationMs: Number((performance.now() - trace.startedAtMs).toFixed(2)),
+    longTaskCount: 0,
+    route: trace.route,
+    extra: {
+      ...trace.extra,
+      ...(extra && typeof extra === "object" && !Array.isArray(extra) ? extra : {}),
+      source: "main",
+    },
+  });
+};
+
+const normalizeIncomingPerfEvent = (payload) => {
+  const source = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+  return {
+    traceId: String(source.traceId || `renderer:${Date.now()}:${Math.random().toString(16).slice(2)}`),
+    area: String(source.area || "app-shell"),
+    action: String(source.action || "unknown"),
+    startedAt: String(source.startedAt || new Date().toISOString()),
+    durationMs: Number(Number(source.durationMs) || 0),
+    longTaskCount: Number(Number(source.longTaskCount) || 0),
+    route: String(source.route || ""),
+    extra: {
+      ...(source.extra && typeof source.extra === "object" && !Array.isArray(source.extra) ? source.extra : {}),
+      source: source?.extra?.source || "renderer",
+    },
+  };
+};
+
+const appBootstrapTraceId = startPerfTrace("electron-main", "app-bootstrap", {
+  packaged: app.isPackaged,
+  platform: process.platform,
+});
 
 const createInitialAppUpdateState = () => ({
   status: app.isPackaged ? "idle" : "unsupported",
@@ -1084,6 +1172,12 @@ const requestMediaAccess = async (mediaType) => {
 };
 
 const createWindow = () => {
+  const createWindowTraceId = startPerfTrace("electron-main", "create-window", {
+    devServer: Boolean(RENDERER_DEV_SERVER_URL),
+  });
+  const firstLoadTraceId = startPerfTrace("electron-main", "initial-window-load", {
+    devServer: Boolean(RENDERER_DEV_SERVER_URL),
+  });
   const desktopTitleBarHeight = 28;
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -1148,7 +1242,20 @@ const createWindow = () => {
     mainWindow.hide();
   });
 
+  mainWindow.once("ready-to-show", () => {
+    finishPerfTrace(createWindowTraceId, {
+      milestone: "ready-to-show",
+    });
+  });
+
   mainWindow.webContents.on("did-finish-load", () => {
+    finishPerfTrace(firstLoadTraceId, {
+      milestone: "did-finish-load",
+      url: mainWindow?.webContents?.getURL?.() || "",
+    });
+    finishPerfTrace(appBootstrapTraceId, {
+      milestone: "did-finish-load",
+    });
     emitAppUpdateState();
   });
 
@@ -1185,6 +1292,7 @@ app.on("open-url", (event, url) => {
 });
 
 app.whenReady().then(async () => {
+  const whenReadyTraceId = startPerfTrace("electron-main", "app-when-ready");
   app.setName(APP_DISPLAY_NAME);
   if (process.defaultApp && process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
@@ -1282,6 +1390,24 @@ app.whenReady().then(async () => {
     showDesktopNotification(payload && typeof payload === "object" ? payload : {}));
   ipcMain.handle("permissions:get-media-status", async (_event, mediaType) => getMediaAccessStatus(mediaType));
   ipcMain.handle("permissions:request-media-access", async (_event, mediaType) => requestMediaAccess(mediaType));
+  ipcMain.handle("perf:record", async (_event, payload) => {
+    if (!PERF_ENABLED) {
+      return false;
+    }
+
+    appendPerfEvent(normalizeIncomingPerfEvent(payload));
+    return true;
+  });
+  ipcMain.handle("perf:get-events", async () => (PERF_ENABLED ? [...perfEvents] : []));
+  ipcMain.handle("perf:clear", async () => {
+    perfEvents.splice(0, perfEvents.length);
+    return true;
+  });
+  ipcMain.handle("perf:ping", async (_event, payload) => ({
+    ok: true,
+    receivedAt: new Date().toISOString(),
+    payload: payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null,
+  }));
   ipcMain.handle("app-update:get-state", async () => getSanitizedAppUpdateState());
   ipcMain.handle("app-update:check", async () => checkForClientUpdates({ force: true }));
   ipcMain.handle("app-update:install", async () => installDownloadedUpdateAndQuit());
@@ -1552,6 +1678,9 @@ app.whenReady().then(async () => {
     );
   }
 
+  finishPerfTrace(whenReadyTraceId, {
+    sessionReady: true,
+  });
   await loadCachedDownloadedUpdate();
   createWindow();
   void checkForClientUpdates();

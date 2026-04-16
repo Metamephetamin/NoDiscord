@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MEDIA_PREVIEW_MAX_ZOOM, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
@@ -20,17 +20,13 @@ export default function TextChatMediaPreview({
   const dragStateRef = useRef(null);
   const dragDistanceRef = useRef(0);
   const lastWheelNavigationAtRef = useRef(0);
+  const viewportRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
-
-  if (!mediaPreview) {
-    return null;
-  }
-
-  const zoom = Number(mediaPreview.zoom) || 1;
-  const hasGallery = mediaPreview.items?.length > 1;
+  const zoom = Number(mediaPreview?.zoom) || 1;
+  const hasGallery = (mediaPreview?.items?.length || 0) > 1;
   const canPan = zoom > 1;
-  const translateX = Number(mediaPreview.panX) || 0;
-  const translateY = Number(mediaPreview.panY) || 0;
+  const translateX = Number(mediaPreview?.panX) || 0;
+  const translateY = Number(mediaPreview?.panY) || 0;
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -132,6 +128,26 @@ export default function TextChatMediaPreview({
     onNavigate?.(deltaY > 0 ? 1 : -1);
   };
 
+  useEffect(() => {
+    const viewportNode = viewportRef.current;
+    if (!viewportNode) {
+      return undefined;
+    }
+
+    const handleNativeWheel = (event) => {
+      handleWheelAction(event);
+    };
+
+    viewportNode.addEventListener("wheel", handleNativeWheel, { passive: false });
+    return () => {
+      viewportNode.removeEventListener("wheel", handleNativeWheel);
+    };
+  }, [handleWheelAction]);
+
+  if (!mediaPreview) {
+    return null;
+  }
+
   return (
     <div className="media-preview" onClick={onClose} role="presentation">
       <div className="media-preview__dialog" role="dialog" aria-modal="true" aria-label="Предпросмотр файла">
@@ -218,13 +234,13 @@ export default function TextChatMediaPreview({
           ) : null}
 
           <div
+            ref={viewportRef}
             className={`media-preview__viewport ${canPan ? "media-preview__viewport--pannable" : ""} ${isDragging ? "media-preview__viewport--dragging" : ""}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerEnd}
             onPointerCancel={handlePointerEnd}
             onPointerLeave={handlePointerEnd}
-            onWheel={handleWheelAction}
             onClick={handleViewportClick}
           >
             {mediaPreview.type === "image" ? (

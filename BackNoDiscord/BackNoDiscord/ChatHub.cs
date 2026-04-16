@@ -76,7 +76,7 @@ public class ChatHub : Hub
             throw new HubException("Unauthorized");
         }
 
-        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        var normalizedChannelId = NormalizeChannelId(channelId);
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             throw new HubException("channelId is required");
@@ -163,7 +163,7 @@ public class ChatHub : Hub
             throw new HubException("Unauthorized");
         }
 
-        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        var normalizedChannelId = NormalizeChannelId(channelId);
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             throw new HubException("channelId is required");
@@ -276,7 +276,7 @@ public class ChatHub : Hub
             throw new HubException("Unauthorized");
         }
 
-        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        var normalizedChannelId = NormalizeChannelId(channelId);
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             throw new HubException("channelId is required");
@@ -290,8 +290,10 @@ public class ChatHub : Hub
         await Groups.AddToGroupAsync(Context.ConnectionId, normalizedChannelId);
         await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
 
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+
         var lastMessages = await _context.Messages.AsNoTracking()
-            .Where(message => message.ChannelId == normalizedChannelId && !message.IsDeleted)
+            .Where(message => equivalentChannelIds.Contains(message.ChannelId) && !message.IsDeleted)
             .OrderByDescending(message => message.Timestamp)
             .Take(100)
             .OrderBy(message => message.Timestamp)
@@ -314,7 +316,7 @@ public class ChatHub : Hub
             throw new HubException("Unauthorized");
         }
 
-        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        var normalizedChannelId = NormalizeChannelId(channelId);
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             throw new HubException("channelId is required");
@@ -335,7 +337,7 @@ public class ChatHub : Hub
             return;
         }
 
-        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        var normalizedChannelId = NormalizeChannelId(channelId);
         if (string.IsNullOrWhiteSpace(normalizedChannelId))
         {
             return;
@@ -965,12 +967,13 @@ public class ChatHub : Hub
 
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
     {
-        if (DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out _))
+        var normalizedChannelId = NormalizeChannelId(channelId);
+        if (DirectMessageChannels.TryParse(normalizedChannelId, out var firstUserId, out var secondUserId, out _))
         {
             return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
         }
 
-        if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))
+        if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(normalizedChannelId, out var serverId))
         {
             return false;
         }
@@ -1006,13 +1009,16 @@ public class ChatHub : Hub
 
     private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)
     {
-        if (!DirectMessageChannels.TryParse(channelId, out _, out _, out _))
+        var normalizedChannelId = NormalizeChannelId(channelId);
+        if (!DirectMessageChannels.TryParse(normalizedChannelId, out _, out _, out _))
         {
             return;
         }
 
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+
         var unreadMessages = await _context.Messages
-            .Where(message => message.ChannelId == channelId && !message.IsDeleted && message.ReadAt == null)
+            .Where(message => equivalentChannelIds.Contains(message.ChannelId) && !message.IsDeleted && message.ReadAt == null)
             .OrderBy(message => message.Timestamp)
             .ToListAsync();
 
@@ -1044,13 +1050,24 @@ public class ChatHub : Hub
 
         await _context.SaveChangesAsync();
 
-        await Clients.Group(channelId).SendAsync("MessagesRead", new MessageReadReceiptDto
+        await Clients.Group(normalizedChannelId).SendAsync("MessagesRead", new MessageReadReceiptDto
         {
-            ChannelId = channelId,
+            ChannelId = normalizedChannelId,
             ReaderUserId = currentUser.UserId,
             MessageIds = readMessageIds,
             ReadAt = readAtUtc
         });
+    }
+
+    private string NormalizeChannelId(string? channelId)
+    {
+        var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        return DirectMessageChannels.NormalizeChannelId(normalizedChannelId);
+    }
+
+    private static IReadOnlyCollection<string> GetEquivalentChannelIds(string? channelId)
+    {
+        return DirectMessageChannels.GetEquivalentChannelIds(channelId);
     }
 
     private List<ChatMentionPayload> NormalizeMentions(string channelId, List<ChatMentionInput>? mentions)

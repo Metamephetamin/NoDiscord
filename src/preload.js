@@ -238,3 +238,18 @@ contextBridge.exposeInMainWorld("electronAppUpdate", {
     };
   },
 });
+
+contextBridge.exposeInMainWorld("electronPerf", {
+  async record(event) {
+    return ipcRenderer.invoke("perf:record", event);
+  },
+  async getEvents() {
+    return ipcRenderer.invoke("perf:get-events");
+  },
+  async clear() {
+    return ipcRenderer.invoke("perf:clear");
+  },
+  async ping(payload) {
+    return ipcRenderer.invoke("perf:ping", payload);
+  },
+});

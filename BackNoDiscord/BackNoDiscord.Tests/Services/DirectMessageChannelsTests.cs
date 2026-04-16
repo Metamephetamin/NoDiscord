@@ -31,4 +31,21 @@ public class DirectMessageChannelsTests
         Assert.Equal(15, secondUserId);
         Assert.False(isSelfChannel);
     }
+
+    [Fact]
+    public void NormalizeChannelId_NormalizesLegacySelfChannel()
+    {
+        var channelId = DirectMessageChannels.NormalizeChannelId("dm:42:42");
+
+        Assert.Equal("dm:self:42", channelId);
+    }
+
+    [Fact]
+    public void GetEquivalentChannelIds_IncludesLegacyAndCanonicalSelfFormats()
+    {
+        var channelIds = DirectMessageChannels.GetEquivalentChannelIds("dm:self:42");
+
+        Assert.Contains("dm:self:42", channelIds);
+        Assert.Contains("dm:42:42", channelIds);
+    }
 }

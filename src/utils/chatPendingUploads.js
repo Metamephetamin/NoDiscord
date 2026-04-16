@@ -32,6 +32,9 @@ export function isCompressibleImageUpload(upload) {
 
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
+  const previewUrl = (kind === "image" || kind === "video")
+    ? createPendingUploadPreview(file)
+    : "";
 
   return {
     id: buildUploadId(),
@@ -40,7 +43,7 @@ export function createPendingUpload(file) {
     size: Number(file?.size) || 0,
     type: String(file?.type || "").trim(),
     kind,
-    previewUrl: "",
+    previewUrl,
     status: "queued",
     progress: 0,
     error: "",

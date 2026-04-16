@@ -1,3 +1,5 @@
+import { memo } from "react";
+import { createPortal } from "react-dom";
 import { formatFileSize } from "../utils/textChatHelpers";
 
 function BatchUploadItem({ file, uploadingFile, onRemove, showPreview }) {
@@ -34,7 +36,7 @@ function BatchUploadItem({ file, uploadingFile, onRemove, showPreview }) {
   );
 }
 
-export default function TextChatBatchUploadSheet({
+function TextChatBatchUploadSheet({
   selectedFiles,
   uploadingFile,
   message,
@@ -50,25 +52,25 @@ export default function TextChatBatchUploadSheet({
 }) {
   const fileCount = selectedFiles.length;
 
-  if (fileCount <= 1) {
+  if (fileCount <= 1 || typeof document === "undefined") {
     return null;
   }
 
-  return (
+  return createPortal(
     <div className="batch-upload-sheet-backdrop" role="presentation">
       <div className="batch-upload-sheet" role="dialog" aria-modal="true" aria-label="Подготовка фотографий">
         <div className="batch-upload-sheet__header">
-          <strong>{`${fileCount} ${fileCount < 5 ? "фото" : "фото"} выбрано`}</strong>
+          <strong>{`${fileCount} фото выбрано`}</strong>
         </div>
 
         <div className="batch-upload-sheet__list">
-          {selectedFiles.map((selectedFile, index) => (
+          {selectedFiles.map((selectedFile) => (
             <BatchUploadItem
               key={selectedFile.id || `${selectedFile.name}-${selectedFile.size}`}
               file={selectedFile}
               uploadingFile={uploadingFile}
               onRemove={onRemovePendingUpload}
-              showPreview={index < 2}
+              showPreview
             />
           ))}
         </div>
@@ -136,6 +138,11 @@ export default function TextChatBatchUploadSheet({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+
+TextChatBatchUploadSheet.displayName = "TextChatBatchUploadSheet";
+
+export default memo(TextChatBatchUploadSheet);

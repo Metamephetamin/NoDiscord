@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, memo } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
@@ -6,7 +6,101 @@ import VoiceChannelList from "./VoiceChannelList";
 
 const VoiceRoomStage = lazy(() => import("./VoiceRoomStage"));
 
-export const ServersSidebar = ({
+function areStringArraysEqual(previousValue = [], nextValue = []) {
+  if (previousValue === nextValue) {
+    return true;
+  }
+
+  if (!Array.isArray(previousValue) || !Array.isArray(nextValue) || previousValue.length !== nextValue.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousValue.length; index += 1) {
+    if (String(previousValue[index] || "") !== String(nextValue[index] || "")) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areUserLikeEntriesEqual(previousEntries = [], nextEntries = []) {
+  if (previousEntries === nextEntries) {
+    return true;
+  }
+
+  if (!Array.isArray(previousEntries) || !Array.isArray(nextEntries) || previousEntries.length !== nextEntries.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousEntries.length; index += 1) {
+    const previousEntry = previousEntries[index];
+    const nextEntry = nextEntries[index];
+
+    if (
+      String(previousEntry?.id || previousEntry?.userId || "") !== String(nextEntry?.id || nextEntry?.userId || "")
+      || String(previousEntry?.name || previousEntry?.nickname || "") !== String(nextEntry?.name || nextEntry?.nickname || "")
+      || String(previousEntry?.avatar || previousEntry?.avatarUrl || "") !== String(nextEntry?.avatar || nextEntry?.avatarUrl || "")
+      || Boolean(previousEntry?.isLive) !== Boolean(nextEntry?.isLive)
+      || Boolean(previousEntry?.isSpeaking) !== Boolean(nextEntry?.isSpeaking)
+      || Boolean(previousEntry?.isSelf) !== Boolean(nextEntry?.isSelf)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areRemoteSharesEqual(previousShares = [], nextShares = []) {
+  if (previousShares === nextShares) {
+    return true;
+  }
+
+  if (!Array.isArray(previousShares) || !Array.isArray(nextShares) || previousShares.length !== nextShares.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousShares.length; index += 1) {
+    const previousShare = previousShares[index];
+    const nextShare = nextShares[index];
+
+    if (
+      String(previousShare?.userId || "") !== String(nextShare?.userId || "")
+      || String(previousShare?.mode || "") !== String(nextShare?.mode || "")
+      || String(previousShare?.videoSrc || "") !== String(nextShare?.videoSrc || "")
+      || String(previousShare?.imageSrc || "") !== String(nextShare?.imageSrc || "")
+      || Boolean(previousShare?.hasAudio) !== Boolean(nextShare?.hasAudio)
+      || Number(previousShare?.updatedAt || 0) !== Number(nextShare?.updatedAt || 0)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areNavigationRequestsEqual(previousRequest, nextRequest) {
+  if (previousRequest === nextRequest) {
+    return true;
+  }
+
+  if (!previousRequest && !nextRequest) {
+    return true;
+  }
+
+  if (!previousRequest || !nextRequest) {
+    return false;
+  }
+
+  return String(previousRequest?.type || "") === String(nextRequest?.type || "")
+    && String(previousRequest?.serverId || "") === String(nextRequest?.serverId || "")
+    && String(previousRequest?.channelId || "") === String(nextRequest?.channelId || "")
+    && String(previousRequest?.messageId || "") === String(nextRequest?.messageId || "")
+    && String(previousRequest?.nonce || "") === String(nextRequest?.nonce || "");
+}
+
+export const ServersSidebar = memo(({
   includeProfilePanel = true,
   profilePanel,
   activeServer,
@@ -268,9 +362,9 @@ export const ServersSidebar = ({
 
     {includeProfilePanel ? profilePanel : null}
   </aside>
-);
+));
 
-export const ServerMain = ({
+function ServerMainComponent({
   activeServer,
   currentTextChannel,
   currentVoiceChannelName,
@@ -316,7 +410,7 @@ export const ServerMain = ({
   onOpenCamera,
   onLeave,
   getChannelDisplayName,
-}) => {
+}) {
   const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName && desktopServerPane === "voice");
   const isJoiningVoiceChannel = Boolean(joiningVoiceChannelId && desktopServerPane === "voice");
 
@@ -433,7 +527,60 @@ export const ServerMain = ({
       </div>
     </main>
   );
-};
+}
+
+function areServerMainPropsEqual(previousProps, nextProps) {
+  return previousProps.activeServer === nextProps.activeServer
+    && previousProps.currentTextChannel === nextProps.currentTextChannel
+    && previousProps.currentVoiceChannelName === nextProps.currentVoiceChannelName
+    && previousProps.desktopServerPane === nextProps.desktopServerPane
+    && areUserLikeEntriesEqual(previousProps.currentVoiceParticipants, nextProps.currentVoiceParticipants)
+    && previousProps.joiningVoiceChannelId === nextProps.joiningVoiceChannelId
+    && areRemoteSharesEqual(previousProps.remoteScreenShares, nextProps.remoteScreenShares)
+    && previousProps.activeServerUnreadCount === nextProps.activeServerUnreadCount
+    && previousProps.hasLocalSharePreview === nextProps.hasLocalSharePreview
+    && previousProps.isLocalSharePreviewVisible === nextProps.isLocalSharePreviewVisible
+    && previousProps.localSharePreview === nextProps.localSharePreview
+    && previousProps.localSharePreviewMeta === nextProps.localSharePreviewMeta
+    && previousProps.localSharePreviewDebugInfo === nextProps.localSharePreviewDebugInfo
+    && previousProps.selectedStreamUserId === nextProps.selectedStreamUserId
+    && previousProps.selectedStream === nextProps.selectedStream
+    && previousProps.selectedStreamParticipant === nextProps.selectedStreamParticipant
+    && previousProps.selectedStreamDebugInfo === nextProps.selectedStreamDebugInfo
+    && previousProps.channelSearchQuery === nextProps.channelSearchQuery
+    && previousProps.searchIcon === nextProps.searchIcon
+    && previousProps.user === nextProps.user
+    && areUserLikeEntriesEqual(previousProps.directConversationTargets, nextProps.directConversationTargets)
+    && areUserLikeEntriesEqual(previousProps.serverMembers, nextProps.serverMembers)
+    && areNavigationRequestsEqual(previousProps.textChatNavigationRequest, nextProps.textChatNavigationRequest)
+    && previousProps.onTextChatNavigationIndexChange === nextProps.onTextChatNavigationIndexChange
+    && previousProps.onOpenDirectChat === nextProps.onOpenDirectChat
+    && previousProps.onStartDirectCall === nextProps.onStartDirectCall
+    && previousProps.onOpenLocalSharePreview === nextProps.onOpenLocalSharePreview
+    && previousProps.onWatchStream === nextProps.onWatchStream
+    && previousProps.onChannelSearchChange === nextProps.onChannelSearchChange
+    && previousProps.onAddServer === nextProps.onAddServer
+    && previousProps.onCloseSelectedStream === nextProps.onCloseSelectedStream
+    && previousProps.onStopCameraShare === nextProps.onStopCameraShare
+    && previousProps.onStopScreenShare === nextProps.onStopScreenShare
+    && previousProps.onCloseLocalSharePreview === nextProps.onCloseLocalSharePreview
+    && previousProps.isMicMuted === nextProps.isMicMuted
+    && previousProps.isSoundMuted === nextProps.isSoundMuted
+    && previousProps.isScreenShareActive === nextProps.isScreenShareActive
+    && previousProps.isCameraShareActive === nextProps.isCameraShareActive
+    && previousProps.onToggleMic === nextProps.onToggleMic
+    && previousProps.onToggleSound === nextProps.onToggleSound
+    && previousProps.onOpenTextChat === nextProps.onOpenTextChat
+    && previousProps.onScreenShareAction === nextProps.onScreenShareAction
+    && previousProps.onOpenCamera === nextProps.onOpenCamera
+    && previousProps.onLeave === nextProps.onLeave
+    && previousProps.getChannelDisplayName === nextProps.getChannelDisplayName;
+}
+
+export const ServerMain = memo(ServerMainComponent, areServerMainPropsEqual);
+
+ServersSidebar.displayName = "ServersSidebar";
+ServerMain.displayName = "ServerMain";
 export const DesktopServerRail = ({
   servers,
   workspaceMode,

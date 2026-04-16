@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
@@ -138,6 +138,7 @@ import {
   uiSoundCache,
   VOICE_INPUT_MODES,
 } from "../../utils/menuMainModel";
+import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../../utils/perf";
 
 const MAX_PROFILE_NICKNAME_LENGTH = 50;
 const normalizeProfileNicknameInput = (value) =>
@@ -238,6 +239,119 @@ const buildDirectCallState = (overrides = {}) => {
     peer,
   };
 };
+
+const areStringArraysEqual = (previousValue = [], nextValue = []) => {
+  if (previousValue === nextValue) {
+    return true;
+  }
+
+  if (previousValue.length !== nextValue.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousValue.length; index += 1) {
+    if (String(previousValue[index] || "") !== String(nextValue[index] || "")) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const areShallowObjectsEqual = (previousValue = {}, nextValue = {}) => {
+  if (previousValue === nextValue) {
+    return true;
+  }
+
+  const previousKeys = Object.keys(previousValue);
+  const nextKeys = Object.keys(nextValue);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  for (const key of previousKeys) {
+    if (previousValue[key] !== nextValue[key]) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const areObjectArraysEqual = (previousValue = [], nextValue = []) => {
+  if (previousValue === nextValue) {
+    return true;
+  }
+
+  if (previousValue.length !== nextValue.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousValue.length; index += 1) {
+    if (!areShallowObjectsEqual(previousValue[index], nextValue[index])) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const areParticipantMapsEqual = (previousValue = {}, nextValue = {}) => {
+  if (previousValue === nextValue) {
+    return true;
+  }
+
+  const previousKeys = Object.keys(previousValue);
+  const nextKeys = Object.keys(nextValue);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  for (const key of previousKeys) {
+    if (!Object.hasOwn(nextValue, key) || !areObjectArraysEqual(previousValue[key], nextValue[key])) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const areRemoteScreenSharesEqual = (previousValue = [], nextValue = []) => {
+  if (previousValue === nextValue) {
+    return true;
+  }
+
+  if (previousValue.length !== nextValue.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousValue.length; index += 1) {
+    const previousShare = previousValue[index] || {};
+    const nextShare = nextValue[index] || {};
+
+    if (
+      String(previousShare.userId || "") !== String(nextShare.userId || "")
+      || String(previousShare.name || "") !== String(nextShare.name || "")
+      || String(previousShare.avatar || "") !== String(nextShare.avatar || "")
+      || previousShare.stream !== nextShare.stream
+      || String(previousShare.videoSrc || "") !== String(nextShare.videoSrc || "")
+      || String(previousShare.imageSrc || "") !== String(nextShare.imageSrc || "")
+      || Boolean(previousShare.hasAudio) !== Boolean(nextShare.hasAudio)
+      || String(previousShare.mode || "") !== String(nextShare.mode || "")
+      || Number(previousShare.width || 0) !== Number(nextShare.width || 0)
+      || Number(previousShare.height || 0) !== Number(nextShare.height || 0)
+      || Number(previousShare.fps || 0) !== Number(nextShare.fps || 0)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const normalizeMicLevel = (value) => Math.max(0, Math.min(1, Number(value) || 0));
 
 export default function MenuMain({
   user,
@@ -427,6 +541,7 @@ export default function MenuMain({
   const suppressedServerClickRef = useRef("");
   const appliedInputDeviceRef = useRef("");
   const appliedOutputDeviceRef = useRef("");
+  const micLevelUiActiveRef = useRef(false);
   const navigationHistoryRef = useRef({ back: [], forward: [] });
   const lastNavigationSnapshotRef = useRef(null);
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
@@ -550,6 +665,20 @@ export default function MenuMain({
     () => [selfDirectEntry, ...friends].filter(Boolean),
     [friends, selfDirectEntry]
   );
+  const serverSidebarIcons = useMemo(() => ({
+    pencil: PENCIL_ICON_URL,
+    microphone: MICROPHONE_ICON_URL,
+    headphones: HEADPHONES_ICON_URL,
+    settings: SETTINGS_ICON_URL,
+  }), []);
+  const mobileVoiceStageIcons = useMemo(() => ({
+    microphone: MICROPHONE_ICON_URL,
+    headphones: HEADPHONES_ICON_URL,
+    chat: SMS_ICON_URL,
+    monitor: MONITOR_ICON_URL,
+    camera: CAMERA_ICON_URL,
+    phone: PHONE_ICON_URL,
+  }), []);
   const currentDirectFriend = useMemo(
     () => directConversationTargets.find((friend) => String(friend.id) === String(activeDirectFriendId)) || null,
     [directConversationTargets, activeDirectFriendId]
@@ -558,6 +687,18 @@ export default function MenuMain({
     () => currentDirectFriend?.directChannelId || buildDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
     [currentDirectFriend?.directChannelId, currentDirectFriend?.id, currentUserId]
   );
+  const resetActiveDirectFriend = useCallback(() => {
+    setActiveDirectFriendId("");
+  }, []);
+  const closeSelectedStream = useCallback(() => {
+    setSelectedStreamUserId(null);
+  }, []);
+  const openDesktopTextChatPane = useCallback(() => {
+    setDesktopServerPane("text");
+  }, []);
+  const openMobileServersChatPane = useCallback(() => {
+    setMobileServersPane("chat");
+  }, []);
   useEffect(() => {
     directCallStateRef.current = directCallState;
   }, [directCallState]);
@@ -1389,6 +1530,9 @@ export default function MenuMain({
   };
 
   const openServersWorkspace = () => {
+    const traceId = startPerfTrace("menu-main", "open-servers-workspace", {
+      isMobileViewport,
+    });
     pushNavigationHistory(() => {
       setWorkspaceMode("servers");
       setActiveDirectFriendId("");
@@ -1398,15 +1542,26 @@ export default function MenuMain({
         setMobileServersPane(currentVoiceChannel ? "voice" : "channels");
       }
     });
+    finishPerfTraceOnNextFrame(traceId, {
+      isMobileViewport,
+      workspaceMode: "servers",
+    });
   };
 
   const openFriendsWorkspace = () => {
+    const traceId = startPerfTrace("menu-main", "open-friends-workspace", {
+      isMobileViewport,
+    });
     pushNavigationHistory(() => {
       setWorkspaceMode("friends");
       setSelectedStreamUserId(null);
       if (isMobileViewport) {
         setMobileSection("friends");
       }
+    });
+    finishPerfTraceOnNextFrame(traceId, {
+      isMobileViewport,
+      workspaceMode: "friends",
     });
   };
 
@@ -1415,6 +1570,10 @@ export default function MenuMain({
       return;
     }
 
+    const traceId = startPerfTrace("menu-main", "select-server", {
+      isMobileViewport,
+      serverId: String(server.id || ""),
+    });
     pushNavigationHistory(() => {
       setWorkspaceMode("servers");
       setActiveServerId(server.id);
@@ -1427,9 +1586,17 @@ export default function MenuMain({
         setMobileServersPane("channels");
       }
     });
+    finishPerfTraceOnNextFrame(traceId, {
+      isMobileViewport,
+      serverId: String(server.id || ""),
+    });
   };
 
   const selectServerTextChannel = (channelId) => {
+    const traceId = startPerfTrace("menu-main", "select-text-channel", {
+      channelId: String(channelId || ""),
+      isMobileViewport,
+    });
     pushNavigationHistory(() => {
       setWorkspaceMode("servers");
       setCurrentTextChannelId(channelId);
@@ -1440,9 +1607,17 @@ export default function MenuMain({
         setMobileServersPane("chat");
       }
     });
+    finishPerfTraceOnNextFrame(traceId, {
+      channelId: String(channelId || ""),
+      isMobileViewport,
+    });
   };
 
   const openDirectChat = (friendId) => {
+    const traceId = startPerfTrace("menu-main", "open-direct-chat", {
+      friendId: String(friendId || ""),
+      isMobileViewport,
+    });
     pushNavigationHistory(() => {
       setActiveDirectFriendId(String(friendId || ""));
       setWorkspaceMode("friends");
@@ -1451,6 +1626,10 @@ export default function MenuMain({
       if (isMobileViewport) {
         setMobileSection("friends");
       }
+    });
+    finishPerfTraceOnNextFrame(traceId, {
+      friendId: String(friendId || ""),
+      isMobileViewport,
     });
   };
 
@@ -3170,6 +3349,142 @@ export default function MenuMain({
     setServerContextMenu(null);
   }, [activeServerId]);
   useEffect(() => {
+    micLevelUiActiveRef.current = Boolean(
+      showMicMenu
+      || isMicTestActive
+      || (openSettings && settingsTab === "voice_video")
+    );
+  }, [isMicTestActive, openSettings, settingsTab, showMicMenu]);
+
+  const handleParticipantsMapChanged = useCallback((nextParticipantsMap) => {
+    const normalizedParticipantsMap =
+      nextParticipantsMap && typeof nextParticipantsMap === "object" ? nextParticipantsMap : {};
+
+    setParticipantsMap((previousValue) => (
+      areParticipantMapsEqual(previousValue, normalizedParticipantsMap)
+        ? previousValue
+        : normalizedParticipantsMap
+    ));
+  }, []);
+
+  const handleRemoteScreenStreamsChanged = useCallback((nextShares) => {
+    const normalizedShares = Array.isArray(nextShares) ? nextShares : [];
+
+    setRemoteScreenShares((previousValue) => (
+      areRemoteScreenSharesEqual(previousValue, normalizedShares)
+        ? previousValue
+        : normalizedShares
+    ));
+  }, []);
+
+  const handleLiveUsersChanged = useCallback((nextLiveUsers) => {
+    const normalizedLiveUsers = Array.isArray(nextLiveUsers)
+      ? nextLiveUsers.map((value) => String(value || ""))
+      : [];
+
+    setAnnouncedLiveUserIds((previousValue) => (
+      areStringArraysEqual(previousValue, normalizedLiveUsers)
+        ? previousValue
+        : normalizedLiveUsers
+    ));
+  }, []);
+
+  const handleSpeakingUsersChanged = useCallback((nextSpeakingUsers) => {
+    const normalizedSpeakingUsers = Array.isArray(nextSpeakingUsers)
+      ? nextSpeakingUsers.map((value) => String(value || ""))
+      : [];
+
+    setSpeakingUserIds((previousValue) => (
+      areStringArraysEqual(previousValue, normalizedSpeakingUsers)
+        ? previousValue
+        : normalizedSpeakingUsers
+    ));
+  }, []);
+
+  const handleRoomParticipantsChanged = useCallback(({ channel, participants }) => {
+    const normalizedChannel = String(channel || "");
+    const normalizedParticipants = Array.isArray(participants) ? participants : [];
+
+    setRoomVoiceParticipants((previousValue) => (
+      previousValue.channel === normalizedChannel
+      && areObjectArraysEqual(previousValue.participants, normalizedParticipants)
+        ? previousValue
+        : {
+            channel: normalizedChannel,
+            participants: normalizedParticipants,
+          }
+    ));
+  }, []);
+
+  const handleSelfVoiceStateChanged = useCallback(({
+    isMicMuted: nextMicMuted,
+    isDeafened: nextIsDeafened,
+    isMicForced: nextIsMicForced,
+    isDeafenedForced: nextIsSoundForced,
+  }) => {
+    const normalizedMicMuted = Boolean(nextMicMuted) && !nextIsDeafened;
+    const normalizedSoundMuted = Boolean(nextIsDeafened);
+    const normalizedMicForced = Boolean(nextIsMicForced);
+    const normalizedSoundForced = Boolean(nextIsSoundForced);
+
+    setIsMicMuted((previousValue) => (
+      previousValue === normalizedMicMuted ? previousValue : normalizedMicMuted
+    ));
+    setIsSoundMuted((previousValue) => (
+      previousValue === normalizedSoundMuted ? previousValue : normalizedSoundMuted
+    ));
+    setIsMicForced((previousValue) => (
+      previousValue === normalizedMicForced ? previousValue : normalizedMicForced
+    ));
+    setIsSoundForced((previousValue) => (
+      previousValue === normalizedSoundForced ? previousValue : normalizedSoundForced
+    ));
+  }, []);
+
+  const handleMicLevelChanged = useCallback((nextLevel) => {
+    if (!micLevelUiActiveRef.current) {
+      return;
+    }
+
+    const normalizedLevel = normalizeMicLevel(nextLevel);
+    setMicLevel((previousValue) => {
+      const delta = Math.abs(previousValue - normalizedLevel);
+      const crossingZero = (previousValue === 0) !== (normalizedLevel === 0);
+      return delta >= 0.04 || crossingZero ? normalizedLevel : previousValue;
+    });
+  }, []);
+
+  const handleAudioDevicesChanged = useCallback(({
+    inputs,
+    outputs,
+    selectedInputDeviceId: nextInputDeviceId,
+    selectedOutputDeviceId: nextOutputDeviceId,
+    outputSelectionSupported: nextOutputSelectionSupported,
+  }) => {
+    const normalizedInputs = Array.isArray(inputs) ? inputs : [];
+    const normalizedOutputs = Array.isArray(outputs) ? outputs : [];
+    const normalizedInputDeviceId = nextInputDeviceId || "";
+    const normalizedOutputDeviceId = nextOutputDeviceId || "";
+    const normalizedOutputSelectionSupported = Boolean(nextOutputSelectionSupported);
+
+    setAudioInputDevices((previousValue) => (
+      areObjectArraysEqual(previousValue, normalizedInputs) ? previousValue : normalizedInputs
+    ));
+    setAudioOutputDevices((previousValue) => (
+      areObjectArraysEqual(previousValue, normalizedOutputs) ? previousValue : normalizedOutputs
+    ));
+    setSelectedInputDeviceId((previousValue) => (
+      previousValue === normalizedInputDeviceId ? previousValue : normalizedInputDeviceId
+    ));
+    setSelectedOutputDeviceId((previousValue) => (
+      previousValue === normalizedOutputDeviceId ? previousValue : normalizedOutputDeviceId
+    ));
+    setOutputSelectionSupported((previousValue) => (
+      previousValue === normalizedOutputSelectionSupported ? previousValue : normalizedOutputSelectionSupported
+    ));
+  }, []);
+
+  useEffect(() => {
     let disposed = false;
     const measurePing = async () => {
       if (document.visibilityState === "hidden") {
@@ -3195,13 +3510,15 @@ export default function MenuMain({
   useEffect(() => {
     if (!user?.id) return undefined;
     const client = createVoiceRoomClient({
-      onParticipantsMapChanged: setParticipantsMap,
+      onParticipantsMapChanged: handleParticipantsMapChanged,
       onChannelChanged: (nextChannel) => {
         if (!nextChannel && voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current) {
           return;
         }
 
-        setCurrentVoiceChannel(nextChannel);
+        setCurrentVoiceChannel((previousValue) => (
+          String(previousValue || "") === String(nextChannel || "") ? previousValue : nextChannel
+        ));
         setJoiningVoiceChannelId((previous) => (String(previous || "") === String(nextChannel || "") ? "" : previous));
         if (!nextChannel && isDirectCallChannelId(directCallStateRef.current.channelId)) {
           const currentCall = directCallStateRef.current;
@@ -3236,48 +3553,37 @@ export default function MenuMain({
           }
         }
       },
-      onRemoteScreenStreamsChanged: setRemoteScreenShares,
-      onLocalScreenShareChanged: setIsSharingScreen,
-      onLocalLiveShareChanged: ({ mode }) => setLocalLiveShareMode(mode || ""),
+      onRemoteScreenStreamsChanged: handleRemoteScreenStreamsChanged,
+      onLocalScreenShareChanged: (nextValue) => {
+        const normalizedValue = Boolean(nextValue);
+        setIsSharingScreen((previousValue) => (
+          previousValue === normalizedValue ? previousValue : normalizedValue
+        ));
+      },
+      onLocalLiveShareChanged: ({ mode }) => {
+        const normalizedMode = mode || "";
+        setLocalLiveShareMode((previousValue) => (
+          previousValue === normalizedMode ? previousValue : normalizedMode
+        ));
+      },
       onLocalPreviewStreamChanged: ({ stream, mode }) => {
-        setLocalSharePreview({
-          stream: stream || null,
-          mode: mode || "",
-        });
+        const normalizedStream = stream || null;
+        const normalizedMode = mode || "";
+        setLocalSharePreview((previousValue) => (
+          previousValue.stream === normalizedStream && previousValue.mode === normalizedMode
+            ? previousValue
+            : {
+                stream: normalizedStream,
+                mode: normalizedMode,
+              }
+        ));
       },
-      onLiveUsersChanged: setAnnouncedLiveUserIds,
-      onSpeakingUsersChanged: setSpeakingUserIds,
-      onRoomParticipantsChanged: ({ channel, participants }) => {
-        setRoomVoiceParticipants({
-          channel: channel || "",
-          participants: Array.isArray(participants) ? participants : [],
-        });
-      },
-      onSelfVoiceStateChanged: ({
-        isMicMuted: nextMicMuted,
-        isDeafened: nextIsDeafened,
-        isMicForced: nextIsMicForced,
-        isDeafenedForced: nextIsSoundForced,
-      }) => {
-        setIsMicMuted(Boolean(nextMicMuted) && !nextIsDeafened);
-        setIsSoundMuted(Boolean(nextIsDeafened));
-        setIsMicForced(Boolean(nextIsMicForced));
-        setIsSoundForced(Boolean(nextIsSoundForced));
-      },
-      onMicLevelChanged: setMicLevel,
-      onAudioDevicesChanged: ({
-        inputs,
-        outputs,
-        selectedInputDeviceId: nextInputDeviceId,
-        selectedOutputDeviceId: nextOutputDeviceId,
-        outputSelectionSupported: nextOutputSelectionSupported,
-      }) => {
-        setAudioInputDevices(Array.isArray(inputs) ? inputs : []);
-        setAudioOutputDevices(Array.isArray(outputs) ? outputs : []);
-        setSelectedInputDeviceId(nextInputDeviceId || "");
-        setSelectedOutputDeviceId(nextOutputDeviceId || "");
-        setOutputSelectionSupported(Boolean(nextOutputSelectionSupported));
-      },
+      onLiveUsersChanged: handleLiveUsersChanged,
+      onSpeakingUsersChanged: handleSpeakingUsersChanged,
+      onRoomParticipantsChanged: handleRoomParticipantsChanged,
+      onSelfVoiceStateChanged: handleSelfVoiceStateChanged,
+      onMicLevelChanged: handleMicLevelChanged,
+      onAudioDevicesChanged: handleAudioDevicesChanged,
       onIncomingDirectCall: ({ channelName, fromUserId, fromName, fromAvatar }) => {
         if (!channelName || !fromUserId) {
           return;
@@ -3487,7 +3793,17 @@ export default function MenuMain({
       client.disconnect().catch((error) => logVoiceHubError("Ошибка отключения от голосового хаба:", error));
       if (voiceClientRef.current === client) voiceClientRef.current = null;
     };
-  }, [user?.id]);
+  }, [
+    handleAudioDevicesChanged,
+    handleLiveUsersChanged,
+    handleMicLevelChanged,
+    handleParticipantsMapChanged,
+    handleRemoteScreenStreamsChanged,
+    handleRoomParticipantsChanged,
+    handleSelfVoiceStateChanged,
+    handleSpeakingUsersChanged,
+    user?.id,
+  ]);
   useEffect(() => {
     if (!user?.id || !voiceClientRef.current) return;
     voiceClientRef.current.connect(user).catch((error) => logVoiceHubError("Ошибка обновления пользователя в голосовом хабе:", error));
@@ -3684,13 +4000,22 @@ export default function MenuMain({
       console.error("Ошибка обновления сервера:", error);
     }
   };
-  const openSettingsPanel = (tab = "voice_video") => {
+  const openSettingsPanel = useCallback((tab = "voice_video") => {
+    const traceId = startPerfTrace("menu-main", "open-settings-panel", {
+      tab: String(tab || "voice_video"),
+    });
     setSettingsTab(tab);
     setOpenSettings(true);
     setShowServerMembersPanel(false);
     setShowMicMenu(false);
     setShowSoundMenu(false);
-  };
+    finishPerfTraceOnNextFrame(traceId, {
+      tab: String(tab || "voice_video"),
+    });
+  }, []);
+  const openServerSettingsPanel = useCallback(() => {
+    openSettingsPanel("server");
+  }, [openSettingsPanel]);
   const openCreateServerModal = () => {
     setCreateServerName("");
     setCreateServerIcon("");
@@ -4145,6 +4470,22 @@ export default function MenuMain({
       return;
     }
 
+    const joinTraceId = startPerfTrace("voice", "join-voice-channel", {
+      channelId: String(channel.id || ""),
+      scopedChannelId,
+      serverId: String(activeServer.id || ""),
+    });
+    let joinSucceeded = false;
+    let joinTraceFinished = false;
+    const finishJoinTrace = (extra = {}) => {
+      if (joinTraceFinished) {
+        return;
+      }
+
+      joinTraceFinished = true;
+      finishPerfTrace(joinTraceId, extra);
+    };
+
     const joinAttemptId = voiceJoinAttemptRef.current + 1;
     voiceJoinAttemptRef.current = joinAttemptId;
     voiceJoinInFlightRef.current = true;
@@ -4160,6 +4501,7 @@ export default function MenuMain({
     });
     try {
       await voiceClientRef.current.joinChannel(scopedChannelId, user);
+      joinSucceeded = true;
     } catch (error) {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
         const errorName = String(error?.name || "").trim();
@@ -4170,6 +4512,12 @@ export default function MenuMain({
           console.error("Ошибка входа в голосовой канал:", error);
           setCurrentVoiceChannel(null);
           setJoiningVoiceChannelId("");
+          finishJoinTrace({
+            channelId: String(channel.id || ""),
+            retry: false,
+            scopedChannelId,
+            success: false,
+          });
           return;
         }
 
@@ -4181,6 +4529,13 @@ export default function MenuMain({
 
         try {
           await voiceClientRef.current.joinChannel(scopedChannelId, user);
+          joinSucceeded = true;
+          finishJoinTrace({
+            channelId: String(channel.id || ""),
+            retry: true,
+            scopedChannelId,
+            success: true,
+          });
           return;
         } catch (retryError) {
           const message = retryError?.message || error?.message || "Не удалось подключиться к голосовому каналу.";
@@ -4188,6 +4543,12 @@ export default function MenuMain({
           console.error("Ошибка входа в голосовой канал:", retryError);
           setCurrentVoiceChannel(null);
           setJoiningVoiceChannelId("");
+          finishJoinTrace({
+            channelId: String(channel.id || ""),
+            retry: true,
+            scopedChannelId,
+            success: false,
+          });
         }
       }
     } finally {
@@ -4196,10 +4557,21 @@ export default function MenuMain({
         pendingVoiceChannelTargetRef.current = "";
         setJoiningVoiceChannelId("");
       }
+
+      finishJoinTrace({
+        channelId: String(channel.id || ""),
+        retry: false,
+        scopedChannelId,
+        success: joinSucceeded,
+      });
     }
   };
   const leaveVoiceChannel = async () => {
     if (!voiceClientRef.current) return;
+    const leaveTraceId = startPerfTrace("voice", "leave-voice-channel", {
+      currentVoiceChannel: String(currentVoiceChannel || ""),
+    });
+    let leaveSucceeded = false;
     try {
       voiceJoinInFlightRef.current = false;
       pendingVoiceChannelTargetRef.current = "";
@@ -4211,8 +4583,14 @@ export default function MenuMain({
         }
       });
       await voiceClientRef.current.leaveChannel();
+      leaveSucceeded = true;
     } catch (error) {
       console.error("Ошибка выхода из голосового канала:", error);
+    } finally {
+      finishPerfTrace(leaveTraceId, {
+        currentVoiceChannel: String(currentVoiceChannel || ""),
+        success: leaveSucceeded,
+      });
     }
   };
   const handleLogout = async () => {
@@ -5196,7 +5574,7 @@ export default function MenuMain({
       onQueryChange={setFriendsSidebarQuery}
       onOpenFriendsWorkspace={openFriendsWorkspace}
       onOpenServersWorkspace={openServersWorkspace}
-      onResetDirect={() => setActiveDirectFriendId("")}
+      onResetDirect={resetActiveDirectFriend}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
@@ -5229,8 +5607,8 @@ export default function MenuMain({
       speakingUserIds={speakingUserIds}
       watchedStreamUserId={selectedStreamUserId}
       joiningVoiceChannelId={joiningVoiceChannelId}
-      icons={{ pencil: PENCIL_ICON_URL, microphone: MICROPHONE_ICON_URL, headphones: HEADPHONES_ICON_URL, settings: SETTINGS_ICON_URL }}
-      onOpenServerSettings={() => openSettingsPanel("server")}
+      icons={serverSidebarIcons}
+      onOpenServerSettings={openServerSettingsPanel}
       onUpdateMemberNickname={updateMemberNickname}
       onUpdateMemberVoiceState={updateMemberVoiceState}
       onUpdateMemberRole={updateMemberRole}
@@ -5276,7 +5654,7 @@ export default function MenuMain({
       friendActionStatus={friendActionStatus}
       isAddingFriend={isAddingFriend}
       activeContacts={activeContacts}
-      onResetDirect={() => setActiveDirectFriendId("")}
+      onResetDirect={resetActiveDirectFriend}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
       onStartDirectCall={startDirectCallWithUser}
@@ -5330,7 +5708,7 @@ export default function MenuMain({
       onWatchStream={handleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}
       onAddServer={handleAddServer}
-      onCloseSelectedStream={() => setSelectedStreamUserId(null)}
+      onCloseSelectedStream={closeSelectedStream}
       onStopCameraShare={stopCameraShare}
       onStopScreenShare={stopScreenShare}
       onCloseLocalSharePreview={closeLocalSharePreview}
@@ -5340,7 +5718,7 @@ export default function MenuMain({
       isCameraShareActive={isCameraShareActive}
       onToggleMic={toggleMicMute}
       onToggleSound={toggleSoundMute}
-      onOpenTextChat={() => setDesktopServerPane("text")}
+      onOpenTextChat={openDesktopTextChatPane}
       onScreenShareAction={handleScreenShareAction}
       onOpenCamera={openCameraModal}
       onLeave={leaveVoiceChannel}
@@ -5407,15 +5785,10 @@ export default function MenuMain({
       isScreenShareActive={isScreenShareActive}
       isCameraShareActive={isCameraShareActive}
       icons={{
-        microphone: MICROPHONE_ICON_URL,
-        headphones: HEADPHONES_ICON_URL,
-        chat: SMS_ICON_URL,
-        monitor: MONITOR_ICON_URL,
-        camera: CAMERA_ICON_URL,
-        phone: PHONE_ICON_URL,
+        ...mobileVoiceStageIcons,
       }}
       onOpenFullscreen={openMobileVoiceStageFullscreen}
-      onCloseRemoteStream={() => setSelectedStreamUserId(null)}
+      onCloseRemoteStream={closeSelectedStream}
       onCloseLocalPreview={closeLocalSharePreview}
       onStopScreenShare={stopScreenShare}
       onStopCameraShare={stopCameraShare}
@@ -5423,7 +5796,7 @@ export default function MenuMain({
       onInvite={handleInvitePeopleToVoice}
       onToggleMic={toggleMicMute}
       onToggleSound={toggleSoundMute}
-      onOpenChat={() => setMobileServersPane("chat")}
+      onOpenChat={openMobileServersChatPane}
       onScreenShareAction={handleScreenShareAction}
       onOpenCamera={openCameraModal}
       onLeave={leaveVoiceChannel}

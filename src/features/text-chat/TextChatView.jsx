@@ -1,13 +1,24 @@
-import { Suspense, lazy } from "react";
+import { Profiler, Suspense, lazy, useCallback, useEffect, useRef } from "react";
 import TextChatContextMenu from "../../components/TextChatContextMenu";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
 import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
 
 const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
 const TextChatMediaPreview = lazy(() => import("../../components/TextChatMediaPreview"));
+
+function useStableCallback(callback) {
+  const callbackRef = useRef(callback);
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
+  return useCallback((...args) => callbackRef.current?.(...args), []);
+}
 
 export default function TextChatView(props) {
   const {
@@ -135,12 +146,33 @@ export default function TextChatView(props) {
     handleForwardSubmit,
   } = props;
 
+  const stableScrollToMessage = useStableCallback(scrollToMessage);
+  const stableToggleMessageSelection = useStableCallback(toggleMessageSelection);
+  const stableOpenMessageContextMenu = useStableCallback(openMessageContextMenu);
+  const stableOpenUserContextMenu = useStableCallback(openUserContextMenu);
+  const stableOpenMediaPreview = useStableCallback(openMediaPreview);
+  const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
+  const stableOpenForwardModal = useStableCallback(openForwardModal);
+  const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+    recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
+      messageCount: messages.length,
+      visibleMessageCount: visibleMessages.length,
+      virtualizationEnabled,
+    });
+  }, [messages.length, visibleMessages.length, virtualizationEnabled]);
+  const handleComposerRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+    recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
+      hasBatchUploadSheet: selectedFiles.length > 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image"),
+      selectedFileCount: selectedFiles.length,
+    });
+  }, [selectedFiles]);
+
   return (
     <div className="textchat-container">
-      <MessageSearchPanel query={searchQuery.trim().toLowerCase()} results={searchResults} onOpenMessage={scrollToMessage} />
+      <MessageSearchPanel query={searchQuery.trim().toLowerCase()} results={searchResults} onOpenMessage={stableScrollToMessage} />
       <PinnedMessagesPanel
         pinnedMessages={pinnedMessages}
-        onOpenMessage={scrollToMessage}
+        onOpenMessage={stableScrollToMessage}
         onRemovePinned={(pinnedMessageId) =>
           setPinnedMessages((previous) => previous.filter((item) => String(item.id) !== String(pinnedMessageId)))
         }
@@ -149,7 +181,7 @@ export default function TextChatView(props) {
         <ChatSelectionBar
           selectedCount={selectedMessageIds.length || 0}
           canForward={Boolean(selectedMessageIds.length && directTargets.length)}
-          onForward={() => openForwardModal(selectedMessageIds)}
+          onForward={() => stableOpenForwardModal(selectedMessageIds)}
           onCancel={clearSelectionMode}
         />
       ) : null}
@@ -161,88 +193,174 @@ export default function TextChatView(props) {
         pinnedMessages={pinnedMessages}
         canReturnToJumpPoint={canReturnToJumpPoint}
         onJumpToFirstUnread={onJumpToFirstUnread}
-        onOpenMention={scrollToMessage}
-        onOpenReply={scrollToMessage}
-        onOpenPinned={scrollToMessage}
+        onOpenMention={stableScrollToMessage}
+        onOpenReply={stableScrollToMessage}
+        onOpenPinned={stableScrollToMessage}
         onReturnToJumpPoint={onReturnToJumpPoint}
       />
       <JumpToLatestBar pendingCount={pendingNewMessagesCount} onJump={() => scrollToLatest("smooth")} />
-      <TextChatMessageList
-        messages={messages}
-        visibleMessages={visibleMessages}
-        messagesListRef={messagesListRef}
-        messagesEndRef={messagesEndRef}
-        messageRefs={messageRefs}
-        virtualizationEnabled={virtualizationEnabled}
-        topSpacerHeight={topSpacerHeight}
-        bottomSpacerHeight={bottomSpacerHeight}
-        registerMeasuredNode={registerMeasuredNode}
-        floatingDateLabel={floatingDateLabel}
-        decryptedAttachmentsByMessageId={decryptedAttachmentsByMessageId}
-        selectedMessageIdSet={selectedMessageIdSet}
-        highlightedMessageId={highlightedMessageId}
-        isDirectChat={isDirectChat}
-        currentUserId={currentUserId}
-        user={user}
-        selectionMode={selectionMode}
-        onToggleSelection={toggleMessageSelection}
-        onOpenContextMenu={openMessageContextMenu}
-        onOpenUserContextMenu={openUserContextMenu}
-        onOpenMediaPreview={openMediaPreview}
-        onToggleReaction={handleToggleReaction}
-        onJumpToReply={scrollToMessage}
-      />
-      <TextChatComposer
-        selectedFiles={selectedFiles}
-        uploadingFile={uploadingFile}
-        composerDropActive={composerDropActive}
-        replyState={replyState}
-        messageEditState={messageEditState}
-        voiceRecordingState={voiceRecordingState}
-        voiceRecordingDurationMs={voiceRecordingDurationMs}
-        speechRecognitionActive={speechRecognitionActive}
-        composerEmojiButtonRef={composerEmojiButtonRef}
-        composerEmojiPickerOpen={composerEmojiPickerOpen}
-        composerEmojiPickerRef={composerEmojiPickerRef}
-        mentionSuggestionsOpen={mentionSuggestionsOpen}
-        mentionSuggestions={mentionSuggestions}
-        mentionSuggestionsRef={mentionSuggestionsRef}
-        selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
-        textareaRef={textareaRef}
-        message={message}
-        batchUploadOptions={batchUploadOptions}
-        preferExplicitSend={preferExplicitSend}
-        onFileChange={handleFileChange}
-        onRemovePendingUpload={removePendingUpload}
-        onRetryPendingUpload={retryPendingUpload}
-        onClearPendingUploads={clearPendingUploads}
-        onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
-        onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
-        onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
-        onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
-        onDragEnter={onComposerDragEnter}
-        onDragOver={onComposerDragOver}
-        onDragLeave={onComposerDragLeave}
-        onDrop={onComposerDrop}
-        onStopReplying={stopReplyingToMessage}
-        onStopEditing={stopEditingMessage}
-        onCancelVoiceRecording={handleCancelVoiceRecording}
-        onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
-        onSyncComposerSelection={syncComposerSelection}
-        onToggleEmojiPicker={(nextValue) => {
-          syncComposerSelection();
-          setComposerEmojiPickerOpen((previous) => (typeof nextValue === "boolean" ? nextValue : !previous));
-        }}
-        onInsertEmoji={insertComposerEmoji}
-        onSendAnimatedEmoji={sendAnimatedEmoji}
-        onApplyMentionSuggestion={applyMentionSuggestion}
-        onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
-        onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}
-        onMessageChange={setMessage}
-        onStopSpeechRecognition={stopSpeechRecognition}
-        onStartEditingLatestOwnMessage={startEditingLatestOwnMessage}
-        onSend={send}
-      />
+      {PERF_ENABLED ? (
+        <Profiler id="TextChatMessageList" onRender={handleMessageListRender}>
+          <TextChatMessageList
+            messages={messages}
+            visibleMessages={visibleMessages}
+            messagesListRef={messagesListRef}
+            messagesEndRef={messagesEndRef}
+            messageRefs={messageRefs}
+            virtualizationEnabled={virtualizationEnabled}
+            topSpacerHeight={topSpacerHeight}
+            bottomSpacerHeight={bottomSpacerHeight}
+            registerMeasuredNode={registerMeasuredNode}
+            floatingDateLabel={floatingDateLabel}
+            decryptedAttachmentsByMessageId={decryptedAttachmentsByMessageId}
+            selectedMessageIdSet={selectedMessageIdSet}
+            highlightedMessageId={highlightedMessageId}
+            isDirectChat={isDirectChat}
+            currentUserId={currentUserId}
+            user={user}
+            selectionMode={selectionMode}
+            onToggleSelection={stableToggleMessageSelection}
+            onOpenContextMenu={stableOpenMessageContextMenu}
+            onOpenUserContextMenu={stableOpenUserContextMenu}
+            onOpenMediaPreview={stableOpenMediaPreview}
+            onToggleReaction={stableHandleToggleReaction}
+            onJumpToReply={stableScrollToMessage}
+          />
+        </Profiler>
+      ) : (
+        <TextChatMessageList
+          messages={messages}
+          visibleMessages={visibleMessages}
+          messagesListRef={messagesListRef}
+          messagesEndRef={messagesEndRef}
+          messageRefs={messageRefs}
+          virtualizationEnabled={virtualizationEnabled}
+          topSpacerHeight={topSpacerHeight}
+          bottomSpacerHeight={bottomSpacerHeight}
+          registerMeasuredNode={registerMeasuredNode}
+          floatingDateLabel={floatingDateLabel}
+          decryptedAttachmentsByMessageId={decryptedAttachmentsByMessageId}
+          selectedMessageIdSet={selectedMessageIdSet}
+          highlightedMessageId={highlightedMessageId}
+          isDirectChat={isDirectChat}
+          currentUserId={currentUserId}
+          user={user}
+          selectionMode={selectionMode}
+          onToggleSelection={stableToggleMessageSelection}
+          onOpenContextMenu={stableOpenMessageContextMenu}
+          onOpenUserContextMenu={stableOpenUserContextMenu}
+          onOpenMediaPreview={stableOpenMediaPreview}
+          onToggleReaction={stableHandleToggleReaction}
+          onJumpToReply={stableScrollToMessage}
+        />
+      )}
+      {PERF_ENABLED ? (
+        <Profiler id="TextChatComposer" onRender={handleComposerRender}>
+          <TextChatComposer
+            selectedFiles={selectedFiles}
+            uploadingFile={uploadingFile}
+            composerDropActive={composerDropActive}
+            replyState={replyState}
+            messageEditState={messageEditState}
+            voiceRecordingState={voiceRecordingState}
+            voiceRecordingDurationMs={voiceRecordingDurationMs}
+            speechRecognitionActive={speechRecognitionActive}
+            composerEmojiButtonRef={composerEmojiButtonRef}
+            composerEmojiPickerOpen={composerEmojiPickerOpen}
+            composerEmojiPickerRef={composerEmojiPickerRef}
+            mentionSuggestionsOpen={mentionSuggestionsOpen}
+            mentionSuggestions={mentionSuggestions}
+            mentionSuggestionsRef={mentionSuggestionsRef}
+            selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
+            textareaRef={textareaRef}
+            message={message}
+            batchUploadOptions={batchUploadOptions}
+            preferExplicitSend={preferExplicitSend}
+            onFileChange={handleFileChange}
+            onRemovePendingUpload={removePendingUpload}
+            onRetryPendingUpload={retryPendingUpload}
+            onClearPendingUploads={clearPendingUploads}
+            onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+            onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
+            onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
+            onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
+            onDragEnter={onComposerDragEnter}
+            onDragOver={onComposerDragOver}
+            onDragLeave={onComposerDragLeave}
+            onDrop={onComposerDrop}
+            onStopReplying={stopReplyingToMessage}
+            onStopEditing={stopEditingMessage}
+            onCancelVoiceRecording={handleCancelVoiceRecording}
+            onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
+            onSyncComposerSelection={syncComposerSelection}
+            onToggleEmojiPicker={(nextValue) => {
+              syncComposerSelection();
+              setComposerEmojiPickerOpen((previous) => (typeof nextValue === "boolean" ? nextValue : !previous));
+            }}
+            onInsertEmoji={insertComposerEmoji}
+            onSendAnimatedEmoji={sendAnimatedEmoji}
+            onApplyMentionSuggestion={applyMentionSuggestion}
+            onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
+            onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}
+            onMessageChange={setMessage}
+            onStopSpeechRecognition={stopSpeechRecognition}
+            onStartEditingLatestOwnMessage={startEditingLatestOwnMessage}
+            onSend={send}
+          />
+        </Profiler>
+      ) : (
+        <TextChatComposer
+          selectedFiles={selectedFiles}
+          uploadingFile={uploadingFile}
+          composerDropActive={composerDropActive}
+          replyState={replyState}
+          messageEditState={messageEditState}
+          voiceRecordingState={voiceRecordingState}
+          voiceRecordingDurationMs={voiceRecordingDurationMs}
+          speechRecognitionActive={speechRecognitionActive}
+          composerEmojiButtonRef={composerEmojiButtonRef}
+          composerEmojiPickerOpen={composerEmojiPickerOpen}
+          composerEmojiPickerRef={composerEmojiPickerRef}
+          mentionSuggestionsOpen={mentionSuggestionsOpen}
+          mentionSuggestions={mentionSuggestions}
+          mentionSuggestionsRef={mentionSuggestionsRef}
+          selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
+          textareaRef={textareaRef}
+          message={message}
+          batchUploadOptions={batchUploadOptions}
+          preferExplicitSend={preferExplicitSend}
+          onFileChange={handleFileChange}
+          onRemovePendingUpload={removePendingUpload}
+          onRetryPendingUpload={retryPendingUpload}
+          onClearPendingUploads={clearPendingUploads}
+          onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+          onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
+          onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
+          onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
+          onDragEnter={onComposerDragEnter}
+          onDragOver={onComposerDragOver}
+          onDragLeave={onComposerDragLeave}
+          onDrop={onComposerDrop}
+          onStopReplying={stopReplyingToMessage}
+          onStopEditing={stopEditingMessage}
+          onCancelVoiceRecording={handleCancelVoiceRecording}
+          onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
+          onSyncComposerSelection={syncComposerSelection}
+          onToggleEmojiPicker={(nextValue) => {
+            syncComposerSelection();
+            setComposerEmojiPickerOpen((previous) => (typeof nextValue === "boolean" ? nextValue : !previous));
+          }}
+          onInsertEmoji={insertComposerEmoji}
+          onSendAnimatedEmoji={sendAnimatedEmoji}
+          onApplyMentionSuggestion={applyMentionSuggestion}
+          onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
+          onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}
+          onMessageChange={setMessage}
+          onStopSpeechRecognition={stopSpeechRecognition}
+          onStartEditingLatestOwnMessage={startEditingLatestOwnMessage}
+          onSend={send}
+        />
+      )}
       {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
       <Suspense fallback={null}>
         <TextChatMediaPreview

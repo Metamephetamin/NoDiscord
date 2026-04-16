@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Profiler, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Auth from "./components/Auth";
 import AppUpdateBanner from "./components/AppUpdateBanner";
@@ -9,6 +9,14 @@ import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./uti
 import "./index.css";
 import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
 import { parseMediaFrame } from "./utils/mediaFrames";
+import {
+  finishPerfTraceOnNextFrame,
+  initRendererPerfMonitoring,
+  measureElectronIpcRoundTrip,
+  PERF_ENABLED,
+  recordReactCommit,
+  startPerfTrace,
+} from "./utils/perf";
 import { ensureBrowserPushSubscription, unregisterBrowserPushSubscription } from "./utils/pushNotifications";
 import {
   AUTH_UNAUTHORIZED_EVENT,
@@ -23,6 +31,7 @@ import {
 } from "./utils/auth";
 
 const MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY = "nd_media_permissions_bootstrap_v2";
+const rendererBootstrapTraceId = startPerfTrace("app-shell", "renderer-bootstrap");
 
 function readMediaPermissionBootstrapState() {
   if (typeof window === "undefined") {
@@ -314,8 +323,34 @@ export default function Renderer() {
   const [pendingImportedServer, setPendingImportedServer] = useState(null);
   const [appUpdateState, setAppUpdateState] = useState(null);
   const mediaPermissionBootstrapStartedRef = useRef(false);
+  const rendererBootstrapFinishedRef = useRef(false);
 
   const isInviteRoute = /^\/invite\/[^/]+$/i.test(location.pathname);
+  const handleRootProfilerRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+    recordReactCommit("app-shell", id, phase, actualDuration, baseDuration, startTime, commitTime, {
+      path: location.pathname,
+      isInviteRoute,
+      loading,
+    });
+  }, [isInviteRoute, loading, location.pathname]);
+
+  useEffect(() => {
+    initRendererPerfMonitoring();
+    void measureElectronIpcRoundTrip("startup-ipc-roundtrip", {
+      phase: "renderer-mount",
+    });
+  }, []);
+
+  useEffect(() => {
+    const traceId = startPerfTrace("app-shell", "route-hydration", {
+      path: location.pathname,
+      search: location.search,
+    });
+    finishPerfTraceOnNextFrame(traceId, {
+      path: location.pathname,
+      inviteRoute: isInviteRoute,
+    });
+  }, [isInviteRoute, location.pathname, location.search]);
 
   useEffect(() => {
     let disposed = false;
@@ -525,6 +560,19 @@ export default function Renderer() {
   }, [navigate]);
 
   useEffect(() => {
+    if (loading || rendererBootstrapFinishedRef.current || !rendererBootstrapTraceId) {
+      return;
+    }
+
+    rendererBootstrapFinishedRef.current = true;
+    finishPerfTraceOnNextFrame(rendererBootstrapTraceId, {
+      sessionHydrated,
+      authenticated: Boolean(token && user),
+      inviteRoute: isInviteRoute,
+    }, 2);
+  }, [isInviteRoute, loading, sessionHydrated, token, user]);
+
+  useEffect(() => {
     const updaterApi = window?.electronAppUpdate;
     if (!updaterApi?.getState) {
       return undefined;
@@ -620,11 +668,21 @@ export default function Renderer() {
           onInstall={handleInstallDownloadedUpdate}
           onRetry={handleRetryAppUpdateCheck}
         />
-        <ServerInvitePage
-          user={user}
-          inviteCode={location.pathname.replace(/^\/invite\//i, "")}
-          onInviteAccepted={handleInviteAccepted}
-        />
+        {PERF_ENABLED ? (
+          <Profiler id="ServerInvitePage" onRender={handleRootProfilerRender}>
+            <ServerInvitePage
+              user={user}
+              inviteCode={location.pathname.replace(/^\/invite\//i, "")}
+              onInviteAccepted={handleInviteAccepted}
+            />
+          </Profiler>
+        ) : (
+          <ServerInvitePage
+            user={user}
+            inviteCode={location.pathname.replace(/^\/invite\//i, "")}
+            onInviteAccepted={handleInviteAccepted}
+          />
+        )}
       </>
     );
   }
@@ -637,15 +695,33 @@ export default function Renderer() {
         onRetry={handleRetryAppUpdateCheck}
       />
       {token && user ? (
-        <MenuMain
-          user={user}
-          setUser={setUser}
-          onLogout={handleLogout}
-          pendingImportedServer={pendingImportedServer}
-          onPendingImportedServerHandled={() => setPendingImportedServer(null)}
-        />
+        PERF_ENABLED ? (
+          <Profiler id="MenuMain" onRender={handleRootProfilerRender}>
+            <MenuMain
+              user={user}
+              setUser={setUser}
+              onLogout={handleLogout}
+              pendingImportedServer={pendingImportedServer}
+              onPendingImportedServerHandled={() => setPendingImportedServer(null)}
+            />
+          </Profiler>
+        ) : (
+          <MenuMain
+            user={user}
+            setUser={setUser}
+            onLogout={handleLogout}
+            pendingImportedServer={pendingImportedServer}
+            onPendingImportedServerHandled={() => setPendingImportedServer(null)}
+          />
+        )
       ) : (
-        <Auth onAuthSuccess={handleAuthSuccess} />
+        PERF_ENABLED ? (
+          <Profiler id="Auth" onRender={handleRootProfilerRender}>
+            <Auth onAuthSuccess={handleAuthSuccess} />
+          </Profiler>
+        ) : (
+          <Auth onAuthSuccess={handleAuthSuccess} />
+        )
       )}
     </>
   );

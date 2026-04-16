@@ -6,7 +6,7 @@ import { readIncomingMessageText } from "../../security/chatPayloadCrypto";
 import { uploadChatAttachment } from "../../utils/chatAttachmentUpload";
 import { revokePendingUploadPreviews } from "../../utils/chatPendingUploads";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
-import { isDirectMessageChannelId } from "../../utils/directMessageChannels";
+import { isDirectMessageChannelId, normalizeDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
 import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
@@ -80,6 +80,85 @@ function readBatchUploadPreferences() {
   }
 }
 
+function updateChannelMessagesState(previousState, channelId, updater) {
+  const normalizedChannelId = String(channelId || "");
+  if (!normalizedChannelId) {
+    return previousState;
+  }
+
+  const currentChannelMessages = Array.isArray(previousState?.[normalizedChannelId])
+    ? previousState[normalizedChannelId]
+    : [];
+  const nextChannelMessages = typeof updater === "function"
+    ? updater(currentChannelMessages)
+    : currentChannelMessages;
+
+  if (nextChannelMessages === currentChannelMessages) {
+    return previousState;
+  }
+
+  return {
+    ...previousState,
+    [normalizedChannelId]: nextChannelMessages,
+  };
+}
+
+function areReactionUsersEqual(leftUsers, rightUsers) {
+  if (leftUsers === rightUsers) {
+    return true;
+  }
+
+  if (!Array.isArray(leftUsers) || !Array.isArray(rightUsers) || leftUsers.length !== rightUsers.length) {
+    return false;
+  }
+
+  for (let index = 0; index < leftUsers.length; index += 1) {
+    const leftUser = leftUsers[index];
+    const rightUser = rightUsers[index];
+    if (
+      String(leftUser?.userId || "") !== String(rightUser?.userId || "")
+      || String(leftUser?.displayName || "") !== String(rightUser?.displayName || "")
+      || String(leftUser?.avatarUrl || "") !== String(rightUser?.avatarUrl || "")
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areNormalizedReactionsEqual(leftReactions, rightReactions) {
+  if (leftReactions === rightReactions) {
+    return true;
+  }
+
+  if (!Array.isArray(leftReactions) || !Array.isArray(rightReactions) || leftReactions.length !== rightReactions.length) {
+    return false;
+  }
+
+  for (let index = 0; index < leftReactions.length; index += 1) {
+    const leftReaction = leftReactions[index];
+    const rightReaction = rightReactions[index];
+    const leftReactorUserIds = Array.isArray(leftReaction?.reactorUserIds) ? leftReaction.reactorUserIds : [];
+    const rightReactorUserIds = Array.isArray(rightReaction?.reactorUserIds) ? rightReaction.reactorUserIds : [];
+
+    if (
+      String(leftReaction?.key || "") !== String(rightReaction?.key || "")
+      || String(leftReaction?.glyph || "") !== String(rightReaction?.glyph || "")
+      || String(leftReaction?.label || "") !== String(rightReaction?.label || "")
+      || String(leftReaction?.assetUrl || "") !== String(rightReaction?.assetUrl || "")
+      || Number(leftReaction?.count || 0) !== Number(rightReaction?.count || 0)
+      || leftReactorUserIds.length !== rightReactorUserIds.length
+      || !leftReactorUserIds.every((userId, userIndex) => String(userId || "") === String(rightReactorUserIds[userIndex] || ""))
+      || !areReactionUsersEqual(leftReaction?.users, rightReaction?.users)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export default function TextChat({
   serverId,
   channelId,
@@ -147,7 +226,14 @@ export default function TextChat({
   const hasInitializedVisibleChannelRef = useRef(false);
   const composerDropDepthRef = useRef(0);
   const selectedFilesRef = useRef([]);
-  const scopedChannelId = resolvedChannelId || getScopedChatChannelId(serverId, channelId);
+  const scopedChannelId = useMemo(() => {
+    const normalizedResolvedChannelId = normalizeDirectMessageChannelId(resolvedChannelId);
+    if (normalizedResolvedChannelId) {
+      return normalizedResolvedChannelId;
+    }
+
+    return getScopedChatChannelId(serverId, channelId);
+  }, [channelId, resolvedChannelId, serverId]);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const messages = messagesByChannel[scopedChannelId] || [];
@@ -848,10 +934,7 @@ export default function TextChat({
     joinedChannelRef.current = scopedChannelId;
     setIsChannelReady(true);
     hasInitializedVisibleChannelRef.current = true;
-    setMessagesByChannel((previous) => ({
-      ...previous,
-      [scopedChannelId]: normalizedInitialMessages,
-    }));
+    setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, normalizedInitialMessages));
 
     if (isDirectChat) {
       chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
@@ -883,10 +966,13 @@ export default function TextChat({
       void (async () => {
         const normalizedMessage = await normalizeIncomingMessage(nextMessage);
 
-        setMessagesByChannel((previous) => {
-          const channelMessages = previous[scopedChannelId] || [];
-          return { ...previous, [scopedChannelId]: [...channelMessages, normalizedMessage] };
-        });
+        setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+          if (channelMessages.some((messageItem) => String(messageItem.id) === String(normalizedMessage.id))) {
+            return channelMessages;
+          }
+
+          return [...channelMessages, normalizedMessage];
+        }));
 
         if (isDirectChat && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
           playDirectMessageSound("receive");
@@ -913,13 +999,10 @@ export default function TextChat({
             }
           : previous
       );
-      setMessagesByChannel((previous) => {
-        const channelMessages = previous[scopedChannelId] || [];
-        return {
-          ...previous,
-          [scopedChannelId]: channelMessages.filter((item) => item.id !== deletedId),
-        };
-      });
+      setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+        const nextChannelMessages = channelMessages.filter((item) => item.id !== deletedId);
+        return nextChannelMessages.length === channelMessages.length ? channelMessages : nextChannelMessages;
+      }));
     };
 
     const handleMessageUpdated = (updatedMessage) => {
@@ -944,15 +1027,23 @@ export default function TextChat({
           previous.map((item) => (String(item.id) === String(normalizedMessage.id) ? createPinnedSnapshot(normalizedMessage) : item))
         );
 
-        setMessagesByChannel((previous) => {
-          const channelMessages = previous[scopedChannelId] || [];
-          return {
-            ...previous,
-            [scopedChannelId]: channelMessages.map((messageItem) =>
-              String(messageItem.id) === String(normalizedMessage.id) ? normalizedMessage : messageItem
-            ),
-          };
-        });
+        setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+          let didChange = false;
+          const nextChannelMessages = channelMessages.map((messageItem) => {
+            if (String(messageItem.id) !== String(normalizedMessage.id)) {
+              return messageItem;
+            }
+
+            if (messageItem === normalizedMessage) {
+              return messageItem;
+            }
+
+            didChange = true;
+            return normalizedMessage;
+          });
+
+          return didChange ? nextChannelMessages : channelMessages;
+        }));
       })();
     };
 
@@ -966,22 +1057,30 @@ export default function TextChat({
         return;
       }
 
-      setMessagesByChannel((previous) => {
-        const channelMessages = previous[scopedChannelId] || [];
-        return {
-          ...previous,
-          [scopedChannelId]: channelMessages.map((messageItem) =>
-            readMessageIds.has(String(messageItem.id))
-              ? {
-                  ...messageItem,
-                  isRead: true,
-                  readAt: payload?.readAt || messageItem.readAt || null,
-                  readByUserId: payload?.readerUserId || messageItem.readByUserId || null,
-                }
-              : messageItem
-          ),
-        };
-      });
+      setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+        let didChange = false;
+        const nextChannelMessages = channelMessages.map((messageItem) => {
+          if (!readMessageIds.has(String(messageItem.id))) {
+            return messageItem;
+          }
+
+          const nextReadAt = payload?.readAt || messageItem.readAt || null;
+          const nextReadByUserId = payload?.readerUserId || messageItem.readByUserId || null;
+          if (messageItem.isRead && messageItem.readAt === nextReadAt && messageItem.readByUserId === nextReadByUserId) {
+            return messageItem;
+          }
+
+          didChange = true;
+          return {
+            ...messageItem,
+            isRead: true,
+            readAt: nextReadAt,
+            readByUserId: nextReadByUserId,
+          };
+        });
+
+        return didChange ? nextChannelMessages : channelMessages;
+      }));
     };
 
     const handleMessageReactionsUpdated = (payload) => {
@@ -990,20 +1089,27 @@ export default function TextChat({
         return;
       }
 
-      setMessagesByChannel((previous) => {
-        const channelMessages = previous[scopedChannelId] || [];
-        return {
-          ...previous,
-          [scopedChannelId]: channelMessages.map((messageItem) =>
-            String(messageItem.id) === messageId
-              ? {
-                  ...messageItem,
-                  reactions: normalizeReactions(payload?.reactions),
-                }
-              : messageItem
-          ),
-        };
-      });
+      setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+        const nextReactions = normalizeReactions(payload?.reactions);
+        let didChange = false;
+        const nextChannelMessages = channelMessages.map((messageItem) => {
+          if (String(messageItem.id) !== messageId) {
+            return messageItem;
+          }
+
+          if (areNormalizedReactionsEqual(messageItem.reactions, nextReactions)) {
+            return messageItem;
+          }
+
+          didChange = true;
+          return {
+            ...messageItem,
+            reactions: nextReactions,
+          };
+        });
+
+        return didChange ? nextChannelMessages : channelMessages;
+      }));
     };
 
     const init = async () => {
@@ -1032,7 +1138,7 @@ export default function TextChat({
 
         joinedChannelRef.current = "";
         setIsChannelReady(false);
-        setMessagesByChannel((previous) => ({ ...previous, [scopedChannelId]: previous[scopedChannelId] || [] }));
+        setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, previous[scopedChannelId] || []));
         if (!hasInitializedVisibleChannelRef.current) {
           return;
         }
@@ -1071,24 +1177,41 @@ export default function TextChat({
       const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
       const nextUsername = nextNickname || `${nextFirstName} ${nextLastName}`.trim();
 
-      setMessagesByChannel((previous) =>
-        Object.fromEntries(
-          Object.entries(previous || {}).map(([channelKey, channelMessages]) => [
-            channelKey,
-            Array.isArray(channelMessages)
-              ? channelMessages.map((messageItem) =>
-                  String(messageItem?.authorUserId || "") === updatedUserId
-                    ? {
-                        ...messageItem,
-                        username: nextUsername || messageItem.username || "User",
-                        photoUrl: nextAvatar || messageItem.photoUrl || "",
-                      }
-                    : messageItem
-                )
-              : channelMessages,
-          ])
-        )
-      );
+      setMessagesByChannel((previous) => {
+        const nextState = Object.entries(previous || {}).reduce((accumulator, [channelKey, channelMessages]) => {
+          if (!Array.isArray(channelMessages)) {
+            accumulator[channelKey] = channelMessages;
+            return accumulator;
+          }
+
+          let didChange = false;
+          const nextChannelMessages = channelMessages.map((messageItem) => {
+            if (String(messageItem?.authorUserId || "") !== updatedUserId) {
+              return messageItem;
+            }
+
+            const resolvedUsername = nextUsername || messageItem.username || "User";
+            const resolvedPhotoUrl = nextAvatar || messageItem.photoUrl || "";
+            if (messageItem.username === resolvedUsername && String(messageItem.photoUrl || "") === resolvedPhotoUrl) {
+              return messageItem;
+            }
+
+            didChange = true;
+            return {
+              ...messageItem,
+              username: resolvedUsername,
+              photoUrl: resolvedPhotoUrl,
+            };
+          });
+
+          accumulator[channelKey] = didChange ? nextChannelMessages : channelMessages;
+          return accumulator;
+        }, {});
+
+        const previousEntries = Object.entries(previous || {});
+        const hasAnyChange = previousEntries.some(([channelKey]) => nextState[channelKey] !== previous[channelKey]);
+        return hasAnyChange ? nextState : previous;
+      });
     };
 
     chatConnection.on("ProfileUpdated", handleProfileUpdated);
@@ -1256,7 +1379,7 @@ export default function TextChat({
     event.preventDefault();
     composerDropDepthRef.current = 0;
     setComposerDropActive(false);
-    queueFiles(droppedFiles);
+    queueFiles(droppedFiles, { source: "drag-drop" });
   };
 
   const buildForwardPayloadForTargetChannel = (targetChannelId, sourceMessages) => buildForwardPayloadForTargetChannelCore({

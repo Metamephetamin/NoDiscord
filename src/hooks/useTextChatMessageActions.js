@@ -15,6 +15,7 @@ import {
   saveBlobWithBrowser,
   shouldUseAuthenticatedDownload,
 } from "../utils/textChatHelpers";
+import { finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
 import {
   buildReplySnapshot,
   COMPAT_FORWARD_DELAY_MS,
@@ -109,11 +110,17 @@ export default function useTextChatMessageActions({
       return;
     }
 
+    const traceId = startPerfTrace("text-chat", "scroll-to-message", {
+      messageId: String(messageId || ""),
+    });
     setHighlightedMessageId(String(messageId));
     element.scrollIntoView({ behavior: "smooth", block: "center" });
     window.setTimeout(() => {
       setHighlightedMessageId((current) => (current === String(messageId) ? "" : current));
     }, 2200);
+    finishPerfTraceOnNextFrame(traceId, {
+      messageId: String(messageId || ""),
+    });
   };
 
   const toggleMessageSelection = (messageId) => {
@@ -202,6 +209,14 @@ export default function useTextChatMessageActions({
       return;
     }
 
+    const traceId = startPerfTrace("media", "open-media-preview", {
+      attachmentIndex: Number(attachmentIndex) || 0,
+      contentType: String(contentType || ""),
+      itemCount: Array.isArray(galleryItems) ? galleryItems.length : 0,
+      mediaType: String(type || ""),
+      messageId: String(messageId || ""),
+    });
+
     const fallbackItem = {
       type,
       url,
@@ -226,6 +241,11 @@ export default function useTextChatMessageActions({
       zoom: 1,
       panX: 0,
       panY: 0,
+    });
+    finishPerfTraceOnNextFrame(traceId, {
+      activeIndex,
+      itemCount: items.length,
+      mediaType: activeItem.type || type,
     });
   };
 

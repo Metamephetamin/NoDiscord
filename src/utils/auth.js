@@ -466,6 +466,28 @@ export function getApiErrorMessage(response, data, fallbackMessage) {
   return fallbackMessage;
 }
 
+export function isNetworkRequestError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return error instanceof TypeError
+    || message.includes("failed to fetch")
+    || message.includes("networkerror")
+    || message.includes("err_connection_reset")
+    || message.includes("load failed");
+}
+
+export function getNetworkErrorMessage(error, fallbackMessage = "Не удалось выполнить запрос.") {
+  const message = String(error?.message || error || "").toLowerCase();
+  if (message.includes("err_connection_reset") || message.includes("connection reset")) {
+    return "Соединение с сервером было сброшено. Проверьте интернет или попробуйте снова чуть позже.";
+  }
+
+  if (message.includes("failed to fetch") || message.includes("networkerror") || message.includes("load failed")) {
+    return "Не удалось связаться с сервером. Проверьте интернет, VPN/прокси и доступность Tend.";
+  }
+
+  return fallbackMessage;
+}
+
 export function isUnauthorizedError(error) {
   const message = String(error?.message || error || "").toLowerCase();
   return message.includes("401") || message.includes("unauthorized");
@@ -568,10 +590,18 @@ export async function refreshAccessToken() {
 
 export async function authFetch(input, init = {}) {
   const { _retryAfterRefresh = true, ...requestInit } = init;
-  let response = await fetch(input, {
-    ...requestInit,
-    headers: buildAuthHeaders(requestInit.headers),
-  });
+  let response;
+
+  try {
+    response = await fetch(input, {
+      ...requestInit,
+      headers: buildAuthHeaders(requestInit.headers),
+    });
+  } catch (error) {
+    const wrappedError = new Error(getNetworkErrorMessage(error, "Не удалось выполнить авторизованный запрос."));
+    wrappedError.cause = error;
+    throw wrappedError;
+  }
 
   if (response.status !== 401) {
     return response;
@@ -594,10 +624,16 @@ export async function authFetch(input, init = {}) {
     return response;
   }
 
-  response = await fetch(input, {
-    ...requestInit,
-    headers: buildAuthHeaders(requestInit.headers),
-  });
+  try {
+    response = await fetch(input, {
+      ...requestInit,
+      headers: buildAuthHeaders(requestInit.headers),
+    });
+  } catch (error) {
+    const wrappedError = new Error(getNetworkErrorMessage(error, "Не удалось выполнить авторизованный запрос."));
+    wrappedError.cause = error;
+    throw wrappedError;
+  }
 
   if (response.status === 401) {
     notifyUnauthorizedSession("http_401");

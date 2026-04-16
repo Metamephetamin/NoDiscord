@@ -6,7 +6,6 @@ import {
 } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
-  createPendingUploadPreview,
   createPendingUpload,
   preparePendingUploadForSend,
   revokePendingUploadPreviews,
@@ -18,6 +17,21 @@ import {
   MAX_FILE_SIZE_BYTES,
   MESSAGE_SEND_COOLDOWN_MS,
 } from "../utils/textChatModel";
+import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
+
+const ATTACHMENT_UPLOAD_CONCURRENCY = 2;
+const PROGRESS_UPDATE_MIN_DELTA = 0.04;
+
+function yieldToMainThread() {
+  return new Promise((resolve) => {
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => resolve());
+      return;
+    }
+
+    setTimeout(resolve, 16);
+  });
+}
 
 export default function useTextChatSendActions({
   message,
@@ -49,53 +63,89 @@ export default function useTextChatSendActions({
   sendMessagesCompat,
   playDirectMessageSound,
 }) {
-  const previewHydrationTimersRef = useRef(new Map());
+  const pendingUploadPatchQueueRef = useRef(new Map());
+  const pendingUploadPatchFrameRef = useRef(0);
+  const uploadProgressSnapshotRef = useRef(new Map());
+  const preparedUploadFileCacheRef = useRef(new Map());
 
-  const cancelPendingPreviewHydration = (uploadId) => {
-    const normalizedId = String(uploadId || "");
-    const timerId = previewHydrationTimersRef.current.get(normalizedId);
-    if (timerId) {
-      window.clearTimeout(timerId);
-      previewHydrationTimersRef.current.delete(normalizedId);
+  const flushPendingUploadPatches = () => {
+    pendingUploadPatchFrameRef.current = 0;
+    const queuedEntries = Array.from(pendingUploadPatchQueueRef.current.entries());
+    if (!queuedEntries.length) {
+      return;
     }
-  };
 
-  const schedulePreviewHydration = (uploads) => {
-    (Array.isArray(uploads) ? uploads : []).forEach((upload, index) => {
-      const uploadId = String(upload?.id || "");
-      if (!uploadId || upload?.previewUrl || (upload?.kind !== "image" && upload?.kind !== "video")) {
-        return;
-      }
-
-      cancelPendingPreviewHydration(uploadId);
-
-      const timerId = window.setTimeout(() => {
-        previewHydrationTimersRef.current.delete(uploadId);
-        const previewUrl = createPendingUploadPreview(upload);
-        if (!previewUrl) {
-          return;
+    pendingUploadPatchQueueRef.current.clear();
+    setSelectedFiles((previous) => {
+      let didChange = false;
+      const patchMap = new Map(queuedEntries);
+      const nextUploads = previous.map((item) => {
+        const uploadId = String(item?.id || "");
+        if (!patchMap.has(uploadId)) {
+          return item;
         }
 
-        startTransition(() => {
-          setSelectedFiles((previous) =>
-            previous.map((item) => {
-              if (String(item?.id || "") !== uploadId || item?.previewUrl) {
-                return item;
-              }
+        const patch = patchMap.get(uploadId);
+        const nextItem = typeof patch === "function" ? patch(item) : { ...item, ...patch };
+        if (nextItem !== item) {
+          didChange = true;
+        }
+        return nextItem;
+      });
 
-              return { ...item, previewUrl };
-            })
-          );
-        });
-      }, index * 24);
-
-      previewHydrationTimersRef.current.set(uploadId, timerId);
+      return didChange ? nextUploads : previous;
     });
   };
 
+  const schedulePendingUploadPatch = (uploadId, patch) => {
+    const normalizedId = String(uploadId || "");
+    if (!normalizedId) {
+      return;
+    }
+
+    const previousPatch = pendingUploadPatchQueueRef.current.get(normalizedId);
+    if (typeof previousPatch === "function" || typeof patch === "function") {
+      pendingUploadPatchQueueRef.current.set(normalizedId, (current) => {
+        const baseValue = typeof previousPatch === "function"
+          ? previousPatch(current)
+          : previousPatch
+            ? { ...current, ...previousPatch }
+            : current;
+
+        return typeof patch === "function"
+          ? patch(baseValue)
+          : { ...baseValue, ...patch };
+      });
+    } else {
+      pendingUploadPatchQueueRef.current.set(normalizedId, {
+        ...(previousPatch || {}),
+        ...(patch || {}),
+      });
+    }
+
+    if (pendingUploadPatchFrameRef.current) {
+      return;
+    }
+
+    const scheduleFrame =
+      typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame.bind(window)
+        : (callback) => window.setTimeout(callback, 16);
+    pendingUploadPatchFrameRef.current = scheduleFrame(() => flushPendingUploadPatches());
+  };
+
   useEffect(() => () => {
-    previewHydrationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-    previewHydrationTimersRef.current.clear();
+    if (pendingUploadPatchFrameRef.current) {
+      const cancelFrame =
+        typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+          ? window.cancelAnimationFrame.bind(window)
+          : window.clearTimeout.bind(window);
+      cancelFrame(pendingUploadPatchFrameRef.current);
+      pendingUploadPatchFrameRef.current = 0;
+    }
+    pendingUploadPatchQueueRef.current.clear();
+    uploadProgressSnapshotRef.current.clear();
+    preparedUploadFileCacheRef.current.clear();
   }, []);
 
   const appendPendingFiles = (files, { replace = false } = {}) => {
@@ -119,8 +169,6 @@ export default function useTextChatSendActions({
     startTransition(() => {
       setSelectedFiles((previous) => {
         if (replace) {
-          previewHydrationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-          previewHydrationTimersRef.current.clear();
           revokePendingUploadPreviews(previous);
           return nextUploads;
         }
@@ -129,7 +177,6 @@ export default function useTextChatSendActions({
       });
     });
 
-    schedulePreviewHydration(nextUploads);
     return true;
   };
 
@@ -139,15 +186,22 @@ export default function useTextChatSendActions({
       return;
     }
 
-    setSelectedFiles((previous) =>
-      previous.map((item) => {
+    setSelectedFiles((previous) => {
+      let didChange = false;
+      const nextUploads = previous.map((item) => {
         if (String(item?.id || "") !== normalizedId) {
           return item;
         }
 
-        return typeof updater === "function" ? updater(item) : { ...item, ...updater };
-      })
-    );
+        const nextItem = typeof updater === "function" ? updater(item) : { ...item, ...updater };
+        if (nextItem !== item) {
+          didChange = true;
+        }
+        return nextItem;
+      });
+
+      return didChange ? nextUploads : previous;
+    });
   };
 
   const removePendingUpload = (uploadId) => {
@@ -156,7 +210,7 @@ export default function useTextChatSendActions({
       return;
     }
 
-    cancelPendingPreviewHydration(normalizedId);
+    preparedUploadFileCacheRef.current.delete(normalizedId);
 
     setSelectedFiles((previous) => {
       const nextUploads = [];
@@ -173,16 +227,21 @@ export default function useTextChatSendActions({
   };
 
   const clearPendingUploads = () => {
-    previewHydrationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-    previewHydrationTimersRef.current.clear();
+    pendingUploadPatchQueueRef.current.clear();
+    uploadProgressSnapshotRef.current.clear();
+    preparedUploadFileCacheRef.current.clear();
 
     setSelectedFiles((previous) => {
+      if (!previous.length) {
+        return previous;
+      }
       revokePendingUploadPreviews(previous);
       return [];
     });
   };
 
   const retryPendingUpload = (uploadId) => {
+    preparedUploadFileCacheRef.current.delete(String(uploadId || ""));
     updatePendingUpload(uploadId, {
       status: "queued",
       progress: 0,
@@ -260,10 +319,39 @@ export default function useTextChatSendActions({
     const avatar = user?.avatarUrl || user?.avatar || "";
     const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers) : [];
     let activeUploadId = "";
+    let sendSucceeded = false;
+    const sendTraceId = startPerfTrace("text-chat", "send-message", {
+      attachmentCount: filesToSend.length,
+      hasText: Boolean(messageText),
+      isDirectChat,
+      isEditing: Boolean(messageEditState?.messageId),
+    });
+    const postSendResetUiState = () => {
+      forceScrollToBottomRef.current = true;
+      lastSendAtRef.current = Date.now();
+      clearChatDraft(user, scopedChannelId);
+
+      startTransition(() => {
+        setMessage("");
+        setReplyState(null);
+        clearPendingUploads();
+        setIsChannelReady(true);
+        setActionFeedback(null);
+      });
+    };
 
     try {
       setErrorMessage("");
-      await ensureChannelJoined();
+      const joinTraceId = startPerfTrace("text-chat", "send-message:ensure-channel-joined", {
+        isEditing: Boolean(messageEditState?.messageId),
+      });
+      try {
+        await ensureChannelJoined();
+      } finally {
+        finishPerfTrace(joinTraceId, {
+          isEditing: Boolean(messageEditState?.messageId),
+        });
+      }
 
       if (messageEditState?.messageId) {
         const preparedTextPayload = await prepareOutgoingTextPayload({
@@ -293,51 +381,158 @@ export default function useTextChatSendActions({
 
       let attachments = [];
       if (filesToSend.length) {
+        const uploadTraceId = startPerfTrace("text-chat", "send-message:upload-attachments", {
+          attachmentCount: filesToSend.length,
+          concurrency: Math.min(ATTACHMENT_UPLOAD_CONCURRENCY, filesToSend.length),
+        });
         setUploadingFile(true);
-        for (let index = 0; index < filesToSend.length; index += 1) {
-          const pendingUpload = filesToSend[index];
-          activeUploadId = String(pendingUpload?.id || "");
+        try {
+          const uploadAbortControllers = filesToSend.map(() => new AbortController());
+          const attachmentResults = new Array(filesToSend.length);
+          let nextUploadIndex = 0;
+          let capturedUploadFailure = null;
 
-          updatePendingUpload(activeUploadId, {
-            status: "preparing",
-            progress: 0.1,
-            error: "",
-            retryable: false,
-          });
-
-          const fileForUpload = await preparePendingUploadForSend(pendingUpload);
-          const preparedAttachment = await prepareOutgoingAttachmentPayload({
-            file: fileForUpload,
-          });
-
-          updatePendingUpload(activeUploadId, {
-            status: "uploading",
-            progress: 0.28,
-          });
-
-          const uploaded = await uploadAttachment({
-            blob: preparedAttachment.uploadBlob,
-            fileName: preparedAttachment.uploadFileName || fileForUpload.name || pendingUpload.name || `attachment-${Date.now()}-${index}`,
-            onProgress: (progressValue) => {
-              updatePendingUpload(activeUploadId, {
-                status: "uploading",
-                progress: 0.28 + (Math.max(0, Math.min(1, Number(progressValue) || 0)) * 0.68),
+          const processSingleUpload = async (pendingUpload, index) => {
+            const uploadId = String(pendingUpload?.id || "");
+            if (uploadId) {
+              activeUploadId = uploadId;
+              uploadProgressSnapshotRef.current.set(uploadId, 0.1);
+              schedulePendingUploadPatch(uploadId, {
+                status: "preparing",
+                progress: 0.1,
+                error: "",
+                retryable: false,
               });
-            },
-          });
+            }
 
-          updatePendingUpload(activeUploadId, {
-            status: "done",
-            progress: 1,
-            retryable: false,
-          });
+            await yieldToMainThread();
 
-          attachments.push({
-            fileUrl: uploaded?.fileUrl || null,
-            fileName: uploaded?.fileName || fileForUpload.name || pendingUpload.name || "attachment",
-            size: uploaded?.size || preparedAttachment.uploadBlob.size || null,
-            contentType: uploaded?.contentType || fileForUpload.type || pendingUpload.type || "application/octet-stream",
-            attachmentEncryption: null,
+            let fileForUpload = uploadId ? preparedUploadFileCacheRef.current.get(uploadId) : null;
+            if (!(fileForUpload instanceof File)) {
+              fileForUpload = await preparePendingUploadForSend(pendingUpload);
+              if (uploadId) {
+                preparedUploadFileCacheRef.current.set(uploadId, fileForUpload);
+              }
+            }
+
+            await yieldToMainThread();
+
+            const preparedAttachment = await prepareOutgoingAttachmentPayload({
+              file: fileForUpload,
+            });
+
+            if (uploadId) {
+              uploadProgressSnapshotRef.current.set(uploadId, 0.28);
+              schedulePendingUploadPatch(uploadId, {
+                status: "uploading",
+                progress: 0.28,
+              });
+            }
+
+            const uploaded = await uploadAttachment({
+              blob: preparedAttachment.uploadBlob,
+              fileName: preparedAttachment.uploadFileName || fileForUpload.name || pendingUpload.name || `attachment-${Date.now()}-${index}`,
+              signal: uploadAbortControllers[index]?.signal,
+              onProgress: (progressValue) => {
+                if (!uploadId) {
+                  return;
+                }
+
+                const normalizedProgress = 0.28 + (Math.max(0, Math.min(1, Number(progressValue) || 0)) * 0.68);
+                const previousProgress = uploadProgressSnapshotRef.current.get(uploadId) || 0;
+                if (normalizedProgress < 0.96 && normalizedProgress - previousProgress < PROGRESS_UPDATE_MIN_DELTA) {
+                  return;
+                }
+
+                uploadProgressSnapshotRef.current.set(uploadId, normalizedProgress);
+                schedulePendingUploadPatch(uploadId, {
+                  status: "uploading",
+                  progress: normalizedProgress,
+                });
+              },
+            });
+
+            if (uploadId) {
+              uploadProgressSnapshotRef.current.delete(uploadId);
+              preparedUploadFileCacheRef.current.delete(uploadId);
+              schedulePendingUploadPatch(uploadId, {
+                status: "done",
+                progress: 1,
+                retryable: false,
+              });
+            }
+
+            attachmentResults[index] = {
+              fileUrl: uploaded?.fileUrl || null,
+              fileName: uploaded?.fileName || fileForUpload.name || pendingUpload.name || "attachment",
+              size: uploaded?.size || preparedAttachment.uploadBlob.size || null,
+              contentType: uploaded?.contentType || fileForUpload.type || pendingUpload.type || "application/octet-stream",
+              attachmentEncryption: null,
+            };
+          };
+
+          const workerCount = Math.min(ATTACHMENT_UPLOAD_CONCURRENCY, filesToSend.length);
+          await Promise.all(Array.from({ length: workerCount }, async () => {
+            while (nextUploadIndex < filesToSend.length && !capturedUploadFailure) {
+              const currentIndex = nextUploadIndex;
+              nextUploadIndex += 1;
+
+              try {
+                await processSingleUpload(filesToSend[currentIndex], currentIndex);
+              } catch (error) {
+                capturedUploadFailure = {
+                  error,
+                  uploadId: String(filesToSend[currentIndex]?.id || ""),
+                  failedIndex: currentIndex,
+                };
+                uploadAbortControllers.forEach((controller, controllerIndex) => {
+                  if (controllerIndex !== currentIndex) {
+                    controller.abort();
+                  }
+                });
+                break;
+              }
+            }
+          }));
+
+          flushPendingUploadPatches();
+
+          if (capturedUploadFailure) {
+            const { error, uploadId, failedIndex } = capturedUploadFailure;
+            activeUploadId = uploadId;
+
+            if (uploadId) {
+              schedulePendingUploadPatch(uploadId, {
+                status: "error",
+                progress: 0,
+                error: getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РІР»РѕР¶РµРЅРёРµ."),
+                retryable: true,
+              });
+            }
+
+            filesToSend.forEach((item, itemIndex) => {
+              const itemId = String(item?.id || "");
+              if (!itemId || itemIndex === failedIndex || itemIndex > failedIndex) {
+                return;
+              }
+
+              schedulePendingUploadPatch(itemId, (current) => (
+                current?.status === "done"
+                  ? { ...current, status: "queued", progress: 0 }
+                  : current
+              ));
+            });
+
+            flushPendingUploadPatches();
+            throw error;
+          }
+
+          attachments = attachmentResults.filter(Boolean);
+        } finally {
+          finishPerfTrace(uploadTraceId, {
+            attachmentCount: filesToSend.length,
+            uploadedCount: attachments.length,
+            concurrency: Math.min(ATTACHMENT_UPLOAD_CONCURRENCY, filesToSend.length),
           });
         }
       }
@@ -373,16 +568,30 @@ export default function useTextChatSendActions({
             voiceMessage: null,
           }));
 
-      await sendMessagesCompat(scopedChannelId, avatar, payload);
+      const invokeTraceId = startPerfTrace("text-chat", "send-message:invoke-send-message", {
+        payloadCount: payload.length,
+        attachmentCount: attachments.length,
+      });
+      try {
+        await sendMessagesCompat(scopedChannelId, avatar, payload);
+      } finally {
+        finishPerfTrace(invokeTraceId, {
+          payloadCount: payload.length,
+          attachmentCount: attachments.length,
+        });
+      }
 
-      forceScrollToBottomRef.current = true;
-      lastSendAtRef.current = Date.now();
-      setMessage("");
-      setReplyState(null);
-      clearChatDraft(user, scopedChannelId);
-      clearPendingUploads();
-      setIsChannelReady(true);
-      setActionFeedback(null);
+      const resetTraceId = startPerfTrace("text-chat", "send-message:post-send-ui-reset", {
+        attachmentCount: attachments.length,
+      });
+      try {
+        postSendResetUiState();
+      } finally {
+        finishPerfTraceOnNextFrame(resetTraceId, {
+          attachmentCount: attachments.length,
+        });
+      }
+      sendSucceeded = true;
       if (isDirectChat) {
         playDirectMessageSound("send");
       }
@@ -391,7 +600,8 @@ export default function useTextChatSendActions({
 
       if (!messageEditState) {
         if (activeUploadId) {
-          updatePendingUpload(activeUploadId, {
+          flushPendingUploadPatches();
+          schedulePendingUploadPatch(activeUploadId, {
             status: "error",
             progress: 0,
             error: getChatErrorMessage(error, "Не удалось загрузить вложение."),
@@ -402,13 +612,14 @@ export default function useTextChatSendActions({
         filesToSend
           .filter((item) => String(item?.id || "") !== activeUploadId)
           .forEach((item) => {
-            updatePendingUpload(item.id, (current) => (
+            schedulePendingUploadPatch(item.id, (current) => (
               current?.status === "done"
                 ? { ...current, status: "queued", progress: 0 }
                 : current
             ));
           });
 
+        flushPendingUploadPatches();
         joinedChannelRef.current = "";
         setIsChannelReady(false);
       }
@@ -421,6 +632,10 @@ export default function useTextChatSendActions({
       ));
     } finally {
       setUploadingFile(false);
+      finishPerfTrace(sendTraceId, {
+        attachmentCount: filesToSend.length,
+        success: sendSucceeded,
+      });
     }
   };
 
@@ -504,7 +719,11 @@ export default function useTextChatSendActions({
     }
   };
 
-  const queueFiles = (files) => {
+  const queueFiles = (files, { source = "unknown" } = {}) => {
+    const queueTraceId = startPerfTrace("text-chat", "queue-files", {
+      requestedFileCount: Array.isArray(files) ? files.length : 0,
+      source,
+    });
     const validFiles = [];
     let hasOversizedFile = false;
 
@@ -529,6 +748,12 @@ export default function useTextChatSendActions({
     }
 
     appendPendingFiles(validFiles);
+    finishPerfTraceOnNextFrame(queueTraceId, {
+      hasOversizedFile,
+      source,
+      success: true,
+      validFileCount: validFiles.length,
+    });
   };
 
   const handleFileChange = (event) => {
@@ -539,7 +764,7 @@ export default function useTextChatSendActions({
       return;
     }
 
-    queueFiles(files);
+    queueFiles(files, { source: "file-input" });
   };
 
   return {

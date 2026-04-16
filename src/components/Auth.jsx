@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
-import { getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { getApiErrorMessage, getNetworkErrorMessage, parseApiResponse } from "../utils/auth";
 import { resolveStaticAssetUrl } from "../utils/media";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import {
@@ -224,11 +224,20 @@ function mapAuthSession(data) {
 }
 
 async function submitAuthRequest(endpoint, payload, fallbackMessage) {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const wrappedError = new Error(getNetworkErrorMessage(error, fallbackMessage));
+    wrappedError.cause = error;
+    throw wrappedError;
+  }
+
   const data = await parseApiResponse(response);
 
   if (!response.ok) {
