@@ -381,23 +381,23 @@
 }
 
 .message-item--dm {
-  width: fit-content;
-  max-width: min(100%, 66%);
-  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 6px 24px 6px 12px;
   background: transparent;
   box-shadow: none;
   gap: 12px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .message-item--dm-own {
-  margin-right: auto;
+  margin-right: 0;
   justify-content: flex-start;
 }
 
 .message-item--dm-incoming {
-  margin-right: auto;
-  margin-left: 8px;
+  margin-right: 0;
+  margin-left: 0;
 }
 
 .msg-avatar {
@@ -445,17 +445,17 @@
 
 .msg-content--dm {
   position: relative;
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
-  align-self: flex-start;
-  padding: 10px 14px 8px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+  align-self: auto;
+  padding: 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .msg-content--dm::before {
@@ -467,11 +467,11 @@
 }
 
 .msg-content--dm-own {
-  background: linear-gradient(180deg, rgba(104, 100, 255, 0.2), rgba(255, 111, 182, 0.13));
-  border-color: rgba(148, 133, 255, 0.18);
-  border-bottom-right-radius: 18px;
-  border-bottom-left-radius: 12px;
-  align-self: flex-start;
+  background: transparent;
+  border-color: transparent;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+  align-self: auto;
 }
 
 .msg-content--pressing {
@@ -586,10 +586,11 @@
 }
 
 .message-item--dm .msg-avatar {
-  align-self: flex-end;
-  width: 36px;
-  height: 36px;
-  margin-right: 2px;
+  align-self: flex-start;
+  width: 42px;
+  height: 42px;
+  margin-right: 0;
+  margin-left: 2px;
 }
 
 .message-item--dm.message-item--highlighted {
@@ -598,7 +599,14 @@
 }
 
 .message-item--dm.message-item--highlighted .msg-content--dm {
-  box-shadow: 0 0 0 1px rgba(118, 108, 255, 0.28), 0 12px 28px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
+}
+
+.message-item--dm .msg-content--attachments,
+.message-item--dm .msg-content--media-only {
+  width: auto;
+  max-width: min(100%, 840px);
+  flex: 0 1 auto;
 }
 
 .message-item--selectable {

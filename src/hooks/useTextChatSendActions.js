@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef } from "react";
+﻿import { startTransition, useEffect, useRef } from "react";
 import chatConnection from "../SignalR/ChatConnect";
 import {
   prepareOutgoingAttachmentPayload,
@@ -505,7 +505,7 @@ export default function useTextChatSendActions({
               schedulePendingUploadPatch(uploadId, {
                 status: "error",
                 progress: 0,
-                error: getChatErrorMessage(error, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РІР»РѕР¶РµРЅРёРµ."),
+                error: getChatErrorMessage(error, "Не удалось загрузить вложение."),
                 retryable: true,
               });
             }
