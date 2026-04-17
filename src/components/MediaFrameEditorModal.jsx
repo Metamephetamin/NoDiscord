@@ -55,6 +55,7 @@ export default function MediaFrameEditorModal({
   const suppressBackdropCloseRef = useRef(false);
   const [draftFrame, setDraftFrame] = useState(() => normalizeMediaFrame(frame));
   const copy = TARGET_COPY[target] || TARGET_COPY.avatar;
+  const isAvatarEditor = target === "avatar";
   const previewTitle = avatarAlt || (target === "serverIcon" ? "Сервер" : "Ваш профиль");
 
   useEffect(() => {
@@ -88,9 +89,14 @@ export default function MediaFrameEditorModal({
       const deltaX = ((event.clientX - dragState.startX) / rect.width) * (100 * horizontalDragSpeed);
       const deltaY = ((event.clientY - dragState.startY) / rect.height) * (100 * verticalDragSpeed);
       const bounds = getMediaFramePositionBounds(dragState.frame.zoom);
-      if (!suppressBackdropCloseRef.current && (Math.abs(event.clientX - dragState.startX) > 3 || Math.abs(event.clientY - dragState.startY) > 3)) {
+
+      if (
+        !suppressBackdropCloseRef.current
+        && (Math.abs(event.clientX - dragState.startX) > 3 || Math.abs(event.clientY - dragState.startY) > 3)
+      ) {
         suppressBackdropCloseRef.current = true;
       }
+
       setDraftFrame({
         x: clamp(dragState.frame.x - deltaX, bounds.min, bounds.max),
         y: clamp(dragState.frame.y - deltaY, bounds.min, bounds.max),
@@ -129,8 +135,19 @@ export default function MediaFrameEditorModal({
       startX: event.clientX,
       startY: event.clientY,
       frame: normalizeMediaFrame(normalizedDraftFrame),
-      zoom: Number(normalizedDraftFrame.zoom) || 1,
     };
+  };
+
+  const handleZoomChange = (event) => {
+    const nextZoom = clamp(Number(event.target.value) || 1, 0.2, 5);
+    setDraftFrame((previous) => ({
+      ...normalizeMediaFrame(previous),
+      zoom: nextZoom,
+    }));
+  };
+
+  const handleReset = () => {
+    setDraftFrame(getDefaultMediaFrame());
   };
 
   const handleBackdropClick = (event) => {
@@ -148,11 +165,14 @@ export default function MediaFrameEditorModal({
 
   return (
     <div className="media-frame-editor" onClick={handleBackdropClick}>
-      <div className="media-frame-editor__dialog" onClick={(event) => event.stopPropagation()}>
+      <div
+        className={`media-frame-editor__dialog ${isAvatarEditor ? "media-frame-editor__dialog--avatar" : ""}`}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="media-frame-editor__header">
           <div>
-            <h3>{copy.title}</h3>
-            <p>{copy.subtitle}</p>
+            <h3>{isAvatarEditor ? "Редактировать изображение" : copy.title}</h3>
+            {!isAvatarEditor ? <p>{copy.subtitle}</p> : null}
           </div>
           <button
             type="button"
@@ -164,88 +184,131 @@ export default function MediaFrameEditorModal({
           </button>
         </div>
 
-        <div className="media-frame-editor__body">
-          <div className={`media-frame-editor__preview media-frame-editor__preview--${target}`}>
-            {target === "profileBackground" ? (
-              <div className="media-frame-editor__profile-card">
-                <div
-                  ref={previewFrameRef}
-                  className="media-frame-editor__frame media-frame-editor__frame--profileBackground"
-                  onPointerDown={handlePointerDown}
+        {isAvatarEditor ? (
+          <div className="media-frame-editor__avatar-layout">
+            <div className="media-frame-editor__avatar-stage">
+              <div
+                ref={previewFrameRef}
+                className="media-frame-editor__frame media-frame-editor__frame--avatar-modal"
+                onPointerDown={handlePointerDown}
+              >
+                <AnimatedMedia
+                  className="media-frame-editor__media"
+                  src={source}
+                  fallback={fallback}
+                  alt={copy.title}
+                  frame={normalizedDraftFrame}
+                  mediaType={mediaType}
+                  loading="eager"
+                  decoding="sync"
+                  draggable={false}
+                />
+                <div className="media-frame-editor__avatar-mask" aria-hidden="true" />
+              </div>
+            </div>
+
+            <div className="media-frame-editor__avatar-toolbar">
+              <label className="media-frame-editor__slider-field media-frame-editor__slider-field--avatar">
+                <span className="media-frame-editor__slider-label">Масштаб</span>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="5"
+                  step="0.01"
+                  value={normalizedDraftFrame.zoom}
+                  onChange={handleZoomChange}
+                />
+                <strong>{Math.round(normalizedDraftFrame.zoom * 100)}%</strong>
+              </label>
+            </div>
+
+            <div className="media-frame-editor__avatar-actions">
+              <button
+                type="button"
+                className="media-frame-editor__reset-link"
+                onClick={handleReset}
+              >
+                Сброс
+              </button>
+              <div className="media-frame-editor__avatar-actions-main">
+                <button type="button" className="settings-inline-button" onClick={onCancel}>
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="mobile-profile-screen__primary"
+                  onClick={() => onConfirm?.(normalizeMediaFrame(normalizedDraftFrame))}
                 >
-                  <AnimatedMedia
-                    className="media-frame-editor__media"
-                    src={source}
-                    fallback={fallback}
-                    alt={copy.title}
-                    frame={normalizedDraftFrame}
-                    mediaType={mediaType}
-                    loading="eager"
-                    decoding="sync"
-                    draggable={false}
-                  />
-                  <div className="media-frame-editor__grid" aria-hidden="true" />
-                </div>
-                <div className="media-frame-editor__profile-card-body">
-                  <div className="media-frame-editor__profile-avatar">
-                    <AnimatedAvatar
-                      className="media-frame-editor__preview-media"
-                      src={avatarSource}
-                      fallback={avatarSource}
-                      alt={avatarAlt}
-                      frame={avatarFrame}
+                  Отправить
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="media-frame-editor__body">
+            <div className={`media-frame-editor__preview media-frame-editor__preview--${target}`}>
+              {target === "profileBackground" ? (
+                <div className="media-frame-editor__profile-card">
+                  <div
+                    ref={previewFrameRef}
+                    className="media-frame-editor__frame media-frame-editor__frame--profileBackground"
+                    onPointerDown={handlePointerDown}
+                  >
+                    <AnimatedMedia
+                      className="media-frame-editor__media"
+                      src={source}
+                      fallback={fallback}
+                      alt={copy.title}
+                      frame={normalizedDraftFrame}
+                      mediaType={mediaType}
+                      loading="eager"
+                      decoding="sync"
+                      draggable={false}
                     />
+                    <div className="media-frame-editor__grid" aria-hidden="true" />
                   </div>
-                  <div className="media-frame-editor__profile-copy">
-                    <strong>{avatarAlt || "Ваш профиль"}</strong>
-                    <span>Так фон будет выглядеть в карточке профиля</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="media-frame-editor__single-preview">
-                <div
-                  ref={previewFrameRef}
-                  className={`media-frame-editor__frame media-frame-editor__frame--${target}`}
-                  onPointerDown={handlePointerDown}
-                >
-                  <AnimatedMedia
-                    className="media-frame-editor__media"
-                    src={source}
-                    fallback={fallback}
-                    alt={copy.title}
-                    frame={normalizedDraftFrame}
-                    mediaType={mediaType}
-                    loading="eager"
-                    decoding="sync"
-                    draggable={false}
-                  />
-                  <div className="media-frame-editor__grid" aria-hidden="true" />
-                </div>
-
-                <div className="media-frame-editor__live-preview">
-                  <span className="media-frame-editor__live-preview-label">Итоговый вид</span>
-                  {target === "serverIcon" ? (
-                    <div className="media-frame-editor__server-preview">
-                      <div className="media-frame-editor__server-preview-icon">
-                        <PreviewMedia
-                          className="media-frame-editor__preview-media"
-                          src={source}
-                          fallback={fallback}
-                          alt={previewTitle}
-                          frame={normalizedDraftFrame}
-                          mediaType={mediaType}
-                        />
-                      </div>
-                      <div className="media-frame-editor__server-preview-copy">
-                        <strong>{previewTitle}</strong>
-                        <span>Так иконка будет смотреться в списке серверов и в шапке</span>
-                      </div>
+                  <div className="media-frame-editor__profile-card-body">
+                    <div className="media-frame-editor__profile-avatar">
+                      <AnimatedAvatar
+                        className="media-frame-editor__preview-media"
+                        src={avatarSource}
+                        fallback={avatarSource}
+                        alt={avatarAlt}
+                        frame={avatarFrame}
+                      />
                     </div>
-                  ) : (
-                    <div className="media-frame-editor__avatar-preview-card">
-                      <div className="media-frame-editor__avatar-preview-row">
-                        <div className="media-frame-editor__avatar-preview-large">
+                    <div className="media-frame-editor__profile-copy">
+                      <strong>{avatarAlt || "Ваш профиль"}</strong>
+                      <span>Так фон будет выглядеть в карточке профиля</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="media-frame-editor__single-preview">
+                  <div
+                    ref={previewFrameRef}
+                    className={`media-frame-editor__frame media-frame-editor__frame--${target}`}
+                    onPointerDown={handlePointerDown}
+                  >
+                    <AnimatedMedia
+                      className="media-frame-editor__media"
+                      src={source}
+                      fallback={fallback}
+                      alt={copy.title}
+                      frame={normalizedDraftFrame}
+                      mediaType={mediaType}
+                      loading="eager"
+                      decoding="sync"
+                      draggable={false}
+                    />
+                    <div className="media-frame-editor__grid" aria-hidden="true" />
+                  </div>
+
+                  <div className="media-frame-editor__live-preview">
+                    <span className="media-frame-editor__live-preview-label">Итоговый вид</span>
+                    {target === "serverIcon" ? (
+                      <div className="media-frame-editor__server-preview">
+                        <div className="media-frame-editor__server-preview-icon">
                           <PreviewMedia
                             className="media-frame-editor__preview-media"
                             src={source}
@@ -255,83 +318,97 @@ export default function MediaFrameEditorModal({
                             mediaType={mediaType}
                           />
                         </div>
-                        <div className="media-frame-editor__avatar-preview-copy">
+                        <div className="media-frame-editor__server-preview-copy">
                           <strong>{previewTitle}</strong>
-                          <span>Так аватарка будет выглядеть в профиле, чатах и компактных списках</span>
+                          <span>Так иконка будет смотреться в списке серверов и в шапке</span>
                         </div>
                       </div>
-                      <div className="media-frame-editor__avatar-preview-strip">
-                        <div className="media-frame-editor__avatar-preview-small">
-                          <PreviewMedia
-                            className="media-frame-editor__preview-media"
-                            src={source}
-                            fallback={fallback}
-                            alt={previewTitle}
-                            frame={normalizedDraftFrame}
-                            mediaType={mediaType}
-                          />
+                    ) : (
+                      <div className="media-frame-editor__avatar-preview-card">
+                        <div className="media-frame-editor__avatar-preview-row">
+                          <div className="media-frame-editor__avatar-preview-large">
+                            <PreviewMedia
+                              className="media-frame-editor__preview-media"
+                              src={source}
+                              fallback={fallback}
+                              alt={previewTitle}
+                              frame={normalizedDraftFrame}
+                              mediaType={mediaType}
+                            />
+                          </div>
+                          <div className="media-frame-editor__avatar-preview-copy">
+                            <strong>{previewTitle}</strong>
+                            <span>Так аватарка будет выглядеть в профиле, чатах и компактных списках</span>
+                          </div>
                         </div>
-                        <div className="media-frame-editor__avatar-preview-small media-frame-editor__avatar-preview-small--tiny">
-                          <PreviewMedia
-                            className="media-frame-editor__preview-media"
-                            src={source}
-                            fallback={fallback}
-                            alt={previewTitle}
-                            frame={normalizedDraftFrame}
-                            mediaType={mediaType}
-                          />
+                        <div className="media-frame-editor__avatar-preview-strip">
+                          <div className="media-frame-editor__avatar-preview-small">
+                            <PreviewMedia
+                              className="media-frame-editor__preview-media"
+                              src={source}
+                              fallback={fallback}
+                              alt={previewTitle}
+                              frame={normalizedDraftFrame}
+                              mediaType={mediaType}
+                            />
+                          </div>
+                          <div className="media-frame-editor__avatar-preview-small media-frame-editor__avatar-preview-small--tiny">
+                            <PreviewMedia
+                              className="media-frame-editor__preview-media"
+                              src={source}
+                              fallback={fallback}
+                              alt={previewTitle}
+                              frame={normalizedDraftFrame}
+                              mediaType={mediaType}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
+              )}
+            </div>
+
+            <div className="media-frame-editor__controls">
+              <div className="media-frame-editor__tip">
+                Тяните само изображение в нужную сторону, чтобы попасть в кадр. Масштаб регулируется ползунком.
               </div>
-            )}
-          </div>
+              <label className="media-frame-editor__slider-field">
+                <span>Масштаб</span>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="5"
+                  step="0.01"
+                  value={normalizedDraftFrame.zoom}
+                  onChange={handleZoomChange}
+                />
+                <strong>{normalizedDraftFrame.zoom.toFixed(2)}x</strong>
+              </label>
 
-          <div className="media-frame-editor__controls">
-            <div className="media-frame-editor__tip">
-              Тяните само изображение в нужную сторону, чтобы попасть в кадр. Масштаб регулируется ползунком.
-            </div>
-            <label className="media-frame-editor__slider-field">
-              <span>Масштаб</span>
-              <input
-                type="range"
-                min="0.2"
-                max="5"
-                step="0.01"
-                value={normalizedDraftFrame.zoom}
-                onChange={(event) =>
-                  setDraftFrame((previous) => ({
-                    ...normalizeMediaFrame(previous),
-                    zoom: clamp(Number(event.target.value) || 1, 0.2, 5),
-                  }))
-                }
-              />
-              <strong>{normalizedDraftFrame.zoom.toFixed(2)}x</strong>
-            </label>
-
-            <div className="media-frame-editor__actions">
-              <button
-                type="button"
-                className="settings-inline-button"
-                onClick={() => setDraftFrame(getDefaultMediaFrame())}
-              >
-                Сбросить
-              </button>
-              <button type="button" className="settings-inline-button" onClick={onCancel}>
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="mobile-profile-screen__primary"
-                onClick={() => onConfirm?.(normalizeMediaFrame(normalizedDraftFrame))}
-              >
-                Применить
-              </button>
+              <div className="media-frame-editor__actions">
+                <button
+                  type="button"
+                  className="settings-inline-button"
+                  onClick={handleReset}
+                >
+                  Сбросить
+                </button>
+                <button type="button" className="settings-inline-button" onClick={onCancel}>
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="mobile-profile-screen__primary"
+                  onClick={() => onConfirm?.(normalizeMediaFrame(normalizedDraftFrame))}
+                >
+                  Применить
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

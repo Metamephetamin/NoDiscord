@@ -6,6 +6,15 @@ const MIN_MESSAGES_FOR_VIRTUALIZATION = 40;
 const MIN_MEASURED_MESSAGE_HEIGHT = 72;
 const SIZE_CHANGE_EPSILON_PX = 2;
 const SCROLL_METRIC_EPSILON_PX = 1;
+const STICK_TO_BOTTOM_DISTANCE_PX = 4;
+
+function snapListToBottom(list) {
+  if (!list) {
+    return;
+  }
+
+  list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+}
 
 function findStartIndex(offsets, scrollTop) {
   let low = 0;
@@ -153,6 +162,10 @@ export default function useTextChatVirtualizer({
 
     const list = messagesListRef.current;
     const currentScrollTop = Math.max(0, list?.scrollTop || 0);
+    const distanceFromBottom = list
+      ? Math.max(0, list.scrollHeight - currentScrollTop - list.clientHeight)
+      : Number.POSITIVE_INFINITY;
+    const shouldStickToBottom = distanceFromBottom <= STICK_TO_BOTTOM_DISTANCE_PX;
     const currentMeasurements = measurementsRef.current;
     let deltaAboveViewport = 0;
 
@@ -183,7 +196,24 @@ export default function useTextChatVirtualizer({
       return changed ? next : previous;
     });
 
-    if (list && Math.abs(deltaAboveViewport) >= SIZE_CHANGE_EPSILON_PX) {
+    if (!list) {
+      return;
+    }
+
+    if (shouldStickToBottom) {
+      window.requestAnimationFrame(() => {
+        const activeList = messagesListRef.current;
+        if (!activeList) {
+          return;
+        }
+
+        snapListToBottom(activeList);
+        scheduleMetricsUpdate();
+      });
+      return;
+    }
+
+    if (Math.abs(deltaAboveViewport) >= SIZE_CHANGE_EPSILON_PX) {
       list.scrollTop = Math.max(0, currentScrollTop + deltaAboveViewport);
       scheduleMetricsUpdate();
     }

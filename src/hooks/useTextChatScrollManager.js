@@ -4,7 +4,6 @@ import { formatDayLabel } from "../utils/textChatHelpers";
 const SCROLL_NEAR_BOTTOM_PX = 96;
 const FLOATING_DATE_PROBE_OFFSET_PX = 24;
 const PROGRAMMATIC_SCROLL_AUTO_RESET_MS = 420;
-const WHEEL_SCROLL_STEP_PX = 56;
 
 function clampScrollTop(list, top) {
   const maxScrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
@@ -247,32 +246,11 @@ export default function useTextChatScrollManager({
       scheduleViewportUpdate();
     };
 
-    const prefersTouchLikeScroll = typeof window !== "undefined"
-      && typeof window.matchMedia === "function"
-      && window.matchMedia("(pointer: coarse)").matches;
-
-    const handleWheel = (event) => {
-      if (prefersTouchLikeScroll || event.defaultPrevented || event.ctrlKey) {
-        return;
-      }
-
-      const hasVerticalIntent = Math.abs(Number(event.deltaY) || 0) >= Math.abs(Number(event.deltaX) || 0);
-      if (!hasVerticalIntent || !event.deltaY) {
-        return;
-      }
-
-      event.preventDefault();
-      list.scrollTop += Math.sign(event.deltaY) * WHEEL_SCROLL_STEP_PX;
-      scheduleViewportUpdate();
-    };
-
     list.addEventListener("scroll", handleScroll, { passive: true });
-    list.addEventListener("wheel", handleWheel, { passive: false });
     window.addEventListener("resize", scheduleViewportUpdate);
 
     return () => {
       list.removeEventListener("scroll", handleScroll);
-      list.removeEventListener("wheel", handleWheel);
       window.removeEventListener("resize", scheduleViewportUpdate);
       if (viewportUpdateRafRef.current) {
         window.cancelAnimationFrame(viewportUpdateRafRef.current);

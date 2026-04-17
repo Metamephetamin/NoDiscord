@@ -27,6 +27,7 @@ export default function TextChatMediaPreview({
   const canPan = zoom > 1;
   const translateX = Number(mediaPreview?.panX) || 0;
   const translateY = Number(mediaPreview?.panY) || 0;
+  const isImagePreview = mediaPreview?.type === "image";
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -154,42 +155,44 @@ export default function TextChatMediaPreview({
         <div className="media-preview__header">
           <div className="media-preview__meta" onClick={stopEvent}>
             <span>
-              {mediaPreview.type === "image" ? "Изображение" : "Видео"}
+              {isImagePreview ? "Изображение" : "Видео"}
               {hasGallery ? ` ${Number(mediaPreview.activeIndex || 0) + 1}/${mediaPreview.items.length}` : ""}
             </span>
           </div>
           <div className="media-preview__actions" onClick={stopEvent}>
-            <button
-              type="button"
-              className="media-preview__action media-preview__action--compact"
-              onClick={() => onZoom?.(-MEDIA_PREVIEW_ZOOM_STEP)}
-              disabled={zoom <= MEDIA_PREVIEW_MIN_ZOOM}
-              aria-label="Уменьшить"
-            >
-              -
-            </button>
-            <button
-              type="button"
-              className="media-preview__action media-preview__action--compact"
-              onClick={() => onZoom?.(MEDIA_PREVIEW_ZOOM_STEP)}
-              disabled={zoom >= MEDIA_PREVIEW_MAX_ZOOM}
-              aria-label="Приблизить"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              className="media-preview__action media-preview__action--compact"
-              onClick={() => onResetZoom?.()}
-              disabled={zoom === 1}
-              aria-label="Сбросить масштаб"
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            {mediaPreview.type === "video" ? (
-              <button type="button" className="media-preview__action" onClick={() => onFullscreen?.()}>
-                На весь экран
-              </button>
+            {isImagePreview ? (
+              <>
+                <button
+                  type="button"
+                  className="media-preview__action media-preview__action--compact"
+                  onClick={() => onZoom?.(-MEDIA_PREVIEW_ZOOM_STEP)}
+                  disabled={zoom <= MEDIA_PREVIEW_MIN_ZOOM}
+                  aria-label="Уменьшить"
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__action media-preview__action--compact"
+                  onClick={() => onZoom?.(MEDIA_PREVIEW_ZOOM_STEP)}
+                  disabled={zoom >= MEDIA_PREVIEW_MAX_ZOOM}
+                  aria-label="Приблизить"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__action media-preview__action--compact"
+                  onClick={() => onResetZoom?.()}
+                  disabled={zoom === 1}
+                  aria-label="Сбросить масштаб"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button type="button" className="media-preview__action" onClick={() => onFullscreen?.()}>
+                  На весь экран
+                </button>
+              </>
             ) : null}
             <button
               type="button"
@@ -243,7 +246,7 @@ export default function TextChatMediaPreview({
             onPointerLeave={handlePointerEnd}
             onClick={handleViewportClick}
           >
-            {mediaPreview.type === "image" ? (
+            {isImagePreview ? (
               <img
                 className="media-preview__image"
                 src={mediaPreview.url}

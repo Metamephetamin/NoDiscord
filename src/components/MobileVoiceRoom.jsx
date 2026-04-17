@@ -150,7 +150,7 @@ export default function MobileVoiceRoom({
           title={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
         >
           <span className={`mobile-voice-room__control-icon ${isMicMuted || isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
-            <img src={icons.microphone} alt="" />
+            <span className="mobile-voice-room__control-glyph mobile-voice-room__control-glyph--microphone" aria-hidden="true" />
           </span>
         </button>
         <button
@@ -161,7 +161,7 @@ export default function MobileVoiceRoom({
           title={isSoundMuted ? "Включить звук" : "Выключить звук"}
         >
           <span className={`mobile-voice-room__control-icon ${isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
-            <img src={icons.headphones} alt="" className="mobile-voice-room__control-icon-image mobile-voice-room__control-icon-image--headphones" />
+            <span className="mobile-voice-room__control-glyph mobile-voice-room__control-glyph--headphones" aria-hidden="true" />
           </span>
         </button>
         <button type="button" className="mobile-voice-room__control" onClick={onOpenChat} aria-label="Перейти в чат" title="Перейти в чат">

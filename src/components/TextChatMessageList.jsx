@@ -942,6 +942,7 @@ function TextChatMessageList({
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
           const showFloatingMediaFooter = hasRenderableAttachments && !messageText.trim() && !reactions.length && !messagePoll;
+          const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
             && !messagePoll
@@ -1007,7 +1008,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {

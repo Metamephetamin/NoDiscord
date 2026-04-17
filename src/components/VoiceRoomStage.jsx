@@ -274,7 +274,7 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
   return null;
 }
 
-function VoiceStageIcon({ name }) {
+function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) {
   const commonProps = {
     viewBox: "0 0 24 24",
     fill: "none",
@@ -283,7 +283,7 @@ function VoiceStageIcon({ name }) {
     strokeLinecap: "round",
     strokeLinejoin: "round",
     "aria-hidden": "true",
-    className: "voice-room-stage__toolbar-icon",
+    className,
   };
 
   switch (name) {
@@ -382,6 +382,14 @@ function VoiceStageIcon({ name }) {
     default:
       return null;
   }
+}
+
+function VoiceStageStatusBadge({ name, label }) {
+  return (
+    <span className="voice-room-stage__status-badge voice-room-stage__status-badge--slashed" title={label} aria-label={label}>
+      <VoiceStageIcon name={name} className="voice-room-stage__status-icon" />
+    </span>
+  );
 }
 
 export default function VoiceRoomStage({
@@ -611,8 +619,8 @@ export default function VoiceRoomStage({
       </div>
       <div className="voice-room-stage__card-flags">
         <span className="voice-room-stage__card-role" style={buildAccentVariables(getParticipantAccent(participant))} aria-hidden="true" />
-        {participant.isMicMuted ? <span className="voice-room-stage__card-flag">Микрофон выкл.</span> : null}
-        {participant.isDeafened ? <span className="voice-room-stage__card-flag">Без звука</span> : null}
+        {participant.isMicMuted ? <VoiceStageStatusBadge name="mic" label="Микрофон выключен" /> : null}
+        {participant.isDeafened ? <VoiceStageStatusBadge name="headphones" label="Звук отключен" /> : null}
       </div>
     </div>
   );

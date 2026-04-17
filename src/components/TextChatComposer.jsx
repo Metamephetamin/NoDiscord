@@ -73,7 +73,6 @@ export default function TextChatComposer({
     () => segmentMessageTextByMentions(message, extractMentionsFromText(message, serverMembers, serverRoles)),
     [message, serverMembers, serverRoles]
   );
-
   const handleAttachFileChange = (event) => {
     onFileChange(event);
     if (event?.target) {

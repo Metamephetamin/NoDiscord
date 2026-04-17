@@ -106,6 +106,41 @@ function updateChannelMessagesState(previousState, channelId, updater) {
   };
 }
 
+function getMessageSortTimestamp(messageItem, fallbackIndex = 0) {
+  const rawTimestamp = messageItem?.timestamp || messageItem?.Timestamp || messageItem?.createdAt || messageItem?.CreatedAt || "";
+  const parsedTimestamp = rawTimestamp ? new Date(rawTimestamp).getTime() : Number.NaN;
+  return Number.isFinite(parsedTimestamp) ? parsedTimestamp : fallbackIndex;
+}
+
+function mergeChannelMessages(existingMessages, incomingMessages) {
+  const existingList = Array.isArray(existingMessages) ? existingMessages : [];
+  const incomingList = Array.isArray(incomingMessages) ? incomingMessages : [];
+  if (!incomingList.length) {
+    return existingList;
+  }
+
+  const mergedById = new Map();
+
+  existingList.forEach((messageItem, index) => {
+    const normalizedId = String(messageItem?.id || `existing:${index}`);
+    mergedById.set(normalizedId, messageItem);
+  });
+
+  incomingList.forEach((messageItem, index) => {
+    const normalizedId = String(messageItem?.id || `incoming:${index}`);
+    mergedById.set(normalizedId, messageItem);
+  });
+
+  return Array.from(mergedById.values()).sort((leftMessage, rightMessage) => {
+    const timestampDelta = getMessageSortTimestamp(leftMessage) - getMessageSortTimestamp(rightMessage);
+    if (timestampDelta !== 0) {
+      return timestampDelta;
+    }
+
+    return String(leftMessage?.id || "").localeCompare(String(rightMessage?.id || ""));
+  });
+}
+
 function areReactionUsersEqual(leftUsers, rightUsers) {
   if (leftUsers === rightUsers) {
     return true;
@@ -1082,7 +1117,11 @@ export default function TextChat({
     joinedChannelRef.current = scopedChannelId;
     setIsChannelReady(true);
     hasInitializedVisibleChannelRef.current = true;
-    setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, normalizedInitialMessages));
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (currentChannelMessages) => mergeChannelMessages(currentChannelMessages, normalizedInitialMessages)
+    ));
 
     if (isDirectChat) {
       chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
