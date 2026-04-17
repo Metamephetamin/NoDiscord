@@ -3,13 +3,13 @@ import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import dns from "node:dns";
 
-dns.setDefaultResultOrder("verbatim");
+dns.setDefaultResultOrder("ipv4first");
 
 export default defineConfig(({ command }) => ({
   base: "/",
   plugins: [react(), command === "serve" ? basicSsl() : null].filter(Boolean),
   server: {
-    host: "localhost",
+    host: "127.0.0.1",
     port: 5173,
     strictPort: false,
     https: true,

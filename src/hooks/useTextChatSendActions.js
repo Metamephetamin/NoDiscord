@@ -7,8 +7,6 @@ import {
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
-  createPendingUploadPreview,
-  createPendingUploadThumbnail,
   preparePendingUploadForSend,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
@@ -23,38 +21,7 @@ import {
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
 
 const ATTACHMENT_UPLOAD_CONCURRENCY = 2;
-const THUMBNAIL_PREVIEW_CONCURRENCY = 2;
-const FULL_PREVIEW_CONCURRENCY = 1;
-const PREPARE_UPLOAD_CONCURRENCY = 1;
 const PROGRESS_UPDATE_MIN_DELTA = 0.04;
-
-function createTaskQueueState() {
-  return {
-    pending: [],
-    running: 0,
-  };
-}
-
-function drainTaskQueue(queueState, concurrency) {
-  while (queueState.running < concurrency && queueState.pending.length) {
-    const nextTask = queueState.pending.shift();
-    queueState.running += 1;
-    Promise.resolve()
-      .then(nextTask)
-      .catch(() => {
-        // Individual queue tasks handle their own state/fallbacks.
-      })
-      .finally(() => {
-        queueState.running = Math.max(0, queueState.running - 1);
-        drainTaskQueue(queueState, concurrency);
-      });
-  }
-}
-
-function enqueueTask(queueState, concurrency, task) {
-  queueState.pending.push(task);
-  drainTaskQueue(queueState, concurrency);
-}
 
 function yieldToMainThread() {
   return new Promise((resolve) => {
@@ -103,11 +70,6 @@ export default function useTextChatSendActions({
   const uploadProgressSnapshotRef = useRef(new Map());
   const preparedUploadFileCacheRef = useRef(new Map());
   const preparedUploadModeRef = useRef(new Map());
-  const uploadPreparationVersionRef = useRef(new Map());
-  const previewHydrationVersionRef = useRef(new Map());
-  const thumbnailPreviewQueueRef = useRef(createTaskQueueState());
-  const fullPreviewQueueRef = useRef(createTaskQueueState());
-  const prepareUploadQueueRef = useRef(createTaskQueueState());
 
   const flushPendingUploadPatches = () => {
     pendingUploadPatchFrameRef.current = 0;
@@ -188,11 +150,6 @@ export default function useTextChatSendActions({
     uploadProgressSnapshotRef.current.clear();
     preparedUploadFileCacheRef.current.clear();
     preparedUploadModeRef.current.clear();
-    uploadPreparationVersionRef.current.clear();
-    previewHydrationVersionRef.current.clear();
-    thumbnailPreviewQueueRef.current.pending = [];
-    fullPreviewQueueRef.current.pending = [];
-    prepareUploadQueueRef.current.pending = [];
   }, []);
 
   useEffect(() => {
@@ -205,141 +162,9 @@ export default function useTextChatSendActions({
       if (!activeUploadIds.has(uploadId)) {
         preparedUploadFileCacheRef.current.delete(uploadId);
         preparedUploadModeRef.current.delete(uploadId);
-        uploadPreparationVersionRef.current.delete(uploadId);
       }
-    });
-
-    nextSelectedFiles.forEach((upload, index) => {
-      const uploadId = String(upload?.id || "");
-      const compressionMode = String(upload?.compressionMode || "original");
-      if (!uploadId) {
-        return;
-      }
-
-      if (compressionMode === "original") {
-        preparedUploadFileCacheRef.current.delete(uploadId);
-        preparedUploadModeRef.current.delete(uploadId);
-        uploadPreparationVersionRef.current.delete(uploadId);
-        return;
-      }
-
-      const cachedMode = preparedUploadModeRef.current.get(uploadId);
-      if (cachedMode === compressionMode) {
-        return;
-      }
-
-      const versionToken = Symbol(uploadId);
-      uploadPreparationVersionRef.current.set(uploadId, versionToken);
-      preparedUploadModeRef.current.set(uploadId, compressionMode);
-
-      enqueueTask(prepareUploadQueueRef.current, PREPARE_UPLOAD_CONCURRENCY, async () => {
-        if (uploadPreparationVersionRef.current.get(uploadId) !== versionToken) {
-          return;
-        }
-
-        try {
-          await yieldToMainThread();
-          const preparedFile = await preparePendingUploadForSend(upload);
-          if (uploadPreparationVersionRef.current.get(uploadId) !== versionToken) {
-            return;
-          }
-
-          preparedUploadFileCacheRef.current.set(uploadId, preparedFile);
-        } catch {
-          if (uploadPreparationVersionRef.current.get(uploadId) !== versionToken) {
-            return;
-          }
-
-          preparedUploadFileCacheRef.current.delete(uploadId);
-          preparedUploadModeRef.current.delete(uploadId);
-        }
-      });
     });
   }, [selectedFiles]);
-
-  const invalidatePreviewHydration = (uploadId) => {
-    const normalizedId = String(uploadId || "");
-    if (!normalizedId) {
-      return;
-    }
-
-    previewHydrationVersionRef.current.set(normalizedId, Symbol(normalizedId));
-  };
-
-  const queueFullPreviewHydration = (upload, versionToken) => {
-    const uploadId = String(upload?.id || "");
-    if (!uploadId || (upload?.kind !== "image" && upload?.kind !== "video")) {
-      return;
-    }
-
-    enqueueTask(fullPreviewQueueRef.current, FULL_PREVIEW_CONCURRENCY, async () => {
-      if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
-        return;
-      }
-
-      await yieldToMainThread();
-
-      if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
-        return;
-      }
-
-      if (!upload.previewUrl) {
-        const previewUrl = createPendingUploadPreview(upload);
-        if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
-          if (previewUrl) {
-            URL.revokeObjectURL(previewUrl);
-          }
-          return;
-        }
-
-        if (previewUrl) {
-          schedulePendingUploadPatch(uploadId, { previewUrl });
-        }
-      }
-    });
-  };
-
-  const hydratePendingUploadPreviews = (uploads) => {
-    (Array.isArray(uploads) ? uploads : []).forEach((upload, index) => {
-      const uploadId = String(upload?.id || "");
-      if (!uploadId || (upload?.kind !== "image" && upload?.kind !== "video")) {
-        return;
-      }
-
-      const versionToken = Symbol(uploadId);
-      previewHydrationVersionRef.current.set(uploadId, versionToken);
-
-      if (upload.kind !== "image" || upload.thumbnailUrl) {
-        queueFullPreviewHydration(upload, versionToken);
-        return;
-      }
-
-      enqueueTask(thumbnailPreviewQueueRef.current, THUMBNAIL_PREVIEW_CONCURRENCY, async () => {
-        if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
-          return;
-        }
-
-        try {
-          await yieldToMainThread();
-          const thumbnailUrl = await createPendingUploadThumbnail(upload);
-          if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
-            if (thumbnailUrl) {
-              URL.revokeObjectURL(thumbnailUrl);
-            }
-            return;
-          }
-
-          if (thumbnailUrl) {
-            schedulePendingUploadPatch(uploadId, { thumbnailUrl });
-          }
-        } catch {
-          // Keep the fallback visible if thumbnail generation fails.
-        }
-
-        queueFullPreviewHydration(upload, versionToken);
-      });
-    });
-  };
 
   const appendPendingFiles = (files, { replace = false } = {}) => {
     const validFiles = Array.isArray(files) ? files.filter((file) => file instanceof File) : [];
@@ -359,19 +184,15 @@ export default function useTextChatSendActions({
 
       return nextUpload;
     });
-    startTransition(() => {
-      setSelectedFiles((previous) => {
-        if (replace) {
-          previous.forEach((item) => invalidatePreviewHydration(item?.id));
-          revokePendingUploadPreviews(previous);
-          return nextUploads;
-        }
 
-        return [...previous, ...nextUploads];
-      });
+    setSelectedFiles((previous) => {
+      if (replace) {
+        revokePendingUploadPreviews(previous);
+        return nextUploads;
+      }
+
+      return [...previous, ...nextUploads];
     });
-
-    hydratePendingUploadPreviews(nextUploads);
     return true;
   };
 
@@ -407,8 +228,6 @@ export default function useTextChatSendActions({
 
     preparedUploadFileCacheRef.current.delete(normalizedId);
     preparedUploadModeRef.current.delete(normalizedId);
-    uploadPreparationVersionRef.current.set(normalizedId, Symbol(normalizedId));
-    invalidatePreviewHydration(normalizedId);
 
     setSelectedFiles((previous) => {
       const nextUploads = [];
@@ -429,15 +248,6 @@ export default function useTextChatSendActions({
     uploadProgressSnapshotRef.current.clear();
     preparedUploadFileCacheRef.current.clear();
     preparedUploadModeRef.current.clear();
-    Array.from(uploadPreparationVersionRef.current.keys()).forEach((uploadId) => {
-      uploadPreparationVersionRef.current.set(uploadId, Symbol(uploadId));
-    });
-    uploadPreparationVersionRef.current.clear();
-    Array.from(previewHydrationVersionRef.current.keys()).forEach((uploadId) => {
-      invalidatePreviewHydration(uploadId);
-    });
-    previewHydrationVersionRef.current.clear();
-
     setSelectedFiles((previous) => {
       if (!previous.length) {
         return previous;
@@ -451,7 +261,6 @@ export default function useTextChatSendActions({
     const normalizedId = String(uploadId || "");
     preparedUploadFileCacheRef.current.delete(normalizedId);
     preparedUploadModeRef.current.delete(normalizedId);
-    uploadPreparationVersionRef.current.set(normalizedId, Symbol(normalizedId));
     updatePendingUpload(uploadId, {
       status: "queued",
       progress: 0,
@@ -467,7 +276,6 @@ export default function useTextChatSendActions({
     const normalizedId = String(uploadId || "");
     preparedUploadFileCacheRef.current.delete(normalizedId);
     preparedUploadModeRef.current.delete(normalizedId);
-    uploadPreparationVersionRef.current.set(normalizedId, Symbol(normalizedId));
     updatePendingUpload(uploadId, { compressionMode: normalizedMode });
   };
 
@@ -487,7 +295,6 @@ export default function useTextChatSendActions({
         const uploadId = String(item?.id || "");
         preparedUploadFileCacheRef.current.delete(uploadId);
         preparedUploadModeRef.current.delete(uploadId);
-        uploadPreparationVersionRef.current.set(uploadId, Symbol(uploadId));
         return { ...item, compressionMode: enabled ? "file" : "original" };
       })
     );
@@ -691,7 +498,6 @@ export default function useTextChatSendActions({
               uploadProgressSnapshotRef.current.delete(uploadId);
               preparedUploadFileCacheRef.current.delete(uploadId);
               preparedUploadModeRef.current.delete(uploadId);
-              uploadPreparationVersionRef.current.delete(uploadId);
               schedulePendingUploadPatch(uploadId, {
                 status: "done",
                 progress: 1,

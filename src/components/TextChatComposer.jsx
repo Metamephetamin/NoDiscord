@@ -64,20 +64,34 @@ export default function TextChatComposer({
   onMessageChange,
   onStopSpeechRecognition,
   onStartEditingLatestOwnMessage,
+  onVoiceRecordPointerDown,
+  onVoiceRecordPointerMove,
+  onVoiceRecordPointerUp,
+  onVoiceRecordPointerCancel,
   onSend,
 }) {
   const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const composerHighlightRef = useRef(null);
   const composerMentionSegments = useMemo(
-    () => segmentMessageTextByMentions(message, extractMentionsFromText(message, serverMembers, serverRoles)),
+    () => {
+      const normalizedMessage = String(message || "");
+      if (!normalizedMessage.includes("@")) {
+        return [{ text: normalizedMessage, isMention: false }];
+      }
+
+      return segmentMessageTextByMentions(
+        normalizedMessage,
+        extractMentionsFromText(normalizedMessage, serverMembers, serverRoles)
+      );
+    },
     [message, serverMembers, serverRoles]
   );
   const handleAttachFileChange = (event) => {
     onFileChange(event);
     if (event?.target) {
-      event.target.blur?.();
       event.target.value = "";
+      event.target.blur?.();
     }
   };
 
@@ -93,6 +107,15 @@ export default function TextChatComposer({
   };
 
   const hasBatchUploadSheet = selectedFiles.length >= 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image");
+  const hasSendPayload = Boolean(String(message || "").trim()) || selectedFiles.length > 0;
+  const shouldShowSendButton = hasSendPayload && voiceRecordingState === "idle";
+  const voiceButtonStateClass = voiceRecordingState !== "idle" ? `composer-tool--recording-${voiceRecordingState}` : "";
+  const handleClearPendingUploads = () => {
+    onClearPendingUploads();
+  };
+  const handleSendMessage = () => {
+    return onSend();
+  };
 
   const getPendingUploadStatusLabel = (selectedFile) => {
     if (selectedFile?.status === "uploading") {
@@ -134,11 +157,11 @@ export default function TextChatComposer({
             onToggleSendAsDocuments={onToggleBatchUploadSendAsDocuments}
             onToggleRememberChoice={onToggleBatchUploadRememberChoice}
             onRemovePendingUpload={onRemovePendingUpload}
-            onClearPendingUploads={onClearPendingUploads}
+            onClearPendingUploads={handleClearPendingUploads}
             onFileChange={onFileChange}
             onUpdatePendingUploadCompressionMode={onUpdatePendingUploadCompressionMode}
             onUpdatePendingUploadSpoilerMode={onUpdatePendingUploadSpoilerMode}
-            onSend={onSend}
+            onSend={handleSendMessage}
           />
         ) : null}
 
@@ -147,7 +170,7 @@ export default function TextChatComposer({
             <div className="chat-file-list__header">
               <strong>Вложения</strong>
               {selectedFiles.length > 1 ? (
-                <button type="button" className="chat-file-list__clear" onClick={onClearPendingUploads} disabled={uploadingFile}>
+                <button type="button" className="chat-file-list__clear" onClick={handleClearPendingUploads} disabled={uploadingFile}>
                   Очистить
                 </button>
               ) : null}
@@ -585,29 +608,74 @@ export default function TextChatComposer({
 
                 if (event.key === "Enter" && !event.shiftKey && !preferExplicitSend) {
                   event.preventDefault();
-                  onSend();
+                  handleSendMessage();
                 }
               }}
               />
             </div>
 
             <div className="composer-tools-end">
+              {shouldShowSendButton ? (
               <button
                 type="button"
                 className="composer-send-button"
-                onClick={() => void onSend()}
+                onClick={() => void handleSendMessage()}
                 disabled={
                   uploadingFile
                   || voiceRecordingState === "holding"
                   || voiceRecordingState === "locked"
                   || voiceRecordingState === "sending"
-                  || (!String(message || "").trim() && !selectedFiles.length)
+                  || !hasSendPayload
                 }
                 aria-label="Отправить сообщение"
                 title="Отправить сообщение"
               >
                 <span className="composer-send-button__icon" aria-hidden="true" />
               </button>
+              ) : ENABLE_VOICE_MESSAGE_BUTTON ? (
+                <button
+                  type="button"
+                  className={`composer-tool composer-tool--voice composer-tool--voice-slot ${voiceButtonStateClass}`}
+                  onPointerDown={async (event) => {
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                    await onVoiceRecordPointerDown?.(event);
+                  }}
+                  onPointerMove={onVoiceRecordPointerMove}
+                  onPointerUp={async (event) => {
+                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture?.(event.pointerId);
+                    }
+                    await onVoiceRecordPointerUp?.(event);
+                  }}
+                  onPointerCancel={async (event) => {
+                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture?.(event.pointerId);
+                    }
+                    await onVoiceRecordPointerCancel?.(event);
+                  }}
+                  disabled={uploadingFile || voiceRecordingState === "sending"}
+                  aria-label={
+                    voiceRecordingState === "locked"
+                      ? "Отправить голосовое сообщение"
+                      : voiceRecordingState === "holding"
+                        ? "Запись голосового сообщения"
+                        : "Записать голосовое сообщение"
+                  }
+                  title={
+                    voiceRecordingState === "locked"
+                      ? "Нажмите, чтобы отправить голосовое сообщение"
+                      : voiceRecordingState === "holding"
+                        ? "Потяните вверх для фиксации или отпустите для отправки"
+                        : "Удерживайте для записи голосового сообщения"
+                  }
+                >
+                  <span className="composer-tool__ring" aria-hidden="true" />
+                  <span className="composer-tool__mic" aria-hidden="true" />
+                  {voiceRecordingState === "locked" ? (
+                    <span className="composer-tool__lock" aria-hidden="true">●</span>
+                  ) : null}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

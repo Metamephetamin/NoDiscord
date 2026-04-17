@@ -47,6 +47,7 @@ public static class UploadPolicies
     {
         ".jpg",
         ".jpeg",
+        ".jfif",
         ".png",
         ".webp",
         ".gif",
@@ -217,10 +218,20 @@ public static class UploadPolicies
 
         if (!HasExpectedFileSignature(file, extension))
         {
-            error = "File content does not match the selected file type.";
-            return false;
+            if (!TryDetectChatFileSignature(file, out var detectedExtension) ||
+                !AllowedChatExtensions.Contains(detectedExtension) ||
+                !AreCompatibleChatFileExtensions(extension, detectedExtension))
+            {
+                error = "File content does not match the selected file type.";
+                return false;
+            }
+
+            extension = NormalizeStorageExtension(detectedExtension);
+            contentType = GetContentType(extension);
         }
 
+        extension = NormalizeStorageExtension(extension);
+        contentType = GetContentType(extension);
         return true;
     }
 
@@ -285,16 +296,106 @@ public static class UploadPolicies
             : "application/octet-stream";
     }
 
+    private static string NormalizeStorageExtension(string extension)
+    {
+        return extension.Equals(".jfif", StringComparison.OrdinalIgnoreCase) ? ".jpg" : extension;
+    }
+
+    private static bool AreCompatibleChatFileExtensions(string declaredExtension, string detectedExtension)
+    {
+        if (declaredExtension.Equals(detectedExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (IsJpegExtension(declaredExtension) && IsJpegExtension(detectedExtension))
+        {
+            return true;
+        }
+
+        return IsImageExtension(declaredExtension) && IsImageExtension(detectedExtension);
+    }
+
+    private static bool IsJpegExtension(string extension)
+    {
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jfif", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsImageExtension(string extension)
+    {
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jfif", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".webp", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryDetectChatFileSignature(IFormFile file, out string extension)
+    {
+        using var stream = file.OpenReadStream();
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
+        Span<byte> buffer = stackalloc byte[512];
+        var bytesRead = stream.Read(buffer);
+        var header = buffer[..bytesRead];
+
+        extension = string.Empty;
+
+        if (StartsWith(header, 0xFF, 0xD8, 0xFF))
+        {
+            extension = ".jpg";
+            return true;
+        }
+
+        if (StartsWith(header, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+        {
+            extension = ".png";
+            return true;
+        }
+
+        if (StartsWithAscii(header, "RIFF") && HasAsciiAt(header, 8, "WEBP"))
+        {
+            extension = ".webp";
+            return true;
+        }
+
+        if (StartsWithAscii(header, "GIF87a") || StartsWithAscii(header, "GIF89a"))
+        {
+            extension = ".gif";
+            return true;
+        }
+
+        if (StartsWithAscii(header, "BM"))
+        {
+            extension = ".bmp";
+            return true;
+        }
+
+        return false;
+    }
+
     private static bool HasExpectedFileSignature(IFormFile file, string extension)
     {
         using var stream = file.OpenReadStream();
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
         Span<byte> buffer = stackalloc byte[512];
         var bytesRead = stream.Read(buffer);
         var header = buffer[..bytesRead];
 
         return extension switch
         {
-            ".jpg" or ".jpeg" => StartsWith(header, 0xFF, 0xD8, 0xFF),
+            ".jpg" or ".jpeg" or ".jfif" => StartsWith(header, 0xFF, 0xD8, 0xFF),
             ".png" => StartsWith(header, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A),
             ".webp" => StartsWithAscii(header, "RIFF") && HasAsciiAt(header, 8, "WEBP"),
             ".gif" => StartsWithAscii(header, "GIF87a") || StartsWithAscii(header, "GIF89a"),

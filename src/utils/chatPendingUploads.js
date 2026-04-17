@@ -7,8 +7,27 @@ const COMPRESSIBLE_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
-const THUMBNAIL_MAX_EDGE = 96;
-const THUMBNAIL_QUALITY = 0.72;
+const THUMBNAIL_MAX_EDGE = 720;
+const THUMBNAIL_QUALITY = 0.82;
+
+const UPLOAD_SIGNATURE_CONTENT_TYPES = {
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".pdf": "application/pdf",
+  ".zip": "application/zip",
+  ".rar": "application/vnd.rar",
+  ".7z": "application/x-7z-compressed",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+};
+
+const JPEG_EXTENSIONS = new Set([".jpg", ".jpeg", ".jfif"]);
 
 function buildUploadId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -39,6 +58,7 @@ export function isCompressibleImageUpload(upload) {
 
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
+  const previewUrl = kind === "video" ? createPendingUploadPreview(file) : "";
 
   return {
     id: buildUploadId(),
@@ -47,7 +67,7 @@ export function createPendingUpload(file) {
     size: Number(file?.size) || 0,
     type: String(file?.type || "").trim(),
     kind,
-    previewUrl: "",
+    previewUrl,
     thumbnailUrl: "",
     status: "queued",
     progress: 0,
@@ -90,6 +110,145 @@ function replaceFileExtension(name, extension) {
   const dotIndex = normalizedName.lastIndexOf(".");
   const baseName = dotIndex > 0 ? normalizedName.slice(0, dotIndex) : normalizedName;
   return `${baseName}${extension}`;
+}
+
+function getFileExtension(name) {
+  const normalizedName = String(name || "").trim();
+  const dotIndex = normalizedName.lastIndexOf(".");
+  return dotIndex > 0 ? normalizedName.slice(dotIndex).toLowerCase() : "";
+}
+
+function bytesStartWith(bytes, signature) {
+  return signature.every((value, index) => bytes[index] === value);
+}
+
+function asciiAt(bytes, offset, signature) {
+  if (bytes.length < offset + signature.length) {
+    return false;
+  }
+
+  for (let index = 0; index < signature.length; index += 1) {
+    if (bytes[offset + index] !== signature.charCodeAt(index)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function detectUploadFileExtension(bytes) {
+  if (!bytes?.length) {
+    return "";
+  }
+
+  if (bytesStartWith(bytes, [0xFF, 0xD8, 0xFF])) {
+    return ".jpg";
+  }
+
+  if (bytesStartWith(bytes, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) {
+    return ".png";
+  }
+
+  if (asciiAt(bytes, 0, "RIFF") && asciiAt(bytes, 8, "WEBP")) {
+    return ".webp";
+  }
+
+  if (asciiAt(bytes, 0, "GIF87a") || asciiAt(bytes, 0, "GIF89a")) {
+    return ".gif";
+  }
+
+  if (asciiAt(bytes, 0, "BM")) {
+    return ".bmp";
+  }
+
+  if (asciiAt(bytes, 0, "%PDF")) {
+    return ".pdf";
+  }
+
+  if (
+    bytesStartWith(bytes, [0x50, 0x4B, 0x03, 0x04])
+    || bytesStartWith(bytes, [0x50, 0x4B, 0x05, 0x06])
+    || bytesStartWith(bytes, [0x50, 0x4B, 0x07, 0x08])
+  ) {
+    return ".zip";
+  }
+
+  if (
+    bytesStartWith(bytes, [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00])
+    || bytesStartWith(bytes, [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00])
+  ) {
+    return ".rar";
+  }
+
+  if (bytesStartWith(bytes, [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C])) {
+    return ".7z";
+  }
+
+  if (
+    asciiAt(bytes, 0, "ID3")
+    || bytesStartWith(bytes, [0xFF, 0xFB])
+    || bytesStartWith(bytes, [0xFF, 0xF3])
+    || bytesStartWith(bytes, [0xFF, 0xF2])
+  ) {
+    return ".mp3";
+  }
+
+  if (asciiAt(bytes, 0, "RIFF") && asciiAt(bytes, 8, "WAVE")) {
+    return ".wav";
+  }
+
+  if (asciiAt(bytes, 0, "OggS")) {
+    return ".ogg";
+  }
+
+  if (asciiAt(bytes, 4, "ftyp")) {
+    return ".mp4";
+  }
+
+  if (bytesStartWith(bytes, [0x1A, 0x45, 0xDF, 0xA3])) {
+    return ".webm";
+  }
+
+  return "";
+}
+
+function isEquivalentUploadExtension(leftExtension, rightExtension) {
+  const left = String(leftExtension || "").toLowerCase();
+  const right = String(rightExtension || "").toLowerCase();
+  if (left === right) {
+    return true;
+  }
+
+  return JPEG_EXTENSIONS.has(left) && JPEG_EXTENSIONS.has(right);
+}
+
+async function normalizeUploadFileSignature(file) {
+  if (!(file instanceof File)) {
+    return file;
+  }
+
+  const header = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+  const detectedExtension = detectUploadFileExtension(header);
+  if (!detectedExtension) {
+    return file;
+  }
+
+  const declaredExtension = getFileExtension(file.name);
+  const normalizedExtension = detectedExtension === ".jpeg" || detectedExtension === ".jfif"
+    ? ".jpg"
+    : detectedExtension;
+  const shouldRename = !isEquivalentUploadExtension(declaredExtension, normalizedExtension)
+    || declaredExtension === ".jfif";
+  const nextType = UPLOAD_SIGNATURE_CONTENT_TYPES[normalizedExtension] || file.type || "application/octet-stream";
+
+  if (!shouldRename && String(file.type || "").toLowerCase() === nextType.toLowerCase()) {
+    return file;
+  }
+
+  return new File([file], replaceFileExtension(file.name, normalizedExtension), {
+    type: nextType,
+    lastModified: Number(file.lastModified) || Date.now(),
+  });
 }
 
 function loadImageElement(src) {
@@ -156,6 +315,20 @@ export async function createPendingUploadThumbnail(fileOrUpload) {
   const kind = getPendingUploadKind(file);
   if (!(file instanceof File) || kind !== "image") {
     return "";
+  }
+
+  try {
+    const blob = await compressImageInWorker({
+      file,
+      maxEdge: THUMBNAIL_MAX_EDGE,
+      quality: THUMBNAIL_QUALITY,
+    });
+
+    if (blob instanceof Blob) {
+      return URL.createObjectURL(blob);
+    }
+  } catch {
+    // Fall back to the main-thread thumbnail path below.
   }
 
   const canvas = await renderImageThumbnailCanvas(file);
@@ -249,15 +422,14 @@ export async function preparePendingUploadForSend(upload) {
   }
 
   if (upload?.compressionMode === "file") {
-    return new File([sourceFile], sourceFile.name, {
-      type: "application/octet-stream",
-      lastModified: sourceFile.lastModified || Date.now(),
-    });
+    // "Send as file" changes presentation in chat, not the binary payload itself.
+    // Only adjust mismatched extensions so backend signature checks still pass.
+    return normalizeUploadFileSignature(sourceFile);
   }
 
   if (upload?.compressionMode === "compressed" && isCompressibleImageUpload(upload)) {
-    return compressImageFile(sourceFile);
+    return normalizeUploadFileSignature(await compressImageFile(sourceFile));
   }
 
-  return sourceFile;
+  return normalizeUploadFileSignature(sourceFile);
 }

@@ -1910,6 +1910,10 @@ export default function TextChat({
       stopReplyingToMessage={stopReplyingToMessage}
       stopEditingMessage={stopEditingMessage}
       handleCancelVoiceRecording={handleCancelVoiceRecording}
+      handleVoiceRecordPointerDown={handleVoiceRecordPointerDown}
+      handleVoiceRecordPointerMove={handleVoiceRecordPointerMove}
+      handleVoiceRecordPointerUp={handleVoiceRecordPointerUp}
+      handleVoiceRecordPointerCancel={handleVoiceRecordPointerCancel}
       handleSpeechRecognitionToggle={handleSpeechRecognitionToggle}
       syncComposerSelection={syncComposerSelection}
       setComposerEmojiPickerOpen={setComposerEmojiPickerOpen}

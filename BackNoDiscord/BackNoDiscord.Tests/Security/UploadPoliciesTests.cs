@@ -91,6 +91,50 @@ public class UploadPoliciesTests
     }
 
     [Fact]
+    public void TryValidateChatFile_AcceptsImageWhenSafeImageExtensionDiffersFromContent()
+    {
+        var bytes = new byte[]
+        {
+            (byte)'R', (byte)'I', (byte)'F', (byte)'F',
+            0x10, 0x00, 0x00, 0x00,
+            (byte)'W', (byte)'E', (byte)'B', (byte)'P',
+            0x00
+        };
+        using var stream = new MemoryStream(bytes);
+        IFormFile file = new FormFile(stream, 0, bytes.Length, "file", "renamed.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(".webp", extension);
+        Assert.Equal("image/webp", contentType);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
+    public void TryValidateChatFile_NormalizesJfifToJpg()
+    {
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00 };
+        using var stream = new MemoryStream(bytes);
+        IFormFile file = new FormFile(stream, 0, bytes.Length, "file", "camera.jfif")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(".jpg", extension);
+        Assert.Equal("image/jpeg", contentType);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
     public void SanitizeRelativeAssetUrl_AllowsOnlyExpectedPrefix()
     {
         Assert.Equal("/avatars/user-1.png", UploadPolicies.SanitizeRelativeAssetUrl("/avatars/user-1.png", "/avatars/"));

@@ -100,6 +100,10 @@ export default function TextChatView(props) {
     stopReplyingToMessage,
     stopEditingMessage,
     handleCancelVoiceRecording,
+    handleVoiceRecordPointerDown,
+    handleVoiceRecordPointerMove,
+    handleVoiceRecordPointerUp,
+    handleVoiceRecordPointerCancel,
     handleSpeechRecognitionToggle,
     syncComposerSelection,
     setComposerEmojiPickerOpen,
@@ -306,6 +310,10 @@ export default function TextChatView(props) {
             onStopReplying={stopReplyingToMessage}
             onStopEditing={stopEditingMessage}
             onCancelVoiceRecording={handleCancelVoiceRecording}
+            onVoiceRecordPointerDown={handleVoiceRecordPointerDown}
+            onVoiceRecordPointerMove={handleVoiceRecordPointerMove}
+            onVoiceRecordPointerUp={handleVoiceRecordPointerUp}
+            onVoiceRecordPointerCancel={handleVoiceRecordPointerCancel}
             onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
             onPaste={handleComposerPaste}
             onSyncComposerSelection={syncComposerSelection}
@@ -364,6 +372,10 @@ export default function TextChatView(props) {
           onStopReplying={stopReplyingToMessage}
           onStopEditing={stopEditingMessage}
           onCancelVoiceRecording={handleCancelVoiceRecording}
+          onVoiceRecordPointerDown={handleVoiceRecordPointerDown}
+          onVoiceRecordPointerMove={handleVoiceRecordPointerMove}
+          onVoiceRecordPointerUp={handleVoiceRecordPointerUp}
+          onVoiceRecordPointerCancel={handleVoiceRecordPointerCancel}
           onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
           onPaste={handleComposerPaste}
           onSyncComposerSelection={syncComposerSelection}

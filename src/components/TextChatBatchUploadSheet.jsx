@@ -77,6 +77,7 @@ function BatchUploadTile({
           file={file}
           className="batch-upload-sheet__preview"
           fallbackClassName="batch-upload-sheet__thumb-fallback"
+          preferThumbnailOnly
         />
 
         <div className="batch-upload-sheet__tile-scrim" aria-hidden="true" />
@@ -134,6 +135,7 @@ function BatchUploadDocumentRow({
             file={file}
             className="batch-upload-sheet__document-preview-media"
             fallbackClassName="batch-upload-sheet__document-fallback"
+            preferThumbnailOnly
           />
 
           {isSpoiler ? (

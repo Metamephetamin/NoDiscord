@@ -4060,7 +4060,7 @@
   justify-content: center;
   cursor: pointer;
   overflow: visible;
-  transition: transform 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  transition: color 0.18s ease, opacity 0.18s ease;
 }
 
 .composer-tool:hover {
@@ -4238,9 +4238,27 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  flex: 0 0 auto;
-  margin-left: 2px;
+  gap: 0;
+  flex: 0 0 38px;
+  width: 38px;
+  margin-left: 0;
+}
+
+.composer-tool--voice-slot {
+  width: 38px;
+  height: 38px;
+  margin: 0;
+  align-self: center;
+  justify-content: center;
+  color: #aeb8cb;
+  background: transparent;
+  box-shadow: none;
+  touch-action: none;
+}
+
+.composer-tool--voice-slot:hover {
+  background: transparent;
+  color: #d2d9e8;
 }
 
 .composer-send-button {
@@ -4248,19 +4266,18 @@
   height: 38px;
   flex: 0 0 auto;
   border: 0;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  background: transparent;
   color: #b7c0d4;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  box-shadow: none;
+  transition: color 0.18s ease, opacity 0.18s ease;
 }
 
 .composer-send-button:hover {
-  background: rgba(255, 255, 255, 0.1);
   color: #d2d9e8;
 }
 
@@ -4937,8 +4954,8 @@ html[data-ui-density="compact"] .input-area {
 }
 
 .batch-upload-sheet__preview .pending-upload-preview__thumb {
-  transform: scale(1.01);
-  filter: blur(4px) saturate(1.02);
+  transform: none;
+  filter: none;
 }
 
 .batch-upload-sheet__tile--spoiler .batch-upload-sheet__preview .pending-upload-preview__full {
@@ -5339,9 +5356,18 @@ html[data-ui-density="compact"] .input-area {
 }
 
 .pending-upload-preview__thumb {
-  transform: scale(1.02);
-  filter: blur(6px) saturate(1.02);
-  opacity: 0.95;
+  transform: none;
+  filter: none;
+  opacity: 1;
+}
+
+.pending-upload-preview__thumb--deferred {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pending-upload-preview__thumb--deferred[data-ready="true"] {
+  opacity: 1;
 }
 
 .pending-upload-preview__full {
@@ -6205,13 +6231,19 @@ html[data-ui-density="compact"] .message-composer {
   .composer-send-button {
     width: 40px;
     height: 40px;
-    border-radius: 999px;
-    box-shadow: 0 10px 24px rgba(66, 78, 188, 0.26);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .composer-tool {
     width: 26px;
     height: 26px;
+  }
+
+  .composer-tool--voice-slot {
+    width: 40px;
+    height: 40px;
   }
 
   .composer-tools-end {
@@ -6295,6 +6327,13 @@ html[data-ui-density="compact"] .message-composer {
   }
 
   .composer-send-button {
+    width: 38px;
+    height: 38px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .composer-tool--voice-slot {
     width: 38px;
     height: 38px;
   }

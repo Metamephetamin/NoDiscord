@@ -1260,6 +1260,29 @@ const createWindow = () => {
     emitAppUpdateState();
   });
 
+  if (!app.isPackaged) {
+    mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      if (String(message || "").startsWith("[perf]")) {
+        return;
+      }
+
+      const levelName = Number(level) >= 3 ? "error" : Number(level) >= 2 ? "warn" : "log";
+      if (levelName === "log") {
+        return;
+      }
+
+      console[levelName](`[renderer:${levelName}] ${message} (${sourceId}:${line})`);
+    });
+
+    mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+      console.error(`[renderer:load-failed] ${errorCode} ${errorDescription} ${validatedURL}`);
+    });
+
+    mainWindow.webContents.on("render-process-gone", (_event, details) => {
+      console.error("[renderer:gone]", details);
+    });
+  }
+
   if (RENDERER_DEV_SERVER_URL) {
     mainWindow.loadURL(RENDERER_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "right" });
