@@ -7,10 +7,12 @@ import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { segmentMessageTextByMentions } from "../utils/messageMentions";
 import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
+import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
 import {
   getAttachmentCacheKey,
+  getMessagePoll,
   getUserName,
   isVoiceMessage,
   normalizeAttachmentItems,
@@ -35,6 +37,32 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
       attachmentEncryption: attachmentItem.attachmentEncryption || null,
       sourceUrl: attachmentItem.attachmentSourceUrl || attachmentItem.attachmentUrl,
     }));
+
+const DOCUMENT_IMAGE_EXTENSION_PATTERN = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:[?#].*)?$/i;
+
+function isImageLikeDocumentAttachment(attachmentItem) {
+  const contentType = String(attachmentItem?.attachmentContentType || "").toLowerCase();
+  if (contentType.startsWith("image/")) {
+    return true;
+  }
+
+  const attachmentName = String(attachmentItem?.attachmentName || "");
+  const attachmentUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "");
+  return DOCUMENT_IMAGE_EXTENSION_PATTERN.test(attachmentName) || DOCUMENT_IMAGE_EXTENSION_PATTERN.test(attachmentUrl);
+}
+
+function normalizeRoleName(role) {
+  return String(role?.name || role?.Name || role?.roleName || role?.role_name || "").trim().toLowerCase();
+}
+
+function getRoleColorValue(role) {
+  return String(role?.color || role?.Color || role?.roleColor || role?.role_color || "").trim();
+}
+
+function isDefaultMemberRole(role) {
+  const normalizedRoleName = normalizeRoleName(role);
+  return !normalizedRoleName || normalizedRoleName === "member";
+}
 
 function normalizeTextLinkHref(value) {
   const rawValue = String(value || "").trim();
@@ -66,10 +94,15 @@ function EditedBadge({ message }) {
 const MessageText = memo(function MessageText({ text, mentions, currentUserId }) {
   return segmentMessageTextByMentions(text, mentions).map((segment, index) => {
     if (segment.isMention) {
+      const isSelfUserMention = String(segment.type || "") !== "role" && String(segment.userId || "") === currentUserId;
+      const roleMentionStyle = segment.color
+        ? { color: segment.color, background: `${segment.color}22` }
+        : undefined;
       return (
         <span
-          key={`mention-${index}-${segment.userId}`}
-          className={`message-text__mention ${String(segment.userId || "") === currentUserId ? "message-text__mention--self" : ""}`}
+          key={`mention-${index}-${segment.roleId || segment.userId || segment.text}`}
+          className={`message-text__mention ${isSelfUserMention ? "message-text__mention--self" : ""} ${segment.type === "role" ? "message-text__mention--role" : ""}`}
+          style={roleMentionStyle}
           title={segment.displayName || segment.text}
         >
           {segment.text}
@@ -113,6 +146,177 @@ const MessageText = memo(function MessageText({ text, mentions, currentUserId })
 });
 
 MessageText.displayName = "MessageText";
+
+function MessagePollCard({ poll }) {
+  const pollResetKey = JSON.stringify({
+    question: String(poll?.question || ""),
+    themeId: String(poll?.themeId || ""),
+    totalVoters: Math.max(0, Number(poll?.totalVoters) || 0),
+    options: Array.isArray(poll?.options)
+      ? poll.options.map((option) => ({
+        id: String(option?.id || ""),
+        text: String(option?.text || ""),
+      }))
+      : [],
+    votes: poll?.votes || {},
+    settings: poll?.settings || {},
+  });
+
+  return <MessagePollCardInner key={pollResetKey} poll={poll} />;
+}
+
+function MessagePollCardInner({ poll }) {
+  const [selectedOptionIds, setSelectedOptionIds] = useState([]);
+  const [submitted, setSubmitted] = useState(false);
+  const [addedOptions, setAddedOptions] = useState([]);
+  const [localVotes, setLocalVotes] = useState(() => ({ ...(poll?.votes || {}) }));
+  const [localTotalVoters, setLocalTotalVoters] = useState(() => Math.max(0, Number(poll?.totalVoters) || 0));
+  const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState([]);
+  const options = [...(Array.isArray(poll?.options) ? poll.options : []), ...addedOptions];
+  const pollTheme = useMemo(() => resolvePollTheme(poll?.themeId), [poll?.themeId]);
+  const totalVoters = Math.max(
+    localTotalVoters,
+    Object.values(localVotes).reduce((sum, voteCount) => sum + Math.max(0, Number(voteCount) || 0), 0)
+  );
+
+  const toggleOption = (optionId) => {
+    if (submitted && !poll?.settings?.allowRevoting) {
+      return;
+    }
+
+    setSelectedOptionIds((previous) => {
+      const normalizedOptionId = String(optionId || "");
+      const alreadySelected = previous.includes(normalizedOptionId);
+
+      if (poll?.settings?.allowMultipleAnswers) {
+        return alreadySelected
+          ? previous.filter((value) => value !== normalizedOptionId)
+          : [...previous, normalizedOptionId];
+      }
+
+      if (alreadySelected) {
+        return [];
+      }
+
+      return [normalizedOptionId];
+    });
+  };
+
+  const handleVote = () => {
+    if (!selectedOptionIds.length) {
+      return;
+    }
+
+    setLocalVotes((previous) => {
+      const nextVotes = { ...previous };
+
+      if (submitted && poll?.settings?.allowRevoting && lastSubmittedOptionIds.length) {
+        lastSubmittedOptionIds.forEach((optionId) => {
+          nextVotes[optionId] = Math.max(0, (Number(nextVotes[optionId]) || 0) - 1);
+        });
+      } else if (!submitted) {
+        setLocalTotalVoters((previousTotal) => previousTotal + 1);
+      }
+
+      selectedOptionIds.forEach((optionId) => {
+        nextVotes[optionId] = (Number(nextVotes[optionId]) || 0) + 1;
+      });
+
+      return nextVotes;
+    });
+
+    setLastSubmittedOptionIds([...selectedOptionIds]);
+    setSubmitted(true);
+  };
+
+  const handleAddOption = () => {
+    if (!poll?.settings?.allowAddingOptions || typeof window === "undefined") {
+      return;
+    }
+
+    const nextOptionText = window.prompt("Новый вариант ответа");
+    const normalizedText = String(nextOptionText || "").trim().slice(0, 120);
+    if (!normalizedText) {
+      return;
+    }
+
+    setAddedOptions((previous) => [
+      ...previous,
+      {
+        id: `local-option-${Date.now()}-${previous.length + 1}`,
+        text: normalizedText,
+      },
+    ]);
+  };
+
+  return (
+    <div
+      className="message-poll-card"
+      style={{
+        "--poll-card-background": pollTheme.cardBackground,
+        "--poll-card-shadow": pollTheme.cardShadow,
+        "--poll-card-badge": pollTheme.badgeColor,
+        "--poll-card-track": pollTheme.trackColor,
+        "--poll-card-fill": pollTheme.fillColor,
+        "--poll-card-selected-ring": pollTheme.selectedRing,
+      }}
+    >
+      <div className="message-poll-card__header">
+        <strong>{poll?.question || "Опрос"}</strong>
+        <span className="message-poll-card__badge">Опрос</span>
+      </div>
+
+      <div className="message-poll-card__options">
+        {options.map((option) => {
+          const optionId = String(option?.id || "");
+          const isSelected = selectedOptionIds.includes(optionId);
+          const voteCount = Math.max(0, Number(localVotes[optionId]) || 0);
+          const percent = totalVoters > 0 ? Math.round((voteCount / totalVoters) * 100) : 0;
+
+          return (
+            <button
+              key={optionId}
+              type="button"
+              className={`message-poll-card__option ${isSelected ? "message-poll-card__option--selected" : ""}`}
+              onClick={() => toggleOption(optionId)}
+              disabled={submitted && !poll?.settings?.allowRevoting}
+            >
+              <span className="message-poll-card__option-fill" style={{ width: `${percent}%` }} aria-hidden="true" />
+              <span className="message-poll-card__checkbox" aria-hidden="true" />
+              <span className="message-poll-card__option-text">{option?.text || "Вариант"}</span>
+              <span className="message-poll-card__option-percent">{percent}%</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="message-poll-card__footer">
+        {poll?.settings?.allowAddingOptions ? (
+          <button type="button" className="message-poll-card__add-option" onClick={handleAddOption}>
+            Добавить вариант
+          </button>
+        ) : (
+          <span className="message-poll-card__meta">
+            {totalVoters > 0
+              ? `${totalVoters} ${totalVoters === 1 ? "голос" : totalVoters < 5 ? "голоса" : "голосов"}`
+              : poll?.settings?.allowMultipleAnswers
+                ? "Можно выбрать несколько вариантов."
+                : "Можно выбрать один вариант."}
+          </span>
+        )}
+
+        <button
+          type="button"
+          className="message-poll-card__vote"
+          onClick={handleVote}
+          disabled={!selectedOptionIds.length || (submitted && !poll?.settings?.allowRevoting)}
+        >
+          {submitted ? (poll?.settings?.allowRevoting ? "Голос обновлён" : "Голос учтён") : "Голосовать"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function MessageInviteCardBase({ inviteCode }) {
   const [preview, setPreview] = useState(null);
@@ -302,7 +506,10 @@ function MessageAttachmentCard({
   selectionMode,
   onToggleSelection,
   onOpenMediaPreview,
+  onRevealSpoiler,
+  isSpoilerRevealed,
 }) {
+  const isHiddenSpoiler = Boolean(attachmentItem.attachmentSpoiler) && !isSpoilerRevealed;
   const openAttachmentMediaPreview = () => {
     const type = attachmentItem.isImage ? "image" : "video";
     onOpenMediaPreview(
@@ -323,6 +530,13 @@ function MessageAttachmentCard({
       event.preventDefault();
       event.stopPropagation();
       onToggleSelection(messageItem.id);
+      return;
+    }
+
+    if (isHiddenSpoiler) {
+      event.preventDefault();
+      event.stopPropagation();
+      onRevealSpoiler?.(attachmentItem.cacheKey);
       return;
     }
 
@@ -359,11 +573,17 @@ function MessageAttachmentCard({
       return (
         <button
           type="button"
-          className="message-media message-media--button"
+          className={`message-media message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""}`}
           onClick={handlePreviewClick}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <img className="message-media__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "image"} />
+          {isHiddenSpoiler ? (
+            <span className="message-media__spoiler-layer" aria-hidden="true">
+              <span className="message-media__spoiler-noise" />
+              <span className="message-media__spoiler-label">Spoiler</span>
+            </span>
+          ) : null}
         </button>
       );
     }
@@ -372,19 +592,28 @@ function MessageAttachmentCard({
       return (
         <button
           type="button"
-          className="message-media message-media--video message-media--button"
+          className={`message-media message-media--video message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""}`}
           onClick={handlePreviewClick}
           aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <video className="message-media__video" src={attachmentItem.attachmentUrl} preload="metadata" playsInline muted />
+          {isHiddenSpoiler ? (
+            <span className="message-media__spoiler-layer" aria-hidden="true">
+              <span className="message-media__spoiler-noise" />
+              <span className="message-media__spoiler-label">Spoiler</span>
+            </span>
+          ) : null}
           <span className="message-media__play" aria-hidden="true" />
         </button>
       );
     }
 
+    const isDocumentAttachment = Boolean(attachmentItem.attachmentAsFile);
+    const showDocumentPreview = isDocumentAttachment && isImageLikeDocumentAttachment(attachmentItem);
+
     return (
       <a
-        className="message-attachment"
+        className={`message-attachment ${isDocumentAttachment ? "message-attachment--document" : ""}`}
         href={attachmentItem.attachmentUrl}
         target="_blank"
         rel="noreferrer"
@@ -398,10 +627,17 @@ function MessageAttachmentCard({
           onToggleSelection(messageItem.id);
         }}
       >
-        <span className="message-attachment__icon" aria-hidden="true" />
+        {showDocumentPreview ? (
+          <span className="message-attachment__preview" aria-hidden="true">
+            <img src={attachmentItem.attachmentUrl} alt="" loading="lazy" decoding="async" />
+          </span>
+        ) : (
+          <span className="message-attachment__icon" aria-hidden="true" />
+        )}
         <span className="message-attachment__meta">
           <span className="message-attachment__name">{attachmentItem.attachmentName || "Файл"}</span>
           <span className="message-attachment__size">{formatFileSize(attachmentItem.attachmentSize)}</span>
+          {isDocumentAttachment ? <span className="message-attachment__open-with">OPEN WITH</span> : null}
         </span>
       </a>
     );
@@ -427,18 +663,36 @@ function MessageAttachmentCard({
 }
 
 const MessageAttachmentCollection = memo(function MessageAttachmentCollection(props) {
-  const { messageItem, attachments, galleryAttachments = attachments } = props;
+  const {
+    messageItem,
+    attachments,
+    galleryAttachments = attachments,
+    revealedSpoilerKeys,
+    onRevealSpoiler,
+  } = props;
 
   if (!attachments.length) {
     return null;
   }
 
   if (attachments.length === 1) {
-    return <MessageAttachmentCard {...props} attachmentItem={attachments[0]} galleryAttachments={galleryAttachments} />;
+    return (
+      <MessageAttachmentCard
+        {...props}
+        attachmentItem={attachments[0]}
+        galleryAttachments={galleryAttachments}
+        isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
+        onRevealSpoiler={onRevealSpoiler}
+      />
+    );
   }
 
-  const visualAttachments = attachments.filter((attachmentItem) => attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo);
-  const fileAttachments = attachments.filter((attachmentItem) => !attachmentItem.isVoice && !attachmentItem.isImage && !attachmentItem.isVideo);
+  const visualAttachments = attachments.filter((attachmentItem) => (
+    !attachmentItem.attachmentAsFile && (attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo)
+  ));
+  const fileAttachments = attachments.filter((attachmentItem) => (
+    Boolean(attachmentItem.attachmentAsFile) || (!attachmentItem.isVoice && !attachmentItem.isImage && !attachmentItem.isVideo)
+  ));
   const featureStackCount = (
     (visualAttachments.length === 3 || visualAttachments.length === 4)
     && !fileAttachments.length
@@ -478,7 +732,13 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
               key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
               className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""} ${featureStackCount && attachmentIndex === 0 ? "message-attachment-grid__item--feature-primary" : ""}`}
             >
-              <MessageAttachmentCard {...props} attachmentItem={attachmentItem} galleryAttachments={galleryAttachments} />
+              <MessageAttachmentCard
+                {...props}
+                attachmentItem={attachmentItem}
+                galleryAttachments={galleryAttachments}
+                isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
+                onRevealSpoiler={onRevealSpoiler}
+              />
             </div>
           ))}
         </div>
@@ -488,7 +748,13 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
         <div className="message-attachment-list">
           {fileAttachments.map((attachmentItem) => (
             <div key={`${messageItem.id}-${attachmentItem.attachmentIndex}`} className="message-attachment-list__item">
-              <MessageAttachmentCard {...props} attachmentItem={attachmentItem} galleryAttachments={galleryAttachments} />
+              <MessageAttachmentCard
+                {...props}
+                attachmentItem={attachmentItem}
+                galleryAttachments={galleryAttachments}
+                isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
+                onRevealSpoiler={onRevealSpoiler}
+              />
             </div>
           ))}
         </div>
@@ -516,10 +782,13 @@ function TextChatMessageList({
   isDirectChat,
   currentUserId,
   user,
+  serverMembers = [],
+  serverRoles = [],
   selectionMode,
   onToggleSelection,
   onOpenContextMenu,
   onOpenUserContextMenu,
+  onInsertMentionByUserId,
   onOpenMediaPreview,
   onToggleReaction,
   onJumpToReply,
@@ -528,7 +797,32 @@ function TextChatMessageList({
   const avatarLongPress = useMobileLongPress();
   const [pressedMessageId, setPressedMessageId] = useState("");
   const [pressedAvatarMessageId, setPressedAvatarMessageId] = useState("");
+  const [revealedSpoilerKeys, setRevealedSpoilerKeys] = useState(() => new Set());
   const currentUserName = useMemo(() => getUserName(user).toLowerCase(), [user]);
+  const serverRoleById = useMemo(
+    () => new Map((serverRoles || []).map((role) => [String(role?.id || ""), role])),
+    [serverRoles]
+  );
+  const authorRoleColorByUserId = useMemo(
+    () =>
+      new Map(
+        (serverMembers || []).flatMap((member) => {
+          const userId = String(member?.userId || member?.id || "");
+          if (!userId) {
+            return [];
+          }
+
+          const resolvedRole = serverRoleById.get(String(member?.roleId || member?.role_id || "")) || member;
+          const resolvedRoleColor = getRoleColorValue(resolvedRole);
+          if (!resolvedRoleColor || isDefaultMemberRole(resolvedRole)) {
+            return [[userId, ""]];
+          }
+
+          return [[userId, resolvedRoleColor]];
+        })
+      ),
+    [serverMembers, serverRoleById]
+  );
   const messageIndexById = useMemo(
     () => new Map(messages.map((messageItem, index) => [String(messageItem.id), index])),
     [messages]
@@ -542,6 +836,22 @@ function TextChatMessageList({
 
     messageRefs.current.delete(messageId);
   }, [messageRefs, registerMeasuredNode]);
+  const revealSpoilerAttachment = useCallback((attachmentCacheKey) => {
+    const normalizedKey = String(attachmentCacheKey || "");
+    if (!normalizedKey) {
+      return;
+    }
+
+    setRevealedSpoilerKeys((previous) => {
+      if (previous.has(normalizedKey)) {
+        return previous;
+      }
+
+      const next = new Set(previous);
+      next.add(normalizedKey);
+      return next;
+    });
+  }, []);
 
   const renderedAttachmentsByMessageId = useMemo(() => new Map(
     visibleMessages.map((messageItem) => [
@@ -561,6 +871,9 @@ function TextChatMessageList({
         const attachmentContentType = attachmentView?.contentType || attachmentItem.attachmentContentType || "";
         const attachmentSize = attachmentView?.size || attachmentItem.attachmentSize || null;
         const voiceMessage = normalizeVoiceMessageMetadata(attachmentItem.voiceMessage);
+        const attachmentAsFile = Boolean(attachmentItem.attachmentAsFile);
+        const isImageContent = String(attachmentContentType).startsWith("image/");
+        const isVideoContent = String(attachmentContentType).startsWith("video/");
 
         return {
           ...attachmentItem,
@@ -575,9 +888,11 @@ function TextChatMessageList({
           attachmentName,
           attachmentContentType,
           attachmentSize,
+          attachmentSpoiler: Boolean(attachmentItem.attachmentSpoiler),
+          attachmentAsFile,
           voiceMessage,
-          isImage: String(attachmentContentType).startsWith("image/"),
-          isVideo: String(attachmentContentType).startsWith("video/"),
+          isImage: isImageContent && !attachmentAsFile,
+          isVideo: isVideoContent && !attachmentAsFile,
           isVoice: isVoiceMessage({
             attachmentUrl,
             attachmentEncryption: attachmentItem.attachmentEncryption,
@@ -608,6 +923,7 @@ function TextChatMessageList({
           const hasRenderableAttachments = attachments.length > 0;
           const reactions = normalizedReactionsByMessageId.get(String(messageItem.id)) || [];
           const messageText = String(messageItem.message || "");
+          const messagePoll = getMessagePoll(messageItem);
           const inviteCode = extractInviteCode(messageText);
           const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
           const isOwnMessage =
@@ -620,19 +936,28 @@ function TextChatMessageList({
           const isMediaOnlyMessage =
             !messageText.trim()
             && !inviteCode
+            && !messagePoll
             && hasRenderableAttachments
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
-          const showFloatingMediaFooter = hasRenderableAttachments && !messageText.trim() && !reactions.length;
+          const showFloatingMediaFooter = hasRenderableAttachments && !messageText.trim() && !reactions.length && !messagePoll;
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
+            && !messagePoll
             && !hasRenderableAttachments
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId
             && !messageText.includes("\n")
             && messageText.trim().length <= 14;
+          const authorRoleColor = !isDirectChat
+            ? authorRoleColorByUserId.get(String(messageItem.authorUserId || "")) || ""
+            : "";
+          const forwardedFromRoleColor = !isDirectChat
+            ? authorRoleColorByUserId.get(String(messageItem.forwardedFromUserId || "")) || ""
+            : "";
+          const canInsertAuthorMention = !isDirectChat && typeof onInsertMentionByUserId === "function";
 
           const handleMessageClick = selectionMode
             ? (event) => {
@@ -693,7 +1018,21 @@ function TextChatMessageList({
               >
                 {!isDirectChat && !isForwardGroupFollow ? (
                   <div className="message-author">
-                    <span>{messageItem.username || "User"}</span>
+                    <button
+                      type="button"
+                      className={`message-author__name ${canInsertAuthorMention ? "message-author__name--interactive" : ""}`}
+                      style={authorRoleColor ? { color: authorRoleColor } : undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!canInsertAuthorMention) {
+                          return;
+                        }
+
+                        onInsertMentionByUserId?.(messageItem.authorUserId, messageItem.username || "User");
+                      }}
+                    >
+                      {messageItem.username || "User"}
+                    </button>
                     <span className="message-meta">
                       <span className="message-time">{formatTime(messageItem.timestamp)}</span>
                       <EditedBadge message={messageItem} />
@@ -704,9 +1043,37 @@ function TextChatMessageList({
                 {messageItem.forwardedFromUsername && !isForwardGroupFollow ? (
                   <div className="message-forwarded">
                     <span className="message-forwarded__label">Переслал</span>
-                    <strong>{messageItem.username}</strong>
+                    <button
+                      type="button"
+                      className={`message-author__name ${canInsertAuthorMention ? "message-author__name--interactive" : ""}`}
+                      style={authorRoleColor ? { color: authorRoleColor } : undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!canInsertAuthorMention) {
+                          return;
+                        }
+
+                        onInsertMentionByUserId?.(messageItem.authorUserId, messageItem.username || "User");
+                      }}
+                    >
+                      {messageItem.username}
+                    </button>
                     <span className="message-forwarded__label">Автор</span>
-                    <strong>{messageItem.forwardedFromUsername}</strong>
+                    <button
+                      type="button"
+                      className={`message-author__name ${canInsertAuthorMention ? "message-author__name--interactive" : ""}`}
+                      style={forwardedFromRoleColor ? { color: forwardedFromRoleColor } : undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!canInsertAuthorMention || !messageItem.forwardedFromUserId) {
+                          return;
+                        }
+
+                        onInsertMentionByUserId?.(messageItem.forwardedFromUserId, messageItem.forwardedFromUsername || "User");
+                      }}
+                    >
+                      {messageItem.forwardedFromUsername}
+                    </button>
                   </div>
                 ) : null}
 
@@ -727,7 +1094,7 @@ function TextChatMessageList({
                   </button>
                 ) : null}
 
-                {messageText ? (
+                {messageText && !messagePoll ? (
                   useInlineFooter ? (
                     <div className="message-text-row">
                       <div className="message-text">
@@ -751,6 +1118,8 @@ function TextChatMessageList({
                   )
                 ) : null}
 
+                {messagePoll ? <MessagePollCard poll={messagePoll} /> : null}
+
                 {inviteCode ? <MessageInviteCard inviteCode={inviteCode} /> : null}
 
                 <MessageAttachmentCollection
@@ -759,6 +1128,8 @@ function TextChatMessageList({
                   selectionMode={selectionMode}
                   onToggleSelection={onToggleSelection}
                   onOpenMediaPreview={onOpenMediaPreview}
+                  revealedSpoilerKeys={revealedSpoilerKeys}
+                  onRevealSpoiler={revealSpoilerAttachment}
                 />
 
                 {((isDirectChat && !useInlineFooter) || reactions.length || showFloatingMediaFooter) ? (
@@ -843,10 +1214,13 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
     && previousProps.isDirectChat === nextProps.isDirectChat
     && previousProps.currentUserId === nextProps.currentUserId
     && previousProps.user === nextProps.user
+    && previousProps.serverMembers === nextProps.serverMembers
+    && previousProps.serverRoles === nextProps.serverRoles
     && previousProps.selectionMode === nextProps.selectionMode
     && previousProps.onToggleSelection === nextProps.onToggleSelection
     && previousProps.onOpenContextMenu === nextProps.onOpenContextMenu
     && previousProps.onOpenUserContextMenu === nextProps.onOpenUserContextMenu
+    && previousProps.onInsertMentionByUserId === nextProps.onInsertMentionByUserId
     && previousProps.onOpenMediaPreview === nextProps.onOpenMediaPreview
     && previousProps.onToggleReaction === nextProps.onToggleReaction
     && previousProps.onJumpToReply === nextProps.onJumpToReply

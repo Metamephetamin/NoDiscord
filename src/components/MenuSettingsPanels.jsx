@@ -1,6 +1,7 @@
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
+import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -591,10 +592,18 @@ export const ServerSettings = ({
                 <div key={member.userId} className="server-members-panel__item server-members-panel__item--settings">
                   <AnimatedAvatar className="server-members-panel__avatar" src={member.avatar} alt={member.name} />
                   <div className="server-members-panel__meta">
-                    <span className="server-members-panel__name">
+                    <button
+                      type="button"
+                      className="server-members-panel__name server-members-panel__name--interactive"
+                      onClick={() => emitInsertMentionRequest({
+                        type: "user",
+                        userId: member.userId,
+                        displayName: member.name,
+                      })}
+                    >
                       <span className="server-members-panel__role-dot" style={{ backgroundColor: memberRole?.color || "#7b89a8" }} aria-hidden="true" />
                       {member.name}
-                    </span>
+                    </button>
                     <span className="server-members-panel__role">{memberRole?.name || "Member"}</span>
                   </div>
                   <div className="server-members-panel__indicators">

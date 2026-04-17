@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedMedia from "./AnimatedMedia";
-import { getDefaultMediaFrame, normalizeMediaFrame } from "../utils/mediaFrames";
+import { getDefaultMediaFrame, getMediaFramePositionBounds, normalizeMediaFrame } from "../utils/mediaFrames";
 
 const TARGET_COPY = {
   avatar: {
@@ -52,6 +52,7 @@ export default function MediaFrameEditorModal({
 }) {
   const previewFrameRef = useRef(null);
   const dragStateRef = useRef(null);
+  const suppressBackdropCloseRef = useRef(false);
   const [draftFrame, setDraftFrame] = useState(() => normalizeMediaFrame(frame));
   const copy = TARGET_COPY[target] || TARGET_COPY.avatar;
   const previewTitle = avatarAlt || (target === "serverIcon" ? "Сервер" : "Ваш профиль");
@@ -81,11 +82,18 @@ export default function MediaFrameEditorModal({
         return;
       }
 
-      const deltaX = ((event.clientX - dragState.startX) / rect.width) * (100 / dragState.zoom);
-      const deltaY = ((event.clientY - dragState.startY) / rect.height) * (100 / dragState.zoom);
+      const zoomTravelBoost = 1 + (Math.max(0, dragState.frame.zoom - 1) * 0.72);
+      const horizontalDragSpeed = 1.18 * zoomTravelBoost * 1.18;
+      const verticalDragSpeed = 1.18 * zoomTravelBoost;
+      const deltaX = ((event.clientX - dragState.startX) / rect.width) * (100 * horizontalDragSpeed);
+      const deltaY = ((event.clientY - dragState.startY) / rect.height) * (100 * verticalDragSpeed);
+      const bounds = getMediaFramePositionBounds(dragState.frame.zoom);
+      if (!suppressBackdropCloseRef.current && (Math.abs(event.clientX - dragState.startX) > 3 || Math.abs(event.clientY - dragState.startY) > 3)) {
+        suppressBackdropCloseRef.current = true;
+      }
       setDraftFrame({
-        x: clamp(dragState.frame.x - deltaX, 0, 100),
-        y: clamp(dragState.frame.y - deltaY, 0, 100),
+        x: clamp(dragState.frame.x - deltaX, bounds.min, bounds.max),
+        y: clamp(dragState.frame.y - deltaY, bounds.min, bounds.max),
         zoom: dragState.frame.zoom,
       });
     };
@@ -121,12 +129,25 @@ export default function MediaFrameEditorModal({
       startX: event.clientX,
       startY: event.clientY,
       frame: normalizeMediaFrame(normalizedDraftFrame),
-      zoom: Math.max(1, Number(normalizedDraftFrame.zoom) || 1),
+      zoom: Number(normalizedDraftFrame.zoom) || 1,
     };
   };
 
+  const handleBackdropClick = (event) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    if (suppressBackdropCloseRef.current) {
+      suppressBackdropCloseRef.current = false;
+      return;
+    }
+
+    onCancel?.();
+  };
+
   return (
-    <div className="media-frame-editor" onClick={onCancel}>
+    <div className="media-frame-editor" onClick={handleBackdropClick}>
       <div className="media-frame-editor__dialog" onClick={(event) => event.stopPropagation()}>
         <div className="media-frame-editor__header">
           <div>
@@ -276,14 +297,14 @@ export default function MediaFrameEditorModal({
               <span>Масштаб</span>
               <input
                 type="range"
-                min="1"
-                max="3"
+                min="0.2"
+                max="5"
                 step="0.01"
                 value={normalizedDraftFrame.zoom}
                 onChange={(event) =>
                   setDraftFrame((previous) => ({
                     ...normalizeMediaFrame(previous),
-                    zoom: clamp(Number(event.target.value) || 1, 1, 3),
+                    zoom: clamp(Number(event.target.value) || 1, 0.2, 5),
                   }))
                 }
               />

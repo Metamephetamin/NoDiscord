@@ -39,6 +39,8 @@ export default function TextChatView(props) {
     selectionMode,
     selectedMessageIds,
     directTargets,
+    serverMembers,
+    serverRoles,
     openForwardModal,
     clearSelectionMode,
     messages,
@@ -62,6 +64,7 @@ export default function TextChatView(props) {
     openUserContextMenu,
     openMediaPreview,
     handleToggleReaction,
+    handleComposerPaste,
     selectedFiles,
     uploadingFile,
     composerDropActive,
@@ -86,6 +89,7 @@ export default function TextChatView(props) {
     retryPendingUpload,
     clearPendingUploads,
     updatePendingUploadCompressionMode,
+    updatePendingUploadSpoilerMode,
     toggleBatchUploadGrouping,
     toggleBatchUploadSendAsDocuments,
     toggleBatchUploadRememberChoice,
@@ -101,6 +105,8 @@ export default function TextChatView(props) {
     setComposerEmojiPickerOpen,
     insertComposerEmoji,
     sendAnimatedEmoji,
+    sendPoll,
+    handleInsertMentionByUserId,
     applyMentionSuggestion,
     setSelectedMentionSuggestionIndex,
     setMentionSuggestionsOpen,
@@ -198,7 +204,7 @@ export default function TextChatView(props) {
         onOpenPinned={stableScrollToMessage}
         onReturnToJumpPoint={onReturnToJumpPoint}
       />
-      <JumpToLatestBar pendingCount={pendingNewMessagesCount} onJump={() => scrollToLatest("smooth")} />
+      <JumpToLatestBar pendingCount={pendingNewMessagesCount} onJump={() => scrollToLatest("auto")} />
       {PERF_ENABLED ? (
         <Profiler id="TextChatMessageList" onRender={handleMessageListRender}>
           <TextChatMessageList
@@ -218,10 +224,13 @@ export default function TextChatView(props) {
             isDirectChat={isDirectChat}
             currentUserId={currentUserId}
             user={user}
+            serverMembers={serverMembers}
+            serverRoles={serverRoles}
             selectionMode={selectionMode}
             onToggleSelection={stableToggleMessageSelection}
             onOpenContextMenu={stableOpenMessageContextMenu}
             onOpenUserContextMenu={stableOpenUserContextMenu}
+            onInsertMentionByUserId={handleInsertMentionByUserId}
             onOpenMediaPreview={stableOpenMediaPreview}
             onToggleReaction={stableHandleToggleReaction}
             onJumpToReply={stableScrollToMessage}
@@ -245,10 +254,13 @@ export default function TextChatView(props) {
           isDirectChat={isDirectChat}
           currentUserId={currentUserId}
           user={user}
+          serverMembers={serverMembers}
+          serverRoles={serverRoles}
           selectionMode={selectionMode}
           onToggleSelection={stableToggleMessageSelection}
           onOpenContextMenu={stableOpenMessageContextMenu}
           onOpenUserContextMenu={stableOpenUserContextMenu}
+          onInsertMentionByUserId={handleInsertMentionByUserId}
           onOpenMediaPreview={stableOpenMediaPreview}
           onToggleReaction={stableHandleToggleReaction}
           onJumpToReply={stableScrollToMessage}
@@ -274,6 +286,8 @@ export default function TextChatView(props) {
             selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
             textareaRef={textareaRef}
             message={message}
+            serverMembers={serverMembers}
+            serverRoles={serverRoles}
             batchUploadOptions={batchUploadOptions}
             preferExplicitSend={preferExplicitSend}
             onFileChange={handleFileChange}
@@ -281,6 +295,7 @@ export default function TextChatView(props) {
             onRetryPendingUpload={retryPendingUpload}
             onClearPendingUploads={clearPendingUploads}
             onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+            onUpdatePendingUploadSpoilerMode={updatePendingUploadSpoilerMode}
             onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
             onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
             onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
@@ -292,6 +307,7 @@ export default function TextChatView(props) {
             onStopEditing={stopEditingMessage}
             onCancelVoiceRecording={handleCancelVoiceRecording}
             onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
+            onPaste={handleComposerPaste}
             onSyncComposerSelection={syncComposerSelection}
             onToggleEmojiPicker={(nextValue) => {
               syncComposerSelection();
@@ -299,6 +315,7 @@ export default function TextChatView(props) {
             }}
             onInsertEmoji={insertComposerEmoji}
             onSendAnimatedEmoji={sendAnimatedEmoji}
+            onSendPoll={sendPoll}
             onApplyMentionSuggestion={applyMentionSuggestion}
             onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
             onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}
@@ -327,6 +344,8 @@ export default function TextChatView(props) {
           selectedMentionSuggestionIndex={selectedMentionSuggestionIndex}
           textareaRef={textareaRef}
           message={message}
+          serverMembers={serverMembers}
+          serverRoles={serverRoles}
           batchUploadOptions={batchUploadOptions}
           preferExplicitSend={preferExplicitSend}
           onFileChange={handleFileChange}
@@ -334,6 +353,7 @@ export default function TextChatView(props) {
           onRetryPendingUpload={retryPendingUpload}
           onClearPendingUploads={clearPendingUploads}
           onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+          onUpdatePendingUploadSpoilerMode={updatePendingUploadSpoilerMode}
           onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
           onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
           onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
@@ -345,6 +365,7 @@ export default function TextChatView(props) {
           onStopEditing={stopEditingMessage}
           onCancelVoiceRecording={handleCancelVoiceRecording}
           onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
+          onPaste={handleComposerPaste}
           onSyncComposerSelection={syncComposerSelection}
           onToggleEmojiPicker={(nextValue) => {
             syncComposerSelection();
@@ -352,6 +373,7 @@ export default function TextChatView(props) {
           }}
           onInsertEmoji={insertComposerEmoji}
           onSendAnimatedEmoji={sendAnimatedEmoji}
+          onSendPoll={sendPoll}
           onApplyMentionSuggestion={applyMentionSuggestion}
           onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
           onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}

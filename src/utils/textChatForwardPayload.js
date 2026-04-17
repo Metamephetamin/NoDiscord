@@ -50,6 +50,8 @@ export async function buildForwardPayloadForTargetChannel({
         attachmentName: uploaded?.fileName || forwardFile.name || "attachment",
         attachmentSize: uploaded?.size || preparedAttachment.uploadBlob.size || null,
         attachmentContentType: uploaded?.contentType || forwardFile.type || "application/octet-stream",
+        attachmentSpoiler: Boolean(attachmentItem.attachmentSpoiler),
+        attachmentAsFile: Boolean(attachmentItem.attachmentAsFile),
         attachmentEncryption: null,
         voiceMessage: attachmentItem.voiceMessage || null,
       });
@@ -72,6 +74,8 @@ export async function buildForwardPayloadForTargetChannel({
       attachmentName: forwardedAttachments[0]?.attachmentName || "",
       attachmentSize: forwardedAttachments[0]?.attachmentSize || null,
       attachmentContentType: forwardedAttachments[0]?.attachmentContentType || "",
+      attachmentSpoiler: Boolean(forwardedAttachments[0]?.attachmentSpoiler),
+      attachmentAsFile: Boolean(forwardedAttachments[0]?.attachmentAsFile),
       attachmentEncryption: null,
     });
   }

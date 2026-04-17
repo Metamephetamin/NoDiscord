@@ -1,9 +1,14 @@
+import { compressImageInWorker } from "./imageCompressionWorkerClient";
+
 const COMPRESSIBLE_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
   "image/png",
   "image/webp",
 ]);
+
+const THUMBNAIL_MAX_EDGE = 96;
+const THUMBNAIL_QUALITY = 0.72;
 
 function buildUploadId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -27,14 +32,13 @@ export function getPendingUploadKind(file) {
 }
 
 export function isCompressibleImageUpload(upload) {
-  return COMPRESSIBLE_IMAGE_TYPES.has(String(upload?.file?.type || upload?.type || "").toLowerCase());
+  return COMPRESSIBLE_IMAGE_TYPES.has(
+    String(upload?.file?.type || upload?.type || "").toLowerCase()
+  );
 }
 
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
-  const previewUrl = (kind === "image" || kind === "video")
-    ? createPendingUploadPreview(file)
-    : "";
 
   return {
     id: buildUploadId(),
@@ -43,12 +47,14 @@ export function createPendingUpload(file) {
     size: Number(file?.size) || 0,
     type: String(file?.type || "").trim(),
     kind,
-    previewUrl,
+    previewUrl: "",
+    thumbnailUrl: "",
     status: "queued",
     progress: 0,
     error: "",
     retryable: false,
     compressionMode: "original",
+    hideWithSpoiler: false,
   };
 }
 
@@ -64,15 +70,15 @@ export function createPendingUploadPreview(fileOrUpload) {
 }
 
 export function revokePendingUploadPreview(upload) {
-  if (!upload?.previewUrl) {
-    return;
-  }
-
-  try {
-    URL.revokeObjectURL(upload.previewUrl);
-  } catch {
-    // ignore revocation failures
-  }
+  [upload?.previewUrl, upload?.thumbnailUrl]
+    .filter(Boolean)
+    .forEach((url) => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // Ignore revocation failures.
+      }
+    });
 }
 
 export function revokePendingUploadPreviews(uploads) {
@@ -90,13 +96,88 @@ function loadImageElement(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Не удалось подготовить изображение к сжатию."));
+    image.onerror = () => reject(new Error("Failed to decode image."));
     image.decoding = "async";
     image.src = src;
   });
 }
 
-async function compressImageFile(file) {
+async function renderImageThumbnailCanvas(file, maxEdge = THUMBNAIL_MAX_EDGE) {
+  const canvas = document.createElement("canvas");
+  const sourceUrl = URL.createObjectURL(file);
+
+  try {
+    if (typeof createImageBitmap === "function") {
+      try {
+        const bitmap = await createImageBitmap(file);
+        try {
+          const scale = Math.min(1, maxEdge / Math.max(bitmap.width || 1, bitmap.height || 1));
+          const width = Math.max(1, Math.round((bitmap.width || 1) * scale));
+          const height = Math.max(1, Math.round((bitmap.height || 1) * scale));
+          canvas.width = width;
+          canvas.height = height;
+
+          const context = canvas.getContext("2d", { alpha: false });
+          if (!context) {
+            throw new Error("Failed to create thumbnail canvas.");
+          }
+
+          context.drawImage(bitmap, 0, 0, width, height);
+          return canvas;
+        } finally {
+          bitmap.close?.();
+        }
+      } catch {
+        // Fall back to the <img> decode path for files that fail createImageBitmap.
+      }
+    }
+
+    const image = await loadImageElement(sourceUrl);
+    const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+    const width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
+    const height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      throw new Error("Failed to create thumbnail canvas.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+export async function createPendingUploadThumbnail(fileOrUpload) {
+  const file = fileOrUpload?.file instanceof File ? fileOrUpload.file : fileOrUpload;
+  const kind = getPendingUploadKind(file);
+  if (!(file instanceof File) || kind !== "image") {
+    return "";
+  }
+
+  const canvas = await renderImageThumbnailCanvas(file);
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (value) => {
+        if (value) {
+          resolve(value);
+          return;
+        }
+
+        reject(new Error("Failed to generate thumbnail blob."));
+      },
+      "image/jpeg",
+      THUMBNAIL_QUALITY
+    );
+  });
+
+  return URL.createObjectURL(blob);
+}
+
+async function compressImageFileOnMainThread(file) {
   const sourceUrl = URL.createObjectURL(file);
 
   try {
@@ -111,7 +192,7 @@ async function compressImageFile(file) {
     const context = canvas.getContext("2d", { alpha: false });
 
     if (!context) {
-      throw new Error("Не удалось подготовить холст для сжатия.");
+      throw new Error("Failed to prepare compression canvas.");
     }
 
     context.drawImage(image, 0, 0, width, height);
@@ -124,7 +205,7 @@ async function compressImageFile(file) {
             return;
           }
 
-          reject(new Error("Не удалось получить сжатый файл."));
+          reject(new Error("Failed to create compressed file."));
         },
         "image/jpeg",
         0.86
@@ -140,10 +221,31 @@ async function compressImageFile(file) {
   }
 }
 
+async function compressImageFile(file) {
+  try {
+    const compressedBlob = await compressImageInWorker({
+      file,
+      maxEdge: 2560,
+      quality: 0.86,
+    });
+
+    if (compressedBlob instanceof Blob) {
+      return new File([compressedBlob], replaceFileExtension(file.name, ".jpg"), {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      });
+    }
+  } catch {
+    // Fall back to the main-thread compression path.
+  }
+
+  return compressImageFileOnMainThread(file);
+}
+
 export async function preparePendingUploadForSend(upload) {
   const sourceFile = upload?.file;
   if (!(sourceFile instanceof File)) {
-    throw new Error("Файл вложения не найден.");
+    throw new Error("Attachment file was not found.");
   }
 
   if (upload?.compressionMode === "file") {

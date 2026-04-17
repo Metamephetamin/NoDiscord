@@ -667,7 +667,9 @@ export default function useTextChatMessageActions({
         attachmentList,
         item.replyToMessageId || null,
         item.replyToUsername || null,
-        item.replyPreview || null
+        item.replyPreview || null,
+        Boolean(item.attachmentSpoiler || primaryAttachment?.attachmentSpoiler),
+        Boolean(item.attachmentAsFile || primaryAttachment?.attachmentAsFile)
       );
 
       if (index < normalizedPayload.length - 1) {

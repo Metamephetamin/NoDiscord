@@ -160,10 +160,10 @@ public class ServerStateService
         normalized.Id = ServerChannelAuthorization.NormalizeSharedServerId(
             string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim(),
             string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim());
-        normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name.Trim();
+        normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name;
         normalized.Description = string.IsNullOrWhiteSpace(normalized.Description)
             ? string.Empty
-            : normalized.Description.Trim();
+            : normalized.Description;
         if (normalized.Description.Length > 280)
         {
             normalized.Description = normalized.Description[..280];

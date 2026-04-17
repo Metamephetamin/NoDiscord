@@ -3,6 +3,7 @@ import { normalizeMediaFrame, parseMediaFrame } from "./mediaFrames";
 import { getStoredUser } from "./auth";
 export const SERVERS_STORAGE_KEY = "nd_servers_v2";
 export const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
+export const ACTIVE_TEXT_CHANNEL_STORAGE_KEY = "nd_active_text_channel_by_server";
 export const NOISE_SUPPRESSION_STORAGE_KEY = "nd_noise_suppression_mode";
 export const ECHO_CANCELLATION_STORAGE_KEY = "nd_echo_cancellation_enabled";
 export const DIRECT_NOTIFICATIONS_STORAGE_KEY = "nd_direct_notifications";
@@ -101,6 +102,30 @@ export const getDisplayName = (user) => {
   const fullName = `${firstName} ${lastName}`.trim();
 
   return fullName || user?.name || user?.email || "User";
+};
+export const isUserCurrentlyOnline = (user) => {
+  const explicitOnlineValue =
+    user?.isOnline
+    ?? user?.is_online
+    ?? user?.online
+    ?? user?.online_now;
+  if (explicitOnlineValue !== undefined && explicitOnlineValue !== null) {
+    return Boolean(explicitOnlineValue);
+  }
+
+  const presenceValues = [
+    user?.status,
+    user?.presence,
+    user?.presenceStatus,
+    user?.presence_status,
+    user?.onlineStatus,
+    user?.online_status,
+  ];
+
+  return presenceValues.some((value) => {
+    const normalizedValue = String(value || "").trim().toLowerCase();
+    return normalizedValue === "online" || normalizedValue === "active" || normalizedValue === "available";
+  });
 };
 export const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || "";
 export const getUserAvatarFrame = (user) =>
@@ -357,14 +382,16 @@ export const canAssignRoleToMember = (server, actorUserId, targetUserId, nextRol
 export const createServer = (name, user, options = {}) => {
   const ownerUser = user || readSessionUser();
   const ownerId = getCurrentUserId(ownerUser) || createId("owner");
+  const rawName = typeof name === "string" ? name : "";
+  const rawDescription = String(options?.description || "");
   const ownerMember = ownerUser
     ? createServerMember(ownerUser, "owner")
     : { userId: ownerId, name: "Owner", avatar: "", roleId: "owner" };
 
   return {
   id: getScopedPrivateServerId(createId("server"), ownerUser),
-  name: name?.trim() || "Новый сервер",
-  description: String(options?.description || "").trim().slice(0, 280),
+  name: rawName.trim() ? rawName : "Новый сервер",
+  description: rawDescription.slice(0, 280),
   icon: String(options?.icon || DEFAULT_SERVER_ICON),
   iconFrame: normalizeMediaFrame(options?.iconFrame, { allowNull: false }),
   isDefault: false,
@@ -417,7 +444,7 @@ export const normalizeServers = (value, currentUser) => {
       isDefault: false,
       id: nextId,
       name: String(server?.name || `Сервер ${index + 1}`),
-      description: String(server?.description || server?.Description || "").trim().slice(0, 280),
+      description: String(server?.description || server?.Description || "").slice(0, 280),
       icon: server?.icon ?? "",
       iconFrame: getServerIconFrame(server),
       isShared: isSharedServer,
@@ -440,6 +467,7 @@ export const normalizeServers = (value, currentUser) => {
 };
 export const getServersStorageKey = (user) => `${SERVERS_STORAGE_KEY}:${getUserStorageScope(user)}`;
 export const getActiveServerStorageKey = (user) => `${ACTIVE_SERVER_STORAGE_KEY}:${getUserStorageScope(user)}`;
+export const getActiveTextChannelStorageKey = (user) => `${ACTIVE_TEXT_CHANNEL_STORAGE_KEY}:${getUserStorageScope(user)}`;
 export const readStoredServers = (user) => {
   try {
     const raw = localStorage.getItem(getServersStorageKey(user));
@@ -563,7 +591,11 @@ export const normalizeFriend = (friend) => ({
     friend?.profileBackgroundFrameJson,
     friend?.profile_background_frame_json
   ),
+  status: String(friend?.status || friend?.presence || friend?.presenceStatus || friend?.onlineStatus || ""),
+  presence: String(friend?.presence || friend?.presenceStatus || friend?.onlineStatus || friend?.status || ""),
+  lastSeenAt: String(friend?.last_seen_at || friend?.lastSeenAt || ""),
   directChannelId: String(friend?.directChannelId || ""),
+  isOnline: isUserCurrentlyOnline(friend),
   isSelf: Boolean(friend?.isSelf),
 });
 export const normalizeFriendRequest = (request) => ({

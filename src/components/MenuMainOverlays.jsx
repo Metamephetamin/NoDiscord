@@ -69,7 +69,7 @@ export const SettingsOverlay = ({
           <>
             <aside className="settings-shell__sidebar">
               <div className="settings-shell__profile">
-                <AnimatedAvatar className="settings-shell__profile-avatar" src={userAvatarSrc} alt={displayName} frame={userAvatarFrame} />
+                <AnimatedAvatar className="settings-shell__profile-avatar" src={userAvatarSrc} alt={displayName} frame={userAvatarFrame} loading="eager" decoding="sync" />
                 <div>
                   <strong>{displayName}</strong>
                   <button type="button" className="settings-shell__profile-link" onClick={() => onSelectSettingsTab("personal_profile")}>

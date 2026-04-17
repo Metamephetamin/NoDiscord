@@ -207,7 +207,6 @@
 
 .server-invite-card__button:hover:not(:disabled) {
   background: #32466a;
-  transform: translateY(-1px);
 }
 
 .server-invite-card__button:disabled {

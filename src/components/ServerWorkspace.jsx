@@ -3,6 +3,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
+import { isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 const VoiceRoomStage = lazy(() => import("./VoiceRoomStage"));
 
@@ -41,9 +42,36 @@ function areUserLikeEntriesEqual(previousEntries = [], nextEntries = []) {
       String(previousEntry?.id || previousEntry?.userId || "") !== String(nextEntry?.id || nextEntry?.userId || "")
       || String(previousEntry?.name || previousEntry?.nickname || "") !== String(nextEntry?.name || nextEntry?.nickname || "")
       || String(previousEntry?.avatar || previousEntry?.avatarUrl || "") !== String(nextEntry?.avatar || nextEntry?.avatarUrl || "")
+      || String(previousEntry?.roleId || "") !== String(nextEntry?.roleId || "")
       || Boolean(previousEntry?.isLive) !== Boolean(nextEntry?.isLive)
       || Boolean(previousEntry?.isSpeaking) !== Boolean(nextEntry?.isSpeaking)
+      || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
       || Boolean(previousEntry?.isSelf) !== Boolean(nextEntry?.isSelf)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areRoleEntriesEqual(previousEntries = [], nextEntries = []) {
+  if (previousEntries === nextEntries) {
+    return true;
+  }
+
+  if (!Array.isArray(previousEntries) || !Array.isArray(nextEntries) || previousEntries.length !== nextEntries.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousEntries.length; index += 1) {
+    const previousEntry = previousEntries[index];
+    const nextEntry = nextEntries[index];
+
+    if (
+      String(previousEntry?.id || "") !== String(nextEntry?.id || "")
+      || String(previousEntry?.name || "") !== String(nextEntry?.name || "")
+      || String(previousEntry?.color || "") !== String(nextEntry?.color || "")
     ) {
       return false;
     }
@@ -387,6 +415,7 @@ function ServerMainComponent({
   user,
   directConversationTargets,
   serverMembers,
+  serverRoles,
   textChatNavigationRequest,
   onTextChatNavigationIndexChange,
   onOpenDirectChat,
@@ -517,6 +546,7 @@ function ServerMainComponent({
               searchQuery={channelSearchQuery}
               directTargets={directConversationTargets}
               serverMembers={serverMembers}
+              serverRoles={serverRoles}
               navigationRequest={textChatNavigationRequest}
               onNavigationIndexChange={onTextChatNavigationIndexChange}
               onOpenDirectChat={onOpenDirectChat}
@@ -552,6 +582,7 @@ function areServerMainPropsEqual(previousProps, nextProps) {
     && previousProps.user === nextProps.user
     && areUserLikeEntriesEqual(previousProps.directConversationTargets, nextProps.directConversationTargets)
     && areUserLikeEntriesEqual(previousProps.serverMembers, nextProps.serverMembers)
+    && areRoleEntriesEqual(previousProps.serverRoles, nextProps.serverRoles)
     && areNavigationRequestsEqual(previousProps.textChatNavigationRequest, nextProps.textChatNavigationRequest)
     && previousProps.onTextChatNavigationIndexChange === nextProps.onTextChatNavigationIndexChange
     && previousProps.onOpenDirectChat === nextProps.onOpenDirectChat
@@ -615,7 +646,15 @@ export const DesktopServerRail = ({
         aria-label={server.name || "Без названия"}
       >
         {server.icon ? (
-          <AnimatedAvatar className="btn__server-media" src={server.icon} fallback={defaultServerIcon} alt={server.name || "Без названия"} frame={getServerIconFrame(server)} />
+          <AnimatedAvatar
+            className="btn__server-media"
+            src={server.icon}
+            fallback={defaultServerIcon}
+            alt={server.name || "Без названия"}
+            frame={getServerIconFrame(server)}
+            loading="eager"
+            decoding="sync"
+          />
         ) : (
           <span className="btn__server-empty" aria-hidden="true" />
         )}
@@ -652,7 +691,15 @@ export const MobileServerStrip = ({
           aria-label={server.name || "Без названия"}
         >
           {server.icon ? (
-            <AnimatedAvatar className="btn__server-media" src={server.icon} fallback={defaultServerIcon} alt={server.name || "Без названия"} frame={getServerIconFrame(server)} />
+            <AnimatedAvatar
+              className="btn__server-media"
+              src={server.icon}
+              fallback={defaultServerIcon}
+              alt={server.name || "Без названия"}
+              frame={getServerIconFrame(server)}
+              loading="eager"
+              decoding="sync"
+            />
           ) : (
             <span className="btn__server-empty" aria-hidden="true" />
           )}
@@ -678,7 +725,7 @@ export const MobileDirectChat = ({
       <div className="chat__topbar chat__topbar--mobile-direct">
         <div className="chat__topbar-title">
           <div className="chat__topbar-copy">
-            <strong>{getDisplayName(currentDirectFriend)}</strong>
+            <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{getDisplayName(currentDirectFriend)}</strong>
             <span>Личный чат между двумя пользователями</span>
           </div>
         </div>

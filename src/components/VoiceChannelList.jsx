@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import "../css/ListChannels.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { resolveStaticAssetUrl } from "../utils/media";
+import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
@@ -138,11 +139,22 @@ const VoiceChannelList = ({
                   <div
                     key={participant.userId}
                     className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}
+                    style={{ "--participant-role-color": participant.roleColor || "#c8d0e2" }}
                   >
                     <span className="participant-item__avatar-shell" aria-hidden="true">
                       <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} />
                     </span>
-                    <span className="participant-item__name">{participant.name}</span>
+                    <button
+                      type="button"
+                      className="participant-item__name"
+                      onClick={() => emitInsertMentionRequest({
+                        type: "user",
+                        userId: participant.userId,
+                        displayName: participant.name,
+                      })}
+                    >
+                      {participant.name}
+                    </button>
                     <span
                       className="participant-item__role-dot"
                       style={{ backgroundColor: participant.roleColor }}

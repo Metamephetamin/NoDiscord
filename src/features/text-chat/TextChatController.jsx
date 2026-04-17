@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TextChatView from "./TextChatView";
 import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/TextChat.css";
@@ -12,7 +12,9 @@ import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import {
+  extractMentionsFromText,
   getMentionHandleForMember,
+  getMentionHandleForRole,
   normalizeMentionAlias,
 } from "../../utils/messageMentions";
 import {
@@ -33,6 +35,7 @@ import {
   normalizeReactions,
 } from "../../utils/textChatModel";
 import { buildForwardPayloadForTargetChannel as buildForwardPayloadForTargetChannelCore } from "../../utils/textChatForwardPayload";
+import { TEXT_CHAT_INSERT_MENTION_EVENT } from "../../utils/textChatMentionInterop";
 import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
 import useMediaPreviewKeyboardControls from "../../hooks/useMediaPreviewKeyboardControls";
 import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers";
@@ -167,6 +170,7 @@ export default function TextChat({
   searchQuery = "",
   directTargets = [],
   serverMembers = [],
+  serverRoles = [],
   navigationRequest = null,
   onNavigationIndexChange = null,
   onOpenDirectChat = null,
@@ -185,7 +189,7 @@ export default function TextChat({
   const [composerEmojiPickerOpen, setComposerEmojiPickerOpen] = useState(false);
   const [mentionSuggestionsOpen, setMentionSuggestionsOpen] = useState(false);
   const [selectedMentionSuggestionIndex, setSelectedMentionSuggestionIndex] = useState(0);
-  const [composerSelection, setComposerSelection] = useState({ start: 0, end: 0 });
+  const [composerCaretPosition, setComposerCaretPosition] = useState(0);
   const [highlightedMessageId, setHighlightedMessageId] = useState("");
   const [messageContextMenu, setMessageContextMenu] = useState(null);
   const [userContextMenu, setUserContextMenu] = useState(null);
@@ -309,8 +313,8 @@ export default function TextChat({
   const pinnedMessageIdSet = useMemo(() => new Set(pinnedMessages.map((item) => String(item.id))), [pinnedMessages]);
   const speechRecognitionSupported = useMemo(() => Boolean(getSpeechRecognitionConstructor()), []);
   const mentionQueryContext = useMemo(
-    () => (!isDirectChat ? getMentionQueryContext(message, composerSelection.start) : null),
-    [composerSelection.start, isDirectChat, message]
+    () => (!isDirectChat ? getMentionQueryContext(message, composerCaretPosition) : null),
+    [composerCaretPosition, isDirectChat, message]
   );
   const mentionSuggestions = useMemo(() => {
     if (isDirectChat || !mentionQueryContext) {
@@ -318,7 +322,35 @@ export default function TextChat({
     }
 
     const normalizedQuery = normalizeMentionAlias(mentionQueryContext.query);
-    return (serverMembers || [])
+    const scoreMentionSuggestion = (normalizedHandle, normalizedName) => {
+      if (!normalizedQuery) {
+        return 0;
+      }
+
+      if (normalizedHandle === normalizedQuery || normalizedName === normalizedQuery) {
+        return 0;
+      }
+
+      if (normalizedHandle.startsWith(normalizedQuery)) {
+        return 1;
+      }
+
+      if (normalizedName.startsWith(normalizedQuery)) {
+        return 2;
+      }
+
+      if (normalizedHandle.includes(normalizedQuery)) {
+        return 3;
+      }
+
+      if (normalizedName.includes(normalizedQuery)) {
+        return 4;
+      }
+
+      return -1;
+    };
+
+    const memberSuggestions = (serverMembers || [])
       .map((member) => {
         const handle = getMentionHandleForMember(member);
         const displayName = String(member?.name || "User").trim() || "User";
@@ -330,34 +362,78 @@ export default function TextChat({
 
         const normalizedHandle = normalizeMentionAlias(handle);
         const normalizedName = normalizeMentionAlias(displayName);
-        const startsWithHandle = normalizedQuery ? normalizedHandle.startsWith(normalizedQuery) : true;
-        const startsWithName = normalizedQuery ? normalizedName.startsWith(normalizedQuery) : true;
-        const includesHandle = normalizedQuery ? normalizedHandle.includes(normalizedQuery) : true;
-        const includesName = normalizedQuery ? normalizedName.includes(normalizedQuery) : true;
-        if (normalizedQuery && !startsWithHandle && !startsWithName && !includesHandle && !includesName) {
+        const score = scoreMentionSuggestion(normalizedHandle, normalizedName);
+        if (score < 0) {
           return null;
         }
 
         return {
+          type: "user",
           userId,
           handle,
           displayName,
           avatar,
-          score: startsWithHandle ? 0 : startsWithName ? 1 : includesHandle ? 2 : 3,
+          color: "",
+          score,
         };
       })
-      .filter(Boolean)
+      .filter(Boolean);
+
+    const roleSuggestions = (serverRoles || [])
+      .map((role) => {
+        const roleId = String(role?.id || role?.roleId || role?.role_id || "").trim();
+        const displayName = String(role?.name || role?.displayName || "Role").trim() || "Role";
+        const handle = getMentionHandleForRole(role);
+        const color = String(role?.color || role?.Color || role?.roleColor || role?.role_color || "").trim();
+        if (!roleId || !handle) {
+          return null;
+        }
+
+        const normalizedHandle = normalizeMentionAlias(handle);
+        const normalizedName = normalizeMentionAlias(displayName);
+        const score = scoreMentionSuggestion(normalizedHandle, normalizedName);
+        if (score < 0) {
+          return null;
+        }
+
+        return {
+          type: "role",
+          roleId,
+          handle,
+          displayName,
+          avatar: "",
+          color,
+          score,
+        };
+      })
+      .filter(Boolean);
+
+    return [...memberSuggestions, ...roleSuggestions]
       .sort((left, right) =>
         left.score - right.score
+        || Number(left.type === "role") - Number(right.type === "role")
         || left.displayName.localeCompare(right.displayName, "ru", { sensitivity: "base" })
       )
       .slice(0, 8);
-  }, [isDirectChat, mentionQueryContext, serverMembers]);
+  }, [isDirectChat, mentionQueryContext, serverMembers, serverRoles]);
 
   const normalizeIncomingMessage = async (messageItem) => {
     const decrypted = await readIncomingMessageText(messageItem);
     const attachments = normalizeAttachmentItems(messageItem);
     const primaryAttachment = attachments[0] || null;
+    const normalizedMentions = Array.isArray(messageItem?.mentions)
+      ? messageItem.mentions
+        .map((mention) => ({
+          type: String(mention?.type || (mention?.roleId ? "role" : "user")).trim().toLowerCase() === "role" ? "role" : "user",
+          userId: String(mention?.userId || ""),
+          roleId: String(mention?.roleId || ""),
+          handle: String(mention?.handle || ""),
+          displayName: String(mention?.displayName || mention?.handle || "User"),
+          color: String(mention?.color || ""),
+        }))
+        .filter((mention) => (mention.type === "role" ? mention.roleId : mention.userId) && mention.handle)
+      : [];
+
     return {
       ...messageItem,
       username: String(messageItem?.username || messageItem?.Username || messageItem?.name || messageItem?.Name || "User").trim() || "User",
@@ -369,6 +445,7 @@ export default function TextChat({
       attachmentName: primaryAttachment?.attachmentName || messageItem?.attachmentName || messageItem?.AttachmentName || "",
       attachmentSize: primaryAttachment?.attachmentSize ?? messageItem?.attachmentSize ?? messageItem?.AttachmentSize ?? null,
       attachmentContentType: primaryAttachment?.attachmentContentType || messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "",
+      attachmentAsFile: Boolean(primaryAttachment?.attachmentAsFile || messageItem?.attachmentAsFile || messageItem?.AttachmentAsFile),
       voiceMessage: primaryAttachment?.voiceMessage || normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage),
       editedAt: messageItem?.editedAt || messageItem?.EditedAt || null,
       replyToMessageId: String(messageItem?.replyToMessageId || messageItem?.ReplyToMessageId || "").trim(),
@@ -376,15 +453,9 @@ export default function TextChat({
       replyPreview: String(messageItem?.replyPreview || messageItem?.ReplyPreview || "").trim(),
       encryptionState: decrypted.encryptionState,
       reactions: normalizeReactions(messageItem?.reactions),
-      mentions: Array.isArray(messageItem?.mentions)
-        ? messageItem.mentions
-          .map((mention) => ({
-            userId: String(mention?.userId || ""),
-            handle: String(mention?.handle || ""),
-            displayName: String(mention?.displayName || mention?.handle || "User"),
-          }))
-          .filter((mention) => mention.userId && mention.handle)
-        : [],
+      mentions: normalizedMentions.length
+        ? normalizedMentions
+        : extractMentionsFromText(decrypted.text, serverMembers, serverRoles),
     };
   };
 
@@ -452,6 +523,16 @@ export default function TextChat({
 
     onOpenDirectChat(userContextMenu.userId);
     setActionFeedback({ tone: "info", message: `Открываем чат с ${userContextMenu.username}` });
+    setUserContextMenu(null);
+  };
+
+  const handleStartDirectCallFromUserMenu = () => {
+    if (!userContextMenu?.userId || typeof onStartDirectCall !== "function" || userContextMenu.isSelf) {
+      return;
+    }
+
+    onStartDirectCall(userContextMenu.userId);
+    setActionFeedback({ tone: "info", message: `Запускаем звонок с ${userContextMenu.username}` });
     setUserContextMenu(null);
   };
 
@@ -596,6 +677,13 @@ export default function TextChat({
         disabled: !userContextMenu?.canOpenDirectChat,
         onClick: handleOpenDirectChatFromUserMenu,
       },
+      {
+        id: "direct-call",
+        label: "Позвонить",
+        icon: "☎",
+        disabled: Boolean(userContextMenu?.isSelf || typeof onStartDirectCall !== "function"),
+        onClick: handleStartDirectCallFromUserMenu,
+      },
     ],
     [
       {
@@ -666,7 +754,7 @@ export default function TextChat({
       const nextLength = textarea.value.length;
       textarea.setSelectionRange(nextLength, nextLength);
       composerSelectionRef.current = { start: nextLength, end: nextLength };
-      setComposerSelection({ start: nextLength, end: nextLength });
+      setComposerCaretPosition(nextLength);
     });
   };
 
@@ -674,8 +762,8 @@ export default function TextChat({
     setReplyState(null);
   };
 
-  const syncComposerSelection = () => {
-    const textarea = textareaRef.current;
+  const syncComposerSelection = useCallback((textareaLike = null) => {
+    const textarea = textareaLike?.selectionStart != null ? textareaLike : textareaRef.current;
     if (!textarea) {
       return;
     }
@@ -685,8 +773,8 @@ export default function TextChat({
       end: Number(textarea.selectionEnd || 0),
     };
     composerSelectionRef.current = nextSelection;
-    setComposerSelection(nextSelection);
-  };
+    setComposerCaretPosition((current) => (current === nextSelection.start ? current : nextSelection.start));
+  }, []);
 
   const insertComposerEmoji = (emojiGlyph) => {
     const textarea = textareaRef.current;
@@ -706,19 +794,24 @@ export default function TextChat({
       nextTextarea.focus();
       nextTextarea.setSelectionRange(nextCaretPosition, nextCaretPosition);
       composerSelectionRef.current = { start: nextCaretPosition, end: nextCaretPosition };
-      setComposerSelection({ start: nextCaretPosition, end: nextCaretPosition });
+      setComposerCaretPosition(nextCaretPosition);
     });
   };
 
-  const applyMentionSuggestion = (suggestion) => {
-    if (!suggestion?.handle || !mentionQueryContext) {
+  const insertMentionSuggestion = (suggestion, explicitQueryContext = null) => {
+    if (!suggestion?.handle) {
       return;
     }
 
     const currentValue = String(textareaRef.current?.value || message || "");
+    const fallbackStart = Number(textareaRef.current?.selectionStart ?? composerSelectionRef.current.start ?? currentValue.length);
+    const fallbackEnd = Number(textareaRef.current?.selectionEnd ?? composerSelectionRef.current.end ?? currentValue.length);
+    const activeQueryContext = explicitQueryContext || getMentionQueryContext(currentValue, fallbackStart);
     const mentionText = `@${suggestion.handle} `;
-    const nextValue = `${currentValue.slice(0, mentionQueryContext.triggerIndex)}${mentionText}${currentValue.slice(mentionQueryContext.tokenEnd)}`;
-    const nextCaretPosition = mentionQueryContext.triggerIndex + mentionText.length;
+    const replaceStart = activeQueryContext ? activeQueryContext.triggerIndex : fallbackStart;
+    const replaceEnd = activeQueryContext ? activeQueryContext.tokenEnd : fallbackEnd;
+    const nextValue = `${currentValue.slice(0, replaceStart)}${mentionText}${currentValue.slice(replaceEnd)}`;
+    const nextCaretPosition = replaceStart + mentionText.length;
     setMessage(nextValue);
     setMentionSuggestionsOpen(false);
     setSelectedMentionSuggestionIndex(0);
@@ -731,9 +824,58 @@ export default function TextChat({
       nextTextarea.focus();
       nextTextarea.setSelectionRange(nextCaretPosition, nextCaretPosition);
       composerSelectionRef.current = { start: nextCaretPosition, end: nextCaretPosition };
-      setComposerSelection({ start: nextCaretPosition, end: nextCaretPosition });
+      setComposerCaretPosition(nextCaretPosition);
     });
   };
+
+  const applyMentionSuggestion = useCallback((suggestion) => {
+    insertMentionSuggestion(suggestion, mentionQueryContext);
+  }, [mentionQueryContext]);
+
+  const handleInsertMentionByUserId = useCallback((userId, displayName = "") => {
+    if (isDirectChat) {
+      return;
+    }
+
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) {
+      return;
+    }
+
+    const matchedMember = (serverMembers || []).find((member) => String(member?.userId || member?.id || "") === normalizedUserId);
+    const handle = getMentionHandleForMember(matchedMember || { name: displayName });
+    if (!handle) {
+      return;
+    }
+
+    insertMentionSuggestion({
+      type: "user",
+      userId: normalizedUserId,
+      handle,
+      displayName: String(displayName || matchedMember?.name || "User").trim() || "User",
+      avatar: String(matchedMember?.avatar || matchedMember?.avatarUrl || "").trim(),
+    });
+  }, [isDirectChat, serverMembers]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleExternalMentionInsert = (event) => {
+      const detail = event?.detail || {};
+      if (String(detail?.type || "user") !== "user") {
+        return;
+      }
+
+      handleInsertMentionByUserId(detail?.userId, detail?.displayName || "");
+    };
+
+    window.addEventListener(TEXT_CHAT_INSERT_MENTION_EVENT, handleExternalMentionInsert);
+    return () => {
+      window.removeEventListener(TEXT_CHAT_INSERT_MENTION_EVENT, handleExternalMentionInsert);
+    };
+  }, [handleInsertMentionByUserId]);
 
   const stopEditingMessage = ({ restoreDraft = true } = {}) => {
     const nextDraft = restoreDraft ? editDraftBackupRef.current : "";
@@ -914,7 +1056,13 @@ export default function TextChat({
       return;
     }
 
-    writeChatDraft(user, scopedChannelId, message);
+    const timeoutId = window.setTimeout(() => {
+      writeChatDraft(user, scopedChannelId, message);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [message, messageEditState, scopedChannelId, user]);
 
   const ensureChannelJoined = async () => {
@@ -1264,12 +1412,14 @@ export default function TextChat({
   const {
     send,
     sendAnimatedEmoji,
+    sendPoll,
     handleFileChange,
     queueFiles,
     removePendingUpload,
     retryPendingUpload,
     clearPendingUploads,
     updatePendingUploadCompressionMode,
+    updatePendingUploadSpoilerMode,
     setPendingUploadsDocumentMode,
   } = useTextChatSendActions({
     message,
@@ -1283,6 +1433,7 @@ export default function TextChat({
     scopedChannelId,
     user,
     serverMembers,
+    serverRoles,
     isDirectChat,
     uploadingFile,
     setUploadingFile,
@@ -1313,6 +1464,7 @@ export default function TextChat({
     const enabled = Boolean(value);
     setBatchUploadOptions((previous) => ({
       ...previous,
+      groupItems: enabled ? false : previous.groupItems,
       sendAsDocuments: enabled,
     }));
     setPendingUploadsDocumentMode(enabled);
@@ -1382,6 +1534,25 @@ export default function TextChat({
     queueFiles(droppedFiles, { source: "drag-drop" });
   };
 
+  const handleComposerPaste = useCallback((event) => {
+    const clipboardItems = Array.from(event.clipboardData?.items || []);
+    if (!clipboardItems.length) {
+      return;
+    }
+
+    const clipboardFiles = clipboardItems
+      .filter((item) => String(item?.kind || "") === "file" && String(item?.type || "").startsWith("image/"))
+      .map((item) => item.getAsFile?.())
+      .filter((file) => file instanceof File);
+
+    if (!clipboardFiles.length) {
+      return;
+    }
+
+    event.preventDefault();
+    queueFiles(clipboardFiles, { source: "clipboard-image" });
+  }, [queueFiles]);
+
   const buildForwardPayloadForTargetChannel = (targetChannelId, sourceMessages) => buildForwardPayloadForTargetChannelCore({
     targetChannelId,
     sourceMessages,
@@ -1444,7 +1615,13 @@ export default function TextChat({
   });
 
   const mentionMessages = useMemo(
-    () => messages.filter((messageItem) => Array.isArray(messageItem.mentions) && messageItem.mentions.some((mention) => String(mention?.userId || "") === currentUserId)),
+    () => messages.filter((messageItem) =>
+      Array.isArray(messageItem.mentions)
+      && messageItem.mentions.some((mention) =>
+        String(mention?.type || (mention?.roleId ? "role" : "user")) !== "role"
+        && String(mention?.userId || "") === currentUserId
+      )
+    ),
     [currentUserId, messages]
   );
   const replyMessages = useMemo(
@@ -1483,7 +1660,7 @@ export default function TextChat({
     }
 
     if (navigationRequest.type === "message" && navigationRequest.messageId) {
-      scrollToMessage(navigationRequest.messageId, { behavior: "smooth", block: "center", rememberCurrent: true });
+      scrollToMessage(navigationRequest.messageId, { behavior: "auto", block: "center", rememberCurrent: true });
       return;
     }
 
@@ -1493,7 +1670,7 @@ export default function TextChat({
     }
 
     if (navigationRequest.type === "latest") {
-      scrollToLatest("smooth");
+      scrollToLatest("auto");
       return;
     }
 
@@ -1632,6 +1809,8 @@ export default function TextChat({
       selectionMode={selectionMode}
       selectedMessageIds={selectedMessageIds}
       directTargets={directTargets}
+      serverMembers={serverMembers}
+      serverRoles={serverRoles}
       openForwardModal={openForwardModal}
       clearSelectionMode={clearSelectionMode}
       messages={messages}
@@ -1655,6 +1834,7 @@ export default function TextChat({
       openUserContextMenu={openUserContextMenu}
       openMediaPreview={openMediaPreview}
       handleToggleReaction={handleToggleReaction}
+      handleComposerPaste={handleComposerPaste}
       selectedFiles={selectedFiles}
       uploadingFile={uploadingFile}
       composerDropActive={composerDropActive}
@@ -1680,6 +1860,7 @@ export default function TextChat({
       retryPendingUpload={retryPendingUpload}
       clearPendingUploads={clearPendingUploads}
       updatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
+      updatePendingUploadSpoilerMode={updatePendingUploadSpoilerMode}
       toggleBatchUploadGrouping={toggleBatchUploadGrouping}
       toggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
       toggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
@@ -1695,6 +1876,8 @@ export default function TextChat({
       setComposerEmojiPickerOpen={setComposerEmojiPickerOpen}
       insertComposerEmoji={insertComposerEmoji}
       sendAnimatedEmoji={sendAnimatedEmoji}
+      sendPoll={sendPoll}
+      handleInsertMentionByUserId={handleInsertMentionByUserId}
       applyMentionSuggestion={applyMentionSuggestion}
       setSelectedMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
       setMentionSuggestionsOpen={setMentionSuggestionsOpen}

@@ -6,8 +6,8 @@ function normalizeMentionAlias(value) {
     .replace(/\s+/g, "");
 }
 
-function getMentionAliasesForMember(member) {
-  const name = String(member?.name || "").trim();
+function getMentionAliasesFromLabel(value) {
+  const name = String(value || "").trim();
   if (!name) {
     return [];
   }
@@ -19,63 +19,148 @@ function getMentionAliasesForMember(member) {
   ])).filter(Boolean);
 }
 
+function buildEntityMentionRecord(entity, baseRecord) {
+  const existing = entity.get(baseRecord.alias);
+  if (existing && existing.entityKey !== baseRecord.entityKey) {
+    entity.set(baseRecord.alias, null);
+    return;
+  }
+
+  if (!existing) {
+    entity.set(baseRecord.alias, baseRecord);
+  }
+}
+
+function getMentionAliasesForMember(member) {
+  return getMentionAliasesFromLabel(member?.name || member?.displayName || member?.nickname || "");
+}
+
+function getMentionAliasesForRole(role) {
+  return getMentionAliasesFromLabel(role?.name || role?.displayName || role?.roleName || role?.role_name || "");
+}
+
+function getRoleColorValue(role) {
+  return String(role?.color || role?.Color || role?.roleColor || role?.role_color || "").trim();
+}
+
+function getMemberRoleId(member) {
+  return String(member?.roleId || member?.role_id || member?.RoleId || "").trim();
+}
+
 export function getMentionHandleForMember(member) {
   return getMentionAliasesForMember(member)[1] || getMentionAliasesForMember(member)[0] || "";
 }
 
-export function buildMentionLookup(serverMembers = []) {
+export function getMentionHandleForRole(role) {
+  return getMentionAliasesForRole(role)[1] || getMentionAliasesForRole(role)[0] || "";
+}
+
+export function buildMentionLookup(serverMembers = [], serverRoles = []) {
   const aliasMap = new Map();
-  const collisions = new Set();
+  const roleColorById = new Map(
+    (serverRoles || []).map((role) => [String(role?.id || role?.roleId || role?.role_id || "").trim(), getRoleColorValue(role)])
+  );
 
   (serverMembers || []).forEach((member) => {
-    const userId = String(member?.userId || "").trim();
+    const userId = String(member?.userId || member?.id || "").trim();
     if (!userId) {
       return;
     }
 
+    const displayName = String(member?.name || member?.displayName || "User").trim() || "User";
+    const memberRoleId = getMemberRoleId(member);
+    const color = String(
+      member?.color
+      || member?.Color
+      || member?.roleColor
+      || member?.role_color
+      || roleColorById.get(memberRoleId)
+      || ""
+    ).trim();
     getMentionAliasesForMember(member).forEach((alias) => {
-      const existing = aliasMap.get(alias);
-      if (existing && existing.userId !== userId) {
-        collisions.add(alias);
-        return;
-      }
-
-      if (!collisions.has(alias)) {
-        aliasMap.set(alias, {
-          userId,
-          displayName: String(member?.name || "User").trim() || "User",
-        });
-      }
+      buildEntityMentionRecord(aliasMap, {
+        alias,
+        entityKey: `user:${userId}`,
+        type: "user",
+        userId,
+        handle: alias,
+        displayName,
+        color,
+      });
     });
   });
 
-  collisions.forEach((alias) => aliasMap.delete(alias));
+  (serverRoles || []).forEach((role) => {
+    const roleId = String(role?.id || role?.roleId || role?.role_id || "").trim();
+    if (!roleId) {
+      return;
+    }
+
+    const displayName = String(role?.name || role?.displayName || "Role").trim() || "Role";
+    const color = getRoleColorValue(role);
+    getMentionAliasesForRole(role).forEach((alias) => {
+      buildEntityMentionRecord(aliasMap, {
+        alias,
+        entityKey: `role:${roleId}`,
+        type: "role",
+        roleId,
+        handle: alias,
+        displayName,
+        color,
+      });
+    });
+  });
+
+  Array.from(aliasMap.entries()).forEach(([alias, value]) => {
+    if (!value) {
+      aliasMap.delete(alias);
+    }
+  });
+
   return aliasMap;
 }
 
-export function extractMentionsFromText(text, serverMembers = []) {
-  const lookup = buildMentionLookup(serverMembers);
+export function extractMentionsFromText(text, serverMembers = [], serverRoles = []) {
+  const lookup = buildMentionLookup(serverMembers, serverRoles);
   if (!lookup.size) {
     return [];
   }
 
   const mentions = [];
-  const seenUserIds = new Set();
+  const seenEntityIds = new Set();
   const pattern = /(^|[^\p{L}\p{N}_.-])@([\p{L}\p{N}_.-]{1,80})/gu;
 
   for (const match of String(text || "").matchAll(pattern)) {
     const handle = String(match[2] || "");
     const alias = normalizeMentionAlias(handle);
     const resolved = lookup.get(alias);
-    if (!resolved || seenUserIds.has(resolved.userId)) {
+    if (!resolved) {
       continue;
     }
 
-    seenUserIds.add(resolved.userId);
+    const entityId = resolved.type === "role" ? `role:${resolved.roleId}` : `user:${resolved.userId}`;
+    if (seenEntityIds.has(entityId)) {
+      continue;
+    }
+
+    seenEntityIds.add(entityId);
+    if (resolved.type === "role") {
+      mentions.push({
+        type: "role",
+        roleId: resolved.roleId,
+        handle,
+        displayName: resolved.displayName,
+        color: resolved.color || "",
+      });
+      continue;
+    }
+
     mentions.push({
+      type: "user",
       userId: resolved.userId,
       handle,
       displayName: resolved.displayName,
+      color: resolved.color || "",
     });
   }
 
@@ -87,13 +172,22 @@ export function segmentMessageTextByMentions(text, mentions = []) {
     (mentions || [])
       .map((mention) => {
         const handle = String(mention?.handle || "").trim();
-        return handle
-          ? [handle.toLowerCase(), {
-              userId: String(mention?.userId || ""),
-              displayName: String(mention?.displayName || handle),
-              handle,
-            }]
-          : null;
+        if (!handle) {
+          return null;
+        }
+
+        const type = String(mention?.type || (mention?.roleId ? "role" : "user")).trim().toLowerCase() === "role"
+          ? "role"
+          : "user";
+
+        return [handle.toLowerCase(), {
+          type,
+          userId: String(mention?.userId || ""),
+          roleId: String(mention?.roleId || ""),
+          displayName: String(mention?.displayName || handle),
+          handle,
+          color: String(mention?.color || ""),
+        }];
       })
       .filter(Boolean)
   );
@@ -123,8 +217,11 @@ export function segmentMessageTextByMentions(text, mentions = []) {
     segments.push({
       text: matchedText,
       isMention: true,
+      type: mention.type,
       userId: mention.userId,
+      roleId: mention.roleId,
       displayName: mention.displayName,
+      color: mention.color,
     });
     lastIndex = matchIndex + matchedText.length;
   }
@@ -138,7 +235,10 @@ export function segmentMessageTextByMentions(text, mentions = []) {
 
 export function isUserMentioned(mentions, userId) {
   const normalizedUserId = String(userId || "");
-  return Array.isArray(mentions) && mentions.some((mention) => String(mention?.userId || "") === normalizedUserId);
+  return Array.isArray(mentions) && mentions.some((mention) =>
+    String(mention?.type || (mention?.roleId ? "role" : "user")) !== "role"
+    && String(mention?.userId || "") === normalizedUserId
+  );
 }
 
 export { normalizeMentionAlias };

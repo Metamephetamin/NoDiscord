@@ -11,6 +11,8 @@ export default function AnimatedMedia({
   frame = null,
   mediaType = "",
   style = undefined,
+  loading = "lazy",
+  decoding = "async",
   ...rest
 }) {
   const resolvedSrc = useMemo(() => resolveMediaUrl(src, fallback), [fallback, src]);
@@ -74,11 +76,18 @@ export default function AnimatedMedia({
       key={resolvedSrc || resolvedFallback}
       {...rest}
       className={className}
-      style={mediaStyle}
+      style={{
+        display: "block",
+        imageRendering: "auto",
+        backfaceVisibility: "hidden",
+        WebkitBackfaceVisibility: "hidden",
+        ...mediaStyle,
+      }}
       src={resolvedSrc || resolvedFallback}
       alt={alt}
       draggable={false}
-      loading="lazy"
+      loading={loading}
+      decoding={decoding}
       onError={(event) => {
         if (resolvedFallback && event.currentTarget.src !== resolvedFallback) {
           event.currentTarget.src = resolvedFallback;

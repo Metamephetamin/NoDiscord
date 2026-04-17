@@ -86,6 +86,7 @@ import {
   createServerToastId,
   FRIENDS_SIDEBAR_ITEMS,
   getActiveServerStorageKey,
+  getActiveTextChannelStorageKey,
   getAudioInputDeviceStorageKey,
   getAudioOutputDeviceStorageKey,
   getCanonicalSharedServerId,
@@ -154,6 +155,54 @@ const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUse
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
   return userId ? `nd:direct-call-history:${userId}` : "";
+};
+
+const readActiveTextChannelMap = (storageKey) => {
+  if (!storageKey) {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const getStoredTextChannelId = (storageKey, server) => {
+  if (!server?.id || !Array.isArray(server?.textChannels)) {
+    return "";
+  }
+
+  const storedChannelId = String(readActiveTextChannelMap(storageKey)[server.id] || "");
+  return server.textChannels.some((channel) => String(channel.id) === storedChannelId)
+    ? storedChannelId
+    : "";
+};
+
+const writeStoredTextChannelId = (storageKey, serverId, channelId) => {
+  if (!storageKey || !serverId || !channelId) {
+    return;
+  }
+
+  try {
+    const nextMap = {
+      ...readActiveTextChannelMap(storageKey),
+      [serverId]: String(channelId),
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(nextMap));
+  } catch {
+    // ignore storage failures
+  }
+};
+
+const getInitialTextChannelId = (user) => {
+  const storedServers = readStoredServers(user);
+  const activeServerId = window.localStorage.getItem(getActiveServerStorageKey(user)) || storedServers[0]?.id || "";
+  const activeServer = storedServers.find((server) => String(server.id) === String(activeServerId)) || storedServers[0];
+  return getStoredTextChannelId(getActiveTextChannelStorageKey(user), activeServer) || activeServer?.textChannels?.[0]?.id || "";
 };
 
 const readDirectCallHistory = (storageKey) => {
@@ -364,7 +413,7 @@ export default function MenuMain({
   const [activeServerId, setActiveServerId] = useState(
     () => localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
   );
-  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readStoredServers(user)[0]?.textChannels?.[0]?.id || "");
+  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => getInitialTextChannelId(user));
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
   const [directCallState, setDirectCallState] = useState(() => createDirectCallState());
@@ -521,6 +570,7 @@ export default function MenuMain({
   const voiceJoinAttemptRef = useRef(0);
   const voiceJoinInFlightRef = useRef(false);
   const pendingVoiceChannelTargetRef = useRef("");
+  const suppressedVoiceChannelRef = useRef("");
   const notificationSoundInputRef = useRef(null);
   const directCallToneStopRef = useRef(null);
   const directCallStateRef = useRef(createDirectCallState());
@@ -529,6 +579,7 @@ export default function MenuMain({
   const cameraStreamRef = useRef(null);
   const voiceClientRef = useRef(null);
   const previousVoiceChannelRef = useRef(null);
+  const voiceTransitionSoundTimeoutRef = useRef(null);
   const previousScreenShareRef = useRef(false);
   const joinedDirectChannelsRef = useRef(new Set());
   const joinedServerNotificationChannelsRef = useRef(new Set());
@@ -544,8 +595,10 @@ export default function MenuMain({
   const micLevelUiActiveRef = useRef(false);
   const navigationHistoryRef = useRef({ back: [], forward: [] });
   const lastNavigationSnapshotRef = useRef(null);
+  const lastServerSyncFingerprintRef = useRef("");
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
   const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
+  const activeTextChannelStorageKey = useMemo(() => getActiveTextChannelStorageKey(user), [user?.id, user?.email]);
   const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
   const echoCancellationStorageKey = useMemo(() => getEchoCancellationStorageKey(user), [user?.id, user?.email]);
   const directNotificationsStorageKey = useMemo(() => getDirectNotificationsStorageKey(user), [user?.id, user?.email]);
@@ -568,6 +621,25 @@ export default function MenuMain({
   const uiTouchTargetStorageKey = useMemo(() => getUiTouchTargetStorageKey(user), [user?.id, user?.email]);
 
   const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
+  const activeServerSyncFingerprint = useMemo(() => {
+    if (!activeServer?.id) {
+      return "";
+    }
+
+    return JSON.stringify({
+      id: activeServer.id,
+      name: activeServer.name,
+      description: activeServer.description,
+      icon: activeServer.icon,
+      iconFrame: activeServer.iconFrame,
+      isShared: Boolean(activeServer.isShared),
+      ownerId: activeServer.ownerId,
+      roles: activeServer.roles || [],
+      members: activeServer.members || [],
+      textChannels: activeServer.textChannels || [],
+      voiceChannels: activeServer.voiceChannels || [],
+    });
+  }, [activeServer]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
   const { prewarmVoiceChannel } = useVoiceRoomWarmup({
     voiceClientRef,
@@ -1577,7 +1649,7 @@ export default function MenuMain({
     pushNavigationHistory(() => {
       setWorkspaceMode("servers");
       setActiveServerId(server.id);
-      setCurrentTextChannelId(server.textChannels[0]?.id || "");
+      setCurrentTextChannelId(getStoredTextChannelId(activeTextChannelStorageKey, server) || server.textChannels[0]?.id || "");
       setDesktopServerPane("text");
       setActiveDirectFriendId("");
       setSelectedStreamUserId(null);
@@ -2234,10 +2306,14 @@ export default function MenuMain({
           ? persistedActiveServerId
           : nextServers[0]?.id || "";
         const nextActiveServer = nextServers.find((server) => server.id === nextActiveServerId) || nextServers[0];
+        const nextTextChannelId =
+          getStoredTextChannelId(activeTextChannelStorageKey, nextActiveServer) ||
+          nextActiveServer?.textChannels?.[0]?.id ||
+          "";
 
         setServers(nextServers);
         setActiveServerId(nextActiveServerId);
-        setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
+        setCurrentTextChannelId(nextTextChannelId);
       } catch (error) {
         console.error("Ошибка загрузки пользовательских серверов:", error);
         if (isDisposed) {
@@ -2256,7 +2332,7 @@ export default function MenuMain({
     return () => {
       isDisposed = true;
     };
-  }, [activeServerStorageKey, serversStorageKey, user]);
+  }, [activeServerStorageKey, activeTextChannelStorageKey, serversStorageKey, user]);
 
   useEffect(() => {
     if (!user || !servers.length) {
@@ -3207,14 +3283,17 @@ export default function MenuMain({
   ]);
 
   useEffect(() => {
-    if (!activeServer?.id || !activeServer?.isShared || isDefaultServer || !currentUserId || !canManageServer) return;
+    if (!activeServer?.id || isDefaultServer || !currentUserId || !canManageServer || !activeServerSyncFingerprint) return;
+    if (lastServerSyncFingerprintRef.current === activeServerSyncFingerprint) return;
+
+    lastServerSyncFingerprintRef.current = activeServerSyncFingerprint;
 
     const timeoutId = window.setTimeout(() => {
       syncServerSnapshot(activeServer);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeServer, canManageServer, currentUserId, isDefaultServer]);
+  }, [activeServer, activeServerSyncFingerprint, canManageServer, currentUserId, isDefaultServer]);
   useEffect(() => {
     setProfileDraft({
       firstName: user?.first_name || user?.firstName || "",
@@ -3268,9 +3347,20 @@ export default function MenuMain({
   }, [servers, activeServerId]);
   useEffect(() => {
     if (activeServer?.textChannels?.length && !activeServer.textChannels.some((channel) => channel.id === currentTextChannelId)) {
-      setCurrentTextChannelId(activeServer.textChannels[0].id);
+      setCurrentTextChannelId(getStoredTextChannelId(activeTextChannelStorageKey, activeServer) || activeServer.textChannels[0].id);
     }
-  }, [activeServer, currentTextChannelId]);
+  }, [activeServer, activeTextChannelStorageKey, currentTextChannelId]);
+  useEffect(() => {
+    if (!user || !activeServer?.id || !currentTextChannelId) {
+      return;
+    }
+
+    if (!activeServer.textChannels?.some((channel) => String(channel.id) === String(currentTextChannelId))) {
+      return;
+    }
+
+    writeStoredTextChannelId(activeTextChannelStorageKey, activeServer.id, currentTextChannelId);
+  }, [activeServer, activeTextChannelStorageKey, currentTextChannelId, user]);
   useEffect(() => {
     setChannelSearchQuery("");
   }, [activeServerId, currentTextChannelId, workspaceMode]);
@@ -3512,8 +3602,24 @@ export default function MenuMain({
     const client = createVoiceRoomClient({
       onParticipantsMapChanged: handleParticipantsMapChanged,
       onChannelChanged: (nextChannel) => {
+        const normalizedNextChannel = String(nextChannel || "");
+        if (
+          normalizedNextChannel
+          && suppressedVoiceChannelRef.current
+          && suppressedVoiceChannelRef.current === normalizedNextChannel
+        ) {
+          void voiceClientRef.current?.leaveChannel().catch((error) => {
+            console.error("Не удалось отменить позднее подключение к голосовому каналу:", error);
+          });
+          return;
+        }
+
         if (!nextChannel && voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current) {
           return;
+        }
+
+        if (!normalizedNextChannel) {
+          suppressedVoiceChannelRef.current = "";
         }
 
         setCurrentVoiceChannel((previousValue) => (
@@ -3590,10 +3696,8 @@ export default function MenuMain({
         }
 
         const currentCall = directCallStateRef.current;
-        const activeChannel = currentVoiceChannelRef.current;
         if (
-          (currentCall.phase !== "idle" && currentCall.channelId !== channelName)
-          || (activeChannel && activeChannel !== channelName && !isDirectCallChannelId(activeChannel))
+          currentCall.phase !== "idle" && currentCall.channelId !== channelName
         ) {
           voiceClientRef.current?.declineDirectCall(fromUserId, channelName, "busy").catch((error) => {
             console.error("Не удалось отклонить входящий звонок:", error);
@@ -3911,13 +4015,30 @@ export default function MenuMain({
   }, []);
   useEffect(() => {
     const previousChannel = previousVoiceChannelRef.current;
+    if (voiceTransitionSoundTimeoutRef.current) {
+      clearTimeout(voiceTransitionSoundTimeoutRef.current);
+      voiceTransitionSoundTimeoutRef.current = null;
+    }
+
     if (!previousChannel && currentVoiceChannel) {
       playUiTone("join");
     } else if (previousChannel && !currentVoiceChannel) {
       playUiTone("leave");
+    } else if (previousChannel && currentVoiceChannel && previousChannel !== currentVoiceChannel) {
+      playUiTone("leave");
+      voiceTransitionSoundTimeoutRef.current = window.setTimeout(() => {
+        playUiTone("join");
+        voiceTransitionSoundTimeoutRef.current = null;
+      }, 90);
     }
     previousVoiceChannelRef.current = currentVoiceChannel;
   }, [currentVoiceChannel]);
+  useEffect(() => () => {
+    if (voiceTransitionSoundTimeoutRef.current) {
+      clearTimeout(voiceTransitionSoundTimeoutRef.current);
+      voiceTransitionSoundTimeoutRef.current = null;
+    }
+  }, []);
   useEffect(() => {
     if (!previousScreenShareRef.current && isSharingScreen) {
       playUiTone("share");
@@ -3931,7 +4052,10 @@ export default function MenuMain({
     const normalizedServer = normalizeServers([{ ...snapshot, isShared: true }], user)[0];
     if (!normalizedServer) return;
     setServers((previous) => {
-      const existingIndex = previous.findIndex((server) => server.id === normalizedServer.id);
+      const existingIndex = previous.findIndex((server) =>
+        server.id === normalizedServer.id ||
+        getCanonicalSharedServerId(server.id, server.ownerId || normalizedServer.ownerId) === normalizedServer.id
+      );
       if (existingIndex === -1) {
         return [...previous, normalizedServer];
       }
@@ -3944,10 +4068,17 @@ export default function MenuMain({
       return nextServers;
     });
 
+    setActiveServerId((previousActiveServerId) =>
+      previousActiveServerId === normalizedServer.id ||
+      getCanonicalSharedServerId(previousActiveServerId, normalizedServer.ownerId) === normalizedServer.id
+        ? normalizedServer.id
+        : previousActiveServerId
+    );
+
     if (activate) {
       setWorkspaceMode("servers");
       setActiveServerId(normalizedServer.id);
-      setCurrentTextChannelId(normalizedServer.textChannels?.[0]?.id || "");
+      setCurrentTextChannelId(getStoredTextChannelId(activeTextChannelStorageKey, normalizedServer) || normalizedServer.textChannels?.[0]?.id || "");
     }
   };
   const updateServer = (updater) => setServers((previous) => previous.map((server) => (server.id === activeServerId ? updater(server) : server)));
@@ -4137,7 +4268,7 @@ export default function MenuMain({
     const nextActiveServer = nextServers.find((server) => server.id === nextActiveId) || nextServers[0] || null;
     setServers(nextServers);
     setActiveServerId(nextActiveId);
-    setCurrentTextChannelId(nextActiveServer?.textChannels?.[0]?.id || "");
+    setCurrentTextChannelId(getStoredTextChannelId(activeTextChannelStorageKey, nextActiveServer) || nextActiveServer?.textChannels?.[0]?.id || "");
     setSelectedStreamUserId(null);
     setProfileStatus("Сервер удалён.");
   };
@@ -4490,6 +4621,9 @@ export default function MenuMain({
     voiceJoinAttemptRef.current = joinAttemptId;
     voiceJoinInFlightRef.current = true;
     pendingVoiceChannelTargetRef.current = scopedChannelId;
+    if (suppressedVoiceChannelRef.current === scopedChannelId) {
+      suppressedVoiceChannelRef.current = "";
+    }
     setJoiningVoiceChannelId(scopedChannelId);
     pushNavigationHistory(() => {
       setDesktopServerPane("voice");
@@ -4501,6 +4635,21 @@ export default function MenuMain({
     });
     try {
       await voiceClientRef.current.joinChannel(scopedChannelId, user);
+      if (voiceJoinAttemptRef.current !== joinAttemptId) {
+        try {
+          await voiceClientRef.current.leaveChannel();
+        } catch {
+          // ignore stale join cleanup failures
+        }
+        finishJoinTrace({
+          channelId: String(channel.id || ""),
+          retry: false,
+          scopedChannelId,
+          success: false,
+          cancelled: true,
+        });
+        return;
+      }
       joinSucceeded = true;
     } catch (error) {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
@@ -4568,14 +4717,20 @@ export default function MenuMain({
   };
   const leaveVoiceChannel = async () => {
     if (!voiceClientRef.current) return;
+    const cancelledChannelId = String(pendingVoiceChannelTargetRef.current || currentVoiceChannelRef.current || "");
     const leaveTraceId = startPerfTrace("voice", "leave-voice-channel", {
       currentVoiceChannel: String(currentVoiceChannel || ""),
     });
     let leaveSucceeded = false;
     try {
+      if (cancelledChannelId) {
+        suppressedVoiceChannelRef.current = cancelledChannelId;
+      }
+      voiceJoinAttemptRef.current += 1;
       voiceJoinInFlightRef.current = false;
       pendingVoiceChannelTargetRef.current = "";
       setJoiningVoiceChannelId("");
+      setCurrentVoiceChannel(null);
       pushNavigationHistory(() => {
         setDesktopServerPane("text");
         if (isMobileViewport) {
@@ -5700,6 +5855,7 @@ export default function MenuMain({
       user={user}
       directConversationTargets={directConversationTargets}
       serverMembers={activeServer?.members || []}
+      serverRoles={activeServer?.roles || []}
       textChatNavigationRequest={textChatNavigationRequest}
       onTextChatNavigationIndexChange={setTextChatNavigationIndex}
       onOpenDirectChat={openDirectChat}

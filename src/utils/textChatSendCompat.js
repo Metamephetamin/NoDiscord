@@ -7,6 +7,54 @@ import {
   sleep,
 } from "./textChatModel";
 
+function normalizeHubAttachmentInput(attachment) {
+  const attachmentUrl = attachment?.attachmentUrl || attachment?.AttachmentUrl || "";
+  const attachmentName = attachment?.attachmentName || attachment?.AttachmentName || null;
+  const attachmentSize = attachment?.attachmentSize ?? attachment?.AttachmentSize ?? null;
+  const attachmentContentType = attachment?.attachmentContentType || attachment?.AttachmentContentType || "";
+  const attachmentSpoiler = Boolean(attachment?.attachmentSpoiler || attachment?.AttachmentSpoiler);
+  const attachmentAsFile = Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile);
+  const attachmentEncryption = attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null;
+  const voiceMessage = attachment?.voiceMessage || attachment?.VoiceMessage || null;
+
+  return {
+    attachmentUrl,
+    AttachmentUrl: attachmentUrl,
+    attachmentName,
+    AttachmentName: attachmentName,
+    attachmentSize,
+    AttachmentSize: attachmentSize,
+    attachmentContentType,
+    AttachmentContentType: attachmentContentType,
+    attachmentSpoiler,
+    AttachmentSpoiler: attachmentSpoiler,
+    attachmentAsFile,
+    AttachmentAsFile: attachmentAsFile,
+    attachmentEncryption,
+    AttachmentEncryption: attachmentEncryption,
+    voiceMessage,
+    VoiceMessage: voiceMessage,
+  };
+}
+
+function normalizeHubMessageInput(item) {
+  const attachments = Array.isArray(item?.attachments)
+    ? item.attachments.map(normalizeHubAttachmentInput)
+    : [];
+  const attachmentSpoiler = Boolean(item?.attachmentSpoiler || item?.AttachmentSpoiler || attachments[0]?.attachmentSpoiler);
+  const attachmentAsFile = Boolean(item?.attachmentAsFile || item?.AttachmentAsFile || attachments[0]?.attachmentAsFile);
+
+  return {
+    ...item,
+    attachmentSpoiler,
+    AttachmentSpoiler: attachmentSpoiler,
+    attachmentAsFile,
+    AttachmentAsFile: attachmentAsFile,
+    attachments,
+    Attachments: attachments,
+  };
+}
+
 export async function sendMessagesCompat({
   targetChannelId,
   avatar,
@@ -28,11 +76,12 @@ export async function sendMessagesCompat({
     throw new Error("Нет данных для отправки.");
   }
 
-  const containsTextPayload = normalizedPayload.some((item) => String(item?.message || "").trim());
+  const hubPayload = normalizedPayload.map(normalizeHubMessageInput);
+  const containsTextPayload = hubPayload.some((item) => String(item?.message || "").trim());
 
-  if (allowBatch && normalizedPayload.length > 1 && !containsTextPayload) {
+  if (allowBatch && hubPayload.length > 1 && !containsTextPayload) {
     try {
-      await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, normalizedPayload);
+      await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, hubPayload);
       return;
     } catch (error) {
       if (!isMissingHubMethodError(error, "ForwardMessages")) {
@@ -41,8 +90,8 @@ export async function sendMessagesCompat({
     }
   }
 
-  for (let index = 0; index < normalizedPayload.length; index += 1) {
-    const item = normalizedPayload[index];
+  for (let index = 0; index < hubPayload.length; index += 1) {
+    const item = hubPayload[index];
     const preparedTextPayload = await prepareOutgoingTextPayload({
       text: String(item.message || ""),
     });
@@ -66,10 +115,12 @@ export async function sendMessagesCompat({
       attachmentList,
       item.replyToMessageId || null,
       item.replyToUsername || null,
-      item.replyPreview || null
+      item.replyPreview || null,
+      Boolean(item.attachmentSpoiler || primaryAttachment?.attachmentSpoiler),
+      Boolean(item.attachmentAsFile || primaryAttachment?.attachmentAsFile)
     );
 
-    if (index < normalizedPayload.length - 1) {
+    if (index < hubPayload.length - 1) {
       await sleep(COMPAT_FORWARD_DELAY_MS);
     }
   }

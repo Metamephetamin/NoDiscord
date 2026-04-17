@@ -46,6 +46,8 @@ export default function MobileProfileScreen({
               src={avatarSrc}
               alt={displayName}
               frame={avatarFrame}
+              loading="eager"
+              decoding="sync"
             />
           </button>
           <div className="mobile-profile-screen__identity">

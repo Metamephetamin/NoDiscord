@@ -395,6 +395,7 @@
   font-size: 15px;
   outline: none;
   font-family: var(--font-body);
+  font-weight: 550;
 }
 
 .auth-input--compact {
@@ -403,6 +404,7 @@
 
 .auth-input::placeholder {
   color: #6a7891;
+  font-weight: 500;
 }
 
 .auth-input:focus {
@@ -594,7 +596,6 @@
 }
 
 .auth-verify-modal__close:hover {
-  transform: translateY(-1px);
   background: rgba(255, 255, 255, 0.12);
 }
 

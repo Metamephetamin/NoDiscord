@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
+import PendingUploadPreview from "./PendingUploadPreview";
 import TextChatBatchUploadSheet from "./TextChatBatchUploadSheet";
+import TextChatPollComposerModal from "./TextChatPollComposerModal";
+import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
 import {
   buildVoiceMessageLabel,
   COMPOSER_EMOJI_OPTIONS,
@@ -28,6 +31,8 @@ export default function TextChatComposer({
   selectedMentionSuggestionIndex,
   textareaRef,
   message,
+  serverMembers,
+  serverRoles,
   batchUploadOptions,
   preferExplicitSend,
   onFileChange,
@@ -35,6 +40,7 @@ export default function TextChatComposer({
   onRetryPendingUpload,
   onClearPendingUploads,
   onUpdatePendingUploadCompressionMode,
+  onUpdatePendingUploadSpoilerMode,
   onToggleBatchUploadGrouping,
   onToggleBatchUploadSendAsDocuments,
   onToggleBatchUploadRememberChoice,
@@ -46,10 +52,12 @@ export default function TextChatComposer({
   onStopEditing,
   onCancelVoiceRecording,
   onSpeechRecognitionToggle,
+  onPaste,
   onSyncComposerSelection,
   onToggleEmojiPicker,
   onInsertEmoji,
   onSendAnimatedEmoji,
+  onSendPoll,
   onApplyMentionSuggestion,
   onSelectMentionSuggestionIndex,
   onCloseMentionSuggestions,
@@ -58,10 +66,24 @@ export default function TextChatComposer({
   onStartEditingLatestOwnMessage,
   onSend,
 }) {
-  const [emojiPreviewCount, setEmojiPreviewCount] = useState(12);
+  const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const composerHighlightRef = useRef(null);
+  const composerMentionSegments = useMemo(
+    () => segmentMessageTextByMentions(message, extractMentionsFromText(message, serverMembers, serverRoles)),
+    [message, serverMembers, serverRoles]
+  );
+
+  const handleAttachFileChange = (event) => {
+    onFileChange(event);
+    if (event?.target) {
+      event.target.blur?.();
+      event.target.value = "";
+    }
+  };
 
   const loadMoreEmojiPreviews = () => {
-    setEmojiPreviewCount((previous) => Math.min(previous + 12, COMPOSER_EMOJI_OPTIONS.length));
+    setEmojiPreviewCount((previous) => Math.min(previous + 8, COMPOSER_EMOJI_OPTIONS.length));
   };
 
   const handleEmojiPickerScroll = (event) => {
@@ -71,7 +93,7 @@ export default function TextChatComposer({
     }
   };
 
-  const hasBatchUploadSheet = selectedFiles.length > 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image");
+  const hasBatchUploadSheet = selectedFiles.length >= 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image");
 
   const getPendingUploadStatusLabel = (selectedFile) => {
     if (selectedFile?.status === "uploading") {
@@ -115,6 +137,8 @@ export default function TextChatComposer({
             onRemovePendingUpload={onRemovePendingUpload}
             onClearPendingUploads={onClearPendingUploads}
             onFileChange={onFileChange}
+            onUpdatePendingUploadCompressionMode={onUpdatePendingUploadCompressionMode}
+            onUpdatePendingUploadSpoilerMode={onUpdatePendingUploadSpoilerMode}
             onSend={onSend}
           />
         ) : null}
@@ -136,15 +160,11 @@ export default function TextChatComposer({
                   className={`chat-file-pill chat-file-pill--${selectedFile.kind || "file"} chat-file-pill--${selectedFile.status || "queued"}`}
                 >
                   <div className="chat-file-pill__preview">
-                    {selectedFile.previewUrl && selectedFile.kind === "image" ? (
-                      <img src={selectedFile.previewUrl} alt={selectedFile.name} />
-                    ) : selectedFile.previewUrl && selectedFile.kind === "video" ? (
-                      <video src={selectedFile.previewUrl} muted playsInline preload="metadata" />
-                    ) : (
-                      <span className="chat-file-pill__fallback" aria-hidden="true">
-                        {selectedFile.kind === "video" ? "VID" : selectedFile.kind === "image" ? "IMG" : "FILE"}
-                      </span>
-                    )}
+                    <PendingUploadPreview
+                      file={selectedFile}
+                      className="chat-file-pill__preview-media"
+                      fallbackClassName="chat-file-pill__fallback"
+                    />
                   </div>
                   <div className="chat-file-pill__body">
                     <div className="chat-file-pill__meta">
@@ -268,10 +288,57 @@ export default function TextChatComposer({
 
         <div className={`input-area__controls ${hasBatchUploadSheet ? "input-area__controls--batch" : ""}`}>
           <div className="message-composer">
-            <label className="attach-button" aria-label="Прикрепить файл" title="Прикрепить файл">
-              <input type="file" className="attach-button__input" onChange={onFileChange} disabled={uploadingFile} multiple />
+            <div className="attach-button" aria-label="Меню вложений" title="Меню вложений">
               <span className="attach-button__icon" aria-hidden="true" />
-            </label>
+            </div>
+
+            <div className="attach-menu__popover" role="menu" aria-label="Меню вложений">
+              <label className="attach-menu__item attach-menu__item--label" role="menuitem">
+                <input
+                  type="file"
+                  className="attach-menu__input"
+                  accept="image/*,video/*"
+                  onChange={handleAttachFileChange}
+                  disabled={uploadingFile}
+                  multiple
+                />
+                <span className="attach-menu__item-icon attach-menu__item-icon--media" aria-hidden="true" />
+                <span>Фото или видео</span>
+              </label>
+
+              <label className="attach-menu__item attach-menu__item--label" role="menuitem">
+                <input
+                  type="file"
+                  className="attach-menu__input"
+                  onChange={handleAttachFileChange}
+                  disabled={uploadingFile}
+                  multiple
+                />
+                <span className="attach-menu__item-icon attach-menu__item-icon--file" aria-hidden="true" />
+                <span>Документ</span>
+              </label>
+
+              <button
+                type="button"
+                className="attach-menu__item"
+                onClick={() => setPollComposerOpen(true)}
+                disabled={uploadingFile || voiceRecordingState === "sending" || typeof onSendPoll !== "function"}
+                role="menuitem"
+              >
+                <span className="attach-menu__item-icon attach-menu__item-icon--poll" aria-hidden="true" />
+                <span>Опрос</span>
+              </button>
+
+              <button type="button" className="attach-menu__item attach-menu__item--disabled" disabled role="menuitem">
+                <span className="attach-menu__item-icon attach-menu__item-icon--location" aria-hidden="true" />
+                <span>Локация</span>
+              </button>
+
+              <button type="button" className="attach-menu__item attach-menu__item--disabled" disabled role="menuitem">
+                <span className="attach-menu__item-icon attach-menu__item-icon--wallet" aria-hidden="true" />
+                <span>Кошелёк</span>
+              </button>
+            </div>
 
             <button
               ref={composerEmojiButtonRef}
@@ -282,7 +349,7 @@ export default function TextChatComposer({
                 onSyncComposerSelection();
                 const nextOpen = !composerEmojiPickerOpen;
                 if (nextOpen) {
-                  setEmojiPreviewCount(12);
+                  setEmojiPreviewCount(8);
                 }
                 onToggleEmojiPicker(nextOpen);
               }}
@@ -365,7 +432,7 @@ export default function TextChatComposer({
               <div ref={mentionSuggestionsRef} className="mention-suggestions" role="listbox" aria-label="Подсказки упоминаний">
                 {mentionSuggestions.map((suggestion, index) => (
                   <button
-                    key={`${suggestion.userId}-${suggestion.handle}`}
+                    key={`${suggestion.type || "user"}-${suggestion.userId || suggestion.roleId || suggestion.handle}-${suggestion.handle}`}
                     type="button"
                     className={`mention-suggestions__item ${index === selectedMentionSuggestionIndex ? "mention-suggestions__item--active" : ""}`}
                     onMouseDown={(event) => event.preventDefault()}
@@ -373,27 +440,74 @@ export default function TextChatComposer({
                     role="option"
                     aria-selected={index === selectedMentionSuggestionIndex}
                   >
-                    <AnimatedAvatar className="mention-suggestions__avatar" src={suggestion.avatar || ""} alt={suggestion.displayName} />
+                    {suggestion.type === "role" ? (
+                      <span
+                        className="mention-suggestions__swatch"
+                        style={{ backgroundColor: suggestion.color || "#7b89a8" }}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <AnimatedAvatar className="mention-suggestions__avatar" src={suggestion.avatar || ""} alt={suggestion.displayName} />
+                    )}
                     <span className="mention-suggestions__content">
                       <span className="mention-suggestions__name">{suggestion.displayName}</span>
-                      <span className="mention-suggestions__handle">@{suggestion.handle}</span>
+                      <span className="mention-suggestions__handle">
+                        @{suggestion.handle}
+                        <span className="mention-suggestions__meta">{suggestion.type === "role" ? "Роль" : "Участник"}</span>
+                      </span>
                     </span>
                   </button>
                 ))}
               </div>
             ) : null}
 
-            <textarea
+            <div className="composer-textarea-shell">
+              <div ref={composerHighlightRef} className="composer-textarea-highlight" aria-hidden="true">
+                {composerMentionSegments.map((segment, index) => {
+                  if (segment.isMention) {
+                    const mentionStyle = segment.color
+                      ? { color: segment.color, background: `${segment.color}22` }
+                      : undefined;
+
+                    return (
+                      <span
+                        key={`composer-mention-${index}-${segment.roleId || segment.userId || segment.text}`}
+                        className={`composer-textarea-highlight__mention ${segment.type === "role" ? "composer-textarea-highlight__mention--role" : ""}`}
+                        style={mentionStyle}
+                        title={segment.displayName || segment.text}
+                      >
+                        {segment.text}
+                      </span>
+                    );
+                  }
+
+                  if (!segment.text) {
+                    return null;
+                  }
+
+                  return <span key={`composer-text-${index}`}>{segment.text}</span>;
+                })}
+              </div>
+
+              <textarea
               ref={textareaRef}
               value={message}
               disabled={uploadingFile || voiceRecordingState === "sending"}
               onChange={(event) => {
                 onMessageChange(event.target.value);
-                onSyncComposerSelection();
+                onSyncComposerSelection(event.target);
               }}
-              onSelect={onSyncComposerSelection}
-              onClick={onSyncComposerSelection}
-              onKeyUp={onSyncComposerSelection}
+              onPaste={onPaste}
+              onSelect={(event) => onSyncComposerSelection(event.target)}
+              onClick={(event) => onSyncComposerSelection(event.target)}
+              onScroll={(event) => {
+                if (!composerHighlightRef.current) {
+                  return;
+                }
+
+                composerHighlightRef.current.scrollTop = event.currentTarget.scrollTop;
+                composerHighlightRef.current.scrollLeft = event.currentTarget.scrollLeft;
+              }}
               data-editing={messageEditState ? "true" : "false"}
               placeholder={uploadingFile ? "Загружаем вложения..." : "Введите сообщение..."}
               onKeyDown={(event) => {
@@ -475,7 +589,8 @@ export default function TextChatComposer({
                   onSend();
                 }
               }}
-            />
+              />
+            </div>
 
             <div className="composer-tools-end">
               <button
@@ -498,6 +613,12 @@ export default function TextChatComposer({
           </div>
         </div>
       </div>
+
+      <TextChatPollComposerModal
+        open={pollComposerOpen}
+        onClose={() => setPollComposerOpen(false)}
+        onSubmit={onSendPoll}
+      />
     </div>
   );
 }

@@ -103,6 +103,7 @@ out/
 
 # IDE and .NET build artifacts
 .dotnet/
+.dotnet-cli-home/
 **/.vs/
 **/bin/
 **/obj/

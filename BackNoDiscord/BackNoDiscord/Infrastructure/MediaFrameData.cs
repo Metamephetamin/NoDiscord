@@ -11,6 +11,9 @@ public sealed class MediaFrameData
 
 public static class MediaFrameSerializer
 {
+    private const double MinZoom = 0.2;
+    private const double MaxZoom = 5;
+    private const double TravelMultiplier = 160;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -19,11 +22,13 @@ public static class MediaFrameSerializer
     public static MediaFrameData? Normalize(MediaFrameData? value, bool allowNull = false)
     {
         var frame = value ?? new MediaFrameData();
+        var normalizedZoom = Clamp(frame.Zoom, MinZoom, MaxZoom, 1);
+        var (minPosition, maxPosition) = GetPositionBounds(normalizedZoom);
         var normalized = new MediaFrameData
         {
-            X = Clamp(frame.X, 0, 100, 50),
-            Y = Clamp(frame.Y, 0, 100, 50),
-            Zoom = Clamp(frame.Zoom, 1, 3, 1)
+            X = Clamp(frame.X, minPosition, maxPosition, 50),
+            Y = Clamp(frame.Y, minPosition, maxPosition, 50),
+            Zoom = normalizedZoom
         };
 
         if (allowNull && IsDefault(normalized))
@@ -63,6 +68,12 @@ public static class MediaFrameSerializer
         return Math.Abs(value.X - 50) < 0.01
             && Math.Abs(value.Y - 50) < 0.01
             && Math.Abs(value.Zoom - 1) < 0.01;
+    }
+
+    private static (double Min, double Max) GetPositionBounds(double zoom)
+    {
+        var extraRange = Math.Abs(zoom - 1) * TravelMultiplier;
+        return (-extraRange, 100 + extraRange);
     }
 
     private static double Clamp(double value, double min, double max, double fallback)

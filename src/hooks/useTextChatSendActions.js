@@ -7,10 +7,13 @@ import {
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
+  createPendingUploadPreview,
+  createPendingUploadThumbnail,
   preparePendingUploadForSend,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
+import { createPollMessagePayload } from "../utils/pollMessages";
 import { punctuateTypedMessageText } from "../utils/speechPunctuation";
 import {
   getChatErrorMessage,
@@ -20,7 +23,38 @@ import {
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
 
 const ATTACHMENT_UPLOAD_CONCURRENCY = 2;
+const THUMBNAIL_PREVIEW_CONCURRENCY = 2;
+const FULL_PREVIEW_CONCURRENCY = 1;
+const PREPARE_UPLOAD_CONCURRENCY = 1;
 const PROGRESS_UPDATE_MIN_DELTA = 0.04;
+
+function createTaskQueueState() {
+  return {
+    pending: [],
+    running: 0,
+  };
+}
+
+function drainTaskQueue(queueState, concurrency) {
+  while (queueState.running < concurrency && queueState.pending.length) {
+    const nextTask = queueState.pending.shift();
+    queueState.running += 1;
+    Promise.resolve()
+      .then(nextTask)
+      .catch(() => {
+        // Individual queue tasks handle their own state/fallbacks.
+      })
+      .finally(() => {
+        queueState.running = Math.max(0, queueState.running - 1);
+        drainTaskQueue(queueState, concurrency);
+      });
+  }
+}
+
+function enqueueTask(queueState, concurrency, task) {
+  queueState.pending.push(task);
+  drainTaskQueue(queueState, concurrency);
+}
 
 function yieldToMainThread() {
   return new Promise((resolve) => {
@@ -45,6 +79,7 @@ export default function useTextChatSendActions({
   scopedChannelId,
   user,
   serverMembers,
+  serverRoles,
   isDirectChat,
   uploadingFile,
   setUploadingFile,
@@ -67,6 +102,12 @@ export default function useTextChatSendActions({
   const pendingUploadPatchFrameRef = useRef(0);
   const uploadProgressSnapshotRef = useRef(new Map());
   const preparedUploadFileCacheRef = useRef(new Map());
+  const preparedUploadModeRef = useRef(new Map());
+  const uploadPreparationVersionRef = useRef(new Map());
+  const previewHydrationVersionRef = useRef(new Map());
+  const thumbnailPreviewQueueRef = useRef(createTaskQueueState());
+  const fullPreviewQueueRef = useRef(createTaskQueueState());
+  const prepareUploadQueueRef = useRef(createTaskQueueState());
 
   const flushPendingUploadPatches = () => {
     pendingUploadPatchFrameRef.current = 0;
@@ -146,7 +187,159 @@ export default function useTextChatSendActions({
     pendingUploadPatchQueueRef.current.clear();
     uploadProgressSnapshotRef.current.clear();
     preparedUploadFileCacheRef.current.clear();
+    preparedUploadModeRef.current.clear();
+    uploadPreparationVersionRef.current.clear();
+    previewHydrationVersionRef.current.clear();
+    thumbnailPreviewQueueRef.current.pending = [];
+    fullPreviewQueueRef.current.pending = [];
+    prepareUploadQueueRef.current.pending = [];
   }, []);
+
+  useEffect(() => {
+    const nextSelectedFiles = Array.isArray(selectedFiles) ? selectedFiles : [];
+    const activeUploadIds = new Set(
+      nextSelectedFiles.map((item) => String(item?.id || "")).filter(Boolean)
+    );
+
+    Array.from(preparedUploadFileCacheRef.current.keys()).forEach((uploadId) => {
+      if (!activeUploadIds.has(uploadId)) {
+        preparedUploadFileCacheRef.current.delete(uploadId);
+        preparedUploadModeRef.current.delete(uploadId);
+        uploadPreparationVersionRef.current.delete(uploadId);
+      }
+    });
+
+    nextSelectedFiles.forEach((upload, index) => {
+      const uploadId = String(upload?.id || "");
+      const compressionMode = String(upload?.compressionMode || "original");
+      if (!uploadId) {
+        return;
+      }
+
+      if (compressionMode === "original") {
+        preparedUploadFileCacheRef.current.delete(uploadId);
+        preparedUploadModeRef.current.delete(uploadId);
+        uploadPreparationVersionRef.current.delete(uploadId);
+        return;
+      }
+
+      const cachedMode = preparedUploadModeRef.current.get(uploadId);
+      if (cachedMode === compressionMode) {
+        return;
+      }
+
+      const versionToken = Symbol(uploadId);
+      uploadPreparationVersionRef.current.set(uploadId, versionToken);
+      preparedUploadModeRef.current.set(uploadId, compressionMode);
+
+      enqueueTask(prepareUploadQueueRef.current, PREPARE_UPLOAD_CONCURRENCY, async () => {
+        if (uploadPreparationVersionRef.current.get(uploadId) !== versionToken) {
+          return;
+        }
+
+        try {
+          await yieldToMainThread();
+          const preparedFile = await preparePendingUploadForSend(upload);
+          if (uploadPreparationVersionRef.current.get(uploadId) !== versionToken) {
+            return;
+          }
+
+          preparedUploadFileCacheRef.current.set(uploadId, preparedFile);
+        } catch {
+          if (uploadPreparationVersionRef.current.get(uploadId) !== versionToken) {
+            return;
+          }
+
+          preparedUploadFileCacheRef.current.delete(uploadId);
+          preparedUploadModeRef.current.delete(uploadId);
+        }
+      });
+    });
+  }, [selectedFiles]);
+
+  const invalidatePreviewHydration = (uploadId) => {
+    const normalizedId = String(uploadId || "");
+    if (!normalizedId) {
+      return;
+    }
+
+    previewHydrationVersionRef.current.set(normalizedId, Symbol(normalizedId));
+  };
+
+  const queueFullPreviewHydration = (upload, versionToken) => {
+    const uploadId = String(upload?.id || "");
+    if (!uploadId || (upload?.kind !== "image" && upload?.kind !== "video")) {
+      return;
+    }
+
+    enqueueTask(fullPreviewQueueRef.current, FULL_PREVIEW_CONCURRENCY, async () => {
+      if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
+        return;
+      }
+
+      await yieldToMainThread();
+
+      if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
+        return;
+      }
+
+      if (!upload.previewUrl) {
+        const previewUrl = createPendingUploadPreview(upload);
+        if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
+          if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+          }
+          return;
+        }
+
+        if (previewUrl) {
+          schedulePendingUploadPatch(uploadId, { previewUrl });
+        }
+      }
+    });
+  };
+
+  const hydratePendingUploadPreviews = (uploads) => {
+    (Array.isArray(uploads) ? uploads : []).forEach((upload, index) => {
+      const uploadId = String(upload?.id || "");
+      if (!uploadId || (upload?.kind !== "image" && upload?.kind !== "video")) {
+        return;
+      }
+
+      const versionToken = Symbol(uploadId);
+      previewHydrationVersionRef.current.set(uploadId, versionToken);
+
+      if (upload.kind !== "image" || upload.thumbnailUrl) {
+        queueFullPreviewHydration(upload, versionToken);
+        return;
+      }
+
+      enqueueTask(thumbnailPreviewQueueRef.current, THUMBNAIL_PREVIEW_CONCURRENCY, async () => {
+        if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
+          return;
+        }
+
+        try {
+          await yieldToMainThread();
+          const thumbnailUrl = await createPendingUploadThumbnail(upload);
+          if (previewHydrationVersionRef.current.get(uploadId) !== versionToken) {
+            if (thumbnailUrl) {
+              URL.revokeObjectURL(thumbnailUrl);
+            }
+            return;
+          }
+
+          if (thumbnailUrl) {
+            schedulePendingUploadPatch(uploadId, { thumbnailUrl });
+          }
+        } catch {
+          // Keep the fallback visible if thumbnail generation fails.
+        }
+
+        queueFullPreviewHydration(upload, versionToken);
+      });
+    });
+  };
 
   const appendPendingFiles = (files, { replace = false } = {}) => {
     const validFiles = Array.isArray(files) ? files.filter((file) => file instanceof File) : [];
@@ -169,6 +362,7 @@ export default function useTextChatSendActions({
     startTransition(() => {
       setSelectedFiles((previous) => {
         if (replace) {
+          previous.forEach((item) => invalidatePreviewHydration(item?.id));
           revokePendingUploadPreviews(previous);
           return nextUploads;
         }
@@ -177,6 +371,7 @@ export default function useTextChatSendActions({
       });
     });
 
+    hydratePendingUploadPreviews(nextUploads);
     return true;
   };
 
@@ -211,6 +406,9 @@ export default function useTextChatSendActions({
     }
 
     preparedUploadFileCacheRef.current.delete(normalizedId);
+    preparedUploadModeRef.current.delete(normalizedId);
+    uploadPreparationVersionRef.current.set(normalizedId, Symbol(normalizedId));
+    invalidatePreviewHydration(normalizedId);
 
     setSelectedFiles((previous) => {
       const nextUploads = [];
@@ -230,6 +428,15 @@ export default function useTextChatSendActions({
     pendingUploadPatchQueueRef.current.clear();
     uploadProgressSnapshotRef.current.clear();
     preparedUploadFileCacheRef.current.clear();
+    preparedUploadModeRef.current.clear();
+    Array.from(uploadPreparationVersionRef.current.keys()).forEach((uploadId) => {
+      uploadPreparationVersionRef.current.set(uploadId, Symbol(uploadId));
+    });
+    uploadPreparationVersionRef.current.clear();
+    Array.from(previewHydrationVersionRef.current.keys()).forEach((uploadId) => {
+      invalidatePreviewHydration(uploadId);
+    });
+    previewHydrationVersionRef.current.clear();
 
     setSelectedFiles((previous) => {
       if (!previous.length) {
@@ -241,7 +448,10 @@ export default function useTextChatSendActions({
   };
 
   const retryPendingUpload = (uploadId) => {
-    preparedUploadFileCacheRef.current.delete(String(uploadId || ""));
+    const normalizedId = String(uploadId || "");
+    preparedUploadFileCacheRef.current.delete(normalizedId);
+    preparedUploadModeRef.current.delete(normalizedId);
+    uploadPreparationVersionRef.current.set(normalizedId, Symbol(normalizedId));
     updatePendingUpload(uploadId, {
       status: "queued",
       progress: 0,
@@ -254,16 +464,32 @@ export default function useTextChatSendActions({
     const normalizedMode = ["compressed", "original", "file"].includes(String(compressionMode || ""))
       ? compressionMode
       : "original";
+    const normalizedId = String(uploadId || "");
+    preparedUploadFileCacheRef.current.delete(normalizedId);
+    preparedUploadModeRef.current.delete(normalizedId);
+    uploadPreparationVersionRef.current.set(normalizedId, Symbol(normalizedId));
     updatePendingUpload(uploadId, { compressionMode: normalizedMode });
+  };
+
+  const updatePendingUploadSpoilerMode = (uploadId, enabled) => {
+    updatePendingUpload(uploadId, {
+      hideWithSpoiler: Boolean(enabled),
+    });
   };
 
   const setPendingUploadsDocumentMode = (enabled) => {
     setSelectedFiles((previous) =>
-      previous.map((item) => (
-        item?.kind === "image"
-          ? { ...item, compressionMode: enabled ? "file" : "original" }
-          : item
-      ))
+      previous.map((item) => {
+        if (item?.kind !== "image") {
+          return item;
+        }
+
+        const uploadId = String(item?.id || "");
+        preparedUploadFileCacheRef.current.delete(uploadId);
+        preparedUploadModeRef.current.delete(uploadId);
+        uploadPreparationVersionRef.current.set(uploadId, Symbol(uploadId));
+        return { ...item, compressionMode: enabled ? "file" : "original" };
+      })
     );
   };
 
@@ -272,6 +498,8 @@ export default function useTextChatSendActions({
     attachmentName: attachment.fileName || "",
     attachmentSize: attachment.size || null,
     attachmentContentType: attachment.contentType || "",
+    attachmentSpoiler: Boolean(attachment.attachmentSpoiler),
+    attachmentAsFile: Boolean(attachment.attachmentAsFile),
     attachmentEncryption: attachment.attachmentEncryption || null,
     voiceMessage: null,
   });
@@ -317,7 +545,7 @@ export default function useTextChatSendActions({
     }
 
     const avatar = user?.avatarUrl || user?.avatar || "";
-    const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers) : [];
+    const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers, serverRoles) : [];
     let activeUploadId = "";
     let sendSucceeded = false;
     const sendTraceId = startPerfTrace("text-chat", "send-message", {
@@ -380,6 +608,7 @@ export default function useTextChatSendActions({
       }
 
       let attachments = [];
+      const hasDocumentUploads = filesToSend.some((item) => String(item?.compressionMode || "original") === "file");
       if (filesToSend.length) {
         const uploadTraceId = startPerfTrace("text-chat", "send-message:upload-attachments", {
           attachmentCount: filesToSend.length,
@@ -407,11 +636,17 @@ export default function useTextChatSendActions({
 
             await yieldToMainThread();
 
-            let fileForUpload = uploadId ? preparedUploadFileCacheRef.current.get(uploadId) : null;
+            const normalizedCompressionMode = String(pendingUpload?.compressionMode || "original");
+            const cachedCompressionMode = uploadId ? preparedUploadModeRef.current.get(uploadId) : "";
+            let fileForUpload =
+              uploadId && cachedCompressionMode === normalizedCompressionMode
+                ? preparedUploadFileCacheRef.current.get(uploadId)
+                : null;
             if (!(fileForUpload instanceof File)) {
               fileForUpload = await preparePendingUploadForSend(pendingUpload);
               if (uploadId) {
                 preparedUploadFileCacheRef.current.set(uploadId, fileForUpload);
+                preparedUploadModeRef.current.set(uploadId, normalizedCompressionMode);
               }
             }
 
@@ -455,6 +690,8 @@ export default function useTextChatSendActions({
             if (uploadId) {
               uploadProgressSnapshotRef.current.delete(uploadId);
               preparedUploadFileCacheRef.current.delete(uploadId);
+              preparedUploadModeRef.current.delete(uploadId);
+              uploadPreparationVersionRef.current.delete(uploadId);
               schedulePendingUploadPatch(uploadId, {
                 status: "done",
                 progress: 1,
@@ -462,11 +699,16 @@ export default function useTextChatSendActions({
               });
             }
 
+            const shouldTreatAsFile = pendingUpload?.kind === "image"
+              && (normalizedCompressionMode === "file" || Boolean(batchUploadOptions?.sendAsDocuments));
+
             attachmentResults[index] = {
               fileUrl: uploaded?.fileUrl || null,
               fileName: uploaded?.fileName || fileForUpload.name || pendingUpload.name || "attachment",
               size: uploaded?.size || preparedAttachment.uploadBlob.size || null,
               contentType: uploaded?.contentType || fileForUpload.type || pendingUpload.type || "application/octet-stream",
+              attachmentSpoiler: Boolean(pendingUpload?.hideWithSpoiler),
+              attachmentAsFile: shouldTreatAsFile,
               attachmentEncryption: null,
             };
           };
@@ -537,7 +779,7 @@ export default function useTextChatSendActions({
         }
       }
 
-      const shouldGroupItems = batchUploadOptions?.groupItems !== false;
+      const shouldGroupItems = !hasDocumentUploads && batchUploadOptions?.groupItems !== false;
       const payload = shouldGroupItems
         ? [{
             message: messageText,
@@ -550,6 +792,8 @@ export default function useTextChatSendActions({
             attachmentName: attachments[0]?.fileName || "",
             attachmentSize: attachments[0]?.size || null,
             attachmentContentType: attachments[0]?.contentType || "",
+            attachmentSpoiler: Boolean(attachments[0]?.attachmentSpoiler),
+            attachmentAsFile: Boolean(attachments[0]?.attachmentAsFile),
             attachmentEncryption: attachments[0]?.attachmentEncryption || null,
             voiceMessage: null,
           }]
@@ -564,6 +808,8 @@ export default function useTextChatSendActions({
             attachmentName: attachment.fileName || "",
             attachmentSize: attachment.size || null,
             attachmentContentType: attachment.contentType || "",
+            attachmentSpoiler: Boolean(attachment.attachmentSpoiler),
+            attachmentAsFile: Boolean(attachment.attachmentAsFile),
             attachmentEncryption: attachment.attachmentEncryption || null,
             voiceMessage: null,
           }));
@@ -596,7 +842,20 @@ export default function useTextChatSendActions({
         playDirectMessageSound("send");
       }
     } catch (error) {
-      console.error(messageEditState ? "EditMessage error:" : "SendMessage error:", error);
+      console.error(messageEditState ? "EditMessage error:" : "SendMessage error:", error, {
+        scopedChannelId,
+        isDirectChat,
+        messageLength: messageText.length,
+        attachmentCount: filesToSend.length,
+        attachments: filesToSend.map((item) => ({
+          id: String(item?.id || ""),
+          kind: String(item?.kind || ""),
+          name: String(item?.name || ""),
+          compressionMode: String(item?.compressionMode || "original"),
+          hideWithSpoiler: Boolean(item?.hideWithSpoiler),
+          size: Number(item?.size || 0),
+        })),
+      });
 
       if (!messageEditState) {
         if (activeUploadId) {
@@ -719,6 +978,85 @@ export default function useTextChatSendActions({
     }
   };
 
+  const sendPoll = async (poll) => {
+    if (!scopedChannelId || uploadingFile || voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+      return false;
+    }
+
+    if (messageEditState) {
+      setErrorMessage("Во время редактирования нельзя отправлять опрос.");
+      return false;
+    }
+
+    if (selectedFiles.length) {
+      setErrorMessage("Сначала отправьте или очистите текущие вложения.");
+      return false;
+    }
+
+    const now = Date.now();
+    const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
+    if (cooldownLeft > 0) {
+      setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
+      return false;
+    }
+
+    const avatar = user?.avatarUrl || user?.avatar || "";
+    let sendSucceeded = false;
+    const sendTraceId = startPerfTrace("text-chat", "send-poll", {
+      isDirectChat,
+    });
+
+    try {
+      setErrorMessage("");
+      await ensureChannelJoined();
+
+      await sendMessagesCompat(scopedChannelId, avatar, [{
+        message: createPollMessagePayload(poll),
+        mentions: [],
+        replyToMessageId: replyState?.messageId || "",
+        replyToUsername: replyState?.username || "",
+        replyPreview: replyState?.preview || "",
+        attachments: [],
+        attachmentUrl: "",
+        attachmentName: "",
+        attachmentSize: null,
+        attachmentContentType: "",
+        attachmentEncryption: null,
+        voiceMessage: null,
+      }]);
+
+      forceScrollToBottomRef.current = true;
+      lastSendAtRef.current = Date.now();
+      clearChatDraft(user, scopedChannelId);
+
+      startTransition(() => {
+        setMessage("");
+        setReplyState(null);
+        clearPendingUploads();
+        setIsChannelReady(true);
+        setActionFeedback(null);
+      });
+
+      if (isDirectChat) {
+        playDirectMessageSound("send");
+      }
+
+      sendSucceeded = true;
+      return true;
+    } catch (error) {
+      console.error("Send poll error:", error);
+      joinedChannelRef.current = "";
+      setIsChannelReady(false);
+      setErrorMessage(getChatErrorMessage(error, "Не удалось отправить опрос."));
+      return false;
+    } finally {
+      finishPerfTrace(sendTraceId, {
+        success: sendSucceeded,
+        isDirectChat,
+      });
+    }
+  };
+
   const queueFiles = (files, { source = "unknown" } = {}) => {
     const queueTraceId = startPerfTrace("text-chat", "queue-files", {
       requestedFileCount: Array.isArray(files) ? files.length : 0,
@@ -770,6 +1108,7 @@ export default function useTextChatSendActions({
   return {
     send,
     sendAnimatedEmoji,
+    sendPoll,
     handleFileChange,
     queueFiles,
     appendPendingFiles,
@@ -777,6 +1116,7 @@ export default function useTextChatSendActions({
     retryPendingUpload,
     clearPendingUploads,
     updatePendingUploadCompressionMode,
+    updatePendingUploadSpoilerMode,
     setPendingUploadsDocumentMode,
   };
 }

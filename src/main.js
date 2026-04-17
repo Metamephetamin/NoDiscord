@@ -1179,6 +1179,7 @@ const createWindow = () => {
     devServer: Boolean(RENDERER_DEV_SERVER_URL),
   });
   const desktopTitleBarHeight = 28;
+  const desktopTitleBarColor = "#10141c";
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -1189,7 +1190,7 @@ const createWindow = () => {
     ...(process.platform === "win32"
       ? {
           titleBarOverlay: {
-            color: "#111319",
+            color: desktopTitleBarColor,
             symbolColor: "#dfe6f7",
             height: desktopTitleBarHeight,
           },
@@ -1261,7 +1262,7 @@ const createWindow = () => {
 
   if (RENDERER_DEV_SERVER_URL) {
     mainWindow.loadURL(RENDERER_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools({ mode: "detach" });
+    mainWindow.webContents.openDevTools({ mode: "right" });
     deliverPendingRendererRoute();
     return;
   }

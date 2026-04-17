@@ -4,6 +4,7 @@ import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
+import { isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 export const FriendsSidebar = ({
   query,
@@ -96,7 +97,7 @@ export const FriendsSidebar = ({
                     onTrigger: () => setPressedFriendId(""),
                   })}
                 >
-                  <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
+                  <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
                   <span className="friends-directs__meta">
                     <span className="friends-directs__name">{getDisplayName(friend)}</span>
                     {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
@@ -170,7 +171,7 @@ export const FriendsMain = ({
         {currentDirectFriend ? (
           <div className="friends-main__chat">
             <div className="chat__header chat__header--friends">
-              <h1>{getDisplayName(currentDirectFriend)}</h1>
+              <h1 className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__header-name--online" : ""}>{getDisplayName(currentDirectFriend)}</h1>
               <span className="chat__subtitle">Личный чат между двумя пользователями</span>
             </div>
             <TextChat
@@ -191,7 +192,7 @@ export const FriendsMain = ({
                   {friends.map((friend) => (
                     <div key={friend.id} className="friends-results__item">
                       <div className="friends-results__identity">
-                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
+                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
                         <div className="friends-results__meta">
                           <strong>{getDisplayName(friend)}</strong>
                           <span>{friend.email || "Без email"}</span>
@@ -225,7 +226,7 @@ export const FriendsMain = ({
                     {incomingFriendRequests.map((request) => (
                       <div key={request.id} className="friends-results__item friends-results__item--request">
                         <div className="friends-results__identity">
-                          <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} />
+                          <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
                           <div className="friends-results__meta">
                             <strong>{getDisplayName(request.sender)}</strong>
                             <span>{request.sender.email || "Без email"}</span>
@@ -260,7 +261,7 @@ export const FriendsMain = ({
                 {friendLookupResults.map((friend) => (
                   <div key={friend.id} className="friends-results__item">
                     <div className="friends-results__identity">
-                      <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
+                      <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
                       <div className="friends-results__meta">
                         <strong>{getDisplayName(friend)}</strong>
                         <span>{friend.email || "Без email"}</span>
@@ -316,7 +317,7 @@ export const FriendsMain = ({
           <div className="friends-contacts__list">
             {activeContacts.map((friend) => (
               <button key={friend.id} type="button" className="friends-contacts__item" onClick={() => onOpenDirectChat(friend.id)}>
-                <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} />
+                <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
                 <span>{getDisplayName(friend)}</span>
               </button>
             ))}

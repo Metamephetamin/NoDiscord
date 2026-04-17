@@ -1,5 +1,6 @@
 import lottiefilesEmojiCatalog from "./lottiefilesEmojiCatalog.json";
 import { resolveStaticAssetUrl } from "./media";
+import { getPollPreview, parsePollMessage } from "./pollMessages";
 import { formatVoiceMessageDuration, normalizeVoiceMessageMetadata, restoreRussianSpeechPunctuation } from "./voiceMessages";
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 export const MESSAGE_SEND_COOLDOWN_MS = 1500;
@@ -189,6 +190,8 @@ export function normalizeAttachmentItems(messageItem) {
           ? Number(attachment.AttachmentSize)
           : null,
       attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || "").trim(),
+      attachmentSpoiler: Boolean(attachment?.attachmentSpoiler || attachment?.AttachmentSpoiler),
+      attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile),
       attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null,
       voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage),
     }))
@@ -200,6 +203,8 @@ export function normalizeAttachmentItems(messageItem) {
 
   const legacyAttachmentUrl = String(messageItem?.attachmentUrl || messageItem?.AttachmentUrl || "").trim();
   const legacyAttachmentEncryption = messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null;
+  const legacyAttachmentSpoiler = Boolean(messageItem?.attachmentSpoiler || messageItem?.AttachmentSpoiler);
+  const legacyAttachmentAsFile = Boolean(messageItem?.attachmentAsFile || messageItem?.AttachmentAsFile);
   const legacyVoiceMessage = normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage);
 
   if (!legacyAttachmentUrl && !legacyAttachmentEncryption && !legacyVoiceMessage) {
@@ -216,6 +221,8 @@ export function normalizeAttachmentItems(messageItem) {
         ? Number(messageItem.AttachmentSize)
         : null,
     attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "").trim(),
+    attachmentSpoiler: legacyAttachmentSpoiler,
+    attachmentAsFile: legacyAttachmentAsFile,
     attachmentEncryption: legacyAttachmentEncryption,
     voiceMessage: legacyVoiceMessage,
   }];
@@ -227,6 +234,10 @@ export function getPrimaryAttachment(messageItem) {
 
 export function getAttachmentKind(messageItem) {
   const primaryAttachment = getPrimaryAttachment(messageItem);
+  if (primaryAttachment?.attachmentAsFile && primaryAttachment?.attachmentUrl) {
+    return "file";
+  }
+
   if (primaryAttachment?.attachmentContentType?.startsWith("image/")) {
     return "image";
   }
@@ -260,6 +271,11 @@ export function getAttachmentCacheKey(messageId, attachmentIndex = 0) {
 
 export function getMessagePreview(messageItem) {
   const text = String(messageItem?.message || "").trim();
+  const pollPreview = getPollPreview(text);
+  if (pollPreview) {
+    return pollPreview;
+  }
+
   if (text) {
     return text;
   }
@@ -312,6 +328,10 @@ export function createPinnedSnapshot(messageItem) {
   };
 }
 
+export function getMessagePoll(messageItem) {
+  return parsePollMessage(messageItem?.message || "");
+}
+
 export function isVoiceMessage(messageItem) {
   return Boolean(messageItem?.voiceMessage) && (Boolean(messageItem?.attachmentUrl) || Boolean(messageItem?.attachmentEncryption));
 }
@@ -359,6 +379,14 @@ export function getChatErrorMessage(error, fallbackMessage) {
   const rawMessage = String(error?.message || "").trim();
   if (!rawMessage) {
     return fallbackMessage;
+  }
+
+  if (rawMessage.includes("Failed to invoke 'SendMessage' due to an error on the server.")) {
+    return "Локальный backend вернул ошибку при отправке. Перезапустите backend в профиле Development и посмотрите точный текст ошибки в его консоли.";
+  }
+
+  if (rawMessage.includes("Failed to invoke 'ForwardMessages' due to an error on the server.")) {
+    return "Локальный backend вернул ошибку при пересылке сообщений. Перезапустите backend в профиле Development и посмотрите точный текст ошибки в его консоли.";
   }
 
   if (rawMessage.includes("Method does not exist")) {

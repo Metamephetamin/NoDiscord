@@ -306,15 +306,24 @@
   width: 42px;
   height: 42px;
   flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 50%;
+  isolation: isolate;
 }
 
 .avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  clip-path: inset(0 round 50%);
   object-fit: cover;
   object-position: center 24%;
   border: 2px solid rgba(255, 255, 255, 0.14);
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -322,14 +331,15 @@
 .avatar-shell--speaking::after {
   content: "";
   position: absolute;
-  top: -2px;
-  right: -1px;
+  top: 2px;
+  right: 2px;
   width: 11px;
   height: 11px;
   border-radius: 50%;
   background: #65e48f;
   border: 2px solid #101319;
   box-shadow: 0 0 12px rgba(101, 228, 143, 0.42);
+  z-index: 2;
 }
 
 .avatar-shell--speaking .avatar {
@@ -342,7 +352,9 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 3px;
+  padding-top: 1px;
 }
 
 .profile__username {
