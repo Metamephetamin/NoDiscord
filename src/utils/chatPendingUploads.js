@@ -7,8 +7,8 @@ const COMPRESSIBLE_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
-const THUMBNAIL_MAX_EDGE = 240;
-const THUMBNAIL_QUALITY = 0.72;
+const THUMBNAIL_MAX_EDGE = 480;
+const THUMBNAIL_QUALITY = 0.86;
 
 const UPLOAD_SIGNATURE_CONTENT_TYPES = {
   ".jpg": "image/jpeg",

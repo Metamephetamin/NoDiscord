@@ -134,17 +134,28 @@
 }
 
 .channel-edit-button:disabled {
-  opacity: 0.45;
+  opacity: 0;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .list__items:hover .channel-edit-button,
+.list__items:focus-within .channel-edit-button,
 .list__items--editing .channel-edit-button,
 .channel-item:hover .channel-edit-button,
+.channel-item:focus-within .channel-edit-button,
 .channel-item--editing .channel-edit-button {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
+}
+
+.list__items:hover .channel-edit-button:disabled,
+.list__items:focus-within .channel-edit-button:disabled,
+.channel-item:hover .channel-edit-button:disabled,
+.channel-item:focus-within .channel-edit-button:disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .channel-inline-input {

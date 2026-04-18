@@ -3,7 +3,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
-import { isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 const VoiceRoomStage = lazy(() => import("./VoiceRoomStage"));
 
@@ -43,6 +43,7 @@ function areUserLikeEntriesEqual(previousEntries = [], nextEntries = []) {
       || String(previousEntry?.name || previousEntry?.nickname || "") !== String(nextEntry?.name || nextEntry?.nickname || "")
       || String(previousEntry?.avatar || previousEntry?.avatarUrl || "") !== String(nextEntry?.avatar || nextEntry?.avatarUrl || "")
       || String(previousEntry?.roleId || "") !== String(nextEntry?.roleId || "")
+      || String(previousEntry?.lastSeenAt || previousEntry?.last_seen_at || "") !== String(nextEntry?.lastSeenAt || nextEntry?.last_seen_at || "")
       || Boolean(previousEntry?.isLive) !== Boolean(nextEntry?.isLive)
       || Boolean(previousEntry?.isSpeaking) !== Boolean(nextEntry?.isSpeaking)
       || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
@@ -713,6 +714,7 @@ export const MobileServerStrip = ({
 export const MobileDirectChat = ({
   currentDirectFriend,
   currentDirectChannelId,
+  textChatLocalStateVersion = 0,
   user,
   directConversationTargets,
   getDisplayName,
@@ -726,12 +728,13 @@ export const MobileDirectChat = ({
         <div className="chat__topbar-title">
           <div className="chat__topbar-copy">
             <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{getDisplayName(currentDirectFriend)}</strong>
-            <span>Личный чат между двумя пользователями</span>
+            <span>{formatUserPresenceStatus(currentDirectFriend)}</span>
           </div>
         </div>
       </div>
       <TextChat
         resolvedChannelId={currentDirectChannelId}
+        localMessageStateVersion={textChatLocalStateVersion}
         user={user}
         directTargets={directConversationTargets}
         navigationRequest={textChatNavigationRequest}

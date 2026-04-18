@@ -4,11 +4,13 @@ import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
-import { isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 export const FriendsSidebar = ({
   query,
   navItems,
+  friendsPageSection,
+  incomingFriendRequestCount,
   filteredFriends,
   activeDirectFriendId,
   directUnreadCounts,
@@ -31,85 +33,99 @@ export const FriendsSidebar = ({
   return (
     <aside className="sidebar__channels sidebar__channels--friends">
       <div className="channels__top">
-      <input
-        className="friends-search-input"
-        type="text"
-        placeholder="Найти друга или беседу"
-        value={query}
-        onChange={(event) => onQueryChange(event.target.value)}
-      />
+        <input
+          className="friends-search-input"
+          type="text"
+          placeholder="Найти друга или беседу"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+        />
 
         <div className="friends-nav">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`friends-nav__item ${item.id === "friends" ? "friends-nav__item--active" : ""}`}
-            onClick={() => {
-              if (item.id === "friends") {
-                onOpenFriendsWorkspace();
-                onResetDirect();
-                onSetFriendsSection("friends");
-                return;
-              }
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`friends-nav__item ${item.id === "friends" && friendsPageSection === "friends" && !activeDirectFriendId ? "friends-nav__item--active" : ""}`}
+              onClick={() => {
+                if (item.id === "friends") {
+                  onOpenFriendsWorkspace();
+                  onResetDirect();
+                  onSetFriendsSection("friends");
+                  return;
+                }
 
-              onOpenServersWorkspace();
+                onOpenServersWorkspace();
+              }}
+            >
+              <span className="friends-nav__icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+
+          <button
+            type="button"
+            className={`friends-nav__item ${friendsPageSection === "add" && !activeDirectFriendId ? "friends-nav__item--active friends-nav__item--accent" : ""}`}
+            onClick={() => {
+              onOpenFriendsWorkspace();
+              onResetDirect();
+              onSetFriendsSection("add");
             }}
           >
-            <span className="friends-nav__icon">{item.icon}</span>
-            <span>{item.label}</span>
+            <span className="friends-nav__icon">+</span>
+            <span>Добавить в друзья</span>
+            {incomingFriendRequestCount > 0 ? <span className="friends-nav__badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
           </button>
-        ))}
         </div>
 
         <div className="friends-directs">
-        <div className="friends-directs__header">
-          <span>Личные сообщения</span>
-          <button type="button" onClick={() => { onResetDirect(); onSetFriendsSection("add"); }}>+</button>
-        </div>
-        <div className="friends-directs__list">
-          {filteredFriends.length ? (
-            filteredFriends.map((friend) => {
-              const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
-              const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
-              const hasDraft = Boolean(chatDraftPresence[directChannelId]);
+          <div className="friends-directs__header">
+            <span>Личные сообщения</span>
+          </div>
 
-              return (
-                <button
-                  key={friend.id}
-                  type="button"
-                  className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""} ${pressedFriendId === String(friend.id) ? "friends-directs__item--pressing" : ""}`}
-                  onClick={(event) => {
-                    if (friendItemLongPress.consumeSuppressedClick()) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      return;
-                    }
+          <div className="friends-directs__list">
+            {filteredFriends.length ? (
+              filteredFriends.map((friend) => {
+                const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
+                const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
+                const hasDraft = Boolean(chatDraftPresence[directChannelId]);
 
-                    onOpenDirectChat(friend.id);
-                  }}
-                  onContextMenu={(event) => onOpenUserContextMenu?.(event, friend)}
-                  {...friendItemLongPress.bindLongPress(friend, (event, pressedFriend) => {
-                    onOpenUserContextMenu?.(event, pressedFriend);
-                  }, {
-                    onStart: (pressedFriend) => setPressedFriendId(String(pressedFriend?.id || "")),
-                    onCancel: () => setPressedFriendId(""),
-                    onTrigger: () => setPressedFriendId(""),
-                  })}
-                >
-                  <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                  <span className="friends-directs__meta">
-                    <span className="friends-directs__name">{getDisplayName(friend)}</span>
-                    {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
-                  </span>
-                  {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
-                </button>
-              );
-            })
-          ) : (
-            <div className="friends-panel__empty">Подходящих друзей пока нет.</div>
-          )}
-        </div>
+                return (
+                  <button
+                    key={friend.id}
+                    type="button"
+                    className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""} ${pressedFriendId === String(friend.id) ? "friends-directs__item--pressing" : ""}`}
+                    onClick={(event) => {
+                      if (friendItemLongPress.consumeSuppressedClick()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                      }
+
+                      onOpenDirectChat(friend.id);
+                    }}
+                    onContextMenu={(event) => onOpenUserContextMenu?.(event, friend)}
+                    {...friendItemLongPress.bindLongPress(friend, (event, pressedFriend) => {
+                      onOpenUserContextMenu?.(event, pressedFriend);
+                    }, {
+                      onStart: (pressedFriend) => setPressedFriendId(String(pressedFriend?.id || "")),
+                      onCancel: () => setPressedFriendId(""),
+                      onTrigger: () => setPressedFriendId(""),
+                    })}
+                  >
+                    <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                    <span className="friends-directs__meta">
+                      <span className="friends-directs__name">{getDisplayName(friend)}</span>
+                      {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
+                    </span>
+                    {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="friends-panel__empty">Подходящих друзей пока нет.</div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -124,6 +140,8 @@ export const FriendsMain = ({
   currentDirectFriend,
   currentDirectChannelId,
   directConversationTargets,
+  directSearchQuery,
+  textChatLocalStateVersion = 0,
   friendsPageSection,
   friends,
   incomingFriendRequestCount,
@@ -144,13 +162,17 @@ export const FriendsMain = ({
   onSetFriendsSection,
   onOpenDirectChat,
   onStartDirectCall,
+  onOpenDirectActions,
   onFriendRequestAction,
   onFriendSearchSubmit,
   onFriendSearchChange,
+  onDirectSearchQueryChange,
   onAddFriend,
   onOpenServersWorkspace,
   onImportServer,
   onServerShared,
+  phoneIcon,
+  searchIcon,
   getDisplayName,
 }) => (
   <main className="chat__wrapper chat__wrapper--friends">
@@ -158,10 +180,24 @@ export const FriendsMain = ({
       <section className="friends-main">
         <div className="friends-main__toolbar">
           <div className="friends-main__tabs">
-            <button type="button" className={`friends-main__tab ${friendsPageSection === "friends" && !currentDirectFriend ? "friends-main__tab--active" : ""}`} onClick={() => { onResetDirect(); onSetFriendsSection("friends"); }}>
+            <button
+              type="button"
+              className={`friends-main__tab ${friendsPageSection === "friends" && !currentDirectFriend ? "friends-main__tab--active" : ""}`}
+              onClick={() => {
+                onResetDirect();
+                onSetFriendsSection("friends");
+              }}
+            >
               Друзья
             </button>
-            <button type="button" className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend ? "friends-main__tab--accent" : ""}`} onClick={() => { onResetDirect(); onSetFriendsSection("add"); }}>
+            <button
+              type="button"
+              className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend ? "friends-main__tab--accent" : ""}`}
+              onClick={() => {
+                onResetDirect();
+                onSetFriendsSection("add");
+              }}
+            >
               <span>Добавить в друзья</span>
               {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
             </button>
@@ -170,13 +206,55 @@ export const FriendsMain = ({
 
         {currentDirectFriend ? (
           <div className="friends-main__chat">
-            <div className="chat__header chat__header--friends">
-              <h1 className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__header-name--online" : ""}>{getDisplayName(currentDirectFriend)}</h1>
-              <span className="chat__subtitle">Личный чат между двумя пользователями</span>
+            <div className="chat__topbar friends-direct-chat-topbar">
+              <div className="chat__topbar-title friends-direct-chat-topbar__title">
+                <div className="chat__topbar-copy">
+                  <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>
+                    {getDisplayName(currentDirectFriend)}
+                  </strong>
+                  <span>{formatUserPresenceStatus(currentDirectFriend)}</span>
+                </div>
+              </div>
+
+              <div className="chat__topbar-actions friends-direct-chat-topbar__actions">
+                <label className="chat__topbar-search-wrap friends-direct-chat-topbar__search">
+                  <img src={searchIcon} alt="" />
+                  <input
+                    className="chat__topbar-search"
+                    type="text"
+                    value={directSearchQuery}
+                    onChange={(event) => onDirectSearchQueryChange(event.target.value)}
+                    placeholder="Поиск по сообщениям и файлам"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  className="chat__topbar-icon"
+                  onClick={() => onStartDirectCall?.(currentDirectFriend.id)}
+                  aria-label="Позвонить"
+                  title="Позвонить"
+                >
+                  {phoneIcon ? <img src={phoneIcon} alt="" /> : <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">📞</span>}
+                </button>
+
+                <button
+                  type="button"
+                  className="chat__topbar-icon"
+                  onClick={(event) => onOpenDirectActions?.(event, currentDirectFriend)}
+                  aria-label="Ещё"
+                  title="Ещё"
+                >
+                  <span className="friends-direct-chat-topbar__glyph friends-direct-chat-topbar__glyph--dots" aria-hidden="true">⋮</span>
+                </button>
+              </div>
             </div>
+
             <TextChat
               resolvedChannelId={currentDirectChannelId}
+              localMessageStateVersion={textChatLocalStateVersion}
               user={user}
+              searchQuery={directSearchQuery}
               directTargets={directConversationTargets}
               onOpenDirectChat={onOpenDirectChat}
               onStartDirectCall={onStartDirectCall}
@@ -213,7 +291,7 @@ export const FriendsMain = ({
           <div className="friends-main__content">
             <div className="friends-hero">
               <h1>Добавить в друзья</h1>
-              <p>Введите имя для поиска по имени. Если в запросе есть символ @, поиск автоматически переключится на email.</p>
+              <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
               <div className="friends-requests">
                 <div className="friends-requests__header">
                   <h2>Входящие заявки</h2>
@@ -250,7 +328,12 @@ export const FriendsMain = ({
               </div>
 
               <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
-                <input type="text" placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"} value={friendEmail} onChange={(event) => onFriendSearchChange(event.target.value)} />
+                <input
+                  type="text"
+                  placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
+                  value={friendEmail}
+                  onChange={(event) => onFriendSearchChange(event.target.value)}
+                />
                 <button type="submit" disabled={friendLookupLoading}>
                   {friendLookupLoading ? "Ищем..." : "Найти"}
                 </button>

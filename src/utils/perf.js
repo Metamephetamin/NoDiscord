@@ -21,7 +21,20 @@ const rendererPerfState = {
   sequence: 0,
 };
 
-export const PERF_ENABLED = Boolean(import.meta.env?.DEV) || String(import.meta.env?.VITE_PERF_AUDIT || "").trim() === "1";
+function readPerfAuditFlag() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem("nodiscord.debug.perf");
+    return rawValue === "1" || rawValue === "true";
+  } catch {
+    return false;
+  }
+}
+
+export const PERF_ENABLED = String(import.meta.env?.VITE_PERF_AUDIT || "").trim() === "1" || readPerfAuditFlag();
 
 /**
  * @typedef {Object} PerfEvent

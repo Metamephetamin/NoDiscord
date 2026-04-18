@@ -11,7 +11,6 @@ export default function TextChatMediaPreview({
   onClose,
   onDownload,
   onDownloadAll,
-  onFullscreen,
   onNavigate,
   onZoom,
   onPan,
@@ -150,8 +149,10 @@ export default function TextChatMediaPreview({
     }
 
     document.body.classList.add("media-preview-open");
+    window.electronWindowControls?.setTitleBarOverlayVisible?.(false).catch?.(() => {});
     return () => {
       document.body.classList.remove("media-preview-open");
+      window.electronWindowControls?.setTitleBarOverlayVisible?.(true).catch?.(() => {});
     };
   }, [mediaPreview]);
 
@@ -169,21 +170,7 @@ export default function TextChatMediaPreview({
               {hasGallery ? ` ${Number(mediaPreview.activeIndex || 0) + 1}/${mediaPreview.items.length}` : ""}
             </span>
           </div>
-          <div className="media-preview__actions" onClick={stopEvent}>
-            {isImagePreview ? (
-              <button type="button" className="media-preview__action" onClick={() => onFullscreen?.()}>
-                На весь экран
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="media-preview__close"
-              onClick={() => onClose?.()}
-              aria-label="Закрыть предпросмотр"
-            >
-              <span className="media-preview__close-icon" aria-hidden="true" />
-            </button>
-          </div>
+          <div className="media-preview__actions" onClick={stopEvent} />
         </div>
 
         <div className="media-preview__content">

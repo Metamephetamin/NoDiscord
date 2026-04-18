@@ -1,9 +1,22 @@
+import { useState } from "react";
 import { formatTimestamp } from "../utils/textChatHelpers";
 
 export function MessageSearchPanel({ query, results, onOpenMessage }) {
-  if (String(query || "").trim().length < 2) {
+  const normalizedQuery = String(query || "").trim();
+  const [collapsedQuery, setCollapsedQuery] = useState("");
+
+  if (normalizedQuery.length < 2 || collapsedQuery === normalizedQuery) {
     return null;
   }
+
+  const handleOpenMessage = (messageId) => {
+    setCollapsedQuery(normalizedQuery);
+    onOpenMessage?.(messageId, {
+      behavior: "smooth",
+      block: "center",
+      highlight: true,
+    });
+  };
 
   return (
     <div className="message-search-panel">
@@ -14,7 +27,7 @@ export function MessageSearchPanel({ query, results, onOpenMessage }) {
       {results.length ? (
         <div className="message-search-panel__list">
           {results.slice(0, 8).map((result) => (
-            <button key={result.id} type="button" className="message-search-panel__item" onClick={() => onOpenMessage(result.id)}>
+            <button key={result.id} type="button" className="message-search-panel__item" onClick={() => handleOpenMessage(result.id)}>
               <strong>{result.username || "User"}</strong>
               <span>{result.preview || "Сообщение без текста"}</span>
               <small>{formatTimestamp(result.timestamp)}</small>
@@ -58,7 +71,7 @@ export function PinnedMessagesPanel({ pinnedMessages, onOpenMessage, onRemovePin
               }}
               aria-label="Открепить сообщение"
             >
-              ?
+              ×
             </button>
           </div>
         ))}
@@ -104,6 +117,28 @@ export function JumpToLatestBar({ pendingCount, onJump }) {
         Перейти вниз
       </button>
     </div>
+  );
+}
+
+export function JumpToLatestButton({ visible = false, pendingCount = 0, onJump }) {
+  return (
+    <button
+      type="button"
+      className={`chat-jump-button ${visible ? "chat-jump-button--visible" : "chat-jump-button--hidden"}`}
+      onClick={onJump}
+      tabIndex={visible ? 0 : -1}
+      aria-hidden={!visible}
+      disabled={!visible}
+      aria-label={pendingCount > 0 ? `Перейти к последним сообщениям (${pendingCount})` : "Перейти к последним сообщениям"}
+      title={pendingCount > 0 ? "Перейти к новым сообщениям" : "Перейти вниз"}
+    >
+      <span className="chat-jump-button__icon" aria-hidden="true" />
+      {pendingCount > 0 ? (
+        <span className="chat-jump-button__badge" aria-hidden="true">
+          {pendingCount > 99 ? "99+" : pendingCount}
+        </span>
+      ) : null}
+    </button>
   );
 }
 

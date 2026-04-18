@@ -1099,6 +1099,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   color: #ffffff;
 }
 
+.friends-nav__item--accent {
+  background: rgba(94, 86, 255, 0.16);
+}
+
 .friends-nav__item--active::before,
 .friends-directs__item--active::before,
 .channel-item.active-channel::before {
@@ -1122,6 +1126,23 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   align-items: center;
   justify-content: center;
   opacity: 0.88;
+}
+
+.friends-nav__badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff6161, #d92d20);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 10px 20px rgba(217, 45, 32, 0.24);
 }
 
 .friends-directs {
@@ -1343,6 +1364,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .friends-main__toolbar {
   padding: 14px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: none;
 }
 
 .friends-main__tabs {
@@ -2506,6 +2528,48 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   height: 16px;
   object-fit: contain;
   opacity: 0.7;
+}
+
+.friends-direct-chat-topbar {
+  gap: 14px;
+}
+
+.friends-direct-chat-topbar__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.friends-direct-chat-topbar .chat__topbar-copy strong {
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.friends-direct-chat-topbar .chat__topbar-copy span {
+  font-size: 11px;
+  color: #93a0ba;
+}
+
+.friends-direct-chat-topbar__actions {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.friends-direct-chat-topbar__search {
+  width: min(360px, 34vw);
+}
+
+.friends-direct-chat-topbar__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.friends-direct-chat-topbar__glyph--dots {
+  font-size: 20px;
+  transform: translateY(-1px);
 }
 
 .mobile-shell__header {
@@ -7407,6 +7471,20 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 @media (max-width: 900px) {
+  .friends-direct-chat-topbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .friends-direct-chat-topbar__actions {
+    width: 100%;
+  }
+
+  .friends-direct-chat-topbar__search {
+    flex: 1 1 240px;
+    width: auto;
+  }
+
   .menu__main--mobile {
     height: 100dvh;
     min-height: 100dvh;

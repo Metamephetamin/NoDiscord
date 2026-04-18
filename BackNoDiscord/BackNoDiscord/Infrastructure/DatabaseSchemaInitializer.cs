@@ -165,6 +165,8 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS profile_background_frame_json text NULL;
             ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS last_seen_at timestamptz NULL;
+            ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS nickname character varying(50) NULL;
             ALTER TABLE IF EXISTS push_subscriptions
                 ADD COLUMN IF NOT EXISTS user_agent text NOT NULL DEFAULT '';

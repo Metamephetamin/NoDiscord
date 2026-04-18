@@ -39,6 +39,7 @@ export const STREAM_FPS_OPTIONS = [
   { value: 60, label: "60 FPS" },
 ];
 export const NOTIFICATION_SOUND_OPTIONS = [
+  { id: "classic", label: "iPhone Classic", path: resolveStaticAssetUrl("/sounds/iphone-receive-w.mp3") },
   { id: "soft", label: "Мягкий", path: resolveStaticAssetUrl("/sounds/notification-soft.ogg") },
   { id: "pulse", label: "Пульс", path: resolveStaticAssetUrl("/sounds/notification-pulse.ogg") },
   { id: "minimal", label: "Минимал", path: resolveStaticAssetUrl("/sounds/notification-minimal.ogg") },
@@ -103,6 +104,27 @@ export const getDisplayName = (user) => {
 
   return fullName || user?.name || user?.email || "User";
 };
+const parseBooleanLike = (value) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  const normalizedValue = String(value ?? "").trim().toLowerCase();
+  if (!normalizedValue) {
+    return false;
+  }
+
+  return normalizedValue === "true"
+    || normalizedValue === "1"
+    || normalizedValue === "yes"
+    || normalizedValue === "online"
+    || normalizedValue === "active"
+    || normalizedValue === "available";
+};
 export const isUserCurrentlyOnline = (user) => {
   const explicitOnlineValue =
     user?.isOnline
@@ -110,7 +132,7 @@ export const isUserCurrentlyOnline = (user) => {
     ?? user?.online
     ?? user?.online_now;
   if (explicitOnlineValue !== undefined && explicitOnlineValue !== null) {
-    return Boolean(explicitOnlineValue);
+    return parseBooleanLike(explicitOnlineValue);
   }
 
   const presenceValues = [
@@ -126,6 +148,67 @@ export const isUserCurrentlyOnline = (user) => {
     const normalizedValue = String(value || "").trim().toLowerCase();
     return normalizedValue === "online" || normalizedValue === "active" || normalizedValue === "available";
   });
+};
+export const getUserLastSeenAt = (user) => String(
+  user?.lastSeenAt
+  || user?.last_seen_at
+  || user?.lastSeen
+  || user?.last_seen
+  || user?.lastActiveAt
+  || user?.last_active_at
+  || user?.lastOnlineAt
+  || user?.last_online_at
+  || user?.lastLoginAt
+  || user?.last_login_at
+  || user?.disconnectedAt
+  || user?.disconnected_at
+  || ""
+).trim();
+export const formatUserPresenceStatus = (user) => {
+  if (isUserCurrentlyOnline(user)) {
+    return "в сети";
+  }
+
+  const lastSeenAt = getUserLastSeenAt(user);
+  if (!lastSeenAt) {
+    return "не в сети";
+  }
+
+  const lastSeenDate = new Date(lastSeenAt);
+  if (Number.isNaN(lastSeenDate.getTime())) {
+    return "не в сети";
+  }
+
+  const now = new Date();
+  const timeLabel = lastSeenDate.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfLastSeenDay = new Date(
+    lastSeenDate.getFullYear(),
+    lastSeenDate.getMonth(),
+    lastSeenDate.getDate()
+  ).getTime();
+  const dayDelta = Math.round((startOfToday - startOfLastSeenDay) / 86400000);
+
+  if (dayDelta === 0) {
+    return `был(а) в сети сегодня в ${timeLabel}`;
+  }
+
+  if (dayDelta === 1) {
+    return `был(а) в сети вчера в ${timeLabel}`;
+  }
+
+  const dateLabel = dayDelta > 1 && dayDelta < 7
+    ? lastSeenDate.toLocaleDateString("ru-RU", { weekday: "long" })
+    : lastSeenDate.toLocaleDateString("ru-RU", (
+      lastSeenDate.getFullYear() === now.getFullYear()
+        ? { day: "numeric", month: "long" }
+        : { day: "2-digit", month: "2-digit", year: "numeric" }
+    ));
+
+  return `был(а) в сети ${dateLabel} в ${timeLabel}`;
 };
 export const getUserAvatar = (user) => user?.avatarUrl || user?.avatar || "";
 export const getUserAvatarFrame = (user) =>
@@ -593,7 +676,7 @@ export const normalizeFriend = (friend) => ({
   ),
   status: String(friend?.status || friend?.presence || friend?.presenceStatus || friend?.onlineStatus || ""),
   presence: String(friend?.presence || friend?.presenceStatus || friend?.onlineStatus || friend?.status || ""),
-  lastSeenAt: String(friend?.last_seen_at || friend?.lastSeenAt || ""),
+  lastSeenAt: getUserLastSeenAt(friend),
   directChannelId: String(friend?.directChannelId || ""),
   isOnline: isUserCurrentlyOnline(friend),
   isSelf: Boolean(friend?.isSelf),

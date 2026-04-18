@@ -681,7 +681,7 @@ export default function Auth({ onAuthSuccess }) {
     setIsSubmitting(true);
 
     try {
-      const data = await submitAuthRequest("/auth/register", payload, "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442.");
+      const data = await submitAuthRequest("/auth/register", payload, "Не удалось создать аккаунт.");
 
       if (data?.token) {
         onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
@@ -707,14 +707,14 @@ export default function Auth({ onAuthSuccess }) {
       );
       setIsSubmitting(false);
     } catch (error) {
-      setMessage(error.message || "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442.");
+      setMessage(error.message || "Не удалось создать аккаунт.");
       setIsSubmitting(false);
     }
   };
 
   const handleResendEmailCode = async () => {
     if (!emailVerificationModal.email) {
-      setMessage("\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u0439\u0442\u0435\u0441\u044c \u0437\u0430\u043d\u043e\u0432\u043e.");
+      setMessage("Сначала зарегистрируйтесь заново.");
       return;
     }
 
@@ -730,7 +730,7 @@ export default function Auth({ onAuthSuccess }) {
       const data = await submitAuthRequest(
         "/auth/resend-email-verification",
         { email: emailVerificationModal.email },
-        "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u0434 \u043d\u0430 \u043f\u043e\u0447\u0442\u0443."
+        "Не удалось повторно отправить код на почту."
       );
 
       const nextResendAvailableAt = data?.resendAvailableAt || "";
@@ -746,7 +746,7 @@ export default function Auth({ onAuthSuccess }) {
 
       setMessage(data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "Код подтверждения повторно отправлен на почту.");
     } catch (error) {
-      setMessage(error.message || "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u0434 \u043d\u0430 \u043f\u043e\u0447\u0442\u0443.");
+      setMessage(error.message || "Не удалось повторно отправить код на почту.");
     } finally {
       setIsResendingEmailCode(false);
     }
@@ -756,12 +756,12 @@ export default function Auth({ onAuthSuccess }) {
     event.preventDefault();
 
     if (!emailVerificationModal.email || !emailVerificationModal.verificationToken) {
-      setMessage("\u0421\u0435\u0441\u0441\u0438\u044f \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f \u043f\u043e\u0447\u0442\u044b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430. \u0417\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u0439\u0442\u0435\u0441\u044c \u0441\u043d\u043e\u0432\u0430.");
+      setMessage("Сессия подтверждения почты не найдена. Зарегистрируйтесь снова.");
       return;
     }
 
     if (emailVerificationCode.trim().length !== 6) {
-      setMessage("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0448\u0435\u0441\u0442\u0438\u0437\u043d\u0430\u0447\u043d\u044b\u0439 \u043a\u043e\u0434 \u0438\u0437 \u043f\u0438\u0441\u044c\u043c\u0430.");
+      setMessage("Введите шестизначный код из письма.");
       return;
     }
 
@@ -776,12 +776,12 @@ export default function Auth({ onAuthSuccess }) {
           verificationToken: emailVerificationModal.verificationToken,
           code: emailVerificationCode.trim(),
         },
-        "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043f\u043e\u0447\u0442\u0443."
+        "Не удалось подтвердить почту."
       );
       resetEmailVerificationModal();
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
-      setMessage(error.message || "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043f\u043e\u0447\u0442\u0443.");
+      setMessage(error.message || "Не удалось подтвердить почту.");
     } finally {
       setIsVerifyingEmailCode(false);
     }
@@ -830,7 +830,7 @@ export default function Auth({ onAuthSuccess }) {
             ) : null}
           </span>
           <h1 className="auth-brand__title">
-            <span className="auth-brand__title-static">- симум возможностей для</span>
+            <span className="auth-brand__title-static">максимум возможностей для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">
               <span className={`auth-brand__title-typewriter ${isDeletingSlogan ? "auth-brand__title-typewriter--deleting" : ""}`}>
                 <span className="auth-brand__title-typewriter-sizer" aria-hidden="true">
@@ -1081,7 +1081,7 @@ export default function Auth({ onAuthSuccess }) {
                 {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? `Повторить через ${formatCooldown(emailResendSecondsLeft)}` : "Отправить код снова"}
               </button>
               <button className="auth-submit" type="submit" disabled={isVerifyingEmailCode}>
-                {isVerifyingEmailCode ? "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u043c..." : "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c"}
+                {isVerifyingEmailCode ? "Проверяем..." : "Подтвердить"}
               </button>
             </div>
           </form>

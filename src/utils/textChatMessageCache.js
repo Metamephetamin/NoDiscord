@@ -1,4 +1,5 @@
 const TEXT_CHAT_MESSAGE_CACHE_PREFIX = "textchat-message-cache";
+const TEXT_CHAT_CHANNEL_CLEAR_PREFIX = "textchat-channel-clear";
 const MAX_CACHED_MESSAGES = 60;
 
 function getStorage() {
@@ -21,6 +22,16 @@ function getCacheKey(userId, channelId) {
   }
 
   return `${TEXT_CHAT_MESSAGE_CACHE_PREFIX}:${normalizedUserId}:${normalizedChannelId}`;
+}
+
+function getChannelClearKey(userId, channelId) {
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedChannelId = String(channelId || "").trim();
+  if (!normalizedUserId || !normalizedChannelId) {
+    return "";
+  }
+
+  return `${TEXT_CHAT_CHANNEL_CLEAR_PREFIX}:${normalizedUserId}:${normalizedChannelId}`;
 }
 
 function normalizeCachedMessage(messageItem) {
@@ -75,7 +86,16 @@ export function readCachedTextChatMessages(userId, channelId) {
 export function writeCachedTextChatMessages(userId, channelId, messages) {
   const storage = getStorage();
   const cacheKey = getCacheKey(userId, channelId);
-  if (!storage || !cacheKey || !Array.isArray(messages) || !messages.length) {
+  if (!storage || !cacheKey || !Array.isArray(messages)) {
+    return;
+  }
+
+  if (!messages.length) {
+    try {
+      storage.removeItem(cacheKey);
+    } catch {
+      // Cache is a speed-up only; quota/private-mode failures are safe to ignore.
+    }
     return;
   }
 
@@ -95,5 +115,54 @@ export function writeCachedTextChatMessages(userId, channelId, messages) {
     }));
   } catch {
     // Cache is a speed-up only; quota/private-mode failures are safe to ignore.
+  }
+}
+
+export function clearCachedTextChatMessages(userId, channelId) {
+  const storage = getStorage();
+  const cacheKey = getCacheKey(userId, channelId);
+  if (!storage || !cacheKey) {
+    return;
+  }
+
+  try {
+    storage.removeItem(cacheKey);
+  } catch {
+    // Cache is a speed-up only; quota/private-mode failures are safe to ignore.
+  }
+}
+
+export function readTextChatChannelClearedAt(userId, channelId) {
+  const storage = getStorage();
+  const clearKey = getChannelClearKey(userId, channelId);
+  if (!storage || !clearKey) {
+    return "";
+  }
+
+  try {
+    return String(storage.getItem(clearKey) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export function writeTextChatChannelClearedAt(userId, channelId, clearedAt) {
+  const storage = getStorage();
+  const clearKey = getChannelClearKey(userId, channelId);
+  if (!storage || !clearKey) {
+    return;
+  }
+
+  const normalizedClearedAt = String(clearedAt || "").trim();
+
+  try {
+    if (!normalizedClearedAt) {
+      storage.removeItem(clearKey);
+      return;
+    }
+
+    storage.setItem(clearKey, normalizedClearedAt);
+  } catch {
+    // Local clear markers are optional UI state; storage failures are safe to ignore.
   }
 }

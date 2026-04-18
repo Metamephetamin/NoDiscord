@@ -117,7 +117,7 @@ export default function useTextChatMessageActions({
     element.scrollIntoView({ behavior: "smooth", block: "center" });
     window.setTimeout(() => {
       setHighlightedMessageId((current) => (current === String(messageId) ? "" : current));
-    }, 2200);
+    }, 4200);
     finishPerfTraceOnNextFrame(traceId, {
       messageId: String(messageId || ""),
     });
@@ -400,10 +400,10 @@ export default function useTextChatMessageActions({
     try {
       await chatConnection.invoke("DeleteMessage", messageContextMenu.messageId);
       setErrorMessage("");
-      setActionFeedback({ tone: "success", message: "Сообщение удалено" });
+      setActionFeedback({ tone: "success", message: "Сообщение удалено у всех" });
     } catch (error) {
       console.error("DeleteMessage error:", error);
-      setErrorMessage(getChatErrorMessage(error, "Не удалось удалить сообщение."));
+      setErrorMessage(getChatErrorMessage(error, "Не удалось удалить сообщение у всех."));
     } finally {
       setMessageContextMenu(null);
     }
@@ -759,7 +759,7 @@ export default function useTextChatMessageActions({
     },
     { id: "copy", label: "Копировать текст", icon: "⧉", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
     { id: "forward", label: "Переслать", icon: "↗", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
-    { id: "delete", label: "Удалить", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
+    { id: "delete", label: "Удалить у всех", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
     { id: "select", label: "Выбрать", icon: "✓", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
   ].filter((action) => !action.hidden);
 

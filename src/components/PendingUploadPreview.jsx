@@ -88,8 +88,9 @@ function PendingUploadPreview({
           src={previewUrl}
           alt={file?.name || "preview"}
           className={`pending-upload-preview__full ${fullPreviewReady ? "pending-upload-preview__full--ready" : ""}`.trim()}
-          loading="lazy"
+          loading={preferThumbnailOnly ? "lazy" : "eager"}
           decoding="async"
+          fetchPriority={preferThumbnailOnly ? "auto" : "high"}
           onLoad={() => setLoadedPreviewUrl(previewUrl)}
           onError={() => setLoadedPreviewUrl("")}
         />
@@ -101,7 +102,7 @@ function PendingUploadPreview({
           className={`pending-upload-preview__full ${fullPreviewReady ? "pending-upload-preview__full--ready" : ""}`.trim()}
           muted
           playsInline
-          preload="metadata"
+          preload={preferThumbnailOnly ? "metadata" : "auto"}
           onLoadedData={() => setLoadedPreviewUrl(previewUrl)}
           onError={() => setLoadedPreviewUrl("")}
         />

@@ -4,7 +4,7 @@ import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
-import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestBar, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
 import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
 
 const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
@@ -28,6 +28,7 @@ export default function TextChatView(props) {
     scrollToLatest,
     pendingNewMessagesCount,
     firstUnreadMessageId,
+    showJumpToLatestButton,
     canReturnToJumpPoint,
     onJumpToFirstUnread,
     onReturnToJumpPoint,
@@ -45,6 +46,7 @@ export default function TextChatView(props) {
     clearSelectionMode,
     messages,
     visibleMessages,
+    visibleStartIndex,
     messagesListRef,
     messagesEndRef,
     messageRefs,
@@ -163,6 +165,7 @@ export default function TextChatView(props) {
   const stableOpenMediaPreview = useStableCallback(openMediaPreview);
   const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
   const stableOpenForwardModal = useStableCallback(openForwardModal);
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
       messageCount: messages.length,
@@ -178,8 +181,22 @@ export default function TextChatView(props) {
   }, [selectedFiles]);
 
   return (
-    <div className="textchat-container">
-      <MessageSearchPanel query={searchQuery.trim().toLowerCase()} results={searchResults} onOpenMessage={stableScrollToMessage} />
+    <div
+      className={`textchat-container ${composerDropActive ? "textchat-container--drag-active" : ""}`}
+      onDragEnter={onComposerDragEnter}
+      onDragOver={onComposerDragOver}
+      onDragLeave={onComposerDragLeave}
+      onDrop={onComposerDrop}
+    >
+      {composerDropActive ? (
+        <div className="textchat-drop-overlay" aria-hidden="true">
+          <div className="textchat-drop-overlay__panel">
+            <strong>Перетащите файлы сюда</strong>
+            <span>Можно бросать изображения, видео и документы в любую часть чата</span>
+          </div>
+        </div>
+      ) : null}
+      <MessageSearchPanel key={normalizedSearchQuery} query={normalizedSearchQuery} results={searchResults} onOpenMessage={stableScrollToMessage} />
       <PinnedMessagesPanel
         pinnedMessages={pinnedMessages}
         onOpenMessage={stableScrollToMessage}
@@ -208,12 +225,17 @@ export default function TextChatView(props) {
         onOpenPinned={stableScrollToMessage}
         onReturnToJumpPoint={onReturnToJumpPoint}
       />
-      <JumpToLatestBar pendingCount={pendingNewMessagesCount} onJump={() => scrollToLatest("auto")} />
+      <JumpToLatestButton
+        visible={showJumpToLatestButton}
+        pendingCount={pendingNewMessagesCount}
+        onJump={() => scrollToLatest("auto")}
+      />
       {PERF_ENABLED ? (
         <Profiler id="TextChatMessageList" onRender={handleMessageListRender}>
           <TextChatMessageList
             messages={messages}
             visibleMessages={visibleMessages}
+            visibleStartIndex={visibleStartIndex}
             messagesListRef={messagesListRef}
             messagesEndRef={messagesEndRef}
             messageRefs={messageRefs}
@@ -244,6 +266,7 @@ export default function TextChatView(props) {
         <TextChatMessageList
           messages={messages}
           visibleMessages={visibleMessages}
+          visibleStartIndex={visibleStartIndex}
           messagesListRef={messagesListRef}
           messagesEndRef={messagesEndRef}
           messageRefs={messageRefs}
@@ -303,10 +326,6 @@ export default function TextChatView(props) {
             onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
             onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
             onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
-            onDragEnter={onComposerDragEnter}
-            onDragOver={onComposerDragOver}
-            onDragLeave={onComposerDragLeave}
-            onDrop={onComposerDrop}
             onStopReplying={stopReplyingToMessage}
             onStopEditing={stopEditingMessage}
             onCancelVoiceRecording={handleCancelVoiceRecording}
@@ -365,10 +384,6 @@ export default function TextChatView(props) {
           onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
           onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
           onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
-          onDragEnter={onComposerDragEnter}
-          onDragOver={onComposerDragOver}
-          onDragLeave={onComposerDragLeave}
-          onDrop={onComposerDrop}
           onStopReplying={stopReplyingToMessage}
           onStopEditing={stopEditingMessage}
           onCancelVoiceRecording={handleCancelVoiceRecording}

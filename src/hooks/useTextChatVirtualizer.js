@@ -6,14 +6,19 @@ const MIN_MESSAGES_FOR_VIRTUALIZATION = 40;
 const MIN_MEASURED_MESSAGE_HEIGHT = 72;
 const SIZE_CHANGE_EPSILON_PX = 2;
 const SCROLL_METRIC_EPSILON_PX = 1;
-const STICK_TO_BOTTOM_DISTANCE_PX = 4;
+const TEXT_CHAT_DEBUG_FLAG_PREFIX = "nodiscord.debug.textchat.";
 
-function snapListToBottom(list) {
-  if (!list) {
-    return;
+function readTextChatDebugFlag(name) {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return false;
   }
 
-  list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+  try {
+    const rawValue = window.localStorage.getItem(`${TEXT_CHAT_DEBUG_FLAG_PREFIX}${name}`);
+    return rawValue === "1" || rawValue === "true";
+  } catch {
+    return false;
+  }
 }
 
 function findStartIndex(offsets, scrollTop) {
@@ -37,6 +42,7 @@ export default function useTextChatVirtualizer({
   messagesListRef,
   estimatedMessageHeight = DEFAULT_ESTIMATED_MESSAGE_HEIGHT,
 }) {
+  const virtualizationDebugDisabled = readTextChatDebugFlag("disableVirtualizer");
   const observerByMessageIdRef = useRef(new Map());
   const scrollMetricsRafRef = useRef(0);
   const pendingSizeFlushRafRef = useRef(0);
@@ -49,7 +55,7 @@ export default function useTextChatVirtualizer({
   const sizeByMessageIdRef = useRef({});
   const [sizeByMessageId, setSizeByMessageId] = useState({});
   const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, viewportHeight: 0 });
-  const virtualizationEnabled = messages.length >= MIN_MESSAGES_FOR_VIRTUALIZATION;
+  const virtualizationEnabled = !virtualizationDebugDisabled && messages.length >= MIN_MESSAGES_FOR_VIRTUALIZATION;
 
   const scheduleMetricsUpdate = useCallback(() => {
     if (scrollMetricsRafRef.current) {
@@ -77,6 +83,10 @@ export default function useTextChatVirtualizer({
   }, [messagesListRef]);
 
   useEffect(() => {
+    if (!virtualizationEnabled) {
+      return undefined;
+    }
+
     scheduleMetricsUpdate();
     const list = messagesListRef.current;
     if (!list) {
@@ -94,9 +104,16 @@ export default function useTextChatVirtualizer({
         scrollMetricsRafRef.current = 0;
       }
     };
-  }, [messagesListRef, scheduleMetricsUpdate]);
+  }, [messagesListRef, scheduleMetricsUpdate, virtualizationEnabled]);
 
   useEffect(() => {
+    if (!virtualizationEnabled) {
+      observerByMessageIdRef.current.forEach((observer) => observer.disconnect());
+      observerByMessageIdRef.current.clear();
+      pendingSizeByMessageIdRef.current.clear();
+      return undefined;
+    }
+
     const messageIdSet = new Set(messages.map((messageItem) => String(messageItem.id)));
     Array.from(observerByMessageIdRef.current.keys()).forEach((messageId) => {
       if (messageIdSet.has(messageId)) {
@@ -128,7 +145,7 @@ export default function useTextChatVirtualizer({
     return () => {
       window.clearTimeout(pruneTimeoutId);
     };
-  }, [messages]);
+  }, [messages, virtualizationEnabled]);
 
   const measurements = useMemo(() => {
     const offsets = [0];
@@ -161,13 +178,6 @@ export default function useTextChatVirtualizer({
     }
 
     const list = messagesListRef.current;
-    const currentScrollTop = Math.max(0, list?.scrollTop || 0);
-    const distanceFromBottom = list
-      ? Math.max(0, list.scrollHeight - currentScrollTop - list.clientHeight)
-      : Number.POSITIVE_INFINITY;
-    const shouldStickToBottom = distanceFromBottom <= STICK_TO_BOTTOM_DISTANCE_PX;
-    const currentMeasurements = measurementsRef.current;
-    let deltaAboveViewport = 0;
 
     setSizeByMessageId((previous) => {
       let changed = false;
@@ -181,16 +191,6 @@ export default function useTextChatVirtualizer({
 
         next[messageId] = nextHeight;
         changed = true;
-
-        const messageIndex = currentMeasurements.messageIndexById.get(messageId);
-        if (!Number.isInteger(messageIndex)) {
-          return;
-        }
-
-        const estimatedTop = currentMeasurements.offsets[messageIndex] || 0;
-        if (estimatedTop + SIZE_CHANGE_EPSILON_PX < currentScrollTop) {
-          deltaAboveViewport += nextHeight - previousHeight;
-        }
       });
 
       return changed ? next : previous;
@@ -199,24 +199,9 @@ export default function useTextChatVirtualizer({
     if (!list) {
       return;
     }
-
-    if (shouldStickToBottom) {
-      window.requestAnimationFrame(() => {
-        const activeList = messagesListRef.current;
-        if (!activeList) {
-          return;
-        }
-
-        snapListToBottom(activeList);
-        scheduleMetricsUpdate();
-      });
-      return;
-    }
-
-    if (Math.abs(deltaAboveViewport) >= SIZE_CHANGE_EPSILON_PX) {
-      list.scrollTop = Math.max(0, currentScrollTop + deltaAboveViewport);
+    window.requestAnimationFrame(() => {
       scheduleMetricsUpdate();
-    }
+    });
   }, [estimatedMessageHeight, messagesListRef, scheduleMetricsUpdate]);
 
   const scheduleSizeFlush = useCallback(() => {
@@ -259,6 +244,10 @@ export default function useTextChatVirtualizer({
   }, [measurements.offsets, messages.length, scrollMetrics.scrollTop, scrollMetrics.viewportHeight, virtualizationEnabled]);
 
   const registerMeasuredNode = useCallback((messageId, node) => {
+    if (!virtualizationEnabled) {
+      return;
+    }
+
     const normalizedMessageId = String(messageId || "");
     const previousObserver = observerByMessageIdRef.current.get(normalizedMessageId);
 
@@ -292,7 +281,7 @@ export default function useTextChatVirtualizer({
     });
     observer.observe(node);
     observerByMessageIdRef.current.set(normalizedMessageId, observer);
-  }, [scheduleSizeFlush]);
+  }, [scheduleSizeFlush, virtualizationEnabled]);
 
   const estimateOffsetForMessageId = useCallback((messageId) => {
     const normalizedMessageId = String(messageId || "");
@@ -314,6 +303,8 @@ export default function useTextChatVirtualizer({
     visibleMessages: virtualizationEnabled
       ? messages.slice(visibleRange.startIndex, visibleRange.endIndex + 1)
       : messages,
+    visibleStartIndex: virtualizationEnabled ? visibleRange.startIndex : 0,
+    visibleEndIndex: virtualizationEnabled ? visibleRange.endIndex : Math.max(0, messages.length - 1),
     topSpacerHeight,
     bottomSpacerHeight,
     registerMeasuredNode,

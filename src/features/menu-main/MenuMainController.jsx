@@ -52,6 +52,10 @@ import {
   normalizeSingleWordNameInput,
 } from "../../utils/nameScripts";
 import { getPinnedStorageKey, readPinnedMessages } from "../../utils/textChatHelpers";
+import {
+  clearCachedTextChatMessages,
+  writeTextChatChannelClearedAt,
+} from "../../utils/textChatMessageCache";
 import { createVoiceRoomClient } from "../../webrtc/voiceRoomClient";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
@@ -155,6 +159,61 @@ const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUse
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
   return userId ? `nd:direct-call-history:${userId}` : "";
+};
+const getWorkspaceStateStorageKey = (user) => {
+  const userId = String(user?.id || user?.email || "").trim();
+  return userId ? `nd:workspace-state:${userId}` : "";
+};
+
+const readWorkspaceStateFromStorageKey = (storageKey) => {
+  if (!storageKey || typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(storageKey);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : {};
+    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
+      return {};
+    }
+
+    return {
+      workspaceMode: parsedValue.workspaceMode === "friends" ? "friends" : parsedValue.workspaceMode === "servers" ? "servers" : "",
+      activeDirectFriendId: String(parsedValue.activeDirectFriendId || ""),
+      friendsPageSection: parsedValue.friendsPageSection === "add" ? "add" : "friends",
+      activeServerId: String(parsedValue.activeServerId || ""),
+      currentTextChannelId: String(parsedValue.currentTextChannelId || ""),
+      desktopServerPane: parsedValue.desktopServerPane === "voice" ? "voice" : "text",
+      mobileSection: ["servers", "friends", "profile"].includes(parsedValue.mobileSection) ? parsedValue.mobileSection : "",
+      mobileServersPane: ["channels", "chat", "voice"].includes(parsedValue.mobileServersPane) ? parsedValue.mobileServersPane : "",
+    };
+  } catch {
+    return {};
+  }
+};
+
+const readWorkspaceState = (user) => readWorkspaceStateFromStorageKey(getWorkspaceStateStorageKey(user));
+
+const writeWorkspaceStateToStorageKey = (storageKey, state) => {
+  if (!storageKey || typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify({
+      workspaceMode: state?.workspaceMode === "friends" ? "friends" : "servers",
+      activeDirectFriendId: String(state?.activeDirectFriendId || ""),
+      friendsPageSection: state?.friendsPageSection === "add" ? "add" : "friends",
+      activeServerId: String(state?.activeServerId || ""),
+      currentTextChannelId: String(state?.currentTextChannelId || ""),
+      desktopServerPane: state?.desktopServerPane === "voice" ? "voice" : "text",
+      mobileSection: ["servers", "friends", "profile"].includes(state?.mobileSection) ? state.mobileSection : "servers",
+      mobileServersPane: ["channels", "chat", "voice"].includes(state?.mobileServersPane) ? state.mobileServersPane : "channels",
+      updatedAt: Date.now(),
+    }));
+  } catch {
+    // Workspace restore is a convenience only.
+  }
 };
 
 const readActiveTextChannelMap = (storageKey) => {
@@ -411,14 +470,14 @@ export default function MenuMain({
 }) {
   const [servers, setServers] = useState(() => readStoredServers(user));
   const [activeServerId, setActiveServerId] = useState(
-    () => localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
+    () => readWorkspaceState(user).activeServerId || localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
   );
-  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => getInitialTextChannelId(user));
+  const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readWorkspaceState(user).currentTextChannelId || getInitialTextChannelId(user));
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
   const [directCallState, setDirectCallState] = useState(() => createDirectCallState());
   const [directCallHistory, setDirectCallHistory] = useState([]);
-  const [desktopServerPane, setDesktopServerPane] = useState("text");
+  const [desktopServerPane, setDesktopServerPane] = useState(() => readWorkspaceState(user).desktopServerPane || "text");
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
@@ -464,7 +523,7 @@ export default function MenuMain({
   const [friendListProfileModal, setFriendListProfileModal] = useState(null);
   const [rolesExpanded, setRolesExpanded] = useState(false);
   const [channelRenameState, setChannelRenameState] = useState(null);
-  const [activeDirectFriendId, setActiveDirectFriendId] = useState("");
+  const [activeDirectFriendId, setActiveDirectFriendId] = useState(() => readWorkspaceState(user).activeDirectFriendId || "");
   const [directNotificationsEnabled, setDirectNotificationsEnabled] = useState(true);
   const [directMessageToasts, setDirectMessageToasts] = useState([]);
   const [serverNotificationsEnabled, setServerNotificationsEnabled] = useState(true);
@@ -480,8 +539,9 @@ export default function MenuMain({
   const [directMessageSendSoundId, setDirectMessageSendSoundId] = useState(getDirectMessageSoundOptions("send")[0]?.id || "classic");
   const [directMessageReceiveSoundId, setDirectMessageReceiveSoundId] = useState(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
   const [chatDraftPresence, setChatDraftPresence] = useState({});
-  const [workspaceMode, setWorkspaceMode] = useState("servers");
-  const [friendsPageSection, setFriendsPageSection] = useState("friends");
+  const [textChatLocalStateVersion, setTextChatLocalStateVersion] = useState(0);
+  const [workspaceMode, setWorkspaceMode] = useState(() => readWorkspaceState(user).workspaceMode || "servers");
+  const [friendsPageSection, setFriendsPageSection] = useState(() => readWorkspaceState(user).friendsPageSection || "friends");
   const [friendsSidebarQuery, setFriendsSidebarQuery] = useState("");
   const {
     friends,
@@ -546,8 +606,8 @@ export default function MenuMain({
 
     return window.matchMedia(MOBILE_VIEWPORT_QUERY).matches;
   });
-  const [mobileSection, setMobileSection] = useState("servers");
-  const [mobileServersPane, setMobileServersPane] = useState("channels");
+  const [mobileSection, setMobileSection] = useState(() => readWorkspaceState(user).mobileSection || "servers");
+  const [mobileServersPane, setMobileServersPane] = useState(() => readWorkspaceState(user).mobileServersPane || "channels");
   const [uiDensity, setUiDensity] = useState("standard");
   const [uiFontScale, setUiFontScale] = useState("md");
   const [uiReduceMotion, setUiReduceMotion] = useState(false);
@@ -595,6 +655,8 @@ export default function MenuMain({
   const micLevelUiActiveRef = useRef(false);
   const navigationHistoryRef = useRef({ back: [], forward: [] });
   const lastNavigationSnapshotRef = useRef(null);
+  const restoredWorkspaceStateKeyRef = useRef("");
+  const skipNextWorkspaceStatePersistRef = useRef(false);
   const lastServerSyncFingerprintRef = useRef("");
   const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
   const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
@@ -615,6 +677,7 @@ export default function MenuMain({
   const videoInputDeviceStorageKey = useMemo(() => getVideoInputDeviceStorageKey(user), [user?.id, user?.email]);
   const currentUserId = useMemo(() => getCurrentUserId(user), [user?.id, user?.email]);
   const directCallHistoryStorageKey = useMemo(() => getDirectCallHistoryStorageKey(user), [user?.id, user?.email]);
+  const workspaceStateStorageKey = useMemo(() => getWorkspaceStateStorageKey(user), [user?.id, user?.email]);
   const uiDensityStorageKey = useMemo(() => getUiDensityStorageKey(user), [user?.id, user?.email]);
   const uiFontScaleStorageKey = useMemo(() => getUiFontScaleStorageKey(user), [user?.id, user?.email]);
   const uiReduceMotionStorageKey = useMemo(() => getUiReduceMotionStorageKey(user), [user?.id, user?.email]);
@@ -975,6 +1038,59 @@ export default function MenuMain({
     mobileServersPane,
     selectedStreamUserId,
     workspaceMode,
+  ]);
+  useEffect(() => {
+    if (!workspaceStateStorageKey || restoredWorkspaceStateKeyRef.current === workspaceStateStorageKey) {
+      return;
+    }
+
+    restoredWorkspaceStateKeyRef.current = workspaceStateStorageKey;
+    skipNextWorkspaceStatePersistRef.current = true;
+
+    const storedWorkspaceState = readWorkspaceStateFromStorageKey(workspaceStateStorageKey);
+    setWorkspaceMode(storedWorkspaceState.workspaceMode || "servers");
+    setActiveDirectFriendId(storedWorkspaceState.activeDirectFriendId || "");
+    setFriendsPageSection(storedWorkspaceState.friendsPageSection || "friends");
+    if (storedWorkspaceState.activeServerId) {
+      setActiveServerId(storedWorkspaceState.activeServerId);
+    }
+    if (storedWorkspaceState.currentTextChannelId) {
+      setCurrentTextChannelId(storedWorkspaceState.currentTextChannelId);
+    }
+    setDesktopServerPane(storedWorkspaceState.desktopServerPane || "text");
+    setMobileSection(storedWorkspaceState.mobileSection || "servers");
+    setMobileServersPane(storedWorkspaceState.mobileServersPane || "channels");
+  }, [workspaceStateStorageKey]);
+  useEffect(() => {
+    if (!workspaceStateStorageKey) {
+      return;
+    }
+
+    if (skipNextWorkspaceStatePersistRef.current) {
+      skipNextWorkspaceStatePersistRef.current = false;
+      return;
+    }
+
+    writeWorkspaceStateToStorageKey(workspaceStateStorageKey, {
+      workspaceMode,
+      activeDirectFriendId,
+      friendsPageSection,
+      activeServerId,
+      currentTextChannelId,
+      desktopServerPane,
+      mobileSection,
+      mobileServersPane,
+    });
+  }, [
+    activeDirectFriendId,
+    activeServerId,
+    currentTextChannelId,
+    desktopServerPane,
+    friendsPageSection,
+    mobileSection,
+    mobileServersPane,
+    workspaceMode,
+    workspaceStateStorageKey,
   ]);
   useEffect(() => {
     if (!isMobileViewport || currentVoiceChannel || mobileServersPane !== "voice") {
@@ -5371,7 +5487,7 @@ export default function MenuMain({
     {
       id: "hard_gate",
       title: "Hard Gate",
-      description: "Максимально жёсткий speech-only режим: паузы почти полностью закрываются, а лишний фон режется агрессивнее.",
+      description: "Максимально жёсткий speech-only режим: шумодав, gate и компрессия выкручены почти в максимум, тихий фон и эхо режутся агрессивнее всего.",
     },
     {
       id: "transparent",
@@ -5576,6 +5692,7 @@ export default function MenuMain({
       y: nextY,
       userId: String(friend.id || ""),
       username: getDisplayName(friend),
+      directChannelId: String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id)),
       avatarUrl: String(friend.avatar || ""),
       avatarFrame: friend.avatarFrame || null,
       backgroundUrl: String(friend.profileBackgroundUrl || ""),
@@ -5624,6 +5741,19 @@ export default function MenuMain({
       return;
     }
   };
+  const handleClearDirectChatForCurrentUser = () => {
+    const normalizedChannelId = String(friendListUserContextMenu?.directChannelId || "").trim();
+    if (!currentUserId || !normalizedChannelId) {
+      return;
+    }
+
+    writeTextChatChannelClearedAt(currentUserId, normalizedChannelId, new Date().toISOString());
+    clearCachedTextChatMessages(currentUserId, normalizedChannelId);
+    setTextChatLocalStateVersion((previous) => previous + 1);
+    setFriendsError("");
+    setFriendActionStatus(`Чат с ${friendListUserContextMenu?.username || "пользователем"} очищен только у вас.`);
+    setFriendListUserContextMenu(null);
+  };
   const friendListUserContextMenuSections = [
     [
       {
@@ -5642,6 +5772,13 @@ export default function MenuMain({
           handleFriendListDirectChat(friendListUserContextMenu?.userId, friendListUserContextMenu?.isSelf);
           setFriendListUserContextMenu(null);
         },
+      },
+      {
+        id: "clear-local-chat",
+        label: "Очистить чат у себя",
+        icon: "🧹",
+        disabled: !friendListUserContextMenu?.directChannelId,
+        onClick: handleClearDirectChatForCurrentUser,
       },
     ],
     [
@@ -5720,6 +5857,8 @@ export default function MenuMain({
     <FriendsSidebar
       query={friendsSidebarQuery}
       navItems={FRIENDS_SIDEBAR_ITEMS}
+      friendsPageSection={friendsPageSection}
+      incomingFriendRequestCount={incomingFriendRequestCount}
       filteredFriends={filteredFriends}
       activeDirectFriendId={activeDirectFriendId}
       directUnreadCounts={directUnreadCounts}
@@ -5793,6 +5932,8 @@ export default function MenuMain({
       currentDirectFriend={currentDirectFriend}
       currentDirectChannelId={currentDirectChannelId}
       directConversationTargets={directConversationTargets}
+      directSearchQuery={channelSearchQuery}
+      textChatLocalStateVersion={textChatLocalStateVersion}
       friendsPageSection={friendsPageSection}
       friends={friends}
       incomingFriendRequestCount={incomingFriendRequestCount}
@@ -5813,6 +5954,7 @@ export default function MenuMain({
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
       onStartDirectCall={startDirectCallWithUser}
+      onOpenDirectActions={openFriendListUserContextMenu}
       onFriendRequestAction={handleFriendRequestAction}
       onFriendSearchSubmit={handleFriendSearchSubmit}
       onFriendSearchChange={(value) => {
@@ -5824,10 +5966,13 @@ export default function MenuMain({
           setFriendActionStatus("");
         }
       }}
+      onDirectSearchQueryChange={setChannelSearchQuery}
       onAddFriend={handleAddFriend}
       onOpenServersWorkspace={openServersWorkspace}
       onImportServer={handleImportServer}
       onServerShared={markServerAsShared}
+      phoneIcon={PHONE_ICON_URL}
+      searchIcon={SEARCH_ICON_URL}
       getDisplayName={getDisplayName}
     />
   );
@@ -5916,6 +6061,7 @@ export default function MenuMain({
     <MobileDirectChat
       currentDirectFriend={currentDirectFriend}
       currentDirectChannelId={currentDirectChannelId}
+      textChatLocalStateVersion={textChatLocalStateVersion}
       user={user}
       directConversationTargets={directConversationTargets}
       getDisplayName={getDisplayName}

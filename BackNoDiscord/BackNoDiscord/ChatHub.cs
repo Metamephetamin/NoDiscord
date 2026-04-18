@@ -42,19 +42,60 @@ public class ChatHub : Hub
     private readonly ILogger<ChatHub> _logger;
     private readonly ServerStateService _serverState;
     private readonly PushNotificationService _pushNotificationService;
+    private readonly UserPresenceService _userPresenceService;
 
     public ChatHub(
         AppDbContext context,
         CryptoService crypto,
         ILogger<ChatHub> logger,
         ServerStateService serverState,
-        PushNotificationService pushNotificationService)
+        PushNotificationService pushNotificationService,
+        UserPresenceService userPresenceService)
     {
         _context = context;
         _crypto = crypto;
         _logger = logger;
         _serverState = serverState;
         _pushNotificationService = pushNotificationService;
+        _userPresenceService = userPresenceService;
+    }
+
+    public override async Task OnConnectedAsync()
+    {
+        if (AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser) &&
+            _userPresenceService.MarkConnected(currentUser.UserId) &&
+            int.TryParse(currentUser.UserId, out var connectedUserId))
+        {
+            await BroadcastFriendPresenceUpdatedAsync(connectedUserId, isOnline: true, lastSeenAt: null);
+        }
+
+        await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser) &&
+            _userPresenceService.MarkDisconnected(currentUser.UserId, out var lastSeenAt) &&
+            int.TryParse(currentUser.UserId, out var disconnectedUserId))
+        {
+            try
+            {
+                var user = await _context.Users.FirstOrDefaultAsync(item => item.id == disconnectedUserId);
+                if (user is not null)
+                {
+                    user.last_seen_at = lastSeenAt;
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist last seen for user {UserId}", currentUser.UserId);
+            }
+
+            await BroadcastFriendPresenceUpdatedAsync(disconnectedUserId, isOnline: false, lastSeenAt);
+        }
+
+        await base.OnDisconnectedAsync(exception);
     }
 
     public async Task SendMessage(
@@ -1006,6 +1047,29 @@ public class ChatHub : Hub
                 }
             },
             Context.ConnectionAborted);
+    }
+
+    private async Task BroadcastFriendPresenceUpdatedAsync(int userId, bool isOnline, DateTimeOffset? lastSeenAt)
+    {
+        var friendIds = await _context.Friendships
+            .AsNoTracking()
+            .Where(item => item.UserLowId == userId || item.UserHighId == userId)
+            .Select(item => item.UserLowId == userId ? item.UserHighId : item.UserLowId)
+            .Distinct()
+            .ToListAsync();
+
+        var recipientIds = friendIds
+            .Append(userId)
+            .Distinct()
+            .Select(item => item.ToString());
+
+        await Clients.Users(recipientIds).SendAsync("FriendPresenceUpdated", new
+        {
+            userId,
+            is_online = isOnline,
+            presence = isOnline ? "online" : "offline",
+            last_seen_at = lastSeenAt
+        });
     }
 
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)

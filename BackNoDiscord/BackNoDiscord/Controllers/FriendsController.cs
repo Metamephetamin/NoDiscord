@@ -16,15 +16,18 @@ public class FriendsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly FriendRequestService _friendRequestService;
+    private readonly UserPresenceService _userPresenceService;
 
     public FriendsController(
         AppDbContext context,
         IHubContext<ChatHub> chatHubContext,
-        FriendRequestService friendRequestService)
+        FriendRequestService friendRequestService,
+        UserPresenceService userPresenceService)
     {
         _context = context;
         _chatHubContext = chatHubContext;
         _friendRequestService = friendRequestService;
+        _userPresenceService = userPresenceService;
     }
 
     [HttpGet]
@@ -97,6 +100,7 @@ public class FriendsController : ControllerBase
                 nickname = item.nickname,
                 email = item.email,
                 avatar_url = item.avatar_url ?? string.Empty,
+                last_seen_at = item.last_seen_at,
                 directChannelId = BuildDirectChannelId(currentUserId, item.id)
             });
 
@@ -125,7 +129,19 @@ public class FriendsController : ControllerBase
             .Take(20)
             .ToList();
 
-        return Ok(result);
+        return Ok(result.Select(item => new
+        {
+            item.id,
+            item.first_name,
+            item.last_name,
+            item.nickname,
+            item.email,
+            item.avatar_url,
+            item.last_seen_at,
+            is_online = _userPresenceService.IsOnline(item.id.ToString()),
+            presence = _userPresenceService.IsOnline(item.id.ToString()) ? "online" : "offline",
+            item.directChannelId
+        }));
     }
 
     [HttpPost("add")]
@@ -287,8 +303,9 @@ public class FriendsController : ControllerBase
         return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
     }
 
-    private static object BuildFriendPayload(User friend, int currentUserId)
+    private object BuildFriendPayload(User friend, int currentUserId)
     {
+        var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
         return new
         {
             id = friend.id,
@@ -297,12 +314,16 @@ public class FriendsController : ControllerBase
             nickname = friend.nickname,
             email = friend.email,
             avatar_url = friend.avatar_url ?? string.Empty,
+            is_online = isOnline,
+            presence = isOnline ? "online" : "offline",
+            last_seen_at = friend.last_seen_at,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id)
         };
     }
 
-    private static object BuildFriendRequestPayload(FriendRequestRecord request, User sender)
+    private object BuildFriendRequestPayload(FriendRequestRecord request, User sender)
     {
+        var isOnline = _userPresenceService.IsOnline(sender.id.ToString());
         return new
         {
             id = request.Id,
@@ -315,7 +336,10 @@ public class FriendsController : ControllerBase
                 last_name = sender.last_name,
                 nickname = sender.nickname,
                 email = sender.email,
-                avatar_url = sender.avatar_url ?? string.Empty
+                avatar_url = sender.avatar_url ?? string.Empty,
+                is_online = isOnline,
+                presence = isOnline ? "online" : "offline",
+                last_seen_at = sender.last_seen_at
             }
         };
     }

@@ -179,6 +179,12 @@ contextBridge.exposeInMainWorld("electronBackground", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronWindowControls", {
+  async setTitleBarOverlayVisible(visible = true) {
+    return ipcRenderer.invoke("window-controls:set-titlebar-overlay-visible", visible);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronDesktopNotifications", {
   async show(payload) {
     return ipcRenderer.invoke("desktop-notifications:show", payload);

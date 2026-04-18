@@ -17,12 +17,14 @@ import {
   isVoiceMessage,
   normalizeAttachmentItems,
   normalizeReactions,
+  resolveAnimatedEmojiFallbackGlyph,
 } from "../utils/textChatModel";
 import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
 import { parseMediaFrame } from "../utils/mediaFrames";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
 const invitePreviewCache = new Map();
+const TEXT_CHAT_STATIC_EMOJI_IN_FEED = true;
 
 const getPreviewableMediaItems = (messageItem, attachments) =>
   attachments
@@ -40,6 +42,7 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
 
 const DOCUMENT_IMAGE_EXTENSION_PATTERN = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:[?#].*)?$/i;
 const PRIORITY_MEDIA_MESSAGE_COUNT = 1;
+const EMOJI_ONLY_MESSAGE_PATTERN = /^(?:(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\u200d|\ufe0f|\s))+$/u;
 
 function isImageLikeDocumentAttachment(attachmentItem) {
   const contentType = String(attachmentItem?.attachmentContentType || "").toLowerCase();
@@ -79,6 +82,19 @@ function normalizeTextLinkHref(value) {
   return /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
 }
 
+function getEmojiOnlyMessageMeta(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue || normalizedValue.length > 16 || !EMOJI_ONLY_MESSAGE_PATTERN.test(normalizedValue)) {
+    return { isEmojiOnly: false, count: 0 };
+  }
+
+  const emojiMatches = normalizedValue.match(/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/gu) || [];
+  return {
+    isEmojiOnly: emojiMatches.length > 0,
+    count: emojiMatches.length,
+  };
+}
+
 function EditedBadge({ message }) {
   if (!message?.editedAt) {
     return null;
@@ -92,12 +108,43 @@ function EditedBadge({ message }) {
   );
 }
 
+function MessageTimestamp({ messageItem }) {
+  return (
+    <span className={`message-time ${messageItem?.isLocalEcho ? "message-time--pending" : ""}`}>
+      {messageItem?.isLocalEcho ? "Отправка..." : formatTime(messageItem.timestamp)}
+    </span>
+  );
+}
+
+function LocalEchoMediaOverlay({ attachmentItem }) {
+  const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
+  const normalizedStatus = String(attachmentItem?.localEchoStatus || "uploading").trim();
+  const statusLabel = normalizedStatus === "preparing"
+    ? "Подготовка"
+    : normalizedStatus === "processing"
+      ? "Обработка"
+      : "Загрузка";
+
+  return (
+    <span className="message-media__upload-overlay" aria-hidden="true">
+      <span
+        className="message-media__upload-progress"
+        style={{ "--message-upload-progress": `${normalizedProgress}%` }}
+      >
+        <span className="message-media__upload-spinner" />
+        <span className="message-media__upload-value">{normalizedProgress}%</span>
+      </span>
+      <span className="message-media__upload-label">{statusLabel}</span>
+    </span>
+  );
+}
+
 function MessageMediaOverlayFooter({ messageItem, isOwnMessage }) {
   return (
     <div className={`message-footer message-media-overlay-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
-      <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+      <MessageTimestamp messageItem={messageItem} />
       <EditedBadge message={messageItem} />
-      {isOwnMessage ? (
+      {isOwnMessage && !messageItem?.isLocalEcho ? (
         <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
           <span className="message-read-status__check" />
           <span className="message-read-status__check" />
@@ -573,7 +620,15 @@ function MessageAttachmentCard({
   }
 
   if (attachmentItem.attachmentUrl) {
+    const showLocalEchoOverlay = Boolean(messageItem?.isLocalEcho);
+
     if (isAnimatedEmojiAttachment(messageItem, attachmentItem, galleryAttachments)) {
+      const fallbackGlyph = resolveAnimatedEmojiFallbackGlyph(
+        attachmentItem,
+        attachmentItem?.attachmentName,
+        attachmentItem?.attachmentSourceUrl,
+        attachmentItem?.attachmentUrl
+      ) || "🙂";
       return (
         <button
           type="button"
@@ -581,7 +636,16 @@ function MessageAttachmentCard({
           onClick={handlePreviewClick}
           aria-label={`Открыть смайлик ${attachmentItem.attachmentName || ""}`.trim()}
         >
-          <img className="message-inline-emoji__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "emoji"} />
+          {TEXT_CHAT_STATIC_EMOJI_IN_FEED ? (
+            <AnimatedEmojiGlyph
+              emoji={{ glyph: fallbackGlyph, assetUrl: attachmentItem.attachmentUrl }}
+              className="message-inline-emoji__glyph"
+              showAsset={false}
+              fallbackText={fallbackGlyph}
+            />
+          ) : (
+            <img className="message-inline-emoji__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "emoji"} />
+          )}
         </button>
       );
     }
@@ -590,7 +654,7 @@ function MessageAttachmentCard({
       return (
         <button
           type="button"
-          className={`message-media message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""}`}
+          className={`message-media message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""} ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
@@ -609,6 +673,7 @@ function MessageAttachmentCard({
               <span className="message-media__spoiler-label">Spoiler</span>
             </span>
           ) : null}
+          {showLocalEchoOverlay ? <LocalEchoMediaOverlay attachmentItem={attachmentItem} /> : null}
         </button>
       );
     }
@@ -617,7 +682,7 @@ function MessageAttachmentCard({
       return (
         <button
           type="button"
-          className={`message-media message-media--video message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""}`}
+          className={`message-media message-media--video message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""} ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
           aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
         >
@@ -628,7 +693,7 @@ function MessageAttachmentCard({
               <span className="message-media__spoiler-label">Spoiler</span>
             </span>
           ) : null}
-          <span className="message-media__play" aria-hidden="true" />
+          {showLocalEchoOverlay ? <LocalEchoMediaOverlay attachmentItem={attachmentItem} /> : <span className="message-media__play" aria-hidden="true" />}
         </button>
       );
     }
@@ -822,6 +887,7 @@ MessageAttachmentCollection.displayName = "MessageAttachmentCollection";
 function TextChatMessageList({
   messages,
   visibleMessages = messages,
+  visibleStartIndex = 0,
   messagesListRef,
   messagesEndRef,
   messageRefs,
@@ -876,10 +942,6 @@ function TextChatMessageList({
         })
       ),
     [serverMembers, serverRoleById]
-  );
-  const messageIndexById = useMemo(
-    () => new Map(messages.map((messageItem, index) => [String(messageItem.id), index])),
-    [messages]
   );
   const registerMessageNode = useCallback((messageId, node) => {
     registerMeasuredNode?.(messageId, node);
@@ -986,16 +1048,17 @@ function TextChatMessageList({
     <div className="messages-list-shell">
       {floatingDateLabel ? <div className="messages-floating-date">{floatingDateLabel}</div> : null}
 
-      <div ref={messagesListRef} className="messages-list">
+      <div ref={messagesListRef} className={`messages-list ${virtualizationEnabled ? "messages-list--virtualized" : "messages-list--plain"}`}>
         {virtualizationEnabled && topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
-        {visibleMessages.map((messageItem) => {
-          const messageIndex = messageIndexById.get(String(messageItem.id)) ?? -1;
+        {visibleMessages.map((messageItem, visibleIndex) => {
+          const messageIndex = Math.max(0, Number(visibleStartIndex) || 0) + visibleIndex;
           const previousMessage = messages[messageIndex - 1] || null;
           const nextMessage = messages[messageIndex + 1] || null;
           const attachments = renderedAttachmentsByMessageId.get(String(messageItem.id)) || [];
           const hasRenderableAttachments = attachments.length > 0;
           const reactions = normalizedReactionsByMessageId.get(String(messageItem.id)) || [];
           const messageText = String(messageItem.message || "");
+          const emojiOnlyMessageMeta = getEmojiOnlyMessageMeta(messageText);
           const messagePoll = getMessagePoll(messageItem);
           const inviteCode = extractInviteCode(messageText);
           const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
@@ -1014,6 +1077,9 @@ function TextChatMessageList({
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
+          const isInlineEmojiOnlyMessage = isMediaOnlyMessage
+            && attachments.length === 1
+            && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
           const hasVisualAttachmentGroup = hasRenderableAttachments
             && attachments.length > 0
             && attachments.every((attachmentItem) => (
@@ -1021,7 +1087,7 @@ function TextChatMessageList({
               && !attachmentItem.isVoice
               && (attachmentItem.isImage || attachmentItem.isVideo)
             ));
-          const showFloatingMediaFooter = hasVisualAttachmentGroup && !reactions.length && !messagePoll;
+          const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const showAttachmentOverlayFooter = showFloatingMediaFooter;
           const useInlineFooter = isDirectChat
@@ -1033,6 +1099,13 @@ function TextChatMessageList({
             && !messageItem.replyToMessageId
             && !messageText.includes("\n")
             && messageText.trim().length <= 14;
+          const isEmojiOnlyTextMessage = emojiOnlyMessageMeta.isEmojiOnly
+            && !hasRenderableAttachments
+            && !messagePoll
+            && !inviteCode
+            && !reactions.length
+            && !messageItem.forwardedFromUsername
+            && !messageItem.replyToMessageId;
           const authorRoleColor = !isDirectChat
             ? authorRoleColorByUserId.get(String(messageItem.authorUserId || "")) || ""
             : "";
@@ -1057,7 +1130,7 @@ function TextChatMessageList({
             <div
               key={messageItem.id}
               ref={(node) => registerMessageNode(messageItem.id, node)}
-              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
+              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
               onClick={handleMessageClick}
             >
@@ -1089,7 +1162,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {
@@ -1117,7 +1190,7 @@ function TextChatMessageList({
                     </button>
                     {!showAttachmentOverlayFooter ? (
                       <span className="message-meta">
-                        <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                        <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />
                       </span>
                     ) : null}
@@ -1185,9 +1258,9 @@ function TextChatMessageList({
                         <MessageText text={messageText} mentions={messageMentions} currentUserId={currentUserId} />
                       </div>
                       <div className={`message-footer message-footer--inline ${isOwnMessage ? "message-footer--own" : ""}`}>
-                        <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                        <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />
-                        {isOwnMessage ? (
+                        {isOwnMessage && !messageItem?.isLocalEcho ? (
                           <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
                             <span className="message-read-status__check" />
                             <span className="message-read-status__check" />
@@ -1196,7 +1269,7 @@ function TextChatMessageList({
                       </div>
                     </div>
                   ) : (
-                    <div className="message-text">
+                    <div className={`message-text ${isEmojiOnlyTextMessage ? "message-text--emoji-only" : ""} ${isEmojiOnlyTextMessage && emojiOnlyMessageMeta.count > 1 ? "message-text--emoji-only-multi" : ""}`}>
                       <MessageText text={messageText} mentions={messageMentions} currentUserId={currentUserId} />
                     </div>
                   )
@@ -1240,7 +1313,12 @@ function TextChatMessageList({
                                 }}
                                 aria-label={`${reaction.glyph} ${reaction.count}`}
                               >
-                                <AnimatedEmojiGlyph emoji={reaction} className="message-reaction__glyph" />
+                                <AnimatedEmojiGlyph
+                                  emoji={reaction}
+                                  className="message-reaction__glyph"
+                                  showAsset={!TEXT_CHAT_STATIC_EMOJI_IN_FEED}
+                                  fallbackText={resolveAnimatedEmojiFallbackGlyph(reaction) || reaction.glyph}
+                                />
                                 <span className="message-reaction__count">{reaction.count}</span>
                                 <span className="message-reaction__avatars" aria-hidden="true">
                                   {reaction.users.slice(0, 2).map((reactor) => (
@@ -1263,9 +1341,9 @@ function TextChatMessageList({
 
                     {(isDirectChat && !useInlineFooter) ? (
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
-                        <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                        <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />
-                        {isOwnMessage ? (
+                        {isOwnMessage && !messageItem?.isLocalEcho ? (
                           <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
                             <span className="message-read-status__check" />
                             <span className="message-read-status__check" />
@@ -1290,6 +1368,7 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
   return (
     previousProps.messages === nextProps.messages
     && previousProps.visibleMessages === nextProps.visibleMessages
+    && previousProps.visibleStartIndex === nextProps.visibleStartIndex
     && previousProps.messagesListRef === nextProps.messagesListRef
     && previousProps.messagesEndRef === nextProps.messagesEndRef
     && previousProps.messageRefs === nextProps.messageRefs

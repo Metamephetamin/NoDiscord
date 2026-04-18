@@ -130,11 +130,84 @@ const ANIMATED_EMOJI_BY_KEY = new Map(MESSAGE_REACTION_OPTIONS.map((emojiOption)
 const ANIMATED_EMOJI_BY_GLYPH = new Map(
   [...LEGACY_EMOJI_OPTIONS, ...MESSAGE_REACTION_OPTIONS].map((emojiOption) => [emojiOption.glyph, emojiOption])
 );
+const ANIMATED_EMOJI_GLYPH_BY_LOOKUP_KEY = new Map();
+
+function normalizeAnimatedEmojiLookupKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .split(/[?#]/, 1)[0]
+    .replace(/^.*[\\/]/, "")
+    .replace(/\.(?:gif|png|jpe?g|webp|avif)$/i, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+[
+  ...LEGACY_EMOJI_OPTIONS,
+  ...MESSAGE_REACTION_OPTIONS,
+].forEach((emojiOption) => {
+  const glyph = String(emojiOption?.glyph || "").trim();
+  if (!glyph) {
+    return;
+  }
+
+  [
+    emojiOption?.key,
+    emojiOption?.assetUrl,
+    emojiOption?.assetPath,
+  ].forEach((value) => {
+    const normalizedKey = normalizeAnimatedEmojiLookupKey(value);
+    if (normalizedKey) {
+      ANIMATED_EMOJI_GLYPH_BY_LOOKUP_KEY.set(normalizedKey, glyph);
+    }
+  });
+});
 
 export function getAnimatedEmojiOption(reaction) {
   const key = String(reaction?.key || "");
   const glyph = String(reaction?.glyph || "");
   return ANIMATED_EMOJI_BY_KEY.get(key) || ANIMATED_EMOJI_BY_GLYPH.get(glyph) || null;
+}
+
+export function resolveAnimatedEmojiFallbackGlyph(...values) {
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+
+    if (typeof value === "object") {
+      const directGlyph = String(value?.glyph || value?.emoji || "").trim();
+      if (directGlyph) {
+        return directGlyph;
+      }
+
+      const nestedMatch = resolveAnimatedEmojiFallbackGlyph(
+        value?.key,
+        value?.assetUrl,
+        value?.assetPath,
+        value?.attachmentName,
+        value?.attachmentUrl,
+        value?.attachmentSourceUrl
+      );
+      if (nestedMatch) {
+        return nestedMatch;
+      }
+      continue;
+    }
+
+    const normalizedKey = normalizeAnimatedEmojiLookupKey(value);
+    if (!normalizedKey) {
+      continue;
+    }
+
+    const exactMatch = ANIMATED_EMOJI_GLYPH_BY_LOOKUP_KEY.get(normalizedKey);
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  return "";
 }
 
 export function getMentionQueryContext(text, caretPosition) {

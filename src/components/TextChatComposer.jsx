@@ -43,10 +43,6 @@ export default function TextChatComposer({
   onToggleBatchUploadGrouping,
   onToggleBatchUploadSendAsDocuments,
   onToggleBatchUploadRememberChoice,
-  onDragEnter,
-  onDragOver,
-  onDragLeave,
-  onDrop,
   onStopReplying,
   onStopEditing,
   onCancelVoiceRecording,
@@ -176,10 +172,6 @@ export default function TextChatComposer({
   return (
     <div
       className={`input-area ${composerDropActive ? "input-area--drag-active" : ""}`}
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
     >
       <div className="input-area__editor">
         {hasBatchUploadSheet ? (
@@ -265,15 +257,6 @@ export default function TextChatComposer({
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        ) : null}
-
-        {composerDropActive ? (
-          <div className="chat-drop-overlay" aria-hidden="true">
-            <div className="chat-drop-overlay__panel">
-              <strong>Перетащите файлы сюда</strong>
-              <span>Изображения, видео и документы добавятся в очередь перед отправкой</span>
             </div>
           </div>
         ) : null}

@@ -76,6 +76,9 @@ public class User
     [Column("profile_background_frame_json")]
     public string? profile_background_frame_json { get; set; }
 
+    [Column("last_seen_at")]
+    public DateTimeOffset? last_seen_at { get; set; }
+
     [Column("password_hash")]
     public string password_hash { get; set; } = null!;
 }
@@ -413,6 +416,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.avatar_frame_json).IsRequired(false);
             entity.Property(x => x.profile_background_url).IsRequired(false);
             entity.Property(x => x.profile_background_frame_json).IsRequired(false);
+            entity.Property(x => x.last_seen_at).IsRequired(false);
             entity.Property(x => x.password_hash).IsRequired();
         });
 

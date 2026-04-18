@@ -166,12 +166,14 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
 }
 
 function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) {
+  const useSpeechPreset =
+    mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
+    || mode === NOISE_SUPPRESSION_MODE_RNNOISE
+    || mode === NOISE_SUPPRESSION_MODE_HARD_GATE;
+
   return {
-    audioPreset:
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
-        ? VOICE_ISOLATION_MIC_AUDIO_PRESET
-        : HIGH_QUALITY_MIC_AUDIO_PRESET,
-    dtx: mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    audioPreset: useSpeechPreset ? VOICE_ISOLATION_MIC_AUDIO_PRESET : HIGH_QUALITY_MIC_AUDIO_PRESET,
+    dtx: useSpeechPreset,
     red: true,
     forceStereo: false,
   };
@@ -501,10 +503,14 @@ export function createVoiceRoomClient({
         ? true
         : undefined,
     googEchoCancellation: echoCancellationEnabled,
+    googEchoCancellation2: echoCancellationEnabled,
+    googDAEchoCancellation: echoCancellationEnabled,
+    googExperimentalEchoCancellation: echoCancellationEnabled,
     googAutoGainControl:
       mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
       mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
     googNoiseSuppression: true,
+    googNoiseSuppression2: true,
     googHighpassFilter: true,
     googTypingNoiseDetection: true,
     channelCount: relaxed ? undefined : 1,
@@ -723,12 +729,12 @@ export function createVoiceRoomClient({
 
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        openThreshold: 0.034,
-        closeThreshold: 0.019,
-        floorGain: 0.0008,
-        attackTime: 0.004,
-        releaseTime: 0.055,
-        holdMs: 240,
+        openThreshold: 0.043,
+        closeThreshold: 0.027,
+        floorGain: 0.00004,
+        attackTime: 0.0025,
+        releaseTime: 0.045,
+        holdMs: 280,
       };
     }
 
@@ -973,26 +979,26 @@ export function createVoiceRoomClient({
   });
 
   const buildHardGateVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 155,
-    highPassQ: 1.05,
-    mudCutFrequency: 290,
-    mudCutQ: 1.28,
-    mudCutGain: -4.6,
-    boxCutFrequency: 820,
-    boxCutQ: 1.45,
-    boxCutGain: -3.4,
-    presenceFrequency: 2050,
-    presenceQ: 1.28,
-    presenceGain: 4.4,
-    airFrequency: 3900,
-    airGain: -0.4,
-    lowPassFrequency: 5400,
-    lowPassQ: 0.95,
-    threshold: -34,
-    knee: 7,
-    ratio: 14,
-    attack: 0.0015,
-    release: 0.085,
+    highPassFrequency: 175,
+    highPassQ: 1.12,
+    mudCutFrequency: 320,
+    mudCutQ: 1.34,
+    mudCutGain: -5.4,
+    boxCutFrequency: 900,
+    boxCutQ: 1.55,
+    boxCutGain: -4.2,
+    presenceFrequency: 1980,
+    presenceQ: 1.34,
+    presenceGain: 5.1,
+    airFrequency: 3600,
+    airGain: -1.1,
+    lowPassFrequency: 4700,
+    lowPassQ: 1.05,
+    threshold: -39,
+    knee: 4,
+    ratio: 18,
+    attack: 0.001,
+    release: 0.06,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
   });
 

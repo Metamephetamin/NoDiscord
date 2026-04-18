@@ -318,6 +318,35 @@ export default function useFriendsWorkspaceState({
       loadFriendRequests().catch(() => {});
       rerunFriendSearch();
     };
+    const handleFriendPresenceUpdated = (payload) => {
+      const updatedUserId = String(payload?.userId || payload?.user_id || "").trim();
+      if (!updatedUserId) {
+        loadFriends().catch(() => {});
+        return;
+      }
+
+      const isOnline = Boolean(payload?.is_online ?? payload?.isOnline);
+      const lastSeenAt = String(payload?.last_seen_at || payload?.lastSeenAt || "").trim();
+      const presence = isOnline ? "online" : "offline";
+      const applyPresence = (friend) => (
+        String(friend?.id || "") === updatedUserId
+          ? {
+            ...friend,
+            isOnline,
+            presence,
+            status: presence,
+            lastSeenAt: lastSeenAt || friend.lastSeenAt || "",
+          }
+          : friend
+      );
+
+      setFriends((previous) => previous.map(applyPresence));
+      setFriendLookupResults((previous) => previous.map(applyPresence));
+      setIncomingFriendRequests((previous) => previous.map((request) => ({
+        ...request,
+        sender: applyPresence(request.sender),
+      })));
+    };
     const handleWindowFocus = () => {
       loadFriends().catch(() => {});
       loadFriendRequests().catch(() => {});
@@ -325,6 +354,7 @@ export default function useFriendsWorkspaceState({
 
     chatConnection.on("FriendListUpdated", handleFriendListUpdated);
     chatConnection.on("FriendRequestsUpdated", handleFriendRequestsUpdated);
+    chatConnection.on("FriendPresenceUpdated", handleFriendPresenceUpdated);
     window.addEventListener("focus", handleWindowFocus);
 
     const intervalId = window.setInterval(() => {
@@ -339,6 +369,7 @@ export default function useFriendsWorkspaceState({
     return () => {
       chatConnection.off("FriendListUpdated", handleFriendListUpdated);
       chatConnection.off("FriendRequestsUpdated", handleFriendRequestsUpdated);
+      chatConnection.off("FriendPresenceUpdated", handleFriendPresenceUpdated);
       window.removeEventListener("focus", handleWindowFocus);
       window.clearInterval(intervalId);
     };

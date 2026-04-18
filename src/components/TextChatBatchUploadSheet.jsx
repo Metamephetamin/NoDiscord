@@ -60,6 +60,8 @@ function BatchUploadTile({
   onSelect,
   onRemove,
 }) {
+  const shouldPreferThumbnailOnly = fileCount > 1;
+
   return (
     <div
       className={`batch-upload-sheet__tile ${getBatchTileClassName(fileCount, index)} ${isActive ? "batch-upload-sheet__tile--active" : ""}`}
@@ -75,7 +77,7 @@ function BatchUploadTile({
           file={file}
           className="batch-upload-sheet__preview"
           fallbackClassName="batch-upload-sheet__thumb-fallback"
-          preferThumbnailOnly
+          preferThumbnailOnly={shouldPreferThumbnailOnly}
         />
 
         <div className="batch-upload-sheet__tile-scrim" aria-hidden="true" />
@@ -268,7 +270,7 @@ function TextChatBatchUploadSheet({
             onChange={onToggleSendAsDocuments}
             disabled={uploadingFile}
           >
-            Отправить как файлы
+            {fileCount === 1 ? "Отправить как файл" : "Отправить как файлы"}
           </BatchUploadToggle>
 
           <BatchUploadToggle

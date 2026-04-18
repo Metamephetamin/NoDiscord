@@ -8,6 +8,7 @@ import {
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
+  createPendingUploadPreview,
   preparePendingUploadForSend,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
@@ -65,6 +66,9 @@ export default function useTextChatSendActions({
   uploadAttachment,
   sendMessagesCompat,
   playDirectMessageSound,
+  onCreateLocalEchoMessages,
+  onRemoveLocalEchoMessages,
+  onUpdateLocalEchoUploads,
 }) {
   const pendingUploadPatchQueueRef = useRef(new Map());
   const pendingUploadPatchFrameRef = useRef(0);
@@ -176,14 +180,19 @@ export default function useTextChatSendActions({
     const shouldSendAsDocuments = Boolean(batchUploadOptions?.sendAsDocuments);
     const nextUploads = validFiles.map((file) => {
       const nextUpload = createPendingUpload(file);
+      const previewUrl = createPendingUploadPreview(file);
       if (shouldSendAsDocuments && nextUpload.kind === "image") {
         return {
           ...nextUpload,
+          previewUrl,
           compressionMode: "file",
         };
       }
 
-      return nextUpload;
+      return {
+        ...nextUpload,
+        previewUrl,
+      };
     });
 
     flushSync(() => {
@@ -357,7 +366,9 @@ export default function useTextChatSendActions({
     const avatar = user?.avatarUrl || user?.avatar || "";
     const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers, serverRoles) : [];
     let activeUploadId = "";
+    let localEchoMessageIds = [];
     let sendSucceeded = false;
+    let didResetUiState = false;
     const sendTraceId = startPerfTrace("text-chat", "send-message", {
       attachmentCount: filesToSend.length,
       hasText: Boolean(messageText),
@@ -369,10 +380,13 @@ export default function useTextChatSendActions({
       lastSendAtRef.current = Date.now();
       clearChatDraft(user, scopedChannelId);
 
-      startTransition(() => {
+      flushSync(() => {
         setMessage("");
         setReplyState(null);
         clearPendingUploads();
+      });
+
+      startTransition(() => {
         setIsChannelReady(true);
         setActionFeedback(null);
       });
@@ -419,6 +433,32 @@ export default function useTextChatSendActions({
 
       let attachments = [];
       const hasDocumentUploads = filesToSend.some((item) => String(item?.compressionMode || "original") === "file");
+      const shouldGroupItems = !hasDocumentUploads && batchUploadOptions?.groupItems !== false;
+
+      localEchoMessageIds = onCreateLocalEchoMessages?.({
+        messageText,
+        filesToSend,
+        outgoingMentions,
+        replyState,
+        shouldGroupItems,
+      }) || [];
+
+      if (localEchoMessageIds.length) {
+        const resetTraceId = startPerfTrace("text-chat", "send-message:pre-upload-ui-reset", {
+          attachmentCount: filesToSend.length,
+          localEchoCount: localEchoMessageIds.length,
+        });
+        try {
+          postSendResetUiState();
+          didResetUiState = true;
+        } finally {
+          finishPerfTraceOnNextFrame(resetTraceId, {
+            attachmentCount: filesToSend.length,
+            localEchoCount: localEchoMessageIds.length,
+          });
+        }
+      }
+
       if (filesToSend.length) {
         const uploadTraceId = startPerfTrace("text-chat", "send-message:upload-attachments", {
           attachmentCount: filesToSend.length,
@@ -436,6 +476,10 @@ export default function useTextChatSendActions({
             if (uploadId) {
               activeUploadId = uploadId;
               uploadProgressSnapshotRef.current.set(uploadId, 0.1);
+              onUpdateLocalEchoUploads?.(uploadId, {
+                progress: 2,
+                status: "preparing",
+              });
               schedulePendingUploadPatch(uploadId, {
                 status: "preparing",
                 progress: 0.1,
@@ -468,6 +512,10 @@ export default function useTextChatSendActions({
 
             if (uploadId) {
               uploadProgressSnapshotRef.current.set(uploadId, 0.28);
+              onUpdateLocalEchoUploads?.(uploadId, {
+                progress: 6,
+                status: "uploading",
+              });
               schedulePendingUploadPatch(uploadId, {
                 status: "uploading",
                 progress: 0.28,
@@ -490,6 +538,10 @@ export default function useTextChatSendActions({
                 }
 
                 uploadProgressSnapshotRef.current.set(uploadId, normalizedProgress);
+                onUpdateLocalEchoUploads?.(uploadId, {
+                  progress: Math.max(6, Math.round((Math.max(0, Math.min(1, Number(progressValue) || 0))) * 100)),
+                  status: "uploading",
+                });
                 schedulePendingUploadPatch(uploadId, {
                   status: "uploading",
                   progress: normalizedProgress,
@@ -501,6 +553,10 @@ export default function useTextChatSendActions({
               uploadProgressSnapshotRef.current.delete(uploadId);
               preparedUploadFileCacheRef.current.delete(uploadId);
               preparedUploadModeRef.current.delete(uploadId);
+              onUpdateLocalEchoUploads?.(uploadId, {
+                progress: 100,
+                status: "processing",
+              });
               schedulePendingUploadPatch(uploadId, {
                 status: "done",
                 progress: 1,
@@ -588,7 +644,6 @@ export default function useTextChatSendActions({
         }
       }
 
-      const shouldGroupItems = !hasDocumentUploads && batchUploadOptions?.groupItems !== false;
       const payload = shouldGroupItems
         ? [{
             message: messageText,
@@ -636,17 +691,24 @@ export default function useTextChatSendActions({
         });
       }
 
-      const resetTraceId = startPerfTrace("text-chat", "send-message:post-send-ui-reset", {
-        attachmentCount: attachments.length,
-      });
-      try {
-        postSendResetUiState();
-      } finally {
-        finishPerfTraceOnNextFrame(resetTraceId, {
+      if (!didResetUiState) {
+        const resetTraceId = startPerfTrace("text-chat", "send-message:post-send-ui-reset", {
           attachmentCount: attachments.length,
         });
+        try {
+          postSendResetUiState();
+        } finally {
+          finishPerfTraceOnNextFrame(resetTraceId, {
+            attachmentCount: attachments.length,
+          });
+        }
       }
       sendSucceeded = true;
+      if (localEchoMessageIds.length) {
+        window.setTimeout(() => {
+          onRemoveLocalEchoMessages?.(localEchoMessageIds);
+        }, 1200);
+      }
       if (isDirectChat) {
         playDirectMessageSound("send");
       }
@@ -667,6 +729,10 @@ export default function useTextChatSendActions({
       });
 
       if (!messageEditState) {
+        if (localEchoMessageIds.length) {
+          onRemoveLocalEchoMessages?.(localEchoMessageIds);
+        }
+
         if (activeUploadId) {
           flushPendingUploadPatches();
           schedulePendingUploadPatch(activeUploadId, {

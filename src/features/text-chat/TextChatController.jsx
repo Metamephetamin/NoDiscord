@@ -11,7 +11,11 @@ import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
 import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
 import { copyTextToClipboard } from "../../utils/clipboard";
-import { readCachedTextChatMessages, writeCachedTextChatMessages } from "../../utils/textChatMessageCache";
+import {
+  readCachedTextChatMessages,
+  readTextChatChannelClearedAt,
+  writeCachedTextChatMessages,
+} from "../../utils/textChatMessageCache";
 import {
   extractMentionsFromText,
   getMentionHandleForMember,
@@ -63,6 +67,36 @@ const clampMenuPosition = (x, y, menuWidth = 260, menuHeight = 320, padding = 12
 
 const BATCH_UPLOAD_PREFERENCES_KEY = "textchat-batch-upload-preferences";
 const EMPTY_DECRYPTED_ATTACHMENTS_BY_MESSAGE_ID = Object.freeze({});
+const TEXT_CHAT_DEBUG_FLAG_PREFIX = "nodiscord.debug.textchat.";
+const LOCAL_ECHO_ID_PREFIX = "local-echo:";
+
+function isUnrecoverableLegacyEncryptedMessage(messageItem) {
+  const encryptionState = String(messageItem?.encryptionState || messageItem?.EncryptionState || "").trim();
+  if (encryptionState === "legacy-client-encrypted") {
+    return true;
+  }
+
+  const legacyEncryption = messageItem?.encryption || messageItem?.Encryption;
+  if (legacyEncryption?.ciphertext || legacyEncryption?.Ciphertext) {
+    return true;
+  }
+
+  const messageText = String(messageItem?.message || messageItem?.Message || "");
+  return messageText.includes("старым клиентским форматом") && messageText.includes("больше недоступно");
+}
+
+function readTextChatDebugFlag(name) {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(`${TEXT_CHAT_DEBUG_FLAG_PREFIX}${name}`);
+    return rawValue === "1" || rawValue === "true";
+  } catch {
+    return false;
+  }
+}
 
 function readBatchUploadPreferences() {
   if (typeof window === "undefined") {
@@ -144,6 +178,103 @@ function mergeChannelMessages(existingMessages, incomingMessages) {
   });
 }
 
+function parseTextChatClearCutoffMs(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return 0;
+  }
+
+  const parsedValue = Date.parse(normalizedValue);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs = 0) {
+  if (!localClearCutoffMs) {
+    return true;
+  }
+
+  const rawTimestamp = messageItem?.timestamp || messageItem?.Timestamp || messageItem?.createdAt || messageItem?.CreatedAt || "";
+  const parsedTimestamp = rawTimestamp ? Date.parse(rawTimestamp) : Number.NaN;
+  if (Number.isFinite(parsedTimestamp)) {
+    return parsedTimestamp > localClearCutoffMs;
+  }
+
+  return Boolean(messageItem?.isLocalEcho);
+}
+
+function filterMessagesAfterLocalClear(messages, localClearCutoffMs = 0) {
+  const messageList = Array.isArray(messages) ? messages : [];
+  if (!localClearCutoffMs) {
+    return messageList;
+  }
+
+  return messageList.filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
+}
+
+function buildLocalEchoAttachmentKey(attachmentItem, index = 0) {
+  return [
+    String(attachmentItem?.attachmentName || "").trim(),
+    String(attachmentItem?.attachmentContentType || "").trim().toLowerCase(),
+    Number(attachmentItem?.attachmentSize) || 0,
+    Boolean(attachmentItem?.attachmentAsFile) ? 1 : 0,
+    Boolean(attachmentItem?.attachmentSpoiler) ? 1 : 0,
+    Number(attachmentItem?.voiceMessage?.durationMs || 0),
+    index,
+  ].join("::");
+}
+
+function buildLocalEchoSignatureFromParts({ message = "", replyToMessageId = "", attachments = [] } = {}) {
+  return JSON.stringify({
+    message: String(message || ""),
+    replyToMessageId: String(replyToMessageId || "").trim(),
+    attachments: (Array.isArray(attachments) ? attachments : []).map((attachmentItem, index) =>
+      buildLocalEchoAttachmentKey(attachmentItem, index)
+    ),
+  });
+}
+
+function buildLocalEchoSignature(messageItem) {
+  return buildLocalEchoSignatureFromParts({
+    message: messageItem?.message || "",
+    replyToMessageId: messageItem?.replyToMessageId || "",
+    attachments: normalizeAttachmentItems(messageItem),
+  });
+}
+
+function findMatchingLocalEchoMessageIndex(channelMessages, incomingMessage, currentUserId) {
+  const normalizedCurrentUserId = String(currentUserId || "");
+  if (!normalizedCurrentUserId || String(incomingMessage?.authorUserId || "") !== normalizedCurrentUserId) {
+    return -1;
+  }
+
+  const incomingSignature = buildLocalEchoSignature(incomingMessage);
+  const messageList = Array.isArray(channelMessages) ? channelMessages : [];
+  const exactMatchIndex = messageList.findIndex((messageItem) => (
+    Boolean(messageItem?.isLocalEcho)
+    && String(messageItem?.authorUserId || "") === normalizedCurrentUserId
+    && String(messageItem?.localEchoSignature || buildLocalEchoSignature(messageItem)) === incomingSignature
+  ));
+
+  if (exactMatchIndex >= 0) {
+    return exactMatchIndex;
+  }
+
+  const incomingAttachments = normalizeAttachmentItems(incomingMessage);
+  const incomingMessageText = String(incomingMessage?.message || "");
+  const incomingReplyId = String(incomingMessage?.replyToMessageId || "").trim();
+
+  return messageList.findIndex((messageItem) => {
+    if (!messageItem?.isLocalEcho || String(messageItem?.authorUserId || "") !== normalizedCurrentUserId) {
+      return false;
+    }
+
+    const localAttachments = normalizeAttachmentItems(messageItem);
+    return String(messageItem?.message || "") === incomingMessageText
+      && String(messageItem?.replyToMessageId || "").trim() === incomingReplyId
+      && localAttachments.length === incomingAttachments.length;
+  });
+}
+
 function areReactionUsersEqual(leftUsers, rightUsers) {
   if (leftUsers === rightUsers) {
     return true;
@@ -205,6 +336,7 @@ export default function TextChat({
   channelId,
   user,
   resolvedChannelId = "",
+  localMessageStateVersion = 0,
   searchQuery = "",
   directTargets = [],
   serverMembers = [],
@@ -224,6 +356,7 @@ export default function TextChat({
   const [composerDropActive, setComposerDropActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
+  const [localClearCutoffMs, setLocalClearCutoffMs] = useState(0);
   const [composerEmojiPickerOpen, setComposerEmojiPickerOpen] = useState(false);
   const [mentionSuggestionsOpen, setMentionSuggestionsOpen] = useState(false);
   const [selectedMentionSuggestionIndex, setSelectedMentionSuggestionIndex] = useState(0);
@@ -268,6 +401,7 @@ export default function TextChat({
   const hasInitializedVisibleChannelRef = useRef(false);
   const composerDropDepthRef = useRef(0);
   const selectedFilesRef = useRef([]);
+  const localEchoObjectUrlsByMessageIdRef = useRef(new Map());
   const scopedChannelId = useMemo(() => {
     const normalizedResolvedChannelId = normalizeDirectMessageChannelId(resolvedChannelId);
     if (normalizedResolvedChannelId) {
@@ -278,17 +412,78 @@ export default function TextChat({
   }, [channelId, resolvedChannelId, serverId]);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
-  const messages = messagesByChannel[scopedChannelId] || [];
+  const rawChannelMessages = messagesByChannel[scopedChannelId] || [];
+  const messages = useMemo(
+    () => filterMessagesAfterLocalClear(
+      rawChannelMessages.filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem)),
+      localClearCutoffMs
+    ),
+    [localClearCutoffMs, rawChannelMessages]
+  );
+  const disableCacheHydration = useMemo(
+    () => readTextChatDebugFlag("disableCacheHydration"),
+    []
+  );
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !disableCacheHydration) {
+      return;
+    }
+
+    console.info("[text-chat debug] cache hydration disabled");
+  }, [disableCacheHydration]);
 
   useEffect(() => {
     if (!currentUserId || !scopedChannelId) {
+      setLocalClearCutoffMs(0);
+      return;
+    }
+
+    const nextLocalClearCutoffMs = parseTextChatClearCutoffMs(
+      readTextChatChannelClearedAt(currentUserId, scopedChannelId)
+    );
+    setLocalClearCutoffMs(nextLocalClearCutoffMs);
+
+    if (!nextLocalClearCutoffMs) {
+      return;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (channelMessages) => filterMessagesAfterLocalClear(channelMessages, nextLocalClearCutoffMs)
+    ));
+    setPinnedMessages((previous) =>
+      previous.filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, nextLocalClearCutoffMs))
+    );
+    setSelectedMessageIds([]);
+    setReplyState(null);
+    setMessageEditState(null);
+    setMessageContextMenu(null);
+    setForwardModal((previous) => (
+      previous.open
+        ? {
+            open: false,
+            messageIds: [],
+            targetIds: [],
+            query: "",
+            submitting: false,
+          }
+        : previous
+    ));
+  }, [currentUserId, localMessageStateVersion, scopedChannelId]);
+
+  useEffect(() => {
+    if (!currentUserId || !scopedChannelId || disableCacheHydration) {
       return;
     }
 
     const cacheTraceId = startPerfTrace("text-chat", "hydrate-channel-from-cache", {
       channelId: scopedChannelId,
     });
-    const cachedMessages = readCachedTextChatMessages(currentUserId, scopedChannelId);
+    const cachedMessages = readCachedTextChatMessages(currentUserId, scopedChannelId)
+      .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
+      .filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
     if (!cachedMessages.length) {
       finishPerfTrace(cacheTraceId, {
         channelId: scopedChannelId,
@@ -308,25 +503,57 @@ export default function TextChat({
       channelId: scopedChannelId,
       cachedMessageCount: cachedMessages.length,
     });
-  }, [currentUserId, scopedChannelId]);
+  }, [currentUserId, disableCacheHydration, localClearCutoffMs, scopedChannelId]);
 
   useEffect(() => {
-    if (!currentUserId || !scopedChannelId || !messages.length) {
+    if (!currentUserId || !scopedChannelId || disableCacheHydration) {
+      return undefined;
+    }
+
+    const cacheableMessages = messages.filter((messageItem) => !messageItem?.isLocalEcho);
+    if (!rawChannelMessages.length && !cacheableMessages.length) {
       return undefined;
     }
 
     const timeoutId = window.setTimeout(() => {
-      writeCachedTextChatMessages(currentUserId, scopedChannelId, messages);
+      writeCachedTextChatMessages(currentUserId, scopedChannelId, cacheableMessages);
     }, 250);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [currentUserId, messages, scopedChannelId]);
+  }, [currentUserId, disableCacheHydration, messages, rawChannelMessages.length, scopedChannelId]);
 
   useEffect(() => {
     selectedFilesRef.current = selectedFiles;
   }, [selectedFiles]);
+
+  const revokeLocalEchoObjectUrls = useCallback((messageId) => {
+    const normalizedMessageId = String(messageId || "");
+    if (!normalizedMessageId) {
+      return;
+    }
+
+    const objectUrls = localEchoObjectUrlsByMessageIdRef.current.get(normalizedMessageId) || [];
+    objectUrls.forEach((objectUrl) => {
+      if (!String(objectUrl || "").startsWith("blob:")) {
+        return;
+      }
+
+      try {
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        // Ignore local preview revocation failures.
+      }
+    });
+    localEchoObjectUrlsByMessageIdRef.current.delete(normalizedMessageId);
+  }, []);
+
+  useEffect(() => () => {
+    Array.from(localEchoObjectUrlsByMessageIdRef.current.keys()).forEach((messageId) => {
+      revokeLocalEchoObjectUrls(messageId);
+    });
+  }, [revokeLocalEchoObjectUrls]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -349,6 +576,7 @@ export default function TextChat({
   const {
     virtualizationEnabled,
     visibleMessages,
+    visibleStartIndex,
     topSpacerHeight,
     bottomSpacerHeight,
     registerMeasuredNode,
@@ -1040,13 +1268,17 @@ export default function TextChat({
     pendingNewMessagesCount,
     firstUnreadMessageId,
     canReturnToJumpPoint,
+    showJumpToLatestButton,
     scrollToLatest,
     scrollToMessage,
     jumpToFirstUnread,
     returnToJumpPoint,
   } = useTextChatScrollManager({
     messages,
+    visibleMessages,
     scopedChannelId,
+    currentUserId,
+    isDirectChat,
     messagesListRef,
     messagesEndRef,
     messageRefs,
@@ -1167,7 +1399,8 @@ export default function TextChat({
 
     const initialMessages = await chatConnection.invoke("JoinChannel", scopedChannelId);
     const normalizedInitialMessages = Array.isArray(initialMessages)
-      ? await Promise.all(initialMessages.map((messageItem) => normalizeIncomingMessage(messageItem)))
+      ? (await Promise.all(initialMessages.map((messageItem) => normalizeIncomingMessage(messageItem))))
+        .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
       : [];
     joinedChannelRef.current = scopedChannelId;
     setIsChannelReady(true);
@@ -1212,10 +1445,22 @@ export default function TextChat({
 
       void (async () => {
         const normalizedMessage = await normalizeIncomingMessage(nextMessage);
+        if (isUnrecoverableLegacyEncryptedMessage(normalizedMessage)) {
+          return;
+        }
 
         setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
           if (channelMessages.some((messageItem) => String(messageItem.id) === String(normalizedMessage.id))) {
             return channelMessages;
+          }
+
+          const matchingLocalEchoIndex = findMatchingLocalEchoMessageIndex(channelMessages, normalizedMessage, currentUserId);
+          if (matchingLocalEchoIndex >= 0) {
+            const nextChannelMessages = [...channelMessages];
+            const replacedMessage = nextChannelMessages[matchingLocalEchoIndex];
+            revokeLocalEchoObjectUrls(replacedMessage?.id);
+            nextChannelMessages[matchingLocalEchoIndex] = normalizedMessage;
+            return nextChannelMessages;
           }
 
           return [...channelMessages, normalizedMessage];
@@ -1259,6 +1504,12 @@ export default function TextChat({
 
       void (async () => {
         const normalizedMessage = await normalizeIncomingMessage(updatedMessage);
+        if (isUnrecoverableLegacyEncryptedMessage(normalizedMessage)) {
+          setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) =>
+            channelMessages.filter((messageItem) => String(messageItem.id) !== String(updatedMessage?.id || updatedMessage?.Id || ""))
+          ));
+          return;
+        }
 
         setMessageContextMenu((current) =>
           String(current?.messageId || "") === String(normalizedMessage.id)
@@ -1409,7 +1660,7 @@ export default function TextChat({
       chatConnection.off("MessagesRead", handleMessagesRead);
       chatConnection.off("MessageReactionsUpdated", handleMessageReactionsUpdated);
     };
-  }, [currentUserId, isDirectChat, messageEditState?.messageId, scopedChannelId]);
+  }, [currentUserId, isDirectChat, messageEditState?.messageId, revokeLocalEchoObjectUrls, scopedChannelId]);
 
   useEffect(() => {
     const handleProfileUpdated = (payload) => {
@@ -1508,6 +1759,215 @@ export default function TextChat({
     playDirectMessageSound,
   });
 
+  const appendLocalEchoMessages = useCallback(({
+    messageText = "",
+    filesToSend = [],
+    outgoingMentions = [],
+    replyState: activeReplyState = null,
+    shouldGroupItems = true,
+  } = {}) => {
+    if (!scopedChannelId || !currentUserId) {
+      return [];
+    }
+
+    const startedAt = Date.now();
+    const username = String(getUserName(user) || "User").trim() || "User";
+    const photoUrl = String(user?.avatarUrl || user?.avatar || "").trim();
+    const normalizedReplyToMessageId = String(activeReplyState?.messageId || "").trim();
+    const normalizedReplyToUsername = String(activeReplyState?.username || "").trim();
+    const normalizedReplyPreview = String(activeReplyState?.preview || "").trim();
+
+    const createLocalEchoAttachment = (pendingUpload, attachmentIndex = 0) => {
+      const file = pendingUpload?.file instanceof File ? pendingUpload.file : null;
+      let attachmentUrl = "";
+
+      if (file instanceof File) {
+        try {
+          attachmentUrl = URL.createObjectURL(file);
+        } catch {
+          attachmentUrl = "";
+        }
+      }
+
+      return {
+        id: `${String(pendingUpload?.id || "attachment")}:${attachmentIndex}`,
+        attachmentUrl,
+        attachmentName: String(pendingUpload?.name || file?.name || "attachment").trim() || "attachment",
+        attachmentSize: Number(pendingUpload?.size || file?.size || 0) || null,
+        attachmentContentType: String(pendingUpload?.type || file?.type || "application/octet-stream").trim(),
+        attachmentSpoiler: Boolean(pendingUpload?.hideWithSpoiler),
+        attachmentAsFile: pendingUpload?.kind === "image"
+          && (String(pendingUpload?.compressionMode || "original") === "file" || Boolean(batchUploadOptions?.sendAsDocuments)),
+        attachmentEncryption: null,
+        voiceMessage: null,
+        sourcePendingUploadId: String(pendingUpload?.id || ""),
+        localEchoProgress: 0,
+        localEchoStatus: "queued",
+      };
+    };
+
+    const outgoingMessageDescriptors = filesToSend.length
+      ? (
+          shouldGroupItems
+            ? [{
+                message: messageText,
+                mentions: outgoingMentions,
+                replyToMessageId: normalizedReplyToMessageId,
+                replyToUsername: normalizedReplyToUsername,
+                replyPreview: normalizedReplyPreview,
+                attachments: filesToSend.map((pendingUpload, attachmentIndex) => createLocalEchoAttachment(pendingUpload, attachmentIndex)),
+              }]
+            : filesToSend.map((pendingUpload, index) => ({
+                message: index === 0 ? messageText : "",
+                mentions: index === 0 ? outgoingMentions : [],
+                replyToMessageId: index === 0 ? normalizedReplyToMessageId : "",
+                replyToUsername: index === 0 ? normalizedReplyToUsername : "",
+                replyPreview: index === 0 ? normalizedReplyPreview : "",
+                attachments: [createLocalEchoAttachment(pendingUpload, 0)],
+              }))
+        )
+      : [{
+          message: messageText,
+          mentions: outgoingMentions,
+          replyToMessageId: normalizedReplyToMessageId,
+          replyToUsername: normalizedReplyToUsername,
+          replyPreview: normalizedReplyPreview,
+          attachments: [],
+        }];
+
+    const optimisticMessages = outgoingMessageDescriptors.map((descriptor, index) => {
+      const messageId = `${LOCAL_ECHO_ID_PREFIX}${scopedChannelId}:${startedAt}:${index}:${Math.random().toString(16).slice(2, 8)}`;
+      const objectUrls = descriptor.attachments
+        .map((attachmentItem) => attachmentItem.attachmentUrl)
+        .filter((attachmentUrl) => String(attachmentUrl || "").startsWith("blob:"));
+
+      if (objectUrls.length) {
+        localEchoObjectUrlsByMessageIdRef.current.set(messageId, objectUrls);
+      }
+
+      const primaryAttachment = descriptor.attachments[0] || null;
+      return {
+        id: messageId,
+        channelId: scopedChannelId,
+        authorUserId: currentUserId,
+        username,
+        photoUrl,
+        timestamp: new Date(startedAt + index).toISOString(),
+        message: descriptor.message,
+        encryption: null,
+        attachments: descriptor.attachments,
+        attachmentEncryption: null,
+        attachmentUrl: primaryAttachment?.attachmentUrl || "",
+        attachmentName: primaryAttachment?.attachmentName || "",
+        attachmentSize: primaryAttachment?.attachmentSize ?? null,
+        attachmentContentType: primaryAttachment?.attachmentContentType || "",
+        attachmentAsFile: Boolean(primaryAttachment?.attachmentAsFile),
+        voiceMessage: null,
+        editedAt: null,
+        replyToMessageId: descriptor.replyToMessageId,
+        replyToUsername: descriptor.replyToUsername,
+        replyPreview: descriptor.replyPreview,
+        encryptionState: "plain",
+        reactions: [],
+        mentions: descriptor.mentions,
+        isRead: false,
+        isLocalEcho: true,
+        localEchoSignature: buildLocalEchoSignatureFromParts(descriptor),
+      };
+    });
+
+    if (!optimisticMessages.length) {
+      return [];
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (channelMessages) => mergeChannelMessages(channelMessages, optimisticMessages)
+    ));
+
+    return optimisticMessages.map((messageItem) => String(messageItem.id || ""));
+  }, [batchUploadOptions?.sendAsDocuments, currentUserId, scopedChannelId, user]);
+
+  const removeLocalEchoMessages = useCallback((messageIds) => {
+    const normalizedIds = Array.from(new Set((messageIds || []).map((messageId) => String(messageId || "")).filter(Boolean)));
+    if (!normalizedIds.length) {
+      return;
+    }
+
+    normalizedIds.forEach((messageId) => revokeLocalEchoObjectUrls(messageId));
+    const localEchoIdSet = new Set(normalizedIds);
+
+    setMessagesByChannel((previous) => {
+      let didChange = false;
+      const nextState = Object.fromEntries(
+        Object.entries(previous || {}).map(([channelKey, channelMessages]) => {
+          const nextChannelMessages = (Array.isArray(channelMessages) ? channelMessages : [])
+            .filter((messageItem) => !localEchoIdSet.has(String(messageItem?.id || "")));
+          if (nextChannelMessages.length !== (Array.isArray(channelMessages) ? channelMessages.length : 0)) {
+            didChange = true;
+          }
+
+          return [channelKey, nextChannelMessages];
+        })
+      );
+
+      return didChange ? nextState : previous;
+    });
+  }, [revokeLocalEchoObjectUrls]);
+
+  const updateLocalEchoUploadProgress = useCallback((pendingUploadId, { progress = null, status = "" } = {}) => {
+    const normalizedPendingUploadId = String(pendingUploadId || "").trim();
+    if (!normalizedPendingUploadId) {
+      return;
+    }
+
+    const normalizedStatus = String(status || "").trim();
+    const normalizedProgress = Number.isFinite(Number(progress))
+      ? Math.max(0, Math.min(100, Math.round(Number(progress))))
+      : null;
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (channelMessages) => {
+        let didChange = false;
+        const nextChannelMessages = channelMessages.map((messageItem) => {
+          if (!messageItem?.isLocalEcho || !Array.isArray(messageItem.attachments) || !messageItem.attachments.length) {
+            return messageItem;
+          }
+
+          let attachmentsChanged = false;
+          const nextAttachments = messageItem.attachments.map((attachmentItem) => {
+            if (String(attachmentItem?.sourcePendingUploadId || "") !== normalizedPendingUploadId) {
+              return attachmentItem;
+            }
+
+            const nextAttachment = {
+              ...attachmentItem,
+              ...(normalizedProgress == null ? null : { localEchoProgress: normalizedProgress }),
+              ...(normalizedStatus ? { localEchoStatus: normalizedStatus } : null),
+            };
+            attachmentsChanged = true;
+            return nextAttachment;
+          });
+
+          if (!attachmentsChanged) {
+            return messageItem;
+          }
+
+          didChange = true;
+          return {
+            ...messageItem,
+            attachments: nextAttachments,
+          };
+        });
+
+        return didChange ? nextChannelMessages : channelMessages;
+      }
+    ));
+  }, [scopedChannelId]);
+
   const {
     send,
     sendAnimatedEmoji,
@@ -1550,6 +2010,9 @@ export default function TextChat({
     uploadAttachment,
     sendMessagesCompat,
     playDirectMessageSound,
+    onCreateLocalEchoMessages: appendLocalEchoMessages,
+    onRemoveLocalEchoMessages: removeLocalEchoMessages,
+    onUpdateLocalEchoUploads: updateLocalEchoUploadProgress,
   });
 
   const toggleBatchUploadGrouping = (value) => {
@@ -1585,9 +2048,29 @@ export default function TextChat({
     setComposerDropActive(false);
   }, [scopedChannelId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const resetDragState = () => {
+      composerDropDepthRef.current = 0;
+      setComposerDropActive(false);
+    };
+
+    window.addEventListener("dragend", resetDragState);
+    window.addEventListener("drop", resetDragState);
+
+    return () => {
+      window.removeEventListener("dragend", resetDragState);
+      window.removeEventListener("drop", resetDragState);
+    };
+  }, []);
+
+  const isFileDragEvent = (event) => Array.from(event?.dataTransfer?.types || []).includes("Files");
+
   const handleComposerDragEnter = (event) => {
-    const transferTypes = Array.from(event.dataTransfer?.types || []);
-    if (!transferTypes.includes("Files")) {
+    if (!isFileDragEvent(event)) {
       return;
     }
 
@@ -1597,8 +2080,7 @@ export default function TextChat({
   };
 
   const handleComposerDragOver = (event) => {
-    const transferTypes = Array.from(event.dataTransfer?.types || []);
-    if (!transferTypes.includes("Files")) {
+    if (!isFileDragEvent(event)) {
       return;
     }
 
@@ -1609,14 +2091,27 @@ export default function TextChat({
   };
 
   const handleComposerDragLeave = (event) => {
-    const transferTypes = Array.from(event.dataTransfer?.types || []);
-    if (!transferTypes.includes("Files")) {
+    if (!isFileDragEvent(event)) {
       return;
     }
 
     event.preventDefault();
+    const currentTarget = event.currentTarget;
+    const relatedTarget = event.relatedTarget;
+    if (currentTarget instanceof Element && relatedTarget instanceof Node && currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
     composerDropDepthRef.current = Math.max(0, composerDropDepthRef.current - 1);
-    if (composerDropDepthRef.current === 0) {
+    const bounds = currentTarget instanceof Element ? currentTarget.getBoundingClientRect() : null;
+    const pointerInsideCurrentTarget = bounds
+      ? event.clientX >= bounds.left
+        && event.clientX <= bounds.right
+        && event.clientY >= bounds.top
+        && event.clientY <= bounds.bottom
+      : false;
+
+    if (composerDropDepthRef.current === 0 && !pointerInsideCurrentTarget) {
       setComposerDropActive(false);
     }
   };
@@ -1897,6 +2392,7 @@ export default function TextChat({
       scrollToLatest={scrollToLatest}
       pendingNewMessagesCount={pendingNewMessagesCount}
       firstUnreadMessageId={firstUnreadMessageId}
+      showJumpToLatestButton={showJumpToLatestButton}
       canReturnToJumpPoint={canReturnToJumpPoint}
       onJumpToFirstUnread={jumpToFirstUnread}
       onReturnToJumpPoint={returnToJumpPoint}
@@ -1914,6 +2410,7 @@ export default function TextChat({
       clearSelectionMode={clearSelectionMode}
       messages={messages}
       visibleMessages={visibleMessages}
+      visibleStartIndex={visibleStartIndex}
       messagesListRef={messagesListRef}
       messagesEndRef={messagesEndRef}
       messageRefs={messageRefs}

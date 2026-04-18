@@ -45,6 +45,7 @@ function areUserLikeEntriesEqual(previousEntries, nextEntries) {
       || String(previousEntry?.avatar || previousEntry?.avatarUrl || "") !== String(nextEntry?.avatar || nextEntry?.avatarUrl || "")
       || String(previousEntry?.directChannelId || "") !== String(nextEntry?.directChannelId || "")
       || String(previousEntry?.roleId || "") !== String(nextEntry?.roleId || "")
+      || String(previousEntry?.lastSeenAt || previousEntry?.last_seen_at || "") !== String(nextEntry?.lastSeenAt || nextEntry?.last_seen_at || "")
       || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
     ) {
       return false;
@@ -103,6 +104,7 @@ function areTextChatPropsEqual(previousProps, nextProps) {
   return previousProps.serverId === nextProps.serverId
     && previousProps.channelId === nextProps.channelId
     && previousProps.resolvedChannelId === nextProps.resolvedChannelId
+    && previousProps.localMessageStateVersion === nextProps.localMessageStateVersion
     && previousProps.user === nextProps.user
     && previousProps.searchQuery === nextProps.searchQuery
     && areUserLikeEntriesEqual(previousProps.directTargets, nextProps.directTargets)

@@ -24,6 +24,9 @@ const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const APP_DISPLAY_NAME = "Tend";
 const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
 const DEFAULT_PACKAGED_API_URL = "https://tendsec.ru";
+const DESKTOP_TITLE_BAR_HEIGHT = 28;
+const DESKTOP_TITLE_BAR_COLOR = "#10141c";
+const DESKTOP_TITLE_BAR_SYMBOL_COLOR = "#dfe6f7";
 const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const MAX_PERF_EVENTS = 500;
@@ -67,6 +70,28 @@ let backgroundPreferences = {
 const perfEvents = [];
 const activePerfTraces = new Map();
 let perfSequence = 0;
+
+const applyTitleBarOverlayVisibility = (visible = true) => {
+  if (process.platform !== "win32" || !mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  if (typeof mainWindow.setTitleBarOverlay !== "function") {
+    return false;
+  }
+
+  try {
+    mainWindow.setTitleBarOverlay({
+      color: visible ? DESKTOP_TITLE_BAR_COLOR : "#00000000",
+      symbolColor: visible ? DESKTOP_TITLE_BAR_SYMBOL_COLOR : "#00000000",
+      height: visible ? DESKTOP_TITLE_BAR_HEIGHT : 0,
+    });
+    return true;
+  } catch (error) {
+    console.warn("Failed to toggle title bar overlay visibility", error);
+    return false;
+  }
+};
 
 const appendPerfEvent = (event) => {
   if (!PERF_ENABLED) {
@@ -1178,8 +1203,6 @@ const createWindow = () => {
   const firstLoadTraceId = startPerfTrace("electron-main", "initial-window-load", {
     devServer: Boolean(RENDERER_DEV_SERVER_URL),
   });
-  const desktopTitleBarHeight = 28;
-  const desktopTitleBarColor = "#10141c";
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -1190,9 +1213,9 @@ const createWindow = () => {
     ...(process.platform === "win32"
       ? {
           titleBarOverlay: {
-            color: desktopTitleBarColor,
-            symbolColor: "#dfe6f7",
-            height: desktopTitleBarHeight,
+            color: DESKTOP_TITLE_BAR_COLOR,
+            symbolColor: DESKTOP_TITLE_BAR_SYMBOL_COLOR,
+            height: DESKTOP_TITLE_BAR_HEIGHT,
           },
         }
       : {}),
@@ -1410,6 +1433,8 @@ app.whenReady().then(async () => {
     focusMainWindow();
     return true;
   });
+  ipcMain.handle("window-controls:set-titlebar-overlay-visible", async (_event, visible = true) =>
+    applyTitleBarOverlayVisibility(visible !== false));
   ipcMain.handle("desktop-notifications:show", async (_event, payload) =>
     showDesktopNotification(payload && typeof payload === "object" ? payload : {}));
   ipcMain.handle("permissions:get-media-status", async (_event, mediaType) => getMediaAccessStatus(mediaType));
