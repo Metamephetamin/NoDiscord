@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatDayLabel } from "../utils/textChatHelpers";
 
-const SCROLL_NEAR_BOTTOM_PX = 96;
+const SCROLL_NEAR_BOTTOM_PX = 32;
 const FLOATING_DATE_PROBE_OFFSET_PX = 24;
 const PROGRAMMATIC_SCROLL_AUTO_RESET_MS = 420;
 
@@ -39,7 +39,9 @@ export default function useTextChatScrollManager({
   const previousChannelIdRef = useRef("");
   const pendingInitialScrollChannelRef = useRef("");
   const previousMessageCountRef = useRef(0);
+  const lastObservedScrollTopRef = useRef(0);
   const nearBottomRef = useRef(true);
+  const userDetachedFromBottomRef = useRef(false);
   const jumpSnapshotRef = useRef(null);
   const viewportUpdateRafRef = useRef(0);
   const programmaticScrollResetTimeoutRef = useRef(0);
@@ -52,6 +54,49 @@ export default function useTextChatScrollManager({
     setPendingNewMessagesCount((current) => (current === 0 ? current : 0));
     setFirstUnreadMessageId((current) => (current ? "" : current));
   }, []);
+
+  const updateNearBottomFromList = useCallback((list) => {
+    if (!list) {
+      nearBottomRef.current = true;
+      return true;
+    }
+
+    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    const isNearBottom = distanceFromBottom < SCROLL_NEAR_BOTTOM_PX;
+    nearBottomRef.current = isNearBottom;
+    if (isNearBottom) {
+      userDetachedFromBottomRef.current = false;
+    }
+    return isNearBottom;
+  }, []);
+
+  const isUserScrollLockedAwayFromBottom = useCallback(() => {
+    updateNearBottomFromList(messagesListRef.current);
+    return userDetachedFromBottomRef.current && !nearBottomRef.current;
+  }, [messagesListRef, updateNearBottomFromList]);
+
+  const markUserScrollIntent = useCallback((direction = "unknown") => {
+    if (programmaticScrollResetTimeoutRef.current) {
+      window.clearTimeout(programmaticScrollResetTimeoutRef.current);
+      programmaticScrollResetTimeoutRef.current = 0;
+    }
+
+    scrollStateRef.current = {
+      scrollIntent: "user",
+      isProgrammaticScroll: false,
+    };
+
+    if (direction === "up") {
+      nearBottomRef.current = false;
+      userDetachedFromBottomRef.current = true;
+      return;
+    }
+
+    const isNearBottom = updateNearBottomFromList(messagesListRef.current);
+    if (!isNearBottom) {
+      userDetachedFromBottomRef.current = true;
+    }
+  }, [messagesListRef, updateNearBottomFromList]);
 
   const scheduleViewportUpdate = useCallback(() => {
     if (viewportUpdateRafRef.current) {
@@ -68,9 +113,7 @@ export default function useTextChatScrollManager({
       }
 
       const isProgrammaticScroll = scrollStateRef.current.isProgrammaticScroll;
-      const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-      const isNearBottom = distanceFromBottom < SCROLL_NEAR_BOTTOM_PX;
-      nearBottomRef.current = isNearBottom;
+      const isNearBottom = updateNearBottomFromList(list);
 
       const probeLine = list.scrollTop + FLOATING_DATE_PROBE_OFFSET_PX;
       let nextVisibleMessage = messages[0] || null;
@@ -99,7 +142,7 @@ export default function useTextChatScrollManager({
         return;
       }
     });
-  }, [clearUnreadBelow, messageRefs, messages, messagesListRef]);
+  }, [clearUnreadBelow, messageRefs, messages, messagesListRef, updateNearBottomFromList]);
 
   const clearProgrammaticScroll = useCallback(() => {
     if (programmaticScrollResetTimeoutRef.current) {
@@ -153,6 +196,7 @@ export default function useTextChatScrollManager({
 
   const scrollToLatest = useCallback((behavior = "auto") => {
     nearBottomRef.current = true;
+    userDetachedFromBottomRef.current = false;
     clearUnreadBelow();
     scrollToBottom(behavior, "auto-bottom");
   }, [clearUnreadBelow, scrollToBottom]);
@@ -243,14 +287,56 @@ export default function useTextChatScrollManager({
     }
 
     const handleScroll = () => {
+      if (!scrollStateRef.current.isProgrammaticScroll) {
+        const previousScrollTop = lastObservedScrollTopRef.current;
+        const nextScrollTop = Math.max(0, list.scrollTop || 0);
+        if (nextScrollTop < previousScrollTop - 1) {
+          userDetachedFromBottomRef.current = true;
+          nearBottomRef.current = false;
+        }
+        lastObservedScrollTopRef.current = nextScrollTop;
+        updateNearBottomFromList(list);
+      }
       scheduleViewportUpdate();
     };
 
+    const handleWheel = (event) => {
+      markUserScrollIntent(Number(event.deltaY || 0) < 0 ? "up" : "down");
+    };
+
+    const handleTouchMove = () => {
+      markUserScrollIntent();
+    };
+
+    const handleKeyDown = (event) => {
+      if (
+        event.key === "ArrowUp"
+        || event.key === "ArrowDown"
+        || event.key === "PageUp"
+        || event.key === "PageDown"
+        || event.key === "Home"
+        || event.key === "End"
+        || event.key === " "
+      ) {
+        markUserScrollIntent(
+          event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home"
+            ? "up"
+            : "down"
+        );
+      }
+    };
+
     list.addEventListener("scroll", handleScroll, { passive: true });
+    list.addEventListener("wheel", handleWheel, { passive: true });
+    list.addEventListener("touchmove", handleTouchMove, { passive: true });
+    list.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", scheduleViewportUpdate);
 
     return () => {
       list.removeEventListener("scroll", handleScroll);
+      list.removeEventListener("wheel", handleWheel);
+      list.removeEventListener("touchmove", handleTouchMove);
+      list.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", scheduleViewportUpdate);
       if (viewportUpdateRafRef.current) {
         window.cancelAnimationFrame(viewportUpdateRafRef.current);
@@ -261,7 +347,7 @@ export default function useTextChatScrollManager({
         programmaticScrollResetTimeoutRef.current = 0;
       }
     };
-  }, [messagesListRef, scheduleViewportUpdate]);
+  }, [markUserScrollIntent, messagesListRef, scheduleViewportUpdate, updateNearBottomFromList]);
 
   useLayoutEffect(() => {
     const list = messagesListRef.current;
@@ -280,6 +366,8 @@ export default function useTextChatScrollManager({
 
     if (channelChanged) {
       nearBottomRef.current = true;
+      userDetachedFromBottomRef.current = false;
+      lastObservedScrollTopRef.current = 0;
       jumpSnapshotRef.current = null;
       forceScrollToBottomRef.current = false;
       pendingInitialScrollChannelRef.current = scopedChannelId;
@@ -297,6 +385,7 @@ export default function useTextChatScrollManager({
       }
 
       nearBottomRef.current = true;
+      userDetachedFromBottomRef.current = false;
       pendingInitialScrollChannelRef.current = "";
       window.requestAnimationFrame(() => {
         clearUnreadBelow();
@@ -307,7 +396,13 @@ export default function useTextChatScrollManager({
 
     if (forceScrollToBottomRef.current) {
       forceScrollToBottomRef.current = false;
+      if (isUserScrollLockedAwayFromBottom()) {
+        scheduleViewportUpdate();
+        return;
+      }
+
       nearBottomRef.current = true;
+      userDetachedFromBottomRef.current = false;
       window.requestAnimationFrame(() => {
         clearUnreadBelow();
       });
@@ -321,7 +416,7 @@ export default function useTextChatScrollManager({
     }
 
     if (messages.length > previousMessageCount) {
-      if (nearBottomRef.current) {
+      if (nearBottomRef.current && !isUserScrollLockedAwayFromBottom()) {
         window.requestAnimationFrame(() => {
           clearUnreadBelow();
         });
@@ -342,6 +437,7 @@ export default function useTextChatScrollManager({
     clearUnreadBelow,
     firstUnreadMessageId,
     forceScrollToBottomRef,
+    isUserScrollLockedAwayFromBottom,
     messages,
     messages.length,
     messagesEndRef,

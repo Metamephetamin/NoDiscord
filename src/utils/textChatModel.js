@@ -16,7 +16,7 @@ export const VOICE_HIGH_SHELF_FREQUENCY_HZ = 5600;
 export const VOICE_HIGH_SHELF_GAIN_DB = 2.4;
 export const SPEECH_RECOGNITION_RESTART_DELAY_MS = 240;
 export const AUTO_PUNCTUATE_TYPED_MESSAGES = true;
-export const ENABLE_VOICE_MESSAGE_BUTTON = true; // flip to false to hide the simple voice-message record button
+export const ENABLE_VOICE_MESSAGE_BUTTON = false; // voice messages are disabled; keep only speech-to-text input
 export const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
 const NORMALIZED_EMOJI_META = {
   grinning: { glyph: "😀", label: "Улыбка" },

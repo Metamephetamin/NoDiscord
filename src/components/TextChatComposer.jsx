@@ -40,7 +40,6 @@ export default function TextChatComposer({
   onRetryPendingUpload,
   onClearPendingUploads,
   onUpdatePendingUploadCompressionMode,
-  onUpdatePendingUploadSpoilerMode,
   onToggleBatchUploadGrouping,
   onToggleBatchUploadSendAsDocuments,
   onToggleBatchUploadRememberChoice,
@@ -73,6 +72,9 @@ export default function TextChatComposer({
   const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const composerHighlightRef = useRef(null);
+  const messageComposerRef = useRef(null);
+  const mediaFileInputRef = useRef(null);
+  const documentFileInputRef = useRef(null);
   const composerMentionSegments = useMemo(
     () => {
       const normalizedMessage = String(message || "");
@@ -88,12 +90,46 @@ export default function TextChatComposer({
     [message, serverMembers, serverRoles]
   );
   const handleAttachFileChange = (event) => {
+    messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
     onFileChange(event);
     if (event?.target) {
       event.target.value = "";
       event.target.blur?.();
     }
   };
+
+  const releaseAttachMenuFocusForFilePicker = () => {
+    if (typeof document !== "undefined") {
+      document.activeElement?.blur?.();
+    }
+  };
+
+  const suppressAttachMenuForFilePicker = () => {
+    releaseAttachMenuFocusForFilePicker();
+    messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
+  };
+
+  const openAttachMenu = () => {
+    if (uploadingFile) {
+      return;
+    }
+
+    messageComposerRef.current?.classList.add("message-composer--attach-menu-open");
+  };
+
+  const closeAttachMenu = () => {
+    messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
+  };
+
+  const openAttachFilePicker = (inputRef) => {
+    if (uploadingFile) {
+      return;
+    }
+
+    suppressAttachMenuForFilePicker();
+    inputRef.current?.click();
+  };
+
 
   const loadMoreEmojiPreviews = () => {
     setEmojiPreviewCount((previous) => Math.min(previous + 8, COMPOSER_EMOJI_OPTIONS.length));
@@ -159,8 +195,6 @@ export default function TextChatComposer({
             onRemovePendingUpload={onRemovePendingUpload}
             onClearPendingUploads={handleClearPendingUploads}
             onFileChange={onFileChange}
-            onUpdatePendingUploadCompressionMode={onUpdatePendingUploadCompressionMode}
-            onUpdatePendingUploadSpoilerMode={onUpdatePendingUploadSpoilerMode}
             onSend={handleSendMessage}
           />
         ) : null}
@@ -309,41 +343,71 @@ export default function TextChatComposer({
         ) : null}
 
         <div className={`input-area__controls ${hasBatchUploadSheet ? "input-area__controls--batch" : ""}`}>
-          <div className="message-composer">
-            <div className="attach-button" aria-label="Меню вложений" title="Меню вложений">
+          <div
+            ref={messageComposerRef}
+            className="message-composer"
+            onPointerLeave={closeAttachMenu}
+          >
+            <div
+              className="attach-button"
+              aria-label="Меню вложений"
+              title="Меню вложений"
+              onPointerEnter={openAttachMenu}
+            >
               <span className="attach-button__icon" aria-hidden="true" />
             </div>
 
-            <div className="attach-menu__popover" role="menu" aria-label="Меню вложений">
-              <label className="attach-menu__item attach-menu__item--label" role="menuitem">
-                <input
-                  type="file"
-                  className="attach-menu__input"
-                  accept="image/*,video/*"
-                  onChange={handleAttachFileChange}
-                  disabled={uploadingFile}
-                  multiple
-                />
+            <div className="attach-menu__popover" role="menu" aria-label="Меню вложений" onPointerEnter={openAttachMenu}>
+              <input
+                ref={mediaFileInputRef}
+                type="file"
+                className="attach-menu__input attach-menu__input--hidden"
+                accept="image/*,video/*"
+                onChange={handleAttachFileChange}
+                disabled={uploadingFile}
+                multiple
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <input
+                ref={documentFileInputRef}
+                type="file"
+                className="attach-menu__input attach-menu__input--hidden"
+                onChange={handleAttachFileChange}
+                disabled={uploadingFile}
+                multiple
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                className="attach-menu__item"
+                onClick={() => openAttachFilePicker(mediaFileInputRef)}
+                disabled={uploadingFile}
+                role="menuitem"
+              >
                 <span className="attach-menu__item-icon attach-menu__item-icon--media" aria-hidden="true" />
                 <span>Фото или видео</span>
-              </label>
-
-              <label className="attach-menu__item attach-menu__item--label" role="menuitem">
-                <input
-                  type="file"
-                  className="attach-menu__input"
-                  onChange={handleAttachFileChange}
-                  disabled={uploadingFile}
-                  multiple
-                />
-                <span className="attach-menu__item-icon attach-menu__item-icon--file" aria-hidden="true" />
-                <span>Документ</span>
-              </label>
+              </button>
 
               <button
                 type="button"
                 className="attach-menu__item"
-                onClick={() => setPollComposerOpen(true)}
+                onClick={() => openAttachFilePicker(documentFileInputRef)}
+                disabled={uploadingFile}
+                role="menuitem"
+              >
+                <span className="attach-menu__item-icon attach-menu__item-icon--file" aria-hidden="true" />
+                <span>Документ</span>
+              </button>
+
+              <button
+                type="button"
+                className="attach-menu__item"
+                onClick={() => {
+                  closeAttachMenu();
+                  setPollComposerOpen(true);
+                }}
                 disabled={uploadingFile || voiceRecordingState === "sending" || typeof onSendPoll !== "function"}
                 role="menuitem"
               >
@@ -384,20 +448,6 @@ export default function TextChatComposer({
                 <span className="composer-tool__emoji-face" />
               </span>
             </button>
-
-            {ENABLE_SPEECH_INPUT_BUTTON ? (
-              <button
-                type="button"
-                className={`composer-tool composer-tool--speech ${speechRecognitionActive ? "composer-tool--active" : ""}`}
-                onClick={onSpeechRecognitionToggle}
-                disabled={uploadingFile || voiceRecordingState !== "idle"}
-                title="Голосовой ввод текста"
-                aria-label="Голосовой ввод текста"
-              >
-                <span className="composer-tool__mic" aria-hidden="true" />
-                <span className="composer-tool__badge" aria-hidden="true">a</span>
-              </button>
-            ) : null}
 
             {composerEmojiPickerOpen ? (
               <div
@@ -616,22 +666,34 @@ export default function TextChatComposer({
 
             <div className="composer-tools-end">
               {shouldShowSendButton ? (
-              <button
-                type="button"
-                className="composer-send-button"
-                onClick={() => void handleSendMessage()}
-                disabled={
-                  uploadingFile
-                  || voiceRecordingState === "holding"
-                  || voiceRecordingState === "locked"
-                  || voiceRecordingState === "sending"
-                  || !hasSendPayload
-                }
-                aria-label="Отправить сообщение"
-                title="Отправить сообщение"
-              >
-                <span className="composer-send-button__icon" aria-hidden="true" />
-              </button>
+                <button
+                  type="button"
+                  className="composer-send-button"
+                  onClick={() => void handleSendMessage()}
+                  disabled={
+                    uploadingFile
+                    || voiceRecordingState === "holding"
+                    || voiceRecordingState === "locked"
+                    || voiceRecordingState === "sending"
+                    || !hasSendPayload
+                  }
+                  aria-label="Отправить сообщение"
+                  title="Отправить сообщение"
+                >
+                  <span className="composer-send-button__icon" aria-hidden="true" />
+                </button>
+              ) : ENABLE_SPEECH_INPUT_BUTTON ? (
+                <button
+                  type="button"
+                  className={`composer-tool composer-tool--speech composer-tool--action-slot ${speechRecognitionActive ? "composer-tool--active" : ""}`}
+                  onClick={onSpeechRecognitionToggle}
+                  disabled={uploadingFile || voiceRecordingState !== "idle"}
+                  title="Голосовой ввод текста"
+                  aria-label="Голосовой ввод текста"
+                >
+                  <span className="composer-tool__mic" aria-hidden="true" />
+                  <span className="composer-tool__badge" aria-hidden="true">a</span>
+                </button>
               ) : ENABLE_VOICE_MESSAGE_BUTTON ? (
                 <button
                   type="button"

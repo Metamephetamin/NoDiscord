@@ -238,17 +238,29 @@ Directory.CreateDirectory(chatFilesDirectory);
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(avatarsDirectory),
-    RequestPath = "/avatars"
+    RequestPath = "/avatars",
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
+    }
 });
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(profileBackgroundsDirectory),
-    RequestPath = "/profile-backgrounds"
+    RequestPath = "/profile-backgrounds",
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
+    }
 });
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(serverIconsDirectory),
-    RequestPath = "/server-icons"
+    RequestPath = "/server-icons",
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
+    }
 });
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -256,6 +268,8 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/chat-files",
     OnPrepareResponse = context =>
     {
+        context.Context.Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
+
         var origin = context.Context.Request.Headers.Origin.ToString();
         if (!FrontendOriginPolicy.IsAllowed(origin, app.Configuration))
         {

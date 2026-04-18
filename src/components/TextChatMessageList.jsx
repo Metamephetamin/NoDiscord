@@ -39,6 +39,7 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
     }));
 
 const DOCUMENT_IMAGE_EXTENSION_PATTERN = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:[?#].*)?$/i;
+const PRIORITY_MEDIA_MESSAGE_COUNT = 1;
 
 function isImageLikeDocumentAttachment(attachmentItem) {
   const contentType = String(attachmentItem?.attachmentContentType || "").toLowerCase();
@@ -88,6 +89,21 @@ function EditedBadge({ message }) {
       <span className="message-edited-badge__icon" aria-hidden="true">✎</span>
       <span className="message-edited-badge__label">ред.</span>
     </span>
+  );
+}
+
+function MessageMediaOverlayFooter({ messageItem, isOwnMessage }) {
+  return (
+    <div className={`message-footer message-media-overlay-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
+      <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+      <EditedBadge message={messageItem} />
+      {isOwnMessage ? (
+        <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
+          <span className="message-read-status__check" />
+          <span className="message-read-status__check" />
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -508,6 +524,7 @@ function MessageAttachmentCard({
   onOpenMediaPreview,
   onRevealSpoiler,
   isSpoilerRevealed,
+  priorityMedia = false,
 }) {
   const isHiddenSpoiler = Boolean(attachmentItem.attachmentSpoiler) && !isSpoilerRevealed;
   const openAttachmentMediaPreview = () => {
@@ -577,7 +594,15 @@ function MessageAttachmentCard({
           onClick={handlePreviewClick}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
-          <img className="message-media__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "image"} />
+          <img
+            className="message-media__image"
+            src={attachmentItem.attachmentUrl}
+            alt={attachmentItem.attachmentName || "image"}
+            loading={priorityMedia ? "eager" : "lazy"}
+            decoding="async"
+            fetchPriority={priorityMedia ? "high" : "auto"}
+            draggable={false}
+          />
           {isHiddenSpoiler ? (
             <span className="message-media__spoiler-layer" aria-hidden="true">
               <span className="message-media__spoiler-noise" />
@@ -669,13 +694,34 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     galleryAttachments = attachments,
     revealedSpoilerKeys,
     onRevealSpoiler,
+    mediaOverlayFooter,
+    priorityMediaMessageIdSet,
   } = props;
+  const isPriorityMediaMessage = priorityMediaMessageIdSet?.has(String(messageItem?.id || ""));
 
   if (!attachments.length) {
     return null;
   }
 
   if (attachments.length === 1) {
+    if (mediaOverlayFooter) {
+      return (
+        <div className="message-attachments-stack message-attachments-stack--single message-attachments-stack--with-overlay">
+          <div className="message-attachment-single">
+            <MessageAttachmentCard
+              {...props}
+              attachmentItem={attachments[0]}
+              galleryAttachments={galleryAttachments}
+              isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
+              onRevealSpoiler={onRevealSpoiler}
+              priorityMedia={isPriorityMediaMessage}
+            />
+          </div>
+          {mediaOverlayFooter}
+        </div>
+      );
+    }
+
     return (
       <MessageAttachmentCard
         {...props}
@@ -683,6 +729,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
         galleryAttachments={galleryAttachments}
         isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
         onRevealSpoiler={onRevealSpoiler}
+        priorityMedia={isPriorityMediaMessage}
       />
     );
   }
@@ -717,7 +764,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
   );
 
   return (
-    <div className="message-attachments-stack">
+    <div className={`message-attachments-stack ${mediaOverlayFooter ? "message-attachments-stack--with-overlay" : ""}`}>
       {visualAttachments.length ? (
         <div
           className={`message-attachment-grid ${featureStackCount ? "message-attachment-grid--feature-stack" : ""} ${
@@ -738,6 +785,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 galleryAttachments={galleryAttachments}
                 isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
                 onRevealSpoiler={onRevealSpoiler}
+                priorityMedia={isPriorityMediaMessage && attachmentIndex === 0}
               />
             </div>
           ))}
@@ -754,11 +802,14 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 galleryAttachments={galleryAttachments}
                 isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
                 onRevealSpoiler={onRevealSpoiler}
+                priorityMedia={isPriorityMediaMessage}
               />
             </div>
           ))}
         </div>
       ) : null}
+
+      {mediaOverlayFooter}
     </div>
   );
 });
@@ -908,6 +959,25 @@ function TextChatMessageList({
       normalizeReactions(messageItem?.reactions),
     ])
   ), [visibleMessages]);
+  const priorityMediaMessageIdSet = useMemo(() => {
+    const priorityIds = new Set();
+
+    for (let index = visibleMessages.length - 1; index >= 0 && priorityIds.size < PRIORITY_MEDIA_MESSAGE_COUNT; index -= 1) {
+      const messageItem = visibleMessages[index];
+      const attachments = renderedAttachmentsByMessageId.get(String(messageItem?.id || "")) || [];
+      const hasMediaImage = attachments.some((attachmentItem) => (
+        attachmentItem?.attachmentUrl
+        && !attachmentItem.attachmentAsFile
+        && attachmentItem.isImage
+      ));
+
+      if (hasMediaImage) {
+        priorityIds.add(String(messageItem.id));
+      }
+    }
+
+    return priorityIds;
+  }, [renderedAttachmentsByMessageId, visibleMessages]);
 
   return (
     <div className="messages-list-shell">
@@ -941,8 +1011,16 @@ function TextChatMessageList({
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
-          const showFloatingMediaFooter = hasRenderableAttachments && !messageText.trim() && !reactions.length && !messagePoll;
+          const hasVisualAttachmentGroup = hasRenderableAttachments
+            && attachments.length > 0
+            && attachments.every((attachmentItem) => (
+              !attachmentItem.attachmentAsFile
+              && !attachmentItem.isVoice
+              && (attachmentItem.isImage || attachmentItem.isVideo)
+            ));
+          const showFloatingMediaFooter = hasVisualAttachmentGroup && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
+          const showAttachmentOverlayFooter = showFloatingMediaFooter;
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
             && !messagePoll
@@ -1034,10 +1112,12 @@ function TextChatMessageList({
                     >
                       {messageItem.username || "User"}
                     </button>
-                    <span className="message-meta">
-                      <span className="message-time">{formatTime(messageItem.timestamp)}</span>
-                      <EditedBadge message={messageItem} />
-                    </span>
+                    {!showAttachmentOverlayFooter ? (
+                      <span className="message-meta">
+                        <span className="message-time">{formatTime(messageItem.timestamp)}</span>
+                        <EditedBadge message={messageItem} />
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1131,9 +1211,15 @@ function TextChatMessageList({
                   onOpenMediaPreview={onOpenMediaPreview}
                   revealedSpoilerKeys={revealedSpoilerKeys}
                   onRevealSpoiler={revealSpoilerAttachment}
+                  mediaOverlayFooter={
+                    showAttachmentOverlayFooter
+                      ? <MessageMediaOverlayFooter messageItem={messageItem} isOwnMessage={isOwnMessage} />
+                      : null
+                  }
+                  priorityMediaMessageIdSet={priorityMediaMessageIdSet}
                 />
 
-                {((isDirectChat && !useInlineFooter) || reactions.length || showFloatingMediaFooter) ? (
+                {((isDirectChat && !useInlineFooter && !showAttachmentOverlayFooter) || reactions.length) ? (
                   <div className="message-bottom-row">
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
@@ -1172,8 +1258,8 @@ function TextChatMessageList({
                       <span />
                     )}
 
-                    {(isDirectChat && !useInlineFooter) || showFloatingMediaFooter ? (
-                      <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""} ${showFloatingMediaFooter ? "message-footer--media-hover" : ""}`}>
+                    {(isDirectChat && !useInlineFooter) ? (
+                      <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <span className="message-time">{formatTime(messageItem.timestamp)}</span>
                         <EditedBadge message={messageItem} />
                         {isOwnMessage ? (

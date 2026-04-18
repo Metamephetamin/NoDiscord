@@ -11,6 +11,7 @@ import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
 import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
 import { copyTextToClipboard } from "../../utils/clipboard";
+import { readCachedTextChatMessages, writeCachedTextChatMessages } from "../../utils/textChatMessageCache";
 import {
   extractMentionsFromText,
   getMentionHandleForMember,
@@ -37,6 +38,7 @@ import {
 import { buildForwardPayloadForTargetChannel as buildForwardPayloadForTargetChannelCore } from "../../utils/textChatForwardPayload";
 import { TEXT_CHAT_INSERT_MENTION_EVENT } from "../../utils/textChatMentionInterop";
 import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
+import { finishPerfTrace, startPerfTrace } from "../../utils/perf";
 import useMediaPreviewKeyboardControls from "../../hooks/useMediaPreviewKeyboardControls";
 import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers";
 import useTextChatMessageActions from "../../hooks/useTextChatMessageActions";
@@ -60,6 +62,7 @@ const clampMenuPosition = (x, y, menuWidth = 260, menuHeight = 320, padding = 12
 });
 
 const BATCH_UPLOAD_PREFERENCES_KEY = "textchat-batch-upload-preferences";
+const EMPTY_DECRYPTED_ATTACHMENTS_BY_MESSAGE_ID = Object.freeze({});
 
 function readBatchUploadPreferences() {
   if (typeof window === "undefined") {
@@ -276,6 +279,50 @@ export default function TextChat({
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const messages = messagesByChannel[scopedChannelId] || [];
+
+  useEffect(() => {
+    if (!currentUserId || !scopedChannelId) {
+      return;
+    }
+
+    const cacheTraceId = startPerfTrace("text-chat", "hydrate-channel-from-cache", {
+      channelId: scopedChannelId,
+    });
+    const cachedMessages = readCachedTextChatMessages(currentUserId, scopedChannelId);
+    if (!cachedMessages.length) {
+      finishPerfTrace(cacheTraceId, {
+        channelId: scopedChannelId,
+        cachedMessageCount: 0,
+      });
+      return;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (currentChannelMessages) => currentChannelMessages.length
+        ? currentChannelMessages
+        : cachedMessages
+    ));
+    finishPerfTrace(cacheTraceId, {
+      channelId: scopedChannelId,
+      cachedMessageCount: cachedMessages.length,
+    });
+  }, [currentUserId, scopedChannelId]);
+
+  useEffect(() => {
+    if (!currentUserId || !scopedChannelId || !messages.length) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      writeCachedTextChatMessages(currentUserId, scopedChannelId, messages);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentUserId, messages, scopedChannelId]);
 
   useEffect(() => {
     selectedFilesRef.current = selectedFiles;
@@ -1101,12 +1148,20 @@ export default function TextChat({
   }, [message, messageEditState, scopedChannelId, user]);
 
   const ensureChannelJoined = async () => {
+    const joinTraceId = startPerfTrace("text-chat", "join-channel", {
+      channelId: scopedChannelId,
+    });
     const connection = await startChatConnection();
     if (!connection) {
       throw new Error("Сессия недействительна. Войдите снова.");
     }
 
     if (joinedChannelRef.current === scopedChannelId) {
+      finishPerfTrace(joinTraceId, {
+        channelId: scopedChannelId,
+        success: true,
+        reused: true,
+      });
       return;
     }
 
@@ -1122,6 +1177,11 @@ export default function TextChat({
       scopedChannelId,
       (currentChannelMessages) => mergeChannelMessages(currentChannelMessages, normalizedInitialMessages)
     ));
+    finishPerfTrace(joinTraceId, {
+      channelId: scopedChannelId,
+      success: true,
+      messageCount: normalizedInitialMessages.length,
+    });
 
     if (isDirectChat) {
       chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
@@ -1862,7 +1922,7 @@ export default function TextChat({
       bottomSpacerHeight={bottomSpacerHeight}
       registerMeasuredNode={registerMeasuredNode}
       floatingDateLabel={floatingDateLabel}
-      decryptedAttachmentsByMessageId={{}}
+      decryptedAttachmentsByMessageId={EMPTY_DECRYPTED_ATTACHMENTS_BY_MESSAGE_ID}
       selectedMessageIdSet={selectedMessageIdSet}
       highlightedMessageId={highlightedMessageId}
       isDirectChat={isDirectChat}

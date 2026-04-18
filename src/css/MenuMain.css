@@ -3248,8 +3248,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .mobile-voice-room__control-glyph--headphones {
-  -webkit-mask-image: url("/icons/NEWicon.png");
-  mask-image: url("/icons/NEWicon.png");
+  -webkit-mask-image: url("/icons/headphones-simple.svg");
+  mask-image: url("/icons/headphones-simple.svg");
 }
 
 .mobile-voice-room__control-label {

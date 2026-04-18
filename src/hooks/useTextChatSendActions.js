@@ -1,5 +1,6 @@
 ﻿import { startTransition, useEffect, useRef } from "react";
 import chatConnection from "../SignalR/ChatConnect";
+import { flushSync } from "react-dom";
 import {
   prepareOutgoingAttachmentPayload,
   prepareOutgoingTextPayload,
@@ -185,13 +186,15 @@ export default function useTextChatSendActions({
       return nextUpload;
     });
 
-    setSelectedFiles((previous) => {
-      if (replace) {
-        revokePendingUploadPreviews(previous);
-        return nextUploads;
-      }
+    flushSync(() => {
+      setSelectedFiles((previous) => {
+        if (replace) {
+          revokePendingUploadPreviews(previous);
+          return nextUploads;
+        }
 
-      return [...previous, ...nextUploads];
+        return [...previous, ...nextUploads];
+      });
     });
     return true;
   };
@@ -889,6 +892,13 @@ export default function useTextChatSendActions({
       setErrorMessage("Некоторые файлы пропущены: размер файла не должен быть больше 100 МБ.");
     } else {
       setErrorMessage("");
+    }
+
+    if (typeof window !== "undefined") {
+      window.__TEND_PENDING_UPLOAD_SHEET_TRACE_ID__ = startPerfTrace("text-chat", "batch-upload-sheet:time-to-visible", {
+        selectedFileCount: validFiles.length,
+        source,
+      });
     }
 
     appendPendingFiles(validFiles);
