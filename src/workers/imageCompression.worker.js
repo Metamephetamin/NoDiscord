@@ -1,5 +1,5 @@
 self.onmessage = async (event) => {
-  const { id, file, maxEdge = 2560, quality = 0.86 } = event.data || {};
+  const { id, file, maxEdge = 2560, quality = 0.86, outputType = "image/jpeg" } = event.data || {};
 
   try {
     if (!(file instanceof Blob)) {
@@ -17,7 +17,8 @@ self.onmessage = async (event) => {
       const width = Math.max(1, Math.round((bitmap.width || 1) * scale));
       const height = Math.max(1, Math.round((bitmap.height || 1) * scale));
       const canvas = new OffscreenCanvas(width, height);
-      const context = canvas.getContext("2d", { alpha: false });
+      const supportsAlpha = String(outputType || "").toLowerCase() === "image/webp";
+      const context = canvas.getContext("2d", { alpha: supportsAlpha });
 
       if (!context) {
         throw new Error("Failed to initialize worker canvas.");
@@ -26,7 +27,7 @@ self.onmessage = async (event) => {
       context.drawImage(bitmap, 0, 0, width, height);
 
       const blob = await canvas.convertToBlob({
-        type: "image/jpeg",
+        type: String(outputType || "image/jpeg"),
         quality: Number(quality) || 0.86,
       });
 

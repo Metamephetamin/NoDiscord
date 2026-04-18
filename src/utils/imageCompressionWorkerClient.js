@@ -51,7 +51,7 @@ function ensureCompressionWorker() {
   return compressionWorker;
 }
 
-export async function compressImageInWorker({ file, maxEdge = 2560, quality = 0.86 }) {
+export async function compressImageInWorker({ file, maxEdge = 2560, quality = 0.86, outputType = "image/jpeg" }) {
   const worker = ensureCompressionWorker();
   const requestId = `compression-${Date.now()}-${compressionRequestId++}`;
 
@@ -62,6 +62,7 @@ export async function compressImageInWorker({ file, maxEdge = 2560, quality = 0.
       file,
       maxEdge,
       quality,
+      outputType,
     });
   });
 }

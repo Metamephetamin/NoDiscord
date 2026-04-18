@@ -273,7 +273,7 @@ export default function useTextChatSendActions({
   };
 
   const updatePendingUploadCompressionMode = (uploadId, compressionMode) => {
-    const normalizedMode = ["compressed", "original", "file"].includes(String(compressionMode || ""))
+    const normalizedMode = ["original", "file"].includes(String(compressionMode || ""))
       ? compressionMode
       : "original";
     const normalizedId = String(uploadId || "");

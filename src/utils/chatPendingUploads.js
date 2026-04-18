@@ -7,8 +7,8 @@ const COMPRESSIBLE_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
-const THUMBNAIL_MAX_EDGE = 720;
-const THUMBNAIL_QUALITY = 0.82;
+const THUMBNAIL_MAX_EDGE = 240;
+const THUMBNAIL_QUALITY = 0.72;
 
 const UPLOAD_SIGNATURE_CONTENT_TYPES = {
   ".jpg": "image/jpeg",
@@ -28,6 +28,28 @@ const UPLOAD_SIGNATURE_CONTENT_TYPES = {
 };
 
 const JPEG_EXTENSIONS = new Set([".jpg", ".jpeg", ".jfif"]);
+
+function getCompressedImageSettings(file) {
+  const normalizedType = String(file?.type || "").toLowerCase();
+
+  if (normalizedType === "image/png" || normalizedType === "image/webp") {
+    return {
+      maxEdge: 3840,
+      quality: 0.94,
+      mimeType: "image/webp",
+      extension: ".webp",
+      alpha: true,
+    };
+  }
+
+  return {
+    maxEdge: 3840,
+    quality: 0.92,
+    mimeType: "image/jpeg",
+    extension: ".jpg",
+    alpha: false,
+  };
+}
 
 function buildUploadId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -58,7 +80,6 @@ export function isCompressibleImageUpload(upload) {
 
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
-  const previewUrl = kind === "video" ? createPendingUploadPreview(file) : "";
 
   return {
     id: buildUploadId(),
@@ -67,7 +88,7 @@ export function createPendingUpload(file) {
     size: Number(file?.size) || 0,
     type: String(file?.type || "").trim(),
     kind,
-    previewUrl,
+    previewUrl: "",
     thumbnailUrl: "",
     status: "queued",
     progress: 0,
@@ -355,14 +376,15 @@ async function compressImageFileOnMainThread(file) {
 
   try {
     const image = await loadImageElement(sourceUrl);
-    const maxEdge = 2560;
+    const settings = getCompressedImageSettings(file);
+    const maxEdge = settings.maxEdge;
     const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
     const width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
     const height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
-    const context = canvas.getContext("2d", { alpha: false });
+    const context = canvas.getContext("2d", { alpha: settings.alpha });
 
     if (!context) {
       throw new Error("Failed to prepare compression canvas.");
@@ -380,13 +402,13 @@ async function compressImageFileOnMainThread(file) {
 
           reject(new Error("Failed to create compressed file."));
         },
-        "image/jpeg",
-        0.86
+        settings.mimeType,
+        settings.quality
       );
     });
 
-    return new File([blob], replaceFileExtension(file.name, ".jpg"), {
-      type: "image/jpeg",
+    return new File([blob], replaceFileExtension(file.name, settings.extension), {
+      type: settings.mimeType,
       lastModified: Date.now(),
     });
   } finally {
@@ -396,15 +418,17 @@ async function compressImageFileOnMainThread(file) {
 
 async function compressImageFile(file) {
   try {
+    const settings = getCompressedImageSettings(file);
     const compressedBlob = await compressImageInWorker({
       file,
-      maxEdge: 2560,
-      quality: 0.86,
+      maxEdge: settings.maxEdge,
+      quality: settings.quality,
+      outputType: settings.mimeType,
     });
 
     if (compressedBlob instanceof Blob) {
-      return new File([compressedBlob], replaceFileExtension(file.name, ".jpg"), {
-        type: "image/jpeg",
+      return new File([compressedBlob], replaceFileExtension(file.name, settings.extension), {
+        type: settings.mimeType,
         lastModified: Date.now(),
       });
     }
@@ -425,10 +449,6 @@ export async function preparePendingUploadForSend(upload) {
     // "Send as file" changes presentation in chat, not the binary payload itself.
     // Only adjust mismatched extensions so backend signature checks still pass.
     return normalizeUploadFileSignature(sourceFile);
-  }
-
-  if (upload?.compressionMode === "compressed" && isCompressibleImageUpload(upload)) {
-    return normalizeUploadFileSignature(await compressImageFile(sourceFile));
   }
 
   return normalizeUploadFileSignature(sourceFile);

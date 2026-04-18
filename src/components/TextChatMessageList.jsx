@@ -707,17 +707,19 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     if (mediaOverlayFooter) {
       return (
         <div className="message-attachments-stack message-attachments-stack--single message-attachments-stack--with-overlay">
-          <div className="message-attachment-single">
-            <MessageAttachmentCard
-              {...props}
-              attachmentItem={attachments[0]}
-              galleryAttachments={galleryAttachments}
-              isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
-              onRevealSpoiler={onRevealSpoiler}
-              priorityMedia={isPriorityMediaMessage}
-            />
+          <div className="message-media-overlay-anchor">
+            <div className="message-attachment-single">
+              <MessageAttachmentCard
+                {...props}
+                attachmentItem={attachments[0]}
+                galleryAttachments={galleryAttachments}
+                isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
+                onRevealSpoiler={onRevealSpoiler}
+                priorityMedia={isPriorityMediaMessage}
+              />
+            </div>
+            {mediaOverlayFooter}
           </div>
-          {mediaOverlayFooter}
         </div>
       );
     }
@@ -766,29 +768,32 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
   return (
     <div className={`message-attachments-stack ${mediaOverlayFooter ? "message-attachments-stack--with-overlay" : ""}`}>
       {visualAttachments.length ? (
-        <div
-          className={`message-attachment-grid ${featureStackCount ? "message-attachment-grid--feature-stack" : ""} ${
-            featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
-          } ${useFiveTileLayout ? "message-attachment-grid--five-tile" : ""
-          } ${useSixTileLayout ? "message-attachment-grid--six-tile" : ""
-          } ${useWideTopMosaicLayout ? "message-attachment-grid--wide-top-mosaic" : ""
-          }`}
-        >
-          {visualAttachments.map((attachmentItem, attachmentIndex) => (
-            <div
-              key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
-              className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""} ${featureStackCount && attachmentIndex === 0 ? "message-attachment-grid__item--feature-primary" : ""}`}
-            >
-              <MessageAttachmentCard
-                {...props}
-                attachmentItem={attachmentItem}
-                galleryAttachments={galleryAttachments}
-                isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
-                onRevealSpoiler={onRevealSpoiler}
-                priorityMedia={isPriorityMediaMessage && attachmentIndex === 0}
-              />
-            </div>
-          ))}
+        <div className="message-media-overlay-anchor">
+          <div
+            className={`message-attachment-grid ${featureStackCount ? "message-attachment-grid--feature-stack" : ""} ${
+              featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
+            } ${useFiveTileLayout ? "message-attachment-grid--five-tile" : ""
+            } ${useSixTileLayout ? "message-attachment-grid--six-tile" : ""
+            } ${useWideTopMosaicLayout ? "message-attachment-grid--wide-top-mosaic" : ""
+            }`}
+          >
+            {visualAttachments.map((attachmentItem, attachmentIndex) => (
+              <div
+                key={`${messageItem.id}-${attachmentItem.attachmentIndex}`}
+                className={`message-attachment-grid__item ${attachmentItem.isVoice ? "message-attachment-grid__item--voice" : ""} ${featureStackCount && attachmentIndex === 0 ? "message-attachment-grid__item--feature-primary" : ""}`}
+              >
+                <MessageAttachmentCard
+                  {...props}
+                  attachmentItem={attachmentItem}
+                  galleryAttachments={galleryAttachments}
+                  isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
+                  onRevealSpoiler={onRevealSpoiler}
+                  priorityMedia={isPriorityMediaMessage && attachmentIndex === 0}
+                />
+              </div>
+            ))}
+          </div>
+          {mediaOverlayFooter}
         </div>
       ) : null}
 
@@ -808,8 +813,6 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
           ))}
         </div>
       ) : null}
-
-      {mediaOverlayFooter}
     </div>
   );
 });

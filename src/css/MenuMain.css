@@ -23,6 +23,14 @@
   -webkit-app-region: drag;
 }
 
+body.media-preview-open .desktop-app-topbar {
+  display: none;
+}
+
+body.media-preview-open .menu-shell__content {
+  height: 100vh;
+}
+
 html[data-ui-density="compact"] .desktop-app-topbar {
   height: 24px;
   grid-template-columns: 138px minmax(0, 1fr) 138px;

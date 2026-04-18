@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MEDIA_PREVIEW_MAX_ZOOM, MEDIA_PREVIEW_MIN_ZOOM, MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
+import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const WHEEL_NAVIGATION_COOLDOWN_MS = 180;
@@ -15,7 +15,6 @@ export default function TextChatMediaPreview({
   onNavigate,
   onZoom,
   onPan,
-  onResetZoom,
 }) {
   const dragStateRef = useRef(null);
   const dragDistanceRef = useRef(0);
@@ -145,6 +144,17 @@ export default function TextChatMediaPreview({
     };
   }, [handleWheelAction]);
 
+  useEffect(() => {
+    if (!mediaPreview) {
+      return undefined;
+    }
+
+    document.body.classList.add("media-preview-open");
+    return () => {
+      document.body.classList.remove("media-preview-open");
+    };
+  }, [mediaPreview]);
+
   if (!mediaPreview) {
     return null;
   }
@@ -161,38 +171,9 @@ export default function TextChatMediaPreview({
           </div>
           <div className="media-preview__actions" onClick={stopEvent}>
             {isImagePreview ? (
-              <>
-                <button
-                  type="button"
-                  className="media-preview__action media-preview__action--compact"
-                  onClick={() => onZoom?.(-MEDIA_PREVIEW_ZOOM_STEP)}
-                  disabled={zoom <= MEDIA_PREVIEW_MIN_ZOOM}
-                  aria-label="Уменьшить"
-                >
-                  -
-                </button>
-                <button
-                  type="button"
-                  className="media-preview__action media-preview__action--compact"
-                  onClick={() => onZoom?.(MEDIA_PREVIEW_ZOOM_STEP)}
-                  disabled={zoom >= MEDIA_PREVIEW_MAX_ZOOM}
-                  aria-label="Приблизить"
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  className="media-preview__action media-preview__action--compact"
-                  onClick={() => onResetZoom?.()}
-                  disabled={zoom === 1}
-                  aria-label="Сбросить масштаб"
-                >
-                  {Math.round(zoom * 100)}%
-                </button>
-                <button type="button" className="media-preview__action" onClick={() => onFullscreen?.()}>
-                  На весь экран
-                </button>
-              </>
+              <button type="button" className="media-preview__action" onClick={() => onFullscreen?.()}>
+                На весь экран
+              </button>
             ) : null}
             <button
               type="button"

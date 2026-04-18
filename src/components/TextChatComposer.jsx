@@ -220,6 +220,7 @@ export default function TextChatComposer({
                       file={selectedFile}
                       className="chat-file-pill__preview-media"
                       fallbackClassName="chat-file-pill__fallback"
+                      preferThumbnailOnly
                     />
                   </div>
                   <div className="chat-file-pill__body">
@@ -238,7 +239,6 @@ export default function TextChatComposer({
                           onChange={(event) => onUpdatePendingUploadCompressionMode(selectedFile.id, event.target.value)}
                           disabled={uploadingFile}
                         >
-                          <option value="compressed">Сжать</option>
                           <option value="original">Оригинал</option>
                           <option value="file">Как файл</option>
                         </select>
