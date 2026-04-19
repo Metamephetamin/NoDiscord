@@ -263,7 +263,6 @@ export function normalizeAttachmentItems(messageItem) {
           ? Number(attachment.AttachmentSize)
           : null,
       attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || "").trim(),
-      attachmentSpoiler: Boolean(attachment?.attachmentSpoiler || attachment?.AttachmentSpoiler),
       attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile),
       attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null,
       voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage),
@@ -276,7 +275,6 @@ export function normalizeAttachmentItems(messageItem) {
 
   const legacyAttachmentUrl = String(messageItem?.attachmentUrl || messageItem?.AttachmentUrl || "").trim();
   const legacyAttachmentEncryption = messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null;
-  const legacyAttachmentSpoiler = Boolean(messageItem?.attachmentSpoiler || messageItem?.AttachmentSpoiler);
   const legacyAttachmentAsFile = Boolean(messageItem?.attachmentAsFile || messageItem?.AttachmentAsFile);
   const legacyVoiceMessage = normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage);
 
@@ -294,7 +292,6 @@ export function normalizeAttachmentItems(messageItem) {
         ? Number(messageItem.AttachmentSize)
         : null,
     attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "").trim(),
-    attachmentSpoiler: legacyAttachmentSpoiler,
     attachmentAsFile: legacyAttachmentAsFile,
     attachmentEncryption: legacyAttachmentEncryption,
     voiceMessage: legacyVoiceMessage,

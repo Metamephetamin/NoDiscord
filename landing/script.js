@@ -6,7 +6,6 @@ let prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)")
 let isLiteMode = false;
 
 const particleField = document.getElementById("particleField");
-const cursorGlow = document.getElementById("cursorGlow");
 const scrollBar = document.getElementById("scrollBar");
 const brainLogo = document.getElementById("brainLogo");
 const siteHeader = document.querySelector(".site-header");
@@ -187,19 +186,6 @@ function applyParallax() {
   );
 }
 
-function trackPointer() {
-  if (!cursorGlow || prefersReducedMotion || isLiteMode) return;
-
-  window.addEventListener(
-    "pointermove",
-    (event) => {
-      cursorGlow.style.left = `${event.clientX}px`;
-      cursorGlow.style.top = `${event.clientY}px`;
-    },
-    { passive: true }
-  );
-}
-
 function recolorLogoImage(imageNode) {
   if (!imageNode || imageNode.dataset.recolorReady === "true") return;
   if (isLiteMode) {
@@ -288,7 +274,6 @@ revealOnScroll();
 animateCounters();
 updateActiveSection();
 applyParallax();
-trackPointer();
 recolorTargets.forEach(recolorLogoImage);
 updateScrollProgress();
 updateHeaderVisibility();

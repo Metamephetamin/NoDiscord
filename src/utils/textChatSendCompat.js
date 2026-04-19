@@ -12,7 +12,6 @@ function normalizeHubAttachmentInput(attachment) {
   const attachmentName = attachment?.attachmentName || attachment?.AttachmentName || null;
   const attachmentSize = attachment?.attachmentSize ?? attachment?.AttachmentSize ?? null;
   const attachmentContentType = attachment?.attachmentContentType || attachment?.AttachmentContentType || "";
-  const attachmentSpoiler = Boolean(attachment?.attachmentSpoiler || attachment?.AttachmentSpoiler);
   const attachmentAsFile = Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile);
   const attachmentEncryption = attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null;
   const voiceMessage = attachment?.voiceMessage || attachment?.VoiceMessage || null;
@@ -26,8 +25,6 @@ function normalizeHubAttachmentInput(attachment) {
     AttachmentSize: attachmentSize,
     attachmentContentType,
     AttachmentContentType: attachmentContentType,
-    attachmentSpoiler,
-    AttachmentSpoiler: attachmentSpoiler,
     attachmentAsFile,
     AttachmentAsFile: attachmentAsFile,
     attachmentEncryption,
@@ -41,13 +38,10 @@ function normalizeHubMessageInput(item) {
   const attachments = Array.isArray(item?.attachments)
     ? item.attachments.map(normalizeHubAttachmentInput)
     : [];
-  const attachmentSpoiler = Boolean(item?.attachmentSpoiler || item?.AttachmentSpoiler || attachments[0]?.attachmentSpoiler);
   const attachmentAsFile = Boolean(item?.attachmentAsFile || item?.AttachmentAsFile || attachments[0]?.attachmentAsFile);
 
   return {
     ...item,
-    attachmentSpoiler,
-    AttachmentSpoiler: attachmentSpoiler,
     attachmentAsFile,
     AttachmentAsFile: attachmentAsFile,
     attachments,
@@ -116,7 +110,7 @@ export async function sendMessagesCompat({
       item.replyToMessageId || null,
       item.replyToUsername || null,
       item.replyPreview || null,
-      Boolean(item.attachmentSpoiler || primaryAttachment?.attachmentSpoiler),
+      false,
       Boolean(item.attachmentAsFile || primaryAttachment?.attachmentAsFile)
     );
 

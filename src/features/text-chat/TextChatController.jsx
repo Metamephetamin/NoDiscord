@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import TextChatView from "./TextChatView";
 import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/TextChat.css";
@@ -47,7 +47,6 @@ import useMediaPreviewKeyboardControls from "../../hooks/useMediaPreviewKeyboard
 import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers";
 import useTextChatMessageActions from "../../hooks/useTextChatMessageActions";
 import useTextChatSendActions from "../../hooks/useTextChatSendActions";
-import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import useTextChatVirtualizer from "../../hooks/useTextChatVirtualizer";
 import useTextChatVoiceSpeech from "../../hooks/useTextChatVoiceSpeech";
 
@@ -217,7 +216,6 @@ function buildLocalEchoAttachmentKey(attachmentItem, index = 0) {
     String(attachmentItem?.attachmentContentType || "").trim().toLowerCase(),
     Number(attachmentItem?.attachmentSize) || 0,
     Boolean(attachmentItem?.attachmentAsFile) ? 1 : 0,
-    Boolean(attachmentItem?.attachmentSpoiler) ? 1 : 0,
     Number(attachmentItem?.voiceMessage?.durationMs || 0),
     index,
   ].join("::");
@@ -397,7 +395,6 @@ export default function TextChat({
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
   const editDraftBackupRef = useRef("");
-  const forceScrollToBottomRef = useRef(false);
   const hasInitializedVisibleChannelRef = useRef(false);
   const composerDropDepthRef = useRef(0);
   const selectedFilesRef = useRef([]);
@@ -626,12 +623,13 @@ export default function TextChat({
     () => (!isDirectChat ? getMentionQueryContext(message, composerCaretPosition) : null),
     [composerCaretPosition, isDirectChat, message]
   );
+  const deferredMentionQueryContext = useDeferredValue(mentionQueryContext);
   const mentionSuggestions = useMemo(() => {
-    if (isDirectChat || !mentionQueryContext) {
+    if (isDirectChat || !deferredMentionQueryContext) {
       return [];
     }
 
-    const normalizedQuery = normalizeMentionAlias(mentionQueryContext.query);
+    const normalizedQuery = normalizeMentionAlias(deferredMentionQueryContext.query);
     const scoreMentionSuggestion = (normalizedHandle, normalizedName) => {
       if (!normalizedQuery) {
         return 0;
@@ -725,7 +723,7 @@ export default function TextChat({
         || left.displayName.localeCompare(right.displayName, "ru", { sensitivity: "base" })
       )
       .slice(0, 8);
-  }, [isDirectChat, mentionQueryContext, serverMembers, serverRoles]);
+  }, [deferredMentionQueryContext, isDirectChat, serverMembers, serverRoles]);
 
   const normalizeIncomingMessage = async (messageItem) => {
     const decrypted = await readIncomingMessageText(messageItem);
@@ -1263,30 +1261,6 @@ export default function TextChat({
     scopedChannelId,
   });
 
-  const {
-    floatingDateLabel,
-    pendingNewMessagesCount,
-    firstUnreadMessageId,
-    canReturnToJumpPoint,
-    showJumpToLatestButton,
-    scrollToLatest,
-    scrollToMessage,
-    jumpToFirstUnread,
-    returnToJumpPoint,
-  } = useTextChatScrollManager({
-    messages,
-    visibleMessages,
-    scopedChannelId,
-    currentUserId,
-    isDirectChat,
-    messagesListRef,
-    messagesEndRef,
-    messageRefs,
-    setHighlightedMessageId,
-    forceScrollToBottomRef,
-    estimateMessageOffsetById: estimateOffsetForMessageId,
-  });
-
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) {
@@ -1750,7 +1724,6 @@ export default function TextChat({
     setErrorMessage,
     setActionFeedback,
     setIsChannelReady,
-    forceScrollToBottomRef,
     lastSendAtRef,
     ensureChannelJoined,
     uploadAttachment,
@@ -1795,9 +1768,8 @@ export default function TextChat({
         attachmentName: String(pendingUpload?.name || file?.name || "attachment").trim() || "attachment",
         attachmentSize: Number(pendingUpload?.size || file?.size || 0) || null,
         attachmentContentType: String(pendingUpload?.type || file?.type || "application/octet-stream").trim(),
-        attachmentSpoiler: Boolean(pendingUpload?.hideWithSpoiler),
         attachmentAsFile: pendingUpload?.kind === "image"
-          && (String(pendingUpload?.compressionMode || "original") === "file" || Boolean(batchUploadOptions?.sendAsDocuments)),
+          && Boolean(batchUploadOptions?.sendAsDocuments),
         attachmentEncryption: null,
         voiceMessage: null,
         sourcePendingUploadId: String(pendingUpload?.id || ""),
@@ -1977,8 +1949,7 @@ export default function TextChat({
     removePendingUpload,
     retryPendingUpload,
     clearPendingUploads,
-    updatePendingUploadCompressionMode,
-    updatePendingUploadSpoilerMode,
+    cancelActiveUpload,
     setPendingUploadsDocumentMode,
   } = useTextChatSendActions({
     message,
@@ -2004,7 +1975,6 @@ export default function TextChat({
     voiceRecordingState,
     ensureChannelJoined,
     focusComposerToEnd,
-    forceScrollToBottomRef,
     lastSendAtRef,
     joinedChannelRef,
     uploadAttachment,
@@ -2014,6 +1984,29 @@ export default function TextChat({
     onRemoveLocalEchoMessages: removeLocalEchoMessages,
     onUpdateLocalEchoUploads: updateLocalEchoUploadProgress,
   });
+
+  const cancelLocalEchoUpload = useCallback((pendingUploadId) => {
+    const normalizedPendingUploadId = String(pendingUploadId || "").trim();
+    if (!normalizedPendingUploadId) {
+      return;
+    }
+
+    cancelActiveUpload(normalizedPendingUploadId);
+    const relatedLocalEchoIds = messages
+      .filter((messageItem) => (
+        messageItem?.isLocalEcho
+        && Array.isArray(messageItem?.attachments)
+        && messageItem.attachments.some(
+          (attachmentItem) => String(attachmentItem?.sourcePendingUploadId || "") === normalizedPendingUploadId
+        )
+      ))
+      .map((messageItem) => String(messageItem?.id || ""))
+      .filter(Boolean);
+
+    if (relatedLocalEchoIds.length) {
+      removeLocalEchoMessages(relatedLocalEchoIds);
+    }
+  }, [cancelActiveUpload, messages, removeLocalEchoMessages]);
 
   const toggleBatchUploadGrouping = (value) => {
     setBatchUploadOptions((previous) => ({
@@ -2224,55 +2217,6 @@ export default function TextChat({
   );
 
   useEffect(() => {
-    if (typeof onNavigationIndexChange !== "function") {
-      return;
-    }
-
-    onNavigationIndexChange({
-      channelId: scopedChannelId,
-      pinnedMessages,
-      searchResults,
-      mentionMessages,
-      replyMessages,
-      firstUnreadMessageId,
-      canReturnToJumpPoint,
-    });
-  }, [
-    canReturnToJumpPoint,
-    firstUnreadMessageId,
-    mentionMessages,
-    onNavigationIndexChange,
-    pinnedMessages,
-    replyMessages,
-    scopedChannelId,
-    searchResults,
-  ]);
-
-  useEffect(() => {
-    if (!navigationRequest || String(navigationRequest?.channelId || "") !== String(scopedChannelId)) {
-      return;
-    }
-
-    if (navigationRequest.type === "message" && navigationRequest.messageId) {
-      scrollToMessage(navigationRequest.messageId, { behavior: "auto", block: "center", rememberCurrent: true });
-      return;
-    }
-
-    if (navigationRequest.type === "firstUnread") {
-      jumpToFirstUnread();
-      return;
-    }
-
-    if (navigationRequest.type === "latest") {
-      scrollToLatest("auto");
-      return;
-    }
-
-    if (navigationRequest.type === "jumpBack") {
-      returnToJumpPoint();
-    }
-  }, [jumpToFirstUnread, navigationRequest, returnToJumpPoint, scopedChannelId, scrollToLatest, scrollToMessage]);
-  useEffect(() => {
     if (!forwardModal.open) {
       return undefined;
     }
@@ -2388,14 +2332,9 @@ export default function TextChat({
     <TextChatView
       searchQuery={searchQuery}
       searchResults={searchResults}
-      scrollToMessage={scrollToMessage}
-      scrollToLatest={scrollToLatest}
-      pendingNewMessagesCount={pendingNewMessagesCount}
-      firstUnreadMessageId={firstUnreadMessageId}
-      showJumpToLatestButton={showJumpToLatestButton}
-      canReturnToJumpPoint={canReturnToJumpPoint}
-      onJumpToFirstUnread={jumpToFirstUnread}
-      onReturnToJumpPoint={returnToJumpPoint}
+      scopedChannelId={scopedChannelId}
+      navigationRequest={navigationRequest}
+      onNavigationIndexChange={onNavigationIndexChange}
       mentionMessages={mentionMessages}
       replyMessages={replyMessages}
       actionFeedback={actionFeedback}
@@ -2418,10 +2357,11 @@ export default function TextChat({
       topSpacerHeight={topSpacerHeight}
       bottomSpacerHeight={bottomSpacerHeight}
       registerMeasuredNode={registerMeasuredNode}
-      floatingDateLabel={floatingDateLabel}
+      estimateMessageOffsetById={estimateOffsetForMessageId}
       decryptedAttachmentsByMessageId={EMPTY_DECRYPTED_ATTACHMENTS_BY_MESSAGE_ID}
       selectedMessageIdSet={selectedMessageIdSet}
       highlightedMessageId={highlightedMessageId}
+      setHighlightedMessageId={setHighlightedMessageId}
       isDirectChat={isDirectChat}
       currentUserId={currentUserId}
       user={user}
@@ -2453,10 +2393,9 @@ export default function TextChat({
       handleFileChange={handleFileChange}
       queueFiles={queueFiles}
       removePendingUpload={removePendingUpload}
+      cancelLocalEchoUpload={cancelLocalEchoUpload}
       retryPendingUpload={retryPendingUpload}
       clearPendingUploads={clearPendingUploads}
-      updatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
-      updatePendingUploadSpoilerMode={updatePendingUploadSpoilerMode}
       toggleBatchUploadGrouping={toggleBatchUploadGrouping}
       toggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
       toggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}

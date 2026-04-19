@@ -27,6 +27,33 @@ export function resolveStaticAssetUrl(value) {
 export const DEFAULT_AVATAR = resolveStaticAssetUrl("/image/avatar.jpg");
 export const DEFAULT_SERVER_ICON = resolveStaticAssetUrl("/image/image.png");
 
+const INTERNAL_MEDIA_PREFIXES = [
+  "/avatars/",
+  "/profile-backgrounds/",
+  "/api/profile-backgrounds/",
+  "/server-icons/",
+];
+
+function getInternalMediaPath(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return "";
+  }
+
+  const directMatch = INTERNAL_MEDIA_PREFIXES.find((prefix) => normalizedValue.startsWith(prefix));
+  if (directMatch) {
+    return normalizedValue;
+  }
+
+  try {
+    const parsed = new URL(normalizedValue, typeof window !== "undefined" ? window.location.origin : API_URL);
+    const parsedPath = String(parsed.pathname || "").trim();
+    return INTERNAL_MEDIA_PREFIXES.find((prefix) => parsedPath.startsWith(prefix)) ? parsedPath : "";
+  } catch {
+    return "";
+  }
+}
+
 export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   if (!value) return fallback;
 
@@ -70,6 +97,32 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   }
 
   return normalizedValue;
+}
+
+export function resolveOptimizedMediaUrl(
+  value,
+  {
+    width = 128,
+    height = width,
+    fit = "cover",
+    animated = true,
+  } = {}
+) {
+  const internalPath = getInternalMediaPath(value);
+  if (!internalPath) {
+    return resolveMediaUrl(value, "");
+  }
+
+  const params = new URLSearchParams();
+  params.set("src", internalPath);
+  params.set("w", String(Math.max(16, Math.min(1024, Math.round(Number(width) || 128)))));
+  params.set("h", String(Math.max(16, Math.min(1024, Math.round(Number(height) || width || 128)))));
+  params.set("fit", fit === "contain" ? "contain" : "cover");
+  if (!animated) {
+    params.set("animated", "0");
+  }
+
+  return `${API_URL}/api/media/render?${params.toString()}`;
 }
 
 export function readFileAsDataUrl(file) {

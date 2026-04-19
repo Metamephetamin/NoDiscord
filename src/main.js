@@ -31,6 +31,31 @@ const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const MAX_PERF_EVENTS = 500;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
+const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+const attachmentPickerFiles = new Map();
+let attachmentPickerSequence = 0;
+const ATTACHMENT_PICKER_CONTENT_TYPES = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".jfif": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".avif": "image/avif",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".mkv": "video/x-matroska",
+  ".avi": "video/x-msvideo",
+  ".pdf": "application/pdf",
+  ".zip": "application/zip",
+  ".rar": "application/vnd.rar",
+  ".7z": "application/x-7z-compressed",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+};
 const resolveAppIconPath = () =>
   app.isPackaged
     ? path.join(app.getAppPath(), "assets", "app-icon.png")
@@ -1062,6 +1087,62 @@ const buildUniqueDownloadPath = async (directoryPath, fileName) => {
   return path.join(safeDirectoryPath, `${Date.now()}-${safeFileName}`);
 };
 
+const normalizeAttachmentPickerKind = (kind) =>
+  String(kind || "").trim().toLowerCase() === "document" ? "document" : "media";
+
+const getAttachmentPickerFilters = (kind) => {
+  if (normalizeAttachmentPickerKind(kind) === "document") {
+    return [{ name: "All files", extensions: ["*"] }];
+  }
+
+  return [
+    {
+      name: "Media",
+      extensions: ["jpg", "jpeg", "jfif", "png", "webp", "gif", "bmp", "avif", "mp4", "webm", "mov", "mkv", "avi"],
+    },
+    { name: "All files", extensions: ["*"] },
+  ];
+};
+
+const inferAttachmentPickerContentType = (filePath) => {
+  const extension = path.extname(String(filePath || "")).toLowerCase();
+  return ATTACHMENT_PICKER_CONTENT_TYPES[extension] || "application/octet-stream";
+};
+
+const rememberAttachmentPickerFile = async (filePath) => {
+  const normalizedPath = String(filePath || "").trim();
+  if (!normalizedPath) {
+    return null;
+  }
+
+  attachmentPickerSequence += 1;
+  const token = `attachment-picker:${Date.now()}:${attachmentPickerSequence}`;
+  const descriptor = {
+    token,
+    name: path.basename(normalizedPath),
+    size: 0,
+    type: inferAttachmentPickerContentType(normalizedPath),
+    lastModified: Date.now(),
+  };
+
+  attachmentPickerFiles.set(token, {
+    path: normalizedPath,
+    descriptor,
+    createdAt: Date.now(),
+  });
+
+  return descriptor;
+};
+
+const pruneAttachmentPickerFiles = () => {
+  const expiresAt = Date.now() - (10 * 60 * 1000);
+  for (const [token, entry] of attachmentPickerFiles.entries()) {
+    if (!entry?.createdAt || entry.createdAt < expiresAt) {
+      attachmentPickerFiles.delete(token);
+    }
+  }
+};
+
 const promptForDownloadDirectory = async () => {
   const rememberedDirectory = await getRememberedDownloadDirectory();
   const fallbackDirectory = rememberedDirectory || app.getPath("downloads");
@@ -1457,6 +1538,120 @@ app.whenReady().then(async () => {
     receivedAt: new Date().toISOString(),
     payload: payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null,
   }));
+  ipcMain.handle("attachments:open-picker", async (_event, payload) => {
+    pruneAttachmentPickerFiles();
+
+    const traceId = startPerfTrace("electron-main", "attachments:open-picker", {
+      kind: normalizeAttachmentPickerKind(payload?.kind),
+    });
+    const kind = normalizeAttachmentPickerKind(payload?.kind);
+    const dialogOptions = {
+      title: kind === "document" ? "Select files" : "Select media",
+      buttonLabel: "Open",
+      properties: ["openFile", "multiSelections"],
+      filters: getAttachmentPickerFilters(kind),
+    };
+    try {
+      const dialogTraceId = startPerfTrace("electron-main", "attachments:open-picker:dialog", {
+        kind,
+      });
+      const result = mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
+      finishPerfTrace(dialogTraceId, {
+        kind,
+        canceled: Boolean(result.canceled),
+        selectedPathCount: Array.isArray(result.filePaths) ? result.filePaths.length : 0,
+      });
+
+      const selectedPaths = !result.canceled && Array.isArray(result.filePaths)
+        ? result.filePaths
+        : [];
+      if (!selectedPaths.length) {
+        finishPerfTrace(traceId, {
+          kind,
+          canceled: true,
+          selectedFileCount: 0,
+        });
+        return { canceled: true, files: [] };
+      }
+
+      const descriptors = (await Promise.all(
+        selectedPaths.map((filePath) => rememberAttachmentPickerFile(filePath).catch(() => null))
+      )).filter(Boolean);
+
+      finishPerfTrace(traceId, {
+        kind,
+        canceled: descriptors.length < 1,
+        selectedFileCount: descriptors.length,
+      });
+      return {
+        canceled: descriptors.length < 1,
+        files: descriptors,
+      };
+    } catch (error) {
+      finishPerfTrace(traceId, {
+        kind,
+        error: error instanceof Error ? error.message : String(error || "unknown"),
+      });
+      throw error;
+    }
+  });
+  ipcMain.handle("attachments:read-selected-files", async (_event, payload) => {
+    pruneAttachmentPickerFiles();
+
+    const traceId = startPerfTrace("electron-main", "attachments:read-selected-files", {
+      requestedTokenCount: Array.isArray(payload?.tokens) ? payload.tokens.length : 0,
+    });
+    const tokens = Array.from(new Set(
+      (Array.isArray(payload?.tokens) ? payload.tokens : [])
+        .map((token) => String(token || "").trim())
+        .filter(Boolean)
+    ));
+    const files = [];
+
+    for (const token of tokens) {
+      const entry = attachmentPickerFiles.get(token);
+      if (!entry?.path || !entry?.descriptor) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
+      const stats = await fs.stat(entry.path);
+      if (!stats.isFile() || stats.size > ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES) {
+        attachmentPickerFiles.delete(token);
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const buffer = await fs.readFile(entry.path);
+      attachmentPickerFiles.delete(token);
+      files.push({
+        ...entry.descriptor,
+        size: Number(stats.size) || entry.descriptor.size || 0,
+        lastModified: Number(stats.mtimeMs) || entry.descriptor.lastModified || Date.now(),
+        bytes: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+      });
+    }
+
+    finishPerfTrace(traceId, {
+      requestedTokenCount: tokens.length,
+      selectedFileCount: files.length,
+      totalBytes: files.reduce((sum, file) => sum + Number(file?.size || 0), 0),
+    });
+    return { files };
+  });
+  ipcMain.handle("attachments:release-selected-files", async (_event, payload) => {
+    const tokens = Array.from(new Set(
+      (Array.isArray(payload?.tokens) ? payload.tokens : [])
+        .map((token) => String(token || "").trim())
+        .filter(Boolean)
+    ));
+
+    tokens.forEach((token) => attachmentPickerFiles.delete(token));
+    return true;
+  });
   ipcMain.handle("app-update:get-state", async () => getSanitizedAppUpdateState());
   ipcMain.handle("app-update:check", async () => checkForClientUpdates({ force: true }));
   ipcMain.handle("app-update:install", async () => installDownloadedUpdateAndQuit());

@@ -171,6 +171,9 @@ export default function MenuProfilePanel({
   onAudioVolumeChange,
   onSuppressTooltip,
   onRestoreTooltip,
+  leaveVoiceActionLabel = "Отключиться",
+  leaveVoiceActionAriaLabel = "Отключиться от голосового канала",
+  directCallPanel = null,
 }) {
   return (
     <div className={`menu__profile-wrapper ${currentVoiceChannel ? "menu__profile-wrapper--voice-connected" : ""}`}>
@@ -222,12 +225,14 @@ export default function MenuProfilePanel({
             >
               <span className="profile__quick-glyph profile__quick-glyph--camera" aria-hidden="true" />
             </button>
-            <button type="button" className="profile__quick-button profile__quick-button--danger ui-tooltip-anchor" onClick={onLeaveVoiceChannel} aria-label="Отключиться от голосового канала" data-tooltip="Отключиться">
+            <button type="button" className="profile__quick-button profile__quick-button--danger ui-tooltip-anchor" onClick={onLeaveVoiceChannel} aria-label={leaveVoiceActionAriaLabel} data-tooltip={leaveVoiceActionLabel}>
               <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
             </button>
           </div>
         </div>
       ) : null}
+
+      {directCallPanel}
 
       <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
         <div className="profile__identity-row">

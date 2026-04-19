@@ -1,5 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
-import { createPendingUploadThumbnail } from "../utils/chatPendingUploads";
+import { memo, useState } from "react";
 
 function PendingUploadPreview({
   file,
@@ -7,72 +6,28 @@ function PendingUploadPreview({
   fallbackClassName = "",
   fallbackLabel = "",
   preferThumbnailOnly = false,
+  previewEnabled = true,
 }) {
   const [loadedPreviewUrl, setLoadedPreviewUrl] = useState("");
-  const thumbnailImageRef = useRef(null);
 
   const kind = file?.kind || "file";
   const previewUrl = file?.previewUrl || "";
   const thumbnailUrl = file?.thumbnailUrl || "";
-  const thumbnailSourceUrl = thumbnailUrl;
+  const thumbnailSourceUrl = thumbnailUrl || (preferThumbnailOnly && kind === "image" ? previewUrl : "");
   const fullPreviewReady = Boolean(previewUrl) && loadedPreviewUrl === previewUrl;
   const showFullPreview = Boolean(previewUrl) && (kind === "image" || kind === "video");
-  const showThumbnail = Boolean(thumbnailSourceUrl) && kind === "image";
-  const shouldRenderFullImage = showFullPreview && kind === "image" && !preferThumbnailOnly;
-  const shouldRenderVideoPreview = showFullPreview && kind === "video";
-  const showLoader = kind === "image" && (
+  const showThumbnail = previewEnabled && Boolean(thumbnailSourceUrl) && kind === "image";
+  const shouldRenderFullImage = previewEnabled && showFullPreview && kind === "image" && !preferThumbnailOnly;
+  const shouldRenderVideoPreview = previewEnabled && showFullPreview && kind === "video";
+  const showLoader = previewEnabled && kind === "image" && (
     preferThumbnailOnly
       ? false
       : (!showFullPreview || !fullPreviewReady)
   );
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !preferThumbnailOnly || kind !== "image" || thumbnailUrl || !(file?.file instanceof File)) {
-      return undefined;
-    }
-
-    let disposed = false;
-    let objectUrl = "";
-    const timerId = window.setTimeout(() => {
-      createPendingUploadThumbnail(file)
-        .then((nextUrl) => {
-          if (disposed) {
-            if (nextUrl) {
-              URL.revokeObjectURL(nextUrl);
-            }
-            return;
-          }
-
-          objectUrl = nextUrl || "";
-          if (objectUrl && thumbnailImageRef.current) {
-            thumbnailImageRef.current.src = objectUrl;
-            thumbnailImageRef.current.dataset.ready = "true";
-          }
-        })
-        .catch(() => {});
-    }, 120);
-
-    return () => {
-      disposed = true;
-      window.clearTimeout(timerId);
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [file, kind, preferThumbnailOnly, thumbnailUrl]);
-
   return (
     <div className={`pending-upload-preview ${className}`.trim()}>
-      {preferThumbnailOnly && kind === "image" && !thumbnailSourceUrl ? (
-        <img
-          ref={thumbnailImageRef}
-          alt=""
-          aria-hidden="true"
-          className="pending-upload-preview__thumb pending-upload-preview__thumb--deferred"
-          loading="lazy"
-          decoding="async"
-        />
-      ) : showThumbnail ? (
+      {showThumbnail ? (
         <img
           src={thumbnailSourceUrl}
           alt=""

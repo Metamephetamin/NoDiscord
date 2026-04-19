@@ -22,6 +22,8 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -31,6 +33,7 @@ body {
   color: var(--text);
   background: var(--bg);
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body::before {
@@ -124,23 +127,12 @@ html.lite-motion .background-video {
   filter: blur(0.4px);
 }
 
-.cursor-glow {
-  position: absolute;
-  width: 380px;
-  height: 380px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(146, 85, 255, 0.24), rgba(87, 213, 255, 0.08), transparent 68%);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  mix-blend-mode: screen;
-  opacity: 0.4;
-}
-
 .page-shell {
   position: relative;
   z-index: 1;
   width: min(1420px, calc(100% - 36px));
   margin: 0 auto;
+  overflow-x: clip;
 }
 
 .scroll-progress {
@@ -725,8 +717,7 @@ html.lite-motion .reveal {
   will-change: auto;
 }
 
-html.lite-motion .particle-field,
-html.lite-motion .cursor-glow {
+html.lite-motion .particle-field {
   display: none;
 }
 

@@ -541,6 +541,30 @@ export default function Auth({ onAuthSuccess }) {
       const data = await submitAuthRequest("/auth/login", payload, "Не удалось войти в аккаунт.");
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
+      const pendingEmailVerification = error?.data?.pendingEmailVerification === true;
+      const verification = error?.data?.verification && typeof error.data.verification === "object"
+        ? error.data.verification
+        : null;
+
+      if (pendingEmailVerification && verification) {
+        setEmailVerificationCode("");
+        setEmailVerificationModal({
+          open: true,
+          email: verification.email || payload.identifier,
+          verificationToken: verification.verificationToken || "",
+          deliveryMode: verification.deliveryMode || "mock",
+          debugCode: verification.debugCode || "",
+          resendAvailableAt: verification.resendAvailableAt || "",
+        });
+        setMessage(
+          verification.debugCode
+            ? `Подтвердите email. Тестовый код: ${verification.debugCode}`
+            : (error.message || "Сначала подтвердите email.")
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
         : null;

@@ -475,6 +475,7 @@ export const DirectCallOverlayView = ({
   onDismiss,
   onRetry,
   onRedialHistoryItem,
+  embedded = false,
 }) => {
   if (!call || call.phase === "idle") {
     return null;
@@ -484,7 +485,7 @@ export const DirectCallOverlayView = ({
   const isConnected = call.phase === "connected";
   const isConnecting = call.phase === "connecting" || call.phase === "reconnecting";
   const isFinished = call.phase === "ended" || call.phase === "declined" || call.phase === "disconnected";
-  const isMiniMode = Boolean(call.isMiniMode) && !isIncoming;
+  const isMiniMode = !embedded && Boolean(call.isMiniMode) && !isIncoming;
   const callTitle = call.peerName || "Пользователь";
   const statusLabel =
     call.statusLabel
@@ -508,12 +509,12 @@ export const DirectCallOverlayView = ({
     .slice(0, 4);
 
   return (
-    <div className={`direct-call-overlay direct-call-overlay--v2 ${isMiniMode ? "direct-call-overlay--mini" : ""}`}>
-      {!isMiniMode ? <div className="direct-call-overlay__backdrop" /> : null}
+    <div className={`direct-call-overlay direct-call-overlay--v2 ${isMiniMode ? "direct-call-overlay--mini" : ""} ${embedded ? "direct-call-overlay--embedded" : ""}`}>
+      {!isMiniMode && !embedded ? <div className="direct-call-overlay__backdrop" /> : null}
       <div
-        className={`direct-call-overlay__workspace direct-call-overlay__workspace--v2 ${isMiniMode ? "direct-call-overlay__workspace--mini" : ""}`}
+        className={`direct-call-overlay__workspace direct-call-overlay__workspace--v2 ${isMiniMode ? "direct-call-overlay__workspace--mini" : ""} ${embedded ? "direct-call-overlay__workspace--embedded" : ""}`}
         role="dialog"
-        aria-modal={isMiniMode ? undefined : "true"}
+        aria-modal={isMiniMode || embedded ? undefined : "true"}
         aria-label={`Звонок с ${callTitle.toLowerCase()}`}
       >
         <div className="direct-call-overlay__header">
@@ -525,7 +526,7 @@ export const DirectCallOverlayView = ({
             <span>{statusLabel}</span>
           </div>
           <div className="direct-call-overlay__header-actions">
-            {(isConnected || isFinished) ? (
+            {!embedded && (isConnected || isFinished) ? (
               <button type="button" className="direct-call-overlay__ghost" onClick={() => onToggleMiniMode?.(!isMiniMode)}>
                 {isMiniMode ? "Развернуть" : "Свернуть"}
               </button>

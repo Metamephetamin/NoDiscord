@@ -33,7 +33,6 @@ export default function useTextChatVoiceSpeech({
   setUploadingFile,
   setErrorMessage,
   setIsChannelReady,
-  forceScrollToBottomRef,
   lastSendAtRef,
   ensureChannelJoined,
   uploadAttachment,
@@ -295,7 +294,6 @@ export default function useTextChatVoiceSpeech({
 
           await ensureChannelJoined();
           await sendVoiceRecordingFile(voiceFile, durationMs, waveformSamples);
-          forceScrollToBottomRef.current = true;
           lastSendAtRef.current = Date.now();
           setIsChannelReady(true);
           if (isDirectChat) {

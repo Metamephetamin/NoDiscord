@@ -5,6 +5,7 @@ import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
 import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
 
 const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
@@ -24,14 +25,9 @@ export default function TextChatView(props) {
   const {
     searchQuery,
     searchResults,
-    scrollToMessage,
-    scrollToLatest,
-    pendingNewMessagesCount,
-    firstUnreadMessageId,
-    showJumpToLatestButton,
-    canReturnToJumpPoint,
-    onJumpToFirstUnread,
-    onReturnToJumpPoint,
+    scopedChannelId,
+    navigationRequest,
+    onNavigationIndexChange,
     mentionMessages,
     replyMessages,
     actionFeedback,
@@ -54,10 +50,11 @@ export default function TextChatView(props) {
     topSpacerHeight,
     bottomSpacerHeight,
     registerMeasuredNode,
-    floatingDateLabel,
+    estimateMessageOffsetById,
     decryptedAttachmentsByMessageId,
     selectedMessageIdSet,
     highlightedMessageId,
+    setHighlightedMessageId,
     isDirectChat,
     currentUserId,
     user,
@@ -87,11 +84,11 @@ export default function TextChatView(props) {
     batchUploadOptions,
     preferExplicitSend,
     handleFileChange,
+    queueFiles,
     removePendingUpload,
+    cancelLocalEchoUpload,
     retryPendingUpload,
     clearPendingUploads,
-    updatePendingUploadCompressionMode,
-    updatePendingUploadSpoilerMode,
     toggleBatchUploadGrouping,
     toggleBatchUploadSendAsDocuments,
     toggleBatchUploadRememberChoice,
@@ -158,13 +155,34 @@ export default function TextChatView(props) {
     handleForwardSubmit,
   } = props;
 
-  const stableScrollToMessage = useStableCallback(scrollToMessage);
   const stableToggleMessageSelection = useStableCallback(toggleMessageSelection);
   const stableOpenMessageContextMenu = useStableCallback(openMessageContextMenu);
   const stableOpenUserContextMenu = useStableCallback(openUserContextMenu);
   const stableOpenMediaPreview = useStableCallback(openMediaPreview);
   const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
   const stableOpenForwardModal = useStableCallback(openForwardModal);
+  const {
+    floatingDateLabel,
+    pendingNewMessagesCount,
+    firstUnreadMessageId,
+    canReturnToJumpPoint,
+    showJumpToLatestButton,
+    scrollToLatest,
+    scrollToMessage,
+    jumpToFirstUnread,
+    returnToJumpPoint,
+  } = useTextChatScrollManager({
+    messages,
+    visibleMessages,
+    scopedChannelId,
+    currentUserId,
+    isDirectChat,
+    messagesListRef,
+    messageRefs,
+    setHighlightedMessageId,
+    estimateMessageOffsetById,
+  });
+  const stableScrollToMessage = useStableCallback(scrollToMessage);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
@@ -179,6 +197,56 @@ export default function TextChatView(props) {
       selectedFileCount: selectedFiles.length,
     });
   }, [selectedFiles]);
+
+  useEffect(() => {
+    if (typeof onNavigationIndexChange !== "function") {
+      return;
+    }
+
+    onNavigationIndexChange({
+      channelId: scopedChannelId,
+      pinnedMessages,
+      searchResults,
+      mentionMessages,
+      replyMessages,
+      firstUnreadMessageId,
+      canReturnToJumpPoint,
+    });
+  }, [
+    canReturnToJumpPoint,
+    firstUnreadMessageId,
+    mentionMessages,
+    onNavigationIndexChange,
+    pinnedMessages,
+    replyMessages,
+    scopedChannelId,
+    searchResults,
+  ]);
+
+  useEffect(() => {
+    if (!navigationRequest || String(navigationRequest?.channelId || "") !== String(scopedChannelId)) {
+      return;
+    }
+
+    if (navigationRequest.type === "message" && navigationRequest.messageId) {
+      scrollToMessage(navigationRequest.messageId, { behavior: "auto", block: "center", rememberCurrent: true });
+      return;
+    }
+
+    if (navigationRequest.type === "firstUnread") {
+      jumpToFirstUnread();
+      return;
+    }
+
+    if (navigationRequest.type === "latest") {
+      scrollToLatest("auto");
+      return;
+    }
+
+    if (navigationRequest.type === "jumpBack") {
+      returnToJumpPoint();
+    }
+  }, [jumpToFirstUnread, navigationRequest, returnToJumpPoint, scopedChannelId, scrollToLatest, scrollToMessage]);
 
   return (
     <div
@@ -219,11 +287,11 @@ export default function TextChatView(props) {
         replyMessages={replyMessages}
         pinnedMessages={pinnedMessages}
         canReturnToJumpPoint={canReturnToJumpPoint}
-        onJumpToFirstUnread={onJumpToFirstUnread}
+        onJumpToFirstUnread={jumpToFirstUnread}
         onOpenMention={stableScrollToMessage}
         onOpenReply={stableScrollToMessage}
         onOpenPinned={stableScrollToMessage}
-        onReturnToJumpPoint={onReturnToJumpPoint}
+        onReturnToJumpPoint={returnToJumpPoint}
       />
       <JumpToLatestButton
         visible={showJumpToLatestButton}
@@ -260,6 +328,7 @@ export default function TextChatView(props) {
             onOpenMediaPreview={stableOpenMediaPreview}
             onToggleReaction={stableHandleToggleReaction}
             onJumpToReply={stableScrollToMessage}
+            onCancelLocalEchoUpload={cancelLocalEchoUpload}
           />
         </Profiler>
       ) : (
@@ -291,6 +360,7 @@ export default function TextChatView(props) {
           onOpenMediaPreview={stableOpenMediaPreview}
           onToggleReaction={stableHandleToggleReaction}
           onJumpToReply={stableScrollToMessage}
+          onCancelLocalEchoUpload={cancelLocalEchoUpload}
         />
       )}
       {PERF_ENABLED ? (
@@ -318,11 +388,10 @@ export default function TextChatView(props) {
             batchUploadOptions={batchUploadOptions}
             preferExplicitSend={preferExplicitSend}
             onFileChange={handleFileChange}
+            onQueueFiles={queueFiles}
             onRemovePendingUpload={removePendingUpload}
             onRetryPendingUpload={retryPendingUpload}
             onClearPendingUploads={clearPendingUploads}
-            onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
-            onUpdatePendingUploadSpoilerMode={updatePendingUploadSpoilerMode}
             onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
             onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
             onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}
@@ -376,11 +445,10 @@ export default function TextChatView(props) {
           batchUploadOptions={batchUploadOptions}
           preferExplicitSend={preferExplicitSend}
           onFileChange={handleFileChange}
+          onQueueFiles={queueFiles}
           onRemovePendingUpload={removePendingUpload}
           onRetryPendingUpload={retryPendingUpload}
           onClearPendingUploads={clearPendingUploads}
-          onUpdatePendingUploadCompressionMode={updatePendingUploadCompressionMode}
-          onUpdatePendingUploadSpoilerMode={updatePendingUploadSpoilerMode}
           onToggleBatchUploadGrouping={toggleBatchUploadGrouping}
           onToggleBatchUploadSendAsDocuments={toggleBatchUploadSendAsDocuments}
           onToggleBatchUploadRememberChoice={toggleBatchUploadRememberChoice}

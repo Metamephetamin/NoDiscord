@@ -436,8 +436,7 @@ public class AuthController : ControllerBase
             last_name = lastName,
             nickname = nickname,
             email = normalizedEmail,
-            // Email verification is temporarily disabled until SMTP is stabilized.
-            is_email_verified = true,
+            is_email_verified = string.IsNullOrWhiteSpace(normalizedEmail),
             phone_number = normalizedPhone,
             is_phone_verified = !string.IsNullOrWhiteSpace(normalizedPhone)
         };
@@ -451,6 +450,39 @@ public class AuthController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            try
+            {
+                var emailVerification = await CreateEmailVerificationAsync(user);
+                return Ok(new
+                {
+                    pendingEmailVerification = true,
+                    user = BuildUserPayload(user),
+                    verification = emailVerification.ToResponse()
+                });
+            }
+            catch (EmailDeliveryException)
+            {
+                var createdUser = await _context.Users.FirstOrDefaultAsync(item => item.id == user.id);
+                if (createdUser != null)
+                {
+                    var pendingCodes = await _context.EmailVerificationCodes
+                        .Where(item => item.UserId == createdUser.id)
+                        .ToListAsync();
+
+                    _context.EmailVerificationCodes.RemoveRange(pendingCodes);
+                    _context.Users.Remove(createdUser);
+                    await _context.SaveChangesAsync();
+                }
+
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "Не удалось отправить письмо с кодом подтверждения. Попробуйте зарегистрироваться ещё раз чуть позже."
+                });
+            }
+        }
 
         // Temporarily disabled email verification flow.
         // if (!string.IsNullOrWhiteSpace(normalizedEmail))
@@ -495,6 +527,11 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
+        if (ModelState.IsValid)
+        {
+            return await HandleLoginAsync(dto);
+        }
+
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
@@ -558,6 +595,89 @@ public class AuthController : ControllerBase
         {
             user.password_hash = _passwordHasher.HashPassword(user, dto.password);
             await _context.SaveChangesAsync();
+        }
+
+        await RevokeActiveRefreshTokensAsync(user.id);
+        var authSession = await IssueAuthSessionAsync(user);
+        return Ok(BuildAuthResponse(user, authSession));
+    }
+
+    private async Task<IActionResult> HandleLoginAsync(LoginDto dto)
+    {
+        var rawIdentifier = dto.identifier ?? dto.email ?? string.Empty;
+        if (rawIdentifier.Any(char.IsWhiteSpace))
+        {
+            return BadRequest(CreateLoginError("identifier_invalid", "Логин не должен содержать пробелы.", identifier: "Логин не должен содержать пробелы."));
+        }
+
+        var identifier = rawIdentifier.Trim();
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return BadRequest(CreateLoginError("identifier_required", "Введите email или номер телефона.", identifier: "Введите email или номер телефона."));
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.password))
+        {
+            return BadRequest(CreateLoginError("password_required", "Введите пароль.", password: "Введите пароль."));
+        }
+
+        User? user;
+        if (identifier.Contains('@'))
+        {
+            if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
+            {
+                return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
+            }
+
+            user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        }
+        else
+        {
+            if (!AuthInputPolicies.TryNormalizeRussianPhone(identifier, out var normalizedPhone, out var phoneError))
+            {
+                return BadRequest(CreateLoginError("identifier_invalid", phoneError, identifier: phoneError));
+            }
+
+            user = await _context.Users.FirstOrDefaultAsync(item => item.phone_number == normalizedPhone);
+        }
+
+        if (user == null)
+        {
+            return BadRequest(CreateInvalidCredentialsError());
+        }
+
+        var passwordResult = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);
+        if (passwordResult == PasswordVerificationResult.Failed)
+        {
+            return BadRequest(CreateInvalidCredentialsError());
+        }
+
+        if (passwordResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.password_hash = _passwordHasher.HashPassword(user, dto.password);
+            await _context.SaveChangesAsync();
+        }
+
+        if (!string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
+        {
+            try
+            {
+                var emailVerification = await CreateEmailVerificationAsync(user, ignoreResendCooldown: true);
+                return BadRequest(new
+                {
+                    code = "email_verification_required",
+                    message = "Сначала подтвердите email. Мы отправили новый код на почту.",
+                    pendingEmailVerification = true,
+                    verification = emailVerification.ToResponse()
+                });
+            }
+            catch (EmailDeliveryException)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "Не удалось отправить код подтверждения email. Попробуйте немного позже."
+                });
+            }
         }
 
         await RevokeActiveRefreshTokensAsync(user.id);
@@ -730,7 +850,7 @@ public class AuthController : ControllerBase
         };
     }
 
-    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user)
+    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user, bool ignoreResendCooldown = false)
     {
         if (string.IsNullOrWhiteSpace(user.email))
         {
@@ -744,7 +864,8 @@ public class AuthController : ControllerBase
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync();
 
-        if (latestActive != null &&
+        if (!ignoreResendCooldown &&
+            latestActive != null &&
             latestActive.LastSentAt + EmailVerificationResendCooldown > now)
         {
             return EmailVerificationResult.RateLimited(
@@ -836,7 +957,7 @@ public class AuthController : ControllerBase
     {
         return int.TryParse(_config["Jwt:AccessTokenMinutes"], out var configured) && configured > 0
             ? configured
-            : 60 * 24 * 7;
+            : 60;
     }
 
     private int GetRefreshTokenLifetimeDays()
@@ -881,6 +1002,16 @@ public class AuthController : ControllerBase
             message,
             fieldErrors
         };
+    }
+
+    private static object CreateInvalidCredentialsError()
+    {
+        const string message = "Неверный email, телефон или пароль.";
+        return CreateLoginError(
+            "invalid_credentials",
+            message,
+            identifier: message,
+            password: message);
     }
 
     private static string GenerateVerificationToken()

@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import PendingUploadPreview from "./PendingUploadPreview";
@@ -12,8 +13,76 @@ import {
   ENABLE_VOICE_MESSAGE_BUTTON,
 } from "../utils/textChatModel";
 import { formatFileSize } from "../utils/textChatHelpers";
+import { recordPerfEvent, startPerfTrace } from "../utils/perf";
 
-export default function TextChatComposer({
+function normalizePendingUploadProgress(progressValue) {
+  const numericProgress = Number(progressValue);
+  if (!Number.isFinite(numericProgress) || numericProgress <= 0) {
+    return 0;
+  }
+
+  if (numericProgress <= 1) {
+    return Math.max(0, Math.min(100, Math.round(numericProgress * 100)));
+  }
+
+  return Math.max(0, Math.min(100, Math.round(numericProgress)));
+}
+
+const SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG = "__TEND_SKIP_NEXT_WINDOW_FOCUS_REFRESH__";
+const NATIVE_ATTACHMENT_PICKER_DISABLED_FLAG = "__TEND_NATIVE_ATTACHMENT_PICKER_DISABLED__";
+
+function getPerfNow() {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
+function logUploadDiagnostic(action, payload = {}, durationMs = 0) {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+
+  try {
+    console.warn("[upload-diagnostics]", JSON.stringify({
+      action,
+      durationMs: Number((Number(durationMs) || 0).toFixed(2)),
+      at: new Date().toISOString(),
+      ...payload,
+    }));
+  } catch {
+    console.warn(`[upload-diagnostics] ${action}`);
+  }
+}
+
+function createFileFromNativePickerPayload(payload) {
+  const bytes = payload?.bytes;
+  let fileBytes = null;
+
+  if (bytes instanceof ArrayBuffer) {
+    fileBytes = bytes;
+  } else if (ArrayBuffer.isView(bytes)) {
+    fileBytes = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+      ? bytes.buffer
+      : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  } else if (Array.isArray(bytes)) {
+    fileBytes = new Uint8Array(bytes).buffer;
+  }
+
+  if (!fileBytes) {
+    return null;
+  }
+
+  return new File([fileBytes], String(payload?.name || "attachment").trim() || "attachment", {
+    type: String(payload?.type || "").trim() || "application/octet-stream",
+    lastModified: Number(payload?.lastModified) || Date.now(),
+  });
+}
+
+function buildNativePickerQueueSource(kind) {
+  return kind === "document" ? "electron-document-picker" : "electron-media-picker";
+}
+
+function TextChatComposer({
   selectedFiles,
   uploadingFile,
   composerDropActive,
@@ -36,10 +105,10 @@ export default function TextChatComposer({
   batchUploadOptions,
   preferExplicitSend,
   onFileChange,
+  onQueueFiles,
   onRemovePendingUpload,
   onRetryPendingUpload,
   onClearPendingUploads,
-  onUpdatePendingUploadCompressionMode,
   onToggleBatchUploadGrouping,
   onToggleBatchUploadSendAsDocuments,
   onToggleBatchUploadRememberChoice,
@@ -67,13 +136,25 @@ export default function TextChatComposer({
 }) {
   const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [pendingBatchSelection, setPendingBatchSelection] = useState(null);
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
   const mediaFileInputRef = useRef(null);
   const documentFileInputRef = useRef(null);
+  const pendingBatchQueueFrameRef = useRef([]);
+  const pendingPickerShellTimeoutRef = useRef(0);
+  const pendingBatchSelectionRef = useRef(null);
+  const selectedFilesLengthRef = useRef(0);
+  const attachPickerKindRef = useRef("media");
+  const pickerDiagnosticRef = useRef({
+    active: false,
+    openedAt: 0,
+    kind: "media",
+  });
+  const deferredMessage = useDeferredValue(message);
   const composerMentionSegments = useMemo(
     () => {
-      const normalizedMessage = String(message || "");
+      const normalizedMessage = String(deferredMessage || "");
       if (!normalizedMessage.includes("@")) {
         return [{ text: normalizedMessage, isMention: false }];
       }
@@ -83,16 +164,272 @@ export default function TextChatComposer({
         extractMentionsFromText(normalizedMessage, serverMembers, serverRoles)
       );
     },
-    [message, serverMembers, serverRoles]
+    [deferredMessage, serverMembers, serverRoles]
   );
+  pendingBatchSelectionRef.current = pendingBatchSelection;
+  selectedFilesLengthRef.current = selectedFiles.length;
+  const shouldRenderComposerHighlight = composerMentionSegments.some((segment) => segment?.isMention);
+  const cancelPendingBatchQueue = () => {
+    if (!pendingBatchQueueFrameRef.current.length || typeof window === "undefined") {
+      return;
+    }
+
+    const cancelFrame =
+      typeof window.cancelAnimationFrame === "function"
+        ? window.cancelAnimationFrame.bind(window)
+        : window.clearTimeout.bind(window);
+
+    pendingBatchQueueFrameRef.current.forEach((handle) => {
+      if (handle?.kind === "timeout") {
+        window.clearTimeout(handle.id);
+        return;
+      }
+
+      cancelFrame(handle?.id ?? handle);
+    });
+    pendingBatchQueueFrameRef.current = [];
+  };
+
+  const scheduleSelectedFilesQueue = (
+    selectedInputFiles,
+    {
+      inputChangeStartedAt,
+      shouldPreferSendAsDocuments,
+      source,
+    }
+  ) => {
+    if (typeof onQueueFiles !== "function" || typeof window === "undefined") {
+      return;
+    }
+
+    const scheduleFrame =
+      typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame.bind(window)
+        : (callback) => window.setTimeout(callback, 16);
+
+    cancelPendingBatchQueue();
+
+    const firstFrameId = scheduleFrame(() => {
+      const timeoutId = window.setTimeout(() => {
+        pendingBatchQueueFrameRef.current = [];
+        recordPerfEvent("text-chat", "file-picker:queue-files-callback", {
+          selectedFileCount: selectedInputFiles.length,
+          source,
+        }, getPerfNow() - inputChangeStartedAt);
+        logUploadDiagnostic("queue-files-callback-after-paint", {
+          selectedFileCount: selectedInputFiles.length,
+          source,
+        }, getPerfNow() - inputChangeStartedAt);
+        onQueueFiles(selectedInputFiles, {
+          preferSendAsDocuments: shouldPreferSendAsDocuments,
+          source,
+        });
+      });
+      pendingBatchQueueFrameRef.current = [{ kind: "timeout", id: timeoutId }];
+    });
+
+    pendingBatchQueueFrameRef.current = [{ kind: "frame", id: firstFrameId }];
+  };
+
+  const clearPendingPickerShellTimeout = () => {
+    if (!pendingPickerShellTimeoutRef.current || typeof window === "undefined") {
+      return;
+    }
+
+    window.clearTimeout(pendingPickerShellTimeoutRef.current);
+    pendingPickerShellTimeoutRef.current = 0;
+  };
+
+  const showPickerReturnShell = ({ kind = "media", source = "file-picker-focus" } = {}) => {
+    if (typeof onQueueFiles !== "function") {
+      return;
+    }
+
+    const normalizedKind = kind === "document" ? "document" : "media";
+    if (pendingBatchSelectionRef.current || selectedFilesLengthRef.current > 0) {
+      return;
+    }
+
+    flushSync(() => {
+      setPendingBatchSelection({
+        fileCount: 1,
+        firstFileName: "",
+        layout: normalizedKind === "document" ? "document" : "media",
+        waitingForPicker: true,
+      });
+    });
+    logUploadDiagnostic("picker-return-shell-shown", {
+      kind: normalizedKind,
+      source,
+    });
+
+    clearPendingPickerShellTimeout();
+    if (typeof window !== "undefined") {
+      pendingPickerShellTimeoutRef.current = window.setTimeout(() => {
+        pendingPickerShellTimeoutRef.current = 0;
+        setPendingBatchSelection((previous) => (previous?.waitingForPicker ? null : previous));
+      }, 15000);
+    }
+  };
+
+  const openPendingBatchSheetForFiles = (
+    selectedInputFiles,
+    {
+      inputChangeStartedAt,
+      shouldPreferSendAsDocuments,
+      source,
+      pendingLogAction = "pending-selection-flushed",
+      skipQueue = false,
+    }
+  ) => {
+    if (!selectedInputFiles.length || typeof onQueueFiles !== "function") {
+      return false;
+    }
+
+    if (typeof window !== "undefined") {
+      window.__TEND_PENDING_UPLOAD_SHELL_TRACE_ID__ = startPerfTrace("text-chat", "batch-upload-sheet:pending-shell-visible", {
+        selectedFileCount: selectedInputFiles.length,
+        source,
+      });
+    }
+
+    flushSync(() => {
+      setPendingBatchSelection({
+        fileCount: selectedInputFiles.length,
+        firstFileName: selectedInputFiles[0]?.name || "",
+        layout: shouldPreferSendAsDocuments ? "document" : "media",
+        waitingForPicker: false,
+      });
+    });
+    recordPerfEvent("text-chat", "file-picker:pending-selection-flushed", {
+      selectedFileCount: selectedInputFiles.length,
+      source,
+    }, getPerfNow() - inputChangeStartedAt);
+    logUploadDiagnostic(pendingLogAction, {
+      selectedFileCount: selectedInputFiles.length,
+      source,
+    }, getPerfNow() - inputChangeStartedAt);
+
+    onToggleBatchUploadSendAsDocuments(shouldPreferSendAsDocuments);
+    if (!skipQueue) {
+      scheduleSelectedFilesQueue(selectedInputFiles, {
+        inputChangeStartedAt,
+        shouldPreferSendAsDocuments,
+        source,
+      });
+    }
+    return true;
+  };
+
   const handleAttachFileChange = (event) => {
+    const inputChangeStartedAt = getPerfNow();
+    const pickerOpenedAt = typeof window !== "undefined"
+      ? Number(window.__TEND_FILE_PICKER_OPENED_AT__ || 0)
+      : 0;
+    const pickerDiagnostic = pickerDiagnosticRef.current;
     messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
-    onFileChange(event);
+    const selectedInputFiles = Array.from(event?.target?.files || []);
+    const selectedFromDocumentPicker = attachPickerKindRef.current === "document";
+    const allSelectedAreImages = selectedInputFiles.length > 0
+      && selectedInputFiles.every((file) => String(file?.type || "").startsWith("image/"));
+    const shouldPreferSendAsDocuments = selectedFromDocumentPicker || !allSelectedAreImages;
+    const shouldOpenPendingBatchSheet = selectedInputFiles.length > 0
+      && typeof onQueueFiles === "function";
+    logUploadDiagnostic("input-change-start", {
+      selectedFileCount: selectedInputFiles.length,
+      selectedFromDocumentPicker,
+      allSelectedAreImages,
+      shouldPreferSendAsDocuments,
+      shouldOpenPendingBatchSheet,
+      msSincePickerOpen: pickerOpenedAt ? inputChangeStartedAt - pickerOpenedAt : 0,
+      pickerActive: Boolean(pickerDiagnostic.active),
+      pickerKind: pickerDiagnostic.kind,
+      fileSummary: selectedInputFiles.slice(0, 8).map((file) => ({
+        name: String(file?.name || ""),
+        type: String(file?.type || ""),
+        size: Number(file?.size || 0),
+      })),
+    });
+    recordPerfEvent("text-chat", "file-picker:input-change", {
+      selectedFileCount: selectedInputFiles.length,
+      selectedFromDocumentPicker,
+      allSelectedAreImages,
+      shouldPreferSendAsDocuments,
+      shouldOpenPendingBatchSheet,
+      fileSummary: selectedInputFiles.slice(0, 8).map((file) => ({
+        name: String(file?.name || ""),
+        type: String(file?.type || ""),
+        size: Number(file?.size || 0),
+      })),
+    });
+
+    if (!selectedInputFiles.length) {
+      clearPendingPickerShellTimeout();
+      setPendingBatchSelection(null);
+    } else if (shouldOpenPendingBatchSheet) {
+      clearPendingPickerShellTimeout();
+      openPendingBatchSheetForFiles(selectedInputFiles, {
+        inputChangeStartedAt,
+        selectedFromDocumentPicker,
+        shouldPreferSendAsDocuments,
+        source: selectedFromDocumentPicker ? "document-input" : "file-input",
+      });
+    } else {
+      onFileChange(event);
+    }
+
     if (event?.target) {
       event.target.value = "";
       event.target.blur?.();
     }
+
+    pickerDiagnosticRef.current = {
+      active: false,
+      openedAt: 0,
+      kind: "media",
+    };
+    attachPickerKindRef.current = "media";
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleWindowBlur = () => {
+      const pickerDiagnostic = pickerDiagnosticRef.current;
+      if (!pickerDiagnostic.active) {
+        return;
+      }
+
+      logUploadDiagnostic("picker-window-blur", {
+        kind: pickerDiagnostic.kind,
+      }, getPerfNow() - pickerDiagnostic.openedAt);
+    };
+
+    const handleWindowFocus = () => {
+      const pickerDiagnostic = pickerDiagnosticRef.current;
+      if (!pickerDiagnostic.active) {
+        return;
+      }
+
+      logUploadDiagnostic("picker-window-focus", {
+        kind: pickerDiagnostic.kind,
+      }, getPerfNow() - pickerDiagnostic.openedAt);
+      showPickerReturnShell({
+        kind: pickerDiagnostic.kind,
+        source: "window-focus",
+      });
+    };
+
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, []);
 
   const releaseAttachMenuFocusForFilePicker = () => {
     if (typeof document !== "undefined") {
@@ -103,6 +440,178 @@ export default function TextChatComposer({
   const suppressAttachMenuForFilePicker = () => {
     releaseAttachMenuFocusForFilePicker();
     messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
+  };
+
+  const openNativeAttachFilePicker = async (kind) => {
+    const pickerApi = typeof window !== "undefined" ? window.electronAttachmentPicker : null;
+    if (
+      (typeof window !== "undefined" && window[NATIVE_ATTACHMENT_PICKER_DISABLED_FLAG])
+      || !pickerApi
+      || typeof pickerApi.open !== "function"
+      || typeof pickerApi.readFiles !== "function"
+    ) {
+      return false;
+    }
+
+    const normalizedKind = kind === "document" ? "document" : "media";
+    const nativePickerStartedAt = getPerfNow();
+    suppressAttachMenuForFilePicker();
+    if (typeof window !== "undefined") {
+      window[SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG] = true;
+      window.__TEND_FILE_PICKER_OPENED_AT__ = nativePickerStartedAt;
+    }
+    pickerDiagnosticRef.current = {
+      active: true,
+      openedAt: nativePickerStartedAt,
+      kind: normalizedKind,
+    };
+    logUploadDiagnostic("native-picker-open", {
+      kind: normalizedKind,
+    });
+
+    let descriptors = [];
+    let preservePickerKindForFallback = false;
+    try {
+      const result = await pickerApi.open({ kind: normalizedKind });
+      const pickerResolvedAt = getPerfNow();
+      descriptors = Array.isArray(result?.files) ? result.files : [];
+      const tokens = descriptors.map((item) => String(item?.token || "").trim()).filter(Boolean);
+      logUploadDiagnostic("native-picker-result", {
+        kind: normalizedKind,
+        canceled: Boolean(result?.canceled) || descriptors.length < 1,
+        selectedFileCount: descriptors.length,
+      }, pickerResolvedAt - nativePickerStartedAt);
+
+      if (result?.canceled || descriptors.length < 1 || tokens.length < 1) {
+        clearPendingPickerShellTimeout();
+        setPendingBatchSelection(null);
+        pickerDiagnosticRef.current = {
+          active: false,
+          openedAt: 0,
+          kind: "media",
+        };
+        attachPickerKindRef.current = "media";
+        return true;
+      }
+
+      const selectedFromDocumentPicker = normalizedKind === "document";
+      const allSelectedAreImages = descriptors.every((file) => String(file?.type || "").startsWith("image/"));
+      const shouldPreferSendAsDocuments = selectedFromDocumentPicker || !allSelectedAreImages;
+      clearPendingPickerShellTimeout();
+      openPendingBatchSheetForFiles(descriptors, {
+        inputChangeStartedAt: pickerResolvedAt,
+        shouldPreferSendAsDocuments,
+        source: buildNativePickerQueueSource(normalizedKind),
+        pendingLogAction: "native-pending-selection-flushed",
+        skipQueue: true,
+      });
+
+      const readStartedAt = getPerfNow();
+      logUploadDiagnostic("native-picker-read-start", {
+        kind: normalizedKind,
+        selectedFileCount: descriptors.length,
+      });
+      const readyFilesByIndex = new Array(descriptors.length);
+      const settledIndexes = new Set();
+      let nextQueueIndex = 0;
+      let queuedFileCount = 0;
+      const queueSource = buildNativePickerQueueSource(normalizedKind);
+      const flushReadyNativeFiles = () => {
+        const readyFiles = [];
+        while (nextQueueIndex < readyFilesByIndex.length && settledIndexes.has(nextQueueIndex)) {
+          const nextReadyFile = readyFilesByIndex[nextQueueIndex];
+          if (nextReadyFile instanceof File) {
+            readyFiles.push(nextReadyFile);
+          }
+          nextQueueIndex += 1;
+        }
+
+        if (!readyFiles.length) {
+          return;
+        }
+
+        queuedFileCount += readyFiles.length;
+        logUploadDiagnostic("native-picker-files-queued", {
+          kind: normalizedKind,
+          queuedFileCount,
+          selectedFileCount: descriptors.length,
+          batchFileCount: readyFiles.length,
+        }, getPerfNow() - readStartedAt);
+        onQueueFiles(readyFiles, {
+          preferSendAsDocuments: shouldPreferSendAsDocuments,
+          source: queueSource,
+        });
+      };
+
+      await Promise.all(descriptors.map(async (descriptor, index) => {
+        const token = String(descriptor?.token || "").trim();
+        if (!token) {
+          settledIndexes.add(index);
+          flushReadyNativeFiles();
+          return;
+        }
+
+        const singleReadStartedAt = getPerfNow();
+        try {
+          const readResult = await pickerApi.readFiles({ tokens: [token] });
+          const selectedFile = (Array.isArray(readResult?.files) ? readResult.files : [])
+            .map(createFileFromNativePickerPayload)
+            .find((file) => file instanceof File) || null;
+          readyFilesByIndex[index] = selectedFile;
+          logUploadDiagnostic("native-picker-read-file-finished", {
+            kind: normalizedKind,
+            index,
+            fileReady: Boolean(selectedFile),
+            name: String(descriptor?.name || ""),
+          }, getPerfNow() - singleReadStartedAt);
+        } catch (readError) {
+          readyFilesByIndex[index] = null;
+          logUploadDiagnostic("native-picker-read-file-error", {
+            kind: normalizedKind,
+            index,
+            name: String(descriptor?.name || ""),
+            reason: String(readError?.message || readError || "unknown"),
+          }, getPerfNow() - singleReadStartedAt);
+        } finally {
+          settledIndexes.add(index);
+          flushReadyNativeFiles();
+        }
+      }));
+      logUploadDiagnostic("native-picker-read-finished", {
+        kind: normalizedKind,
+        selectedFileCount: queuedFileCount,
+        requestedFileCount: descriptors.length,
+      }, getPerfNow() - readStartedAt);
+
+      if (!queuedFileCount) {
+        setPendingBatchSelection(null);
+      }
+      return true;
+    } catch (error) {
+      console.error("Native attachment picker failed:", error);
+      const tokens = descriptors.map((item) => String(item?.token || "").trim()).filter(Boolean);
+      if (tokens.length && typeof pickerApi.releaseFiles === "function") {
+        pickerApi.releaseFiles({ tokens }).catch(() => {});
+      }
+      preservePickerKindForFallback = descriptors.length < 1;
+      if (String(error?.message || "").includes("No handler registered")) {
+        window[NATIVE_ATTACHMENT_PICKER_DISABLED_FLAG] = true;
+      }
+      logUploadDiagnostic("native-picker-fallback-to-input", {
+        kind: normalizedKind,
+        reason: String(error?.message || error || "unknown"),
+      });
+      clearPendingPickerShellTimeout();
+      setPendingBatchSelection(null);
+      return descriptors.length > 0;
+    } finally {
+      pickerDiagnosticRef.current = {
+        active: false,
+        openedAt: 0,
+        kind: "media",
+      };
+      attachPickerKindRef.current = preservePickerKindForFallback ? normalizedKind : "media";
+    }
   };
 
   const openAttachMenu = () => {
@@ -117,13 +626,48 @@ export default function TextChatComposer({
     messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
   };
 
-  const openAttachFilePicker = (inputRef) => {
+  const openAttachFilePicker = async (inputRef) => {
     if (uploadingFile) {
       return;
     }
 
+    const nativePickerHandled = await openNativeAttachFilePicker(attachPickerKindRef.current);
+    if (nativePickerHandled) {
+      return;
+    }
+
     suppressAttachMenuForFilePicker();
+    if (typeof window !== "undefined") {
+      window[SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG] = true;
+      window.__TEND_FILE_PICKER_OPENED_AT__ = getPerfNow();
+    }
+    pickerDiagnosticRef.current = {
+      active: true,
+      openedAt: getPerfNow(),
+      kind: attachPickerKindRef.current,
+    };
+    logUploadDiagnostic("picker-open", {
+      kind: attachPickerKindRef.current,
+    });
     inputRef.current?.click();
+  };
+
+  const openMediaAttachFilePicker = () => {
+    if (uploadingFile) {
+      return;
+    }
+
+    attachPickerKindRef.current = "media";
+    void openAttachFilePicker(mediaFileInputRef);
+  };
+
+  const openDocumentAttachFilePicker = () => {
+    if (uploadingFile) {
+      return;
+    }
+
+    attachPickerKindRef.current = "document";
+    void openAttachFilePicker(documentFileInputRef);
   };
 
 
@@ -138,7 +682,8 @@ export default function TextChatComposer({
     }
   };
 
-  const hasBatchUploadSheet = selectedFiles.length >= 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image");
+  const hasBatchUploadSheet = selectedFiles.length >= 1;
+  const shouldShowPendingBatchSheet = Boolean(pendingBatchSelection) && selectedFiles.length < 1;
   const hasSendPayload = Boolean(String(message || "").trim()) || selectedFiles.length > 0;
   const shouldShowSendButton = hasSendPayload && voiceRecordingState === "idle";
   const voiceButtonStateClass = voiceRecordingState !== "idle" ? `composer-tool--recording-${voiceRecordingState}` : "";
@@ -148,10 +693,28 @@ export default function TextChatComposer({
   const handleSendMessage = () => {
     return onSend();
   };
+  const handleDismissPendingBatchSelection = () => {
+    if (pendingBatchQueueFrameRef.current.length) {
+      const cancelFrame =
+        typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+          ? window.cancelAnimationFrame.bind(window)
+          : window.clearTimeout.bind(window);
+      pendingBatchQueueFrameRef.current.forEach((handle) => {
+        if (handle?.kind === "timeout") {
+          window.clearTimeout(handle.id);
+          return;
+        }
+
+        cancelFrame(handle?.id ?? handle);
+      });
+      pendingBatchQueueFrameRef.current = [];
+    }
+    setPendingBatchSelection(null);
+  };
 
   const getPendingUploadStatusLabel = (selectedFile) => {
     if (selectedFile?.status === "uploading") {
-      return `Загрузка ${Math.round((Number(selectedFile?.progress) || 0) * 100)}%`;
+      return `Загрузка ${normalizePendingUploadProgress(selectedFile?.progress)}%`;
     }
 
     if (selectedFile?.status === "preparing") {
@@ -169,12 +732,47 @@ export default function TextChatComposer({
     return selectedFile?.kind === "image" ? "Изображение" : selectedFile?.kind === "video" ? "Видео" : "Файл";
   };
 
+  useEffect(() => {
+    if (!pendingBatchSelection || selectedFiles.length < 1) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setPendingBatchSelection(null);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [pendingBatchSelection, selectedFiles.length]);
+
+  useEffect(() => () => {
+    clearPendingPickerShellTimeout();
+    if (!pendingBatchQueueFrameRef.current.length) {
+      return;
+    }
+
+    const cancelFrame =
+      typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+        ? window.cancelAnimationFrame.bind(window)
+        : window.clearTimeout.bind(window);
+    pendingBatchQueueFrameRef.current.forEach((handle) => {
+      if (handle?.kind === "timeout") {
+        window.clearTimeout(handle.id);
+        return;
+      }
+
+      cancelFrame(handle?.id ?? handle);
+    });
+    pendingBatchQueueFrameRef.current = [];
+  }, []);
+
   return (
     <div
       className={`input-area ${composerDropActive ? "input-area--drag-active" : ""}`}
     >
       <div className="input-area__editor">
-        {hasBatchUploadSheet ? (
+        {hasBatchUploadSheet || shouldShowPendingBatchSheet ? (
           <TextChatBatchUploadSheet
             selectedFiles={selectedFiles}
             uploadingFile={uploadingFile}
@@ -188,6 +786,8 @@ export default function TextChatComposer({
             onClearPendingUploads={handleClearPendingUploads}
             onFileChange={onFileChange}
             onSend={handleSendMessage}
+            pendingSelection={pendingBatchSelection}
+            onDismissPendingSelection={handleDismissPendingBatchSelection}
           />
         ) : null}
 
@@ -224,20 +824,9 @@ export default function TextChatComposer({
                       <span className={`chat-file-pill__status chat-file-pill__status--${selectedFile.status || "queued"}`}>
                         {getPendingUploadStatusLabel(selectedFile)}
                       </span>
-                      {selectedFile.kind === "image" ? (
-                        <select
-                          className="chat-file-pill__mode"
-                          value={selectedFile.compressionMode || "original"}
-                          onChange={(event) => onUpdatePendingUploadCompressionMode(selectedFile.id, event.target.value)}
-                          disabled={uploadingFile}
-                        >
-                          <option value="original">Оригинал</option>
-                          <option value="file">Как файл</option>
-                        </select>
-                      ) : null}
                     </div>
                     <div className="chat-file-pill__progress">
-                      <span style={{ width: `${Math.max(6, Math.round((Number(selectedFile.progress) || 0) * 100))}%` }} />
+                      <span style={{ width: `${Math.max(6, normalizePendingUploadProgress(selectedFile?.progress))}%` }} />
                     </div>
                     <div className="chat-file-pill__actions">
                       {selectedFile.retryable ? (
@@ -365,7 +954,7 @@ export default function TextChatComposer({
               <button
                 type="button"
                 className="attach-menu__item"
-                onClick={() => openAttachFilePicker(mediaFileInputRef)}
+                onClick={openMediaAttachFilePicker}
                 disabled={uploadingFile}
                 role="menuitem"
               >
@@ -376,7 +965,7 @@ export default function TextChatComposer({
               <button
                 type="button"
                 className="attach-menu__item"
-                onClick={() => openAttachFilePicker(documentFileInputRef)}
+                onClick={openDocumentAttachFilePicker}
                 disabled={uploadingFile}
                 role="menuitem"
               >
@@ -502,7 +1091,13 @@ export default function TextChatComposer({
                         aria-hidden="true"
                       />
                     ) : (
-                      <AnimatedAvatar className="mention-suggestions__avatar" src={suggestion.avatar || ""} alt={suggestion.displayName} />
+                      <AnimatedAvatar
+                        className="mention-suggestions__avatar"
+                        src={suggestion.avatar || ""}
+                        alt={suggestion.displayName}
+                        loading="eager"
+                        decoding="sync"
+                      />
                     )}
                     <span className="mention-suggestions__content">
                       <span className="mention-suggestions__name">{suggestion.displayName}</span>
@@ -517,32 +1112,34 @@ export default function TextChatComposer({
             ) : null}
 
             <div className="composer-textarea-shell">
-              <div ref={composerHighlightRef} className="composer-textarea-highlight" aria-hidden="true">
-                {composerMentionSegments.map((segment, index) => {
-                  if (segment.isMention) {
-                    const mentionStyle = segment.color
-                      ? { color: segment.color, background: `${segment.color}22` }
-                      : undefined;
+              {shouldRenderComposerHighlight ? (
+                <div ref={composerHighlightRef} className="composer-textarea-highlight" aria-hidden="true">
+                  {composerMentionSegments.map((segment, index) => {
+                    if (segment.isMention) {
+                      const mentionStyle = segment.color
+                        ? { color: segment.color, background: `${segment.color}22` }
+                        : undefined;
 
-                    return (
-                      <span
-                        key={`composer-mention-${index}-${segment.roleId || segment.userId || segment.text}`}
-                        className={`composer-textarea-highlight__mention ${segment.type === "role" ? "composer-textarea-highlight__mention--role" : ""}`}
-                        style={mentionStyle}
-                        title={segment.displayName || segment.text}
-                      >
-                        {segment.text}
-                      </span>
-                    );
-                  }
+                      return (
+                        <span
+                          key={`composer-mention-${index}-${segment.roleId || segment.userId || segment.text}`}
+                          className={`composer-textarea-highlight__mention ${segment.type === "role" ? "composer-textarea-highlight__mention--role" : ""}`}
+                          style={mentionStyle}
+                          title={segment.displayName || segment.text}
+                        >
+                          {segment.text}
+                        </span>
+                      );
+                    }
 
-                  if (!segment.text) {
-                    return null;
-                  }
+                    if (!segment.text) {
+                      return null;
+                    }
 
-                  return <span key={`composer-text-${index}`}>{segment.text}</span>;
-                })}
-              </div>
+                    return <span key={`composer-text-${index}`}>{segment.text}</span>;
+                  })}
+                </div>
+              ) : null}
 
               <textarea
               ref={textareaRef}
@@ -556,7 +1153,7 @@ export default function TextChatComposer({
               onSelect={(event) => onSyncComposerSelection(event.target)}
               onClick={(event) => onSyncComposerSelection(event.target)}
               onScroll={(event) => {
-                if (!composerHighlightRef.current) {
+                if (!shouldRenderComposerHighlight || !composerHighlightRef.current) {
                   return;
                 }
 
@@ -564,6 +1161,7 @@ export default function TextChatComposer({
                 composerHighlightRef.current.scrollLeft = event.currentTarget.scrollLeft;
               }}
               data-editing={messageEditState ? "true" : "false"}
+              data-highlight-active={shouldRenderComposerHighlight ? "true" : "false"}
               placeholder={uploadingFile ? "Загружаем вложения..." : "Введите сообщение..."}
               onKeyDown={(event) => {
                 if (mentionSuggestionsOpen && mentionSuggestions.length) {
@@ -734,3 +1332,106 @@ export default function TextChatComposer({
     </div>
   );
 }
+
+function areReplyStatesEqual(previousReplyState, nextReplyState) {
+  if (previousReplyState === nextReplyState) {
+    return true;
+  }
+
+  if (!previousReplyState && !nextReplyState) {
+    return true;
+  }
+
+  if (!previousReplyState || !nextReplyState) {
+    return false;
+  }
+
+  return String(previousReplyState?.messageId || "") === String(nextReplyState?.messageId || "")
+    && String(previousReplyState?.username || "") === String(nextReplyState?.username || "")
+    && String(previousReplyState?.preview || "") === String(nextReplyState?.preview || "");
+}
+
+function areMessageEditStatesEqual(previousMessageEditState, nextMessageEditState) {
+  if (previousMessageEditState === nextMessageEditState) {
+    return true;
+  }
+
+  if (!previousMessageEditState && !nextMessageEditState) {
+    return true;
+  }
+
+  if (!previousMessageEditState || !nextMessageEditState) {
+    return false;
+  }
+
+  return String(previousMessageEditState?.messageId || "") === String(nextMessageEditState?.messageId || "")
+    && String(previousMessageEditState?.originalText || "") === String(nextMessageEditState?.originalText || "");
+}
+
+function areBatchUploadOptionsEqual(previousBatchUploadOptions, nextBatchUploadOptions) {
+  if (previousBatchUploadOptions === nextBatchUploadOptions) {
+    return true;
+  }
+
+  return Boolean(previousBatchUploadOptions?.groupItems) === Boolean(nextBatchUploadOptions?.groupItems)
+    && Boolean(previousBatchUploadOptions?.sendAsDocuments) === Boolean(nextBatchUploadOptions?.sendAsDocuments)
+    && Boolean(previousBatchUploadOptions?.rememberChoice) === Boolean(nextBatchUploadOptions?.rememberChoice);
+}
+
+function areMentionSuggestionsEqual(previousMentionSuggestions, nextMentionSuggestions) {
+  if (previousMentionSuggestions === nextMentionSuggestions) {
+    return true;
+  }
+
+  if (!Array.isArray(previousMentionSuggestions) || !Array.isArray(nextMentionSuggestions) || previousMentionSuggestions.length !== nextMentionSuggestions.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousMentionSuggestions.length; index += 1) {
+    const previousSuggestion = previousMentionSuggestions[index];
+    const nextSuggestion = nextMentionSuggestions[index];
+
+    if (
+      String(previousSuggestion?.type || "") !== String(nextSuggestion?.type || "")
+      || String(previousSuggestion?.userId || "") !== String(nextSuggestion?.userId || "")
+      || String(previousSuggestion?.roleId || "") !== String(nextSuggestion?.roleId || "")
+      || String(previousSuggestion?.handle || "") !== String(nextSuggestion?.handle || "")
+      || String(previousSuggestion?.displayName || "") !== String(nextSuggestion?.displayName || "")
+      || String(previousSuggestion?.avatar || "") !== String(nextSuggestion?.avatar || "")
+      || String(previousSuggestion?.color || "") !== String(nextSuggestion?.color || "")
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areTextChatComposerPropsEqual(previousProps, nextProps) {
+  return previousProps.selectedFiles === nextProps.selectedFiles
+    && previousProps.uploadingFile === nextProps.uploadingFile
+    && previousProps.composerDropActive === nextProps.composerDropActive
+    && areReplyStatesEqual(previousProps.replyState, nextProps.replyState)
+    && areMessageEditStatesEqual(previousProps.messageEditState, nextProps.messageEditState)
+    && previousProps.voiceRecordingState === nextProps.voiceRecordingState
+    && previousProps.voiceRecordingDurationMs === nextProps.voiceRecordingDurationMs
+    && previousProps.speechRecognitionActive === nextProps.speechRecognitionActive
+    && previousProps.composerEmojiButtonRef === nextProps.composerEmojiButtonRef
+    && previousProps.composerEmojiPickerOpen === nextProps.composerEmojiPickerOpen
+    && previousProps.composerEmojiPickerRef === nextProps.composerEmojiPickerRef
+    && previousProps.mentionSuggestionsOpen === nextProps.mentionSuggestionsOpen
+    && areMentionSuggestionsEqual(previousProps.mentionSuggestions, nextProps.mentionSuggestions)
+    && previousProps.mentionSuggestionsRef === nextProps.mentionSuggestionsRef
+    && previousProps.selectedMentionSuggestionIndex === nextProps.selectedMentionSuggestionIndex
+    && previousProps.textareaRef === nextProps.textareaRef
+    && previousProps.message === nextProps.message
+    && previousProps.serverMembers === nextProps.serverMembers
+    && previousProps.serverRoles === nextProps.serverRoles
+    && areBatchUploadOptionsEqual(previousProps.batchUploadOptions, nextProps.batchUploadOptions)
+    && previousProps.preferExplicitSend === nextProps.preferExplicitSend;
+}
+
+TextChatComposer.displayName = "TextChatComposer";
+
+export default memo(TextChatComposer, areTextChatComposerPropsEqual);
+

@@ -251,6 +251,26 @@ export function recordLongTask(area, action, durationMs, extra = {}) {
   return event;
 }
 
+export function recordPerfEvent(area, action, extra = {}, durationMs = 0) {
+  if (!PERF_ENABLED) {
+    return null;
+  }
+
+  const event = {
+    traceId: buildTraceId(normalizeArea(area), action),
+    area: normalizeArea(area),
+    action: String(action || "unknown").trim() || "unknown",
+    startedAt: new Date().toISOString(),
+    durationMs: Number((Number(durationMs) || 0).toFixed(2)),
+    longTaskCount: 0,
+    route: getCurrentRoute(),
+    extra: normalizeExtra(extra),
+  };
+
+  appendPerfEvent(event);
+  return event;
+}
+
 export function recordReactCommit(area, componentId, phase, actualDuration, baseDuration, startTime, commitTime, extra = {}) {
   if (!PERF_ENABLED) {
     return null;

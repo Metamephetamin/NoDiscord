@@ -21,10 +21,15 @@ import {
 } from "../utils/textChatModel";
 import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
 import { parseMediaFrame } from "../utils/mediaFrames";
+import { recordPerfEvent } from "../utils/perf";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
 const invitePreviewCache = new Map();
 const TEXT_CHAT_STATIC_EMOJI_IN_FEED = true;
+
+function getMessageRenderId(messageItem) {
+  return String(messageItem?.id || messageItem?.clientId || messageItem?.localId || "");
+}
 
 const getPreviewableMediaItems = (messageItem, attachments) =>
   attachments
@@ -41,7 +46,7 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
     }));
 
 const DOCUMENT_IMAGE_EXTENSION_PATTERN = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:[?#].*)?$/i;
-const PRIORITY_MEDIA_MESSAGE_COUNT = 1;
+const PRIORITY_MEDIA_MESSAGE_COUNT = 0;
 const EMOJI_ONLY_MESSAGE_PATTERN = /^(?:(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\u200d|\ufe0f|\s))+$/u;
 
 function isImageLikeDocumentAttachment(attachmentItem) {
@@ -116,25 +121,58 @@ function MessageTimestamp({ messageItem }) {
   );
 }
 
-function LocalEchoMediaOverlay({ attachmentItem }) {
+function LocalEchoMediaOverlay({ attachmentItem, onCancel }) {
   const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
   const normalizedStatus = String(attachmentItem?.localEchoStatus || "uploading").trim();
-  const statusLabel = normalizedStatus === "preparing"
+  const attachmentSize = Math.max(0, Number(attachmentItem?.attachmentSize) || 0);
+  const uploadedBytes = attachmentSize > 0
+    ? Math.min(attachmentSize, Math.round((attachmentSize * normalizedProgress) / 100))
+    : 0;
+  const resolvedStatusLabel = normalizedStatus === "preparing"
+    ? "Подготовка"
+    : normalizedStatus === "processing"
+      ? "Обработка"
+      : "Загрузка";
+  const progressLabel = attachmentSize > 0
+    ? `${formatFileSize(uploadedBytes)} / ${formatFileSize(attachmentSize)}`
+    : `${normalizedProgress}%`;
+  const statusLabelUnused = normalizedStatus === "preparing"
     ? "Подготовка"
     : normalizedStatus === "processing"
       ? "Обработка"
       : "Загрузка";
 
   return (
-    <span className="message-media__upload-overlay" aria-hidden="true">
-      <span
-        className="message-media__upload-progress"
-        style={{ "--message-upload-progress": `${normalizedProgress}%` }}
-      >
-        <span className="message-media__upload-spinner" />
-        <span className="message-media__upload-value">{normalizedProgress}%</span>
+    <span className="message-media__upload-overlay">
+      <span className="message-media__upload-progress-chip">
+        {progressLabel}
       </span>
-      <span className="message-media__upload-label">{statusLabel}</span>
+      <span
+        className="message-media__upload-cancel"
+        role="button"
+        tabIndex={0}
+        aria-label="Отменить загрузку"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onCancel?.();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          onCancel?.();
+        }}
+      >
+        <span className="message-media__upload-cancel-icon" aria-hidden="true" />
+      </span>
+      <span className="message-media__upload-footer">
+        <span className="message-media__upload-status">{resolvedStatusLabel || statusLabelUnused}</span>
+        <span className="message-media__upload-progress-value">{normalizedProgress}%</span>
+      </span>
     </span>
   );
 }
@@ -569,11 +607,9 @@ function MessageAttachmentCard({
   selectionMode,
   onToggleSelection,
   onOpenMediaPreview,
-  onRevealSpoiler,
-  isSpoilerRevealed,
+  onCancelLocalEchoUpload,
   priorityMedia = false,
 }) {
-  const isHiddenSpoiler = Boolean(attachmentItem.attachmentSpoiler) && !isSpoilerRevealed;
   const openAttachmentMediaPreview = () => {
     const type = attachmentItem.isImage ? "image" : "video";
     onOpenMediaPreview(
@@ -594,13 +630,6 @@ function MessageAttachmentCard({
       event.preventDefault();
       event.stopPropagation();
       onToggleSelection(messageItem.id);
-      return;
-    }
-
-    if (isHiddenSpoiler) {
-      event.preventDefault();
-      event.stopPropagation();
-      onRevealSpoiler?.(attachmentItem.cacheKey);
       return;
     }
 
@@ -654,7 +683,7 @@ function MessageAttachmentCard({
       return (
         <button
           type="button"
-          className={`message-media message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""} ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
+          className={`message-media message-media--button ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
@@ -662,18 +691,17 @@ function MessageAttachmentCard({
             className="message-media__image"
             src={attachmentItem.attachmentUrl}
             alt={attachmentItem.attachmentName || "image"}
-            loading={priorityMedia ? "eager" : "lazy"}
+            loading="lazy"
             decoding="async"
-            fetchPriority={priorityMedia ? "high" : "auto"}
+            fetchPriority={priorityMedia ? "auto" : "low"}
             draggable={false}
           />
-          {isHiddenSpoiler ? (
-            <span className="message-media__spoiler-layer" aria-hidden="true">
-              <span className="message-media__spoiler-noise" />
-              <span className="message-media__spoiler-label">Spoiler</span>
-            </span>
+          {showLocalEchoOverlay ? (
+            <LocalEchoMediaOverlay
+              attachmentItem={attachmentItem}
+              onCancel={() => onCancelLocalEchoUpload?.(attachmentItem?.sourcePendingUploadId)}
+            />
           ) : null}
-          {showLocalEchoOverlay ? <LocalEchoMediaOverlay attachmentItem={attachmentItem} /> : null}
         </button>
       );
     }
@@ -682,18 +710,17 @@ function MessageAttachmentCard({
       return (
         <button
           type="button"
-          className={`message-media message-media--video message-media--button ${isHiddenSpoiler ? "message-media--spoiler" : ""} ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
+          className={`message-media message-media--video message-media--button ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
           aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <video className="message-media__video" src={attachmentItem.attachmentUrl} preload="metadata" playsInline muted />
-          {isHiddenSpoiler ? (
-            <span className="message-media__spoiler-layer" aria-hidden="true">
-              <span className="message-media__spoiler-noise" />
-              <span className="message-media__spoiler-label">Spoiler</span>
-            </span>
-          ) : null}
-          {showLocalEchoOverlay ? <LocalEchoMediaOverlay attachmentItem={attachmentItem} /> : <span className="message-media__play" aria-hidden="true" />}
+          {showLocalEchoOverlay ? (
+            <LocalEchoMediaOverlay
+              attachmentItem={attachmentItem}
+              onCancel={() => onCancelLocalEchoUpload?.(attachmentItem?.sourcePendingUploadId)}
+            />
+          ) : <span className="message-media__play" aria-hidden="true" />}
         </button>
       );
     }
@@ -757,8 +784,6 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     messageItem,
     attachments,
     galleryAttachments = attachments,
-    revealedSpoilerKeys,
-    onRevealSpoiler,
     mediaOverlayFooter,
     priorityMediaMessageIdSet,
   } = props;
@@ -778,8 +803,6 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 {...props}
                 attachmentItem={attachments[0]}
                 galleryAttachments={galleryAttachments}
-                isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
-                onRevealSpoiler={onRevealSpoiler}
                 priorityMedia={isPriorityMediaMessage}
               />
             </div>
@@ -794,8 +817,6 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
         {...props}
         attachmentItem={attachments[0]}
         galleryAttachments={galleryAttachments}
-        isSpoilerRevealed={revealedSpoilerKeys?.has(attachments[0]?.cacheKey)}
-        onRevealSpoiler={onRevealSpoiler}
         priorityMedia={isPriorityMediaMessage}
       />
     );
@@ -851,8 +872,6 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                   {...props}
                   attachmentItem={attachmentItem}
                   galleryAttachments={galleryAttachments}
-                  isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
-                  onRevealSpoiler={onRevealSpoiler}
                   priorityMedia={isPriorityMediaMessage && attachmentIndex === 0}
                 />
               </div>
@@ -870,8 +889,6 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 {...props}
                 attachmentItem={attachmentItem}
                 galleryAttachments={galleryAttachments}
-                isSpoilerRevealed={revealedSpoilerKeys?.has(attachmentItem?.cacheKey)}
-                onRevealSpoiler={onRevealSpoiler}
                 priorityMedia={isPriorityMediaMessage}
               />
             </div>
@@ -912,12 +929,12 @@ function TextChatMessageList({
   onOpenMediaPreview,
   onToggleReaction,
   onJumpToReply,
+  onCancelLocalEchoUpload,
 }) {
   const messageLongPress = useMobileLongPress();
   const avatarLongPress = useMobileLongPress();
   const [pressedMessageId, setPressedMessageId] = useState("");
   const [pressedAvatarMessageId, setPressedAvatarMessageId] = useState("");
-  const [revealedSpoilerKeys, setRevealedSpoilerKeys] = useState(() => new Set());
   const currentUserName = useMemo(() => getUserName(user).toLowerCase(), [user]);
   const serverRoleById = useMemo(
     () => new Map((serverRoles || []).map((role) => [String(role?.id || ""), role])),
@@ -952,22 +969,6 @@ function TextChatMessageList({
 
     messageRefs.current.delete(messageId);
   }, [messageRefs, registerMeasuredNode]);
-  const revealSpoilerAttachment = useCallback((attachmentCacheKey) => {
-    const normalizedKey = String(attachmentCacheKey || "");
-    if (!normalizedKey) {
-      return;
-    }
-
-    setRevealedSpoilerKeys((previous) => {
-      if (previous.has(normalizedKey)) {
-        return previous;
-      }
-
-      const next = new Set(previous);
-      next.add(normalizedKey);
-      return next;
-    });
-  }, []);
 
   const renderedAttachmentsByMessageId = useMemo(() => new Map(
     visibleMessages.map((messageItem) => [
@@ -1004,7 +1005,6 @@ function TextChatMessageList({
           attachmentName,
           attachmentContentType,
           attachmentSize,
-          attachmentSpoiler: Boolean(attachmentItem.attachmentSpoiler),
           attachmentAsFile,
           voiceMessage,
           isImage: isImageContent && !attachmentAsFile,
@@ -1024,6 +1024,36 @@ function TextChatMessageList({
       normalizeReactions(messageItem?.reactions),
     ])
   ), [visibleMessages]);
+  const duplicateMessageIdSet = useMemo(() => {
+    const countById = new Map();
+    messages.forEach((messageItem) => {
+      const messageId = getMessageRenderId(messageItem);
+      if (!messageId) {
+        return;
+      }
+
+      countById.set(messageId, (countById.get(messageId) || 0) + 1);
+    });
+
+    return new Set(
+      Array.from(countById.entries())
+        .filter(([, count]) => count > 1)
+        .map(([messageId]) => messageId)
+    );
+  }, [messages]);
+
+  useEffect(() => {
+    if (!duplicateMessageIdSet.size) {
+      return;
+    }
+
+    recordPerfEvent("text-chat", "message-list:duplicate-message-ids", {
+      duplicateIds: Array.from(duplicateMessageIdSet).slice(0, 20),
+      duplicateCount: duplicateMessageIdSet.size,
+      messageCount: messages.length,
+    });
+  }, [duplicateMessageIdSet, messages.length]);
+
   const priorityMediaMessageIdSet = useMemo(() => {
     const priorityIds = new Set();
 
@@ -1113,6 +1143,10 @@ function TextChatMessageList({
             ? authorRoleColorByUserId.get(String(messageItem.forwardedFromUserId || "")) || ""
             : "";
           const canInsertAuthorMention = !isDirectChat && typeof onInsertMentionByUserId === "function";
+          const messageRenderId = getMessageRenderId(messageItem);
+          const messageRenderKey = duplicateMessageIdSet.has(messageRenderId)
+            ? `${messageRenderId || "message"}:${messageIndex}`
+            : messageRenderId || `message:${messageIndex}`;
 
           const handleMessageClick = selectionMode
             ? (event) => {
@@ -1128,7 +1162,7 @@ function TextChatMessageList({
 
           return (
             <div
-              key={messageItem.id}
+              key={messageRenderKey}
               ref={(node) => registerMessageNode(messageItem.id, node)}
               className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
@@ -1151,6 +1185,8 @@ function TextChatMessageList({
                 src={messageItem.photoUrl}
                 alt="avatar"
                 className={`msg-avatar ${pressedAvatarMessageId === String(messageItem.id) ? "msg-avatar--pressing" : ""}`}
+                loading="eager"
+                decoding="sync"
                 onContextMenu={(event) => onOpenUserContextMenu?.(event, messageItem)}
                 {...avatarLongPress.bindLongPress(messageItem, (event, pressedMessageItem) => {
                   onOpenUserContextMenu?.(event, pressedMessageItem);
@@ -1285,8 +1321,6 @@ function TextChatMessageList({
                   selectionMode={selectionMode}
                   onToggleSelection={onToggleSelection}
                   onOpenMediaPreview={onOpenMediaPreview}
-                  revealedSpoilerKeys={revealedSpoilerKeys}
-                  onRevealSpoiler={revealSpoilerAttachment}
                   mediaOverlayFooter={
                     showAttachmentOverlayFooter
                       ? <MessageMediaOverlayFooter messageItem={messageItem} isOwnMessage={isOwnMessage} />
@@ -1393,6 +1427,7 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
     && previousProps.onOpenMediaPreview === nextProps.onOpenMediaPreview
     && previousProps.onToggleReaction === nextProps.onToggleReaction
     && previousProps.onJumpToReply === nextProps.onJumpToReply
+    && previousProps.onCancelLocalEchoUpload === nextProps.onCancelLocalEchoUpload
   );
 }
 

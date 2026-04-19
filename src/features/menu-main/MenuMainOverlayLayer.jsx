@@ -151,26 +151,28 @@ export default function MenuMainOverlayLayer({
         onSelect={handleQuickSwitcherSelect}
       />
 
-      <DirectCallOverlayView
-        call={directCallState}
-        history={directCallHistory}
-        isMicMuted={isMicMuted}
-        audioInputDevices={audioInputDevices}
-        audioOutputDevices={audioOutputDevices}
-        selectedInputDeviceId={selectedInputDeviceId}
-        selectedOutputDeviceId={selectedOutputDeviceId}
-        outputSelectionSupported={outputSelectionSupported}
-        onAccept={acceptDirectCall}
-        onDecline={declineDirectCall}
-        onEnd={endDirectCall}
-        onToggleMic={toggleMicMute}
-        onSelectInputDevice={setSelectedInputDeviceId}
-        onSelectOutputDevice={setSelectedOutputDeviceId}
-        onToggleMiniMode={setDirectCallMiniMode}
-        onDismiss={dismissDirectCallOverlay}
-        onRetry={retryDirectCall}
-        onRedialHistoryItem={onDirectCallHistoryRedial}
-      />
+      {isMobileViewport ? (
+        <DirectCallOverlayView
+          call={directCallState}
+          history={directCallHistory}
+          isMicMuted={isMicMuted}
+          audioInputDevices={audioInputDevices}
+          audioOutputDevices={audioOutputDevices}
+          selectedInputDeviceId={selectedInputDeviceId}
+          selectedOutputDeviceId={selectedOutputDeviceId}
+          outputSelectionSupported={outputSelectionSupported}
+          onAccept={acceptDirectCall}
+          onDecline={declineDirectCall}
+          onEnd={endDirectCall}
+          onToggleMic={toggleMicMute}
+          onSelectInputDevice={setSelectedInputDeviceId}
+          onSelectOutputDevice={setSelectedOutputDeviceId}
+          onToggleMiniMode={setDirectCallMiniMode}
+          onDismiss={dismissDirectCallOverlay}
+          onRetry={retryDirectCall}
+          onRedialHistoryItem={onDirectCallHistoryRedial}
+        />
+      ) : null}
 
       <SettingsOverlay
         open={openSettings}

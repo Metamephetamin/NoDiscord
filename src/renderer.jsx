@@ -1,9 +1,7 @@
-import { Profiler, useCallback, useEffect, useRef, useState } from "react";
+import { Profiler, Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Auth from "./components/Auth";
 import AppUpdateBanner from "./components/AppUpdateBanner";
-import MenuMain from "./components/MenuMain";
-import ServerInvitePage from "./components/ServerInvitePage";
 import { API_BASE_URL } from "./config/runtime";
 import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./utils/inviteFlow";
 import "./index.css";
@@ -26,12 +24,15 @@ import {
   getStoredToken,
   hydrateStoredSession,
   authFetch,
+  isUnauthorizedError,
   parseApiResponse,
   storeSession,
 } from "./utils/auth";
 
 const MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY = "nd_media_permissions_bootstrap_v2";
 const rendererBootstrapTraceId = startPerfTrace("app-shell", "renderer-bootstrap");
+const MenuMain = lazy(() => import("./components/MenuMain"));
+const ServerInvitePage = lazy(() => import("./components/ServerInvitePage"));
 
 function readMediaPermissionBootstrapState() {
   if (typeof window === "undefined") {
@@ -379,14 +380,32 @@ export default function Renderer() {
         return;
       }
 
+      const restoreCachedSession = () => {
+        if (!disposed) {
+          setUser(savedUser);
+          setToken(getStoredToken() || savedToken);
+          setSessionHydrated(true);
+          setLoading(false);
+        }
+      };
+
+      restoreCachedSession();
+
       try {
         const response = await authFetch(`${API_BASE_URL}/auth/me`, {
           method: "GET",
         });
         const data = await parseApiResponse(response);
 
-        if (!response.ok || !data?.id) {
+        if (response.status === 401) {
           resetSession();
+          return;
+        }
+
+        if (!response.ok || !data?.id) {
+          console.warn("Failed to refresh session snapshot, keeping cached credentials.", {
+            status: response.status,
+          });
           return;
         }
 
@@ -445,8 +464,12 @@ export default function Renderer() {
           accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
         });
       } catch (error) {
+        if (isUnauthorizedError(error)) {
+          resetSession();
+          return;
+        }
+
         console.error("Failed to restore secure session", error);
-        resetSession();
       }
     };
 
@@ -643,6 +666,21 @@ export default function Renderer() {
     navigate("/", { replace: true });
   };
 
+  const shellFallback = (
+    <div className="app-loader">
+      <div className="app-loader__stage" aria-hidden="true">
+        <div className="app-loader__halo" />
+        <div className="app-loader__ring app-loader__ring--outer" />
+        <div className="app-loader__ring app-loader__ring--inner" />
+        <div className="app-loader__core" />
+        <span className="app-loader__spark app-loader__spark--one" />
+        <span className="app-loader__spark app-loader__spark--two" />
+        <span className="app-loader__spark app-loader__spark--three" />
+      </div>
+      <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="app-loader">
@@ -668,21 +706,23 @@ export default function Renderer() {
           onInstall={handleInstallDownloadedUpdate}
           onRetry={handleRetryAppUpdateCheck}
         />
-        {PERF_ENABLED ? (
-          <Profiler id="ServerInvitePage" onRender={handleRootProfilerRender}>
+        <Suspense fallback={shellFallback}>
+          {PERF_ENABLED ? (
+            <Profiler id="ServerInvitePage" onRender={handleRootProfilerRender}>
+              <ServerInvitePage
+                user={user}
+                inviteCode={location.pathname.replace(/^\/invite\//i, "")}
+                onInviteAccepted={handleInviteAccepted}
+              />
+            </Profiler>
+          ) : (
             <ServerInvitePage
               user={user}
               inviteCode={location.pathname.replace(/^\/invite\//i, "")}
               onInviteAccepted={handleInviteAccepted}
             />
-          </Profiler>
-        ) : (
-          <ServerInvitePage
-            user={user}
-            inviteCode={location.pathname.replace(/^\/invite\//i, "")}
-            onInviteAccepted={handleInviteAccepted}
-          />
-        )}
+          )}
+        </Suspense>
       </>
     );
   }
@@ -695,8 +735,18 @@ export default function Renderer() {
         onRetry={handleRetryAppUpdateCheck}
       />
       {token && user ? (
-        PERF_ENABLED ? (
-          <Profiler id="MenuMain" onRender={handleRootProfilerRender}>
+        <Suspense fallback={shellFallback}>
+          {PERF_ENABLED ? (
+            <Profiler id="MenuMain" onRender={handleRootProfilerRender}>
+              <MenuMain
+                user={user}
+                setUser={setUser}
+                onLogout={handleLogout}
+                pendingImportedServer={pendingImportedServer}
+                onPendingImportedServerHandled={() => setPendingImportedServer(null)}
+              />
+            </Profiler>
+          ) : (
             <MenuMain
               user={user}
               setUser={setUser}
@@ -704,16 +754,8 @@ export default function Renderer() {
               pendingImportedServer={pendingImportedServer}
               onPendingImportedServerHandled={() => setPendingImportedServer(null)}
             />
-          </Profiler>
-        ) : (
-          <MenuMain
-            user={user}
-            setUser={setUser}
-            onLogout={handleLogout}
-            pendingImportedServer={pendingImportedServer}
-            onPendingImportedServerHandled={() => setPendingImportedServer(null)}
-          />
-        )
+          )}
+        </Suspense>
       ) : (
         PERF_ENABLED ? (
           <Profiler id="Auth" onRender={handleRootProfilerRender}>

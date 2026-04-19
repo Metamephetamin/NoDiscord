@@ -20,6 +20,10 @@
   pointer-events: auto;
 }
 
+.menu__profile-wrapper .direct-call-overlay--embedded {
+  margin: 0 0 12px;
+}
+
 .profile__top {
   display: flex;
   flex-direction: column;

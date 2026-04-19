@@ -454,6 +454,13 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
                 continue;
             }
 
+            if (phrase.Equals("если", StringComparison.OrdinalIgnoreCase)
+                && words.Length > phraseWords.Length
+                && TrimWordToken(words[phraseWords.Length]).Equals("честно", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             for (var index = phraseWords.Length + 2; index < words.Length; index += 1)
             {
                 var current = TrimWordToken(words[index]);
@@ -509,9 +516,11 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             var nextToken = TrimWordToken(words[index + 1]);
             var nextNextToken = index + 2 < words.Length ? TrimWordToken(words[index + 2]) : string.Empty;
             var nextStartsClause = ClauseLeadTokens.Contains(nextToken)
+                || LooksLikeFiniteVerb(nextToken)
                 || (!string.IsNullOrWhiteSpace(nextToken) && !LooksLikeFiniteVerb(nextToken) && LooksLikeFiniteVerb(nextNextToken));
+            var previousClauseHasFiniteVerb = HasFiniteVerbBefore(words, index);
 
-            if (!LooksLikeFiniteVerb(previousToken) || !nextStartsClause || EndsWithComma(words[index - 1]))
+            if ((!LooksLikeFiniteVerb(previousToken) && !previousClauseHasFiniteVerb) || !nextStartsClause || EndsWithComma(words[index - 1]))
             {
                 continue;
             }
@@ -605,9 +614,34 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         return true;
     }
 
+    private static bool HasFiniteVerbBefore(IReadOnlyList<string> words, int index)
+    {
+        var startIndex = Math.Max(0, index - 4);
+        for (var cursor = index - 1; cursor >= startIndex; cursor -= 1)
+        {
+            if (LooksLikeFiniteVerb(words[cursor]))
+            {
+                return true;
+            }
+
+            if (EndsWithComma(words[cursor]))
+            {
+                break;
+            }
+        }
+
+        return false;
+    }
+
     private static bool LooksLikeFiniteVerb(string token)
     {
-        return !string.IsNullOrWhiteSpace(token) && FiniteVerbRegex.IsMatch(token);
+        var normalizedToken = TrimWordToken(token);
+        return !string.IsNullOrWhiteSpace(normalizedToken)
+            && (FiniteVerbRegex.IsMatch(normalizedToken)
+                || normalizedToken.EndsWith("лся", StringComparison.OrdinalIgnoreCase)
+                || normalizedToken.EndsWith("лась", StringComparison.OrdinalIgnoreCase)
+                || normalizedToken.EndsWith("лось", StringComparison.OrdinalIgnoreCase)
+                || normalizedToken.EndsWith("лись", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool EndsWithComma(string token)

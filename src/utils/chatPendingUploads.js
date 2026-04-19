@@ -94,8 +94,6 @@ export function createPendingUpload(file) {
     progress: 0,
     error: "",
     retryable: false,
-    compressionMode: "original",
-    hideWithSpoiler: false,
   };
 }
 
@@ -443,12 +441,6 @@ export async function preparePendingUploadForSend(upload) {
   const sourceFile = upload?.file;
   if (!(sourceFile instanceof File)) {
     throw new Error("Attachment file was not found.");
-  }
-
-  if (upload?.compressionMode === "file") {
-    // "Send as file" changes presentation in chat, not the binary payload itself.
-    // Only adjust mismatched extensions so backend signature checks still pass.
-    return normalizeUploadFileSignature(sourceFile);
   }
 
   return normalizeUploadFileSignature(sourceFile);

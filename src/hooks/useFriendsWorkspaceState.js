@@ -12,6 +12,8 @@ import {
   parseFriendSearchInput,
 } from "../utils/menuMainModel";
 
+const SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG = "__TEND_SKIP_NEXT_WINDOW_FOCUS_REFRESH__";
+
 const sortFriends = (friends) =>
   friends.sort((left, right) =>
     getDisplayName(left).localeCompare(getDisplayName(right), "ru", { sensitivity: "base" })
@@ -348,6 +350,11 @@ export default function useFriendsWorkspaceState({
       })));
     };
     const handleWindowFocus = () => {
+      if (typeof window !== "undefined" && window[SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG]) {
+        window[SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG] = false;
+        return;
+      }
+
       loadFriends().catch(() => {});
       loadFriendRequests().catch(() => {});
     };

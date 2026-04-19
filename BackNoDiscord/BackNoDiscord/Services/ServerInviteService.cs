@@ -215,10 +215,10 @@ public class ServerInviteService
         normalized.Id = ServerChannelAuthorization.NormalizeSharedServerId(
             string.IsNullOrWhiteSpace(normalized.Id) ? "server" : normalized.Id.Trim(),
             string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim());
-        normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name;
+        normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Server" : normalized.Name.Trim();
         normalized.Description = string.IsNullOrWhiteSpace(normalized.Description)
             ? string.Empty
-            : normalized.Description;
+            : normalized.Description.Trim();
         if (normalized.Description.Length > 280)
         {
             normalized.Description = normalized.Description[..280];
@@ -231,6 +231,38 @@ public class ServerInviteService
         normalized.Members ??= new List<ServerMemberSnapshot>();
         normalized.TextChannels ??= new List<ChannelSnapshot>();
         normalized.VoiceChannels ??= new List<ChannelSnapshot>();
+
+        foreach (var role in normalized.Roles)
+        {
+            role.Id = role.Id?.Trim() ?? string.Empty;
+            role.Name = string.IsNullOrWhiteSpace(role.Name) ? "Role" : role.Name.Trim();
+            role.Color = role.Color?.Trim() ?? string.Empty;
+            role.Permissions = role.Permissions
+                .Where(static permission => !string.IsNullOrWhiteSpace(permission))
+                .Select(static permission => permission.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        foreach (var member in normalized.Members)
+        {
+            member.UserId = member.UserId?.Trim() ?? string.Empty;
+            member.Name = string.IsNullOrWhiteSpace(member.Name) ? "Member" : member.Name.Trim();
+            member.Avatar = member.Avatar?.Trim() ?? string.Empty;
+            member.RoleId = string.IsNullOrWhiteSpace(member.RoleId) ? "member" : member.RoleId.Trim();
+        }
+
+        foreach (var channel in normalized.TextChannels)
+        {
+            channel.Id = channel.Id?.Trim() ?? string.Empty;
+            channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "general" : channel.Name.Trim();
+        }
+
+        foreach (var channel in normalized.VoiceChannels)
+        {
+            channel.Id = channel.Id?.Trim() ?? string.Empty;
+            channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
+        }
 
         if (!normalized.Members.Any(member => string.Equals(member.UserId, normalized.OwnerId, StringComparison.Ordinal)))
         {

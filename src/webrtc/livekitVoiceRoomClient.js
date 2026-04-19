@@ -17,6 +17,7 @@ import {
   notifyUnauthorizedSession,
   parseApiResponse,
 } from "../utils/auth";
+import { isDirectCallChannelId } from "../utils/directCallModel";
 import {
   DEFAULT_AVATAR,
   NOISE_SUPPRESSION_MODE_BROADCAST,
@@ -1568,7 +1569,7 @@ export function createVoiceRoomClient({
   };
 
   const applyPublishedAudioState = async () => {
-    const shouldMuteMicrophone = isSelfMicMuted || isSelfDeafened;
+    const shouldMuteMicrophone = isSelfMicMuted || (isSelfDeafened && !isDirectCallChannelId(currentChannel));
     const microphoneTrack = micPublication?.track;
 
     if (microphoneTrack?.mediaStreamTrack) {

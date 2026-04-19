@@ -167,6 +167,18 @@ contextBridge.exposeInMainWorld("electronClipboard", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronAttachmentPicker", {
+  async open(payload) {
+    return ipcRenderer.invoke("attachments:open-picker", payload);
+  },
+  async readFiles(payload) {
+    return ipcRenderer.invoke("attachments:read-selected-files", payload);
+  },
+  async releaseFiles(payload) {
+    return ipcRenderer.invoke("attachments:release-selected-files", payload);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronBackground", {
   async getPreferences() {
     return ipcRenderer.invoke("background:get-preferences");

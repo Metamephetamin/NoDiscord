@@ -60,9 +60,11 @@
     "electron-squirrel-startup": "^1.0.1",
     "howler": "^2.2.4",
     "livekit-client": "^2.18.1",
+    "openai": "^6.34.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-player": "^3.4.0",
-    "react-router-dom": "^7.9.5"
+    "react-router-dom": "^7.9.5",
+    "readline-sync": "^1.4.10"
   }
 }

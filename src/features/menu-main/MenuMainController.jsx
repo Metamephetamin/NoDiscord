@@ -1863,6 +1863,29 @@ export default function MenuMain({
     setDirectCallState(createDirectCallState());
   };
 
+  const disconnectFromActiveVoiceContext = async ({ preserveSuppressedChannel = true } = {}) => {
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    const activeChannelId = String(pendingVoiceChannelTargetRef.current || currentVoiceChannelRef.current || "").trim();
+    if (activeChannelId && preserveSuppressedChannel) {
+      suppressedVoiceChannelRef.current = activeChannelId;
+    } else if (!activeChannelId) {
+      suppressedVoiceChannelRef.current = "";
+    }
+
+    voiceJoinAttemptRef.current += 1;
+    voiceJoinInFlightRef.current = false;
+    pendingVoiceChannelTargetRef.current = "";
+    setJoiningVoiceChannelId("");
+    setCurrentVoiceChannel(null);
+    setSelectedStreamUserId(null);
+    setIsLocalSharePreviewVisible(false);
+
+    await voiceClientRef.current.leaveChannel();
+  };
+
   const retryDirectCall = async () => {
     const targetUserId = String(directCallStateRef.current.peerUserId || "").trim();
     if (!targetUserId) {
@@ -1893,7 +1916,7 @@ export default function MenuMain({
     try {
       openDirectChat(normalizedTargetUserId);
       if (currentVoiceChannelRef.current && currentVoiceChannelRef.current !== channelId) {
-        await voiceClientRef.current.leaveChannel();
+        await disconnectFromActiveVoiceContext();
       }
 
       setDirectCallState(buildDirectCallState({
@@ -1960,7 +1983,7 @@ export default function MenuMain({
       openDirectChat(currentCall.peerUserId);
 
       if (currentVoiceChannelRef.current && currentVoiceChannelRef.current !== currentCall.channelId) {
-        await voiceClientRef.current.leaveChannel();
+        await disconnectFromActiveVoiceContext();
       }
 
       await voiceClientRef.current.acceptDirectCall(currentCall.peerUserId, currentCall.channelId, user);
@@ -1976,6 +1999,13 @@ export default function MenuMain({
       }));
     } catch (error) {
       console.error("Не удалось принять личный звонок:", error);
+      if (currentVoiceChannelRef.current === currentCall.channelId) {
+        try {
+          await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
+        } catch (leaveError) {
+          console.error("Не удалось сбросить состояние личного звонка:", leaveError);
+        }
+      }
       appendDirectCallHistoryEntry({
         peerUserId: currentCall.peerUserId,
         peerName: currentCall.peerName,
@@ -2015,6 +2045,13 @@ export default function MenuMain({
     } catch (error) {
       console.error("Не удалось отменить личный звонок:", error);
     } finally {
+      if (currentVoiceChannelRef.current === currentCall.channelId) {
+        try {
+          await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
+        } catch (leaveError) {
+          console.error("Не удалось сбросить состояние личного звонка:", leaveError);
+        }
+      }
       appendDirectCallHistoryEntry({
         peerUserId: currentCall.peerUserId,
         peerName: currentCall.peerName,
@@ -2036,7 +2073,7 @@ export default function MenuMain({
       setDirectCallState((previous) => ({ ...previous, lastReason: "expected-end" }));
       await voiceClientRef.current.endDirectCall(currentCall.peerUserId, currentCall.channelId, user);
       if (currentVoiceChannelRef.current === currentCall.channelId) {
-        await voiceClientRef.current.leaveChannel();
+        await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
       }
     } catch (error) {
       console.error("Не удалось завершить личный звонок:", error);
@@ -3873,7 +3910,7 @@ export default function MenuMain({
         void (async () => {
           try {
             if (currentVoiceChannelRef.current && currentVoiceChannelRef.current !== channelName) {
-              await voiceClientRef.current?.leaveChannel();
+              await disconnectFromActiveVoiceContext();
             }
 
             await voiceClientRef.current?.joinChannel(channelName, user);
@@ -3887,6 +3924,13 @@ export default function MenuMain({
             }));
           } catch (error) {
             console.error("Не удалось подключить исходящий звонок:", error);
+            if (currentVoiceChannelRef.current === channelName) {
+              try {
+                await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
+              } catch (leaveError) {
+                console.error("Не удалось сбросить состояние личного звонка:", leaveError);
+              }
+            }
             appendDirectCallHistoryEntry({
               peerUserId: String(fromUserId || directCallStateRef.current.peerUserId || ""),
               peerName: String(fromName || directCallStateRef.current.peerName || "Пользователь"),
@@ -3958,7 +4002,7 @@ export default function MenuMain({
         void (async () => {
           try {
             if (currentVoiceChannelRef.current === channelName) {
-              await voiceClientRef.current?.leaveChannel();
+              await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
             }
           } catch (error) {
             console.error("Не удалось завершить личный звонок:", error);
@@ -4029,14 +4073,18 @@ export default function MenuMain({
     voiceClientRef.current.connect(user).catch((error) => logVoiceHubError("Ошибка обновления пользователя в голосовом хабе:", error));
   }, [user?.id, user?.nickname, user?.firstName, user?.first_name, user?.avatarUrl, user?.avatar]);
   useEffect(() => {
-    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : micVolume) : micVolume;
+    const shouldMutePublishedMic =
+      isMicMuted || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
+    const effectiveMicVolume = currentVoiceChannel ? (shouldMutePublishedMic ? 0 : micVolume) : micVolume;
     voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
   }, [currentVoiceChannel, micVolume, isMicMuted, isSoundMuted]);
   useEffect(() => {
-    voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: isMicMuted || isSoundMuted, isDeafened: isSoundMuted }).catch((error) => {
+    const shouldMutePublishedMic =
+      isMicMuted || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
+    voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: shouldMutePublishedMic, isDeafened: isSoundMuted }).catch((error) => {
       console.error("Ошибка обновления состояния микрофона:", error);
     });
-  }, [isMicMuted, isSoundMuted]);
+  }, [currentVoiceChannel, isMicMuted, isSoundMuted]);
   useEffect(() => {
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume);
   }, [audioVolume, isSoundMuted]);
@@ -4864,6 +4912,19 @@ export default function MenuMain({
       });
     }
   };
+  const leaveCurrentVoiceContext = async () => {
+    if (isDirectCallChannelId(currentVoiceChannelRef.current) && directCallStateRef.current.phase !== "idle") {
+      if (directCallStateRef.current.phase === "connected") {
+        await endDirectCall();
+        return;
+      }
+
+      await declineDirectCall();
+      return;
+    }
+
+    await leaveVoiceChannel();
+  };
   const handleLogout = async () => {
     try { await voiceClientRef.current?.disconnect(); } catch (error) { console.error("Ошибка при отключении перед выходом:", error); }
     finally {
@@ -5113,18 +5174,11 @@ export default function MenuMain({
     pushNavigationHistory(() => {
       setIsLocalSharePreviewVisible(false);
       setDesktopServerPane("voice");
-      if (String(selectedStreamUserId || "") === normalizedUserId && selectedStream) {
-        setSelectedStreamUserId(null);
-        return;
-      }
       setSelectedStreamUserId(normalizedUserId);
       if (isMobileViewport) {
         setMobileServersPane("voice");
       }
     });
-    if (String(selectedStreamUserId || "") === normalizedUserId && selectedStream) {
-      return;
-    }
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
   };
   const handleImportServer = (snapshot) => {
@@ -5656,6 +5710,7 @@ export default function MenuMain({
     handleScreenShareAction,
     openCameraModal,
     leaveVoiceChannel,
+    leaveCurrentVoiceContext,
     handleAvatarChange,
     handleServerIconChange,
     toggleMicMute,
@@ -5670,8 +5725,60 @@ export default function MenuMain({
     updateAudioVolume,
     suppressTooltipOnClick,
     restoreTooltipOnLeave,
+    leaveVoiceActionLabel: isDirectCallChannelId(currentVoiceChannel) && directCallState.phase !== "idle" ? "Завершить звонок" : "Отключиться",
+    leaveVoiceActionAriaLabel: isDirectCallChannelId(currentVoiceChannel) && directCallState.phase !== "idle" ? "Завершить личный звонок" : "Отключиться от голосового канала",
+    directCallPanelProps: {
+      call: directCallState,
+      history: directCallHistory,
+      isMicMuted,
+      audioInputDevices,
+      audioOutputDevices,
+      selectedInputDeviceId,
+      selectedOutputDeviceId,
+      outputSelectionSupported,
+      onAccept: acceptDirectCall,
+      onDecline: declineDirectCall,
+      onEnd: endDirectCall,
+      onToggleMic: toggleMicMute,
+      onSelectInputDevice: setSelectedInputDeviceId,
+      onSelectOutputDevice: setSelectedOutputDeviceId,
+      onToggleMiniMode: setDirectCallMiniMode,
+      onDismiss: dismissDirectCallOverlay,
+      onRetry: retryDirectCall,
+      onRedialHistoryItem: startDirectCallWithUser,
+    },
   };
-  const renderProfilePanel = () => <MenuMainProfilePanelSlot {...profilePanelProps} />;
+  const profilePanelElement = useMemo(() => <MenuMainProfilePanelSlot {...profilePanelProps} />, [
+    activeMicMenuBars,
+    activeNoiseProfile,
+    audioInputDevices,
+    audioOutputDevices,
+    audioVolume,
+    currentVoiceChannel,
+    currentVoiceChannelName,
+    deviceInputLabel,
+    deviceOutputLabel,
+    directCallHistory,
+    directCallState,
+    echoCancellationEnabled,
+    isCameraShareActive,
+    isCurrentUserSpeaking,
+    isMicMuted,
+    isScreenShareActive,
+    isSoundMuted,
+    micVolume,
+    noiseProfileOptions,
+    noiseSuppressionMode,
+    outputSelectionAvailable,
+    pingTone,
+    pingTooltip,
+    selectedInputDeviceId,
+    selectedOutputDeviceId,
+    showMicMenu,
+    showSoundMenu,
+    user,
+  ]);
+  const renderProfilePanel = () => profilePanelElement;
   const openFriendListUserContextMenu = (event, friend) => {
     event.preventDefault();
     event.stopPropagation();
@@ -5853,6 +5960,12 @@ export default function MenuMain({
       />
     </>
   );
+  const friendListOverlayElement = useMemo(() => renderFriendListOverlay(), [
+    friendListProfileModal,
+    friendListUserContextMenu,
+    friendListUserContextMenuSections,
+    startDirectCallWithUser,
+  ]);
   const renderFriendsSidebar = () => (
     <FriendsSidebar
       query={friendsSidebarQuery}
@@ -5872,7 +5985,7 @@ export default function MenuMain({
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
-      overlayContent={renderFriendListOverlay()}
+      overlayContent={friendListOverlayElement}
       getDisplayName={getDisplayName}
     />
   );
@@ -6393,4 +6506,3 @@ export default function MenuMain({
     </MenuMainOverlayLayer>
   );
 }
-
