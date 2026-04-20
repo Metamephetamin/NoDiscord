@@ -70,7 +70,7 @@ jobs:
         run: |
           PORT="${DEPLOY_PORT:-22}"
           mkdir -p ~/.ssh
-          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
 
       - name: Sync landing to server
         if: steps.validate.outputs.ready == 'true'
@@ -88,12 +88,13 @@ jobs:
           LANDING_OWNER="${LANDING_DEPLOY_OWNER:-www-data:www-data}"
           HEALTHCHECK="${LANDING_HEALTHCHECK_URL:-https://land.tendsec.ru}"
           TEMP_ROOT="/tmp/tend-landing-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 
-          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/landing' '$LANDING_PATH'"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/landing' '$LANDING_PATH'"
 
-          rsync -az --delete -e "ssh -p $PORT" ./landing/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/landing/"
+          rsync -az --delete -e "ssh $SSH_OPTS" ./landing/ "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/landing/"
 
-          ssh -p "$PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "
             set -e
             LANDING_PATH='$LANDING_PATH'
             TEMP_ROOT='$TEMP_ROOT'

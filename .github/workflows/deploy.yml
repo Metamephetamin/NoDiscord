@@ -159,7 +159,7 @@ jobs:
         run: |
           PORT="${DEPLOY_PORT:-22}"
           mkdir -p ~/.ssh
-          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
 
       - name: Sync frontend artifact to server
         if: steps.validate.outputs.ready == 'true'
@@ -179,7 +179,7 @@ jobs:
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_FRONTEND_ARCHIVE="$TEMP_ROOT/frontend-dist.tar.gz"
           FRONTEND_ARCHIVE="./frontend-package/frontend-dist.tar.gz"
-          SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Frontend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH"
           if [ ! -f "$FRONTEND_ARCHIVE" ]; then
@@ -234,7 +234,7 @@ jobs:
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
           TEMP_ARCHIVE_FILE="$TEMP_ROOT/backend-publish.tar.gz"
           BACKEND_ARCHIVE="./backend-package/backend-publish.tar.gz"
-          SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Backend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_PATH"
           if [ ! -f "$BACKEND_ARCHIVE" ]; then
@@ -297,7 +297,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          SSH_OPTS="-p $PORT -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Restarting backend service and reloading nginx"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 10m bash -lc '
