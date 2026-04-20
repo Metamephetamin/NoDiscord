@@ -31,7 +31,7 @@ public class ChatHub : Hub
     private const string ChatChannelMarker = "::channel:";
     private const string PrivateServerPrefix = "server-";
     private const string PersonalServerPrefix = "server-main-";
-    private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan MessageSendCooldown = TimeSpan.Zero;
     private static readonly TimeSpan ForwardCooldown = TimeSpan.FromMilliseconds(900);
     private static readonly TimeSpan MessageMutationCooldown = TimeSpan.FromMilliseconds(350);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
@@ -116,7 +116,8 @@ public class ChatHub : Hub
         string? replyToUsername = null,
         string? replyPreview = null,
         bool? attachmentSpoiler = null,
-        bool? attachmentAsFile = null)
+        bool? attachmentAsFile = null,
+        string? clientTempId = null)
     {
         try
         {
@@ -163,6 +164,7 @@ public class ChatHub : Hub
                 ReplyToMessageId = replyReference?.MessageId,
                 ReplyToUsername = replyReference?.Username,
                 ReplyPreview = replyReference?.Preview,
+                ClientTempId = UploadPolicies.TrimToLength(clientTempId, 160),
                 Attachments = normalizedAttachments,
                 Mentions = NormalizeMentions(normalizedChannelId, mentions),
                 VoiceMessage = normalizedAttachments.FirstOrDefault(static item => item.VoiceMessage is not null)?.VoiceMessage
@@ -356,21 +358,7 @@ public class ChatHub : Hub
 
         await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
 
-        var lastMessages = await _context.Messages.AsNoTracking()
-            .Where(message => equivalentChannelIds.Contains(message.ChannelId) && !message.IsDeleted)
-            .OrderByDescending(message => message.Timestamp)
-            .Take(100)
-            .OrderBy(message => message.Timestamp)
-            .ToListAsync();
-
-        var reactionsByMessageId = await BuildReactionMapAsync(lastMessages.Select(message => message.Id));
-
-        return lastMessages
-            .Select(message => ToMessageDto(
-                message,
-                DeserializePayload(GetRawPayload(message)),
-                reactionsByMessageId.TryGetValue(message.Id, out var reactions) ? reactions : []))
-            .ToList();
+        return [];
     }
 
     public async Task MarkChannelRead(string channelId)
@@ -583,6 +571,7 @@ public class ChatHub : Hub
             ReplyToMessageId = payload.ReplyToMessageId,
             ReplyToUsername = payload.ReplyToUsername,
             ReplyPreview = payload.ReplyPreview,
+            ClientTempId = payload.ClientTempId,
             PhotoUrl = message.PhotoUrl,
             AttachmentEncryption = payload.AttachmentEncryption,
             AttachmentUrl = payload.AttachmentUrl,
@@ -1318,6 +1307,7 @@ public class MessageDto
     public string? ReplyToMessageId { get; set; }
     public string? ReplyToUsername { get; set; }
     public string? ReplyPreview { get; set; }
+    public string? ClientTempId { get; set; }
     public string? PhotoUrl { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
@@ -1391,6 +1381,7 @@ public class ChatMessagePayload
     public string? ReplyToMessageId { get; set; }
     public string? ReplyToUsername { get; set; }
     public string? ReplyPreview { get; set; }
+    public string? ClientTempId { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }
     public long? AttachmentSize { get; set; }

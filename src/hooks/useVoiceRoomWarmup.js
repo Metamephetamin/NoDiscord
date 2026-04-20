@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 
 export default function useVoiceRoomWarmup({
   voiceClientRef,
   user,
   activeServerId,
-  voiceChannels = [],
   getScopedVoiceChannelId,
 }) {
   const lastWarmedChannelRef = useRef("");
@@ -22,15 +21,6 @@ export default function useVoiceRoomWarmup({
     lastWarmedChannelRef.current = scopedChannelId;
     voiceClientRef.current.prewarmChannel(scopedChannelId, user).catch(() => {});
   }, [activeServerId, getScopedVoiceChannelId, user, voiceClientRef]);
-
-  useEffect(() => {
-    const firstVoiceChannelId = String(voiceChannels?.[0]?.id || "").trim();
-    if (!firstVoiceChannelId) {
-      return;
-    }
-
-    prewarmVoiceChannel(firstVoiceChannelId);
-  }, [prewarmVoiceChannel, voiceChannels]);
 
   return {
     prewarmVoiceChannel,

@@ -5,9 +5,25 @@ import dns from "node:dns";
 
 dns.setDefaultResultOrder("ipv4first");
 
+const DEV_RENDERER_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;";
+const PROD_RENDERER_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;";
+
 export default defineConfig(({ command }) => ({
   base: "/",
-  plugins: [react(), command === "serve" ? basicSsl() : null].filter(Boolean),
+  plugins: [
+    react(),
+    {
+      name: "tend-renderer-csp",
+      transformIndexHtml(html) {
+        const csp = command === "serve" ? DEV_RENDERER_CSP : PROD_RENDERER_CSP;
+        return html.replace(
+          /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")[^"]*("\s*\/>)/i,
+          `$1${csp}$2`
+        );
+      },
+    },
+    command === "serve" ? basicSsl() : null,
+  ].filter(Boolean),
   build: {
     // The RNNoise bundle is an intentionally isolated optional chunk.
     // Raise the generic warning threshold so regular builds stay signal-rich.

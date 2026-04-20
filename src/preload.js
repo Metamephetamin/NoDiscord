@@ -7,7 +7,21 @@ const DEFAULT_PACKAGED_LIVEKIT_URL = "wss://tendsec.ru/livekit";
 const DEFAULT_APP_PROTOCOL = "nodiscord";
 
 function isPackagedRuntime() {
-  return process.defaultApp !== true;
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  if (nodeEnv === "development") {
+    return false;
+  }
+
+  if (process.defaultApp === true) {
+    return false;
+  }
+
+  const normalizedExecPath = String(process.execPath || "").replace(/\\/g, "/").toLowerCase();
+  if (normalizedExecPath.includes("/node_modules/electron/dist/")) {
+    return false;
+  }
+
+  return true;
 }
 
 function normalizeIceServers(value) {

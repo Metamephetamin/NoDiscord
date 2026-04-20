@@ -29,7 +29,7 @@ public sealed class MediaRenderController : ControllerBase
         [FromQuery] int? w,
         [FromQuery] int? h,
         [FromQuery] string? fit,
-        [FromQuery] bool animated = true,
+        [FromQuery] string? animated,
         CancellationToken cancellationToken = default)
     {
         if (!TryResolveAllowedAsset(src, out var filePath, out var extension))
@@ -76,7 +76,7 @@ public sealed class MediaRenderController : ControllerBase
         });
 
         var outputStream = new MemoryStream();
-        var preserveAnimatedGif = animated && string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase);
+        var preserveAnimatedGif = ParseAnimatedFlag(animated) && string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase);
 
         if (preserveAnimatedGif)
         {
@@ -140,6 +140,7 @@ public sealed class MediaRenderController : ControllerBase
             ("/profile-backgrounds/", _uploadStoragePaths.ResolveDirectory("profile-backgrounds")),
             ("/api/profile-backgrounds/", _uploadStoragePaths.ResolveDirectory("profile-backgrounds")),
             ("/server-icons/", _uploadStoragePaths.ResolveDirectory("server-icons")),
+            ("/chat-files/", _uploadStoragePaths.ResolveDirectory("chat-files")),
         };
 
         foreach (var mapping in mappings)
@@ -181,5 +182,31 @@ public sealed class MediaRenderController : ControllerBase
         }
 
         return normalizedSource.Split('?', 2, StringSplitOptions.TrimEntries)[0];
+    }
+
+    private static bool ParseAnimatedFlag(string? rawAnimated)
+    {
+        if (string.IsNullOrWhiteSpace(rawAnimated))
+        {
+            return true;
+        }
+
+        var normalizedValue = rawAnimated.Trim();
+        if (string.Equals(normalizedValue, "1", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(normalizedValue, "0", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (bool.TryParse(normalizedValue, out var parsedValue))
+        {
+            return parsedValue;
+        }
+
+        return true;
     }
 }

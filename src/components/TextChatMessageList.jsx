@@ -6,7 +6,7 @@ import useMobileLongPress from "../hooks/useMobileLongPress";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { segmentMessageTextByMentions } from "../utils/messageMentions";
-import { DEFAULT_SERVER_ICON, resolveMediaUrl } from "../utils/media";
+import { DEFAULT_SERVER_ICON, resolveMediaUrl, resolveOptimizedMediaUrl } from "../utils/media";
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
@@ -46,8 +46,34 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
     }));
 
 const DOCUMENT_IMAGE_EXTENSION_PATTERN = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:[?#].*)?$/i;
+const DOCUMENT_VIDEO_EXTENSION_PATTERN = /\.(?:m4v|mov|mp4|ogv|webm)(?:[?#].*)?$/i;
 const PRIORITY_MEDIA_MESSAGE_COUNT = 0;
+const MEDIA_PREFETCH_MESSAGE_BUFFER = 4;
+const MEDIA_PREFETCH_IMAGE_LIMIT = 4;
 const EMOJI_ONLY_MESSAGE_PATTERN = /^(?:(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\u200d|\ufe0f|\s))+$/u;
+const prefetchedFeedImageUrls = new Set();
+
+function isPrefetchableFeedImage(attachmentItem) {
+  const contentType = String(attachmentItem?.attachmentContentType || "").toLowerCase();
+  if (contentType.startsWith("image/")) {
+    return true;
+  }
+
+  return isImageLikeDocumentAttachment(attachmentItem);
+}
+
+function preloadFeedImageUrl(url) {
+  const normalizedUrl = String(url || "").trim();
+  if (!normalizedUrl || prefetchedFeedImageUrls.has(normalizedUrl)) {
+    return;
+  }
+
+  prefetchedFeedImageUrls.add(normalizedUrl);
+  const image = new Image();
+  image.decoding = "async";
+  image.fetchPriority = "low";
+  image.src = normalizedUrl;
+}
 
 function isImageLikeDocumentAttachment(attachmentItem) {
   const contentType = String(attachmentItem?.attachmentContentType || "").toLowerCase();
@@ -58,6 +84,17 @@ function isImageLikeDocumentAttachment(attachmentItem) {
   const attachmentName = String(attachmentItem?.attachmentName || "");
   const attachmentUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "");
   return DOCUMENT_IMAGE_EXTENSION_PATTERN.test(attachmentName) || DOCUMENT_IMAGE_EXTENSION_PATTERN.test(attachmentUrl);
+}
+
+function isVideoLikeAttachment(attachmentItem) {
+  const contentType = String(attachmentItem?.attachmentContentType || "").toLowerCase();
+  if (contentType.startsWith("video/")) {
+    return true;
+  }
+
+  const attachmentName = String(attachmentItem?.attachmentName || "");
+  const attachmentUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "");
+  return DOCUMENT_VIDEO_EXTENSION_PATTERN.test(attachmentName) || DOCUMENT_VIDEO_EXTENSION_PATTERN.test(attachmentUrl);
 }
 
 function normalizeRoleName(role) {
@@ -121,61 +158,252 @@ function MessageTimestamp({ messageItem }) {
   );
 }
 
-function LocalEchoMediaOverlay({ attachmentItem, onCancel }) {
+function getLocalEchoUploadStatusLabel(status) {
+  const normalizedStatus = String(status || "uploading").trim();
+  if (normalizedStatus === "pending") {
+    return "Ожидание";
+  }
+  if (normalizedStatus === "preparing") {
+    return "Подготовка";
+  }
+  if (normalizedStatus === "processing") {
+    return "Обработка";
+  }
+  if (normalizedStatus === "sent") {
+    return "Отправлено";
+  }
+  if (normalizedStatus === "failed") {
+    return "Ошибка";
+  }
+  if (normalizedStatus === "canceled") {
+    return "Отменено";
+  }
+
+  return "Загрузка";
+}
+
+function LocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) {
   const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
   const normalizedStatus = String(attachmentItem?.localEchoStatus || "uploading").trim();
   const attachmentSize = Math.max(0, Number(attachmentItem?.attachmentSize) || 0);
-  const uploadedBytes = attachmentSize > 0
-    ? Math.min(attachmentSize, Math.round((attachmentSize * normalizedProgress) / 100))
-    : 0;
-  const resolvedStatusLabel = normalizedStatus === "preparing"
-    ? "Подготовка"
-    : normalizedStatus === "processing"
-      ? "Обработка"
-      : "Загрузка";
+  const uploadedBytes = Math.max(
+    0,
+    Number(attachmentItem?.localEchoUploadedBytes) || (
+      attachmentSize > 0 ? Math.min(attachmentSize, Math.round((attachmentSize * normalizedProgress) / 100)) : 0
+    )
+  );
+  const isTerminalFailureState = normalizedStatus === "failed" || normalizedStatus === "canceled";
+  const resolvedStatusLabel = getLocalEchoUploadStatusLabel(normalizedStatus);
   const progressLabel = attachmentSize > 0
     ? `${formatFileSize(uploadedBytes)} / ${formatFileSize(attachmentSize)}`
     : `${normalizedProgress}%`;
-  const statusLabelUnused = normalizedStatus === "preparing"
-    ? "Подготовка"
-    : normalizedStatus === "processing"
-      ? "Обработка"
-      : "Загрузка";
 
   return (
     <span className="message-media__upload-overlay">
       <span className="message-media__upload-progress-chip">
-        {progressLabel}
+        {isTerminalFailureState ? (attachmentItem?.localEchoError || resolvedStatusLabel) : progressLabel}
       </span>
-      <span
-        className="message-media__upload-cancel"
-        role="button"
-        tabIndex={0}
-        aria-label="Отменить загрузку"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onCancel?.();
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") {
-            return;
-          }
+      {isTerminalFailureState ? (
+        <span className="message-media__upload-actions">
+          <span
+            className="message-media__upload-cancel"
+            role="button"
+            tabIndex={0}
+            aria-label="Повторить загрузку"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRetry?.();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
 
-          event.preventDefault();
-          event.stopPropagation();
-          onCancel?.();
-        }}
-      >
-        <span className="message-media__upload-cancel-icon" aria-hidden="true" />
-      </span>
+              event.preventDefault();
+              event.stopPropagation();
+              onRetry?.();
+            }}
+          >
+            ↻
+          </span>
+          <span
+            className="message-media__upload-cancel"
+            role="button"
+            tabIndex={0}
+            aria-label="Убрать загрузку"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRemove?.();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
+
+              event.preventDefault();
+              event.stopPropagation();
+              onRemove?.();
+            }}
+          >
+            <span className="message-media__upload-cancel-icon" aria-hidden="true" />
+          </span>
+        </span>
+      ) : normalizedStatus === "sent" ? null : (
+        <span
+          className="message-media__upload-cancel"
+          role="button"
+          tabIndex={0}
+          aria-label="Отменить загрузку"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onCancel?.();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            onCancel?.();
+          }}
+        >
+          <span className="message-media__upload-cancel-icon" aria-hidden="true" />
+        </span>
+      )}
       <span className="message-media__upload-footer">
-        <span className="message-media__upload-status">{resolvedStatusLabel || statusLabelUnused}</span>
+        <span className="message-media__upload-status">{resolvedStatusLabel}</span>
         <span className="message-media__upload-progress-value">{normalizedProgress}%</span>
       </span>
     </span>
   );
 }
+
+function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) {
+  const normalizedStatus = String(attachmentItem?.localEchoStatus || "pending").trim();
+  const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
+  const totalBytes = Math.max(0, Number(attachmentItem?.localEchoTotalBytes || attachmentItem?.attachmentSize) || 0);
+  const uploadedBytes = Math.max(
+    0,
+    Number(attachmentItem?.localEchoUploadedBytes) || (
+      totalBytes > 0 ? Math.round((totalBytes * normalizedProgress) / 100) : 0
+    )
+  );
+  const isTerminalFailureState = normalizedStatus === "failed" || normalizedStatus === "canceled";
+  const statusLabel = getLocalEchoUploadStatusLabel(normalizedStatus);
+  const progressLabel = totalBytes > 0
+    ? `${formatFileSize(uploadedBytes)} / ${formatFileSize(totalBytes)}`
+    : `${normalizedProgress}%`;
+
+  return (
+    <>
+      <span className="message-attachment__size">
+        {isTerminalFailureState ? (attachmentItem?.localEchoError || statusLabel) : progressLabel}
+      </span>
+      <span className="message-attachment__open-with">{statusLabel}</span>
+      <span className="message-attachment__local-echo-actions">
+        {isTerminalFailureState ? (
+          <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRetry?.();
+          }}>
+            Повторить
+          </button>
+        ) : normalizedStatus === "sent" ? null : (
+          <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onCancel?.();
+          }}>
+            Отмена
+          </button>
+        )}
+        <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove?.();
+        }}>
+          Убрать
+        </button>
+      </span>
+    </>
+  );
+}
+
+const MESSAGE_MEDIA_FALLBACK_SIZE = 1024;
+
+const MessageMediaImage = memo(function MessageMediaImage({
+  attachmentItem,
+  alt = "image",
+  className = "message-media__image",
+  priorityMedia = false,
+}) {
+  const directSourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const sourceCandidates = useMemo(() => {
+    const sourceUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "").trim();
+    const candidates = [];
+    const isLocalPreview = /^(?:blob:|data:|file:)/i.test(directSourceUrl);
+
+    if (sourceUrl && !isLocalPreview) {
+      const optimizedUrl = resolveOptimizedMediaUrl(sourceUrl, {
+        width: MESSAGE_MEDIA_FALLBACK_SIZE,
+        height: MESSAGE_MEDIA_FALLBACK_SIZE,
+        fit: "contain",
+        animated: true,
+      });
+      if (optimizedUrl && optimizedUrl !== sourceUrl && optimizedUrl !== directSourceUrl) {
+        candidates.push(optimizedUrl);
+      }
+    }
+
+    if (directSourceUrl) {
+      candidates.push(directSourceUrl);
+    }
+
+    if (!candidates.length && sourceUrl) {
+      candidates.push(sourceUrl);
+    }
+
+    return Array.from(new Set(candidates));
+  }, [attachmentItem?.attachmentSourceUrl, attachmentItem?.attachmentUrl, directSourceUrl]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [isUnavailable, setIsUnavailable] = useState(false);
+  const resolvedSourceUrl = sourceCandidates[sourceIndex] || "";
+
+  const handleError = useCallback(() => {
+    if (sourceIndex < sourceCandidates.length - 1) {
+      setSourceIndex((currentIndex) => Math.min(currentIndex + 1, sourceCandidates.length - 1));
+      return;
+    }
+
+    setIsUnavailable(true);
+  }, [sourceCandidates.length, sourceIndex]);
+
+  if (!resolvedSourceUrl || isUnavailable) {
+    return (
+      <span className="message-media__fallback" aria-label="Изображение недоступно">
+        Не удалось загрузить фото
+      </span>
+    );
+  }
+
+  return (
+    <img
+      className={className}
+      src={resolvedSourceUrl}
+      alt={alt}
+      loading={priorityMedia ? "eager" : "lazy"}
+      decoding="async"
+      fetchPriority={priorityMedia ? "auto" : "low"}
+      draggable={false}
+      onError={handleError}
+    />
+  );
+});
 
 function MessageMediaOverlayFooter({ messageItem, isOwnMessage }) {
   return (
@@ -608,6 +836,8 @@ function MessageAttachmentCard({
   onToggleSelection,
   onOpenMediaPreview,
   onCancelLocalEchoUpload,
+  onRetryLocalEchoUpload,
+  onRemoveLocalEchoUpload,
   priorityMedia = false,
 }) {
   const openAttachmentMediaPreview = () => {
@@ -687,19 +917,19 @@ function MessageAttachmentCard({
           onClick={handlePreviewClick}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
-          <img
+          <MessageMediaImage
+            key={`${attachmentItem.cacheKey || attachmentItem.attachmentIndex || 0}:${attachmentItem.attachmentUrl || attachmentItem.attachmentSourceUrl || ""}`}
             className="message-media__image"
-            src={attachmentItem.attachmentUrl}
+            attachmentItem={attachmentItem}
             alt={attachmentItem.attachmentName || "image"}
-            loading="lazy"
-            decoding="async"
-            fetchPriority={priorityMedia ? "auto" : "low"}
-            draggable={false}
+            priorityMedia={priorityMedia}
           />
           {showLocalEchoOverlay ? (
             <LocalEchoMediaOverlay
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(attachmentItem?.sourcePendingUploadId)}
+              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+              onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
+              onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
           ) : null}
         </button>
@@ -718,7 +948,9 @@ function MessageAttachmentCard({
           {showLocalEchoOverlay ? (
             <LocalEchoMediaOverlay
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(attachmentItem?.sourcePendingUploadId)}
+              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+              onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
+              onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
           ) : <span className="message-media__play" aria-hidden="true" />}
         </button>
@@ -753,8 +985,19 @@ function MessageAttachmentCard({
         )}
         <span className="message-attachment__meta">
           <span className="message-attachment__name">{attachmentItem.attachmentName || "Файл"}</span>
-          <span className="message-attachment__size">{formatFileSize(attachmentItem.attachmentSize)}</span>
-          {isDocumentAttachment ? <span className="message-attachment__open-with">OPEN WITH</span> : null}
+          {showLocalEchoOverlay ? (
+            <LocalEchoDocumentMeta
+              attachmentItem={attachmentItem}
+              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+              onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
+              onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
+            />
+          ) : (
+            <>
+              <span className="message-attachment__size">{formatFileSize(attachmentItem.attachmentSize)}</span>
+              {isDocumentAttachment ? <span className="message-attachment__open-with">OPEN WITH</span> : null}
+            </>
+          )}
         </span>
       </a>
     );
@@ -788,44 +1031,11 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     priorityMediaMessageIdSet,
   } = props;
   const isPriorityMediaMessage = priorityMediaMessageIdSet?.has(String(messageItem?.id || ""));
-
-  if (!attachments.length) {
-    return null;
-  }
-
-  if (attachments.length === 1) {
-    if (mediaOverlayFooter) {
-      return (
-        <div className="message-attachments-stack message-attachments-stack--single message-attachments-stack--with-overlay">
-          <div className="message-media-overlay-anchor">
-            <div className="message-attachment-single">
-              <MessageAttachmentCard
-                {...props}
-                attachmentItem={attachments[0]}
-                galleryAttachments={galleryAttachments}
-                priorityMedia={isPriorityMediaMessage}
-              />
-            </div>
-            {mediaOverlayFooter}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <MessageAttachmentCard
-        {...props}
-        attachmentItem={attachments[0]}
-        galleryAttachments={galleryAttachments}
-        priorityMedia={isPriorityMediaMessage}
-      />
-    );
-  }
-
-  const visualAttachments = attachments.filter((attachmentItem) => (
+  const attachmentList = Array.isArray(attachments) ? attachments : [];
+  const visualAttachments = attachmentList.filter((attachmentItem) => (
     !attachmentItem.attachmentAsFile && (attachmentItem.isVoice || attachmentItem.isImage || attachmentItem.isVideo)
   ));
-  const fileAttachments = attachments.filter((attachmentItem) => (
+  const fileAttachments = attachmentList.filter((attachmentItem) => (
     Boolean(attachmentItem.attachmentAsFile) || (!attachmentItem.isVoice && !attachmentItem.isImage && !attachmentItem.isVideo)
   ));
   const featureStackCount = (
@@ -850,6 +1060,39 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
+
+  if (!attachmentList.length) {
+    return null;
+  }
+
+  if (attachmentList.length === 1) {
+    if (mediaOverlayFooter) {
+      return (
+        <div className="message-attachments-stack message-attachments-stack--single message-attachments-stack--with-overlay">
+          <div className="message-media-overlay-anchor">
+            <div className="message-attachment-single">
+              <MessageAttachmentCard
+                {...props}
+                attachmentItem={attachmentList[0]}
+                galleryAttachments={galleryAttachments}
+                priorityMedia={isPriorityMediaMessage}
+              />
+            </div>
+            {mediaOverlayFooter}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <MessageAttachmentCard
+        {...props}
+        attachmentItem={attachmentList[0]}
+        galleryAttachments={galleryAttachments}
+        priorityMedia={isPriorityMediaMessage}
+      />
+    );
+  }
 
   return (
     <div className={`message-attachments-stack ${mediaOverlayFooter ? "message-attachments-stack--with-overlay" : ""}`}>
@@ -930,6 +1173,8 @@ function TextChatMessageList({
   onToggleReaction,
   onJumpToReply,
   onCancelLocalEchoUpload,
+  onRetryLocalEchoUpload,
+  onRemoveLocalEchoUpload,
 }) {
   const messageLongPress = useMobileLongPress();
   const avatarLongPress = useMobileLongPress();
@@ -989,8 +1234,17 @@ function TextChatMessageList({
         const attachmentSize = attachmentView?.size || attachmentItem.attachmentSize || null;
         const voiceMessage = normalizeVoiceMessageMetadata(attachmentItem.voiceMessage);
         const attachmentAsFile = Boolean(attachmentItem.attachmentAsFile);
-        const isImageContent = String(attachmentContentType).startsWith("image/");
-        const isVideoContent = String(attachmentContentType).startsWith("video/");
+        const mediaTypeAttachment = {
+          ...attachmentItem,
+          attachmentName,
+          attachmentUrl,
+          attachmentSourceUrl: attachmentItem.attachmentUrl
+            ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+            : attachmentUrl,
+          attachmentContentType,
+        };
+        const isImageContent = isImageLikeDocumentAttachment(mediaTypeAttachment);
+        const isVideoContent = isVideoLikeAttachment(mediaTypeAttachment);
 
         return {
           ...attachmentItem,
@@ -1073,6 +1327,74 @@ function TextChatMessageList({
 
     return priorityIds;
   }, [renderedAttachmentsByMessageId, visibleMessages]);
+
+  const mediaPrefetchUrls = useMemo(() => {
+    const startIndex = Math.max(0, (Number(visibleStartIndex) || 0) - MEDIA_PREFETCH_MESSAGE_BUFFER);
+    const endIndex = Math.min(
+      messages.length,
+      (Number(visibleStartIndex) || 0) + visibleMessages.length + MEDIA_PREFETCH_MESSAGE_BUFFER
+    );
+    const seenUrls = new Set();
+    const urls = [];
+
+    for (let index = startIndex; index < endIndex; index += 1) {
+      const attachments = getNormalizedMessageAttachments(messages[index]);
+      attachments.forEach((attachmentItem) => {
+        if (!attachmentItem?.attachmentUrl || attachmentItem?.attachmentEncryption || !isPrefetchableFeedImage(attachmentItem)) {
+          return;
+        }
+
+        const resolvedUrl = resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl);
+        const nextUrl = resolveOptimizedMediaUrl(resolvedUrl, {
+          width: MESSAGE_MEDIA_FALLBACK_SIZE,
+          height: MESSAGE_MEDIA_FALLBACK_SIZE,
+          fit: "contain",
+          animated: true,
+        }) || resolvedUrl;
+        if (!nextUrl || seenUrls.has(nextUrl)) {
+          return;
+        }
+
+        seenUrls.add(nextUrl);
+        urls.push(nextUrl);
+      });
+    }
+
+    return urls.slice(0, MEDIA_PREFETCH_IMAGE_LIMIT);
+  }, [messages, visibleMessages.length, visibleStartIndex]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !mediaPrefetchUrls.length) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let idleCallbackId = 0;
+    let timeoutId = 0;
+    const runPreload = () => {
+      if (cancelled) {
+        return;
+      }
+
+      mediaPrefetchUrls.forEach(preloadFeedImageUrl);
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      idleCallbackId = window.requestIdleCallback(runPreload, { timeout: 600 });
+    } else {
+      timeoutId = window.setTimeout(runPreload, 120);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleCallbackId && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [mediaPrefetchUrls]);
 
   return (
     <div className="messages-list-shell">

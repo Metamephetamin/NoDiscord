@@ -12,7 +12,21 @@ const electronRuntime =
     ? window.electronRuntime
     : {};
 
+function isTrustedLocalHost(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  return normalizedValue === "localhost" || normalizedValue === "127.0.0.1";
+}
+
 const resolveDefaultApiUrl = () => {
+  if (
+    !electronRuntime.isPackagedApp
+    && typeof window !== "undefined"
+    && /^https?:$/i.test(String(window.location?.protocol || ""))
+    && isTrustedLocalHost(window.location?.hostname)
+  ) {
+    return String(window.location.origin || "").trim();
+  }
+
   if (electronRuntime.apiUrl) {
     return String(electronRuntime.apiUrl).trim();
   }

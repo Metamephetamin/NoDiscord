@@ -192,6 +192,7 @@ public static class DatabaseSchemaInitializer
                 ALTER COLUMN photourl DROP NOT NULL;
 
             CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_timestamp ON chatmessages (channelid, timestamp);
+            CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_id ON chatmessages (channelid, id);
             CREATE INDEX IF NOT EXISTS ix_chatmessages_timestamp ON chatmessages (timestamp);
             CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_read_at ON chatmessages (channelid, read_at);
             DROP INDEX IF EXISTS "IX_users_email";

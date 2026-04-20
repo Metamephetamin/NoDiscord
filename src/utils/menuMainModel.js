@@ -1,5 +1,6 @@
 ﻿import { DEFAULT_SERVER_ICON, resolveStaticAssetUrl } from "./media";
 import { normalizeMediaFrame, parseMediaFrame } from "./mediaFrames";
+import { API_URL } from "../config/runtime";
 import { getStoredUser } from "./auth";
 export const SERVERS_STORAGE_KEY = "nd_servers_v2";
 export const ACTIVE_SERVER_STORAGE_KEY = "nd_active_server_id";
@@ -248,9 +249,29 @@ export const sanitizeScopeFragment = (value) =>
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "") || "guest";
+const getApiStorageScope = () => {
+  try {
+    const parsed = new URL(String(API_URL || "").trim());
+    return sanitizeScopeFragment(parsed.origin);
+  } catch {
+    return sanitizeScopeFragment(API_URL || "default");
+  }
+};
+export const getScopedUserStorageScope = (user) => `${getApiStorageScope()}:${getUserStorageScope(user)}`;
 export const isReservedDefaultServerId = (serverId) => /^server-main(?:-|$)/.test(String(serverId || ""));
 export const getScopedDefaultServerId = (user) =>
   `server-main-${sanitizeScopeFragment(getUserStorageScope(user))}`;
+
+const stripLegacyApiScopePrefix = (value) => {
+  const normalizedValue = String(value || "").trim();
+  const apiScopePrefix = `${getApiStorageScope()}-`;
+  if (!normalizedValue || !normalizedValue.toLowerCase().startsWith(apiScopePrefix.toLowerCase())) {
+    return normalizedValue;
+  }
+
+  return normalizedValue.slice(apiScopePrefix.length);
+};
+
 export const getScopedPrivateServerId = (serverId, user) => {
   const scope = sanitizeScopeFragment(getUserStorageScope(user));
   const normalizedServerId = String(serverId || "").trim();
@@ -259,9 +280,13 @@ export const getScopedPrivateServerId = (serverId, user) => {
     return normalizedServerId;
   }
 
-  const rawSuffix = String(serverId || createId("server"))
+  let rawSuffix = String(serverId || createId("server"))
     .replace(/^server-main-?/i, "")
     .replace(/^server-?/i, "");
+  rawSuffix = stripLegacyApiScopePrefix(rawSuffix);
+  if (rawSuffix.toLowerCase().startsWith(`${scope}-`.toLowerCase())) {
+    rawSuffix = rawSuffix.slice(scope.length + 1);
+  }
   const suffix = sanitizeScopeFragment(rawSuffix);
   return `server-${scope}-${suffix}`;
 };
@@ -287,17 +312,17 @@ export const getCanonicalSharedServerId = (serverId, ownerUserId) => {
   const suffix = normalizedServerId.slice(scopedPrefix.length).trim();
   return suffix ? `server-${suffix}` : normalizedServerId;
 };
-export const getNoiseSuppressionStorageKey = (user) => `${NOISE_SUPPRESSION_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getEchoCancellationStorageKey = (user) => `${ECHO_CANCELLATION_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getDirectNotificationsStorageKey = (user) => `${DIRECT_NOTIFICATIONS_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getServerNotificationsStorageKey = (user) => `${SERVER_NOTIFICATIONS_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getNotificationSoundEnabledStorageKey = (user) => `${NOTIFICATION_SOUND_ENABLED_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getNotificationSoundStorageKey = (user) => `${NOTIFICATION_SOUND_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getNotificationSoundCustomDataStorageKey = (user) => `${NOTIFICATION_SOUND_CUSTOM_DATA_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getNotificationSoundCustomNameStorageKey = (user) => `${NOTIFICATION_SOUND_CUSTOM_NAME_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getAudioInputDeviceStorageKey = (user) => `${AUDIO_INPUT_DEVICE_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getAudioOutputDeviceStorageKey = (user) => `${AUDIO_OUTPUT_DEVICE_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getVideoInputDeviceStorageKey = (user) => `${VIDEO_INPUT_DEVICE_STORAGE_KEY}:${getUserStorageScope(user)}`;
+export const getNoiseSuppressionStorageKey = (user) => `${NOISE_SUPPRESSION_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getEchoCancellationStorageKey = (user) => `${ECHO_CANCELLATION_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getDirectNotificationsStorageKey = (user) => `${DIRECT_NOTIFICATIONS_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getServerNotificationsStorageKey = (user) => `${SERVER_NOTIFICATIONS_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getNotificationSoundEnabledStorageKey = (user) => `${NOTIFICATION_SOUND_ENABLED_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getNotificationSoundStorageKey = (user) => `${NOTIFICATION_SOUND_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getNotificationSoundCustomDataStorageKey = (user) => `${NOTIFICATION_SOUND_CUSTOM_DATA_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getNotificationSoundCustomNameStorageKey = (user) => `${NOTIFICATION_SOUND_CUSTOM_NAME_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getAudioInputDeviceStorageKey = (user) => `${AUDIO_INPUT_DEVICE_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getAudioOutputDeviceStorageKey = (user) => `${AUDIO_OUTPUT_DEVICE_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getVideoInputDeviceStorageKey = (user) => `${VIDEO_INPUT_DEVICE_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const createDirectToastId = () => `dm-toast-${Math.random().toString(36).slice(2, 10)}`;
 export const createServerToastId = () => `server-toast-${Math.random().toString(36).slice(2, 10)}`;
 export const getMeterActiveBars = (level, total) => {
@@ -548,9 +573,9 @@ export const normalizeServers = (value, currentUser) => {
     return normalizedServers;
   }, []);
 };
-export const getServersStorageKey = (user) => `${SERVERS_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getActiveServerStorageKey = (user) => `${ACTIVE_SERVER_STORAGE_KEY}:${getUserStorageScope(user)}`;
-export const getActiveTextChannelStorageKey = (user) => `${ACTIVE_TEXT_CHANNEL_STORAGE_KEY}:${getUserStorageScope(user)}`;
+export const getServersStorageKey = (user) => `${SERVERS_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getActiveServerStorageKey = (user) => `${ACTIVE_SERVER_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getActiveTextChannelStorageKey = (user) => `${ACTIVE_TEXT_CHANNEL_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const readStoredServers = (user) => {
   try {
     const raw = localStorage.getItem(getServersStorageKey(user));

@@ -32,6 +32,32 @@ const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const MAX_PERF_EVENTS = 500;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
 const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+const PROD_RENDERER_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: http: https:",
+  "media-src 'self' data: blob: http: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' http: https: ws: wss:",
+  "worker-src 'self' blob:",
+].join("; ");
+const DEV_RENDERER_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: http: https:",
+  "media-src 'self' data: blob: http: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' http: https: ws: wss:",
+  "worker-src 'self' blob:",
+].join("; ");
 const attachmentPickerFiles = new Map();
 let attachmentPickerSequence = 0;
 const ATTACHMENT_PICKER_CONTENT_TYPES = {
@@ -1277,6 +1303,55 @@ const requestMediaAccess = async (mediaType) => {
   };
 };
 
+const isRendererMainFrameRequest = (details) => {
+  if (String(details?.resourceType || "") !== "mainFrame") {
+    return false;
+  }
+
+  const requestUrl = String(details?.url || "");
+  if (!requestUrl) {
+    return false;
+  }
+
+  if (requestUrl.startsWith("file://")) {
+    return true;
+  }
+
+  if (!RENDERER_DEV_SERVER_URL) {
+    return false;
+  }
+
+  try {
+    const requestOrigin = new URL(requestUrl).origin;
+    const rendererOrigin = new URL(RENDERER_DEV_SERVER_URL).origin;
+    return requestOrigin === rendererOrigin;
+  } catch {
+    return requestUrl.startsWith(RENDERER_DEV_SERVER_URL);
+  }
+};
+
+const installRendererContentSecurityPolicy = () => {
+  const rendererContentSecurityPolicy = RENDERER_DEV_SERVER_URL
+    ? DEV_RENDERER_CONTENT_SECURITY_POLICY
+    : PROD_RENDERER_CONTENT_SECURITY_POLICY;
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!isRendererMainFrameRequest(details)) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+
+    const responseHeaders = { ...(details.responseHeaders || {}) };
+    Object.keys(responseHeaders).forEach((headerName) => {
+      if (headerName.toLowerCase() === "content-security-policy") {
+        delete responseHeaders[headerName];
+      }
+    });
+    responseHeaders["Content-Security-Policy"] = [rendererContentSecurityPolicy];
+    callback({ responseHeaders });
+  });
+};
+
 const createWindow = () => {
   const createWindowTraceId = startPerfTrace("electron-main", "create-window", {
     devServer: Boolean(RENDERER_DEV_SERVER_URL),
@@ -1389,7 +1464,9 @@ const createWindow = () => {
 
   if (RENDERER_DEV_SERVER_URL) {
     mainWindow.loadURL(RENDERER_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools({ mode: "right" });
+    if (process.env.ND_OPEN_DEVTOOLS === "1") {
+      mainWindow.webContents.openDevTools({ mode: "right" });
+    }
     deliverPendingRendererRoute();
     return;
   }
@@ -1431,6 +1508,7 @@ app.whenReady().then(async () => {
   pendingRendererRoute = parseRendererRouteFromDeepLink(extractDeepLinkFromArgv(process.argv));
   await loadBackgroundPreferences();
   applyLaunchOnStartupPreference();
+  installRendererContentSecurityPolicy();
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     const allowedPermissions = new Set(["media", "display-capture", "microphone", "camera"]);

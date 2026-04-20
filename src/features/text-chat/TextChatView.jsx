@@ -41,6 +41,9 @@ export default function TextChatView(props) {
     openForwardModal,
     clearSelectionMode,
     messages,
+    hasMoreHistory,
+    isLoadingOlderHistory,
+    onLoadOlderHistory,
     visibleMessages,
     visibleStartIndex,
     messagesListRef,
@@ -87,6 +90,8 @@ export default function TextChatView(props) {
     queueFiles,
     removePendingUpload,
     cancelLocalEchoUpload,
+    retryLocalEchoUpload,
+    removeLocalEchoUpload,
     retryPendingUpload,
     clearPendingUploads,
     toggleBatchUploadGrouping,
@@ -181,6 +186,9 @@ export default function TextChatView(props) {
     messageRefs,
     setHighlightedMessageId,
     estimateMessageOffsetById,
+    hasMoreHistory,
+    isLoadingOlderHistory,
+    onLoadOlderHistory,
   });
   const stableScrollToMessage = useStableCallback(scrollToMessage);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -281,6 +289,7 @@ export default function TextChatView(props) {
         />
       ) : null}
       <ChatActionStatus feedback={actionFeedback} />
+      {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
       <ChatNavigationBar
         firstUnreadMessageId={firstUnreadMessageId}
         mentionMessages={mentionMessages}
@@ -329,6 +338,8 @@ export default function TextChatView(props) {
             onToggleReaction={stableHandleToggleReaction}
             onJumpToReply={stableScrollToMessage}
             onCancelLocalEchoUpload={cancelLocalEchoUpload}
+            onRetryLocalEchoUpload={retryLocalEchoUpload}
+            onRemoveLocalEchoUpload={removeLocalEchoUpload}
           />
         </Profiler>
       ) : (
@@ -361,6 +372,8 @@ export default function TextChatView(props) {
           onToggleReaction={stableHandleToggleReaction}
           onJumpToReply={stableScrollToMessage}
           onCancelLocalEchoUpload={cancelLocalEchoUpload}
+          onRetryLocalEchoUpload={retryLocalEchoUpload}
+          onRemoveLocalEchoUpload={removeLocalEchoUpload}
         />
       )}
       {PERF_ENABLED ? (
@@ -478,7 +491,6 @@ export default function TextChatView(props) {
           onSend={send}
         />
       )}
-      {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
       <Suspense fallback={null}>
         <TextChatMediaPreview
           mediaPreview={mediaPreview}

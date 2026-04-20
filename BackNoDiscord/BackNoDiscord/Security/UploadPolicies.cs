@@ -78,7 +78,7 @@ public static class UploadPolicies
 
     public static string SanitizeRelativeAssetUrl(string? value, string expectedPrefix)
     {
-        var sanitized = (value ?? string.Empty).Trim();
+        var sanitized = NormalizeAssetPath(value);
         if (string.IsNullOrWhiteSpace(sanitized) ||
             sanitized.Length > 260 ||
             !sanitized.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase) ||
@@ -88,6 +88,24 @@ public static class UploadPolicies
         }
 
         return sanitized;
+    }
+
+    private static string NormalizeAssetPath(string? value)
+    {
+        var sanitized = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            return string.Empty;
+        }
+
+        if (Uri.TryCreate(sanitized, UriKind.Absolute, out var absoluteUri))
+        {
+            return absoluteUri.AbsolutePath;
+        }
+
+        return sanitized.StartsWith("/", StringComparison.Ordinal)
+            ? sanitized
+            : $"/{sanitized}";
     }
 
     public static string SanitizeDisplayFileName(string? value)

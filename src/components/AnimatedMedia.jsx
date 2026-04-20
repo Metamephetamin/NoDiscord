@@ -6,6 +6,35 @@ import { recordPerfEvent } from "../utils/perf";
 
 let optimizedMediaEndpointDisabled = false;
 const failedOptimizedMediaSourceSet = new Set();
+const MEDIA_SOURCE_FAILURE_COOLDOWN_MS = 60000;
+const failedMediaSourceExpiryMap = new Map();
+
+function getMediaSourceFailureExpiry(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return 0;
+  }
+
+  return Number(failedMediaSourceExpiryMap.get(normalizedValue) || 0);
+}
+
+function markMediaSourceFailed(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return;
+  }
+
+  failedMediaSourceExpiryMap.set(normalizedValue, Date.now() + MEDIA_SOURCE_FAILURE_COOLDOWN_MS);
+}
+
+function clearMediaSourceFailure(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return;
+  }
+
+  failedMediaSourceExpiryMap.delete(normalizedValue);
+}
 
 export default function AnimatedMedia({
   src,
@@ -22,20 +51,23 @@ export default function AnimatedMedia({
   ...rest
 }) {
   const resolvedSrc = useMemo(() => resolveMediaUrl(src, fallback), [fallback, src]);
-  const [failedVideoSrc, setFailedVideoSrc] = useState("");
   const [readyVideoSrc, setReadyVideoSrc] = useState("");
   const readyVideoSrcRef = useRef("");
   const [node, setNode] = useState(null);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [isVisible, setIsVisible] = useState(() => loading === "eager");
   const [failedOptimizedImageSrc, setFailedOptimizedImageSrc] = useState("");
+  const [mediaFailureClock, setMediaFailureClock] = useState(() => Date.now());
+  const [, setMediaFailureVersion] = useState(0);
   const resolvedFallback = resolveMediaUrl(fallback, "");
+  const safeFallbackSrc = resolvedFallback && resolvedFallback !== resolvedSrc ? resolvedFallback : "";
   const normalizedMediaType = String(mediaType || "").toLowerCase().trim();
   const shouldPreferVideo = normalizedMediaType.startsWith("video/");
-  const shouldRenderVideo = allowVideo
-    && (shouldPreferVideo || isVideoAvatarUrl(resolvedSrc))
-    && failedVideoSrc !== resolvedSrc;
-  const hasVisualSource = Boolean(resolvedSrc || resolvedFallback);
+  const isVideoSource = allowVideo
+    && (shouldPreferVideo || isVideoAvatarUrl(resolvedSrc));
+  const failedMediaExpiry = getMediaSourceFailureExpiry(resolvedSrc);
+  const isMediaSourceCoolingDown = failedMediaExpiry > mediaFailureClock;
+  const shouldRenderVideo = isVideoSource && !isMediaSourceCoolingDown;
   const mediaStyle = useMemo(() => getMediaFrameStyle(frame, style), [frame, style]);
   const isVideoReady = readyVideoSrc === resolvedSrc;
   const shouldTrackVisibility = loading !== "eager" && typeof IntersectionObserver === "function";
@@ -43,8 +75,9 @@ export default function AnimatedMedia({
     && !optimizedMediaEndpointDisabled
     && !failedOptimizedMediaSourceSet.has(resolvedSrc)
     && failedOptimizedImageSrc !== resolvedSrc
-    && !shouldRenderVideo;
-  const isAnimatedImage = !shouldRenderVideo && isAnimatedAvatarUrl(resolvedSrc);
+    && !isVideoSource
+    && !isMediaSourceCoolingDown;
+  const isAnimatedImage = !isVideoSource && !isMediaSourceCoolingDown && isAnimatedAvatarUrl(resolvedSrc);
   const targetWidth = Math.max(32, Math.min(512, Math.round((bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
   const targetHeight = Math.max(32, Math.min(512, Math.round((bounds.height || bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
   const optimizedImageSrc = useMemo(
@@ -71,6 +104,18 @@ export default function AnimatedMedia({
     ),
     [resolvedFallback, targetHeight, targetWidth]
   );
+  const imageSrc = useMemo(() => {
+    if (isMediaSourceCoolingDown) {
+      return safeFallbackSrc;
+    }
+
+    if (isVideoSource) {
+      return safeFallbackSrc;
+    }
+
+    return optimizedImageSrc || safeFallbackSrc || resolvedSrc;
+  }, [isMediaSourceCoolingDown, isVideoSource, optimizedImageSrc, resolvedSrc, safeFallbackSrc]);
+  const hasVisualSource = Boolean((shouldRenderVideo ? resolvedSrc : imageSrc) || safeFallbackSrc);
   const mediaDebugPayload = useMemo(() => ({
     src: resolvedSrc,
     className,
@@ -90,11 +135,30 @@ export default function AnimatedMedia({
     readyVideoSrcRef.current = readyVideoSrc;
   }, [readyVideoSrc]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !failedMediaExpiry) {
+      return undefined;
+    }
+
+    const remaining = failedMediaExpiry - Date.now();
+    const timeoutId = window.setTimeout(() => {
+      clearMediaSourceFailure(resolvedSrc);
+      setMediaFailureClock(Date.now());
+      setMediaFailureVersion((current) => current + 1);
+    }, Math.max(0, remaining) + 16);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [failedMediaExpiry, resolvedSrc]);
+
   const markVideoReady = useCallback((action) => {
     if (readyVideoSrcRef.current === resolvedSrc) {
       return;
     }
 
+    clearMediaSourceFailure(resolvedSrc);
+    setMediaFailureClock(Date.now());
     readyVideoSrcRef.current = resolvedSrc;
     setReadyVideoSrc(resolvedSrc);
     recordPerfEvent("media", action, mediaDebugPayload);
@@ -190,11 +254,13 @@ export default function AnimatedMedia({
         onPlaying={() => markVideoReady("animated-media:video-playing")}
         onError={() => {
           recordPerfEvent("media", "animated-media:video-error", mediaDebugPayload);
+          markMediaSourceFailed(resolvedSrc);
+          setMediaFailureClock(Date.now());
           if (readyVideoSrcRef.current === resolvedSrc) {
             readyVideoSrcRef.current = "";
             setReadyVideoSrc("");
           }
-          setFailedVideoSrc(resolvedSrc);
+          setMediaFailureVersion((current) => current + 1);
         }}
       />
     );
@@ -213,12 +279,14 @@ export default function AnimatedMedia({
         WebkitBackfaceVisibility: "hidden",
         ...mediaStyle,
       }}
-      src={optimizedImageSrc || resolvedFallback}
+      src={imageSrc}
       alt={alt}
       draggable={false}
       loading={loading}
       decoding={decoding}
       onLoad={() => {
+        clearMediaSourceFailure(resolvedSrc);
+        setMediaFailureClock(Date.now());
         recordPerfEvent("media", "animated-media:image-loaded", mediaDebugPayload);
       }}
       onError={(event) => {
@@ -227,12 +295,21 @@ export default function AnimatedMedia({
           optimizedMediaEndpointDisabled = true;
           failedOptimizedMediaSourceSet.add(resolvedSrc);
           setFailedOptimizedImageSrc(resolvedSrc);
-          event.currentTarget.src = resolvedSrc;
-          return;
+          if (!isVideoSource && resolvedSrc && event.currentTarget.src !== resolvedSrc) {
+            event.currentTarget.src = resolvedSrc;
+            return;
+          }
         }
 
-        if (resolvedFallback && event.currentTarget.src !== resolvedFallback) {
-          event.currentTarget.src = resolvedFallback;
+        if (resolvedSrc && event.currentTarget.src !== safeFallbackSrc) {
+          markMediaSourceFailed(resolvedSrc);
+          setMediaFailureClock(Date.now());
+          setMediaFailureVersion((current) => current + 1);
+        }
+
+        if (safeFallbackSrc && event.currentTarget.src !== safeFallbackSrc) {
+          event.currentTarget.src = safeFallbackSrc;
+          return;
         }
       }}
     />

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { formatDayLabel } from "../utils/textChatHelpers";
 
 const SCROLL_NEAR_BOTTOM_PX = 32;
+const SCROLL_LOAD_OLDER_THRESHOLD_PX = 180;
 const FLOATING_DATE_PROBE_OFFSET_PX = 24;
 const PROGRAMMATIC_SCROLL_AUTO_RESET_MS = 420;
-const FORCE_LATEST_SCROLL_FRAME_COUNT = 4;
+const FORCE_LATEST_SCROLL_FRAME_COUNT = 3;
+const FORCE_LATEST_SCROLL_SETTLE_MS = 120;
 const TEXT_CHAT_SCROLL_STATE_PREFIX = "textchat-scroll-state";
-const TEXT_CHAT_SCROLL_STATE_ENABLED = true;
+const TEXT_CHAT_SCROLL_STATE_ENABLED = false;
 
 function getTextChatScrollStateKey(userId, channelId) {
   const normalizedUserId = String(userId || "").trim();
@@ -88,6 +90,20 @@ function getTargetScrollTopForBlock(list, targetTop, targetHeight, block = "cent
   return clampScrollTop(list, targetTop - Math.max(0, (list.clientHeight - targetHeight) / 2));
 }
 
+function isOwnOutgoingMessage(messageItem, currentUserId) {
+  if (!messageItem) {
+    return false;
+  }
+
+  if (messageItem.isLocalEcho) {
+    return true;
+  }
+
+  const normalizedCurrentUserId = String(currentUserId || "").trim();
+  return Boolean(normalizedCurrentUserId)
+    && String(messageItem.authorUserId || "").trim() === normalizedCurrentUserId;
+}
+
 export default function useTextChatScrollManager({
   messages,
   visibleMessages = messages,
@@ -98,6 +114,9 @@ export default function useTextChatScrollManager({
   messageRefs,
   setHighlightedMessageId,
   estimateMessageOffsetById,
+  hasMoreHistory = false,
+  isLoadingOlderHistory = false,
+  onLoadOlderHistory,
 }) {
   const [floatingDateLabel, setFloatingDateLabel] = useState("");
   const [pendingNewMessagesCount, setPendingNewMessagesCount] = useState(0);
@@ -107,17 +126,27 @@ export default function useTextChatScrollManager({
   const previousChannelIdRef = useRef("");
   const previousMessageCountRef = useRef(0);
   const previousLatestMessageKeyRef = useRef("");
-  const forcedLatestScrollRafRef = useRef(0);
-  const forcedLatestScrollTimeoutRef = useRef(0);
+  const previousScrollHeightRef = useRef(0);
+  const autoScrollRafRef = useRef(0);
+  const autoScrollSettleTimeoutRef = useRef(0);
   const lastObservedScrollTopRef = useRef(0);
   const nearBottomRef = useRef(true);
   const userDetachedFromBottomRef = useRef(false);
   const jumpSnapshotRef = useRef(null);
+  const pendingPrependSnapshotRef = useRef(null);
   const viewportUpdateRafRef = useRef(0);
   const programmaticScrollResetTimeoutRef = useRef(0);
   const pendingScrollStateWriteTimeoutRef = useRef(0);
   const pendingScrollStatePayloadRef = useRef(null);
   const visibleMessagesRef = useRef(visibleMessages);
+  const loadOlderHistoryRef = useRef(onLoadOlderHistory);
+  const hasMoreHistoryRef = useRef(hasMoreHistory);
+  const isLoadingOlderHistoryRef = useRef(isLoadingOlderHistory);
+  const messagesMetaRef = useRef({
+    channelId: scopedChannelId,
+    count: messages.length,
+    latestMessageKey: "",
+  });
   const initialScrollAppliedRef = useRef(false);
   const scrollStateRef = useRef({
     scrollIntent: "user",
@@ -127,6 +156,21 @@ export default function useTextChatScrollManager({
   useLayoutEffect(() => {
     visibleMessagesRef.current = visibleMessages;
   }, [visibleMessages]);
+
+  useLayoutEffect(() => {
+    const latestMessage = messages[messages.length - 1] || null;
+    messagesMetaRef.current = {
+      channelId: scopedChannelId,
+      count: messages.length,
+      latestMessageKey: latestMessage?.id ? String(latestMessage.id) : "",
+    };
+  }, [messages, scopedChannelId]);
+
+  useLayoutEffect(() => {
+    loadOlderHistoryRef.current = onLoadOlderHistory;
+    hasMoreHistoryRef.current = Boolean(hasMoreHistory);
+    isLoadingOlderHistoryRef.current = Boolean(isLoadingOlderHistory);
+  }, [hasMoreHistory, isLoadingOlderHistory, onLoadOlderHistory]);
 
   const flushPendingScrollStateWrite = useCallback(() => {
     if (pendingScrollStateWriteTimeoutRef.current) {
@@ -341,33 +385,68 @@ export default function useTextChatScrollManager({
     scrollToPosition(list.scrollHeight, { behavior, scrollIntent: "manual-bottom" });
   }, [clearUnreadBelow, messagesListRef, scrollToPosition]);
 
+  const anchorBottomAfterViewportResize = useCallback(() => {
+    const list = messagesListRef.current;
+    if (!list) {
+      return;
+    }
+
+    const nextScrollTop = clampScrollTop(list, list.scrollHeight);
+    if (Math.abs((Number(list.scrollTop) || 0) - nextScrollTop) < 1) {
+      return;
+    }
+
+    setShowJumpToLatestButton(false);
+    clearUnreadBelow();
+    nearBottomRef.current = true;
+    userDetachedFromBottomRef.current = false;
+    scrollStateRef.current = {
+      scrollIntent: "resize-bottom",
+      isProgrammaticScroll: true,
+    };
+    list.scrollTop = nextScrollTop;
+    lastObservedScrollTopRef.current = nextScrollTop;
+    scrollStateRef.current = {
+      scrollIntent: "user",
+      isProgrammaticScroll: false,
+    };
+    scheduleViewportUpdate();
+  }, [clearUnreadBelow, messagesListRef, scheduleViewportUpdate]);
+
   const forceScrollToLatest = useCallback((behavior = "auto") => {
-    if (forcedLatestScrollRafRef.current) {
-      window.cancelAnimationFrame(forcedLatestScrollRafRef.current);
-      forcedLatestScrollRafRef.current = 0;
+    if (autoScrollRafRef.current) {
+      window.cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = 0;
+    }
+    if (autoScrollSettleTimeoutRef.current) {
+      window.clearTimeout(autoScrollSettleTimeoutRef.current);
+      autoScrollSettleTimeoutRef.current = 0;
     }
 
-    if (forcedLatestScrollTimeoutRef.current) {
-      window.clearTimeout(forcedLatestScrollTimeoutRef.current);
-      forcedLatestScrollTimeoutRef.current = 0;
-    }
+    nearBottomRef.current = true;
+    userDetachedFromBottomRef.current = false;
 
-    const scrollFrame = (remainingFrames) => {
-      scrollToLatest(behavior);
-
-      if (remainingFrames <= 0) {
-        forcedLatestScrollRafRef.current = 0;
-        forcedLatestScrollTimeoutRef.current = window.setTimeout(() => {
-          forcedLatestScrollTimeoutRef.current = 0;
-          scrollToLatest("auto");
-        }, 80);
+    let remainingFrames = FORCE_LATEST_SCROLL_FRAME_COUNT;
+    const scrollAfterLayout = () => {
+      autoScrollRafRef.current = 0;
+      if (userDetachedFromBottomRef.current) {
         return;
       }
 
-      forcedLatestScrollRafRef.current = window.requestAnimationFrame(() => scrollFrame(remainingFrames - 1));
+      scrollToLatest(behavior);
+      remainingFrames -= 1;
+      if (remainingFrames > 0) {
+        autoScrollRafRef.current = window.requestAnimationFrame(scrollAfterLayout);
+      }
     };
 
-    scrollFrame(FORCE_LATEST_SCROLL_FRAME_COUNT);
+    autoScrollRafRef.current = window.requestAnimationFrame(scrollAfterLayout);
+    autoScrollSettleTimeoutRef.current = window.setTimeout(() => {
+      autoScrollSettleTimeoutRef.current = 0;
+      if (nearBottomRef.current && !userDetachedFromBottomRef.current) {
+        scrollToLatest("auto");
+      }
+    }, FORCE_LATEST_SCROLL_SETTLE_MS);
   }, [scrollToLatest]);
 
   const captureJumpSnapshot = useCallback(() => {
@@ -448,13 +527,20 @@ export default function useTextChatScrollManager({
       : null;
 
     if (savedScrollState?.anchorMessageId) {
-      scrollToMessage(savedScrollState.anchorMessageId, {
-        behavior: "auto",
-        block: savedScrollState.block === "end" ? "end" : "start",
-        rememberCurrent: false,
-        highlight: false,
-      });
-      return true;
+      if (savedScrollState.block === "end") {
+        scrollToLatest("auto");
+        return true;
+      }
+
+      if (messageRefs.current.has(savedScrollState.anchorMessageId)) {
+        scrollToMessage(savedScrollState.anchorMessageId, {
+          behavior: "auto",
+          block: "start",
+          rememberCurrent: false,
+          highlight: false,
+        });
+        return true;
+      }
     }
 
     scrollToLatest("auto");
@@ -462,6 +548,7 @@ export default function useTextChatScrollManager({
   }, [
     clearUnreadBelow,
     currentUserId,
+    messageRefs,
     messages.length,
     scopedChannelId,
     scrollToLatest,
@@ -496,6 +583,35 @@ export default function useTextChatScrollManager({
     };
   }, [currentUserId, flushPendingScrollStateWrite, isDirectChat, scopedChannelId]);
 
+  useLayoutEffect(() => {
+    const list = messagesListRef.current;
+    if (!list || typeof ResizeObserver !== "function") {
+      return undefined;
+    }
+
+    let previousClientHeight = Math.max(0, Number(list.clientHeight) || 0);
+    const observer = new ResizeObserver(() => {
+      const nextClientHeight = Math.max(0, Number(list.clientHeight) || 0);
+      const heightChanged = Math.abs(nextClientHeight - previousClientHeight) >= 1;
+      previousClientHeight = nextClientHeight;
+
+      if (
+        heightChanged
+        && initialScrollAppliedRef.current
+        && nearBottomRef.current
+        && !userDetachedFromBottomRef.current
+      ) {
+        anchorBottomAfterViewportResize();
+        return;
+      }
+
+      scheduleViewportUpdate();
+    });
+
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [anchorBottomAfterViewportResize, messagesListRef, scheduleViewportUpdate, scopedChannelId]);
+
   useEffect(() => {
     scheduleViewportUpdate();
     const list = messagesListRef.current;
@@ -513,6 +629,37 @@ export default function useTextChatScrollManager({
         }
         lastObservedScrollTopRef.current = nextScrollTop;
         updateNearBottomFromList(list);
+        if (
+          nextScrollTop <= SCROLL_LOAD_OLDER_THRESHOLD_PX
+          && hasMoreHistoryRef.current
+          && !isLoadingOlderHistoryRef.current
+          && typeof loadOlderHistoryRef.current === "function"
+        ) {
+          isLoadingOlderHistoryRef.current = true;
+          pendingPrependSnapshotRef.current = {
+            channelId: scopedChannelId,
+            scrollHeight: Math.max(0, Number(list.scrollHeight) || 0),
+            scrollTop: nextScrollTop,
+            messageCount: messagesMetaRef.current.count,
+            latestMessageKey: messagesMetaRef.current.latestMessageKey,
+          };
+          const loadPromise = loadOlderHistoryRef.current();
+          if (loadPromise && typeof loadPromise.finally === "function") {
+            loadPromise.finally(() => {
+              window.setTimeout(() => {
+                const snapshot = pendingPrependSnapshotRef.current;
+                const currentMeta = messagesMetaRef.current;
+                if (
+                  snapshot
+                  && snapshot.channelId === currentMeta.channelId
+                  && currentMeta.count <= snapshot.messageCount
+                ) {
+                  pendingPrependSnapshotRef.current = null;
+                }
+              }, 0);
+            });
+          }
+        }
       }
       scheduleViewportUpdate();
     };
@@ -567,13 +714,13 @@ export default function useTextChatScrollManager({
         window.clearTimeout(pendingScrollStateWriteTimeoutRef.current);
         pendingScrollStateWriteTimeoutRef.current = 0;
       }
-      if (forcedLatestScrollRafRef.current) {
-        window.cancelAnimationFrame(forcedLatestScrollRafRef.current);
-        forcedLatestScrollRafRef.current = 0;
+      if (autoScrollRafRef.current) {
+        window.cancelAnimationFrame(autoScrollRafRef.current);
+        autoScrollRafRef.current = 0;
       }
-      if (forcedLatestScrollTimeoutRef.current) {
-        window.clearTimeout(forcedLatestScrollTimeoutRef.current);
-        forcedLatestScrollTimeoutRef.current = 0;
+      if (autoScrollSettleTimeoutRef.current) {
+        window.clearTimeout(autoScrollSettleTimeoutRef.current);
+        autoScrollSettleTimeoutRef.current = 0;
       }
     };
   }, [markUserScrollIntent, messagesListRef, scheduleViewportUpdate, updateNearBottomFromList]);
@@ -583,28 +730,33 @@ export default function useTextChatScrollManager({
     if (!list) {
       previousChannelIdRef.current = scopedChannelId;
       previousMessageCountRef.current = messages.length;
+      previousScrollHeightRef.current = 0;
       return;
     }
 
     const channelChanged = previousChannelIdRef.current !== scopedChannelId;
     const previousMessageCount = previousMessageCountRef.current;
+    const previousScrollHeight = previousScrollHeightRef.current || 0;
+    const currentScrollHeight = Math.max(0, Number(list.scrollHeight) || 0);
     const latestMessage = messages[messages.length - 1] || null;
     const latestMessageKey = latestMessage?.id ? String(latestMessage.id) : "";
     const previousLatestMessageKey = previousLatestMessageKeyRef.current;
     const latestMessageChanged = Boolean(latestMessageKey) && latestMessageKey !== previousLatestMessageKey;
-    const latestMessageIsOwn = Boolean(currentUserId)
-      && String(latestMessage?.authorUserId || "") === String(currentUserId || "");
+    const latestMessageIsOwn = isOwnOutgoingMessage(latestMessage, currentUserId);
 
     previousChannelIdRef.current = scopedChannelId;
     previousMessageCountRef.current = messages.length;
     previousLatestMessageKeyRef.current = latestMessageKey;
+    previousScrollHeightRef.current = currentScrollHeight;
 
     if (channelChanged) {
       nearBottomRef.current = true;
       userDetachedFromBottomRef.current = false;
       initialScrollAppliedRef.current = false;
       lastObservedScrollTopRef.current = Math.max(0, list.scrollTop || 0);
+      previousScrollHeightRef.current = Math.max(0, Number(list.scrollHeight) || 0);
       jumpSnapshotRef.current = null;
+      pendingPrependSnapshotRef.current = null;
       window.requestAnimationFrame(() => {
         if (!restoreInitialChannelPosition()) {
           clearUnreadBelow();
@@ -624,13 +776,41 @@ export default function useTextChatScrollManager({
       if (!initialScrollAppliedRef.current) {
         window.requestAnimationFrame(() => {
           restoreInitialChannelPosition();
+          previousScrollHeightRef.current = Math.max(0, Number(list.scrollHeight) || 0);
         });
+        return;
+      }
+
+      const prependSnapshot = pendingPrependSnapshotRef.current;
+      if (
+        prependSnapshot
+        && prependSnapshot.channelId === scopedChannelId
+        && messages.length > prependSnapshot.messageCount
+        && latestMessageKey === prependSnapshot.latestMessageKey
+      ) {
+        const scrollDelta = Math.max(0, currentScrollHeight - prependSnapshot.scrollHeight);
+        list.scrollTop = clampScrollTop(list, prependSnapshot.scrollTop + scrollDelta);
+        lastObservedScrollTopRef.current = Math.max(0, list.scrollTop || 0);
+        pendingPrependSnapshotRef.current = null;
+        scheduleViewportUpdate();
+        return;
+      }
+
+      const olderHistoryPrepended = Boolean(previousLatestMessageKey)
+        && latestMessageKey === previousLatestMessageKey;
+      if (olderHistoryPrepended) {
+        const scrollDelta = Math.max(0, currentScrollHeight - previousScrollHeight);
+        if (scrollDelta > 0) {
+          list.scrollTop = clampScrollTop(list, Math.max(0, Number(list.scrollTop) || 0) + scrollDelta);
+          lastObservedScrollTopRef.current = Math.max(0, list.scrollTop || 0);
+        }
+        scheduleViewportUpdate();
         return;
       }
 
       const newMessages = messages.slice(previousMessageCount);
       const hasOwnNewMessage = newMessages.some(
-        (messageItem) => String(messageItem?.authorUserId || "") === String(currentUserId || "")
+        (messageItem) => isOwnOutgoingMessage(messageItem, currentUserId)
       );
 
       if (hasOwnNewMessage || (nearBottomRef.current && !userDetachedFromBottomRef.current)) {

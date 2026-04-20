@@ -1,15 +1,11 @@
 ﻿import { startTransition, useEffect, useRef } from "react";
 import chatConnection from "../SignalR/ChatConnect";
 import { flushSync } from "react-dom";
-import {
-  prepareOutgoingAttachmentPayload,
-  prepareOutgoingTextPayload,
-} from "../security/chatPayloadCrypto";
+import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
   createPendingUploadPreview,
-  preparePendingUploadForSend,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
@@ -21,20 +17,6 @@ import {
   MESSAGE_SEND_COOLDOWN_MS,
 } from "../utils/textChatModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
-
-const ATTACHMENT_UPLOAD_CONCURRENCY = 2;
-const PROGRESS_UPDATE_MIN_DELTA = 0.04;
-
-function yieldToMainThread() {
-  return new Promise((resolve) => {
-    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-      window.requestAnimationFrame(() => resolve());
-      return;
-    }
-
-    setTimeout(resolve, 16);
-  });
-}
 
 export default function useTextChatSendActions({
   message,
@@ -65,9 +47,7 @@ export default function useTextChatSendActions({
   uploadAttachment,
   sendMessagesCompat,
   playDirectMessageSound,
-  onCreateLocalEchoMessages,
-  onRemoveLocalEchoMessages,
-  onUpdateLocalEchoUploads,
+  startOptimisticAttachmentSend,
 }) {
   const pendingUploadPatchQueueRef = useRef(new Map());
   const pendingUploadPatchFrameRef = useRef(0);
@@ -457,7 +437,6 @@ export default function useTextChatSendActions({
     const avatar = user?.avatarUrl || user?.avatar || "";
     const outgoingMentions = !isDirectChat ? extractMentionsFromText(messageText, serverMembers, serverRoles) : [];
     let activeUploadId = "";
-    let localEchoMessageIds = [];
     let sendSucceeded = false;
     let didResetUiState = false;
     const sendTraceId = startPerfTrace("text-chat", "send-message", {
@@ -484,18 +463,19 @@ export default function useTextChatSendActions({
 
     try {
       setErrorMessage("");
-      const joinTraceId = startPerfTrace("text-chat", "send-message:ensure-channel-joined", {
-        isEditing: Boolean(messageEditState?.messageId),
-      });
-      try {
-        await ensureChannelJoined();
-      } finally {
-        finishPerfTrace(joinTraceId, {
-          isEditing: Boolean(messageEditState?.messageId),
-        });
-      }
 
       if (messageEditState?.messageId) {
+        const joinTraceId = startPerfTrace("text-chat", "send-message:ensure-channel-joined", {
+          isEditing: true,
+        });
+        try {
+          await ensureChannelJoined();
+        } finally {
+          finishPerfTrace(joinTraceId, {
+            isEditing: true,
+          });
+        }
+
         const preparedTextPayload = await prepareOutgoingTextPayload({
           text: messageText,
         });
@@ -521,296 +501,77 @@ export default function useTextChatSendActions({
         return;
       }
 
-      let attachments = [];
-      const shouldGroupItems = !Boolean(batchUploadOptions?.sendAsDocuments) && batchUploadOptions?.groupItems !== false;
-
-      localEchoMessageIds = onCreateLocalEchoMessages?.({
-        messageText,
-        filesToSend,
-        outgoingMentions,
-        replyState,
-        shouldGroupItems,
-      }) || [];
-
-      if (localEchoMessageIds.length) {
-        const resetTraceId = startPerfTrace("text-chat", "send-message:pre-upload-ui-reset", {
-          attachmentCount: filesToSend.length,
-          localEchoCount: localEchoMessageIds.length,
-        });
-        try {
-          postSendResetUiState();
-          didResetUiState = true;
-        } finally {
-          finishPerfTraceOnNextFrame(resetTraceId, {
-            attachmentCount: filesToSend.length,
-            localEchoCount: localEchoMessageIds.length,
-          });
-        }
-      }
-
+      const shouldGroupItems = batchUploadOptions?.groupItems !== false;
       if (filesToSend.length) {
-        const uploadTraceId = startPerfTrace("text-chat", "send-message:upload-attachments", {
-          attachmentCount: filesToSend.length,
-          concurrency: Math.min(ATTACHMENT_UPLOAD_CONCURRENCY, filesToSend.length),
+        const startSucceeded = startOptimisticAttachmentSend?.({
+          channelId: scopedChannelId,
+          avatar,
+          messageText,
+          filesToSend,
+          outgoingMentions,
+          replyState,
+          shouldGroupItems,
+          sendAsDocuments: Boolean(batchUploadOptions?.sendAsDocuments),
         });
-        setUploadingFile(true);
+        if (!startSucceeded) {
+          throw new Error("Не удалось запустить отправку вложений.");
+        }
+      } else {
+        const joinTraceId = startPerfTrace("text-chat", "send-message:ensure-channel-joined", {
+          isEditing: false,
+        });
         try {
-          const uploadAbortControllers = filesToSend.map(() => new AbortController());
-          const attachmentResults = new Array(filesToSend.length);
-          let nextUploadIndex = 0;
-          let capturedUploadFailure = null;
-
-          const processSingleUpload = async (pendingUpload, index) => {
-            const uploadId = String(pendingUpload?.id || "");
-            const uploadAbortController = uploadAbortControllers[index];
-            if (uploadId) {
-              activeUploadId = uploadId;
-              activeUploadAbortControllersRef.current.set(uploadId, uploadAbortController);
-              uploadProgressSnapshotRef.current.set(uploadId, 0.1);
-              onUpdateLocalEchoUploads?.(uploadId, {
-                progress: 2,
-                status: "preparing",
-              });
-              schedulePendingUploadPatch(uploadId, {
-                status: "preparing",
-                progress: 0.1,
-                error: "",
-                retryable: false,
-              });
-            }
-
-            await yieldToMainThread();
-
-            const cachedCompressionMode = uploadId ? preparedUploadModeRef.current.get(uploadId) : "";
-            let fileForUpload =
-              uploadId && cachedCompressionMode === "default"
-                ? preparedUploadFileCacheRef.current.get(uploadId)
-                : null;
-            if (!(fileForUpload instanceof File)) {
-              fileForUpload = await preparePendingUploadForSend(pendingUpload);
-              if (uploadId) {
-                preparedUploadFileCacheRef.current.set(uploadId, fileForUpload);
-                preparedUploadModeRef.current.set(uploadId, "default");
-              }
-            }
-
-            await yieldToMainThread();
-
-            const preparedAttachment = await prepareOutgoingAttachmentPayload({
-              file: fileForUpload,
-            });
-
-            if (uploadId) {
-              uploadProgressSnapshotRef.current.set(uploadId, 0.28);
-              onUpdateLocalEchoUploads?.(uploadId, {
-                progress: 6,
-                status: "uploading",
-              });
-              schedulePendingUploadPatch(uploadId, {
-                status: "uploading",
-                progress: 0.28,
-              });
-            }
-
-            let uploaded;
-            try {
-              uploaded = await uploadAttachment({
-                blob: preparedAttachment.uploadBlob,
-                fileName: preparedAttachment.uploadFileName || fileForUpload.name || pendingUpload.name || `attachment-${Date.now()}-${index}`,
-                signal: uploadAbortController?.signal,
-                onProgress: (progressValue) => {
-                  if (!uploadId) {
-                    return;
-                  }
-
-                  const normalizedProgress = 0.28 + (Math.max(0, Math.min(1, Number(progressValue) || 0)) * 0.68);
-                  const previousProgress = uploadProgressSnapshotRef.current.get(uploadId) || 0;
-                  if (normalizedProgress < 0.96 && normalizedProgress - previousProgress < PROGRESS_UPDATE_MIN_DELTA) {
-                    return;
-                  }
-
-                  uploadProgressSnapshotRef.current.set(uploadId, normalizedProgress);
-                  onUpdateLocalEchoUploads?.(uploadId, {
-                    progress: Math.max(6, Math.round((Math.max(0, Math.min(1, Number(progressValue) || 0))) * 100)),
-                    status: "uploading",
-                  });
-                  schedulePendingUploadPatch(uploadId, {
-                    status: "uploading",
-                    progress: normalizedProgress,
-                  });
-                },
-              });
-            } finally {
-              if (uploadId) {
-                activeUploadAbortControllersRef.current.delete(uploadId);
-              }
-            }
-
-            if (uploadId) {
-              uploadProgressSnapshotRef.current.delete(uploadId);
-              preparedUploadFileCacheRef.current.delete(uploadId);
-              preparedUploadModeRef.current.delete(uploadId);
-              onUpdateLocalEchoUploads?.(uploadId, {
-                progress: 100,
-                status: "processing",
-              });
-              schedulePendingUploadPatch(uploadId, {
-                status: "done",
-                progress: 1,
-                retryable: false,
-              });
-            }
-
-            const shouldTreatAsFile = pendingUpload?.kind === "image"
-              && Boolean(batchUploadOptions?.sendAsDocuments);
-
-            attachmentResults[index] = {
-              fileUrl: uploaded?.fileUrl || null,
-              fileName: uploaded?.fileName || fileForUpload.name || pendingUpload.name || "attachment",
-              size: uploaded?.size || preparedAttachment.uploadBlob.size || null,
-              contentType: uploaded?.contentType || fileForUpload.type || pendingUpload.type || "application/octet-stream",
-              attachmentAsFile: shouldTreatAsFile,
-              attachmentEncryption: null,
-            };
-          };
-
-          const workerCount = Math.min(ATTACHMENT_UPLOAD_CONCURRENCY, filesToSend.length);
-          await Promise.all(Array.from({ length: workerCount }, async () => {
-            while (nextUploadIndex < filesToSend.length && !capturedUploadFailure) {
-              const currentIndex = nextUploadIndex;
-              nextUploadIndex += 1;
-
-              try {
-                await processSingleUpload(filesToSend[currentIndex], currentIndex);
-              } catch (error) {
-                capturedUploadFailure = {
-                  error,
-                  uploadId: String(filesToSend[currentIndex]?.id || ""),
-                  failedIndex: currentIndex,
-                };
-                uploadAbortControllers.forEach((controller, controllerIndex) => {
-                  if (controllerIndex !== currentIndex) {
-                    controller.abort();
-                  }
-                });
-                break;
-              }
-            }
-          }));
-
-          flushPendingUploadPatches();
-
-          if (capturedUploadFailure) {
-            const { error, uploadId, failedIndex } = capturedUploadFailure;
-            activeUploadId = uploadId;
-
-            if (isCancelledPendingUploadError(uploadId, error)) {
-              const cancelledError = new Error("pending-upload-cancelled");
-              cancelledError.code = "PENDING_UPLOAD_CANCELLED";
-              cancelledError.uploadId = uploadId;
-              throw cancelledError;
-            }
-
-            if (uploadId) {
-              schedulePendingUploadPatch(uploadId, {
-                status: "error",
-                progress: 0,
-                error: getChatErrorMessage(error, "Не удалось загрузить вложение."),
-                retryable: true,
-              });
-            }
-
-            filesToSend.forEach((item, itemIndex) => {
-              const itemId = String(item?.id || "");
-              if (!itemId || itemIndex === failedIndex || itemIndex > failedIndex) {
-                return;
-              }
-
-              schedulePendingUploadPatch(itemId, (current) => (
-                current?.status === "done"
-                  ? { ...current, status: "queued", progress: 0 }
-                  : current
-              ));
-            });
-
-            flushPendingUploadPatches();
-            throw error;
-          }
-
-          attachments = attachmentResults.filter(Boolean);
+          await ensureChannelJoined();
         } finally {
-          finishPerfTrace(uploadTraceId, {
-            attachmentCount: filesToSend.length,
-            uploadedCount: attachments.length,
-            concurrency: Math.min(ATTACHMENT_UPLOAD_CONCURRENCY, filesToSend.length),
+          finishPerfTrace(joinTraceId, {
+            isEditing: false,
           });
         }
-      }
 
-      const payload = shouldGroupItems
-        ? [{
-            message: messageText,
-            mentions: outgoingMentions,
-            replyToMessageId: replyState?.messageId || "",
-            replyToUsername: replyState?.username || "",
-            replyPreview: replyState?.preview || "",
-            attachments: attachments.map(buildUploadedAttachmentPayload),
-            attachmentUrl: attachments[0]?.fileUrl || "",
-            attachmentName: attachments[0]?.fileName || "",
-            attachmentSize: attachments[0]?.size || null,
-            attachmentContentType: attachments[0]?.contentType || "",
-            attachmentAsFile: Boolean(attachments[0]?.attachmentAsFile),
-            attachmentEncryption: attachments[0]?.attachmentEncryption || null,
-            voiceMessage: null,
-          }]
-        : attachments.map((attachment, index) => ({
-            message: index === 0 ? messageText : "",
-            mentions: index === 0 ? outgoingMentions : [],
-            replyToMessageId: index === 0 ? (replyState?.messageId || "") : "",
-            replyToUsername: index === 0 ? (replyState?.username || "") : "",
-            replyPreview: index === 0 ? (replyState?.preview || "") : "",
-            attachments: [buildUploadedAttachmentPayload(attachment)],
-            attachmentUrl: attachment.fileUrl || "",
-            attachmentName: attachment.fileName || "",
-            attachmentSize: attachment.size || null,
-            attachmentContentType: attachment.contentType || "",
-            attachmentAsFile: Boolean(attachment.attachmentAsFile),
-            attachmentEncryption: attachment.attachmentEncryption || null,
-            voiceMessage: null,
-          }));
+        const payload = [{
+          message: messageText,
+          mentions: outgoingMentions,
+          replyToMessageId: replyState?.messageId || "",
+          replyToUsername: replyState?.username || "",
+          replyPreview: replyState?.preview || "",
+          attachments: [],
+          attachmentUrl: "",
+          attachmentName: "",
+          attachmentSize: null,
+          attachmentContentType: "",
+          attachmentAsFile: false,
+          attachmentEncryption: null,
+          voiceMessage: null,
+        }];
 
-      const invokeTraceId = startPerfTrace("text-chat", "send-message:invoke-send-message", {
-        payloadCount: payload.length,
-        attachmentCount: attachments.length,
-      });
-      try {
-        await sendMessagesCompat(scopedChannelId, avatar, payload);
-      } finally {
-        finishPerfTrace(invokeTraceId, {
+        const invokeTraceId = startPerfTrace("text-chat", "send-message:invoke-send-message", {
           payloadCount: payload.length,
-          attachmentCount: attachments.length,
+          attachmentCount: 0,
         });
+        try {
+          await sendMessagesCompat(scopedChannelId, avatar, payload);
+        } finally {
+          finishPerfTrace(invokeTraceId, {
+            payloadCount: payload.length,
+            attachmentCount: 0,
+          });
+        }
       }
 
       if (!didResetUiState) {
         const resetTraceId = startPerfTrace("text-chat", "send-message:post-send-ui-reset", {
-          attachmentCount: attachments.length,
+          attachmentCount: filesToSend.length,
         });
         try {
           postSendResetUiState();
         } finally {
           finishPerfTraceOnNextFrame(resetTraceId, {
-            attachmentCount: attachments.length,
+            attachmentCount: filesToSend.length,
           });
         }
       }
       sendSucceeded = true;
-      if (localEchoMessageIds.length) {
-        window.setTimeout(() => {
-          onRemoveLocalEchoMessages?.(localEchoMessageIds);
-        }, 1200);
-      }
-      if (isDirectChat) {
+      if (isDirectChat && !filesToSend.length) {
         playDirectMessageSound("send");
       }
     } catch (error) {
@@ -831,32 +592,7 @@ export default function useTextChatSendActions({
       }
 
       if (!messageEditState) {
-        if (localEchoMessageIds.length) {
-          onRemoveLocalEchoMessages?.(localEchoMessageIds);
-        }
-
-        if (activeUploadId && !wasCancelled) {
-          flushPendingUploadPatches();
-          schedulePendingUploadPatch(activeUploadId, {
-            status: "error",
-            progress: 0,
-            error: getChatErrorMessage(error, "Не удалось загрузить вложение."),
-            retryable: true,
-          });
-        }
-
         if (!wasCancelled) {
-          filesToSend
-            .filter((item) => String(item?.id || "") !== activeUploadId)
-            .forEach((item) => {
-              schedulePendingUploadPatch(item.id, (current) => (
-                current?.status === "done"
-                  ? { ...current, status: "queued", progress: 0 }
-                  : current
-              ));
-            });
-
-          flushPendingUploadPatches();
           joinedChannelRef.current = "";
           setIsChannelReady(false);
         }
@@ -1067,6 +803,8 @@ export default function useTextChatSendActions({
       setErrorMessage("");
     }
 
+    const shouldSendAsDocuments = preferSendAsDocuments || Boolean(batchUploadOptions?.sendAsDocuments);
+
     if (typeof window !== "undefined") {
       window.__TEND_PENDING_UPLOAD_SHEET_TRACE_ID__ = startPerfTrace("text-chat", "batch-upload-sheet:time-to-visible", {
         preferSendAsDocuments,
@@ -1078,11 +816,13 @@ export default function useTextChatSendActions({
     appendPendingFiles(validFiles, { preferSendAsDocuments });
     finishPerfTraceOnNextFrame(queueTraceId, {
       hasOversizedFile,
+      instantOptimisticUpload: false,
       preferSendAsDocuments,
       source,
       success: true,
       validFileCount: validFiles.length,
     });
+    return "queued-preview";
   };
 
   const handleFileChange = (event) => {

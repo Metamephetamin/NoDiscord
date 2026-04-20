@@ -522,9 +522,9 @@ function TextChatBatchUploadSheet({
 
         <div className={`batch-upload-sheet__options ${resolvedFileCount === 1 ? "batch-upload-sheet__options--single" : ""}`}>
           <BatchUploadToggle
-            checked={!sendAsDocumentsEnabled && Boolean(batchOptions.groupItems)}
+            checked={Boolean(batchOptions.groupItems)}
             onChange={onToggleGroupItems}
-            disabled={controlsDisabled || useDocumentLayout}
+            disabled={controlsDisabled}
           >
             Сгруппировать
           </BatchUploadToggle>

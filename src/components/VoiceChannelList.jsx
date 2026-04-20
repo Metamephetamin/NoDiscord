@@ -113,8 +113,16 @@ const VoiceChannelList = ({
                   className="voice-channel__button"
                   onMouseEnter={() => onPrewarmChannel?.(channel.id)}
                   onFocus={() => onPrewarmChannel?.(channel.id)}
-                  onPointerDown={() => onPrewarmChannel?.(channel.id)}
-                  onClick={() => onJoinChannel?.(channel)}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onPrewarmChannel?.(channel.id);
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onJoinChannel?.(channel);
+                  }}
                   disabled={isJoining}
                 >
                   <span className="voice-channel__title">{channel.name}</span>

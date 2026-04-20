@@ -1,11 +1,12 @@
 ﻿import { API_BASE_URL } from "../config/runtime";
-
+import { API_URL } from "../config/runtime";
 import { parseMediaFrame } from "./mediaFrames";
 
 const TOKEN_STORAGE_KEY = "token";
 const USER_STORAGE_KEY = "user";
 const REFRESH_TOKEN_STORAGE_KEY = "refresh_token";
 const ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY = "access_token_expires_at";
+const SESSION_API_URL_STORAGE_KEY = "session_api_url";
 
 export const AUTH_UNAUTHORIZED_EVENT = "nodiscord:auth-unauthorized";
 
@@ -19,6 +20,26 @@ const sessionCache = {
 };
 
 let refreshPromise = null;
+
+function normalizeApiScope(value) {
+  const normalizedValue = normalizeStoredValue(value);
+  if (!normalizedValue) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(normalizedValue);
+    return parsed.origin.toLowerCase();
+  } catch {
+    return normalizedValue.replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+function isLocalApiScope(value) {
+  return /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(normalizeApiScope(value));
+}
+
+const CURRENT_API_SCOPE = normalizeApiScope(API_URL);
 
 function normalizeStoredValue(value) {
   if (typeof value !== "string") {
@@ -65,6 +86,7 @@ function readSessionFromStorage(storage) {
       refreshToken: "",
       accessTokenExpiresAt: "",
       updatedAt: "",
+      apiUrl: "",
     };
   }
 
@@ -76,6 +98,7 @@ function readSessionFromStorage(storage) {
       refreshToken: normalizeStoredValue(storage.getItem(REFRESH_TOKEN_STORAGE_KEY)),
       accessTokenExpiresAt: normalizeStoredValue(storage.getItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY)),
       updatedAt: normalizeSessionUpdatedAt(storage.getItem(`${USER_STORAGE_KEY}_updated_at`)),
+      apiUrl: normalizeApiScope(storage.getItem(SESSION_API_URL_STORAGE_KEY)),
     };
   } catch {
     return {
@@ -84,11 +107,12 @@ function readSessionFromStorage(storage) {
       refreshToken: "",
       accessTokenExpiresAt: "",
       updatedAt: "",
+      apiUrl: "",
     };
   }
 }
 
-function writeSessionToStorage(storage, { user, accessToken, refreshToken, accessTokenExpiresAt, updatedAt }) {
+function writeSessionToStorage(storage, { user, accessToken, refreshToken, accessTokenExpiresAt, updatedAt, apiUrl }) {
   if (!storage) {
     return;
   }
@@ -123,6 +147,12 @@ function writeSessionToStorage(storage, { user, accessToken, refreshToken, acces
     } else {
       storage.removeItem(`${USER_STORAGE_KEY}_updated_at`);
     }
+
+    if (apiUrl) {
+      storage.setItem(SESSION_API_URL_STORAGE_KEY, apiUrl);
+    } else {
+      storage.removeItem(SESSION_API_URL_STORAGE_KEY);
+    }
   } catch {
     // ignore storage failures
   }
@@ -145,6 +175,7 @@ function readLegacySession() {
       accessToken: "",
       refreshToken: "",
       accessTokenExpiresAt: "",
+      apiUrl: "",
       updatedAt: "",
     };
   }
@@ -161,6 +192,7 @@ function clearStorageSession(storage) {
     storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
     storage.removeItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY);
     storage.removeItem(`${USER_STORAGE_KEY}_updated_at`);
+    storage.removeItem(SESSION_API_URL_STORAGE_KEY);
   } catch {
     // ignore storage failures
   }
@@ -210,6 +242,7 @@ function buildSessionPayload(user, tokenOrSession, refreshToken = "", accessToke
       refreshToken: normalizeStoredValue(tokenOrSession.refreshToken),
       accessTokenExpiresAt: normalizeStoredValue(tokenOrSession.accessTokenExpiresAt),
       updatedAt: normalizeSessionUpdatedAt(tokenOrSession.updatedAt) || new Date().toISOString(),
+      apiUrl: normalizeApiScope(tokenOrSession.apiUrl) || CURRENT_API_SCOPE,
     };
   }
 
@@ -219,7 +252,21 @@ function buildSessionPayload(user, tokenOrSession, refreshToken = "", accessToke
     refreshToken: normalizeStoredValue(refreshToken),
     accessTokenExpiresAt: normalizeStoredValue(accessTokenExpiresAt),
     updatedAt: new Date().toISOString(),
+    apiUrl: CURRENT_API_SCOPE,
   };
+}
+
+function shouldDiscardSessionForApiScope(session) {
+  const sessionApiScope = normalizeApiScope(session?.apiUrl);
+  if (!CURRENT_API_SCOPE) {
+    return false;
+  }
+
+  if (isLocalApiScope(CURRENT_API_SCOPE)) {
+    return sessionApiScope !== CURRENT_API_SCOPE;
+  }
+
+  return Boolean(sessionApiScope) && sessionApiScope !== CURRENT_API_SCOPE;
 }
 
 export async function hydrateStoredSession() {
@@ -230,6 +277,7 @@ export async function hydrateStoredSession() {
       refreshToken: sessionCache.refreshToken,
       accessTokenExpiresAt: sessionCache.accessTokenExpiresAt,
       updatedAt: sessionCache.updatedAt,
+      apiUrl: CURRENT_API_SCOPE,
     };
   }
 
@@ -245,6 +293,20 @@ export async function hydrateStoredSession() {
             updatedAt: normalizeSessionUpdatedAt(baseSession.updatedAt) || new Date().toISOString(),
           }
         : baseSession;
+
+    if (shouldDiscardSessionForApiScope(resolvedSession)) {
+      clearTransientSession();
+      clearLegacySession();
+      applySessionCache();
+      return {
+        user: null,
+        accessToken: "",
+        refreshToken: "",
+        accessTokenExpiresAt: "",
+        updatedAt: "",
+        apiUrl: CURRENT_API_SCOPE,
+      };
+    }
 
     applySessionCache(resolvedSession);
     if (legacySession.accessToken || legacySession.user) {
@@ -264,6 +326,7 @@ export async function hydrateStoredSession() {
             refreshToken: normalizeStoredValue(secureSession.refreshToken),
             accessTokenExpiresAt: normalizeStoredValue(secureSession.accessTokenExpiresAt),
             updatedAt: normalizeSessionUpdatedAt(secureSession.updatedAt),
+            apiUrl: normalizeApiScope(secureSession.apiUrl),
           }
         : baseSession;
 
@@ -278,6 +341,18 @@ export async function hydrateStoredSession() {
       ...baseSession,
       updatedAt: normalizeSessionUpdatedAt(baseSession.updatedAt) || new Date(legacyUpdatedAtMs || Date.now()).toISOString(),
     } : normalizedSession;
+
+    if (shouldDiscardSessionForApiScope(resolvedSession)) {
+      await clearStoredSession();
+      return {
+        user: null,
+        accessToken: "",
+        refreshToken: "",
+        accessTokenExpiresAt: "",
+        updatedAt: "",
+        apiUrl: CURRENT_API_SCOPE,
+      };
+    }
 
     applySessionCache(resolvedSession);
 
@@ -294,8 +369,21 @@ export async function hydrateStoredSession() {
       refreshToken: sessionCache.refreshToken,
       accessTokenExpiresAt: sessionCache.accessTokenExpiresAt,
       updatedAt: sessionCache.updatedAt,
+      apiUrl: CURRENT_API_SCOPE,
     };
   } catch {
+    if (shouldDiscardSessionForApiScope(baseSession)) {
+      await clearStoredSession();
+      return {
+        user: null,
+        accessToken: "",
+        refreshToken: "",
+        accessTokenExpiresAt: "",
+        updatedAt: "",
+        apiUrl: CURRENT_API_SCOPE,
+      };
+    }
+
     applySessionCache(baseSession);
     if (legacySession.accessToken || legacySession.user) {
       writeTransientSession(baseSession);

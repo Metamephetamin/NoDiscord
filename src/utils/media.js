@@ -32,6 +32,7 @@ const INTERNAL_MEDIA_PREFIXES = [
   "/profile-backgrounds/",
   "/api/profile-backgrounds/",
   "/server-icons/",
+  "/chat-files/",
 ];
 
 function getInternalMediaPath(value) {
@@ -119,7 +120,7 @@ export function resolveOptimizedMediaUrl(
   params.set("h", String(Math.max(16, Math.min(1024, Math.round(Number(height) || width || 128)))));
   params.set("fit", fit === "contain" ? "contain" : "cover");
   if (!animated) {
-    params.set("animated", "0");
+    params.set("animated", "false");
   }
 
   return `${API_URL}/api/media/render?${params.toString()}`;

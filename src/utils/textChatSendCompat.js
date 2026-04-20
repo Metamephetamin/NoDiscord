@@ -8,7 +8,7 @@ import {
 } from "./textChatModel";
 
 function normalizeHubAttachmentInput(attachment) {
-  const attachmentUrl = attachment?.attachmentUrl || attachment?.AttachmentUrl || "";
+  const attachmentUrl = normalizeChatFileHubUrl(attachment?.attachmentUrl || attachment?.AttachmentUrl || "");
   const attachmentName = attachment?.attachmentName || attachment?.AttachmentName || null;
   const attachmentSize = attachment?.attachmentSize ?? attachment?.AttachmentSize ?? null;
   const attachmentContentType = attachment?.attachmentContentType || attachment?.AttachmentContentType || "";
@@ -34,14 +34,40 @@ function normalizeHubAttachmentInput(attachment) {
   };
 }
 
+function normalizeChatFileHubUrl(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (normalizedValue.startsWith("/chat-files/")) {
+    return normalizedValue;
+  }
+
+  if (normalizedValue.startsWith("chat-files/")) {
+    return `/${normalizedValue}`;
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue);
+    const pathname = String(parsedUrl.pathname || "").trim();
+    return pathname.startsWith("/chat-files/") ? pathname : "";
+  } catch {
+    return "";
+  }
+}
+
 function normalizeHubMessageInput(item) {
   const attachments = Array.isArray(item?.attachments)
     ? item.attachments.map(normalizeHubAttachmentInput)
     : [];
   const attachmentAsFile = Boolean(item?.attachmentAsFile || item?.AttachmentAsFile || attachments[0]?.attachmentAsFile);
+  const clientTempId = String(item?.clientTempId || item?.ClientTempId || "").trim();
 
   return {
     ...item,
+    clientTempId,
+    ClientTempId: clientTempId,
     attachmentAsFile,
     AttachmentAsFile: attachmentAsFile,
     attachments,
@@ -91,9 +117,7 @@ export async function sendMessagesCompat({
     });
     const attachmentList = Array.isArray(item.attachments) ? item.attachments : [];
     const primaryAttachment = attachmentList[0] || null;
-
-    await chatConnection.invoke(
-      "SendMessage",
+    const sendMessageArgs = [
       targetChannelId,
       getUserName(user),
       preparedTextPayload.message,
@@ -111,8 +135,22 @@ export async function sendMessagesCompat({
       item.replyToUsername || null,
       item.replyPreview || null,
       false,
-      Boolean(item.attachmentAsFile || primaryAttachment?.attachmentAsFile)
-    );
+      Boolean(item.attachmentAsFile || primaryAttachment?.attachmentAsFile),
+      item.clientTempId || null,
+    ];
+
+    try {
+      await chatConnection.invoke("SendMessage", ...sendMessageArgs);
+    } catch (error) {
+      const rawMessage = String(error?.message || "");
+      const expectsLegacySignature = rawMessage.includes("provides 19 argument(s) but target expects 18");
+      if (!expectsLegacySignature) {
+        throw error;
+      }
+
+      console.warn("SendMessage legacy signature fallback: backend expects 18 arguments.", error);
+      await chatConnection.invoke("SendMessage", ...sendMessageArgs.slice(0, -1));
+    }
 
     if (index < hubPayload.length - 1) {
       await sleep(COMPAT_FORWARD_DELAY_MS);

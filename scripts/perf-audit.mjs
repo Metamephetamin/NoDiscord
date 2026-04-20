@@ -8,6 +8,13 @@ const repoRoot = path.resolve(__dirname, "..");
 const distAssetsDir = path.join(repoRoot, "dist", "assets");
 const registryPath = path.join(repoRoot, "docs", "performance", "registry.md");
 const reportOutputPath = path.join(repoRoot, ".tmp", "perf-audit-report.json");
+const textChatMessageListPath = path.join(repoRoot, "src", "components", "TextChatMessageList.jsx");
+const textChatVirtualizerPath = path.join(repoRoot, "src", "hooks", "useTextChatVirtualizer.js");
+
+const textChatBudgets = {
+  minVirtualizationThreshold: 50,
+  maxMediaPrefetchImageLimit: 4,
+};
 
 function formatKb(bytes) {
   return `${(bytes / 1024).toFixed(2)} KB`;
@@ -83,9 +90,77 @@ async function readRegistryIssues() {
   }
 }
 
+function readNumericConst(source, name) {
+  const match = String(source || "").match(new RegExp(`const\\s+${name}\\s*=\\s*(\\d+)`));
+  return match ? Number(match[1]) : null;
+}
+
+async function auditTextChatHotPath() {
+  const violations = [];
+  let messageListSource = "";
+  let virtualizerSource = "";
+
+  try {
+    messageListSource = await fs.readFile(textChatMessageListPath, "utf8");
+  } catch {
+    violations.push({
+      id: "TEXT_CHAT_MESSAGE_LIST_MISSING",
+      message: "TextChatMessageList.jsx was not readable.",
+    });
+  }
+
+  try {
+    virtualizerSource = await fs.readFile(textChatVirtualizerPath, "utf8");
+  } catch {
+    violations.push({
+      id: "TEXT_CHAT_VIRTUALIZER_MISSING",
+      message: "useTextChatVirtualizer.js was not readable.",
+    });
+  }
+
+  const virtualizationThreshold = readNumericConst(virtualizerSource, "MIN_MESSAGES_FOR_VIRTUALIZATION");
+  if (
+    virtualizationThreshold != null
+    && virtualizationThreshold < textChatBudgets.minVirtualizationThreshold
+  ) {
+    violations.push({
+      id: "TEXT_CHAT_VIRTUALIZATION_TOO_EARLY",
+      message: `MIN_MESSAGES_FOR_VIRTUALIZATION must be at least ${textChatBudgets.minVirtualizationThreshold}. Current: ${virtualizationThreshold}.`,
+    });
+  }
+
+  const mediaPrefetchImageLimit = readNumericConst(messageListSource, "MEDIA_PREFETCH_IMAGE_LIMIT");
+  if (
+    mediaPrefetchImageLimit != null
+    && mediaPrefetchImageLimit > textChatBudgets.maxMediaPrefetchImageLimit
+  ) {
+    violations.push({
+      id: "TEXT_CHAT_MEDIA_PREFETCH_TOO_AGGRESSIVE",
+      message: `MEDIA_PREFETCH_IMAGE_LIMIT must be <= ${textChatBudgets.maxMediaPrefetchImageLimit}. Current: ${mediaPrefetchImageLimit}.`,
+    });
+  }
+
+  if (messageListSource.includes(".decode?.(") || messageListSource.includes(".decode().")) {
+    violations.push({
+      id: "TEXT_CHAT_FEED_FORCED_IMAGE_DECODE",
+      message: "Do not force image.decode() in the feed prefetch path.",
+    });
+  }
+
+  return {
+    budgets: textChatBudgets,
+    values: {
+      virtualizationThreshold,
+      mediaPrefetchImageLimit,
+    },
+    violations,
+  };
+}
+
 async function main() {
   const assets = await listDistAssets();
   const issues = await readRegistryIssues();
+  const textChatHotPath = await auditTextChatHotPath();
   const jsAssets = assets.filter((item) => item.extension === ".js");
   const cssAssets = assets.filter((item) => item.extension === ".css");
 
@@ -107,6 +182,7 @@ async function main() {
       byStatus: countBy(issues, "status"),
       byArea: countBy(issues, "area"),
     },
+    textChatHotPath,
   };
 
   await fs.mkdir(path.dirname(reportOutputPath), { recursive: true });
@@ -133,6 +209,18 @@ async function main() {
     report.dist.topAssets.forEach((item, index) => {
       console.log(`${index + 1}. ${item.name} - ${formatMb(item.bytes)} (${formatKb(item.bytes)})`);
     });
+  }
+
+  console.log(`Text chat virtualization threshold: ${textChatHotPath.values.virtualizationThreshold ?? "unknown"}`);
+  console.log(`Text chat media prefetch image limit: ${textChatHotPath.values.mediaPrefetchImageLimit ?? "unknown"}`);
+  if (textChatHotPath.violations.length) {
+    console.error("Performance budget violations:");
+    textChatHotPath.violations.forEach((violation) => {
+      console.error(`- ${violation.id}: ${violation.message}`);
+    });
+    process.exitCode = 1;
+  } else {
+    console.log("Performance budgets: passed");
   }
 
   console.log(`JSON report: ${path.relative(repoRoot, reportOutputPath)}`);

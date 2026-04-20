@@ -368,6 +368,7 @@ public class AppDbContext : DbContext
             entity.ToTable("chatmessages");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.ChannelId, x.Timestamp });
+            entity.HasIndex(x => new { x.ChannelId, x.Id });
             entity.HasIndex(x => x.Timestamp);
         });
 

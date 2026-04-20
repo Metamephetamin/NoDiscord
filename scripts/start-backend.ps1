@@ -46,5 +46,9 @@ $env:DOTNET_NOLOGO = "1"
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:ASPNETCORE_URLS = "http://localhost:7031"
 
+if ($env:ND_USE_SMTP_IN_DEV -ne "1") {
+    $env:Email__Mode = "mock"
+}
+
 Write-Host "Starting backend on http://localhost:7031"
 dotnet run --project $projectPath --no-launch-profile

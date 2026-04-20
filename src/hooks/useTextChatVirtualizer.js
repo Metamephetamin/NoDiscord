@@ -4,11 +4,10 @@ import { recordPerfEvent } from "../utils/perf";
 const DEFAULT_ESTIMATED_MESSAGE_HEIGHT = 96;
 const VIRTUALIZED_MESSAGE_GAP_PX = 14;
 const VIRTUALIZATION_OVERSCAN_PX = 360;
-const MIN_MESSAGES_FOR_VIRTUALIZATION = 12;
+const MIN_MESSAGES_FOR_VIRTUALIZATION = 80;
 const MIN_MEASURED_MESSAGE_HEIGHT = 72;
 const SIZE_CHANGE_EPSILON_PX = 2;
 const SCROLL_METRIC_EPSILON_PX = 1;
-const ACTIVE_SCROLL_LOCK_MS = 700;
 const TEXT_CHAT_DEBUG_FLAG_PREFIX = "nodiscord.debug.textchat.";
 
 function readTextChatDebugFlag(name) {
@@ -66,7 +65,6 @@ export default function useTextChatVirtualizer({
   const scrollMetricsRafRef = useRef(0);
   const pendingSizeFlushRafRef = useRef(0);
   const pendingSizeByMessageIdRef = useRef(new Map());
-  const lastScrollActivityAtRef = useRef(0);
   const previousVisibleRangeRef = useRef({ startIndex: -1, endIndex: -1 });
   const measurementsRef = useRef({
     offsets: [0],
@@ -128,7 +126,6 @@ export default function useTextChatVirtualizer({
     }
 
     const handleScroll = () => {
-      lastScrollActivityAtRef.current = Date.now();
       scheduleMetricsUpdate();
     };
 
@@ -281,8 +278,7 @@ export default function useTextChatVirtualizer({
     }
 
     window.requestAnimationFrame(() => {
-      const isActiveScroll = Date.now() - lastScrollActivityAtRef.current < ACTIVE_SCROLL_LOCK_MS;
-      if (scrollAnchorDelta && !isActiveScroll) {
+      if (scrollAnchorDelta) {
         list.scrollTop = clampScrollTop(list, previousScrollTop + scrollAnchorDelta);
       }
 

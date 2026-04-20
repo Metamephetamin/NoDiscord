@@ -56,7 +56,6 @@ import {
   clearCachedTextChatMessages,
   writeTextChatChannelClearedAt,
 } from "../../utils/textChatMessageCache";
-import { createVoiceRoomClient } from "../../webrtc/voiceRoomClient";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
@@ -146,23 +145,42 @@ import {
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../../utils/perf";
 
 const MAX_PROFILE_NICKNAME_LENGTH = 50;
+let voiceRoomClientFactoryPromise = null;
+
+function loadVoiceRoomClientFactory() {
+  if (!voiceRoomClientFactoryPromise) {
+    voiceRoomClientFactoryPromise = import("../../webrtc/voiceRoomClient")
+      .then((module) => module.createVoiceRoomClient);
+  }
+
+  return voiceRoomClientFactoryPromise;
+}
+
 const normalizeProfileNicknameInput = (value) =>
   String(value || "")
     .replace(/[^\p{L}\p{M}\p{N} ]/gu, "")
     .replace(/\s+/g, " ")
     .slice(0, MAX_PROFILE_NICKNAME_LENGTH)
     .trimStart();
+const getLocalApiStorageScope = () => {
+  try {
+    const parsed = new URL(String(API_URL || "").trim());
+    return String(parsed.origin || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+  } catch {
+    return String(API_URL || "default").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+  }
+};
 const getUiDensityStorageKey = (user) => `nd:ui-density:${getCurrentUserId(user) || "guest"}`;
 const getUiFontScaleStorageKey = (user) => `nd:ui-font-scale:${getCurrentUserId(user) || "guest"}`;
 const getUiReduceMotionStorageKey = (user) => `nd:ui-reduce-motion:${getCurrentUserId(user) || "guest"}`;
 const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUserId(user) || "guest"}`;
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
-  return userId ? `nd:direct-call-history:${userId}` : "";
+  return userId ? `nd:direct-call-history:${getLocalApiStorageScope()}:${userId}` : "";
 };
 const getWorkspaceStateStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
-  return userId ? `nd:workspace-state:${userId}` : "";
+  return userId ? `nd:workspace-state:${getLocalApiStorageScope()}:${userId}` : "";
 };
 
 const readWorkspaceStateFromStorageKey = (storageKey) => {
@@ -3752,7 +3770,17 @@ export default function MenuMain({
 
   useEffect(() => {
     if (!user?.id) return undefined;
-    const client = createVoiceRoomClient({
+    let disposed = false;
+    let client = null;
+    let initializeTimeoutId = 0;
+
+    const initializeVoiceClient = async () => {
+      const createVoiceRoomClient = await loadVoiceRoomClientFactory();
+      if (disposed) {
+        return;
+      }
+
+      client = createVoiceRoomClient({
       onParticipantsMapChanged: handleParticipantsMapChanged,
       onChannelChanged: (nextChannel) => {
         const normalizedNextChannel = String(nextChannel || "");
@@ -4053,8 +4081,20 @@ export default function MenuMain({
       console.error("Ошибка применения стартового эхоподавления:", error);
     });
     client.connect(user).catch((error) => logVoiceHubError("Ошибка подключения к голосовому хабу:", error));
+    };
+
+    initializeTimeoutId = window.setTimeout(() => {
+      initializeVoiceClient().catch((error) => {
+        logVoiceHubError("Voice client initialization failed:", error);
+      });
+    }, 1800);
+
     return () => {
-      client.disconnect().catch((error) => logVoiceHubError("Ошибка отключения от голосового хаба:", error));
+      disposed = true;
+      window.clearTimeout(initializeTimeoutId);
+      if (client) {
+        client.disconnect().catch((error) => logVoiceHubError("Ошибка отключения от голосового хаба:", error));
+      }
       if (voiceClientRef.current === client) voiceClientRef.current = null;
     };
   }, [

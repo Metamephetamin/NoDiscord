@@ -1,6 +1,6 @@
 const TEXT_CHAT_MESSAGE_CACHE_PREFIX = "textchat-message-cache";
 const TEXT_CHAT_CHANNEL_CLEAR_PREFIX = "textchat-channel-clear";
-const MAX_CACHED_MESSAGES = 60;
+const MAX_CACHED_MESSAGES = 160;
 
 function getStorage() {
   if (typeof window === "undefined") {
