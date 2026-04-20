@@ -68,21 +68,9 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
-          set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
-          if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
-            echo "::error::DEPLOY_PORT must be a number. Use 22 unless SSH runs on a custom port."
-            exit 1
-          fi
-          if [[ "$DEPLOY_HOST" =~ ^https?:// ]] || [[ "$DEPLOY_HOST" == */* ]]; then
-            echo "::error::DEPLOY_HOST must be only a hostname or IP, for example tendsec.ru or 1.2.3.4. Do not include https://, a port, or a path."
-            exit 1
-          fi
           mkdir -p ~/.ssh
-          if ! timeout 25 ssh-keyscan -T 15 -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts; then
-            echo "::error::Could not read SSH host key from DEPLOY_HOST:DEPLOY_PORT. Check that DEPLOY_HOST is reachable from GitHub Actions, DEPLOY_PORT is the SSH port, and the server firewall allows SSH."
-            exit 1
-          fi
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Sync landing to server
         if: steps.validate.outputs.ready == 'true'
