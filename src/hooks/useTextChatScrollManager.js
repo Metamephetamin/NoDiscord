@@ -6,9 +6,8 @@ const SCROLL_LOAD_OLDER_THRESHOLD_PX = 180;
 const FLOATING_DATE_PROBE_OFFSET_PX = 24;
 const LATEST_SCROLL_BOTTOM_PADDING_PX = 20;
 const PROGRAMMATIC_SCROLL_AUTO_RESET_MS = 420;
-const FORCE_LATEST_SCROLL_FRAME_COUNT = 5;
-const FORCE_LATEST_SCROLL_SETTLE_MS = 160;
-const FORCE_LATEST_SCROLL_FINAL_SETTLE_MS = 420;
+const FORCE_LATEST_SCROLL_STABLE_FRAME_COUNT = 3;
+const FORCE_LATEST_SCROLL_MAX_FRAME_COUNT = 14;
 const TEXT_CHAT_SCROLL_STATE_PREFIX = "textchat-scroll-state";
 const TEXT_CHAT_SCROLL_STATE_ENABLED = false;
 
@@ -155,8 +154,6 @@ export default function useTextChatScrollManager({
   const previousLatestMessageKeyRef = useRef("");
   const previousScrollHeightRef = useRef(0);
   const autoScrollRafRef = useRef(0);
-  const autoScrollSettleTimeoutRef = useRef(0);
-  const autoScrollFinalTimeoutRef = useRef(0);
   const lastObservedScrollTopRef = useRef(0);
   const nearBottomRef = useRef(true);
   const userDetachedFromBottomRef = useRef(false);
@@ -453,52 +450,55 @@ export default function useTextChatScrollManager({
       window.cancelAnimationFrame(autoScrollRafRef.current);
       autoScrollRafRef.current = 0;
     }
-    if (autoScrollSettleTimeoutRef.current) {
-      window.clearTimeout(autoScrollSettleTimeoutRef.current);
-      autoScrollSettleTimeoutRef.current = 0;
-    }
-    if (autoScrollFinalTimeoutRef.current) {
-      window.clearTimeout(autoScrollFinalTimeoutRef.current);
-      autoScrollFinalTimeoutRef.current = 0;
-    }
 
     nearBottomRef.current = true;
     userDetachedFromBottomRef.current = false;
 
-    let remainingFrames = FORCE_LATEST_SCROLL_FRAME_COUNT;
+    let stableFrameCount = 0;
+    let totalFrameCount = 0;
+    let previousMetrics = null;
+
     const scrollAfterLayout = () => {
       autoScrollRafRef.current = 0;
       if (userDetachedFromBottomRef.current) {
         return;
       }
 
-      scrollToLatest(behavior);
-      remainingFrames -= 1;
-      if (remainingFrames > 0) {
-        autoScrollRafRef.current = window.requestAnimationFrame(scrollAfterLayout);
+      const list = messagesListRef.current;
+      if (!list) {
+        return;
       }
+
+      scrollToLatest(behavior);
+
+      const currentMetrics = {
+        scrollHeight: Math.max(0, Number(list.scrollHeight) || 0),
+        clientHeight: Math.max(0, Number(list.clientHeight) || 0),
+        targetScrollTop: getLatestAnchorScrollTop(list, messagesEndRef?.current),
+        actualScrollTop: Math.max(0, Number(list.scrollTop) || 0),
+      };
+      const layoutStable = Boolean(previousMetrics)
+        && Math.abs(currentMetrics.scrollHeight - previousMetrics.scrollHeight) < 1
+        && Math.abs(currentMetrics.clientHeight - previousMetrics.clientHeight) < 1
+        && Math.abs(currentMetrics.targetScrollTop - previousMetrics.targetScrollTop) < 1
+        && Math.abs(currentMetrics.actualScrollTop - currentMetrics.targetScrollTop) < 1;
+
+      stableFrameCount = layoutStable ? (stableFrameCount + 1) : 0;
+      totalFrameCount += 1;
+      previousMetrics = currentMetrics;
+
+      if (
+        stableFrameCount >= FORCE_LATEST_SCROLL_STABLE_FRAME_COUNT
+        || totalFrameCount >= FORCE_LATEST_SCROLL_MAX_FRAME_COUNT
+      ) {
+        return;
+      }
+
+      autoScrollRafRef.current = window.requestAnimationFrame(scrollAfterLayout);
     };
 
     autoScrollRafRef.current = window.requestAnimationFrame(scrollAfterLayout);
-    autoScrollSettleTimeoutRef.current = window.setTimeout(() => {
-      autoScrollSettleTimeoutRef.current = 0;
-      if (nearBottomRef.current && !userDetachedFromBottomRef.current) {
-        scrollToLatest("auto");
-      }
-    }, FORCE_LATEST_SCROLL_SETTLE_MS);
-
-    autoScrollFinalTimeoutRef.current = window.setTimeout(() => {
-      autoScrollFinalTimeoutRef.current = 0;
-      if (nearBottomRef.current && !userDetachedFromBottomRef.current) {
-        scrollToLatest("auto");
-        window.requestAnimationFrame(() => {
-          if (nearBottomRef.current && !userDetachedFromBottomRef.current) {
-            scrollToLatest("auto");
-          }
-        });
-      }
-    }, FORCE_LATEST_SCROLL_FINAL_SETTLE_MS);
-  }, [scrollToLatest]);
+  }, [messagesEndRef, messagesListRef, scrollToLatest]);
 
   const captureJumpSnapshot = useCallback(() => {
     const list = messagesListRef.current;
@@ -769,14 +769,6 @@ export default function useTextChatScrollManager({
         window.cancelAnimationFrame(autoScrollRafRef.current);
         autoScrollRafRef.current = 0;
       }
-      if (autoScrollSettleTimeoutRef.current) {
-        window.clearTimeout(autoScrollSettleTimeoutRef.current);
-        autoScrollSettleTimeoutRef.current = 0;
-      }
-      if (autoScrollFinalTimeoutRef.current) {
-        window.clearTimeout(autoScrollFinalTimeoutRef.current);
-        autoScrollFinalTimeoutRef.current = 0;
-      }
     };
   }, [markUserScrollIntent, messagesListRef, scheduleViewportUpdate, updateNearBottomFromList]);
 
@@ -908,6 +900,7 @@ export default function useTextChatScrollManager({
     canReturnToJumpPoint,
     showJumpToLatestButton,
     scrollToLatest,
+    forceScrollToLatest,
     scrollToMessage,
     jumpToFirstUnread,
     returnToJumpPoint,

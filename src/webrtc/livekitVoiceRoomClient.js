@@ -66,6 +66,7 @@ const SCREEN_SHARE_QUALITY_TARGETS = {
   "1440p": { width: 2560, height: 1440, bitrate: { 30: 14_000_000 } },
   "2160p": { width: 3840, height: 2160, bitrate: { 30: 22_000_000 } },
 };
+const MAX_DEVICE_VOLUME_PERCENT = 200;
 
 function normalizePublishFps(value, fallback = 30) {
   const numericValue = Number(value);
@@ -310,6 +311,7 @@ export function createVoiceRoomClient({
 
   const remoteScreenShares = new Map();
   const remoteAudioElements = new Map();
+  const remoteAudioNodes = new Map();
   const remoteParticipantMedia = new Map();
   const roomActiveSpeakerIds = new Set();
 
@@ -425,6 +427,15 @@ export function createVoiceRoomClient({
   const getOutputSelectionSupported = () =>
     typeof HTMLMediaElement !== "undefined" &&
     typeof HTMLMediaElement.prototype.setSinkId === "function";
+
+  const clampDeviceVolumePercent = (value) => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return 100;
+    }
+
+    return Math.max(0, Math.min(MAX_DEVICE_VOLUME_PERCENT, numericValue));
+  };
 
   const normalizeDeviceLabel = (device, index, fallback) => {
     const label = String(device?.label || "").trim();
@@ -1168,6 +1179,9 @@ export function createVoiceRoomClient({
     }
 
     try {
+      if (audioContext && typeof audioContext.setSinkId === "function") {
+        await audioContext.setSinkId(selectedOutputDeviceId);
+      }
       await element.setSinkId(selectedOutputDeviceId);
       logVoiceDebug("remote-audio:sink-applied", { selectedOutputDeviceId });
     } catch (error) {
@@ -1179,6 +1193,23 @@ export function createVoiceRoomClient({
   };
 
   const removeRemoteAudioElement = (key) => {
+    const nodeEntry = remoteAudioNodes.get(key);
+    if (nodeEntry) {
+      try {
+        nodeEntry.gainNode?.disconnect();
+      } catch {
+        // Ignore disconnect failures for settled gain nodes.
+      }
+
+      try {
+        nodeEntry.sourceNode?.disconnect();
+      } catch {
+        // Ignore disconnect failures for settled source nodes.
+      }
+
+      remoteAudioNodes.delete(key);
+    }
+
     const element = remoteAudioElements.get(key);
     if (!element) {
       return;
@@ -1197,6 +1228,32 @@ export function createVoiceRoomClient({
 
   const removeAllRemoteAudioElements = () => {
     Array.from(remoteAudioElements.keys()).forEach(removeRemoteAudioElement);
+  };
+
+  const ensureAudioContextForPlayback = async () => {
+    if (!audioContext) {
+      audioContext = createPreferredAudioContext();
+    }
+
+    if (audioContext?.state === "suspended") {
+      await audioContext.resume().catch(() => {});
+    }
+
+    return audioContext;
+  };
+
+  const applyRemoteAudioVolume = (element, key) => {
+    if (!element) {
+      return;
+    }
+
+    const normalizedRemoteVolume = Math.max(0, clampDeviceVolumePercent(remoteVolume * 100) / 100);
+    const nodeEntry = remoteAudioNodes.get(key);
+    element.volume = Math.min(1, normalizedRemoteVolume);
+
+    if (nodeEntry?.gainNode) {
+      nodeEntry.gainNode.gain.value = normalizedRemoteVolume;
+    }
   };
 
   const attachRemoteAudioTrack = async (track, publication, participant) => {
@@ -1231,9 +1288,27 @@ export function createVoiceRoomClient({
     element.playsInline = true;
     element.defaultMuted = false;
     element.muted = false;
-    element.volume = remoteVolume;
+    element.volume = Math.min(1, remoteVolume);
     element.style.display = "none";
     document.body.appendChild(element);
+
+    try {
+      const playbackContext = await ensureAudioContextForPlayback();
+      if (playbackContext && typeof playbackContext.createMediaElementSource === "function") {
+        const sourceNode = playbackContext.createMediaElementSource(element);
+        const gainNode = playbackContext.createGain();
+        sourceNode.connect(gainNode);
+        gainNode.connect(playbackContext.destination);
+        remoteAudioNodes.set(key, { sourceNode, gainNode });
+      }
+    } catch (error) {
+      logVoiceDebug("remote-audio:gain-chain-failed", {
+        key,
+        error: error?.message || String(error),
+      });
+    }
+
+    applyRemoteAudioVolume(element, key);
 
     await applyOutputDeviceToElement(element).catch(() => {});
     const playPromise = element.play?.();
@@ -2533,7 +2608,7 @@ export function createVoiceRoomClient({
     },
 
     setMicrophoneVolume(value) {
-      micVolume = value / 100;
+      micVolume = clampDeviceVolumePercent(value) / 100;
       if (gainNode) {
         gainNode.gain.value = micVolume;
       }
@@ -2541,9 +2616,9 @@ export function createVoiceRoomClient({
     },
 
     setRemoteVolume(value) {
-      remoteVolume = value / 100;
-      for (const element of remoteAudioElements.values()) {
-        element.volume = remoteVolume;
+      remoteVolume = clampDeviceVolumePercent(value) / 100;
+      for (const [key, element] of remoteAudioElements.entries()) {
+        applyRemoteAudioVolume(element, key);
       }
       logVoiceDebug("remote-audio:volume-set", {
         value,

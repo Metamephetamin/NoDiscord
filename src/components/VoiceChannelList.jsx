@@ -6,8 +6,8 @@ import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
-const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone.png");
-const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-simple.svg");
+const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone-svgrepo-com.svg");
+const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
 
 const getVoiceDisplayName = (name) => {
   const normalized = String(name || "").trim();
@@ -80,10 +80,38 @@ const VoiceChannelList = ({
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
+        const canJoinFromRow = !isEditing && !isJoining;
+
+        const handleRowJoin = (event) => {
+          if (!canJoinFromRow) {
+            return;
+          }
+
+          if (event.target instanceof Element && event.target.closest(".channel-edit-button")) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          onJoinChannel?.(channel);
+        };
 
         return (
           <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""}`}>
-            <div className="voice-channel__row">
+            <div
+              className={`voice-channel__row ${canJoinFromRow ? "voice-channel__row--interactive" : ""}`}
+              onMouseEnter={() => onPrewarmChannel?.(channel.id)}
+              onPointerDown={(event) => {
+                if (event.target instanceof Element && event.target.closest(".channel-edit-button")) {
+                  return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                onPrewarmChannel?.(channel.id);
+              }}
+              onClick={handleRowJoin}
+            >
               {isEditing ? (
                 <input
                   className="channel-inline-input"
@@ -111,18 +139,8 @@ const VoiceChannelList = ({
                 <button
                   type="button"
                   className="voice-channel__button"
-                  onMouseEnter={() => onPrewarmChannel?.(channel.id)}
                   onFocus={() => onPrewarmChannel?.(channel.id)}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onPrewarmChannel?.(channel.id);
-                  }}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onJoinChannel?.(channel);
-                  }}
+                  onClick={handleRowJoin}
                   disabled={isJoining}
                 >
                   <span className="voice-channel__title">{channel.name}</span>
@@ -133,7 +151,11 @@ const VoiceChannelList = ({
               <button
                 type="button"
                 className="channel-edit-button"
-                onClick={() => onRenameChannel?.("voice", channel)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRenameChannel?.("voice", channel);
+                }}
                 disabled={!canManageChannels}
                 aria-label="Переименовать канал"
               >

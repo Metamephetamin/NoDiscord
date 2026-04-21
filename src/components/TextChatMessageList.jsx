@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
@@ -50,6 +50,7 @@ const DOCUMENT_VIDEO_EXTENSION_PATTERN = /\.(?:m4v|mov|mp4|ogv|webm)(?:[?#].*)?$
 const PRIORITY_MEDIA_MESSAGE_COUNT = 0;
 const MEDIA_PREFETCH_MESSAGE_BUFFER = 4;
 const MEDIA_PREFETCH_IMAGE_LIMIT = 4;
+const VIDEO_PREVIEW_SEEK_OFFSET_SECONDS = 0.12;
 const EMOJI_ONLY_MESSAGE_PATTERN = /^(?:(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\u200d|\ufe0f|\s))+$/u;
 const prefetchedFeedImageUrls = new Set();
 
@@ -282,6 +283,72 @@ function LocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) 
   );
 }
 
+function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) {
+  const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
+  const normalizedStatus = String(attachmentItem?.localEchoStatus || "uploading").trim();
+  const isTerminalFailureState = normalizedStatus === "failed" || normalizedStatus === "canceled";
+  const resolvedStatusLabel = getLocalEchoUploadStatusLabel(normalizedStatus);
+  const primaryAction = isTerminalFailureState ? onRetry : onCancel;
+  const primaryActionLabel = isTerminalFailureState ? "Повторить загрузку" : "Отменить загрузку";
+  const footerTitle = String(attachmentItem?.localEchoError || "").trim() || resolvedStatusLabel;
+  const footerLabel = isTerminalFailureState
+    ? footerTitle
+    : `${resolvedStatusLabel} ${normalizedProgress}%`;
+
+  if (normalizedStatus === "sent") {
+    return null;
+  }
+
+  return (
+    <span className={`message-media__upload-overlay-simple ${isTerminalFailureState ? "message-media__upload-overlay-simple--failed" : ""}`}>
+      <span
+        className={`message-media__upload-action ${isTerminalFailureState ? "message-media__upload-action--retry" : "message-media__upload-action--loading"}`}
+        role="button"
+        tabIndex={0}
+        aria-label={primaryActionLabel}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          primaryAction?.();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          primaryAction?.();
+        }}
+      >
+        {isTerminalFailureState ? (
+          <span className="message-media__upload-retry-icon" aria-hidden="true">↻</span>
+        ) : (
+          <span className="message-media__upload-loader" aria-hidden="true">
+            <span className="message-media__upload-loader-ring" />
+            <span className="message-media__upload-loader-core" />
+          </span>
+        )}
+      </span>
+      <span
+        className="message-media__upload-footer-simple"
+        title={footerTitle}
+        onClick={(event) => {
+          if (!isTerminalFailureState) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove?.();
+        }}
+      >
+        <span className="message-media__upload-status-simple">{footerLabel}</span>
+      </span>
+    </span>
+  );
+}
+
 function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) {
   const normalizedStatus = String(attachmentItem?.localEchoStatus || "pending").trim();
   const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
@@ -402,6 +469,133 @@ const MessageMediaImage = memo(function MessageMediaImage({
       draggable={false}
       onError={handleError}
     />
+  );
+});
+
+const MessageMediaVideo = memo(function MessageMediaVideo({
+  attachmentItem,
+  className = "message-media__video",
+  priorityMedia = false,
+}) {
+  const sourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const preparedSourceUrlRef = useRef("");
+  const previewSeekRequestedRef = useRef(false);
+  const [node, setNode] = useState(null);
+  const [hasStartedLoading, setHasStartedLoading] = useState(() => (
+    priorityMedia || typeof IntersectionObserver !== "function"
+  ));
+  const [failedSourceUrl, setFailedSourceUrl] = useState("");
+  const [readyFrameSourceUrl, setReadyFrameSourceUrl] = useState("");
+  const attachNodeRef = useCallback((nextNode) => {
+    setNode(nextNode);
+  }, []);
+
+  useEffect(() => {
+    if (priorityMedia || hasStartedLoading) {
+      return undefined;
+    }
+
+    if (!node) {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) {
+            return;
+          }
+
+          setHasStartedLoading(true);
+          observer.disconnect();
+        });
+      },
+      { rootMargin: "320px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasStartedLoading, node, priorityMedia]);
+
+  const handleVideoLoadedMetadata = useCallback((event) => {
+    if (preparedSourceUrlRef.current !== sourceUrl) {
+      preparedSourceUrlRef.current = sourceUrl;
+      previewSeekRequestedRef.current = false;
+    }
+
+    const mediaNode = event.currentTarget;
+    const duration = Number(mediaNode?.duration);
+    const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+    const previewTime = safeDuration > VIDEO_PREVIEW_SEEK_OFFSET_SECONDS
+      ? Math.min(VIDEO_PREVIEW_SEEK_OFFSET_SECONDS, Math.max(0, safeDuration - 0.05))
+      : 0;
+
+    if (previewTime > 0.01 && !previewSeekRequestedRef.current) {
+      previewSeekRequestedRef.current = true;
+      try {
+        mediaNode.currentTime = previewTime;
+        return;
+      } catch {
+        // Fall back to the first decodable frame when seeking is not available.
+      }
+    }
+
+    setReadyFrameSourceUrl(sourceUrl);
+  }, [sourceUrl]);
+
+  const handleVideoLoadedData = useCallback(() => {
+    if (!previewSeekRequestedRef.current) {
+      setReadyFrameSourceUrl(sourceUrl);
+    }
+  }, [sourceUrl]);
+
+  const handleVideoSeeked = useCallback((event) => {
+    event.currentTarget.pause?.();
+    setReadyFrameSourceUrl(sourceUrl);
+  }, [sourceUrl]);
+
+  const handleVideoError = useCallback(() => {
+    setFailedSourceUrl(sourceUrl);
+  }, [sourceUrl]);
+
+  const isUnavailable = !sourceUrl || failedSourceUrl === sourceUrl;
+
+  if (!sourceUrl || isUnavailable) {
+    return (
+      <span className="message-media__fallback" aria-label="Видео недоступно">
+        Не удалось загрузить видео
+      </span>
+    );
+  }
+
+  return (
+    <span ref={attachNodeRef} className={className} aria-hidden="true">
+      {hasStartedLoading ? (
+        <video
+          className={`message-media__video-frame ${readyFrameSourceUrl === sourceUrl ? "message-media__video-frame--ready" : ""}`.trim()}
+          src={sourceUrl}
+          preload="auto"
+          muted
+          playsInline
+          disablePictureInPicture
+          controls={false}
+          tabIndex={-1}
+          aria-hidden="true"
+          onLoadedMetadata={handleVideoLoadedMetadata}
+          onLoadedData={handleVideoLoadedData}
+          onSeeked={handleVideoSeeked}
+          onError={handleVideoError}
+        />
+      ) : null}
+      <span className="message-media__video-badge">
+        {String(attachmentItem?.attachmentContentType || "").toLowerCase().startsWith("video/")
+          ? String(attachmentItem.attachmentContentType).slice("video/".length).toUpperCase()
+          : "VIDEO"}
+      </span>
+      <span className="message-media__video-caption">
+        {String(attachmentItem?.attachmentName || "").trim() || "Видео"}
+      </span>
+    </span>
   );
 });
 
@@ -925,7 +1119,7 @@ function MessageAttachmentCard({
             priorityMedia={priorityMedia}
           />
           {showLocalEchoOverlay ? (
-            <LocalEchoMediaOverlay
+            <SimplifiedLocalEchoMediaOverlay
               attachmentItem={attachmentItem}
               onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
               onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
@@ -944,9 +1138,13 @@ function MessageAttachmentCard({
           onClick={handlePreviewClick}
           aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
         >
-          <video className="message-media__video" src={attachmentItem.attachmentUrl} preload="metadata" playsInline muted />
+          <MessageMediaVideo
+            className="message-media__video"
+            attachmentItem={attachmentItem}
+            priorityMedia={priorityMedia}
+          />
           {showLocalEchoOverlay ? (
-            <LocalEchoMediaOverlay
+            <SimplifiedLocalEchoMediaOverlay
               attachmentItem={attachmentItem}
               onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
               onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
@@ -1441,7 +1639,7 @@ function TextChatMessageList({
             ));
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
-          const showAttachmentOverlayFooter = showFloatingMediaFooter;
+          const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;
           const useInlineFooter = isDirectChat
             && Boolean(messageText.trim())
             && !messagePoll

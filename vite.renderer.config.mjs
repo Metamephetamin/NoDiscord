@@ -93,7 +93,7 @@ export default defineConfig(({ command }) => ({
         secure: false,
       },
       "/livekit": {
-        target: "ws://127.0.0.1:7880",
+        target: "http://127.0.0.1:7880",
         ws: true,
         changeOrigin: true,
         secure: false,

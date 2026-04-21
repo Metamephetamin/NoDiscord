@@ -1,6 +1,8 @@
 const TEXT_CHAT_MESSAGE_CACHE_PREFIX = "textchat-message-cache";
 const TEXT_CHAT_CHANNEL_CLEAR_PREFIX = "textchat-channel-clear";
+const TEXT_CHAT_HIDDEN_MESSAGES_PREFIX = "textchat-hidden-messages";
 const MAX_CACHED_MESSAGES = 160;
+const MAX_HIDDEN_MESSAGE_IDS = 1000;
 
 function getStorage() {
   if (typeof window === "undefined") {
@@ -32,6 +34,16 @@ function getChannelClearKey(userId, channelId) {
   }
 
   return `${TEXT_CHAT_CHANNEL_CLEAR_PREFIX}:${normalizedUserId}:${normalizedChannelId}`;
+}
+
+function getHiddenMessagesKey(userId, channelId) {
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedChannelId = String(channelId || "").trim();
+  if (!normalizedUserId || !normalizedChannelId) {
+    return "";
+  }
+
+  return `${TEXT_CHAT_HIDDEN_MESSAGES_PREFIX}:${normalizedUserId}:${normalizedChannelId}`;
 }
 
 function normalizeCachedMessage(messageItem) {
@@ -164,5 +176,52 @@ export function writeTextChatChannelClearedAt(userId, channelId, clearedAt) {
     storage.setItem(clearKey, normalizedClearedAt);
   } catch {
     // Local clear markers are optional UI state; storage failures are safe to ignore.
+  }
+}
+
+export function readHiddenTextChatMessageIds(userId, channelId) {
+  const storage = getStorage();
+  const hiddenKey = getHiddenMessagesKey(userId, channelId);
+  if (!storage || !hiddenKey) {
+    return [];
+  }
+
+  try {
+    const rawValue = storage.getItem(hiddenKey);
+    if (!rawValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    const messageIds = Array.isArray(parsedValue?.messageIds) ? parsedValue.messageIds : [];
+    return Array.from(new Set(messageIds.map((messageId) => String(messageId || "").trim()).filter(Boolean)));
+  } catch {
+    return [];
+  }
+}
+
+export function writeHiddenTextChatMessageIds(userId, channelId, messageIds) {
+  const storage = getStorage();
+  const hiddenKey = getHiddenMessagesKey(userId, channelId);
+  if (!storage || !hiddenKey) {
+    return;
+  }
+
+  const normalizedMessageIds = Array.from(
+    new Set((Array.isArray(messageIds) ? messageIds : []).map((messageId) => String(messageId || "").trim()).filter(Boolean))
+  ).slice(-MAX_HIDDEN_MESSAGE_IDS);
+
+  try {
+    if (!normalizedMessageIds.length) {
+      storage.removeItem(hiddenKey);
+      return;
+    }
+
+    storage.setItem(hiddenKey, JSON.stringify({
+      updatedAt: Date.now(),
+      messageIds: normalizedMessageIds,
+    }));
+  } catch {
+    // Local hidden-message state is optional UI state; storage failures are safe to ignore.
   }
 }

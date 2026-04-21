@@ -169,11 +169,11 @@ export const VoiceSettingsPanel = ({
 
         <label className="voice-settings-field">
           <span>Громкость микрофона</span>
-          <input type="range" min="0" max="100" value={micVolume} onChange={(event) => onMicVolumeChange(Number(event.target.value))} />
+          <input type="range" min="0" max="200" value={micVolume} onChange={(event) => onMicVolumeChange(Number(event.target.value))} />
         </label>
         <label className="voice-settings-field">
           <span>Громкость динамика</span>
-          <input type="range" min="0" max="100" value={audioVolume} onChange={(event) => onAudioVolumeChange(Number(event.target.value))} />
+          <input type="range" min="0" max="200" value={audioVolume} onChange={(event) => onAudioVolumeChange(Number(event.target.value))} />
         </label>
       </div>
 

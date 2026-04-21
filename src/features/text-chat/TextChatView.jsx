@@ -10,7 +10,6 @@ import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
 
 const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
 const TextChatMediaPreview = lazy(() => import("../../components/TextChatMediaPreview"));
-const SEND_SCROLL_RETRY_DELAYS_MS = [0, 40, 120, 260, 520];
 
 function useStableCallback(callback) {
   const callbackRef = useRef(callback);
@@ -115,6 +114,7 @@ export default function TextChatView(props) {
     insertComposerEmoji,
     sendAnimatedEmoji,
     sendPoll,
+    sendLocation,
     handleInsertMentionByUserId,
     applyMentionSuggestion,
     setSelectedMentionSuggestionIndex,
@@ -167,7 +167,6 @@ export default function TextChatView(props) {
   const stableOpenMediaPreview = useStableCallback(openMediaPreview);
   const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
   const stableOpenForwardModal = useStableCallback(openForwardModal);
-  const pendingSendScrollTimeoutsRef = useRef([]);
   const {
     floatingDateLabel,
     pendingNewMessagesCount,
@@ -175,6 +174,7 @@ export default function TextChatView(props) {
     canReturnToJumpPoint,
     showJumpToLatestButton,
     scrollToLatest,
+    forceScrollToLatest,
     scrollToMessage,
     jumpToFirstUnread,
     returnToJumpPoint,
@@ -195,17 +195,7 @@ export default function TextChatView(props) {
   });
   const stableScrollToMessage = useStableCallback(scrollToMessage);
   const stableRequestScrollToLatest = useStableCallback(() => {
-    if (typeof window === "undefined") {
-      scrollToLatest("auto");
-      return;
-    }
-
-    pendingSendScrollTimeoutsRef.current.forEach((timeoutId) => {
-      window.clearTimeout(timeoutId);
-    });
-    pendingSendScrollTimeoutsRef.current = SEND_SCROLL_RETRY_DELAYS_MS.map((delayMs) => window.setTimeout(() => {
-      scrollToLatest("auto");
-    }, delayMs));
+    scrollToLatest("auto");
   });
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
@@ -221,19 +211,6 @@ export default function TextChatView(props) {
       selectedFileCount: selectedFiles.length,
     });
   }, [selectedFiles]);
-
-  useEffect(() => {
-    return () => {
-      if (typeof window === "undefined") {
-        return;
-      }
-
-      pendingSendScrollTimeoutsRef.current.forEach((timeoutId) => {
-        window.clearTimeout(timeoutId);
-      });
-      pendingSendScrollTimeoutsRef.current = [];
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof onNavigationIndexChange !== "function") {
@@ -334,7 +311,7 @@ export default function TextChatView(props) {
       <JumpToLatestButton
         visible={showJumpToLatestButton}
         pendingCount={pendingNewMessagesCount}
-        onJump={() => scrollToLatest("auto")}
+        onJump={() => forceScrollToLatest("auto")}
       />
       {PERF_ENABLED ? (
         <Profiler id="TextChatMessageList" onRender={handleMessageListRender}>
@@ -454,6 +431,7 @@ export default function TextChatView(props) {
             onInsertEmoji={insertComposerEmoji}
             onSendAnimatedEmoji={sendAnimatedEmoji}
             onSendPoll={sendPoll}
+            onSendLocation={sendLocation}
             onApplyMentionSuggestion={applyMentionSuggestion}
             onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
             onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}
@@ -512,6 +490,7 @@ export default function TextChatView(props) {
           onInsertEmoji={insertComposerEmoji}
           onSendAnimatedEmoji={sendAnimatedEmoji}
           onSendPoll={sendPoll}
+          onSendLocation={sendLocation}
           onApplyMentionSuggestion={applyMentionSuggestion}
           onSelectMentionSuggestionIndex={setSelectedMentionSuggestionIndex}
           onCloseMentionSuggestions={() => setMentionSuggestionsOpen(false)}

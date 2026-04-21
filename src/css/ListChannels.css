@@ -38,6 +38,10 @@
   gap: 8px;
 }
 
+.voice-channel__row--interactive {
+  cursor: pointer;
+}
+
 .voice-channel__button {
   flex: 1;
   min-width: 0;

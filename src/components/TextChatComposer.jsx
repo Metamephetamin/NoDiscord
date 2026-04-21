@@ -4,6 +4,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import PendingUploadPreview from "./PendingUploadPreview";
 import TextChatBatchUploadSheet from "./TextChatBatchUploadSheet";
+import TextChatLocationPickerModal from "./TextChatLocationPickerModal";
 import TextChatPollComposerModal from "./TextChatPollComposerModal";
 import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
 import {
@@ -11,6 +12,7 @@ import {
   COMPOSER_EMOJI_OPTIONS,
   ENABLE_SPEECH_INPUT_BUTTON,
   ENABLE_VOICE_MESSAGE_BUTTON,
+  resolveAnimatedEmojiFallbackGlyph,
 } from "../utils/textChatModel";
 import { formatFileSize } from "../utils/textChatHelpers";
 import { recordPerfEvent, startPerfTrace } from "../utils/perf";
@@ -169,6 +171,7 @@ function TextChatComposer({
   onInsertEmoji,
   onSendAnimatedEmoji,
   onSendPoll,
+  onSendLocation,
   onApplyMentionSuggestion,
   onSelectMentionSuggestionIndex,
   onCloseMentionSuggestions,
@@ -184,6 +187,10 @@ function TextChatComposer({
 }) {
   const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [locationPickerLocating, setLocationPickerLocating] = useState(false);
+  const [locationPickerError, setLocationPickerError] = useState("");
+  const [locationPickerCurrentPosition, setLocationPickerCurrentPosition] = useState(null);
   const [pendingBatchSelection, setPendingBatchSelection] = useState(null);
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
@@ -192,6 +199,7 @@ function TextChatComposer({
   const pendingBatchQueueFrameRef = useRef([]);
   const pendingPickerShellTimeoutRef = useRef(0);
   const pendingPickerFocusShellTimeoutRef = useRef(0);
+  const attachMenuCloseTimeoutRef = useRef(0);
   const pendingBatchSelectionRef = useRef(null);
   const selectedFilesLengthRef = useRef(0);
   const instantAttachmentSendRef = useRef(false);
@@ -292,6 +300,15 @@ function TextChatComposer({
 
     window.clearTimeout(pendingPickerFocusShellTimeoutRef.current);
     pendingPickerFocusShellTimeoutRef.current = 0;
+  };
+
+  const clearAttachMenuCloseTimeout = () => {
+    if (!attachMenuCloseTimeoutRef.current || typeof window === "undefined") {
+      return;
+    }
+
+    window.clearTimeout(attachMenuCloseTimeoutRef.current);
+    attachMenuCloseTimeoutRef.current = 0;
   };
 
   const showPickerReturnShell = ({ kind = "media", source = "file-picker-focus" } = {}) => {
@@ -704,11 +721,40 @@ function TextChatComposer({
       return;
     }
 
+    clearAttachMenuCloseTimeout();
     messageComposerRef.current?.classList.add("message-composer--attach-menu-open");
   };
 
   const closeAttachMenu = () => {
+    clearAttachMenuCloseTimeout();
     messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
+  };
+
+  const scheduleCloseAttachMenu = () => {
+    if (uploadingFile || typeof window === "undefined") {
+      closeAttachMenu();
+      return;
+    }
+
+    clearAttachMenuCloseTimeout();
+    attachMenuCloseTimeoutRef.current = window.setTimeout(() => {
+      attachMenuCloseTimeoutRef.current = 0;
+      messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
+    }, 140);
+  };
+
+  const toggleAttachMenu = () => {
+    if (uploadingFile) {
+      return;
+    }
+
+    clearAttachMenuCloseTimeout();
+    if (messageComposerRef.current?.classList.contains("message-composer--attach-menu-open")) {
+      messageComposerRef.current.classList.remove("message-composer--attach-menu-open");
+      return;
+    }
+
+    messageComposerRef.current?.classList.add("message-composer--attach-menu-open");
   };
 
   const openAttachFilePicker = async (inputRef) => {
@@ -757,6 +803,10 @@ function TextChatComposer({
     void openAttachFilePicker(documentFileInputRef);
   };
 
+  useEffect(() => () => {
+    clearAttachMenuCloseTimeout();
+  }, []);
+
 
   const loadMoreEmojiPreviews = () => {
     setEmojiPreviewCount((previous) => Math.min(previous + 8, COMPOSER_EMOJI_OPTIONS.length));
@@ -800,6 +850,67 @@ function TextChatComposer({
       pendingBatchQueueFrameRef.current = [];
     }
     setPendingBatchSelection(null);
+  };
+
+  const requestCurrentLocation = async () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationPickerError("Браузер не поддерживает геолокацию. Выберите точку на карте вручную.");
+      return null;
+    }
+
+    setLocationPickerLocating(true);
+    setLocationPickerError("");
+
+    try {
+      const nextPosition = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0,
+        });
+      });
+
+      const resolvedPosition = {
+        latitude: Number(nextPosition?.coords?.latitude) || 0,
+        longitude: Number(nextPosition?.coords?.longitude) || 0,
+        accuracy: Number(nextPosition?.coords?.accuracy) || null,
+      };
+
+      setLocationPickerCurrentPosition(resolvedPosition);
+      return resolvedPosition;
+    } catch (error) {
+      const errorCode = Number(error?.code) || 0;
+      setLocationPickerError(
+        errorCode === 1
+          ? "Разрешение на геолокацию отклонено. Выберите точку на карте вручную."
+          : "Не удалось определить ваше местоположение. Выберите точку на карте вручную."
+      );
+      return null;
+    } finally {
+      setLocationPickerLocating(false);
+    }
+  };
+
+  const handleOpenLocationPicker = async () => {
+    if (uploadingFile || voiceRecordingState === "sending" || typeof onSendLocation !== "function") {
+      return;
+    }
+
+    closeAttachMenu();
+    setLocationPickerOpen(true);
+    void requestCurrentLocation();
+  };
+
+  const handleCloseLocationPicker = () => {
+    setLocationPickerOpen(false);
+  };
+
+  const handleSubmitLocation = async (locationPayload) => {
+    if (typeof onSendLocation !== "function") {
+      return false;
+    }
+
+    return onSendLocation(locationPayload);
   };
 
   const getPendingUploadStatusLabel = (selectedFile) => {
@@ -1011,19 +1122,22 @@ function TextChatComposer({
         ) : null}
 
         <div className={`input-area__controls ${hasBatchUploadSheet ? "input-area__controls--batch" : ""}`}>
-          <div
-            ref={messageComposerRef}
-            className="message-composer"
-            onPointerLeave={closeAttachMenu}
-          >
+          <div ref={messageComposerRef} className="message-composer">
             <div
+              className="attach-menu-anchor"
+              onPointerEnter={openAttachMenu}
+              onPointerLeave={scheduleCloseAttachMenu}
+            >
+            <button
+              type="button"
               className="attach-button"
               aria-label="Меню вложений"
               title="Меню вложений"
-              onPointerEnter={openAttachMenu}
+              onClick={toggleAttachMenu}
+              onFocus={openAttachMenu}
             >
               <span className="attach-button__icon" aria-hidden="true" />
-            </div>
+            </button>
 
             <div className="attach-menu__popover" role="menu" aria-label="Меню вложений" onPointerEnter={openAttachMenu}>
               <input
@@ -1082,16 +1196,17 @@ function TextChatComposer({
                 <span className="attach-menu__item-icon attach-menu__item-icon--poll" aria-hidden="true" />
                 <span>Опрос</span>
               </button>
-
-              <button type="button" className="attach-menu__item attach-menu__item--disabled" disabled role="menuitem">
+              <button
+                type="button"
+                className="attach-menu__item"
+                onClick={() => void handleOpenLocationPicker()}
+                disabled={uploadingFile || voiceRecordingState === "sending" || typeof onSendLocation !== "function"}
+                role="menuitem"
+              >
                 <span className="attach-menu__item-icon attach-menu__item-icon--location" aria-hidden="true" />
                 <span>Локация</span>
               </button>
-
-              <button type="button" className="attach-menu__item attach-menu__item--disabled" disabled role="menuitem">
-                <span className="attach-menu__item-icon attach-menu__item-icon--wallet" aria-hidden="true" />
-                <span>Кошелёк</span>
-              </button>
+            </div>
             </div>
 
             <button
@@ -1142,25 +1257,23 @@ function TextChatComposer({
                           loadMoreEmojiPreviews();
                         }
                       }}
-                      onClick={async () => {
-                        if (emojiOption.assetUrl) {
-                          const handled = await onSendAnimatedEmoji?.(emojiOption);
-                          if (handled) {
-                            onToggleEmojiPicker(false);
-                          }
+                      onClick={() => {
+                        const fallbackGlyph = resolveAnimatedEmojiFallbackGlyph(emojiOption);
+                        const emojiGlyph = String(emojiOption.glyph || fallbackGlyph || "").trim();
+                        if (!emojiGlyph) {
                           return;
                         }
 
-                        onInsertEmoji(emojiOption.glyph);
+                        onInsertEmoji(emojiGlyph);
                         onToggleEmojiPicker(false);
                       }}
-                      title={emojiOption.label}
-                      aria-label={emojiOption.label}
+                      title={String(emojiOption.label || resolveAnimatedEmojiFallbackGlyph(emojiOption) || "Эмодзи")}
+                      aria-label={String(emojiOption.label || resolveAnimatedEmojiFallbackGlyph(emojiOption) || "Эмодзи")}
                     >
                       <AnimatedEmojiGlyph
                         emoji={emojiOption}
                         showAsset={index < emojiPreviewCount}
-                        fallbackText={String(emojiOption.label || "").trim().slice(0, 1).toUpperCase()}
+                        fallbackText={resolveAnimatedEmojiFallbackGlyph(emojiOption)}
                       />
                     </button>
                   ))}
@@ -1258,7 +1371,7 @@ function TextChatComposer({
               }}
               data-editing={messageEditState ? "true" : "false"}
               data-highlight-active={shouldRenderComposerHighlight ? "true" : "false"}
-              placeholder={uploadingFile ? "Загружаем вложения..." : "Введите сообщение..."}
+              placeholder={uploadingFile ? "Загружаем вложения..." : "Сообщение..."}
               onKeyDown={(event) => {
                 if (mentionSuggestionsOpen && mentionSuggestions.length) {
                   if (event.key === "ArrowDown") {
@@ -1369,7 +1482,6 @@ function TextChatComposer({
                   aria-label="Голосовой ввод текста"
                 >
                   <span className="composer-tool__mic" aria-hidden="true" />
-                  <span className="composer-tool__badge" aria-hidden="true">a</span>
                 </button>
               ) : ENABLE_VOICE_MESSAGE_BUTTON ? (
                 <button
@@ -1424,6 +1536,16 @@ function TextChatComposer({
         open={pollComposerOpen}
         onClose={() => setPollComposerOpen(false)}
         onSubmit={onSendPoll}
+      />
+      <TextChatLocationPickerModal
+        key={`${Number(locationPickerOpen)}-${locationPickerCurrentPosition?.latitude || ""}-${locationPickerCurrentPosition?.longitude || ""}`}
+        open={locationPickerOpen}
+        currentLocation={locationPickerCurrentPosition}
+        locationError={locationPickerError}
+        isLocating={locationPickerLocating}
+        onClose={handleCloseLocationPicker}
+        onLocateCurrent={requestCurrentLocation}
+        onSubmit={handleSubmitLocation}
       />
     </div>
   );
@@ -1531,4 +1653,5 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
 TextChatComposer.displayName = "TextChatComposer";
 
 export default memo(TextChatComposer, areTextChatComposerPropsEqual);
+
 

@@ -13,7 +13,9 @@ import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/aut
 import { copyTextToClipboard } from "../../utils/clipboard";
 import {
   readCachedTextChatMessages,
+  readHiddenTextChatMessageIds,
   readTextChatChannelClearedAt,
+  writeHiddenTextChatMessageIds,
   writeCachedTextChatMessages,
 } from "../../utils/textChatMessageCache";
 import {
@@ -450,6 +452,7 @@ export default function TextChat({
   const [errorMessage, setErrorMessage] = useState("");
   const [isChannelReady, setIsChannelReady] = useState(false);
   const [localClearCutoffMs, setLocalClearCutoffMs] = useState(0);
+  const [hiddenMessageIds, setHiddenMessageIds] = useState([]);
   const [composerEmojiPickerOpen, setComposerEmojiPickerOpen] = useState(false);
   const [mentionSuggestionsOpen, setMentionSuggestionsOpen] = useState(false);
   const [selectedMentionSuggestionIndex, setSelectedMentionSuggestionIndex] = useState(0);
@@ -507,6 +510,10 @@ export default function TextChat({
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const rawChannelMessages = messagesByChannel[scopedChannelId] || [];
+  const hiddenMessageIdSet = useMemo(
+    () => new Set((hiddenMessageIds || []).map((messageId) => String(messageId || ""))),
+    [hiddenMessageIds]
+  );
   const historyState = historyStateByChannel[scopedChannelId] || {
     hasMore: false,
     nextCursor: null,
@@ -514,10 +521,12 @@ export default function TextChat({
   };
   const messages = useMemo(
     () => filterMessagesAfterLocalClear(
-      rawChannelMessages.filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem)),
+      rawChannelMessages
+        .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
+        .filter((messageItem) => !hiddenMessageIdSet.has(String(messageItem?.id || ""))),
       localClearCutoffMs
     ),
-    [localClearCutoffMs, rawChannelMessages]
+    [hiddenMessageIdSet, localClearCutoffMs, rawChannelMessages]
   );
   const disableCacheHydration = useMemo(
     () => readTextChatDebugFlag("disableCacheHydration"),
@@ -564,39 +573,61 @@ export default function TextChat({
   useEffect(() => {
     if (!currentUserId || !scopedChannelId) {
       setLocalClearCutoffMs(0);
+      setHiddenMessageIds([]);
       return;
     }
 
     const nextLocalClearCutoffMs = parseTextChatClearCutoffMs(
       readTextChatChannelClearedAt(currentUserId, scopedChannelId)
     );
+    const nextHiddenMessageIds = readHiddenTextChatMessageIds(currentUserId, scopedChannelId);
     setLocalClearCutoffMs(nextLocalClearCutoffMs);
+    setHiddenMessageIds(nextHiddenMessageIds);
+    const hiddenMessageIdSet = new Set(nextHiddenMessageIds);
 
-    if (!nextLocalClearCutoffMs) {
+    if (!nextLocalClearCutoffMs && !hiddenMessageIdSet.size) {
       return;
     }
 
     setMessagesByChannel((previous) => updateChannelMessagesState(
       previous,
       scopedChannelId,
-      (channelMessages) => filterMessagesAfterLocalClear(channelMessages, nextLocalClearCutoffMs)
+      (channelMessages) => filterMessagesAfterLocalClear(
+        channelMessages.filter((messageItem) => !hiddenMessageIdSet.has(String(messageItem?.id || ""))),
+        nextLocalClearCutoffMs
+      )
     ));
     setPinnedMessages((previous) =>
-      previous.filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, nextLocalClearCutoffMs))
+      previous.filter((messageItem) =>
+        !hiddenMessageIdSet.has(String(messageItem?.id || ""))
+        && isMessageVisibleAfterLocalClear(messageItem, nextLocalClearCutoffMs)
+      )
     );
-    setSelectedMessageIds([]);
-    setReplyState(null);
-    setMessageEditState(null);
-    setMessageContextMenu(null);
+    setSelectedMessageIds((previous) => previous.filter((messageId) => !hiddenMessageIdSet.has(String(messageId || ""))));
+    setReplyState((current) =>
+      hiddenMessageIdSet.has(String(current?.messageId || ""))
+        ? null
+        : current
+    );
+    setMessageEditState((current) =>
+      hiddenMessageIdSet.has(String(current?.messageId || ""))
+        ? null
+        : current
+    );
+    setMessageContextMenu((current) =>
+      hiddenMessageIdSet.has(String(current?.messageId || ""))
+        ? null
+        : current
+    );
     setForwardModal((previous) => (
       previous.open
         ? {
-            open: false,
+          open: false,
             messageIds: [],
             targetIds: [],
             query: "",
             submitting: false,
-          }
+        }
         : previous
     ));
   }, [currentUserId, localMessageStateVersion, scopedChannelId]);
@@ -611,6 +642,7 @@ export default function TextChat({
     });
     const cachedMessages = readCachedTextChatMessages(currentUserId, scopedChannelId)
       .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
+      .filter((messageItem) => !hiddenMessageIdSet.has(String(messageItem?.id || "")))
       .filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
     if (!cachedMessages.length) {
       finishPerfTrace(cacheTraceId, {
@@ -631,7 +663,7 @@ export default function TextChat({
       channelId: scopedChannelId,
       cachedMessageCount: cachedMessages.length,
     });
-  }, [currentUserId, disableCacheHydration, localClearCutoffMs, scopedChannelId]);
+  }, [currentUserId, disableCacheHydration, hiddenMessageIdSet, localClearCutoffMs, scopedChannelId]);
 
   useEffect(() => {
     if (!currentUserId || !scopedChannelId || disableCacheHydration) {
@@ -1849,6 +1881,7 @@ export default function TextChat({
     };
 
     const handleMessageDeleted = (deletedId) => {
+      const normalizedDeletedId = String(deletedId || "");
       if (String(messageEditState?.messageId || "") === String(deletedId)) {
         stopEditingMessage();
       }
@@ -1858,6 +1891,15 @@ export default function TextChat({
       setMessageContextMenu((current) => (String(current?.messageId || "") === String(deletedId) ? null : current));
       setPinnedMessages((previous) => previous.filter((item) => String(item.id) !== String(deletedId)));
       setSelectedMessageIds((previous) => previous.filter((itemId) => String(itemId) !== String(deletedId)));
+      setHiddenMessageIds((previous) => {
+        if (!previous.includes(normalizedDeletedId)) {
+          return previous;
+        }
+
+        const nextMessageIds = previous.filter((messageId) => String(messageId || "") !== normalizedDeletedId);
+        writeHiddenTextChatMessageIds(currentUserId, scopedChannelId, nextMessageIds);
+        return nextMessageIds;
+      });
       setForwardModal((previous) =>
         previous.open
           ? {
@@ -2279,6 +2321,41 @@ export default function TextChat({
     });
   }, [revokeLocalEchoObjectUrls]);
 
+  const deleteMessageLocally = useCallback((messageId) => {
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!normalizedMessageId || !currentUserId || !scopedChannelId) {
+      return;
+    }
+
+    setHiddenMessageIds((previous) => {
+      const nextMessageIds = previous.includes(normalizedMessageId)
+        ? previous
+        : [...previous, normalizedMessageId];
+      writeHiddenTextChatMessageIds(currentUserId, scopedChannelId, nextMessageIds);
+      return nextMessageIds;
+    });
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (channelMessages) => channelMessages.filter((messageItem) => String(messageItem?.id || "") !== normalizedMessageId)
+    ));
+    setPinnedMessages((previous) => previous.filter((messageItem) => String(messageItem?.id || "") !== normalizedMessageId));
+    setSelectedMessageIds((previous) => previous.filter((selectedMessageId) => String(selectedMessageId || "") !== normalizedMessageId));
+    setReplyState((current) => (String(current?.messageId || "") === normalizedMessageId ? null : current));
+    setMessageEditState((current) => (String(current?.messageId || "") === normalizedMessageId ? null : current));
+    setMessageContextMenu((current) => (String(current?.messageId || "") === normalizedMessageId ? null : current));
+    setForwardModal((previous) =>
+      previous.open
+        ? {
+          ...previous,
+          messageIds: previous.messageIds.filter((itemId) => String(itemId || "") !== normalizedMessageId),
+        }
+        : previous
+    );
+    setActionFeedback({ tone: "success", message: "Сообщение удалено" });
+  }, [currentUserId, scopedChannelId]);
+
   const updateLocalEchoUploadProgress = useCallback((pendingUploadId, { progress = null, status = "" } = {}) => {
     const normalizedPendingUploadId = String(pendingUploadId || "").trim();
     if (!normalizedPendingUploadId) {
@@ -2354,6 +2431,7 @@ export default function TextChat({
     send,
     sendAnimatedEmoji,
     sendPoll,
+    sendLocation,
     handleFileChange,
     queueFiles,
     removePendingUpload,
@@ -2585,6 +2663,7 @@ export default function TextChat({
     startEditingMessage,
     setReplyState,
     currentUserId,
+    onDeleteMessageLocally: deleteMessageLocally,
   });
 
   const mentionMessages = useMemo(
@@ -2807,6 +2886,7 @@ export default function TextChat({
       insertComposerEmoji={insertComposerEmoji}
       sendAnimatedEmoji={sendAnimatedEmoji}
       sendPoll={sendPoll}
+      sendLocation={sendLocation}
       handleInsertMentionByUserId={handleInsertMentionByUserId}
       applyMentionSuggestion={applyMentionSuggestion}
       setSelectedMentionSuggestionIndex={setSelectedMentionSuggestionIndex}

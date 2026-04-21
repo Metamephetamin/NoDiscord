@@ -71,7 +71,7 @@ const MicMenuPanel = ({
 
     <div className="device-menu__slider">
       <span>Громкость микрофона</span>
-      <input type="range" min="0" max="100" value={micVolume} onChange={(event) => onMicVolumeChange(Number(event.target.value))} />
+      <input type="range" min="0" max="200" value={micVolume} onChange={(event) => onMicVolumeChange(Number(event.target.value))} />
       <div className="device-menu__meter" aria-hidden="true">
         {Array.from({ length: 24 }).map((_, index) => (
           <span key={index} className={index < activeMicMenuBars ? "is-active" : ""} />
@@ -111,7 +111,7 @@ const SoundMenuPanel = ({
 
     <div className="device-menu__slider">
       <span>Громкость звука</span>
-      <input type="range" min="0" max="100" value={audioVolume} onChange={(event) => onAudioVolumeChange(Number(event.target.value))} />
+      <input type="range" min="0" max="200" value={audioVolume} onChange={(event) => onAudioVolumeChange(Number(event.target.value))} />
     </div>
 
     <DeviceSettingsButton settingsIcon={settingsIcon} onClick={onOpenVoiceSettings} />

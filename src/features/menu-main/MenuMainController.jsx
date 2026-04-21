@@ -212,6 +212,16 @@ const readWorkspaceStateFromStorageKey = (storageKey) => {
 
 const readWorkspaceState = (user) => readWorkspaceStateFromStorageKey(getWorkspaceStateStorageKey(user));
 
+const MAX_DEVICE_VOLUME_PERCENT = 200;
+const clampDeviceVolumePercent = (value, fallback = 100) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(MAX_DEVICE_VOLUME_PERCENT, Math.round(numericValue)));
+};
+
 const writeWorkspaceStateToStorageKey = (storageKey, state) => {
   if (!storageKey || typeof window === "undefined") {
     return;
@@ -4674,13 +4684,15 @@ export default function MenuMain({
     updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.map((channel) => channel.id === channelId ? { ...channel, name: value } : channel) }));
   };
   const updateMicVolume = (value) => {
-    setMicVolume(value);
-    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : value) : value;
+    const normalizedValue = clampDeviceVolumePercent(value, micVolume);
+    setMicVolume(normalizedValue);
+    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : normalizedValue) : normalizedValue;
     voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
   };
   const updateAudioVolume = (value) => {
-    setAudioVolume(value);
-    voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : value);
+    const normalizedValue = clampDeviceVolumePercent(value, audioVolume);
+    setAudioVolume(normalizedValue);
+    voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : normalizedValue);
   };
   const handleInputDeviceChange = (deviceId) => {
     setSelectedInputDeviceId(deviceId || "");
@@ -4820,6 +4832,18 @@ export default function MenuMain({
       joinTraceFinished = true;
       finishPerfTrace(joinTraceId, extra);
     };
+    const activateJoinedVoiceUi = () => {
+      pushNavigationHistory(() => {
+        setDesktopServerPane("voice");
+        setCurrentVoiceChannel((previousValue) => (
+          String(previousValue || "") === scopedChannelId ? previousValue : scopedChannelId
+        ));
+        if (isMobileViewport) {
+          setMobileSection("servers");
+          setMobileServersPane("voice");
+        }
+      });
+    };
 
     const joinAttemptId = voiceJoinAttemptRef.current + 1;
     voiceJoinAttemptRef.current = joinAttemptId;
@@ -4829,14 +4853,6 @@ export default function MenuMain({
       suppressedVoiceChannelRef.current = "";
     }
     setJoiningVoiceChannelId(scopedChannelId);
-    pushNavigationHistory(() => {
-      setDesktopServerPane("voice");
-      setCurrentVoiceChannel(scopedChannelId);
-      if (isMobileViewport) {
-        setMobileSection("servers");
-        setMobileServersPane("voice");
-      }
-    });
     try {
       await voiceClientRef.current.joinChannel(scopedChannelId, user);
       if (voiceJoinAttemptRef.current !== joinAttemptId) {
@@ -4854,6 +4870,7 @@ export default function MenuMain({
         });
         return;
       }
+      activateJoinedVoiceUi();
       joinSucceeded = true;
     } catch (error) {
       if (voiceJoinAttemptRef.current === joinAttemptId) {
@@ -4882,6 +4899,7 @@ export default function MenuMain({
 
         try {
           await voiceClientRef.current.joinChannel(scopedChannelId, user);
+          activateJoinedVoiceUi();
           joinSucceeded = true;
           finishJoinTrace({
             channelId: String(channel.id || ""),

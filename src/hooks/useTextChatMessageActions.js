@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import { API_URL } from "../config/runtime";
 import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
@@ -61,6 +61,7 @@ export default function useTextChatMessageActions({
   startEditingMessage,
   setReplyState,
   currentUserId,
+  onDeleteMessageLocally,
 }) {
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchResults = useMemo(() => {
@@ -409,6 +410,15 @@ export default function useTextChatMessageActions({
     }
   };
 
+  const handleDeleteMessageLocally = () => {
+    if (!messageContextMenu?.messageId) {
+      return;
+    }
+
+    onDeleteMessageLocally?.(messageContextMenu.messageId);
+    setMessageContextMenu(null);
+  };
+
   const handleStartEditingMessage = () => {
     if (!messageContextMenu?.canEdit || !messageContextMenu?.messageId) {
       return;
@@ -752,14 +762,15 @@ export default function useTextChatMessageActions({
     {
       id: "download",
       label: getDownloadLabel(messageContextMenu?.attachmentKind),
-      icon: "v",
+      icon: "↓",
       disabled: !messageContextMenu?.hasAttachment,
       hidden: !messageContextMenu?.hasAttachment,
       onClick: () => handleDownloadAttachment(),
     },
     { id: "copy", label: "Копировать текст", icon: "⧉", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
     { id: "forward", label: "Переслать", icon: "↗", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
-    { id: "delete", label: "Удалить у всех", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: false, danger: true, onClick: handleDeleteMessage },
+    { id: "delete-local", label: "Удалить", icon: "🗑", disabled: !messageContextMenu?.messageId, hidden: false, danger: true, onClick: handleDeleteMessageLocally },
+    { id: "delete", label: "Удалить у всех", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: !messageContextMenu?.canDelete, danger: true, onClick: handleDeleteMessage },
     { id: "select", label: "Выбрать", icon: "✓", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },
   ].filter((action) => !action.hidden);
 

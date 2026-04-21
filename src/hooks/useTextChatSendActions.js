@@ -18,6 +18,8 @@ import {
 } from "../utils/textChatModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
 
+const LOCATION_MESSAGE_DEFAULT_ZOOM = 15;
+
 export default function useTextChatSendActions({
   message,
   setMessage,
@@ -782,6 +784,91 @@ export default function useTextChatSendActions({
     }
   };
 
+  const sendLocation = async ({ latitude, longitude, zoom = LOCATION_MESSAGE_DEFAULT_ZOOM } = {}) => {
+    if (!scopedChannelId || uploadingFile || voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+      return false;
+    }
+
+    if (messageEditState) {
+      setErrorMessage("Во время редактирования нельзя отправлять локацию.");
+      return false;
+    }
+
+    if (selectedFiles.length || String(message || "").trim()) {
+      setErrorMessage("Сначала отправьте или очистите текущее сообщение и вложения.");
+      return false;
+    }
+
+    const numericLatitude = Number(latitude);
+    const numericLongitude = Number(longitude);
+    if (!Number.isFinite(numericLatitude) || !Number.isFinite(numericLongitude)) {
+      setErrorMessage("Не удалось определить координаты для отправки.");
+      return false;
+    }
+
+    const now = Date.now();
+    const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
+    if (cooldownLeft > 0) {
+      setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
+      return false;
+    }
+
+    const normalizedLatitude = Number(numericLatitude.toFixed(6));
+    const normalizedLongitude = Number(numericLongitude.toFixed(6));
+    const normalizedZoom = Math.max(3, Math.min(18, Math.round(Number(zoom) || LOCATION_MESSAGE_DEFAULT_ZOOM)));
+    const locationUrl = `https://www.openstreetmap.org/?mlat=${normalizedLatitude}&mlon=${normalizedLongitude}#map=${normalizedZoom}/${normalizedLatitude}/${normalizedLongitude}`;
+    const avatar = user?.avatarUrl || user?.avatar || "";
+    let sendSucceeded = false;
+
+    try {
+      setErrorMessage("");
+      await ensureChannelJoined();
+
+      await sendMessagesCompat(scopedChannelId, avatar, [{
+        message: `📍 ${normalizedLatitude}, ${normalizedLongitude}\n${locationUrl}`,
+        mentions: [],
+        replyToMessageId: replyState?.messageId || "",
+        replyToUsername: replyState?.username || "",
+        replyPreview: replyState?.preview || "",
+        attachments: [],
+        attachmentUrl: "",
+        attachmentName: "",
+        attachmentSize: null,
+        attachmentContentType: "",
+        attachmentEncryption: null,
+        voiceMessage: null,
+      }]);
+
+      lastSendAtRef.current = Date.now();
+      clearChatDraft(user, scopedChannelId);
+
+      startTransition(() => {
+        setMessage("");
+        setReplyState(null);
+        clearPendingUploads();
+        setIsChannelReady(true);
+        setActionFeedback(null);
+      });
+
+      if (isDirectChat) {
+        playDirectMessageSound("send");
+      }
+
+      sendSucceeded = true;
+      return true;
+    } catch (error) {
+      console.error("Send location error:", error);
+      joinedChannelRef.current = "";
+      setIsChannelReady(false);
+      setErrorMessage(getChatErrorMessage(error, "Не удалось отправить локацию."));
+      return false;
+    } finally {
+      if (!sendSucceeded) {
+        setUploadingFile(false);
+      }
+    }
+  };
+
   const queueFiles = (files, { source = "unknown", preferSendAsDocuments = false } = {}) => {
     const queueTraceId = startPerfTrace("text-chat", "queue-files", {
       preferSendAsDocuments,
@@ -848,6 +935,7 @@ export default function useTextChatSendActions({
     send,
     sendAnimatedEmoji,
     sendPoll,
+    sendLocation,
     handleFileChange,
     queueFiles,
     appendPendingFiles,
