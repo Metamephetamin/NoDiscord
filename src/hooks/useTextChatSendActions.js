@@ -5,7 +5,7 @@ import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
-  createPendingUploadPreview,
+  createPendingUploadThumbnail,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
@@ -118,51 +118,59 @@ export default function useTextChatSendActions({
 
     pendingUploadPreviewFrameRef.current = scheduleFrame(() => {
       pendingUploadPreviewFrameRef.current = 0;
-      const nextQueuedUploads = Array.from(pendingUploadPreviewQueueRef.current.values());
+      const nextQueuedUploads = Array.from(pendingUploadPreviewQueueRef.current.values())
+        .filter((upload) => upload?.kind === "image" && !upload?.thumbnailUrl);
       pendingUploadPreviewQueueRef.current.clear();
-      const previewUrlMap = new Map();
-
-      nextQueuedUploads.forEach((upload) => {
-        const previewUrl = createPendingUploadPreview(upload);
-        if (previewUrl) {
-          previewUrlMap.set(String(upload.id), previewUrl);
-        }
-      });
-
-      if (!previewUrlMap.size) {
+      if (!nextQueuedUploads.length) {
         return;
       }
 
-      setSelectedFiles((previous) => {
-        const activeUploadIds = new Set(previous.map((item) => String(item?.id || "")).filter(Boolean));
-        let didChange = false;
+      Promise.all(nextQueuedUploads.map(async (upload) => ({
+        uploadId: String(upload.id || ""),
+        thumbnailUrl: await createPendingUploadThumbnail(upload).catch(() => ""),
+      }))).then((thumbnailResults) => {
+        const thumbnailUrlMap = new Map(
+          thumbnailResults
+            .filter((entry) => entry?.uploadId && entry?.thumbnailUrl)
+            .map((entry) => [entry.uploadId, entry.thumbnailUrl])
+        );
 
-        const nextUploads = previous.map((item) => {
-          const uploadId = String(item?.id || "");
-          if (!previewUrlMap.has(uploadId) || item?.previewUrl) {
-            return item;
-          }
+        if (!thumbnailUrlMap.size) {
+          return;
+        }
 
-          didChange = true;
-          return {
-            ...item,
-            previewUrl: previewUrlMap.get(uploadId) || "",
-          };
+        setSelectedFiles((previous) => {
+          const activeUploadIds = new Set(previous.map((item) => String(item?.id || "")).filter(Boolean));
+          let didChange = false;
+
+          const nextUploads = previous.map((item) => {
+            const uploadId = String(item?.id || "");
+            const nextThumbnailUrl = thumbnailUrlMap.get(uploadId);
+            if (!nextThumbnailUrl || item?.thumbnailUrl) {
+              return item;
+            }
+
+            didChange = true;
+            return {
+              ...item,
+              thumbnailUrl: nextThumbnailUrl,
+            };
+          });
+
+          thumbnailUrlMap.forEach((thumbnailUrl, uploadId) => {
+            if (activeUploadIds.has(uploadId)) {
+              return;
+            }
+
+            try {
+              URL.revokeObjectURL(thumbnailUrl);
+            } catch {
+              // Ignore revocation failures for thumbnails that were never mounted.
+            }
+          });
+
+          return didChange ? nextUploads : previous;
         });
-
-        previewUrlMap.forEach((previewUrl, uploadId) => {
-          if (activeUploadIds.has(uploadId)) {
-            return;
-          }
-
-          try {
-            URL.revokeObjectURL(previewUrl);
-          } catch {
-            // Ignore revocation failures for previews that were never mounted.
-          }
-        });
-
-        return didChange ? nextUploads : previous;
       });
     });
   };

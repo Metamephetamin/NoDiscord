@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, safeStorage, session, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, nativeImage, safeStorage, session, shell, systemPreferences } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -25,13 +25,16 @@ const APP_DISPLAY_NAME = "Tend";
 const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
 const DEFAULT_PACKAGED_API_URL = "https://tendsec.ru";
 const DESKTOP_TITLE_BAR_HEIGHT = 28;
-const DESKTOP_TITLE_BAR_COLOR = "#10141c";
+const APP_WINDOW_BACKGROUND_COLOR = "#090b0f";
+const DESKTOP_TITLE_BAR_COLOR = APP_WINDOW_BACKGROUND_COLOR;
 const DESKTOP_TITLE_BAR_SYMBOL_COLOR = "#dfe6f7";
+const WINDOWS_USE_NATIVE_TITLEBAR_OVERLAY = false;
 const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const MAX_PERF_EVENTS = 500;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
 const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+const ATTACHMENT_PICKER_PREVIEW_MAX_EDGE = 320;
 const PROD_RENDERER_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -39,8 +42,8 @@ const PROD_RENDERER_CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: http: https:",
-  "media-src 'self' data: blob: http: https:",
+  "img-src 'self' data: blob: file: http: https:",
+  "media-src 'self' data: blob: file: http: https:",
   "font-src 'self' data:",
   "connect-src 'self' http: https: ws: wss:",
   "worker-src 'self' blob:",
@@ -52,8 +55,8 @@ const DEV_RENDERER_CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: http: https:",
-  "media-src 'self' data: blob: http: https:",
+  "img-src 'self' data: blob: file: http: https:",
+  "media-src 'self' data: blob: file: http: https:",
   "font-src 'self' data:",
   "connect-src 'self' http: https: ws: wss:",
   "worker-src 'self' blob:",
@@ -123,7 +126,7 @@ const activePerfTraces = new Map();
 let perfSequence = 0;
 
 const applyTitleBarOverlayVisibility = (visible = true) => {
-  if (process.platform !== "win32" || !mainWindow || mainWindow.isDestroyed()) {
+  if (process.platform !== "win32" || !WINDOWS_USE_NATIVE_TITLEBAR_OVERLAY || !mainWindow || mainWindow.isDestroyed()) {
     return false;
   }
 
@@ -1135,20 +1138,78 @@ const inferAttachmentPickerContentType = (filePath) => {
   return ATTACHMENT_PICKER_CONTENT_TYPES[extension] || "application/octet-stream";
 };
 
+const inferAttachmentPickerPreviewKind = (contentType) => {
+  const normalizedContentType = String(contentType || "").trim().toLowerCase();
+  if (normalizedContentType.startsWith("image/")) {
+    return "image";
+  }
+
+  if (normalizedContentType.startsWith("video/")) {
+    return "video";
+  }
+
+  return "file";
+};
+
+const createAttachmentPickerPreviewDataUrl = async (filePath, kind) => {
+  if (kind !== "image") {
+    return "";
+  }
+
+  try {
+    const image = nativeImage.createFromPath(filePath);
+    if (!image || image.isEmpty()) {
+      return "";
+    }
+
+    const { width, height } = image.getSize();
+    if (!width || !height) {
+      return "";
+    }
+
+    const scale = Math.min(1, ATTACHMENT_PICKER_PREVIEW_MAX_EDGE / Math.max(width, height));
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const previewImage = scale < 1
+      ? image.resize({
+        width: targetWidth,
+        height: targetHeight,
+        quality: "good",
+      })
+      : image;
+
+    return previewImage.toDataURL();
+  } catch {
+    return "";
+  }
+};
+
 const rememberAttachmentPickerFile = async (filePath) => {
   const normalizedPath = String(filePath || "").trim();
   if (!normalizedPath) {
     return null;
   }
 
+  const stats = await fs.stat(normalizedPath);
+  if (!stats.isFile() || stats.size > ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES) {
+    return null;
+  }
+
+  const contentType = inferAttachmentPickerContentType(normalizedPath);
+  const kind = inferAttachmentPickerPreviewKind(contentType);
+  const thumbnailUrl = await createAttachmentPickerPreviewDataUrl(normalizedPath, kind);
+
   attachmentPickerSequence += 1;
   const token = `attachment-picker:${Date.now()}:${attachmentPickerSequence}`;
   const descriptor = {
     token,
     name: path.basename(normalizedPath),
-    size: 0,
-    type: inferAttachmentPickerContentType(normalizedPath),
-    lastModified: Date.now(),
+    size: Number(stats.size) || 0,
+    type: contentType,
+    kind,
+    lastModified: Number(stats.mtimeMs) || Date.now(),
+    previewUrl: "",
+    thumbnailUrl,
   };
 
   attachmentPickerFiles.set(token, {
@@ -1364,15 +1425,18 @@ const createWindow = () => {
     height: 800,
     title: APP_DISPLAY_NAME,
     icon: resolveAppIconPath(),
+    backgroundColor: APP_WINDOW_BACKGROUND_COLOR,
     autoHideMenuBar: true,
     titleBarStyle: "hidden",
     ...(process.platform === "win32"
       ? {
-          titleBarOverlay: {
-            color: DESKTOP_TITLE_BAR_COLOR,
-            symbolColor: DESKTOP_TITLE_BAR_SYMBOL_COLOR,
-            height: DESKTOP_TITLE_BAR_HEIGHT,
-          },
+          titleBarOverlay: WINDOWS_USE_NATIVE_TITLEBAR_OVERLAY
+            ? {
+                color: DESKTOP_TITLE_BAR_COLOR,
+                symbolColor: DESKTOP_TITLE_BAR_SYMBOL_COLOR,
+                height: DESKTOP_TITLE_BAR_HEIGHT,
+              }
+            : false,
         }
       : {}),
     webPreferences: {
@@ -1594,6 +1658,35 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("window-controls:set-titlebar-overlay-visible", async (_event, visible = true) =>
     applyTitleBarOverlayVisibility(visible !== false));
+  ipcMain.handle("window-controls:minimize", async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return false;
+    }
+
+    mainWindow.minimize();
+    return true;
+  });
+  ipcMain.handle("window-controls:toggle-maximize", async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return false;
+    }
+
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+
+    return true;
+  });
+  ipcMain.handle("window-controls:close", async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return false;
+    }
+
+    mainWindow.close();
+    return true;
+  });
   ipcMain.handle("desktop-notifications:show", async (_event, payload) =>
     showDesktopNotification(payload && typeof payload === "object" ? payload : {}));
   ipcMain.handle("permissions:get-media-status", async (_event, mediaType) => getMediaAccessStatus(mediaType));
@@ -1686,32 +1779,32 @@ app.whenReady().then(async () => {
         .map((token) => String(token || "").trim())
         .filter(Boolean)
     ));
-    const files = [];
-
-    for (const token of tokens) {
+    const files = (await Promise.all(tokens.map(async (token) => {
       const entry = attachmentPickerFiles.get(token);
       if (!entry?.path || !entry?.descriptor) {
-        // eslint-disable-next-line no-continue
-        continue;
+        return null;
       }
 
-      const stats = await fs.stat(entry.path);
-      if (!stats.isFile() || stats.size > ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES) {
+      try {
+        const stats = await fs.stat(entry.path);
+        if (!stats.isFile() || stats.size > ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES) {
+          attachmentPickerFiles.delete(token);
+          return null;
+        }
+
+        const buffer = await fs.readFile(entry.path);
         attachmentPickerFiles.delete(token);
-        // eslint-disable-next-line no-continue
-        continue;
+        return {
+          ...entry.descriptor,
+          size: Number(stats.size) || entry.descriptor.size || 0,
+          lastModified: Number(stats.mtimeMs) || entry.descriptor.lastModified || Date.now(),
+          bytes: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+        };
+      } catch {
+        attachmentPickerFiles.delete(token);
+        return null;
       }
-
-      // eslint-disable-next-line no-await-in-loop
-      const buffer = await fs.readFile(entry.path);
-      attachmentPickerFiles.delete(token);
-      files.push({
-        ...entry.descriptor,
-        size: Number(stats.size) || entry.descriptor.size || 0,
-        lastModified: Number(stats.mtimeMs) || entry.descriptor.lastModified || Date.now(),
-        bytes: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
-      });
-    }
+    }))).filter(Boolean);
 
     finishPerfTrace(traceId, {
       requestedTokenCount: tokens.length,

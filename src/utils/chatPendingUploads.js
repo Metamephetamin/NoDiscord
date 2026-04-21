@@ -7,7 +7,7 @@ const COMPRESSIBLE_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
-const THUMBNAIL_MAX_EDGE = 480;
+const THUMBNAIL_MAX_EDGE = 320;
 const THUMBNAIL_QUALITY = 0.86;
 
 const UPLOAD_SIGNATURE_CONTENT_TYPES = {
@@ -80,6 +80,7 @@ export function isCompressibleImageUpload(upload) {
 
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
+  const previewUrl = createPendingUploadPreview(file);
 
   return {
     id: buildUploadId(),
@@ -88,7 +89,7 @@ export function createPendingUpload(file) {
     size: Number(file?.size) || 0,
     type: String(file?.type || "").trim(),
     kind,
-    previewUrl: "",
+    previewUrl,
     thumbnailUrl: "",
     status: "queued",
     progress: 0,

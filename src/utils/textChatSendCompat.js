@@ -58,9 +58,12 @@ function normalizeChatFileHubUrl(value) {
 }
 
 function normalizeHubMessageInput(item) {
-  const attachments = Array.isArray(item?.attachments)
-    ? item.attachments.map(normalizeHubAttachmentInput)
-    : [];
+  const sourceAttachments = Array.isArray(item?.attachments)
+    ? item.attachments
+    : Array.isArray(item?.Attachments)
+      ? item.Attachments
+      : [];
+  const attachments = sourceAttachments.map(normalizeHubAttachmentInput);
   const attachmentAsFile = Boolean(item?.attachmentAsFile || item?.AttachmentAsFile || attachments[0]?.attachmentAsFile);
   const clientTempId = String(item?.clientTempId || item?.ClientTempId || "").trim();
 
@@ -75,21 +78,54 @@ function normalizeHubMessageInput(item) {
   };
 }
 
-export async function sendMessagesCompat({
-  targetChannelId,
-  avatar,
-  payload,
-  user,
-  allowBatch = true,
-}) {
+function normalizeSendMessagesCompatArgs(firstArg, legacyAvatar = "", legacyPayload = [], legacyOptions = {}) {
+  if (firstArg && typeof firstArg === "object" && !Array.isArray(firstArg)) {
+    return {
+      targetChannelId: firstArg.targetChannelId,
+      avatar: firstArg.avatar,
+      payload: firstArg.payload,
+      user: firstArg.user,
+      allowBatch: firstArg.allowBatch !== false,
+    };
+  }
+
+  return {
+    targetChannelId: firstArg,
+    avatar: legacyAvatar,
+    payload: legacyPayload,
+    user: legacyOptions?.user,
+    allowBatch: legacyOptions?.allowBatch !== false,
+  };
+}
+
+function hasMessagePayloadContent(item) {
+  const attachments = Array.isArray(item?.attachments)
+    ? item.attachments
+    : Array.isArray(item?.Attachments)
+      ? item.Attachments
+      : [];
+
+  return String(item?.message || item?.Message || "").trim()
+    || String(item?.attachmentUrl || item?.AttachmentUrl || "").trim()
+    || item?.voiceMessage
+    || item?.VoiceMessage
+    || attachments.some((attachment) => (
+      String(attachment?.attachmentUrl || attachment?.AttachmentUrl || "").trim()
+      || attachment?.voiceMessage
+      || attachment?.VoiceMessage
+    ));
+}
+
+export async function sendMessagesCompat(...args) {
+  const {
+    targetChannelId,
+    avatar,
+    payload,
+    user,
+    allowBatch,
+  } = normalizeSendMessagesCompatArgs(...args);
   const normalizedPayload = Array.isArray(payload)
-    ? payload.filter((item) => {
-        const attachments = Array.isArray(item?.attachments) ? item.attachments : [];
-        return String(item?.message || "").trim()
-          || String(item?.attachmentUrl || "").trim()
-          || item?.voiceMessage
-          || attachments.some((attachment) => String(attachment?.attachmentUrl || "").trim() || attachment?.voiceMessage);
-      })
+    ? payload.filter(hasMessagePayloadContent)
     : [];
 
   if (!normalizedPayload.length) {

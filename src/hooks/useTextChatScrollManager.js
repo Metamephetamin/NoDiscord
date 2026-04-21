@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatDayLabel } from "../utils/textChatHelpers";
 
-const SCROLL_NEAR_BOTTOM_PX = 32;
+const SCROLL_NEAR_BOTTOM_PX = 64;
 const SCROLL_LOAD_OLDER_THRESHOLD_PX = 180;
 const FLOATING_DATE_PROBE_OFFSET_PX = 24;
+const LATEST_SCROLL_BOTTOM_PADDING_PX = 20;
 const PROGRAMMATIC_SCROLL_AUTO_RESET_MS = 420;
-const FORCE_LATEST_SCROLL_FRAME_COUNT = 3;
-const FORCE_LATEST_SCROLL_SETTLE_MS = 120;
+const FORCE_LATEST_SCROLL_FRAME_COUNT = 5;
+const FORCE_LATEST_SCROLL_SETTLE_MS = 160;
+const FORCE_LATEST_SCROLL_FINAL_SETTLE_MS = 420;
 const TEXT_CHAT_SCROLL_STATE_PREFIX = "textchat-scroll-state";
 const TEXT_CHAT_SCROLL_STATE_ENABLED = false;
 
@@ -78,6 +80,30 @@ function clampScrollTop(list, top) {
   return Math.max(0, Math.min(maxScrollTop, Number(top) || 0));
 }
 
+function applyScrollTop(list, top) {
+  const nextScrollTop = clampScrollTop(list, top);
+  list.scrollTop = nextScrollTop;
+  return nextScrollTop;
+}
+
+function getLatestAnchorScrollTop(list, endNode) {
+  if (!list) {
+    return 0;
+  }
+
+  const maxScrollTop = clampScrollTop(list, list.scrollHeight);
+  if (!endNode) {
+    return maxScrollTop;
+  }
+
+  const anchorScrollTop = clampScrollTop(
+    list,
+    Number(endNode.offsetTop || 0) + Number(endNode.offsetHeight || 0) - Number(list.clientHeight || 0) + LATEST_SCROLL_BOTTOM_PADDING_PX
+  );
+
+  return Math.max(maxScrollTop, anchorScrollTop);
+}
+
 function getTargetScrollTopForBlock(list, targetTop, targetHeight, block = "center") {
   if (block === "start") {
     return clampScrollTop(list, targetTop - 24);
@@ -111,6 +137,7 @@ export default function useTextChatScrollManager({
   currentUserId = "",
   isDirectChat = false,
   messagesListRef,
+  messagesEndRef,
   messageRefs,
   setHighlightedMessageId,
   estimateMessageOffsetById,
@@ -129,6 +156,7 @@ export default function useTextChatScrollManager({
   const previousScrollHeightRef = useRef(0);
   const autoScrollRafRef = useRef(0);
   const autoScrollSettleTimeoutRef = useRef(0);
+  const autoScrollFinalTimeoutRef = useRef(0);
   const lastObservedScrollTopRef = useRef(0);
   const nearBottomRef = useRef(true);
   const userDetachedFromBottomRef = useRef(false);
@@ -365,9 +393,16 @@ export default function useTextChatScrollManager({
       return;
     }
 
+    const nextScrollTop = clampScrollTop(list, top);
     markProgrammaticScroll(scrollIntent);
+    if (behavior === "auto") {
+      applyScrollTop(list, nextScrollTop);
+      lastObservedScrollTopRef.current = nextScrollTop;
+      return;
+    }
+
     list.scrollTo({
-      top: clampScrollTop(list, top),
+      top: nextScrollTop,
       behavior,
     });
   }, [markProgrammaticScroll, messagesListRef]);
@@ -382,8 +417,8 @@ export default function useTextChatScrollManager({
 
     nearBottomRef.current = true;
     userDetachedFromBottomRef.current = false;
-    scrollToPosition(list.scrollHeight, { behavior, scrollIntent: "manual-bottom" });
-  }, [clearUnreadBelow, messagesListRef, scrollToPosition]);
+    scrollToPosition(getLatestAnchorScrollTop(list, messagesEndRef?.current), { behavior, scrollIntent: "manual-bottom" });
+  }, [clearUnreadBelow, messagesEndRef, messagesListRef, scrollToPosition]);
 
   const anchorBottomAfterViewportResize = useCallback(() => {
     const list = messagesListRef.current;
@@ -391,7 +426,7 @@ export default function useTextChatScrollManager({
       return;
     }
 
-    const nextScrollTop = clampScrollTop(list, list.scrollHeight);
+    const nextScrollTop = getLatestAnchorScrollTop(list, messagesEndRef?.current);
     if (Math.abs((Number(list.scrollTop) || 0) - nextScrollTop) < 1) {
       return;
     }
@@ -404,14 +439,14 @@ export default function useTextChatScrollManager({
       scrollIntent: "resize-bottom",
       isProgrammaticScroll: true,
     };
-    list.scrollTop = nextScrollTop;
+    applyScrollTop(list, nextScrollTop);
     lastObservedScrollTopRef.current = nextScrollTop;
     scrollStateRef.current = {
       scrollIntent: "user",
       isProgrammaticScroll: false,
     };
     scheduleViewportUpdate();
-  }, [clearUnreadBelow, messagesListRef, scheduleViewportUpdate]);
+  }, [clearUnreadBelow, messagesEndRef, messagesListRef, scheduleViewportUpdate]);
 
   const forceScrollToLatest = useCallback((behavior = "auto") => {
     if (autoScrollRafRef.current) {
@@ -421,6 +456,10 @@ export default function useTextChatScrollManager({
     if (autoScrollSettleTimeoutRef.current) {
       window.clearTimeout(autoScrollSettleTimeoutRef.current);
       autoScrollSettleTimeoutRef.current = 0;
+    }
+    if (autoScrollFinalTimeoutRef.current) {
+      window.clearTimeout(autoScrollFinalTimeoutRef.current);
+      autoScrollFinalTimeoutRef.current = 0;
     }
 
     nearBottomRef.current = true;
@@ -447,6 +486,18 @@ export default function useTextChatScrollManager({
         scrollToLatest("auto");
       }
     }, FORCE_LATEST_SCROLL_SETTLE_MS);
+
+    autoScrollFinalTimeoutRef.current = window.setTimeout(() => {
+      autoScrollFinalTimeoutRef.current = 0;
+      if (nearBottomRef.current && !userDetachedFromBottomRef.current) {
+        scrollToLatest("auto");
+        window.requestAnimationFrame(() => {
+          if (nearBottomRef.current && !userDetachedFromBottomRef.current) {
+            scrollToLatest("auto");
+          }
+        });
+      }
+    }, FORCE_LATEST_SCROLL_FINAL_SETTLE_MS);
   }, [scrollToLatest]);
 
   const captureJumpSnapshot = useCallback(() => {
@@ -721,6 +772,10 @@ export default function useTextChatScrollManager({
       if (autoScrollSettleTimeoutRef.current) {
         window.clearTimeout(autoScrollSettleTimeoutRef.current);
         autoScrollSettleTimeoutRef.current = 0;
+      }
+      if (autoScrollFinalTimeoutRef.current) {
+        window.clearTimeout(autoScrollFinalTimeoutRef.current);
+        autoScrollFinalTimeoutRef.current = 0;
       }
     };
   }, [markUserScrollIntent, messagesListRef, scheduleViewportUpdate, updateNearBottomFromList]);

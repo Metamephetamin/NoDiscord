@@ -209,6 +209,15 @@ contextBridge.exposeInMainWorld("electronWindowControls", {
   async setTitleBarOverlayVisible(visible = true) {
     return ipcRenderer.invoke("window-controls:set-titlebar-overlay-visible", visible);
   },
+  async minimize() {
+    return ipcRenderer.invoke("window-controls:minimize");
+  },
+  async toggleMaximize() {
+    return ipcRenderer.invoke("window-controls:toggle-maximize");
+  },
+  async close() {
+    return ipcRenderer.invoke("window-controls:close");
+  },
 });
 
 contextBridge.exposeInMainWorld("electronDesktopNotifications", {

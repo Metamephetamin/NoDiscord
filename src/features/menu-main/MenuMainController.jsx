@@ -6348,6 +6348,16 @@ export default function MenuMain({
     openSettings,
     workspaceMode,
   ]);
+  const hasDesktopWindowControls = typeof window !== "undefined" && Boolean(window.electronWindowControls?.minimize);
+  const handleWindowMinimize = useCallback(() => {
+    window.electronWindowControls?.minimize?.().catch?.(() => {});
+  }, []);
+  const handleWindowToggleMaximize = useCallback(() => {
+    window.electronWindowControls?.toggleMaximize?.().catch?.(() => {});
+  }, []);
+  const handleWindowClose = useCallback(() => {
+    window.electronWindowControls?.close?.().catch?.(() => {});
+  }, []);
   const renderDesktopTitlebar = () => (
     <div className="desktop-app-topbar">
       <div className="desktop-app-topbar__drag" aria-hidden="true" />
@@ -6389,7 +6399,39 @@ export default function MenuMain({
           </div>
         </div>
       </div>
-      <div className="desktop-app-topbar__right" />
+      <div className="desktop-app-topbar__right">
+        {hasDesktopWindowControls ? (
+          <div className="desktop-app-topbar__window-controls">
+            <button
+              type="button"
+              className="desktop-app-topbar__window-button"
+              onClick={handleWindowMinimize}
+              aria-label="Свернуть окно"
+              title="Свернуть"
+            >
+              <span className="desktop-app-topbar__window-glyph desktop-app-topbar__window-glyph--minimize" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="desktop-app-topbar__window-button"
+              onClick={handleWindowToggleMaximize}
+              aria-label="Развернуть окно"
+              title="Развернуть"
+            >
+              <span className="desktop-app-topbar__window-glyph desktop-app-topbar__window-glyph--maximize" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="desktop-app-topbar__window-button desktop-app-topbar__window-button--close"
+              onClick={handleWindowClose}
+              aria-label="Закрыть окно"
+              title="Закрыть"
+            >
+              <span className="desktop-app-topbar__window-glyph desktop-app-topbar__window-glyph--close" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
   const renderMobileShell = () => (

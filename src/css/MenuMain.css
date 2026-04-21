@@ -16,9 +16,9 @@
   align-items: center;
   padding: 0 10px 0 10px;
   background:
-    radial-gradient(circle at 50% 50%, rgba(86, 98, 128, 0.16), transparent 28%),
-    linear-gradient(90deg, #10141c 0%, #121721 18%, #171d28 50%, #121721 82%, #10141c 100%);
-  border-bottom: 1px solid rgba(18, 23, 32, 0.98);
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08), transparent 28%),
+    linear-gradient(90deg, #090b0f 0%, #0b0d11 18%, #11141a 50%, #0b0d11 82%, #090b0f 100%);
+  border-bottom: 1px solid rgba(9, 11, 15, 0.98);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
   -webkit-app-region: drag;
 }
@@ -68,6 +68,95 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .desktop-app-topbar__right {
   min-height: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-app-topbar__window-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.desktop-app-topbar__window-button {
+  width: 30px;
+  height: 24px;
+  border: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #dfe6f7;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.desktop-app-topbar__window-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.desktop-app-topbar__window-button:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.desktop-app-topbar__window-button--close:hover {
+  background: rgba(216, 74, 74, 0.82);
+  color: #ffffff;
+}
+
+.desktop-app-topbar__window-button--close:active {
+  background: rgba(196, 58, 58, 0.92);
+}
+
+.desktop-app-topbar__window-glyph {
+  position: relative;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  opacity: 0.96;
+}
+
+.desktop-app-topbar__window-glyph--minimize::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.desktop-app-topbar__window-glyph--maximize::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.desktop-app-topbar__window-glyph--close::before,
+.desktop-app-topbar__window-glyph--close::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  width: 1.5px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.desktop-app-topbar__window-glyph--close::before {
+  transform: rotate(45deg);
+}
+
+.desktop-app-topbar__window-glyph--close::after {
+  transform: rotate(-45deg);
 }
 
 .desktop-app-topbar__nav {

@@ -245,6 +245,25 @@ export const getUserName = (user) => user?.nickname || user?.firstName || user?.
 export const getScopedChatChannelId = (serverId, channelId) =>
   serverId && channelId ? `server:${serverId}::channel:${channelId}` : "";
 
+function normalizeAttachmentUrlValue(value) {
+  return String(value || "").trim();
+}
+
+function getAttachmentUrlValue(attachment) {
+  return normalizeAttachmentUrlValue(
+    attachment?.attachmentUrl
+    || attachment?.AttachmentUrl
+    || attachment?.attachmentSourceUrl
+    || attachment?.AttachmentSourceUrl
+    || attachment?.fileUrl
+    || attachment?.FileUrl
+    || attachment?.url
+    || attachment?.Url
+    || attachment?.src
+    || attachment?.Src
+  );
+}
+
 export function normalizeAttachmentItems(messageItem) {
   const sourceAttachments = Array.isArray(messageItem?.attachments)
     ? messageItem.attachments
@@ -253,27 +272,41 @@ export function normalizeAttachmentItems(messageItem) {
       : [];
 
   const normalizedFromArray = sourceAttachments
-    .map((attachment, index) => ({
-      id: String(attachment?.id || attachment?.Id || `${messageItem?.id || "message"}:${index}`),
-      attachmentUrl: String(attachment?.attachmentUrl || attachment?.AttachmentUrl || "").trim(),
-      attachmentName: String(attachment?.attachmentName || attachment?.AttachmentName || "").trim(),
-      attachmentSize: Number.isFinite(Number(attachment?.attachmentSize))
-        ? Number(attachment.attachmentSize)
-        : Number.isFinite(Number(attachment?.AttachmentSize))
-          ? Number(attachment.AttachmentSize)
-          : null,
-      attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || "").trim(),
-      attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile),
-      attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null,
-      voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage),
-    }))
+    .map((attachment, index) => {
+      const attachmentUrl = getAttachmentUrlValue(attachment);
+
+      return {
+        id: String(attachment?.id || attachment?.Id || `${messageItem?.id || "message"}:${index}`),
+        attachmentUrl,
+        attachmentSourceUrl: normalizeAttachmentUrlValue(attachment?.attachmentSourceUrl || attachment?.AttachmentSourceUrl || attachmentUrl),
+        attachmentName: String(attachment?.attachmentName || attachment?.AttachmentName || attachment?.fileName || attachment?.FileName || attachment?.name || attachment?.Name || "").trim(),
+        attachmentSize: Number.isFinite(Number(attachment?.attachmentSize))
+          ? Number(attachment.attachmentSize)
+          : Number.isFinite(Number(attachment?.AttachmentSize))
+            ? Number(attachment.AttachmentSize)
+            : Number.isFinite(Number(attachment?.size))
+              ? Number(attachment.size)
+              : Number.isFinite(Number(attachment?.Size))
+                ? Number(attachment.Size)
+                : null,
+        attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || attachment?.contentType || attachment?.ContentType || attachment?.type || attachment?.Type || "").trim(),
+        attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile),
+        attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null,
+        voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage),
+        attachmentIndex: Number.isFinite(Number(attachment?.attachmentIndex))
+          ? Number(attachment.attachmentIndex)
+          : Number.isFinite(Number(attachment?.AttachmentIndex))
+            ? Number(attachment.AttachmentIndex)
+            : index,
+      };
+    })
     .filter((attachment) => attachment.attachmentUrl || attachment.attachmentEncryption || attachment.voiceMessage);
 
   if (normalizedFromArray.length) {
     return normalizedFromArray;
   }
 
-  const legacyAttachmentUrl = String(messageItem?.attachmentUrl || messageItem?.AttachmentUrl || "").trim();
+  const legacyAttachmentUrl = getAttachmentUrlValue(messageItem);
   const legacyAttachmentEncryption = messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null;
   const legacyAttachmentAsFile = Boolean(messageItem?.attachmentAsFile || messageItem?.AttachmentAsFile);
   const legacyVoiceMessage = normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage);
@@ -285,16 +318,22 @@ export function normalizeAttachmentItems(messageItem) {
   return [{
     id: String(messageItem?.id || "message"),
     attachmentUrl: legacyAttachmentUrl,
-    attachmentName: String(messageItem?.attachmentName || messageItem?.AttachmentName || "").trim(),
+    attachmentSourceUrl: normalizeAttachmentUrlValue(messageItem?.attachmentSourceUrl || messageItem?.AttachmentSourceUrl || legacyAttachmentUrl),
+    attachmentName: String(messageItem?.attachmentName || messageItem?.AttachmentName || messageItem?.fileName || messageItem?.FileName || messageItem?.name || messageItem?.Name || "").trim(),
     attachmentSize: Number.isFinite(Number(messageItem?.attachmentSize))
       ? Number(messageItem.attachmentSize)
       : Number.isFinite(Number(messageItem?.AttachmentSize))
         ? Number(messageItem.AttachmentSize)
-        : null,
-    attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || "").trim(),
+        : Number.isFinite(Number(messageItem?.size))
+          ? Number(messageItem.size)
+          : Number.isFinite(Number(messageItem?.Size))
+            ? Number(messageItem.Size)
+            : null,
+    attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || messageItem?.contentType || messageItem?.ContentType || messageItem?.type || messageItem?.Type || "").trim(),
     attachmentAsFile: legacyAttachmentAsFile,
     attachmentEncryption: legacyAttachmentEncryption,
     voiceMessage: legacyVoiceMessage,
+    attachmentIndex: 0,
   }];
 }
 

@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import PendingUploadPreview from "./PendingUploadPreview";
 import { formatFileSize } from "../utils/textChatHelpers";
-import { finishPerfTraceOnNextFrame, recordPerfEvent, startPerfTrace } from "../utils/perf";
+import { finishPerfTraceOnNextFrame, recordPerfEvent } from "../utils/perf";
 
 const INITIAL_VISIBLE_BATCH_ITEMS = 12;
 const BATCH_RENDER_CHUNK_SIZE = 18;
@@ -237,6 +237,85 @@ function PendingBatchUploadDocumentShell({ fileCount }) {
   );
 }
 
+function PendingBatchUploadMediaPreviewGrid({ items, fileCount }) {
+  const previewItems = Array.isArray(items) ? items.slice(0, 6) : [];
+  const resolvedCount = Math.min(Math.max(fileCount, previewItems.length, 1), 6);
+
+  return (
+    <div className={`batch-upload-sheet__grid batch-upload-sheet__grid--count-${resolvedCount}`}>
+      {previewItems.map((item, index) => (
+        <div
+          key={item?.id || `pending-preview-${index}`}
+          className={`batch-upload-sheet__tile ${getBatchTileClassName(resolvedCount, index)} batch-upload-sheet__tile--pending-preview`}
+        >
+          <PendingUploadPreview
+            file={item}
+            className="batch-upload-sheet__preview"
+            fallbackClassName="batch-upload-sheet__thumb-fallback"
+            preferThumbnailOnly
+          />
+        </div>
+      ))}
+      {Array.from({ length: Math.max(0, resolvedCount - previewItems.length) }, (_, index) => {
+        const tileIndex = previewItems.length + index;
+        return (
+          <div
+            key={`pending-media-shell-${tileIndex}`}
+            className={`batch-upload-sheet__tile ${getBatchTileClassName(resolvedCount, tileIndex)} batch-upload-sheet__tile--pending-shell`}
+            aria-hidden="true"
+          >
+            <span className="batch-upload-sheet__tile-pending-shimmer" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PendingBatchUploadDocumentPreviewList({ items, fileCount }) {
+  const previewItems = Array.isArray(items) ? items.slice(0, 4) : [];
+  const resolvedCount = Math.min(Math.max(fileCount, previewItems.length, 1), 4);
+
+  return (
+    <div className="batch-upload-sheet__document-list">
+      {previewItems.map((item, index) => (
+        <div
+          key={item?.id || `pending-document-preview-${index}`}
+          className="batch-upload-sheet__document-row batch-upload-sheet__document-row--pending-preview"
+        >
+          <span className="batch-upload-sheet__document-preview">
+            <PendingUploadPreview
+              file={item}
+              className="batch-upload-sheet__document-preview-media"
+              fallbackClassName="batch-upload-sheet__document-fallback"
+              preferThumbnailOnly
+            />
+          </span>
+          <span className="batch-upload-sheet__document-copy">
+            <span className="batch-upload-sheet__document-name">{item?.name || "Файл"}</span>
+            <span className="batch-upload-sheet__document-meta">{formatFileSize(item?.size)}</span>
+          </span>
+        </div>
+      ))}
+      {Array.from({ length: Math.max(0, resolvedCount - previewItems.length) }, (_, index) => (
+        <div
+          key={`pending-document-shell-${previewItems.length + index}`}
+          className="batch-upload-sheet__document-row batch-upload-sheet__document-row--pending-shell"
+          aria-hidden="true"
+        >
+          <span className="batch-upload-sheet__document-preview batch-upload-sheet__document-preview--pending-shell">
+            <span className="batch-upload-sheet__tile-pending-shimmer" />
+          </span>
+          <span className="batch-upload-sheet__document-copy batch-upload-sheet__document-copy--pending-shell">
+            <span className="batch-upload-sheet__document-line batch-upload-sheet__document-line--title" />
+            <span className="batch-upload-sheet__document-line batch-upload-sheet__document-line--meta" />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TextChatBatchUploadSheet({
   selectedFiles,
   uploadingFile,
@@ -255,13 +334,13 @@ function TextChatBatchUploadSheet({
 }) {
   const fileCount = selectedFiles.length;
   const pendingFileCount = Math.max(0, Number(pendingSelection?.fileCount) || 0);
-  const resolvedFileCount = fileCount || pendingFileCount;
+  const resolvedFileCount = Math.max(fileCount, pendingFileCount);
   const pendingHeaderName = String(pendingSelection?.firstFileName || "").trim();
   const pendingLayoutMode = String(pendingSelection?.layout || "").trim() === "document" ? "document" : "media";
+  const pendingPreviewItems = Array.isArray(pendingSelection?.previewItems) ? pendingSelection.previewItems : [];
   const waitingForPicker = Boolean(pendingSelection?.waitingForPicker);
   const [activeFileId, setActiveFileId] = useState(() => String(selectedFiles?.[0]?.id || ""));
   const [visibleItemCount, setVisibleItemCount] = useState(() => Math.min(fileCount, INITIAL_VISIBLE_BATCH_ITEMS));
-  const [previewEnabled, setPreviewEnabled] = useState(false);
   const activeFile = selectedFiles.find((item) => String(item?.id || "") === String(activeFileId || "")) || selectedFiles[0] || null;
   const resolvedActiveFileId = String(activeFile?.id || "");
   const sendAsDocumentsEnabled = Boolean(batchOptions?.sendAsDocuments);
@@ -273,7 +352,12 @@ function TextChatBatchUploadSheet({
   const useDocumentLayout = layoutMode === "document";
   const controlsDisabled = uploadingFile || showPendingShell;
   const visibleFiles = selectedFiles.slice(0, visibleItemCount);
-  const resolvedGridCount = Math.min(showPendingShell ? resolvedFileCount : fileCount, 6);
+  const resolvedGridCount = Math.min(resolvedFileCount, 6);
+  const displayTileCount = Math.max(visibleFiles.length, resolvedGridCount || fileCount);
+  const unresolvedVisibleTileCount = useDocumentLayout
+    ? 0
+    : Math.max(0, Math.min(resolvedGridCount, resolvedFileCount) - visibleFiles.length);
+  const previewEnabled = !showPendingShell && fileCount > 0;
 
   useLayoutEffect(() => {
     const pickerOpenedAt = typeof window !== "undefined"
@@ -362,71 +446,6 @@ function TextChatBatchUploadSheet({
   }, [fileCount]);
 
   useEffect(() => {
-    setPreviewEnabled(false);
-  }, [fileCount]);
-
-  useEffect(() => {
-    if (fileCount < 1) {
-      return undefined;
-    }
-
-    if (typeof window !== "undefined") {
-      window.__TEND_PENDING_UPLOAD_PREVIEW_TRACE_ID__ = startPerfTrace("text-chat", "batch-upload-sheet:preview-enabled", {
-        layoutMode,
-        selectedFileCount: fileCount,
-        sendAsDocuments: sendAsDocumentsEnabled,
-      });
-    }
-
-    let cancelled = false;
-    const scheduleFrame =
-      typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
-        ? window.requestAnimationFrame.bind(window)
-        : (callback) => setTimeout(callback, 16);
-    const cancelFrame =
-      typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
-        ? window.cancelAnimationFrame.bind(window)
-        : clearTimeout;
-
-    const firstFrameId = scheduleFrame(() => {
-      if (!cancelled) {
-        setPreviewEnabled(true);
-        recordPerfEvent("text-chat", "batch-upload-sheet:preview-state-enabled", {
-          layoutMode,
-          selectedFileCount: fileCount,
-          sendAsDocuments: sendAsDocumentsEnabled,
-        });
-        logUploadDiagnostic("preview-state-enabled", {
-          layoutMode,
-          selectedFileCount: fileCount,
-          sendAsDocuments: sendAsDocumentsEnabled,
-        });
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      cancelFrame(firstFrameId);
-    };
-  }, [fileCount, layoutMode, sendAsDocumentsEnabled]);
-
-  useEffect(() => {
-    const traceId = typeof window !== "undefined"
-      ? window.__TEND_PENDING_UPLOAD_PREVIEW_TRACE_ID__
-      : "";
-    if (!traceId || !previewEnabled || fileCount < 1) {
-      return;
-    }
-
-    window.__TEND_PENDING_UPLOAD_PREVIEW_TRACE_ID__ = "";
-    finishPerfTraceOnNextFrame(traceId, {
-      layoutMode,
-      selectedFileCount: fileCount,
-      sendAsDocuments: sendAsDocumentsEnabled,
-    }, 1);
-  }, [fileCount, layoutMode, previewEnabled, sendAsDocumentsEnabled]);
-
-  useEffect(() => {
     if (visibleItemCount >= fileCount) {
       return undefined;
     }
@@ -479,9 +498,17 @@ function TextChatBatchUploadSheet({
 
         {showPendingShell ? (
           useDocumentLayout ? (
-            <PendingBatchUploadDocumentShell fileCount={resolvedFileCount} />
+            pendingPreviewItems.length ? (
+              <PendingBatchUploadDocumentPreviewList items={pendingPreviewItems} fileCount={resolvedFileCount} />
+            ) : (
+              <PendingBatchUploadDocumentShell fileCount={resolvedFileCount} />
+            )
           ) : (
-            <PendingBatchUploadMediaShell fileCount={resolvedFileCount} />
+            pendingPreviewItems.length ? (
+              <PendingBatchUploadMediaPreviewGrid items={pendingPreviewItems} fileCount={resolvedFileCount} />
+            ) : (
+              <PendingBatchUploadMediaShell fileCount={resolvedFileCount} />
+            )
           )
         ) : useDocumentLayout ? (
           <div className="batch-upload-sheet__document-list">
@@ -503,7 +530,7 @@ function TextChatBatchUploadSheet({
               <BatchUploadTile
                 key={selectedFile.id || `${selectedFile.name}-${selectedFile.size}`}
                 file={selectedFile}
-                fileCount={fileCount}
+                fileCount={displayTileCount}
                 index={index}
                 uploadingFile={uploadingFile}
                 isActive={String(selectedFile?.id || "") === resolvedActiveFileId}
@@ -512,6 +539,18 @@ function TextChatBatchUploadSheet({
                 onRemove={onRemovePendingUpload}
               />
             ))}
+            {Array.from({ length: unresolvedVisibleTileCount }, (_, placeholderIndex) => {
+              const tileIndex = visibleFiles.length + placeholderIndex;
+              return (
+                <div
+                  key={`pending-batch-tile-${tileIndex}`}
+                  className={`batch-upload-sheet__tile ${getBatchTileClassName(displayTileCount, tileIndex)} batch-upload-sheet__tile--pending-shell`}
+                  aria-hidden="true"
+                >
+                  <span className="batch-upload-sheet__tile-pending-shimmer" />
+                </div>
+              );
+            })}
             {visibleItemCount < fileCount ? (
               <div className="batch-upload-sheet__tile batch-upload-sheet__tile--loading-more" aria-hidden="true">
                 <span className="batch-upload-sheet__loading-more-label">+{fileCount - visibleItemCount}</span>
