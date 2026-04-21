@@ -273,6 +273,7 @@ export default function Auth({ onAuthSuccess }) {
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const authVideoRef = useRef(null);
+  const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
 
   const cardHolderName = useMemo(() => {
     const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
@@ -894,11 +895,10 @@ export default function Auth({ onAuthSuccess }) {
                   maxLength={MAX_AUTH_IDENTIFIER_LENGTH}
                   required
                 />
-                {loginErrors.identifier ? <span className="auth-field__error">{loginErrors.identifier}</span> : null}
               </label>
-              <label className="auth-field">
+              <label className="auth-field auth-field--with-error-slot">
                 <input
-                  className={`auth-input ${loginErrors.password ? "auth-input--error" : ""}`}
+                  className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
                   placeholder="Пароль"
                   type="password"
                   value={loginForm.password}
@@ -906,7 +906,7 @@ export default function Auth({ onAuthSuccess }) {
                   maxLength={MAX_AUTH_PASSWORD_LENGTH}
                   required
                 />
-                {loginErrors.password ? <span className="auth-field__error">{loginErrors.password}</span> : null}
+                <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
               </label>
             </div>
           ) : (

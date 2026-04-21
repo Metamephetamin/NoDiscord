@@ -361,6 +361,10 @@
   gap: 6px;
 }
 
+.auth-field--with-error-slot {
+  min-height: 79px;
+}
+
 .auth-section__title,
 .auth-side__title {
   color: #18263a;
@@ -395,7 +399,7 @@
   font-size: 15px;
   outline: none;
   font-family: var(--font-body);
-  font-weight: 550;
+  font-weight: 400;
 }
 
 .auth-input--compact {
@@ -404,7 +408,7 @@
 
 .auth-input::placeholder {
   color: #6a7891;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .auth-input:focus {
@@ -425,6 +429,11 @@
   line-height: 1.4;
   padding: 0 2px;
   text-align: left;
+}
+
+.auth-field__error-slot {
+  display: block;
+  min-height: 19px;
 }
 
 .auth-file {
