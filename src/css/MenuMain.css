@@ -124,10 +124,11 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 2px;
+  top: 50%;
   height: 1.5px;
   border-radius: 999px;
   background: currentColor;
+  transform: translateY(-50%);
 }
 
 .desktop-app-topbar__window-glyph--maximize::before {
@@ -1252,6 +1253,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   min-height: 0;
 }
 
+.friends-directs--conversations {
+  margin-top: 20px;
+}
+
 .friends-directs__header {
   display: flex;
   align-items: center;
@@ -1783,11 +1788,11 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .friends-modal-layer {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 5000;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(4, 6, 12, 0.72);
+  background: rgba(4, 6, 12, 0.82);
   backdrop-filter: blur(14px);
 }
 
@@ -1809,8 +1814,17 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   width: min(100%, 460px);
 }
 
+.friends-modal--conversation-settings {
+  width: min(100%, 620px);
+  max-height: min(84vh, 820px);
+}
+
 .friends-modal__header {
   padding: 24px 26px 16px;
+}
+
+.friends-modal__header--compact {
+  padding-bottom: 10px;
 }
 
 .friends-modal__header--split {
@@ -1871,7 +1885,13 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   box-shadow: 0 16px 36px rgba(31, 59, 134, 0.34);
 }
 
+.friends-conversation-avatar-picker:disabled {
+  cursor: default;
+  opacity: 0.88;
+}
+
 .friends-conversation-avatar-picker img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1882,13 +1902,88 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   line-height: 1;
 }
 
+.friends-conversation-avatar-picker--compact {
+  width: 76px;
+  height: 76px;
+  align-self: flex-start;
+  margin-top: 4px;
+  box-shadow: 0 10px 24px rgba(31, 59, 134, 0.22);
+}
+
+.friends-conversation-avatar-picker--compact img {
+  width: 118%;
+  height: 118%;
+  max-width: none;
+  object-position: center 34%;
+  transform: scale(1.16);
+  transform-origin: center;
+}
+
+.friends-directs__status {
+  color: #8f99ae;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .friends-conversation-details {
   min-width: 0;
   flex: 1;
 }
 
+.friends-conversation-settings-card {
+  margin: 0 26px 14px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "avatar body save";
+  align-items: flex-start;
+  gap: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.friends-conversation-avatar-picker--compact {
+  grid-area: avatar;
+}
+
+.friends-conversation-settings-card__body {
+  grid-area: body;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.friends-conversation-settings-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.friends-conversation-settings-card__meta span,
+.friends-conversation-role-badge {
+  min-height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d9e1f4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .friends-conversation-field {
   display: block;
+}
+
+.friends-conversation-field--compact span {
+  margin-bottom: 6px;
 }
 
 .friends-conversation-field span {
@@ -1932,12 +2027,50 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   padding: 0 26px 14px;
 }
 
+.friends-modal__search--compact {
+  flex: 1;
+  padding: 0;
+}
+
+.friends-conversation-settings-toolbar {
+  padding: 0 26px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .friends-modal__list {
   padding: 0 12px 10px;
   overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.friends-modal__list--settings {
+  max-height: 320px;
+  padding-right: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(84, 89, 108, 0.92) rgba(18, 20, 28, 0.98);
+}
+
+.friends-modal__list--settings::-webkit-scrollbar {
+  width: 10px;
+}
+
+.friends-modal__list--settings::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(18, 20, 28, 0.98);
+}
+
+.friends-modal__list--settings::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(18, 20, 28, 0.98);
+  background: rgba(84, 89, 108, 0.92);
+}
+
+.friends-modal__list--settings::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 113, 136, 0.96);
 }
 
 .friends-member-picker__row {
@@ -1953,6 +2086,11 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   color: inherit;
   cursor: pointer;
   text-align: left;
+}
+
+.friends-member-picker__row--settings {
+  padding: 10px 12px;
+  gap: 14px;
 }
 
 .friends-member-picker__row--selected {
@@ -2011,6 +2149,97 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   color: #ffffff;
 }
 
+.friends-conversation-member-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.friends-conversation-role-select {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(122, 153, 255, 0.26);
+  border-radius: 10px;
+  background: rgba(68, 88, 156, 0.24);
+  color: #eef3ff;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+}
+
+.friends-conversation-member-action {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(97, 122, 210, 0.18);
+  color: #f0f5ff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.friends-conversation-member-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.friends-conversation-member-menu__toggle {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.065);
+  color: #eef3ff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.friends-conversation-member-menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 190px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(23, 29, 41, 0.98);
+  box-shadow: 0 20px 34px rgba(0, 0, 0, 0.34);
+  z-index: 4;
+}
+
+.friends-conversation-member-menu__item {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #edf2ff;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.friends-conversation-member-menu__item--active {
+  background: rgba(96, 142, 255, 0.18);
+  color: #ffffff;
+}
+
+.friends-conversation-member-menu__item--danger {
+  background: rgba(214, 63, 92, 0.18);
+  color: #ffbcc9;
+}
+
 .friends-modal__actions {
   padding: 16px 26px 24px;
   display: flex;
@@ -2031,6 +2260,20 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   cursor: pointer;
 }
 
+.friends-modal__action--compact {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 11px;
+  font-size: 13px;
+}
+
+.friends-conversation-settings-save {
+  grid-area: save;
+  min-width: 124px;
+  align-self: start;
+  margin-top: 28px;
+}
+
 .friends-modal__action:disabled,
 .friends-create-button:disabled {
   opacity: 0.56;
@@ -2040,6 +2283,26 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .friends-modal__action--ghost {
   background: rgba(255, 255, 255, 0.06);
   color: #d6deef;
+}
+
+.friends-conversation-settings-actions {
+  padding: 14px 26px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.friends-conversation-danger-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(214, 63, 92, 0.18);
+  color: #ffb9c7;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 @media (max-width: 900px) {
@@ -2068,6 +2331,35 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
   .friends-conversation-avatar-picker {
     margin: 0 auto;
+  }
+
+  .friends-conversation-settings-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .friends-conversation-settings-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "avatar"
+      "body"
+      "save";
+  }
+
+  .friends-conversation-settings-toolbar,
+  .friends-conversation-settings-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .friends-conversation-settings-save {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .friends-conversation-member-controls {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 

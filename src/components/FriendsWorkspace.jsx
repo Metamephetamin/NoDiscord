@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
@@ -37,12 +37,61 @@ function FriendsNavIcon({ kind }) {
   }
 }
 
+const CONVERSATION_ROLE_OPTIONS = [
+  {
+    id: "admin",
+    label: "Администратор",
+    description: "Может менять карточку беседы, роли, добавлять и выгонять участников.",
+  },
+  {
+    id: "moderator",
+    label: "Модератор",
+    description: "Может добавлять и выгонять участников.",
+  },
+  {
+    id: "inviter",
+    label: "Приглашающий",
+    description: "Может только добавлять участников.",
+  },
+  {
+    id: "member",
+    label: "Участник",
+    description: "Без дополнительных прав.",
+  },
+];
+
+const CONVERSATION_ROLE_LABELS = {
+  owner: "Владелец",
+  admin: "Администратор",
+  moderator: "Модератор",
+  inviter: "Приглашающий",
+  member: "Участник",
+};
+
+const CONVERSATION_ROLE_PRIORITIES = {
+  owner: 4,
+  admin: 3,
+  moderator: 2,
+  inviter: 1,
+  member: 0,
+};
+
+const getConversationRoleLabel = (role) => CONVERSATION_ROLE_LABELS[String(role || "member").toLowerCase()] || "Участник";
+const getConversationRolePriority = (role) => CONVERSATION_ROLE_PRIORITIES[String(role || "member").toLowerCase()] ?? 0;
+
+const getConversationMemberRole = (member, ownerUserId) => (
+  String(member?.id || "") === String(ownerUserId || "")
+    ? "owner"
+    : String(member?.role || "member").toLowerCase()
+);
+
 export const FriendsSidebar = ({
   query,
   navItems,
   friendsPageSection,
   incomingFriendRequestCount,
   filteredFriends,
+  filteredConversations,
   activeDirectFriendId,
   activeConversationId,
   directUnreadCounts,
@@ -55,6 +104,7 @@ export const FriendsSidebar = ({
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
+  onOpenConversationChat,
   onOpenUserContextMenu,
   overlayContent = null,
   getDisplayName,
@@ -171,6 +221,51 @@ export const FriendsSidebar = ({
             )}
           </div>
         </div>
+
+        <div className="friends-directs friends-directs--conversations">
+          <div className="friends-directs__header">
+            <span>БЕСЕДЫ</span>
+          </div>
+
+          <div className="friends-directs__list">
+            {filteredConversations.length ? (
+              filteredConversations.map((conversation) => {
+                const conversationId = String(conversation.conversationId || conversation.id || "");
+                const conversationChannelId = String(conversation.directChannelId || "");
+                const unreadCount = Number(directUnreadCounts[conversationChannelId] || 0);
+                const hasDraft = Boolean(chatDraftPresence[conversationChannelId]);
+                const memberCount = Number(conversation.memberCount || conversation.members?.length || 0);
+                const participantLabel = `${memberCount} ${memberCount === 1 ? "участник" : memberCount < 5 ? "участника" : "участников"}`;
+
+                return (
+                  <button
+                    key={conversationId}
+                    type="button"
+                    className={`friends-directs__item ${String(activeConversationId) === conversationId ? "friends-directs__item--active" : ""}`}
+                    onClick={() => onOpenConversationChat(conversationId)}
+                  >
+                    <AnimatedAvatar
+                      className="friends-directs__avatar"
+                      src={conversation.avatar || ""}
+                      alt={conversation.title || "Беседа"}
+                      loading="eager"
+                      decoding="sync"
+                    />
+                    <span className="friends-directs__meta">
+                      <span className="friends-directs__name">{conversation.title || "Новая беседа"}</span>
+                      <span className="friends-directs__status">
+                        {hasDraft ? "Черновик" : participantLabel}
+                      </span>
+                    </span>
+                    {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="friends-panel__empty">Пока нет бесед.</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {profilePanel}
@@ -217,6 +312,11 @@ export const FriendsMain = ({
   onCreateConversation,
   onUploadConversationAvatar,
   onAddConversationMember,
+  onUpdateConversation,
+  onUpdateConversationMemberRole,
+  onRemoveConversationMember,
+  onLeaveConversation,
+  onDeleteConversation,
   onClearConversationStatus,
   onStartDirectCall,
   onOpenDirectActions,
@@ -233,6 +333,7 @@ export const FriendsMain = ({
   getDisplayName,
 }) => {
   const conversationAvatarInputRef = useRef(null);
+  const conversationSettingsAvatarInputRef = useRef(null);
   const [createConversationStep, setCreateConversationStep] = useState("");
   const [conversationTitle, setConversationTitle] = useState("");
   const [conversationAvatarFile, setConversationAvatarFile] = useState(null);
@@ -242,6 +343,12 @@ export const FriendsMain = ({
   const [showAddConversationMemberForm, setShowAddConversationMemberForm] = useState(false);
   const [addConversationMemberSearch, setAddConversationMemberSearch] = useState("");
   const [pendingConversationMemberId, setPendingConversationMemberId] = useState("");
+  const [showConversationSettings, setShowConversationSettings] = useState(false);
+  const [conversationSettingsTitle, setConversationSettingsTitle] = useState("");
+  const [conversationSettingsAvatarFile, setConversationSettingsAvatarFile] = useState(null);
+  const [conversationSettingsAvatarPreview, setConversationSettingsAvatarPreview] = useState("");
+  const [conversationSettingsSearch, setConversationSettingsSearch] = useState("");
+  const [activeConversationMemberActionId, setActiveConversationMemberActionId] = useState("");
 
   const currentConversationMemberIds = useMemo(
     () => new Set((currentConversationTarget?.members || []).map((member) => String(member?.id || ""))),
@@ -275,12 +382,69 @@ export const FriendsMain = ({
       return displayName.includes(normalizedQuery) || email.includes(normalizedQuery);
     });
   }, [addConversationMemberSearch, addableConversationFriends, getDisplayName]);
+  const filteredConversationMembers = useMemo(() => {
+    const normalizedQuery = String(conversationSettingsSearch || "").trim().toLowerCase();
+    const members = Array.isArray(currentConversationTarget?.members) ? currentConversationTarget.members : [];
+    if (!normalizedQuery) {
+      return members;
+    }
+
+    return members.filter((member) => {
+      const displayName = String(getDisplayName(member) || "").toLowerCase();
+      const email = String(member?.email || "").toLowerCase();
+      return displayName.includes(normalizedQuery) || email.includes(normalizedQuery);
+    });
+  }, [conversationSettingsSearch, currentConversationTarget?.members, getDisplayName]);
+  const fallbackConversationRole = useMemo(() => {
+    if (!currentConversationTarget) {
+      return "member";
+    }
+
+    const currentUserId = String(user?.id || "");
+    if (String(currentConversationTarget.ownerUserId || "") === currentUserId) {
+      return "owner";
+    }
+
+    const matchedMember = (currentConversationTarget.members || []).find((member) => String(member?.id || "") === currentUserId);
+    if (matchedMember?.role) {
+      return String(matchedMember.role).toLowerCase();
+    }
+
+    return "member";
+  }, [currentConversationTarget, user?.id]);
+  const currentConversationRole = String(
+    String(currentConversationTarget?.ownerUserId || "") === String(user?.id || "")
+      ? "owner"
+      : (currentConversationTarget?.currentUserRole || fallbackConversationRole || "member")
+  ).toLowerCase();
+  const assignableConversationRoles = useMemo(
+    () => CONVERSATION_ROLE_OPTIONS.filter((option) => getConversationRolePriority(currentConversationRole) > getConversationRolePriority(option.id)),
+    [currentConversationRole]
+  );
+
+  const derivedCanEditConversationInfo = currentConversationRole === "owner" || currentConversationRole === "admin";
+  const derivedCanAddConversationMembers = derivedCanEditConversationInfo || currentConversationRole === "moderator" || currentConversationRole === "inviter";
+  const derivedCanRemoveConversationMembers = derivedCanEditConversationInfo || currentConversationRole === "moderator";
+  const derivedCanManageConversationRoles = derivedCanEditConversationInfo;
+  const canAddConversationMembers = Boolean(currentConversationTarget?.canAddMembers ?? derivedCanAddConversationMembers);
+  const canOpenConversationAddMembers = Boolean(canAddConversationMembers && addableConversationFriends.length);
+  const canEditConversationInfo = Boolean(currentConversationTarget?.canEditInfo ?? derivedCanEditConversationInfo);
+  const canManageConversationRoles = Boolean(currentConversationTarget?.canManageRoles ?? derivedCanManageConversationRoles);
+  const canRemoveConversationMembers = Boolean(currentConversationTarget?.canRemoveMembers ?? derivedCanRemoveConversationMembers);
+  const canLeaveConversation = Boolean(currentConversationTarget?.canLeave ?? currentConversationTarget);
+  const canDeleteConversation = Boolean(currentConversationTarget?.canDeleteConversation ?? currentConversationRole === "owner");
 
   useEffect(() => () => {
     if (conversationAvatarPreview?.startsWith("blob:")) {
       URL.revokeObjectURL(conversationAvatarPreview);
     }
   }, [conversationAvatarPreview]);
+
+  useEffect(() => () => {
+    if (conversationSettingsAvatarPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(conversationSettingsAvatarPreview);
+    }
+  }, [conversationSettingsAvatarPreview]);
 
   const resetConversationDraft = () => {
     setCreateConversationStep("");
@@ -296,10 +460,47 @@ export const FriendsMain = ({
     });
   };
 
+  const resetConversationSettingsDraft = () => {
+    setConversationSettingsTitle("");
+    setConversationSettingsSearch("");
+    setConversationSettingsAvatarFile(null);
+    setConversationSettingsAvatarPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return "";
+    });
+  };
+
   const openCreateConversationFlow = () => {
     onClearConversationStatus?.();
     resetConversationDraft();
     setCreateConversationStep("details");
+  };
+
+  const openConversationSettings = () => {
+    if (!currentConversationTarget) {
+      return;
+    }
+
+    onClearConversationStatus?.();
+    setConversationSettingsTitle(String(currentConversationTarget.title || ""));
+    setConversationSettingsSearch("");
+    setConversationSettingsAvatarFile(null);
+    setConversationSettingsAvatarPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return String(currentConversationTarget.avatar || "");
+    });
+    setShowConversationSettings(true);
+  };
+
+  const closeConversationSettings = () => {
+    onClearConversationStatus?.();
+    setShowConversationSettings(false);
+    setActiveConversationMemberActionId("");
+    resetConversationSettingsDraft();
   };
 
   const handleConversationAvatarChange = (event) => {
@@ -311,6 +512,22 @@ export const FriendsMain = ({
     onClearConversationStatus?.();
     setConversationAvatarFile(nextFile);
     setConversationAvatarPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return URL.createObjectURL(nextFile);
+    });
+  };
+
+  const handleConversationSettingsAvatarChange = (event) => {
+    const nextFile = event.target.files?.[0];
+    if (!nextFile) {
+      return;
+    }
+
+    onClearConversationStatus?.();
+    setConversationSettingsAvatarFile(nextFile);
+    setConversationSettingsAvatarPreview((previous) => {
       if (previous?.startsWith("blob:")) {
         URL.revokeObjectURL(previous);
       }
@@ -373,6 +590,31 @@ export const FriendsMain = ({
     }
   };
 
+  const handleConversationSettingsSubmit = async (event) => {
+    event.preventDefault();
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      let uploadedAvatarUrl = undefined;
+      if (conversationSettingsAvatarFile) {
+        uploadedAvatarUrl = await onUploadConversationAvatar?.(conversationSettingsAvatarFile) || "";
+      } else if (!conversationSettingsAvatarPreview) {
+        uploadedAvatarUrl = "";
+      }
+
+      await onUpdateConversation?.(currentConversationTarget.conversationId || currentConversationTarget.id, {
+        title: conversationSettingsTitle,
+        avatarUrl: uploadedAvatarUrl,
+      });
+      setShowConversationSettings(false);
+      resetConversationSettingsDraft();
+    } catch {
+      // handled in state
+    }
+  };
+
   const handleProceedToConversationMembers = () => {
     if (!String(conversationTitle || "").trim()) {
       return;
@@ -397,13 +639,119 @@ export const FriendsMain = ({
     setPendingConversationMemberId(String(friendId || ""));
   };
 
+  const handleConversationMemberRoleChange = async (member, nextRole) => {
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      await onUpdateConversationMemberRole?.(
+        currentConversationTarget.conversationId || currentConversationTarget.id,
+        member.id,
+        nextRole
+      );
+      closeConversationMemberActions();
+    } catch {
+      // handled in state
+    }
+  };
+
+  const handleConversationMemberRemove = async (member) => {
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      await onRemoveConversationMember?.(
+        currentConversationTarget.conversationId || currentConversationTarget.id,
+        member.id
+      );
+      closeConversationMemberActions();
+    } catch {
+      // handled in state
+    }
+  };
+
+  const handleLeaveConversation = async () => {
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      await onLeaveConversation?.(currentConversationTarget.conversationId || currentConversationTarget.id);
+      setShowConversationSettings(false);
+      resetConversationSettingsDraft();
+    } catch {
+      // handled in state
+    }
+  };
+
+  const handleDeleteCurrentConversation = async () => {
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      await onDeleteConversation?.(currentConversationTarget.conversationId || currentConversationTarget.id);
+      setShowConversationSettings(false);
+      resetConversationSettingsDraft();
+    } catch {
+      // handled in state
+    }
+  };
+
   useEffect(() => {
     if (!currentConversationTarget) {
       setShowAddConversationMemberForm(false);
+      setShowConversationSettings(false);
+      setActiveConversationMemberActionId("");
       setAddConversationMemberSearch("");
       setPendingConversationMemberId("");
+      resetConversationSettingsDraft();
     }
   }, [currentConversationTarget]);
+
+  useEffect(() => {
+    if (!showConversationSettings) {
+      setActiveConversationMemberActionId("");
+    }
+  }, [showConversationSettings]);
+
+  useEffect(() => {
+    if (!showConversationSettings || !currentConversationTarget) {
+      return;
+    }
+
+    setConversationSettingsTitle(String(currentConversationTarget.title || ""));
+    setConversationSettingsAvatarPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        return previous;
+      }
+      return String(currentConversationTarget.avatar || "");
+    });
+  }, [
+    showConversationSettings,
+    currentConversationTarget?.conversationId,
+    currentConversationTarget?.title,
+    currentConversationTarget?.avatar,
+  ]);
+
+  const toggleConversationMemberActions = (memberId) => {
+    const normalizedMemberId = String(memberId || "");
+    setActiveConversationMemberActionId((current) => (current === normalizedMemberId ? "" : normalizedMemberId));
+  };
+
+  const closeConversationMemberActions = () => {
+    setActiveConversationMemberActionId("");
+  };
+
+  const canManageConversationMember = (member) => {
+    if (!member || String(member?.id || "") === String(user?.id || "")) {
+      return false;
+    }
+
+    return getConversationRolePriority(currentConversationRole) > getConversationRolePriority(getConversationMemberRole(member, currentConversationTarget?.ownerUserId));
+  };
 
   return (
     <main className="chat__wrapper chat__wrapper--friends">
@@ -473,7 +821,7 @@ export const FriendsMain = ({
                   />
                 </label>
 
-                {currentConversationTarget?.canManage ? (
+                {canOpenConversationAddMembers ? (
                   <button
                     type="button"
                     className="chat__topbar-icon"
@@ -487,6 +835,18 @@ export const FriendsMain = ({
                     title="Добавить участника"
                   >
                     <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">+</span>
+                  </button>
+                ) : null}
+
+                {currentConversationTarget ? (
+                  <button
+                    type="button"
+                    className="chat__topbar-icon"
+                    onClick={openConversationSettings}
+                    aria-label="Настройки беседы"
+                    title="Настройки беседы"
+                  >
+                    <span className="friends-direct-chat-topbar__glyph friends-direct-chat-topbar__glyph--dots" aria-hidden="true">⋯</span>
                   </button>
                 ) : null}
 
@@ -662,7 +1022,7 @@ export const FriendsMain = ({
                             {friendRequestActionId === request.id ? "..." : "✓"}
                           </button>
                           <button type="button" className="friends-results__action friends-results__action--decline" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                            {friendRequestActionId === request.id ? "..." : "×"}
+                            {friendRequestActionId === request.id ? "..." : "Г—"}
                           </button>
                         </div>
                       </div>
@@ -885,7 +1245,206 @@ export const FriendsMain = ({
         </div>
       ) : null}
 
-      {showAddConversationMemberForm && currentConversationTarget?.canManage ? (
+      {showConversationSettings && currentConversationTarget ? (
+        <div className="friends-modal-layer" role="presentation" onClick={closeConversationSettings}>
+          <form
+            className="friends-modal friends-modal--conversation-settings"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="conversation-settings-title"
+            onSubmit={handleConversationSettingsSubmit}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="friends-modal__header friends-modal__header--compact">
+              <h3 id="conversation-settings-title">Настройки беседы</h3>
+            </div>
+
+            <div className="friends-conversation-settings-card">
+              <button
+                type="button"
+                className="friends-conversation-avatar-picker friends-conversation-avatar-picker--compact"
+                onClick={() => canEditConversationInfo && conversationSettingsAvatarInputRef.current?.click()}
+                aria-label="Изменить фото беседы"
+                disabled={!canEditConversationInfo}
+              >
+                {conversationSettingsAvatarPreview ? (
+                  <img src={conversationSettingsAvatarPreview} alt="" />
+                ) : (
+                  <span className="friends-conversation-avatar-picker__glyph" aria-hidden="true">+</span>
+                )}
+              </button>
+
+              <div className="friends-conversation-settings-card__body">
+                <label className="friends-conversation-field friends-conversation-field--compact">
+                  <span>Название</span>
+                  <input
+                    type="text"
+                    value={conversationSettingsTitle}
+                    onChange={(event) => {
+                      onClearConversationStatus?.();
+                      setConversationSettingsTitle(event.target.value);
+                    }}
+                    placeholder="Название беседы"
+                    disabled={!canEditConversationInfo || conversationActionLoading}
+                  />
+                </label>
+
+                <div className="friends-conversation-settings-card__meta">
+                  <span>{`Вы: ${getConversationRoleLabel(currentConversationRole)}`}</span>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="friends-modal__action friends-modal__action--compact friends-conversation-settings-save"
+                disabled={!canEditConversationInfo || conversationActionLoading || !String(conversationSettingsTitle || "").trim()}
+              >
+                {conversationActionLoading ? "..." : "Сохранить"}
+              </button>
+            </div>
+
+            <input
+              ref={conversationSettingsAvatarInputRef}
+              type="file"
+              accept="image/*"
+              className="friends-conversation-hidden-input"
+              onChange={handleConversationSettingsAvatarChange}
+            />
+
+            <div className="friends-conversation-settings-toolbar">
+              <div className="friends-modal__search friends-modal__search--compact">
+                <input
+                  type="text"
+                  value={conversationSettingsSearch}
+                  onChange={(event) => setConversationSettingsSearch(event.target.value)}
+                  placeholder="Поиск участников"
+                />
+              </div>
+
+              {canOpenConversationAddMembers ? (
+                <button
+                  type="button"
+                  className="friends-modal__action friends-modal__action--ghost friends-modal__action--compact"
+                  onClick={() => {
+                    closeConversationSettings();
+                    onClearConversationStatus?.();
+                    setPendingConversationMemberId("");
+                    setAddConversationMemberSearch("");
+                    setShowAddConversationMemberForm(true);
+                  }}
+                >
+                  Добавить
+                </button>
+              ) : null}
+            </div>
+
+            <div className="friends-modal__list friends-modal__list--settings">
+              {filteredConversationMembers.map((member) => {
+                const canManageMember = canManageConversationMember(member);
+                const memberRole = getConversationMemberRole(member, currentConversationTarget.ownerUserId);
+                const canOpenMemberActions = (canManageConversationRoles || canRemoveConversationMembers) && canManageMember;
+                const isMemberActionsOpen = activeConversationMemberActionId === String(member.id || "");
+
+                return (
+                  <div key={member.id} className="friends-member-picker__row friends-member-picker__row--settings">
+                    <div className="friends-member-picker__identity">
+                      <AnimatedAvatar className="friends-member-picker__avatar" src={member.avatar || ""} alt={getDisplayName(member)} loading="eager" decoding="sync" />
+                      <div className="friends-member-picker__meta">
+                        <strong>{getDisplayName(member)}</strong>
+                        <span>{formatUserPresenceStatus(member)}</span>
+                      </div>
+                    </div>
+
+                    <div className="friends-conversation-member-controls">
+                      <span className="friends-conversation-role-badge">
+                        {getConversationRoleLabel(memberRole)}
+                      </span>
+
+                      {canOpenMemberActions ? (
+                        <div className="friends-conversation-member-menu">
+                          <button
+                            type="button"
+                            className="friends-conversation-member-menu__toggle"
+                            onClick={() => toggleConversationMemberActions(member.id)}
+                            disabled={conversationActionLoading}
+                            aria-label="Действия с участником"
+                          >
+                            ⋯
+                          </button>
+
+                          {isMemberActionsOpen ? (
+                            <div className="friends-conversation-member-menu__panel">
+                              {canManageConversationRoles ? assignableConversationRoles.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`friends-conversation-member-menu__item ${memberRole === option.id ? "friends-conversation-member-menu__item--active" : ""}`}
+                                  onClick={() => handleConversationMemberRoleChange(member, option.id)}
+                                  disabled={conversationActionLoading || memberRole === option.id}
+                                >
+                                  {option.label}
+                                </button>
+                              )) : null}
+                              {canRemoveConversationMembers ? (
+                                <button
+                                  type="button"
+                                  className="friends-conversation-member-menu__item friends-conversation-member-menu__item--danger"
+                                  onClick={() => handleConversationMemberRemove(member)}
+                                  disabled={conversationActionLoading}
+                                >
+                                  Выгнать из беседы
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+              {!filteredConversationMembers.length ? (
+                <div className="friends-panel__empty">Под поиск никого не нашли.</div>
+              ) : null}
+            </div>
+
+            {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
+            {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
+
+            <div className="friends-conversation-settings-actions">
+              <button
+                type="button"
+                className="friends-modal__action friends-modal__action--ghost friends-modal__action--compact"
+                onClick={closeConversationSettings}
+              >
+                Закрыть
+              </button>
+              {canLeaveConversation ? (
+                <button
+                  type="button"
+                  className="friends-modal__action friends-modal__action--ghost friends-modal__action--compact"
+                  onClick={handleLeaveConversation}
+                  disabled={conversationActionLoading}
+                >
+                  Покинуть
+                </button>
+              ) : null}
+              {canDeleteConversation ? (
+                <button
+                  type="button"
+                  className="friends-conversation-danger-button"
+                  onClick={handleDeleteCurrentConversation}
+                  disabled={conversationActionLoading}
+                >
+                  Удалить беседу
+                </button>
+              ) : null}
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {showAddConversationMemberForm && canAddConversationMembers ? (
         <div className="friends-modal-layer" role="presentation" onClick={() => setShowAddConversationMemberForm(false)}>
           <form
             className="friends-modal friends-modal--members"

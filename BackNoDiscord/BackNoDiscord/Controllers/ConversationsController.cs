@@ -18,6 +18,28 @@ public sealed class ConversationsController : ControllerBase
     private const int MaxConversationMembers = 24;
     private const int MaxMuteMinutes = 7 * 24 * 60;
     private const long MaxConversationAvatarSizeBytes = 50L * 1024L * 1024L;
+    private const string ConversationPermissionEditInfo = "edit_info";
+    private const string ConversationPermissionAddMembers = "add_members";
+    private const string ConversationPermissionRemoveMembers = "remove_members";
+    private const string ConversationPermissionManageRoles = "manage_roles";
+
+    private static readonly IReadOnlyDictionary<string, string[]> ConversationRolePermissions = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["owner"] = [ConversationPermissionEditInfo, ConversationPermissionAddMembers, ConversationPermissionRemoveMembers, ConversationPermissionManageRoles],
+        ["admin"] = [ConversationPermissionEditInfo, ConversationPermissionAddMembers, ConversationPermissionRemoveMembers, ConversationPermissionManageRoles],
+        ["moderator"] = [ConversationPermissionAddMembers, ConversationPermissionRemoveMembers],
+        ["inviter"] = [ConversationPermissionAddMembers],
+        ["member"] = []
+    };
+
+    private static readonly IReadOnlyDictionary<string, int> ConversationRolePriority = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["owner"] = 4,
+        ["admin"] = 3,
+        ["moderator"] = 2,
+        ["inviter"] = 1,
+        ["member"] = 0
+    };
 
     private readonly AppDbContext _context;
     private readonly IHubContext<ChatHub> _chatHubContext;
@@ -220,7 +242,16 @@ public sealed class ConversationsController : ControllerBase
             return NotFound(new { message = "Беседа не найдена." });
         }
 
-        if (conversation.OwnerUserId != currentUserId)
+        var actorMember = await _context.GroupConversationMembers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        if (actorMember is null)
+        {
+            return Forbid();
+        }
+
+        var actorRole = NormalizeConversationRole(actorMember.Role);
+        if (!HasConversationPermission(actorRole, ConversationPermissionAddMembers))
         {
             return Forbid();
         }
@@ -266,6 +297,259 @@ public sealed class ConversationsController : ControllerBase
         await BroadcastConversationsUpdatedAsync(recipientIds.Append(userId), cancellationToken);
 
         return Ok(new { status = "member_added" });
+    }
+
+    [HttpPatch("{conversationId:int}")]
+    public async Task<IActionResult> UpdateConversation([FromRoute] int conversationId, [FromBody] UpdateConversationRequest? request, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var conversation = await _context.GroupConversations.FirstOrDefaultAsync(item => item.Id == conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound(new { message = "Беседа не найдена." });
+        }
+
+        var actorMember = await _context.GroupConversationMembers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        if (actorMember is null)
+        {
+            return Forbid();
+        }
+
+        var actorRole = NormalizeConversationRole(actorMember.Role);
+        if (!HasConversationPermission(actorRole, ConversationPermissionEditInfo))
+        {
+            return Forbid();
+        }
+
+        if (request?.Title is not null)
+        {
+            var title = NormalizeTitle(request.Title);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return BadRequest(new { message = "Название беседы обязательно." });
+            }
+
+            conversation.Title = title;
+        }
+
+        if (request?.AvatarUrl is not null)
+        {
+            var normalizedAvatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(request.AvatarUrl, "/avatars/");
+            conversation.AvatarUrl = string.IsNullOrWhiteSpace(normalizedAvatarUrl) ? null : normalizedAvatarUrl;
+        }
+
+        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var members = await _context.GroupConversationMembers
+            .AsNoTracking()
+            .Where(item => item.ConversationId == conversationId)
+            .ToListAsync(cancellationToken);
+        var users = await LoadUsersAsync(members.Select(item => item.UserId), cancellationToken);
+        await BroadcastConversationsUpdatedAsync(members.Where(item => !item.IsBanned).Select(item => item.UserId), cancellationToken);
+
+        return Ok(BuildConversationPayload(conversation, members, users, currentUserId));
+    }
+
+    [HttpPatch("{conversationId:int}/members/{userId:int}/role")]
+    public async Task<IActionResult> UpdateMemberRole([FromRoute] int conversationId, [FromRoute] int userId, [FromBody] UpdateConversationMemberRoleRequest? request, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var conversation = await _context.GroupConversations.FirstOrDefaultAsync(item => item.Id == conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound(new { message = "Беседа не найдена." });
+        }
+
+        var actorMember = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        if (actorMember is null)
+        {
+            return Forbid();
+        }
+
+        var targetMember = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == userId && !item.IsBanned, cancellationToken);
+        if (targetMember is null)
+        {
+            return NotFound(new { message = "Участник беседы не найден." });
+        }
+
+        if (targetMember.UserId == currentUserId)
+        {
+            return BadRequest(new { message = "Нельзя менять свою собственную роль." });
+        }
+
+        var actorRole = NormalizeConversationRole(actorMember.Role);
+        var targetRole = NormalizeConversationRole(targetMember.Role);
+        var nextRole = NormalizeConversationRole(request?.Role);
+
+        if (!HasConversationPermission(actorRole, ConversationPermissionManageRoles) ||
+            nextRole == "owner" ||
+            !CanManageConversationTarget(actorRole, targetRole) ||
+            !CanAssignConversationRole(actorRole, nextRole))
+        {
+            return Forbid();
+        }
+
+        targetMember.Role = nextRole;
+        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var members = await _context.GroupConversationMembers
+            .AsNoTracking()
+            .Where(item => item.ConversationId == conversationId)
+            .ToListAsync(cancellationToken);
+        var users = await LoadUsersAsync(members.Select(item => item.UserId), cancellationToken);
+        await BroadcastConversationsUpdatedAsync(members.Where(item => !item.IsBanned).Select(item => item.UserId), cancellationToken);
+
+        return Ok(BuildConversationPayload(conversation, members, users, currentUserId));
+    }
+
+    [HttpDelete("{conversationId:int}/members/{userId:int}")]
+    public async Task<IActionResult> RemoveMember([FromRoute] int conversationId, [FromRoute] int userId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var conversation = await _context.GroupConversations.FirstOrDefaultAsync(item => item.Id == conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound(new { message = "Беседа не найдена." });
+        }
+
+        var actorMember = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        if (actorMember is null)
+        {
+            return Forbid();
+        }
+
+        var targetMember = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == userId && !item.IsBanned, cancellationToken);
+        if (targetMember is null)
+        {
+            return NotFound(new { message = "Участник беседы не найден." });
+        }
+
+        if (targetMember.UserId == currentUserId)
+        {
+            return BadRequest(new { message = "Для выхода используйте отдельную кнопку." });
+        }
+
+        var actorRole = NormalizeConversationRole(actorMember.Role);
+        var targetRole = NormalizeConversationRole(targetMember.Role);
+        if (!HasConversationPermission(actorRole, ConversationPermissionRemoveMembers) ||
+            !CanManageConversationTarget(actorRole, targetRole))
+        {
+            return Forbid();
+        }
+
+        _context.GroupConversationMembers.Remove(targetMember);
+        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var recipientIds = await GetConversationRecipientIdsAsync(conversationId, includeBanned: false, cancellationToken);
+        await BroadcastConversationsUpdatedAsync(recipientIds.Append(userId), cancellationToken);
+
+        return Ok(new { status = "member_removed" });
+    }
+
+    [HttpPost("{conversationId:int}/leave")]
+    public async Task<IActionResult> LeaveConversation([FromRoute] int conversationId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var conversation = await _context.GroupConversations.FirstOrDefaultAsync(item => item.Id == conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound(new { message = "Беседа не найдена." });
+        }
+
+        var currentMember = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        if (currentMember is null)
+        {
+            return Forbid();
+        }
+
+        var recipientIds = await GetConversationRecipientIdsAsync(conversationId, includeBanned: false, cancellationToken);
+        var remainingMembers = await _context.GroupConversationMembers
+            .Where(item => item.ConversationId == conversationId && item.UserId != currentUserId && !item.IsBanned)
+            .ToListAsync(cancellationToken);
+
+        if (NormalizeConversationRole(currentMember.Role) == "owner" && remainingMembers.Count > 0)
+        {
+            var nextOwner = remainingMembers
+                .OrderByDescending(item => GetConversationRolePriority(item.Role))
+                .ThenBy(item => item.JoinedAt)
+                .First();
+            nextOwner.Role = "owner";
+            conversation.OwnerUserId = nextOwner.UserId;
+        }
+
+        _context.GroupConversationMembers.Remove(currentMember);
+
+        if (remainingMembers.Count == 0)
+        {
+            _context.GroupConversations.Remove(conversation);
+            await _context.SaveChangesAsync(cancellationToken);
+            await BroadcastConversationsUpdatedAsync(recipientIds, cancellationToken);
+            return Ok(new { status = "conversation_deleted" });
+        }
+
+        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        await BroadcastConversationsUpdatedAsync(recipientIds, cancellationToken);
+
+        return Ok(new { status = "conversation_left" });
+    }
+
+    [HttpDelete("{conversationId:int}")]
+    public async Task<IActionResult> DeleteConversation([FromRoute] int conversationId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var conversation = await _context.GroupConversations.FirstOrDefaultAsync(item => item.Id == conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound(new { message = "Беседа не найдена." });
+        }
+
+        if (conversation.OwnerUserId != currentUserId)
+        {
+            return Forbid();
+        }
+
+        var recipientIds = await GetConversationRecipientIdsAsync(conversationId, includeBanned: true, cancellationToken);
+        var members = await _context.GroupConversationMembers
+            .Where(item => item.ConversationId == conversationId)
+            .ToListAsync(cancellationToken);
+
+        _context.GroupConversationMembers.RemoveRange(members);
+        _context.GroupConversations.Remove(conversation);
+        await _context.SaveChangesAsync(cancellationToken);
+        await BroadcastConversationsUpdatedAsync(recipientIds, cancellationToken);
+
+        return Ok(new { status = "conversation_deleted" });
     }
 
     [HttpPost("{conversationId:int}/members/{userId:int}/mute")]
@@ -495,6 +779,10 @@ public sealed class ConversationsController : ControllerBase
         IReadOnlyDictionary<int, User> users,
         int currentUserId)
     {
+        var currentMember = members.FirstOrDefault(item => item.UserId == currentUserId && !item.IsBanned);
+        var currentRole = NormalizeConversationRole(currentMember?.Role);
+        var permissions = GetConversationPermissions(currentRole);
+
         var activeMembers = members
             .Where(item => !item.IsBanned)
             .OrderBy(item => item.Role == "owner" ? 0 : 1)
@@ -533,7 +821,15 @@ public sealed class ConversationsController : ControllerBase
             ownerUserId = conversation.OwnerUserId.ToString(),
             directChannelId = ConversationChannels.BuildChatChannelId(conversation.Id),
             voiceChannelId = ConversationChannels.BuildVoiceChannelName(conversation.Id),
-            canManage = conversation.OwnerUserId == currentUserId,
+            currentUserRole = currentRole,
+            permissions,
+            canManage = permissions.Length > 0,
+            canEditInfo = HasConversationPermission(currentRole, ConversationPermissionEditInfo),
+            canAddMembers = HasConversationPermission(currentRole, ConversationPermissionAddMembers),
+            canRemoveMembers = HasConversationPermission(currentRole, ConversationPermissionRemoveMembers),
+            canManageRoles = HasConversationPermission(currentRole, ConversationPermissionManageRoles),
+            canLeave = currentMember is not null,
+            canDeleteConversation = conversation.OwnerUserId == currentUserId,
             memberCount = activeMembers.Count,
             members = activeMembers,
             createdAt = conversation.CreatedAt,
@@ -548,11 +844,52 @@ public sealed class ConversationsController : ControllerBase
         return UploadPolicies.TrimToLength(title, MaxConversationTitleLength).Trim();
     }
 
+    private static string NormalizeConversationRole(string? role)
+    {
+        var normalizedRole = string.IsNullOrWhiteSpace(role) ? "member" : role.Trim().ToLowerInvariant();
+        return ConversationRolePermissions.ContainsKey(normalizedRole) ? normalizedRole : "member";
+    }
+
+    private static string[] GetConversationPermissions(string? role)
+    {
+        var normalizedRole = NormalizeConversationRole(role);
+        return ConversationRolePermissions.TryGetValue(normalizedRole, out var permissions)
+            ? permissions
+            : [];
+    }
+
+    private static bool HasConversationPermission(string? role, string permission)
+    {
+        return GetConversationPermissions(role).Contains(permission, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static int GetConversationRolePriority(string? role)
+    {
+        var normalizedRole = NormalizeConversationRole(role);
+        return ConversationRolePriority.TryGetValue(normalizedRole, out var priority) ? priority : 0;
+    }
+
+    private static bool CanManageConversationTarget(string? actorRole, string? targetRole)
+    {
+        return GetConversationRolePriority(actorRole) > GetConversationRolePriority(targetRole);
+    }
+
+    private static bool CanAssignConversationRole(string? actorRole, string? nextRole)
+    {
+        return GetConversationRolePriority(actorRole) > GetConversationRolePriority(nextRole);
+    }
+
     public sealed class CreateConversationRequest
     {
         public string? Title { get; set; }
         public string? AvatarUrl { get; set; }
         public List<int>? MemberUserIds { get; set; }
+    }
+
+    public sealed class UpdateConversationRequest
+    {
+        public string? Title { get; set; }
+        public string? AvatarUrl { get; set; }
     }
 
     public sealed class UploadConversationAvatarRequest
@@ -563,6 +900,11 @@ public sealed class ConversationsController : ControllerBase
     public sealed class AddConversationMemberRequest
     {
         public int UserId { get; set; }
+    }
+
+    public sealed class UpdateConversationMemberRoleRequest
+    {
+        public string? Role { get; set; }
     }
 
     public sealed class MuteConversationMemberRequest

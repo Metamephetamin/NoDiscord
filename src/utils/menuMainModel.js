@@ -17,7 +17,7 @@ export const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 export const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 export const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 export const MAX_PROFILE_NAME_LENGTH = 32;
-export const VOICE_INPUT_MODES = ["broadcast", "voice_isolation", "rnnoise", "hard_gate", "transparent"];
+export const VOICE_INPUT_MODES = ["transparent", "broadcast", "hard_gate"];
 export const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "general" },
   { id: "2", name: "gaming" },
@@ -729,6 +729,14 @@ export const normalizeConversationTarget = (conversation) => {
     voiceChannelId: String(conversation?.voiceChannelId || ""),
     ownerUserId: String(conversation?.ownerUserId || conversation?.owner_user_id || ""),
     canManage: Boolean(conversation?.canManage ?? conversation?.can_manage),
+    currentUserRole: String(conversation?.currentUserRole || conversation?.current_user_role || "member"),
+    permissions: Array.isArray(conversation?.permissions) ? conversation.permissions.map(String) : [],
+    canEditInfo: Boolean(conversation?.canEditInfo ?? conversation?.can_edit_info),
+    canAddMembers: Boolean(conversation?.canAddMembers ?? conversation?.can_add_members),
+    canRemoveMembers: Boolean(conversation?.canRemoveMembers ?? conversation?.can_remove_members),
+    canManageRoles: Boolean(conversation?.canManageRoles ?? conversation?.can_manage_roles),
+    canLeave: Boolean(conversation?.canLeave ?? conversation?.can_leave),
+    canDeleteConversation: Boolean(conversation?.canDeleteConversation ?? conversation?.can_delete_conversation),
     memberCount: Number(conversation?.memberCount || conversation?.member_count || members.length),
     members,
     activeCallChannel: String(conversation?.activeCallChannel || conversation?.active_call_channel || ""),

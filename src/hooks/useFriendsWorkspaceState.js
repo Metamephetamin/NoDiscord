@@ -247,6 +247,171 @@ export default function useFriendsWorkspaceState({
     }
   };
 
+  const handleUpdateConversation = async (conversationId, { title, avatarUrl }) => {
+    const normalizedConversationId = Number(conversationId);
+    if (normalizedConversationId <= 0) {
+      throw new Error("Не удалось определить беседу.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title == null ? undefined : String(title || "").trim(),
+          avatarUrl: avatarUrl == null ? undefined : String(avatarUrl || "").trim(),
+        }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось обновить беседу."));
+      }
+
+      setConversationActionStatus("Настройки беседы сохранены.");
+      await loadConversations();
+      return normalizeConversationTarget(data || {});
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось обновить беседу.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
+  const handleUpdateConversationMemberRole = async (conversationId, userId, role) => {
+    const normalizedConversationId = Number(conversationId);
+    const normalizedUserId = Number(userId);
+    const normalizedRole = String(role || "").trim().toLowerCase();
+    if (normalizedConversationId <= 0 || normalizedUserId <= 0 || !normalizedRole) {
+      throw new Error("Не удалось обновить роль участника.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}/members/${normalizedUserId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: normalizedRole }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось обновить роль участника."));
+      }
+
+      setConversationActionStatus("Роль участника обновлена.");
+      await loadConversations();
+      return normalizeConversationTarget(data || {});
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось обновить роль участника.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
+  const handleRemoveConversationMember = async (conversationId, userId) => {
+    const normalizedConversationId = Number(conversationId);
+    const normalizedUserId = Number(userId);
+    if (normalizedConversationId <= 0 || normalizedUserId <= 0) {
+      throw new Error("Не удалось определить участника.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}/members/${normalizedUserId}`, {
+        method: "DELETE",
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось удалить участника из беседы."));
+      }
+
+      setConversationActionStatus("Участник удалён из беседы.");
+      await loadConversations();
+      return data;
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось удалить участника из беседы.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
+  const handleLeaveConversation = async (conversationId) => {
+    const normalizedConversationId = Number(conversationId);
+    if (normalizedConversationId <= 0) {
+      throw new Error("Не удалось определить беседу.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}/leave`, {
+        method: "POST",
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось покинуть беседу."));
+      }
+
+      setConversationActionStatus(data?.status === "conversation_deleted" ? "Беседа удалена." : "Вы вышли из беседы.");
+      await loadConversations();
+      return data;
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось покинуть беседу.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
+  const handleDeleteConversation = async (conversationId) => {
+    const normalizedConversationId = Number(conversationId);
+    if (normalizedConversationId <= 0) {
+      throw new Error("Не удалось определить беседу.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}`, {
+        method: "DELETE",
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось удалить беседу."));
+      }
+
+      setConversationActionStatus("Беседа удалена.");
+      await loadConversations();
+      return data;
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось удалить беседу.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
   const handleUploadConversationAvatar = async (file) => {
     if (!(file instanceof File)) {
       throw new Error("Выберите изображение для беседы.");
@@ -605,5 +770,10 @@ export default function useFriendsWorkspaceState({
     handleCreateConversation,
     handleUploadConversationAvatar,
     handleAddConversationMember,
+    handleUpdateConversation,
+    handleUpdateConversationMemberRole,
+    handleRemoveConversationMember,
+    handleLeaveConversation,
+    handleDeleteConversation,
   };
 }

@@ -1220,6 +1220,50 @@ function MessageAttachmentCard({
   );
 }
 
+const getDenseGalleryColumnCount = (attachmentCount) => {
+  if (attachmentCount <= 8) {
+    return 4;
+  }
+  if (attachmentCount === 9) {
+    return 3;
+  }
+  if (attachmentCount <= 12) {
+    return 4;
+  }
+  if (attachmentCount <= 15) {
+    return 5;
+  }
+  if (attachmentCount === 16) {
+    return 4;
+  }
+  if (attachmentCount <= 18) {
+    return 6;
+  }
+  if (attachmentCount <= 20) {
+    return 5;
+  }
+  if (attachmentCount <= 24) {
+    return 6;
+  }
+  if (attachmentCount === 25) {
+    return 5;
+  }
+  return 6;
+};
+
+const getDenseGalleryRowSize = (attachmentCount, columnCount) => {
+  if (columnCount === 3) {
+    return "182px";
+  }
+  if (columnCount === 4) {
+    return attachmentCount <= 8 ? "168px" : attachmentCount <= 16 ? "150px" : "138px";
+  }
+  if (columnCount === 5) {
+    return attachmentCount <= 20 ? "122px" : "112px";
+  }
+  return attachmentCount <= 24 ? "108px" : "96px";
+};
+
 const MessageAttachmentCollection = memo(function MessageAttachmentCollection(props) {
   const {
     messageItem,
@@ -1253,16 +1297,26 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
-  const useSevenTileLayout = (
-    visualAttachments.length === 7
+  const useDenseGalleryLayout = (
+    visualAttachments.length >= 7
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
-  const useWideTopMosaicLayout = (
-    visualAttachments.length >= 8
-    && !fileAttachments.length
-    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
-  );
+  const denseGalleryColumnCount = useDenseGalleryLayout
+    ? getDenseGalleryColumnCount(visualAttachments.length)
+    : 0;
+  const denseGalleryRowSize = useDenseGalleryLayout
+    ? getDenseGalleryRowSize(visualAttachments.length, denseGalleryColumnCount)
+    : "";
+  const denseGalleryRemainder = useDenseGalleryLayout
+    ? visualAttachments.length % denseGalleryColumnCount
+    : 0;
+  const denseGalleryLayoutStyle = useDenseGalleryLayout
+    ? {
+        "--message-attachment-grid-columns": String(denseGalleryColumnCount),
+        "--message-attachment-grid-row-size": denseGalleryRowSize,
+      }
+    : undefined;
 
   if (!attachmentList.length) {
     return null;
@@ -1306,9 +1360,11 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
               featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
             } ${useFiveTileLayout ? "message-attachment-grid--five-tile" : ""
             } ${useSixTileLayout ? "message-attachment-grid--six-tile" : ""
-            } ${useSevenTileLayout ? "message-attachment-grid--seven-tile" : ""
-            } ${useWideTopMosaicLayout ? "message-attachment-grid--wide-top-mosaic" : ""
+            } ${useDenseGalleryLayout ? "message-attachment-grid--dense-gallery" : ""
+            } ${useDenseGalleryLayout ? `message-attachment-grid--dense-gallery-cols-${denseGalleryColumnCount}` : ""
+            } ${useDenseGalleryLayout && denseGalleryRemainder ? `message-attachment-grid--dense-gallery-rem-${denseGalleryRemainder}` : ""
             }`}
+            style={denseGalleryLayoutStyle}
           >
             {visualAttachments.map((attachmentItem, attachmentIndex) => (
               <div

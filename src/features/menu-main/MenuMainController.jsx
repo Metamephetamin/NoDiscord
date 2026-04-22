@@ -609,6 +609,11 @@ export default function MenuMain({
     handleCreateConversation,
     handleUploadConversationAvatar,
     handleAddConversationMember,
+    handleUpdateConversation,
+    handleUpdateConversationMemberRole,
+    handleRemoveConversationMember,
+    handleLeaveConversation,
+    handleDeleteConversation,
   } = useFriendsWorkspaceState({
     user,
     apiBaseUrl: API_BASE_URL,
@@ -1584,6 +1589,20 @@ export default function MenuMain({
       return displayName.includes(query) || email.includes(query);
     });
   }, [directConversationTargets, friendsSidebarQuery]);
+  const filteredConversations = useMemo(() => {
+    const query = friendsSidebarQuery.trim().toLowerCase();
+    if (!query) {
+      return conversationTargets;
+    }
+
+    return conversationTargets.filter((conversation) => {
+      const title = String(conversation?.title || "Новая беседа").toLowerCase();
+      const memberNames = Array.isArray(conversation?.members)
+        ? conversation.members.map((member) => getDisplayName(member)).join(" ").toLowerCase()
+        : "";
+      return title.includes(query) || memberNames.includes(query);
+    });
+  }, [conversationTargets, friendsSidebarQuery, getDisplayName]);
   const notificationSoundOptions = useMemo(() => {
     if (!customNotificationSoundData && notificationSoundId !== "custom") {
       return NOTIFICATION_SOUND_OPTIONS;
@@ -2803,8 +2822,13 @@ export default function MenuMain({
 
     try {
       const storedMode = localStorage.getItem(noiseSuppressionStorageKey);
-      const normalizedStoredMode = storedMode === "krisp" ? "rnnoise" : storedMode;
-      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "broadcast");
+      const normalizedStoredMode =
+        storedMode === "voice_isolation"
+          ? "hard_gate"
+          : storedMode === "rnnoise" || storedMode === "krisp"
+            ? "broadcast"
+            : storedMode;
+      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "transparent");
     } catch {
       setNoiseSuppressionMode("transparent");
     }
@@ -4864,7 +4888,13 @@ export default function MenuMain({
     setSelectedOutputDeviceId(deviceId || "");
   };
   const handleNoiseSuppressionModeChange = (mode) => {
-    setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(mode) ? mode : "broadcast");
+    const normalizedMode =
+      mode === "voice_isolation"
+        ? "hard_gate"
+        : mode === "rnnoise" || mode === "krisp"
+          ? "broadcast"
+          : mode;
+    setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : "transparent");
     setShowNoiseMenu(false);
   };
   const toggleEchoCancellation = () => {
@@ -5745,29 +5775,19 @@ export default function MenuMain({
   const outputSelectionAvailable = outputSelectionSupported && audioOutputDevices.length > 0;
   const noiseProfileOptions = [
     {
+      id: "transparent",
+      title: "Студия",
+      description: "Естественный голос с лёгким EQ и мягкой компрессией, почти без заметного шумодава.",
+    },
+    {
       id: "broadcast",
-      title: "Broadcast",
-      description: "Оптимальный режим для звонков: мягкий EQ и компрессия голоса.",
-    },
-    {
-      id: "voice_isolation",
-      title: "Изоляция голоса",
-      description: "Только ваш голос: фон режется сильнее и речь выходит вперёд.",
-    },
-    {
-      id: "rnnoise",
-      title: "RNNoise",
-      description: "Бесплатное подавление фонового шума и клавиатуры на RNNoise, если Electron/Chromium его поддерживает.",
+      title: "Эфир",
+      description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
     },
     {
       id: "hard_gate",
-      title: "Hard Gate",
-      description: "Максимально жёсткий speech-only режим: шумодав, gate и компрессия выкручены почти в максимум, тихий фон и эхо режутся агрессивнее всего.",
-    },
-    {
-      id: "transparent",
-      title: "Студия",
-      description: "Чистый естественный звук с минимальной обработкой.",
+      title: "Hard RNNoise",
+      description: "Агрессивно давит фон и посторонние звуки, оставляя в приоритете почти только голос.",
     },
   ];
   const activeNoiseProfile =
@@ -6194,6 +6214,7 @@ export default function MenuMain({
       friendsPageSection={friendsPageSection}
       incomingFriendRequestCount={incomingFriendRequestCount}
       filteredFriends={filteredFriends}
+      filteredConversations={filteredConversations}
       activeDirectFriendId={activeDirectFriendId}
       activeConversationId={activeConversationId}
       directUnreadCounts={directUnreadCounts}
@@ -6206,6 +6227,7 @@ export default function MenuMain({
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
+      onOpenConversationChat={openConversationChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
       overlayContent={friendListOverlayElement}
       getDisplayName={getDisplayName}
@@ -6300,6 +6322,25 @@ export default function MenuMain({
       onCreateConversation={handleCreateConversation}
       onUploadConversationAvatar={handleUploadConversationAvatar}
       onAddConversationMember={handleAddConversationMember}
+      onUpdateConversation={handleUpdateConversation}
+      onUpdateConversationMemberRole={handleUpdateConversationMemberRole}
+      onRemoveConversationMember={handleRemoveConversationMember}
+      onLeaveConversation={async (conversationId) => {
+        const result = await handleLeaveConversation(conversationId);
+        if (String(activeConversationId || "") === String(conversationId || "")) {
+          resetActiveFriendWorkspaceSelection();
+          setFriendsPageSection("conversations");
+        }
+        return result;
+      }}
+      onDeleteConversation={async (conversationId) => {
+        const result = await handleDeleteConversation(conversationId);
+        if (String(activeConversationId || "") === String(conversationId || "")) {
+          resetActiveFriendWorkspaceSelection();
+          setFriendsPageSection("conversations");
+        }
+        return result;
+      }}
       onClearConversationStatus={() => setConversationActionStatus("")}
       onStartDirectCall={startDirectCallWithUser}
       onOpenDirectActions={openFriendListUserContextMenu}

@@ -45,6 +45,7 @@ export default function useTextChatVoiceSpeech({
   const [, setVoiceMicLevel] = useState(0);
   const [speechRecognitionActive, setSpeechRecognitionActive] = useState(false);
   const [speechMicLevel, setSpeechMicLevel] = useState(0);
+  const [speechCaptureState, setSpeechCaptureState] = useState("idle");
 
   const voiceRecorderRef = useRef(null);
   const voiceInputStreamRef = useRef(null);
@@ -52,6 +53,7 @@ export default function useTextChatVoiceSpeech({
   const voiceRecordingChunksRef = useRef([]);
   const voiceRecordingStartAtRef = useRef(0);
   const voicePointerStateRef = useRef({ pointerId: null, startY: 0, locked: false });
+  const speechPointerStateRef = useRef({ pointerId: null, startY: 0, locked: false });
   const voiceAudioContextRef = useRef(null);
   const voiceAnalyserRef = useRef(null);
   const voiceLevelFrameRef = useRef(0);
@@ -74,6 +76,49 @@ export default function useTextChatVoiceSpeech({
 
   const SPEECH_RECOGNITION_MAX_RESTART_DELAY_MS = 4000;
   const SPEECH_RECOGNITION_NETWORK_WARNING_DELAY_MS = 7000;
+  const PREFERRED_VOICE_SAMPLE_SIZE = 24;
+  const MAX_VOICE_SAMPLE_SIZE = 32;
+
+  const getMicrophoneAccessErrorMessage = (error, fallbackMessage) => {
+    const errorName = String(error?.name || error?.error || "").trim();
+    switch (errorName) {
+      case "NotAllowedError":
+      case "PermissionDeniedError":
+      case "not-allowed":
+      case "service-not-allowed":
+        return "Доступ к микрофону запрещен. Разрешите микрофон для сайта и попробуйте снова.";
+      case "NotFoundError":
+      case "DevicesNotFoundError":
+      case "audio-capture":
+        return "Микрофон не найден или занят другой программой.";
+      case "NotReadableError":
+      case "TrackStartError":
+        return "Не удалось получить звук с микрофона. Проверьте, не занят ли он другой программой.";
+      case "OverconstrainedError":
+      case "ConstraintNotSatisfiedError":
+        return "Текущие настройки микрофона не поддерживаются этим устройством.";
+      default:
+        return fallbackMessage;
+    }
+  };
+
+  const reportVoiceSpeechError = (fallbackMessage, error, { logLevel = "error" } = {}) => {
+    const nextMessage = getMicrophoneAccessErrorMessage(error, fallbackMessage);
+    const logger = logLevel === "warn" ? console.warn : console.error;
+    logger("Voice/speech error:", error);
+    setErrorMessage(nextMessage);
+    return nextMessage;
+  };
+
+  const buildPreferredVoiceCaptureConstraints = () => ({
+    sampleRate: VOICE_RECORDING_SAMPLE_RATE,
+    sampleSize: { ideal: PREFERRED_VOICE_SAMPLE_SIZE },
+    advanced: [
+      { sampleSize: MAX_VOICE_SAMPLE_SIZE },
+      { sampleSize: PREFERRED_VOICE_SAMPLE_SIZE },
+      { sampleSize: 16 },
+    ],
+  });
 
   const stopVoiceLevelLoop = () => {
     if (voiceLevelFrameRef.current) {
@@ -119,6 +164,11 @@ export default function useTextChatVoiceSpeech({
     voicePointerStateRef.current = { pointerId: null, startY: 0, locked: false };
   };
 
+  const resetSpeechPointerState = () => {
+    speechPointerStateRef.current = { pointerId: null, startY: 0, locked: false };
+    setSpeechCaptureState("idle");
+  };
+
   const clearSpeechRecognitionRestartTimer = () => {
     if (!speechRestartTimeoutRef.current || typeof window === "undefined") {
       speechRestartTimeoutRef.current = 0;
@@ -135,7 +185,9 @@ export default function useTextChatVoiceSpeech({
     setSpeechMicLevel(0);
 
     if (speechAudioContextRef.current) {
-      speechAudioContextRef.current.close().catch(() => {});
+      speechAudioContextRef.current.close().catch((error) => {
+        console.warn("Speech meter audio context close error:", error);
+      });
       speechAudioContextRef.current = null;
     }
 
@@ -143,6 +195,8 @@ export default function useTextChatVoiceSpeech({
       speechMeterStreamRef.current.getTracks().forEach((track) => track.stop());
       speechMeterStreamRef.current = null;
     }
+
+    resetSpeechPointerState();
   };
 
   const formatSpeechTranscriptDraft = (transcriptText, finalize = false) =>
@@ -287,54 +341,62 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    const inputStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-      },
-    });
+    try {
+      const inputStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          ...buildPreferredVoiceCaptureConstraints(),
+        },
+      });
 
-    const audioContext = new AudioContextCtor({
-      latencyHint: "interactive",
-      sampleRate: VOICE_RECORDING_SAMPLE_RATE,
-    });
+      const audioContext = new AudioContextCtor({
+        latencyHint: "interactive",
+        sampleRate: VOICE_RECORDING_SAMPLE_RATE,
+      });
 
-    if (audioContext.state === "suspended") {
-      await audioContext.resume().catch(() => {});
+      if (audioContext.state === "suspended") {
+        await audioContext.resume().catch((error) => {
+          console.warn("Speech meter audio context resume error:", error);
+        });
+      }
+
+      const source = audioContext.createMediaStreamSource(inputStream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.76;
+
+      const highPassFilter = audioContext.createBiquadFilter();
+      highPassFilter.type = "highpass";
+      highPassFilter.frequency.value = VOICE_HIGH_PASS_FREQUENCY_HZ;
+      highPassFilter.Q.value = 0.82;
+
+      const presenceFilter = audioContext.createBiquadFilter();
+      presenceFilter.type = "peaking";
+      presenceFilter.frequency.value = VOICE_PRESENCE_FREQUENCY_HZ;
+      presenceFilter.Q.value = 0.88;
+      presenceFilter.gain.value = VOICE_PRESENCE_GAIN_DB;
+
+      const highShelfFilter = audioContext.createBiquadFilter();
+      highShelfFilter.type = "highshelf";
+      highShelfFilter.frequency.value = VOICE_HIGH_SHELF_FREQUENCY_HZ;
+      highShelfFilter.gain.value = VOICE_HIGH_SHELF_GAIN_DB;
+
+      source.connect(highPassFilter);
+      highPassFilter.connect(presenceFilter);
+      presenceFilter.connect(highShelfFilter);
+      highShelfFilter.connect(analyser);
+
+      speechAudioContextRef.current = audioContext;
+      speechAnalyserRef.current = analyser;
+      speechMeterStreamRef.current = inputStream;
+      speechLevelFrameRef.current = requestAnimationFrame(sampleSpeechLevel);
+    } catch (error) {
+      cleanupSpeechMeterResources();
+      console.warn("Speech microphone analysis start error:", error);
     }
-
-    const source = audioContext.createMediaStreamSource(inputStream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.76;
-
-    const highPassFilter = audioContext.createBiquadFilter();
-    highPassFilter.type = "highpass";
-    highPassFilter.frequency.value = VOICE_HIGH_PASS_FREQUENCY_HZ;
-    highPassFilter.Q.value = 0.82;
-
-    const presenceFilter = audioContext.createBiquadFilter();
-    presenceFilter.type = "peaking";
-    presenceFilter.frequency.value = VOICE_PRESENCE_FREQUENCY_HZ;
-    presenceFilter.Q.value = 0.88;
-    presenceFilter.gain.value = VOICE_PRESENCE_GAIN_DB;
-
-    const highShelfFilter = audioContext.createBiquadFilter();
-    highShelfFilter.type = "highshelf";
-    highShelfFilter.frequency.value = VOICE_HIGH_SHELF_FREQUENCY_HZ;
-    highShelfFilter.gain.value = VOICE_HIGH_SHELF_GAIN_DB;
-
-    source.connect(highPassFilter);
-    highPassFilter.connect(presenceFilter);
-    presenceFilter.connect(highShelfFilter);
-    highShelfFilter.connect(analyser);
-
-    speechAudioContextRef.current = audioContext;
-    speechAnalyserRef.current = analyser;
-    speechMeterStreamRef.current = inputStream;
-    speechLevelFrameRef.current = requestAnimationFrame(sampleSpeechLevel);
   };
 
   const sendVoiceRecordingFile = async (voiceFile, durationMs, waveformSamples) => {
@@ -477,7 +539,7 @@ export default function useTextChatVoiceSpeech({
           noiseSuppression: true,
           autoGainControl: true,
           channelCount: 1,
-          sampleRate: VOICE_RECORDING_SAMPLE_RATE,
+          ...buildPreferredVoiceCaptureConstraints(),
         },
       });
 
@@ -512,9 +574,7 @@ export default function useTextChatVoiceSpeech({
       cleanupVoiceRecordingResources();
       setVoiceRecordingState("idle");
       setVoiceRecordingDurationMs(0);
-      setErrorMessage(error?.name === "NotAllowedError"
-        ? "Доступ к микрофону запрещен."
-        : "Не удалось включить микрофон для записи.");
+      reportVoiceSpeechError("Не удалось включить микрофон для записи.", error);
     }
   };
 
@@ -531,9 +591,72 @@ export default function useTextChatVoiceSpeech({
     recognition.__shouldFinalize = shouldFinalize;
     try {
       recognition.stop();
-    } catch {
+    } catch (error) {
+      console.error("Speech recognition stop error:", error);
       setSpeechRecognitionActive(false);
       speechRecognitionRef.current = null;
+      cleanupSpeechMeterResources();
+    }
+  };
+
+  const handleSpeechRecognitionPointerDown = (event) => {
+    event.preventDefault();
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    if (voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+      return;
+    }
+
+    if (speechRecognitionActive && speechCaptureState === "locked") {
+      stopSpeechRecognition(true);
+      return;
+    }
+
+    if (speechRecognitionActive) {
+      return;
+    }
+
+    startSpeechRecognition();
+    if (speechRecognitionRef.current) {
+      speechPointerStateRef.current = {
+        pointerId: event.pointerId ?? null,
+        startY: event.clientY ?? 0,
+        locked: false,
+      };
+      setSpeechCaptureState("holding");
+    }
+  };
+
+  const handleSpeechRecognitionPointerMove = (event) => {
+    if (speechCaptureState !== "holding") {
+      return;
+    }
+
+    const pointerState = speechPointerStateRef.current;
+    if (pointerState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const dragDistance = pointerState.startY - event.clientY;
+    if (dragDistance >= VOICE_LOCK_DRAG_THRESHOLD_PX) {
+      speechPointerStateRef.current = { ...pointerState, locked: true };
+      setSpeechCaptureState("locked");
+    }
+  };
+
+  const handleSpeechRecognitionPointerUp = (event) => {
+    const pointerState = speechPointerStateRef.current;
+    if (speechCaptureState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
+      stopSpeechRecognition(true);
+    }
+  };
+
+  const handleSpeechRecognitionPointerCancel = (event) => {
+    const pointerState = speechPointerStateRef.current;
+    if (speechCaptureState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
+      stopSpeechRecognition(false);
     }
   };
 
@@ -576,7 +699,8 @@ export default function useTextChatVoiceSpeech({
 
       recognition.onstart = () => {
         setSpeechRecognitionActive(true);
-        void startSpeechMicrophoneAnalysis().catch(() => {
+        void startSpeechMicrophoneAnalysis().catch((error) => {
+          console.warn("Speech microphone analysis bootstrap error:", error);
           setSpeechMicLevel(0);
         });
       };
@@ -638,7 +762,7 @@ export default function useTextChatVoiceSpeech({
           return;
         }
 
-        console.warn("Speech recognition error:", event);
+        reportVoiceSpeechError("Не удалось распознать речь. Попробуйте еще раз.", event, { logLevel: "warn" });
       };
 
       recognition.onend = () => {
@@ -744,7 +868,7 @@ export default function useTextChatVoiceSpeech({
       }
 
       console.warn("Speech recognition start error:", error);
-      setErrorMessage("Не удалось запустить голосовой ввод текста.");
+      reportVoiceSpeechError("Не удалось запустить голосовой ввод текста.", error);
     }
   };
 
@@ -844,11 +968,16 @@ export default function useTextChatVoiceSpeech({
     voiceRecordingDurationMs,
     speechRecognitionActive,
     speechMicLevel,
+    speechCaptureState,
     stopSpeechRecognition,
     handleVoiceRecordPointerDown,
     handleVoiceRecordPointerMove,
     handleVoiceRecordPointerUp,
     handleVoiceRecordPointerCancel,
+    handleSpeechRecognitionPointerDown,
+    handleSpeechRecognitionPointerMove,
+    handleSpeechRecognitionPointerUp,
+    handleSpeechRecognitionPointerCancel,
     handleCancelVoiceRecording,
     handleSpeechRecognitionToggle,
   };

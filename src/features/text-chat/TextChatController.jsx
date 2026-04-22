@@ -2151,11 +2151,16 @@ export default function TextChat({
     voiceRecordingDurationMs,
     speechRecognitionActive,
     speechMicLevel,
+    speechCaptureState,
     stopSpeechRecognition,
     handleVoiceRecordPointerDown,
     handleVoiceRecordPointerMove,
     handleVoiceRecordPointerUp,
     handleVoiceRecordPointerCancel,
+    handleSpeechRecognitionPointerDown,
+    handleSpeechRecognitionPointerMove,
+    handleSpeechRecognitionPointerUp,
+    handleSpeechRecognitionPointerCancel,
     handleCancelVoiceRecording,
     handleSpeechRecognitionToggle,
   } = useTextChatVoiceSpeech({
@@ -2844,6 +2849,7 @@ export default function TextChat({
       voiceRecordingDurationMs={voiceRecordingDurationMs}
       speechRecognitionActive={speechRecognitionActive}
       speechMicLevel={speechMicLevel}
+      speechCaptureState={speechCaptureState}
       composerEmojiButtonRef={composerEmojiButtonRef}
       composerEmojiPickerOpen={composerEmojiPickerOpen}
       composerEmojiPickerRef={composerEmojiPickerRef}
@@ -2877,6 +2883,10 @@ export default function TextChat({
       handleVoiceRecordPointerMove={handleVoiceRecordPointerMove}
       handleVoiceRecordPointerUp={handleVoiceRecordPointerUp}
       handleVoiceRecordPointerCancel={handleVoiceRecordPointerCancel}
+      handleSpeechRecognitionPointerDown={handleSpeechRecognitionPointerDown}
+      handleSpeechRecognitionPointerMove={handleSpeechRecognitionPointerMove}
+      handleSpeechRecognitionPointerUp={handleSpeechRecognitionPointerUp}
+      handleSpeechRecognitionPointerCancel={handleSpeechRecognitionPointerCancel}
       handleSpeechRecognitionToggle={handleSpeechRecognitionToggle}
       syncComposerSelection={syncComposerSelection}
       setComposerEmojiPickerOpen={setComposerEmojiPickerOpen}

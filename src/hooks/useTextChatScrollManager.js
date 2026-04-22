@@ -10,6 +10,7 @@ const FORCE_LATEST_SCROLL_STABLE_FRAME_COUNT = 3;
 const FORCE_LATEST_SCROLL_MAX_FRAME_COUNT = 14;
 const TEXT_CHAT_SCROLL_STATE_PREFIX = "textchat-scroll-state";
 const TEXT_CHAT_SCROLL_STATE_ENABLED = false;
+const DEFAULT_MESSAGE_HIGHLIGHT_DURATION_MS = 2800;
 
 function getTextChatScrollStateKey(userId, channelId) {
   const normalizedUserId = String(userId || "").trim();
@@ -173,6 +174,7 @@ export default function useTextChatScrollManager({
     latestMessageKey: "",
   });
   const initialScrollAppliedRef = useRef(false);
+  const highlightTimeoutRef = useRef(0);
   const scrollStateRef = useRef({
     scrollIntent: "user",
     isProgrammaticScroll: false,
@@ -512,14 +514,25 @@ export default function useTextChatScrollManager({
     };
   }, [messagesListRef, scopedChannelId]);
 
-  const applyHighlight = useCallback((messageId) => {
+  const applyHighlight = useCallback((messageId, durationMs = DEFAULT_MESSAGE_HIGHLIGHT_DURATION_MS) => {
     setHighlightedMessageId(String(messageId));
-    window.setTimeout(() => {
+    if (highlightTimeoutRef.current && typeof window !== "undefined") {
+      window.clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = 0;
+    }
+    highlightTimeoutRef.current = window.setTimeout(() => {
       setHighlightedMessageId((current) => (current === String(messageId) ? "" : current));
-    }, 4200);
+      highlightTimeoutRef.current = 0;
+    }, Math.max(600, Number(durationMs) || DEFAULT_MESSAGE_HIGHLIGHT_DURATION_MS));
   }, [setHighlightedMessageId]);
 
-  const scrollToMessage = useCallback((messageId, { behavior = "auto", block = "center", rememberCurrent = true, highlight = true } = {}) => {
+  const scrollToMessage = useCallback((messageId, {
+    behavior = "auto",
+    block = "center",
+    rememberCurrent = true,
+    highlight = true,
+    highlightDurationMs = DEFAULT_MESSAGE_HIGHLIGHT_DURATION_MS,
+  } = {}) => {
     const normalizedMessageId = String(messageId || "");
     const list = messagesListRef.current;
     if (!normalizedMessageId || !list) {
@@ -535,7 +548,7 @@ export default function useTextChatScrollManager({
       const element = messageRefs.current.get(normalizedMessageId);
       if (element) {
         if (highlight) {
-          applyHighlight(normalizedMessageId);
+          applyHighlight(normalizedMessageId, highlightDurationMs);
         }
         const targetTop = getTargetScrollTopForBlock(list, element.offsetTop, element.offsetHeight, block);
         scrollToPosition(targetTop, { behavior, scrollIntent: "jump" });
@@ -557,6 +570,13 @@ export default function useTextChatScrollManager({
 
     attemptScroll();
   }, [applyHighlight, captureJumpSnapshot, estimateMessageOffsetById, messageRefs, messagesListRef, scrollToPosition]);
+
+  useEffect(() => () => {
+    if (highlightTimeoutRef.current && typeof window !== "undefined") {
+      window.clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = 0;
+    }
+  }, []);
 
   const restoreInitialChannelPosition = useCallback(() => {
     if (!scopedChannelId) {

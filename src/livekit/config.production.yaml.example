@@ -1,0 +1,21 @@
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: true
+
+turn:
+  enabled: true
+  # Use a dedicated TURN domain with a valid public certificate.
+  # If you do not have a separate L4 load balancer for TURN/TLS,
+  # set tls_port to 443 as recommended by LiveKit.
+  domain: turn.example.com
+  tls_port: 443
+  cert_file: /etc/letsencrypt/live/turn.example.com/fullchain.pem
+  key_file: /etc/letsencrypt/live/turn.example.com/privkey.pem
+
+logging:
+  level: info

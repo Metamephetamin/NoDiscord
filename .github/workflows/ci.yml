@@ -65,6 +65,9 @@ jobs:
       - name: Check encoding
         run: npm run check:encoding
 
+      - name: Test encoding guard
+        run: npm run test:encoding
+
       - name: Check formatting if configured
         if: needs.determine-scope.outputs.mode == 'heavy'
         run: npm run format:check --if-present

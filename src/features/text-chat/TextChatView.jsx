@@ -76,6 +76,7 @@ export default function TextChatView(props) {
     voiceRecordingDurationMs,
     speechRecognitionActive,
     speechMicLevel,
+    speechCaptureState,
     composerEmojiButtonRef,
     composerEmojiPickerOpen,
     composerEmojiPickerRef,
@@ -109,6 +110,10 @@ export default function TextChatView(props) {
     handleVoiceRecordPointerMove,
     handleVoiceRecordPointerUp,
     handleVoiceRecordPointerCancel,
+    handleSpeechRecognitionPointerDown,
+    handleSpeechRecognitionPointerMove,
+    handleSpeechRecognitionPointerUp,
+    handleSpeechRecognitionPointerCancel,
     handleSpeechRecognitionToggle,
     syncComposerSelection,
     setComposerEmojiPickerOpen,
@@ -195,6 +200,15 @@ export default function TextChatView(props) {
     onLoadOlderHistory,
   });
   const stableScrollToMessage = useStableCallback(scrollToMessage);
+  const handleSearchPanelOpenMessage = useStableCallback((messageId) => {
+    scrollToMessage(messageId, {
+      behavior: "auto",
+      block: "center",
+      rememberCurrent: true,
+      highlight: true,
+      highlightDurationMs: 2800,
+    });
+  });
   const latestOwnMessageSignatureRef = useRef("");
   const scheduleAggressiveScrollToLatest = useStableCallback(() => {
     forceScrollToLatest("auto");
@@ -337,7 +351,7 @@ export default function TextChatView(props) {
           </div>
         </div>
       ) : null}
-      <MessageSearchPanel key={normalizedSearchQuery} query={normalizedSearchQuery} results={searchResults} onOpenMessage={stableScrollToMessage} />
+      <MessageSearchPanel key={normalizedSearchQuery} query={normalizedSearchQuery} results={searchResults} onOpenMessage={handleSearchPanelOpenMessage} />
       <PinnedMessagesPanel
         pinnedMessages={pinnedMessages}
         onOpenMessage={stableScrollToMessage}
@@ -447,12 +461,14 @@ export default function TextChatView(props) {
             selectedFiles={selectedFiles}
             uploadingFile={uploadingFile}
             composerDropActive={composerDropActive}
+            errorMessage={errorMessage}
             replyState={replyState}
             messageEditState={messageEditState}
             voiceRecordingState={voiceRecordingState}
             voiceRecordingDurationMs={voiceRecordingDurationMs}
             speechRecognitionActive={speechRecognitionActive}
             speechMicLevel={speechMicLevel}
+            speechCaptureState={speechCaptureState}
             composerEmojiButtonRef={composerEmojiButtonRef}
             composerEmojiPickerOpen={composerEmojiPickerOpen}
             composerEmojiPickerRef={composerEmojiPickerRef}
@@ -481,6 +497,10 @@ export default function TextChatView(props) {
             onVoiceRecordPointerMove={handleVoiceRecordPointerMove}
             onVoiceRecordPointerUp={handleVoiceRecordPointerUp}
             onVoiceRecordPointerCancel={handleVoiceRecordPointerCancel}
+            onSpeechRecognitionPointerDown={handleSpeechRecognitionPointerDown}
+            onSpeechRecognitionPointerMove={handleSpeechRecognitionPointerMove}
+            onSpeechRecognitionPointerUp={handleSpeechRecognitionPointerUp}
+            onSpeechRecognitionPointerCancel={handleSpeechRecognitionPointerCancel}
             onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
             onPaste={handleComposerPaste}
             onSyncComposerSelection={syncComposerSelection}
@@ -507,12 +527,14 @@ export default function TextChatView(props) {
           selectedFiles={selectedFiles}
           uploadingFile={uploadingFile}
           composerDropActive={composerDropActive}
+          errorMessage={errorMessage}
           replyState={replyState}
           messageEditState={messageEditState}
           voiceRecordingState={voiceRecordingState}
           voiceRecordingDurationMs={voiceRecordingDurationMs}
           speechRecognitionActive={speechRecognitionActive}
           speechMicLevel={speechMicLevel}
+          speechCaptureState={speechCaptureState}
           composerEmojiButtonRef={composerEmojiButtonRef}
           composerEmojiPickerOpen={composerEmojiPickerOpen}
           composerEmojiPickerRef={composerEmojiPickerRef}
@@ -541,6 +563,10 @@ export default function TextChatView(props) {
           onVoiceRecordPointerMove={handleVoiceRecordPointerMove}
           onVoiceRecordPointerUp={handleVoiceRecordPointerUp}
           onVoiceRecordPointerCancel={handleVoiceRecordPointerCancel}
+          onSpeechRecognitionPointerDown={handleSpeechRecognitionPointerDown}
+          onSpeechRecognitionPointerMove={handleSpeechRecognitionPointerMove}
+          onSpeechRecognitionPointerUp={handleSpeechRecognitionPointerUp}
+          onSpeechRecognitionPointerCancel={handleSpeechRecognitionPointerCancel}
           onSpeechRecognitionToggle={handleSpeechRecognitionToggle}
           onPaste={handleComposerPaste}
           onSyncComposerSelection={syncComposerSelection}

@@ -33,12 +33,14 @@ function TextChatComposer({
   selectedFiles,
   uploadingFile,
   composerDropActive,
+  errorMessage = "",
   replyState,
   messageEditState,
   voiceRecordingState,
   voiceRecordingDurationMs,
   speechRecognitionActive,
   speechMicLevel = 0,
+  speechCaptureState = "idle",
   composerEmojiButtonRef,
   composerEmojiPickerOpen,
   composerEmojiPickerRef,
@@ -82,6 +84,10 @@ function TextChatComposer({
   onVoiceRecordPointerMove,
   onVoiceRecordPointerUp,
   onVoiceRecordPointerCancel,
+  onSpeechRecognitionPointerDown,
+  onSpeechRecognitionPointerMove,
+  onSpeechRecognitionPointerUp,
+  onSpeechRecognitionPointerCancel,
   onRequestScrollToLatest,
   onSend,
 }) {
@@ -94,6 +100,7 @@ function TextChatComposer({
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
   const attachMenuCloseTimeoutRef = useRef(0);
+  const suppressSpeechClickRef = useRef(false);
   const deferredMessage = useDeferredValue(message);
   const composerMentionSegments = useMemo(
     () => {
@@ -197,20 +204,21 @@ function TextChatComposer({
   const shouldShowSendButton = hasSendPayload && voiceRecordingState === "idle";
   const voiceButtonStateClass = voiceRecordingState !== "idle" ? `composer-tool--recording-${voiceRecordingState}` : "";
   const normalizedSpeechMicLevel = Math.max(0, Math.min(1, Number(speechMicLevel) || 0));
-  const speechIndicatorBars = useMemo(
-    () => [0.62, 0.94, 1, 0.8].map((factor) => Math.max(0.24, 0.24 + normalizedSpeechMicLevel * factor)),
-    [normalizedSpeechMicLevel]
-  );
   const speechMicStyle = speechRecognitionActive
     ? {
       "--speech-level-scale": (1 + normalizedSpeechMicLevel * 0.68).toFixed(3),
       "--speech-level-opacity": (0.28 + normalizedSpeechMicLevel * 0.6).toFixed(3),
     }
     : undefined;
+  const speechIsHolding = speechCaptureState === "holding";
+  const speechIsLocked = speechCaptureState === "locked";
   const handleClearPendingUploads = () => {
     onClearPendingUploads();
   };
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
+    if (speechRecognitionActive) {
+      onStopSpeechRecognition(false);
+    }
     if (!messageEditState && (String(message || "").trim() || selectedFiles.length > 0)) {
       onRequestScrollToLatest?.();
     }
@@ -381,6 +389,8 @@ function TextChatComposer({
           </div>
         ) : null}
 
+        {errorMessage ? <div className="chat-error chat-error--composer">{errorMessage}</div> : null}
+
         {replyState || messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") ? (
           <div className="composer-status-strip">
             {replyState ? (
@@ -430,18 +440,6 @@ function TextChatComposer({
               </div>
             ) : null}
 
-            {speechRecognitionActive ? (
-              <div className="composer-status composer-status--speech">
-                <span className="composer-status__dot" aria-hidden="true" />
-                <div className="composer-status__copy">
-                  <strong>Голосовой ввод</strong>
-                  <span>Слушаем речь на русском и вставляем её в поле сообщения.</span>
-                </div>
-                <button type="button" className="composer-status__action" onClick={onSpeechRecognitionToggle}>
-                  Стоп
-                </button>
-              </div>
-            ) : null}
           </div>
         ) : null}
 
@@ -645,29 +643,6 @@ function TextChatComposer({
             ) : null}
 
             <div className="composer-textarea-shell">
-              {speechRecognitionActive ? (
-                <div className="composer-speech-indicator" role="status" aria-live="polite">
-                  <span className="composer-speech-indicator__badge" style={speechMicStyle} aria-hidden="true">
-                    <span className="composer-speech-indicator__badge-ring composer-speech-indicator__badge-ring--outer" />
-                    <span className="composer-speech-indicator__badge-ring composer-speech-indicator__badge-ring--inner" />
-                    <span className="composer-tool__mic composer-tool__mic--speech-indicator" />
-                  </span>
-                  <span className="composer-speech-indicator__copy">
-                    <strong>Голосовой ввод</strong>
-                    <span>Говорите, текст появится сразу.</span>
-                  </span>
-                  <span className="composer-speech-indicator__wave" aria-hidden="true">
-                    {speechIndicatorBars.map((barLevel, index) => (
-                      <span
-                        key={`speech-bar-${index}`}
-                        className="composer-speech-indicator__bar"
-                        style={{ "--speech-bar-scale": barLevel.toFixed(3) }}
-                      />
-                    ))}
-                  </span>
-                </div>
-              ) : null}
-
               {shouldRenderComposerHighlight ? (
                 <div ref={composerHighlightRef} className="composer-textarea-highlight" aria-hidden="true">
                   {composerMentionSegments.map((segment, index) => {
@@ -795,7 +770,7 @@ function TextChatComposer({
 
                 if (event.key === "Enter" && !event.shiftKey && !preferExplicitSend) {
                   event.preventDefault();
-                  handleSendMessage();
+                  void handleSendMessage();
                 }
               }}
               />
@@ -823,7 +798,31 @@ function TextChatComposer({
                 <button
                   type="button"
                   className={`composer-tool composer-tool--speech composer-tool--action-slot ${speechRecognitionActive ? "composer-tool--active" : ""}`}
-                  onClick={onSpeechRecognitionToggle}
+                  onClick={() => {
+                    if (suppressSpeechClickRef.current) {
+                      suppressSpeechClickRef.current = false;
+                      return;
+                    }
+                    onSpeechRecognitionToggle();
+                  }}
+                  onPointerDown={async (event) => {
+                    suppressSpeechClickRef.current = true;
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                    await onSpeechRecognitionPointerDown?.(event);
+                  }}
+                  onPointerMove={onSpeechRecognitionPointerMove}
+                  onPointerUp={async (event) => {
+                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture?.(event.pointerId);
+                    }
+                    await onSpeechRecognitionPointerUp?.(event);
+                  }}
+                  onPointerCancel={async (event) => {
+                    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture?.(event.pointerId);
+                    }
+                    await onSpeechRecognitionPointerCancel?.(event);
+                  }}
                   disabled={uploadingFile || voiceRecordingState !== "idle"}
                   style={speechMicStyle}
                   title="Голосовой ввод текста"
@@ -832,6 +831,12 @@ function TextChatComposer({
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--outer" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--inner" aria-hidden="true" />
                   <span className="composer-tool__mic" aria-hidden="true" />
+                  {speechIsHolding ? (
+                    <span className="composer-tool__speech-hint" aria-hidden="true">^</span>
+                  ) : null}
+                  {speechIsLocked ? (
+                    <span className="composer-tool__lock composer-tool__lock--speech" aria-hidden="true">?</span>
+                  ) : null}
                 </button>
               ) : ENABLE_VOICE_MESSAGE_BUTTON ? (
                 <button
@@ -979,12 +984,14 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
   return previousProps.selectedFiles === nextProps.selectedFiles
     && previousProps.uploadingFile === nextProps.uploadingFile
     && previousProps.composerDropActive === nextProps.composerDropActive
+    && previousProps.errorMessage === nextProps.errorMessage
     && areReplyStatesEqual(previousProps.replyState, nextProps.replyState)
     && areMessageEditStatesEqual(previousProps.messageEditState, nextProps.messageEditState)
     && previousProps.voiceRecordingState === nextProps.voiceRecordingState
     && previousProps.voiceRecordingDurationMs === nextProps.voiceRecordingDurationMs
     && previousProps.speechRecognitionActive === nextProps.speechRecognitionActive
     && previousProps.speechMicLevel === nextProps.speechMicLevel
+    && previousProps.speechCaptureState === nextProps.speechCaptureState
     && previousProps.composerEmojiButtonRef === nextProps.composerEmojiButtonRef
     && previousProps.composerEmojiPickerOpen === nextProps.composerEmojiPickerOpen
     && previousProps.composerEmojiPickerRef === nextProps.composerEmojiPickerRef

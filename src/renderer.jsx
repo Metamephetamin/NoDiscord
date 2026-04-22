@@ -668,32 +668,30 @@ export default function Renderer() {
 
   const shellFallback = (
     <div className="app-loader">
-      <div className="app-loader__stage" aria-hidden="true">
-        <div className="app-loader__halo" />
-        <div className="app-loader__ring app-loader__ring--outer" />
-        <div className="app-loader__ring app-loader__ring--inner" />
-        <div className="app-loader__core" />
-        <span className="app-loader__spark app-loader__spark--one" />
-        <span className="app-loader__spark app-loader__spark--two" />
-        <span className="app-loader__spark app-loader__spark--three" />
+      <div className="app-loader__content">
+        <div className="app-loader__stage" aria-hidden="true">
+          <div className="app-loader__halo" />
+          <div className="app-loader__ring app-loader__ring--track" />
+          <div className="app-loader__ring app-loader__ring--orbit" />
+          <div className="app-loader__core" />
+        </div>
+        <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
       </div>
-      <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
     </div>
   );
 
   if (loading) {
     return (
       <div className="app-loader">
-        <div className="app-loader__stage" aria-hidden="true">
-          <div className="app-loader__halo" />
-          <div className="app-loader__ring app-loader__ring--outer" />
-          <div className="app-loader__ring app-loader__ring--inner" />
-          <div className="app-loader__core" />
-          <span className="app-loader__spark app-loader__spark--one" />
-          <span className="app-loader__spark app-loader__spark--two" />
-          <span className="app-loader__spark app-loader__spark--three" />
+        <div className="app-loader__content">
+          <div className="app-loader__stage" aria-hidden="true">
+            <div className="app-loader__halo" />
+            <div className="app-loader__ring app-loader__ring--track" />
+            <div className="app-loader__ring app-loader__ring--orbit" />
+            <div className="app-loader__core" />
+          </div>
+          <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
         </div>
-        <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
       </div>
     );
   }

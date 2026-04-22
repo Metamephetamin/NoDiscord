@@ -22,9 +22,7 @@ import {
   DEFAULT_AVATAR,
   NOISE_SUPPRESSION_MODE_BROADCAST,
   NOISE_SUPPRESSION_MODE_HARD_GATE,
-  NOISE_SUPPRESSION_MODE_RNNOISE,
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
-  NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
   createPreferredAudioContext,
   getAvatar,
   getCameraConstraints,
@@ -47,11 +45,15 @@ const CAMERA_TRACK_NAME = "camera-share";
 const VOICE_DEBUG_PREFIX = "[voice]";
 const PREWARMED_SESSION_TTL_MS = 20_000;
 const AUDIO_SAMPLE_RATE = 48_000;
+const PREFERRED_AUDIO_SAMPLE_SIZE = 24;
+const MAX_PREFERRED_AUDIO_SAMPLE_SIZE = 32;
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
 const VIDEO_ENCODING_PRIORITY = "high";
 const LEGACY_NOISE_SUPPRESSION_MODE_KRISP = "krisp";
+const LEGACY_NOISE_SUPPRESSION_MODE_RNNOISE = "rnnoise";
+const LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const REMOTE_BACKGROUND_SHARE_TARGET = { width: 960, height: 540, fps: 15 };
 const REMOTE_CAMERA_TARGET = { width: 640, height: 360, fps: 15 };
 const CAMERA_VIDEO_QUALITY_TARGETS = {
@@ -168,10 +170,7 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
 }
 
 function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) {
-  const useSpeechPreset =
-    mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION
-    || mode === NOISE_SUPPRESSION_MODE_RNNOISE
-    || mode === NOISE_SUPPRESSION_MODE_HARD_GATE;
+  const useSpeechPreset = mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT;
 
   return {
     audioPreset: useSpeechPreset ? VOICE_ISOLATION_MIC_AUDIO_PRESET : HIGH_QUALITY_MIC_AUDIO_PRESET,
@@ -186,16 +185,16 @@ function normalizeNoiseSuppressionMode(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT
     return NOISE_SUPPRESSION_MODE_BROADCAST;
   }
 
-  if (mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
-    return NOISE_SUPPRESSION_MODE_VOICE_ISOLATION;
-  }
-
   if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
     return NOISE_SUPPRESSION_MODE_HARD_GATE;
   }
 
-  if (mode === NOISE_SUPPRESSION_MODE_RNNOISE || mode === LEGACY_NOISE_SUPPRESSION_MODE_KRISP) {
-    return NOISE_SUPPRESSION_MODE_RNNOISE;
+  if (mode === LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
+    return NOISE_SUPPRESSION_MODE_HARD_GATE;
+  }
+
+  if (mode === LEGACY_NOISE_SUPPRESSION_MODE_RNNOISE || mode === LEGACY_NOISE_SUPPRESSION_MODE_KRISP) {
+    return NOISE_SUPPRESSION_MODE_BROADCAST;
   }
 
   return NOISE_SUPPRESSION_MODE_TRANSPARENT;
@@ -494,9 +493,22 @@ export function createVoiceRoomClient({
     return payload;
   };
 
-  const handleDeviceChange = () => {
+const handleDeviceChange = () => {
     emitAudioDevices().catch(() => {});
   };
+
+  const buildPreferredSampleSizeConstraints = (relaxed = false) => (
+    relaxed
+      ? {}
+      : {
+          sampleSize: { ideal: PREFERRED_AUDIO_SAMPLE_SIZE },
+          advanced: [
+            { sampleSize: MAX_PREFERRED_AUDIO_SAMPLE_SIZE },
+            { sampleSize: PREFERRED_AUDIO_SAMPLE_SIZE },
+            { sampleSize: 16 },
+          ],
+        }
+  );
 
   const buildMicConstraints = ({ deviceId = selectedInputDeviceId, mode = noiseSuppressionMode, relaxed = false } = {}) => ({
     deviceId:
@@ -505,12 +517,8 @@ export function createVoiceRoomClient({
         : undefined,
     echoCancellation: echoCancellationEnabled,
     noiseSuppression: true,
-    autoGainControl:
-      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    autoGainControl: mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
     voiceIsolation:
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION ||
-      mode === NOISE_SUPPRESSION_MODE_RNNOISE ||
       mode === NOISE_SUPPRESSION_MODE_HARD_GATE
         ? true
         : undefined,
@@ -518,17 +526,15 @@ export function createVoiceRoomClient({
     googEchoCancellation2: echoCancellationEnabled,
     googDAEchoCancellation: echoCancellationEnabled,
     googExperimentalEchoCancellation: echoCancellationEnabled,
-    googAutoGainControl:
-      mode === NOISE_SUPPRESSION_MODE_BROADCAST ||
-      mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION,
+    googAutoGainControl: mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
     googNoiseSuppression: true,
     googNoiseSuppression2: true,
     googHighpassFilter: true,
     googTypingNoiseDetection: true,
     channelCount: relaxed ? undefined : 1,
     sampleRate: relaxed ? undefined : AUDIO_SAMPLE_RATE,
-    sampleSize: relaxed ? undefined : 16,
     latency: relaxed ? undefined : 0.01,
+    ...buildPreferredSampleSizeConstraints(relaxed),
   });
 
   const getMicConstraints = (mode = noiseSuppressionMode) => buildMicConstraints({ mode });
@@ -630,14 +636,6 @@ export function createVoiceRoomClient({
     }
   };
 
-  const loadRnnoiseModule = () => {
-    if (!rnnoiseModulePromise) {
-      rnnoiseModulePromise = import("@shiguredo/noise-suppression");
-    }
-
-    return rnnoiseModulePromise;
-  };
-
   const stopRnnoiseNoiseSuppression = async () => {
     try {
       rnnoiseProcessor?.stopProcessing?.();
@@ -660,40 +658,8 @@ export function createVoiceRoomClient({
   };
 
   const applyRnnoiseToTrack = async (track) => {
-    if (!track) {
-      await stopRnnoiseNoiseSuppression();
-      return track;
-    }
-
-    if (noiseSuppressionMode !== NOISE_SUPPRESSION_MODE_RNNOISE) {
-      await stopRnnoiseNoiseSuppression();
-      return track;
-    }
-
-    try {
-      const { NoiseSuppressionProcessor } = await loadRnnoiseModule();
-      if (typeof NoiseSuppressionProcessor?.isSupported === "function" && !NoiseSuppressionProcessor.isSupported()) {
-        logVoiceDebug("local-audio:rnnoise-unsupported");
-        await stopRnnoiseNoiseSuppression();
-        return track;
-      }
-
-      await stopRnnoiseNoiseSuppression();
-      rnnoiseProcessor = new NoiseSuppressionProcessor();
-      rnnoiseProcessedTrack = await rnnoiseProcessor.startProcessing(track);
-      logVoiceDebug("local-audio:rnnoise-enabled", {
-        originalTrack: getTrackDebugInfo(track),
-        processedTrack: getTrackDebugInfo(rnnoiseProcessedTrack),
-      });
-      return rnnoiseProcessedTrack || track;
-    } catch (error) {
-      await stopRnnoiseNoiseSuppression();
-      logVoiceDebug("local-audio:rnnoise-failed", {
-        errorName: error?.name || "",
-        error: error?.message || String(error),
-      });
-      return track;
-    }
+    await stopRnnoiseNoiseSuppression();
+    return track;
   };
 
   const startLocalMetering = (analyser) => {
@@ -717,28 +683,6 @@ export function createVoiceRoomClient({
   };
 
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
-    if (mode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
-      return {
-        openThreshold: 0.021,
-        closeThreshold: 0.011,
-        floorGain: 0.05,
-        attackTime: 0.012,
-        releaseTime: 0.11,
-        holdMs: 180,
-      };
-    }
-
-    if (mode === NOISE_SUPPRESSION_MODE_RNNOISE) {
-      return {
-        openThreshold: 0.026,
-        closeThreshold: 0.014,
-        floorGain: 0.003,
-        attackTime: 0.006,
-        releaseTime: 0.075,
-        holdMs: 210,
-      };
-    }
-
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
         openThreshold: 0.043,
@@ -910,84 +854,37 @@ export function createVoiceRoomClient({
       mudCutGain: -2.4,
       boxCutFrequency: 520,
       boxCutGain: -1.4,
-      presenceFrequency: 2480,
-      presenceGain: 2.7,
-      airFrequency: 5400,
-      airGain: 1.6,
+      presenceFrequency: 2650,
+      presenceGain: 3.0,
+      airFrequency: 5850,
+      airGain: 1.9,
       lowPassFrequency: 9200,
       threshold: -24,
-      knee: 20,
-      ratio: 4.6,
-      attack: 0.004,
-      release: 0.17,
-      noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
-    });
-  };
-
-  const buildNoiseIsolationChain = (sourceNode) => {
-    return buildSpeechPolishChain(sourceNode, {
-      highPassFrequency: 120,
-      highPassQ: 0.82,
-      mudCutFrequency: 230,
-      mudCutGain: -3.1,
-      boxCutFrequency: 620,
-      boxCutGain: -1.8,
-      presenceFrequency: 2200,
-      presenceQ: 1.15,
-      presenceGain: 3.1,
-      airFrequency: 5000,
-      airGain: 0.8,
-      lowPassFrequency: 7100,
-      threshold: -28,
-      knee: 24,
-      ratio: 8.5,
+      knee: 19,
+      ratio: 4.3,
       attack: 0.003,
       release: 0.16,
-      noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_VOICE_ISOLATION),
+      noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
     });
   };
 
   const buildTransparentVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
     highPassFrequency: 84,
     mudCutFrequency: 235,
-    mudCutGain: -1.5,
+    mudCutGain: -1.6,
     boxCutFrequency: 520,
-    boxCutGain: -0.8,
-    presenceFrequency: 2450,
-    presenceGain: 1.8,
-    airFrequency: 5600,
-    airGain: 0.9,
+    boxCutGain: -0.9,
+    presenceFrequency: 2650,
+    presenceGain: 2.1,
+    airFrequency: 6100,
+    airGain: 1.1,
     lowPassFrequency: 9800,
-    threshold: -23,
-    knee: 16,
-    ratio: 3.2,
+    threshold: -22,
+    knee: 18,
+    ratio: 2.8,
     attack: 0.005,
-    release: 0.2,
+    release: 0.18,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT),
-  });
-
-  const buildRnnoiseVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 135,
-    highPassQ: 0.92,
-    mudCutFrequency: 250,
-    mudCutQ: 1.18,
-    mudCutGain: -3.8,
-    boxCutFrequency: 700,
-    boxCutQ: 1.35,
-    boxCutGain: -2.6,
-    presenceFrequency: 2100,
-    presenceQ: 1.22,
-    presenceGain: 3.8,
-    airFrequency: 4300,
-    airGain: 0.35,
-    lowPassFrequency: 6200,
-    lowPassQ: 0.82,
-    threshold: -31,
-    knee: 10,
-    ratio: 10.5,
-    attack: 0.002,
-    release: 0.11,
-    noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_RNNOISE),
   });
 
   const buildHardGateVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
@@ -999,31 +896,27 @@ export function createVoiceRoomClient({
     boxCutFrequency: 900,
     boxCutQ: 1.55,
     boxCutGain: -4.2,
-    presenceFrequency: 1980,
+    presenceFrequency: 2240,
     presenceQ: 1.34,
-    presenceGain: 5.1,
-    airFrequency: 3600,
-    airGain: -1.1,
-    lowPassFrequency: 4700,
+    presenceGain: 4.6,
+    airFrequency: 4400,
+    airGain: 0.3,
+    lowPassFrequency: 5600,
     lowPassQ: 1.05,
-    threshold: -39,
-    knee: 4,
-    ratio: 18,
+    threshold: -34,
+    knee: 6,
+    ratio: 12,
     attack: 0.001,
-    release: 0.06,
+    release: 0.08,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
   });
 
   const connectLocalAudioGraph = (sourceNode) => {
     let inputNode = sourceNode;
-    if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
-      inputNode = buildNoiseIsolationChain(sourceNode);
-    } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
+    if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       inputNode = buildBroadcastVoiceChain(sourceNode);
     } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       inputNode = buildHardGateVoiceChain(sourceNode);
-    } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_RNNOISE) {
-      inputNode = buildRnnoiseVoiceChain(sourceNode);
     } else {
       inputNode = buildTransparentVoiceChain(sourceNode);
     }

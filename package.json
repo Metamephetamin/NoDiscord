@@ -22,6 +22,8 @@
     "lint:fix": "eslint . --fix",
     "lint:ci": "eslint . --quiet",
     "check:encoding": "node ./scripts/check-encoding.mjs",
+    "check:encoding:fix": "node ./scripts/check-encoding.mjs --fix",
+    "test:encoding": "node --test ./scripts/__tests__/encoding-tools.test.mjs",
     "audit:public-assets": "node ./scripts/audit-public-assets.mjs",
     "audit:perf": "node ./scripts/perf-audit.mjs"
   },
