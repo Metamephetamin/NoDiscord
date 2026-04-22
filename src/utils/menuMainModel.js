@@ -706,6 +706,36 @@ export const normalizeFriend = (friend) => ({
   isOnline: isUserCurrentlyOnline(friend),
   isSelf: Boolean(friend?.isSelf),
 });
+export const normalizeConversationTarget = (conversation) => {
+  const members = Array.isArray(conversation?.members)
+    ? conversation.members.map((member) => ({
+      ...normalizeFriend(member),
+      role: String(member?.role || "member"),
+      muteUntil: String(member?.mute_until || member?.muteUntil || ""),
+      isMuted: Boolean(member?.is_muted ?? member?.isMuted),
+      joinedAt: String(member?.joined_at || member?.joinedAt || ""),
+    }))
+    : [];
+
+  return {
+    id: String(conversation?.directChannelId || conversation?.id || ""),
+    conversationId: Number(conversation?.id || 0),
+    kind: "conversation",
+    title: String(conversation?.title || "Новая беседа"),
+    name: String(conversation?.title || "Новая беседа"),
+    nickname: String(conversation?.title || "Новая беседа"),
+    avatar: String(conversation?.avatar_url || conversation?.avatarUrl || members[0]?.avatar || ""),
+    directChannelId: String(conversation?.directChannelId || ""),
+    voiceChannelId: String(conversation?.voiceChannelId || ""),
+    ownerUserId: String(conversation?.ownerUserId || conversation?.owner_user_id || ""),
+    canManage: Boolean(conversation?.canManage ?? conversation?.can_manage),
+    memberCount: Number(conversation?.memberCount || conversation?.member_count || members.length),
+    members,
+    activeCallChannel: String(conversation?.activeCallChannel || conversation?.active_call_channel || ""),
+    activeCallStartedAt: String(conversation?.activeCallStartedAt || conversation?.active_call_started_at || ""),
+    updatedAt: String(conversation?.updatedAt || conversation?.updated_at || ""),
+  };
+};
 export const normalizeFriendRequest = (request) => ({
   id: Number(request?.id || 0),
   status: String(request?.status || "pending"),

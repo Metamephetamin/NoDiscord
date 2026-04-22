@@ -138,6 +138,7 @@ export default function useTextChatAttachmentPickerFlow({
   const pickerDiagnosticRef = useRef({
     active: false,
     openedAt: 0,
+    focusedAt: 0,
     kind: "media",
   });
 
@@ -366,6 +367,10 @@ export default function useTextChatAttachmentPickerFlow({
     const pickerDiagnostic = pickerDiagnosticRef.current;
     messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
     const selectedInputFiles = Array.from(event?.target?.files || []);
+    const totalSelectedBytes = selectedInputFiles.reduce(
+      (sum, file) => sum + (Number(file?.size || 0) || 0),
+      0
+    );
     const selectedFromDocumentPicker = attachPickerKindRef.current === "document";
     const allSelectedAreImages = selectedInputFiles.length > 0
       && selectedInputFiles.every((file) => String(file?.type || "").startsWith("image/"));
@@ -380,8 +385,10 @@ export default function useTextChatAttachmentPickerFlow({
       shouldPreferSendAsDocuments,
       shouldOpenPendingBatchSheet,
       msSincePickerOpen: pickerOpenedAt ? inputChangeStartedAt - pickerOpenedAt : 0,
+      msSincePickerFocus: pickerDiagnostic.focusedAt ? inputChangeStartedAt - pickerDiagnostic.focusedAt : 0,
       pickerActive: Boolean(pickerDiagnostic.active),
       pickerKind: pickerDiagnostic.kind,
+      totalSelectedBytes,
       fileSummary: selectedInputFiles.slice(0, 8).map((file) => ({
         name: String(file?.name || ""),
         type: String(file?.type || ""),
@@ -395,6 +402,9 @@ export default function useTextChatAttachmentPickerFlow({
       allSelectedAreImages,
       shouldPreferSendAsDocuments,
       shouldOpenPendingBatchSheet,
+      msSincePickerOpen: pickerOpenedAt ? inputChangeStartedAt - pickerOpenedAt : 0,
+      msSincePickerFocus: pickerDiagnostic.focusedAt ? inputChangeStartedAt - pickerDiagnostic.focusedAt : 0,
+      totalSelectedBytes,
       fileSummary: selectedInputFiles.slice(0, 8).map((file) => ({
         name: String(file?.name || ""),
         type: String(file?.type || ""),
@@ -440,6 +450,7 @@ export default function useTextChatAttachmentPickerFlow({
     pickerDiagnosticRef.current = {
       active: false,
       openedAt: 0,
+      focusedAt: 0,
       kind: "media",
     };
     attachPickerKindRef.current = "media";
@@ -471,6 +482,10 @@ export default function useTextChatAttachmentPickerFlow({
       logUploadDiagnostic("picker-window-focus", {
         kind: pickerDiagnostic.kind,
       }, getPerfNow() - pickerDiagnostic.openedAt);
+      pickerDiagnosticRef.current = {
+        ...pickerDiagnostic,
+        focusedAt: getPerfNow(),
+      };
       if (instantAttachmentSendRef.current && selectedFilesLengthRef.current < 1 && !messageEditStateRef.current) {
         return;
       }
@@ -523,6 +538,7 @@ export default function useTextChatAttachmentPickerFlow({
     pickerDiagnosticRef.current = {
       active: true,
       openedAt: getPerfNow(),
+      focusedAt: 0,
       kind: attachPickerKindRef.current,
     };
     logUploadDiagnostic("picker-open", {

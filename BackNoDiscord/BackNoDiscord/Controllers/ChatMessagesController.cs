@@ -290,6 +290,11 @@ public sealed class ChatMessagesController : ControllerBase
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
     {
         var normalizedChannelId = NormalizeChannelId(channelId);
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
+        {
+            return CanAccessConversationChannel(currentUser.UserId, conversationId);
+        }
+
         if (DirectMessageChannels.TryParse(normalizedChannelId, out var firstUserId, out var secondUserId, out _))
         {
             return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
@@ -329,18 +334,41 @@ public sealed class ChatMessagesController : ControllerBase
             .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
     }
 
+    private bool CanAccessConversationChannel(string currentUserId, int conversationId)
+    {
+        if (!int.TryParse(currentUserId, out var actorUserId) || actorUserId <= 0 || conversationId <= 0)
+        {
+            return false;
+        }
+
+        return _context.GroupConversationMembers
+            .AsNoTracking()
+            .Any(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned);
+    }
+
     private string NormalizeChannelId(string? channelId)
     {
         var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out _))
+        {
+            return ConversationChannels.NormalizeChatChannelId(normalizedChannelId);
+        }
+
         return DirectMessageChannels.NormalizeChannelId(normalizedChannelId);
     }
 
     private IReadOnlyCollection<string> GetEquivalentChannelIds(string? channelId)
     {
         var normalizedChannelId = channelId?.Trim() ?? string.Empty;
-        var equivalentChannelIds = new HashSet<string>(
-            DirectMessageChannels.GetEquivalentChannelIds(normalizedChannelId),
-            StringComparer.Ordinal);
+        var equivalentChannelIds = new HashSet<string>(StringComparer.Ordinal);
+
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out _))
+        {
+            equivalentChannelIds.Add(ConversationChannels.NormalizeChatChannelId(normalizedChannelId));
+            return equivalentChannelIds.ToList();
+        }
+
+        equivalentChannelIds.UnionWith(DirectMessageChannels.GetEquivalentChannelIds(normalizedChannelId));
 
         if (!TryParseServerChatChannelId(normalizedChannelId, out var serverId, out var channelPart))
         {

@@ -443,9 +443,9 @@ function TextChatComposer({
             <button
               type="button"
               className="attach-button"
-              aria-label="Меню вложений"
-              title="Меню вложений"
-              onClick={toggleAttachMenu}
+              aria-label="Добавить фото или видео"
+              title="Добавить фото или видео"
+              onClick={openMediaAttachFilePicker}
               onFocus={openAttachMenu}
             >
               <span className="attach-button__icon" aria-hidden="true" />

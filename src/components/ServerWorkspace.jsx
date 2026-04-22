@@ -5,7 +5,17 @@ import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
-const VoiceRoomStage = lazy(() => import("./VoiceRoomStage"));
+const loadVoiceRoomStage = () => import("./VoiceRoomStage");
+const VoiceRoomStage = lazy(loadVoiceRoomStage);
+
+function VoiceStageModuleFallback({ channelName = "" }) {
+  return (
+    <div className="voice-room-stage__empty voice-room-stage__empty--pending">
+      <strong>{channelName ? `Подключаем ${channelName}` : "Подключаем голосовой канал"}</strong>
+      <span>Готовим голосовую сцену без полной перезагрузки интерфейса.</span>
+    </div>
+  );
+}
 
 function areStringArraysEqual(previousValue = [], nextValue = []) {
   if (previousValue === nextValue) {
@@ -370,7 +380,10 @@ export const ServersSidebar = memo(({
               serverRoles={activeServer?.roles || []}
               onJoinChannel={onJoinVoiceChannel}
               onLeaveChannel={onLeaveVoiceChannel}
-              onPrewarmChannel={onPrewarmVoiceChannel}
+              onPrewarmChannel={(channelId) => {
+                void loadVoiceRoomStage();
+                onPrewarmVoiceChannel?.(channelId);
+              }}
               onRenameChannel={onStartChannelRename}
               liveUserIds={liveUserIds}
               speakingUserIds={speakingUserIds}
@@ -486,6 +499,7 @@ function ServerMainComponent({
             <button type="button" className="server-empty-state__button" onClick={onAddServer}>Создать первый сервер</button>
           </div>
         ) : isVoiceStageVisible ? (
+          <Suspense fallback={<VoiceStageModuleFallback channelName={currentVoiceChannelName} />}>
           <VoiceRoomStage
             activeServerName={activeServer?.name || "Сервер"}
             channelName={currentVoiceChannelName}
@@ -516,6 +530,7 @@ function ServerMainComponent({
             onOpenCamera={onOpenCamera}
             onLeave={onLeave}
           />
+          </Suspense>
         ) : selectedStreamUserId ? (
           <ScreenShareViewer
             stream={selectedStream?.stream || null}

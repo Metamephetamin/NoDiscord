@@ -76,12 +76,7 @@ const MAX_ACTIVE_CHANNEL_MESSAGES = 1600;
 const MAX_BACKGROUND_CHANNEL_MESSAGES = 160;
 
 function shouldUseRestTextChatHistoryEndpoint() {
-  try {
-    const parsedUrl = new URL(API_BASE_URL);
-    return !/^(?:www\.)?tendsec\.ru$/i.test(parsedUrl.hostname);
-  } catch {
-    return true;
-  }
+  return Boolean(String(API_BASE_URL || "").trim());
 }
 
 function isUnrecoverableLegacyEncryptedMessage(messageItem) {

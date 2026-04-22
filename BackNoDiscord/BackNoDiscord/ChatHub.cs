@@ -137,6 +137,23 @@ public class ChatHub : Hub
                 throw new HubException("Forbidden");
             }
 
+            if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
+            {
+                var mutedMember = await _context.GroupConversationMembers
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId.ToString() == currentUser.UserId && !item.IsBanned);
+
+                if (mutedMember is null)
+                {
+                    throw new HubException("Forbidden");
+                }
+
+                if (mutedMember.MutedUntil.HasValue && mutedMember.MutedUntil > DateTimeOffset.UtcNow)
+                {
+                    throw new HubException($"Вы временно замучены в беседе до {mutedMember.MutedUntil.Value.LocalDateTime:dd.MM HH:mm}.");
+                }
+            }
+
             if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
                 && DateTime.UtcNow - lastMessageSentAtUtc < MessageSendCooldown)
             {
@@ -1064,6 +1081,11 @@ public class ChatHub : Hub
     private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
     {
         var normalizedChannelId = NormalizeChannelId(channelId);
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
+        {
+            return CanAccessConversationChannel(currentUser.UserId, conversationId);
+        }
+
         if (DirectMessageChannels.TryParse(normalizedChannelId, out var firstUserId, out var secondUserId, out _))
         {
             return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
@@ -1101,6 +1123,18 @@ public class ChatHub : Hub
         return _context.Friendships
             .AsNoTracking()
             .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
+    }
+
+    private bool CanAccessConversationChannel(string currentUserId, int conversationId)
+    {
+        if (!int.TryParse(currentUserId, out var actorUserId) || actorUserId <= 0 || conversationId <= 0)
+        {
+            return false;
+        }
+
+        return _context.GroupConversationMembers
+            .AsNoTracking()
+            .Any(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned);
     }
 
     private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)
@@ -1158,15 +1192,26 @@ public class ChatHub : Hub
     private string NormalizeChannelId(string? channelId)
     {
         var normalizedChannelId = UploadPolicies.TrimToLength(channelId, MaxChannelIdLength);
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out _))
+        {
+            return ConversationChannels.NormalizeChatChannelId(normalizedChannelId);
+        }
+
         return DirectMessageChannels.NormalizeChannelId(normalizedChannelId);
     }
 
     private IReadOnlyCollection<string> GetEquivalentChannelIds(string? channelId)
     {
         var normalizedChannelId = channelId?.Trim() ?? string.Empty;
-        var equivalentChannelIds = new HashSet<string>(
-            DirectMessageChannels.GetEquivalentChannelIds(normalizedChannelId),
-            StringComparer.Ordinal);
+        var equivalentChannelIds = new HashSet<string>(StringComparer.Ordinal);
+
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out _))
+        {
+            equivalentChannelIds.Add(ConversationChannels.NormalizeChatChannelId(normalizedChannelId));
+            return equivalentChannelIds.ToList();
+        }
+
+        equivalentChannelIds.UnionWith(DirectMessageChannels.GetEquivalentChannelIds(normalizedChannelId));
 
         if (!TryParseServerChatChannelId(normalizedChannelId, out var serverId, out var channelPart))
         {
@@ -1248,6 +1293,51 @@ public class ChatHub : Hub
         if (DirectMessageChannels.TryParse(channelId, out _, out _, out _))
         {
             return [];
+        }
+
+        if (ConversationChannels.TryParseChatChannelId(channelId, out var conversationId))
+        {
+            var memberLookup = _context.GroupConversationMembers
+                .AsNoTracking()
+                .Where(item => item.ConversationId == conversationId && !item.IsBanned)
+                .Join(
+                    _context.Users.AsNoTracking(),
+                    member => member.UserId,
+                    user => user.id,
+                    (member, user) => new
+                    {
+                        UserId = member.UserId.ToString(),
+                        DisplayName = string.IsNullOrWhiteSpace(user.nickname)
+                            ? $"{user.first_name} {user.last_name}".Trim()
+                            : user.nickname.Trim()
+                    })
+                .ToList()
+                .GroupBy(item => item.UserId, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => UploadPolicies.TrimToLength(group.First().DisplayName, MaxMentionDisplayNameLength),
+                    StringComparer.Ordinal);
+
+            return mentions
+                .Take(MaxMentionsPerMessage)
+                .Select(item =>
+                {
+                    var userId = UploadPolicies.TrimToLength(item?.UserId, 64);
+                    var handle = NormalizeMentionHandle(item?.Handle);
+
+                    return string.IsNullOrWhiteSpace(userId) || !memberLookup.TryGetValue(userId, out var memberName)
+                        ? null
+                        : new ChatMentionPayload
+                        {
+                            UserId = userId,
+                            Handle = handle,
+                            DisplayName = string.IsNullOrWhiteSpace(memberName) ? "User" : memberName
+                        };
+                })
+                .Where(item => item is not null)
+                .GroupBy(item => item!.UserId, StringComparer.Ordinal)
+                .Select(group => group.First()!)
+                .ToList();
         }
 
         if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))

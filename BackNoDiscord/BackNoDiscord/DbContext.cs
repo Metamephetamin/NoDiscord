@@ -272,6 +272,65 @@ public class FriendRequestRecord
     public DateTimeOffset? RespondedAt { get; set; }
 }
 
+[Table("group_conversations")]
+public class GroupConversationRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("owner_user_id")]
+    public int OwnerUserId { get; set; }
+
+    [Column("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    [Column("active_call_channel")]
+    public string? ActiveCallChannel { get; set; }
+
+    [Column("active_call_started_at")]
+    public DateTimeOffset? ActiveCallStartedAt { get; set; }
+}
+
+[Table("group_conversation_members")]
+public class GroupConversationMemberRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("conversation_id")]
+    public int ConversationId { get; set; }
+
+    [Column("user_id")]
+    public int UserId { get; set; }
+
+    [Column("role")]
+    public string Role { get; set; } = "member";
+
+    [Column("joined_at")]
+    public DateTimeOffset JoinedAt { get; set; }
+
+    [Column("added_by_user_id")]
+    public int? AddedByUserId { get; set; }
+
+    [Column("muted_until")]
+    public DateTimeOffset? MutedUntil { get; set; }
+
+    [Column("is_banned")]
+    public bool IsBanned { get; set; }
+
+    [Column("banned_at")]
+    public DateTimeOffset? BannedAt { get; set; }
+
+    [Column("banned_by_user_id")]
+    public int? BannedByUserId { get; set; }
+}
+
 [Table("message_reactions")]
 public class MessageReactionRecord
 {
@@ -354,6 +413,8 @@ public class AppDbContext : DbContext
     public DbSet<ServerInviteRecordEntity> ServerInvites => Set<ServerInviteRecordEntity>();
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
     public DbSet<FriendRequestRecord> FriendRequests => Set<FriendRequestRecord>();
+    public DbSet<GroupConversationRecord> GroupConversations => Set<GroupConversationRecord>();
+    public DbSet<GroupConversationMemberRecord> GroupConversationMembers => Set<GroupConversationMemberRecord>();
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
@@ -383,6 +444,26 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ReactorUserId).IsRequired();
             entity.Property(x => x.ReactionKey).IsRequired();
             entity.Property(x => x.ReactionGlyph).IsRequired();
+        });
+
+        modelBuilder.Entity<GroupConversationRecord>(entity =>
+        {
+            entity.ToTable("group_conversations");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.OwnerUserId);
+            entity.HasIndex(x => x.UpdatedAt);
+            entity.Property(x => x.Title).IsRequired();
+        });
+
+        modelBuilder.Entity<GroupConversationMemberRecord>(entity =>
+        {
+            entity.ToTable("group_conversation_members");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.ConversationId, x.UserId }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.IsBanned });
+            entity.HasIndex(x => new { x.ConversationId, x.IsBanned });
+            entity.Property(x => x.Role).IsRequired();
+            entity.Property(x => x.IsBanned).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<PushSubscriptionRecord>(entity =>

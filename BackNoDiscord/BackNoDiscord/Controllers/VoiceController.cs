@@ -143,6 +143,14 @@ public class VoiceController : ControllerBase
             return false;
         }
 
+        if (ConversationChannels.TryParseVoiceChannelName(normalizedChannel, out var conversationId) &&
+            int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return await _context.GroupConversationMembers
+                .AsNoTracking()
+                .AnyAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        }
+
         if (await DirectCallAuthorization.CanAccessChannelAsync(_context, normalizedChannel, currentUser, cancellationToken))
         {
             return true;

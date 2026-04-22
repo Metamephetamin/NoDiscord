@@ -500,6 +500,14 @@ public class VoiceHub : Hub
     private async Task<bool> TryAuthorizeChannelAccessAsync(string channelName, string userId)
     {
         var currentUser = new AuthenticatedUser(userId, string.Empty, string.Empty, string.Empty, string.Empty);
+        if (ConversationChannels.TryParseVoiceChannelName(channelName, out var conversationId) &&
+            int.TryParse(userId, out var currentUserId))
+        {
+            return await _context.GroupConversationMembers
+                .AsNoTracking()
+                .AnyAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, Context.ConnectionAborted);
+        }
+
         if (await DirectCallAuthorization.CanAccessChannelAsync(_context, channelName, currentUser, Context.ConnectionAborted))
         {
             return true;
