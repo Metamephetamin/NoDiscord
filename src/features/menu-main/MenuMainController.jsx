@@ -590,10 +590,13 @@ export default function MenuMain({
     conversations,
     conversationsLoading,
     conversationsError,
+    conversationActionLoading,
+    conversationActionStatus,
     setFriends,
     setFriendEmail,
     setFriendsError,
     setFriendActionStatus,
+    setConversationActionStatus,
     refreshFriends,
     refreshFriendRequests,
     refreshConversations,
@@ -603,6 +606,9 @@ export default function MenuMain({
     handleFriendSearchSubmit,
     handleAddFriend,
     handleFriendRequestAction,
+    handleCreateConversation,
+    handleUploadConversationAvatar,
+    handleAddConversationMember,
   } = useFriendsWorkspaceState({
     user,
     apiBaseUrl: API_BASE_URL,
@@ -676,6 +682,7 @@ export default function MenuMain({
   const previousVoiceChannelRef = useRef(null);
   const voiceTransitionSoundTimeoutRef = useRef(null);
   const previousMicMutedRef = useRef(null);
+  const previousSoundMutedRef = useRef(null);
   const previousVoiceParticipantIdsRef = useRef({ channelId: "", participantIds: [] });
   const previousLiveVoiceUserIdsRef = useRef({ channelId: "", userIds: [] });
   const joinedDirectChannelsRef = useRef(new Set());
@@ -4398,6 +4405,23 @@ export default function MenuMain({
 
     previousMicMutedRef.current = isMicMuted;
   }, [currentVoiceChannel, isMicMuted]);
+  useEffect(() => {
+    if (!currentVoiceChannel) {
+      previousSoundMutedRef.current = isSoundMuted;
+      return;
+    }
+
+    if (previousSoundMutedRef.current === null) {
+      previousSoundMutedRef.current = isSoundMuted;
+      return;
+    }
+
+    if (previousSoundMutedRef.current !== isSoundMuted) {
+      playUiTone(isSoundMuted ? "mute" : "unmute");
+    }
+
+    previousSoundMutedRef.current = isSoundMuted;
+  }, [currentVoiceChannel, isSoundMuted]);
 
   const replaceServerSnapshot = (snapshot, { activate = false } = {}) => {
     if (!snapshot) return;
@@ -6267,10 +6291,16 @@ export default function MenuMain({
       conversations={conversations}
       conversationsLoading={conversationsLoading}
       conversationsError={conversationsError}
+      conversationActionLoading={conversationActionLoading}
+      conversationActionStatus={conversationActionStatus}
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
       onOpenConversationChat={openConversationChat}
+      onCreateConversation={handleCreateConversation}
+      onUploadConversationAvatar={handleUploadConversationAvatar}
+      onAddConversationMember={handleAddConversationMember}
+      onClearConversationStatus={() => setConversationActionStatus("")}
       onStartDirectCall={startDirectCallWithUser}
       onOpenDirectActions={openFriendListUserContextMenu}
       onFriendRequestAction={handleFriendRequestAction}

@@ -44,6 +44,7 @@ export default function useTextChatVoiceSpeech({
   const [voiceRecordingDurationMs, setVoiceRecordingDurationMs] = useState(0);
   const [, setVoiceMicLevel] = useState(0);
   const [speechRecognitionActive, setSpeechRecognitionActive] = useState(false);
+  const [speechMicLevel, setSpeechMicLevel] = useState(0);
 
   const voiceRecorderRef = useRef(null);
   const voiceInputStreamRef = useRef(null);
@@ -57,6 +58,10 @@ export default function useTextChatVoiceSpeech({
   const voiceLevelSamplesRef = useRef([]);
   const voiceLastSampleAtRef = useRef(0);
   const speechRecognitionRef = useRef(null);
+  const speechAudioContextRef = useRef(null);
+  const speechAnalyserRef = useRef(null);
+  const speechMeterStreamRef = useRef(null);
+  const speechLevelFrameRef = useRef(0);
   const speechFinalTranscriptRef = useRef("");
   const speechDraftBaseRef = useRef("");
   const speechDisplayedTranscriptRef = useRef("");
@@ -74,6 +79,13 @@ export default function useTextChatVoiceSpeech({
     if (voiceLevelFrameRef.current) {
       cancelAnimationFrame(voiceLevelFrameRef.current);
       voiceLevelFrameRef.current = 0;
+    }
+  };
+
+  const stopSpeechLevelLoop = () => {
+    if (speechLevelFrameRef.current) {
+      cancelAnimationFrame(speechLevelFrameRef.current);
+      speechLevelFrameRef.current = 0;
     }
   };
 
@@ -115,6 +127,22 @@ export default function useTextChatVoiceSpeech({
 
     window.clearTimeout(speechRestartTimeoutRef.current);
     speechRestartTimeoutRef.current = 0;
+  };
+
+  const cleanupSpeechMeterResources = () => {
+    stopSpeechLevelLoop();
+    speechAnalyserRef.current = null;
+    setSpeechMicLevel(0);
+
+    if (speechAudioContextRef.current) {
+      speechAudioContextRef.current.close().catch(() => {});
+      speechAudioContextRef.current = null;
+    }
+
+    if (speechMeterStreamRef.current) {
+      speechMeterStreamRef.current.getTracks().forEach((track) => track.stop());
+      speechMeterStreamRef.current = null;
+    }
   };
 
   const formatSpeechTranscriptDraft = (transcriptText, finalize = false) =>
@@ -162,6 +190,27 @@ export default function useTextChatVoiceSpeech({
     }
 
     voiceLevelFrameRef.current = requestAnimationFrame(sampleVoiceLevel);
+  };
+
+  const sampleSpeechLevel = () => {
+    const analyser = speechAnalyserRef.current;
+    if (!analyser) {
+      setSpeechMicLevel(0);
+      return;
+    }
+
+    const data = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let index = 0; index < data.length; index += 1) {
+      const normalized = (data[index] - 128) / 128;
+      sum += normalized * normalized;
+    }
+
+    const rms = Math.sqrt(sum / data.length);
+    const normalizedLevel = Math.max(0, Math.min(1, rms * 4.2));
+    setSpeechMicLevel(normalizedLevel);
+    speechLevelFrameRef.current = requestAnimationFrame(sampleSpeechLevel);
   };
 
   const startMicrophoneAnalysis = async (stream) => {
@@ -220,6 +269,72 @@ export default function useTextChatVoiceSpeech({
     stopVoiceLevelLoop();
     voiceLevelFrameRef.current = requestAnimationFrame(sampleVoiceLevel);
     return destination.stream;
+  };
+
+  const startSpeechMicrophoneAnalysis = async () => {
+    if (
+      typeof navigator === "undefined"
+      || !navigator.mediaDevices?.getUserMedia
+      || typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    cleanupSpeechMeterResources();
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const inputStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
+
+    const audioContext = new AudioContextCtor({
+      latencyHint: "interactive",
+      sampleRate: VOICE_RECORDING_SAMPLE_RATE,
+    });
+
+    if (audioContext.state === "suspended") {
+      await audioContext.resume().catch(() => {});
+    }
+
+    const source = audioContext.createMediaStreamSource(inputStream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.76;
+
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = "highpass";
+    highPassFilter.frequency.value = VOICE_HIGH_PASS_FREQUENCY_HZ;
+    highPassFilter.Q.value = 0.82;
+
+    const presenceFilter = audioContext.createBiquadFilter();
+    presenceFilter.type = "peaking";
+    presenceFilter.frequency.value = VOICE_PRESENCE_FREQUENCY_HZ;
+    presenceFilter.Q.value = 0.88;
+    presenceFilter.gain.value = VOICE_PRESENCE_GAIN_DB;
+
+    const highShelfFilter = audioContext.createBiquadFilter();
+    highShelfFilter.type = "highshelf";
+    highShelfFilter.frequency.value = VOICE_HIGH_SHELF_FREQUENCY_HZ;
+    highShelfFilter.gain.value = VOICE_HIGH_SHELF_GAIN_DB;
+
+    source.connect(highPassFilter);
+    highPassFilter.connect(presenceFilter);
+    presenceFilter.connect(highShelfFilter);
+    highShelfFilter.connect(analyser);
+
+    speechAudioContextRef.current = audioContext;
+    speechAnalyserRef.current = analyser;
+    speechMeterStreamRef.current = inputStream;
+    speechLevelFrameRef.current = requestAnimationFrame(sampleSpeechLevel);
   };
 
   const sendVoiceRecordingFile = async (voiceFile, durationMs, waveformSamples) => {
@@ -406,6 +521,7 @@ export default function useTextChatVoiceSpeech({
   const stopSpeechRecognition = (shouldFinalize = true) => {
     speechShouldRestartRef.current = false;
     clearSpeechRecognitionRestartTimer();
+    cleanupSpeechMeterResources();
     const recognition = speechRecognitionRef.current;
     if (!recognition) {
       setSpeechRecognitionActive(false);
@@ -460,6 +576,9 @@ export default function useTextChatVoiceSpeech({
 
       recognition.onstart = () => {
         setSpeechRecognitionActive(true);
+        void startSpeechMicrophoneAnalysis().catch(() => {
+          setSpeechMicLevel(0);
+        });
       };
 
       recognition.onresult = (event) => {
@@ -547,6 +666,7 @@ export default function useTextChatVoiceSpeech({
         }
 
         setSpeechRecognitionActive(false);
+        cleanupSpeechMeterResources();
 
         if (!shouldFinalize) {
           speechDisplayedTranscriptRef.current = "";
@@ -715,6 +835,7 @@ export default function useTextChatVoiceSpeech({
 
   useEffect(() => () => {
     cleanupVoiceRecordingResources();
+    cleanupSpeechMeterResources();
     stopSpeechRecognition(false);
   }, []);
 
@@ -722,6 +843,7 @@ export default function useTextChatVoiceSpeech({
     voiceRecordingState,
     voiceRecordingDurationMs,
     speechRecognitionActive,
+    speechMicLevel,
     stopSpeechRecognition,
     handleVoiceRecordPointerDown,
     handleVoiceRecordPointerMove,

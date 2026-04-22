@@ -38,6 +38,7 @@ function TextChatComposer({
   voiceRecordingState,
   voiceRecordingDurationMs,
   speechRecognitionActive,
+  speechMicLevel = 0,
   composerEmojiButtonRef,
   composerEmojiPickerOpen,
   composerEmojiPickerRef,
@@ -195,6 +196,17 @@ function TextChatComposer({
   const hasSendPayload = Boolean(String(message || "").trim()) || selectedFiles.length > 0;
   const shouldShowSendButton = hasSendPayload && voiceRecordingState === "idle";
   const voiceButtonStateClass = voiceRecordingState !== "idle" ? `composer-tool--recording-${voiceRecordingState}` : "";
+  const normalizedSpeechMicLevel = Math.max(0, Math.min(1, Number(speechMicLevel) || 0));
+  const speechIndicatorBars = useMemo(
+    () => [0.62, 0.94, 1, 0.8].map((factor) => Math.max(0.24, 0.24 + normalizedSpeechMicLevel * factor)),
+    [normalizedSpeechMicLevel]
+  );
+  const speechMicStyle = speechRecognitionActive
+    ? {
+      "--speech-level-scale": (1 + normalizedSpeechMicLevel * 0.68).toFixed(3),
+      "--speech-level-opacity": (0.28 + normalizedSpeechMicLevel * 0.6).toFixed(3),
+    }
+    : undefined;
   const handleClearPendingUploads = () => {
     onClearPendingUploads();
   };
@@ -369,7 +381,7 @@ function TextChatComposer({
           </div>
         ) : null}
 
-        {replyState || messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") || speechRecognitionActive ? (
+        {replyState || messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") ? (
           <div className="composer-status-strip">
             {replyState ? (
               <div className="composer-status composer-status--reply">
@@ -633,6 +645,29 @@ function TextChatComposer({
             ) : null}
 
             <div className="composer-textarea-shell">
+              {speechRecognitionActive ? (
+                <div className="composer-speech-indicator" role="status" aria-live="polite">
+                  <span className="composer-speech-indicator__badge" style={speechMicStyle} aria-hidden="true">
+                    <span className="composer-speech-indicator__badge-ring composer-speech-indicator__badge-ring--outer" />
+                    <span className="composer-speech-indicator__badge-ring composer-speech-indicator__badge-ring--inner" />
+                    <span className="composer-tool__mic composer-tool__mic--speech-indicator" />
+                  </span>
+                  <span className="composer-speech-indicator__copy">
+                    <strong>Голосовой ввод</strong>
+                    <span>Говорите, текст появится сразу.</span>
+                  </span>
+                  <span className="composer-speech-indicator__wave" aria-hidden="true">
+                    {speechIndicatorBars.map((barLevel, index) => (
+                      <span
+                        key={`speech-bar-${index}`}
+                        className="composer-speech-indicator__bar"
+                        style={{ "--speech-bar-scale": barLevel.toFixed(3) }}
+                      />
+                    ))}
+                  </span>
+                </div>
+              ) : null}
+
               {shouldRenderComposerHighlight ? (
                 <div ref={composerHighlightRef} className="composer-textarea-highlight" aria-hidden="true">
                   {composerMentionSegments.map((segment, index) => {
@@ -790,9 +825,12 @@ function TextChatComposer({
                   className={`composer-tool composer-tool--speech composer-tool--action-slot ${speechRecognitionActive ? "composer-tool--active" : ""}`}
                   onClick={onSpeechRecognitionToggle}
                   disabled={uploadingFile || voiceRecordingState !== "idle"}
+                  style={speechMicStyle}
                   title="Голосовой ввод текста"
                   aria-label="Голосовой ввод текста"
                 >
+                  <span className="composer-tool__speech-ring composer-tool__speech-ring--outer" aria-hidden="true" />
+                  <span className="composer-tool__speech-ring composer-tool__speech-ring--inner" aria-hidden="true" />
                   <span className="composer-tool__mic" aria-hidden="true" />
                 </button>
               ) : ENABLE_VOICE_MESSAGE_BUTTON ? (
@@ -946,6 +984,7 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
     && previousProps.voiceRecordingState === nextProps.voiceRecordingState
     && previousProps.voiceRecordingDurationMs === nextProps.voiceRecordingDurationMs
     && previousProps.speechRecognitionActive === nextProps.speechRecognitionActive
+    && previousProps.speechMicLevel === nextProps.speechMicLevel
     && previousProps.composerEmojiButtonRef === nextProps.composerEmojiButtonRef
     && previousProps.composerEmojiPickerOpen === nextProps.composerEmojiPickerOpen
     && previousProps.composerEmojiPickerRef === nextProps.composerEmojiPickerRef

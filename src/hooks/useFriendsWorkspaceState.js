@@ -41,6 +41,8 @@ export default function useFriendsWorkspaceState({
   const [conversations, setConversations] = useState([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [conversationsError, setConversationsError] = useState("");
+  const [conversationActionLoading, setConversationActionLoading] = useState(false);
+  const [conversationActionStatus, setConversationActionStatus] = useState("");
 
   const latestSearchRef = useRef("");
 
@@ -161,6 +163,119 @@ export default function useFriendsWorkspaceState({
       setConversationsError(error.message || "Не удалось загрузить беседы.");
     } finally {
       setConversationsLoading(false);
+    }
+  };
+
+  const handleCreateConversation = async ({ title, avatarUrl = "", memberUserIds }) => {
+    const normalizedTitle = String(title || "").trim();
+    const normalizedMemberIds = Array.isArray(memberUserIds)
+      ? memberUserIds.map((item) => Number(item)).filter((item) => item > 0)
+      : [];
+
+    if (!normalizedTitle) {
+      throw new Error("Введите название беседы.");
+    }
+
+    if (!normalizedMemberIds.length) {
+      throw new Error("Выберите хотя бы одного друга.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: normalizedTitle,
+          avatarUrl: String(avatarUrl || "").trim(),
+          memberUserIds: normalizedMemberIds,
+        }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось создать беседу."));
+      }
+
+      const createdConversation = normalizeConversationTarget(data || {});
+      setConversationActionStatus("Беседа создана.");
+      await loadConversations();
+      return createdConversation;
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось создать беседу.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
+  const handleAddConversationMember = async (conversationId, userId) => {
+    const normalizedConversationId = Number(conversationId);
+    const normalizedUserId = Number(userId);
+
+    if (normalizedConversationId <= 0 || normalizedUserId <= 0) {
+      throw new Error("Не удалось определить беседу или пользователя.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: normalizedUserId }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось добавить участника в беседу."));
+      }
+
+      setConversationActionStatus("Участник добавлен в беседу.");
+      await loadConversations();
+      return data;
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось добавить участника в беседу.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
+  const handleUploadConversationAvatar = async (file) => {
+    if (!(file instanceof File)) {
+      throw new Error("Выберите изображение для беседы.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const formData = new FormData();
+      formData.append("avatar", file);
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/upload-avatar`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить аватар беседы."));
+      }
+
+      return String(data?.avatarUrl || data?.avatar_url || "").trim();
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось загрузить аватар беседы.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
     }
   };
 
@@ -322,6 +437,7 @@ export default function useFriendsWorkspaceState({
     setFriendActionStatus("");
     setFriendRequestsError("");
     setConversationsError("");
+    setConversationActionStatus("");
   };
 
   const updateFriendProfile = (updatedUserId, updater) => {
@@ -470,10 +586,13 @@ export default function useFriendsWorkspaceState({
     conversations,
     conversationsLoading,
     conversationsError,
+    conversationActionLoading,
+    conversationActionStatus,
     setFriends,
     setFriendEmail: setFriendSearchValue,
     setFriendsError,
     setFriendActionStatus,
+    setConversationActionStatus,
     refreshFriends: loadFriends,
     refreshFriendRequests: loadFriendRequests,
     refreshConversations: loadConversations,
@@ -483,5 +602,8 @@ export default function useFriendsWorkspaceState({
     handleFriendSearchSubmit,
     handleAddFriend,
     handleFriendRequestAction,
+    handleCreateConversation,
+    handleUploadConversationAvatar,
+    handleAddConversationMember,
   };
 }

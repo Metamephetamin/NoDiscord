@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PendingUploadPreview from "./PendingUploadPreview";
 import { formatFileSize } from "../utils/textChatHelpers";
@@ -373,6 +373,7 @@ function TextChatBatchUploadSheet({
   const waitingForPicker = Boolean(pendingSelection?.waitingForPicker);
   const [activeFileId, setActiveFileId] = useState(() => String(selectedFiles?.[0]?.id || ""));
   const [visibleItemCount, setVisibleItemCount] = useState(() => Math.min(fileCount, INITIAL_VISIBLE_BATCH_ITEMS));
+  const captionTextareaRef = useRef(null);
   const activeFile = selectedFiles.find((item) => String(item?.id || "") === String(activeFileId || "")) || selectedFiles[0] || null;
   const resolvedActiveFileId = String(activeFile?.id || "");
   const sendAsDocumentsEnabled = Boolean(batchOptions?.sendAsDocuments);
@@ -476,6 +477,31 @@ function TextChatBatchUploadSheet({
   useEffect(() => {
     setVisibleItemCount(Math.min(fileCount, INITIAL_VISIBLE_BATCH_ITEMS));
   }, [fileCount]);
+
+  useEffect(() => {
+    if (showPendingShell || controlsDisabled || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const textarea = captionTextareaRef.current;
+      if (!textarea || document.activeElement === textarea) {
+        return;
+      }
+
+      textarea.focus();
+      const valueLength = String(textarea.value || "").length;
+      try {
+        textarea.setSelectionRange(valueLength, valueLength);
+      } catch {
+        // ignore selection failures
+      }
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [controlsDisabled, fileCount, showPendingShell]);
 
   useEffect(() => {
     if (visibleItemCount >= fileCount) {
@@ -620,8 +646,21 @@ function TextChatBatchUploadSheet({
         <label className="batch-upload-sheet__caption">
           <span>Подпись</span>
           <textarea
+            ref={captionTextareaRef}
             value={message}
             onChange={(event) => onMessageChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey) {
+                return;
+              }
+
+              event.preventDefault();
+              if (controlsDisabled || (!String(message || "").trim() && !fileCount)) {
+                return;
+              }
+
+              void onSend();
+            }}
             disabled={controlsDisabled}
             placeholder=""
             rows={1}

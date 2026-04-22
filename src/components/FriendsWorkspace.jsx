@@ -1,10 +1,41 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
+
+function FriendsNavIcon({ kind }) {
+  switch (kind) {
+    case "friends":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 11C10.6569 11 12 9.65685 12 8C12 6.34315 10.6569 5 9 5C7.34315 5 6 6.34315 6 8C6 9.65685 7.34315 11 9 11Z" />
+          <path d="M15.5 10C16.8807 10 18 8.88071 18 7.5C18 6.11929 16.8807 5 15.5 5C14.1193 5 13 6.11929 13 7.5C13 8.88071 14.1193 10 15.5 10Z" />
+          <path d="M4.5 18C4.5 15.7909 6.29086 14 8.5 14H9.5C11.7091 14 13.5 15.7909 13.5 18" />
+          <path d="M13.5 18C13.5 16.3431 14.8431 15 16.5 15H17C18.6569 15 20 16.3431 20 18" />
+        </svg>
+      );
+    case "add":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M15 19C15 16.7909 13.2091 15 11 15H8C5.79086 15 4 16.7909 4 19" />
+          <path d="M9.5 11C11.433 11 13 9.433 13 7.5C13 5.567 11.433 4 9.5 4C7.567 4 6 5.567 6 7.5C6 9.433 7.567 11 9.5 11Z" />
+          <path d="M18 8V14" />
+          <path d="M15 11H21" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6 8.5H18" />
+          <path d="M6 12H14.5" />
+          <path d="M7.5 20.25C7.08 20.25 6.7 20.01 6.53 19.63L5.52 17.25H5C3.34 17.25 2 15.91 2 14.25V6.75C2 5.09 3.34 3.75 5 3.75H19C20.66 3.75 22 5.09 22 6.75V14.25C22 15.91 20.66 17.25 19 17.25H11.89L8.1 20.01C7.92 20.17 7.71 20.25 7.5 20.25Z" />
+        </svg>
+      );
+  }
+}
 
 export const FriendsSidebar = ({
   query,
@@ -59,7 +90,7 @@ export const FriendsSidebar = ({
                 onOpenServersWorkspace();
               }}
             >
-              <span className="friends-nav__icon">{item.icon}</span>
+              <span className="friends-nav__icon"><FriendsNavIcon kind="friends" /></span>
               <span>{item.label}</span>
             </button>
           ))}
@@ -73,7 +104,7 @@ export const FriendsSidebar = ({
               onSetFriendsSection("add");
             }}
           >
-            <span className="friends-nav__icon">+</span>
+            <span className="friends-nav__icon"><FriendsNavIcon kind="add" /></span>
             <span>Добавить в друзья</span>
             {incomingFriendRequestCount > 0 ? <span className="friends-nav__badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
           </button>
@@ -86,7 +117,7 @@ export const FriendsSidebar = ({
               onSetFriendsSection("conversations");
             }}
           >
-            <span className="friends-nav__icon">#</span>
+            <span className="friends-nav__icon"><FriendsNavIcon kind="conversations" /></span>
             <span>Беседы</span>
           </button>
         </div>
@@ -177,10 +208,16 @@ export const FriendsMain = ({
   conversations,
   conversationsLoading,
   conversationsError,
+  conversationActionLoading,
+  conversationActionStatus,
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
   onOpenConversationChat,
+  onCreateConversation,
+  onUploadConversationAvatar,
+  onAddConversationMember,
+  onClearConversationStatus,
   onStartDirectCall,
   onOpenDirectActions,
   onFriendRequestAction,
@@ -194,10 +231,184 @@ export const FriendsMain = ({
   phoneIcon,
   searchIcon,
   getDisplayName,
-}) => (
-  <main className="chat__wrapper chat__wrapper--friends">
-    <div className="friends-layout">
-      <section className="friends-main">
+}) => {
+  const conversationAvatarInputRef = useRef(null);
+  const [createConversationStep, setCreateConversationStep] = useState("");
+  const [conversationTitle, setConversationTitle] = useState("");
+  const [conversationAvatarFile, setConversationAvatarFile] = useState(null);
+  const [conversationAvatarPreview, setConversationAvatarPreview] = useState("");
+  const [selectedConversationFriendIds, setSelectedConversationFriendIds] = useState([]);
+  const [conversationFriendSearch, setConversationFriendSearch] = useState("");
+  const [showAddConversationMemberForm, setShowAddConversationMemberForm] = useState(false);
+  const [addConversationMemberSearch, setAddConversationMemberSearch] = useState("");
+  const [pendingConversationMemberId, setPendingConversationMemberId] = useState("");
+
+  const currentConversationMemberIds = useMemo(
+    () => new Set((currentConversationTarget?.members || []).map((member) => String(member?.id || ""))),
+    [currentConversationTarget?.members]
+  );
+  const addableConversationFriends = useMemo(
+    () => friends.filter((friend) => friend?.id && !currentConversationMemberIds.has(String(friend.id))),
+    [currentConversationMemberIds, friends]
+  );
+  const filteredConversationFriends = useMemo(() => {
+    const normalizedQuery = String(conversationFriendSearch || "").trim().toLowerCase();
+    if (!normalizedQuery) {
+      return friends;
+    }
+
+    return friends.filter((friend) => {
+      const displayName = String(getDisplayName(friend) || "").toLowerCase();
+      const email = String(friend?.email || "").toLowerCase();
+      return displayName.includes(normalizedQuery) || email.includes(normalizedQuery);
+    });
+  }, [conversationFriendSearch, friends, getDisplayName]);
+  const filteredAddableConversationFriends = useMemo(() => {
+    const normalizedQuery = String(addConversationMemberSearch || "").trim().toLowerCase();
+    if (!normalizedQuery) {
+      return addableConversationFriends;
+    }
+
+    return addableConversationFriends.filter((friend) => {
+      const displayName = String(getDisplayName(friend) || "").toLowerCase();
+      const email = String(friend?.email || "").toLowerCase();
+      return displayName.includes(normalizedQuery) || email.includes(normalizedQuery);
+    });
+  }, [addConversationMemberSearch, addableConversationFriends, getDisplayName]);
+
+  useEffect(() => () => {
+    if (conversationAvatarPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(conversationAvatarPreview);
+    }
+  }, [conversationAvatarPreview]);
+
+  const resetConversationDraft = () => {
+    setCreateConversationStep("");
+    setConversationTitle("");
+    setSelectedConversationFriendIds([]);
+    setConversationFriendSearch("");
+    setConversationAvatarFile(null);
+    setConversationAvatarPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return "";
+    });
+  };
+
+  const openCreateConversationFlow = () => {
+    onClearConversationStatus?.();
+    resetConversationDraft();
+    setCreateConversationStep("details");
+  };
+
+  const handleConversationAvatarChange = (event) => {
+    const nextFile = event.target.files?.[0];
+    if (!nextFile) {
+      return;
+    }
+
+    onClearConversationStatus?.();
+    setConversationAvatarFile(nextFile);
+    setConversationAvatarPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return URL.createObjectURL(nextFile);
+    });
+  };
+
+  const toggleConversationFriendSelection = (friendId) => {
+    const normalizedFriendId = String(friendId || "");
+    if (!normalizedFriendId) {
+      return;
+    }
+
+    onClearConversationStatus?.();
+    setSelectedConversationFriendIds((previous) => (
+      previous.includes(normalizedFriendId)
+        ? previous.filter((item) => item !== normalizedFriendId)
+        : [...previous, normalizedFriendId]
+    ));
+  };
+
+  const handleCreateConversationSubmit = async (event) => {
+    event.preventDefault();
+    try {
+      let uploadedAvatarUrl = "";
+      if (conversationAvatarFile) {
+        uploadedAvatarUrl = await onUploadConversationAvatar?.(conversationAvatarFile) || "";
+      }
+
+      const createdConversation = await onCreateConversation?.({
+        title: conversationTitle,
+        avatarUrl: uploadedAvatarUrl,
+        memberUserIds: selectedConversationFriendIds,
+      });
+      resetConversationDraft();
+      if (createdConversation?.conversationId || createdConversation?.id) {
+        onOpenConversationChat?.(createdConversation.conversationId || createdConversation.id);
+      }
+    } catch {
+      // handled in state
+    }
+  };
+
+  const handleAddConversationMemberSubmit = async (event) => {
+    event.preventDefault();
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      await onAddConversationMember?.(
+        currentConversationTarget.conversationId || currentConversationTarget.id,
+        pendingConversationMemberId
+      );
+      setPendingConversationMemberId("");
+      setAddConversationMemberSearch("");
+      setShowAddConversationMemberForm(false);
+    } catch {
+      // handled in state
+    }
+  };
+
+  const handleProceedToConversationMembers = () => {
+    if (!String(conversationTitle || "").trim()) {
+      return;
+    }
+
+    onClearConversationStatus?.();
+    setCreateConversationStep("members");
+  };
+
+  const handleCloseConversationFlow = () => {
+    onClearConversationStatus?.();
+    resetConversationDraft();
+  };
+
+  const handleBackToConversationDetails = () => {
+    onClearConversationStatus?.();
+    setCreateConversationStep("details");
+  };
+
+  const handleSelectPendingConversationMember = (friendId) => {
+    onClearConversationStatus?.();
+    setPendingConversationMemberId(String(friendId || ""));
+  };
+
+  useEffect(() => {
+    if (!currentConversationTarget) {
+      setShowAddConversationMemberForm(false);
+      setAddConversationMemberSearch("");
+      setPendingConversationMemberId("");
+    }
+  }, [currentConversationTarget]);
+
+  return (
+    <main className="chat__wrapper chat__wrapper--friends">
+      <div className="friends-layout">
+        <section className="friends-main">
         <div className="friends-main__toolbar">
           <div className="friends-main__tabs">
             <button
@@ -262,6 +473,23 @@ export const FriendsMain = ({
                   />
                 </label>
 
+                {currentConversationTarget?.canManage ? (
+                  <button
+                    type="button"
+                    className="chat__topbar-icon"
+                    onClick={() => {
+                      onClearConversationStatus?.();
+                      setPendingConversationMemberId("");
+                      setAddConversationMemberSearch("");
+                      setShowAddConversationMemberForm(true);
+                    }}
+                    aria-label="Добавить участника"
+                    title="Добавить участника"
+                  >
+                    <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">+</span>
+                  </button>
+                ) : null}
+
                 {!currentConversationTarget ? (
                   <button
                     type="button"
@@ -287,6 +515,35 @@ export const FriendsMain = ({
                 ) : null}
               </div>
             </div>
+
+            {false ? (
+              <div className="friends-hero friends-hero--conversation-inline">
+                <form className="friends-hero__form" onSubmit={handleAddConversationMemberSubmit}>
+                  <select
+                    value={pendingConversationMemberId}
+                    onChange={(event) => {
+                      onClearConversationStatus?.();
+                      setPendingConversationMemberId(event.target.value);
+                    }}
+                    disabled={conversationActionLoading || !addableConversationFriends.length}
+                  >
+                    <option value="">Выберите друга для добавления</option>
+                    {addableConversationFriends.map((friend) => (
+                      <option key={friend.id} value={String(friend.id)}>
+                        {getDisplayName(friend)}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" disabled={conversationActionLoading || !pendingConversationMemberId}>
+                    {conversationActionLoading ? "Добавляем..." : "Добавить"}
+                  </button>
+                </form>
+                {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
+                {!addableConversationFriends.length ? (
+                  <div className="friends-panel__empty">Все ваши друзья уже добавлены в эту беседу.</div>
+                ) : null}
+              </div>
+            ) : null}
 
             <TextChat
               resolvedChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}
@@ -328,9 +585,21 @@ export const FriendsMain = ({
         ) : friendsPageSection === "conversations" ? (
           <div className="friends-main__content">
             <div className="friends-hero">
-              <h1>Беседы</h1>
-              <p>Здесь находятся групповые чаты, куда можно добавлять друзей и общаться в отдельном канале.</p>
+              <div className="friends-hero__header">
+                <div className="friends-hero__header-copy">
+                  <h1>Беседы</h1>
+                  <p>Здесь находятся групповые чаты, куда можно добавлять друзей и общаться в отдельном канале.</p>
+                </div>
+                <button
+                  type="button"
+                  className="friends-create-button"
+                  onClick={openCreateConversationFlow}
+                >
+                  Создать беседу
+                </button>
+              </div>
               {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
+              {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
               {conversationsLoading ? <div className="friends-panel__empty">Загружаем беседы...</div> : null}
               {!conversationsLoading && conversations.length ? (
                 <div className="friends-results">
@@ -472,6 +741,231 @@ export const FriendsMain = ({
         )}
       </section>
 
+      {createConversationStep ? (
+        <div className="friends-modal-layer" role="presentation" onClick={handleCloseConversationFlow}>
+          <div
+            className={`friends-modal friends-modal--${createConversationStep === "members" ? "members" : "details"}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={createConversationStep === "members" ? "conversation-members-title" : "conversation-details-title"}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {createConversationStep === "details" ? (
+              <>
+                <div className="friends-modal__header">
+                  <h3 id="conversation-details-title">Создать беседу</h3>
+                  <p>Сначала задайте название и, если нужно, сразу поставьте аватар беседы.</p>
+                </div>
+
+                <div className="friends-modal__body friends-modal__body--details">
+                  <button
+                    type="button"
+                    className="friends-conversation-avatar-picker"
+                    onClick={() => conversationAvatarInputRef.current?.click()}
+                    aria-label="Выбрать аватар беседы"
+                  >
+                    {conversationAvatarPreview ? (
+                      <img src={conversationAvatarPreview} alt="" />
+                    ) : (
+                      <span className="friends-conversation-avatar-picker__glyph" aria-hidden="true">📷</span>
+                    )}
+                  </button>
+
+                  <div className="friends-conversation-details">
+                    <label className="friends-conversation-field">
+                      <span>Название беседы</span>
+                      <input
+                        type="text"
+                        value={conversationTitle}
+                        onChange={(event) => {
+                          onClearConversationStatus?.();
+                          setConversationTitle(event.target.value);
+                        }}
+                        placeholder="Например, Основной чат"
+                        maxLength={80}
+                        autoFocus
+                        disabled={conversationActionLoading}
+                      />
+                    </label>
+                    <p className="friends-conversation-hint">Аватар можно пропустить и поменять позже.</p>
+                  </div>
+                </div>
+
+                <input
+                  ref={conversationAvatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="friends-conversation-hidden-input"
+                  onChange={handleConversationAvatarChange}
+                />
+                {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
+                {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
+
+                <div className="friends-modal__actions">
+                  <button type="button" className="friends-modal__action friends-modal__action--ghost" onClick={handleCloseConversationFlow}>
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    className="friends-modal__action"
+                    onClick={handleProceedToConversationMembers}
+                    disabled={!String(conversationTitle || "").trim()}
+                  >
+                    Далее
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleCreateConversationSubmit}>
+                <div className="friends-modal__header friends-modal__header--split">
+                  <div>
+                    <h3 id="conversation-members-title">Добавить участников</h3>
+                    <p>Выберите друзей, которых нужно сразу пригласить в беседу.</p>
+                  </div>
+                  <span className="friends-modal__counter">
+                    {selectedConversationFriendIds.length} выбрано
+                  </span>
+                </div>
+
+                <div className="friends-modal__search">
+                  <input
+                    type="text"
+                    value={conversationFriendSearch}
+                    onChange={(event) => setConversationFriendSearch(event.target.value)}
+                    placeholder="Поиск друзей"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="friends-modal__list">
+                  {filteredConversationFriends.length ? filteredConversationFriends.map((friend) => {
+                    const isSelected = selectedConversationFriendIds.includes(String(friend.id || ""));
+
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        className={`friends-member-picker__row ${isSelected ? "friends-member-picker__row--selected" : ""}`}
+                        onClick={() => toggleConversationFriendSelection(friend.id)}
+                      >
+                        <div className="friends-member-picker__identity">
+                          <AnimatedAvatar className="friends-member-picker__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                          <div className="friends-member-picker__meta">
+                            <strong>{getDisplayName(friend)}</strong>
+                            <span>{formatUserPresenceStatus(friend)}</span>
+                          </div>
+                        </div>
+                        <span className={`friends-member-picker__check ${isSelected ? "friends-member-picker__check--selected" : ""}`} aria-hidden="true">
+                          {isSelected ? "✓" : ""}
+                        </span>
+                      </button>
+                    );
+                  }) : (
+                    <div className="friends-panel__empty">Под подходящий запрос друзей не нашлось.</div>
+                  )}
+                </div>
+                {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
+                {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
+
+                <div className="friends-modal__actions">
+                  <button type="button" className="friends-modal__action friends-modal__action--ghost" onClick={handleBackToConversationDetails}>
+                    Назад
+                  </button>
+                  <button
+                    type="submit"
+                    className="friends-modal__action"
+                    disabled={conversationActionLoading || !selectedConversationFriendIds.length || !String(conversationTitle || "").trim()}
+                  >
+                    {conversationActionLoading ? "Создаём..." : "Создать"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {showAddConversationMemberForm && currentConversationTarget?.canManage ? (
+        <div className="friends-modal-layer" role="presentation" onClick={() => setShowAddConversationMemberForm(false)}>
+          <form
+            className="friends-modal friends-modal--members"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="conversation-add-members-title"
+            onSubmit={handleAddConversationMemberSubmit}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="friends-modal__header friends-modal__header--split">
+              <div>
+                <h3 id="conversation-add-members-title">Добавить участников</h3>
+                <p>Пригласите друзей в уже созданную беседу.</p>
+              </div>
+              <span className="friends-modal__counter">
+                {addableConversationFriends.length} доступно
+              </span>
+            </div>
+
+            <div className="friends-modal__search">
+              <input
+                type="text"
+                value={addConversationMemberSearch}
+                onChange={(event) => setAddConversationMemberSearch(event.target.value)}
+                placeholder="Поиск друзей"
+                autoFocus
+              />
+            </div>
+
+            <div className="friends-modal__list">
+              {filteredAddableConversationFriends.length ? filteredAddableConversationFriends.map((friend) => {
+                const friendId = String(friend.id || "");
+                const isSelected = pendingConversationMemberId === friendId;
+
+                return (
+                  <button
+                    key={friend.id}
+                    type="button"
+                    className={`friends-member-picker__row ${isSelected ? "friends-member-picker__row--selected" : ""}`}
+                    onClick={() => handleSelectPendingConversationMember(friend.id)}
+                  >
+                    <div className="friends-member-picker__identity">
+                      <AnimatedAvatar className="friends-member-picker__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                      <div className="friends-member-picker__meta">
+                        <strong>{getDisplayName(friend)}</strong>
+                        <span>{formatUserPresenceStatus(friend)}</span>
+                      </div>
+                    </div>
+                    <span className={`friends-member-picker__check ${isSelected ? "friends-member-picker__check--selected" : ""}`} aria-hidden="true">
+                      {isSelected ? "✓" : ""}
+                    </span>
+                  </button>
+                );
+              }) : (
+                <div className="friends-panel__empty">Свободных друзей для добавления не осталось.</div>
+              )}
+            </div>
+            {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
+            {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
+
+            <div className="friends-modal__actions">
+              <button
+                type="button"
+                className="friends-modal__action friends-modal__action--ghost"
+                onClick={() => setShowAddConversationMemberForm(false)}
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                className="friends-modal__action"
+                disabled={conversationActionLoading || !pendingConversationMemberId}
+              >
+                {conversationActionLoading ? "Добавляем..." : "Добавить"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
       <aside className="friends-contacts">
         <h3>Активные контакты</h3>
         {activeContacts.length ? (
@@ -491,5 +985,6 @@ export const FriendsMain = ({
         )}
       </aside>
     </div>
-  </main>
-);
+    </main>
+  );
+};

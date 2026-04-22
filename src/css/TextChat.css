@@ -712,14 +712,7 @@
 }
 
 .msg-content--dm::before {
-  content: "";
-  position: absolute;
-  bottom: 4px;
-  width: 12px;
-  height: 12px;
-  background: inherit;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: -1;
+  content: none;
 }
 
 .msg-content--dm::after {
@@ -729,7 +722,7 @@
 .msg-content--dm-own {
   align-self: flex-end;
   border-color: rgba(255, 255, 255, 0.08);
-  border-bottom-left-radius: 8px;
+  border-bottom-left-radius: 20px;
   background: rgba(27, 35, 48, 0.9);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
 }
@@ -738,13 +731,6 @@
   display: block;
   margin-left: 2px;
   margin-right: 0;
-}
-
-.message-item--dm-own .msg-content--dm::before {
-  left: -5px;
-  bottom: 2px;
-  border-right: 0;
-  transform: rotate(45deg);
 }
 
 .msg-content--pressing {
@@ -760,13 +746,7 @@
 }
 
 .message-item--dm-incoming .msg-content--dm {
-  border-bottom-left-radius: 8px;
-}
-
-.message-item--dm-incoming .msg-content--dm::before {
-  left: -5px;
-  bottom: 2px;
-  transform: rotate(45deg);
+  border-bottom-left-radius: 20px;
 }
 
 .message-author {
@@ -2107,6 +2087,20 @@
   gap: 10px;
   margin-top: 12px;
   width: 100%;
+}
+
+.message-bottom-row--footer-only {
+  width: auto;
+  align-self: flex-end;
+  justify-content: flex-end;
+}
+
+.message-bottom-row--file {
+  margin-top: 8px;
+}
+
+.message-bottom-row--file .message-footer {
+  align-self: flex-start;
 }
 
 .message-reactions-wrap {
@@ -4122,7 +4116,9 @@
   order: 1;
   position: relative;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 48px;
@@ -4133,6 +4129,7 @@
   position: relative;
   z-index: 1;
   display: block;
+  width: 100%;
   min-height: 48px;
 }
 
@@ -5216,6 +5213,7 @@
 }
 
 .composer-status--speech {
+  display: none;
   background: linear-gradient(180deg, rgba(16, 28, 49, 0.94), rgba(13, 19, 32, 0.96));
   border-color: rgba(103, 146, 255, 0.18);
 }
@@ -5347,8 +5345,8 @@
 
 .composer-tool__mic {
   position: relative;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: inline-block;
   background-color: currentColor;
   -webkit-mask-image: url("/icons/telegram-chat/mic-mask.png");
@@ -5452,6 +5450,53 @@
   order: 3;
 }
 
+.composer-tool--speech.composer-tool--action-slot {
+  width: 52px;
+  height: 52px;
+  color: #8ba2c8;
+}
+
+.composer-tool--speech.composer-tool--action-slot:hover {
+  color: #d8e5ff;
+}
+
+.composer-tool__speech-ring {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 0.18s ease,
+    transform 0.12s linear;
+}
+
+.composer-tool__speech-ring--outer {
+  background: radial-gradient(circle, rgba(112, 168, 255, 0.34), rgba(112, 168, 255, 0.08) 58%, transparent 70%);
+}
+
+.composer-tool__speech-ring--inner {
+  inset: 11px;
+  background: radial-gradient(circle, rgba(123, 180, 255, 0.46), rgba(123, 180, 255, 0.14) 62%, transparent 76%);
+}
+
+.composer-tool--speech.composer-tool--active .composer-tool__speech-ring {
+  opacity: var(--speech-level-opacity, 0.36);
+}
+
+.composer-tool--speech.composer-tool--active .composer-tool__speech-ring--outer {
+  transform: scale(var(--speech-level-scale, 1));
+}
+
+.composer-tool--speech.composer-tool--active .composer-tool__speech-ring--inner {
+  transform: scale(calc(0.92 + (var(--speech-level-scale, 1) - 1) * 0.72));
+}
+
+.composer-tool--speech.composer-tool--active .composer-tool__mic {
+  filter: drop-shadow(0 0 10px rgba(121, 179, 255, 0.28));
+}
+
 .composer-tool--emoji {
   order: 2;
 }
@@ -5479,6 +5524,102 @@
 
 .composer-tool--action-slot:hover {
   background: transparent;
+}
+
+.composer-speech-indicator {
+  width: 100%;
+  min-height: 38px;
+  margin-bottom: 4px;
+  padding: 8px 10px 8px 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(112, 153, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(16, 25, 43, 0.76), rgba(12, 18, 31, 0.88)),
+    radial-gradient(circle at left center, rgba(106, 152, 255, 0.1), transparent 56%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.composer-speech-indicator__badge {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(94, 148, 255, 0.16);
+}
+
+.composer-speech-indicator__badge-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.composer-speech-indicator__badge-ring--outer {
+  background: radial-gradient(circle, rgba(108, 165, 255, 0.26), rgba(108, 165, 255, 0.04) 62%, transparent 74%);
+  opacity: var(--speech-level-opacity, 0.36);
+  transform: scale(var(--speech-level-scale, 1));
+}
+
+.composer-speech-indicator__badge-ring--inner {
+  inset: 4px;
+  background: radial-gradient(circle, rgba(130, 183, 255, 0.36), rgba(130, 183, 255, 0.08) 68%, transparent 84%);
+  opacity: calc(var(--speech-level-opacity, 0.36) + 0.08);
+  transform: scale(calc(0.92 + (var(--speech-level-scale, 1) - 1) * 0.7));
+}
+
+.composer-tool__mic--speech-indicator {
+  width: 18px;
+  height: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.composer-speech-indicator__copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-speech-indicator__copy strong {
+  color: #f3f7ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.composer-speech-indicator__copy span {
+  color: #98accd;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.composer-speech-indicator__wave {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 30px;
+  height: 24px;
+}
+
+.composer-speech-indicator__bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(157, 197, 255, 0.98), rgba(93, 146, 255, 0.74));
+  transform-origin: center;
+  transform: scaleY(var(--speech-bar-scale, 0.24));
+  transition: transform 0.08s linear;
 }
 
 .composer-tool--voice-slot {

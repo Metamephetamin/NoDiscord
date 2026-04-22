@@ -1643,6 +1643,11 @@ function TextChatMessageList({
               && !attachmentItem.isVoice
               && (attachmentItem.isImage || attachmentItem.isVideo)
             ));
+          const hasFileLikeAttachments = hasRenderableAttachments
+            && attachments.some((attachmentItem) => (
+              Boolean(attachmentItem?.attachmentAsFile)
+              || (!attachmentItem?.isVoice && !attachmentItem?.isImage && !attachmentItem?.isVideo)
+            ));
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;
@@ -1724,7 +1729,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {
@@ -1856,7 +1861,7 @@ function TextChatMessageList({
                 />
 
                 {((isDirectChat && !useInlineFooter && !showAttachmentOverlayFooter) || reactions.length) ? (
-                  <div className="message-bottom-row">
+                  <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
                         <div className="message-reactions">
@@ -1895,9 +1900,7 @@ function TextChatMessageList({
                           })}
                         </div>
                       </div>
-                    ) : (
-                      <span />
-                    )}
+                    ) : null}
 
                     {(isDirectChat && !useInlineFooter) ? (
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>

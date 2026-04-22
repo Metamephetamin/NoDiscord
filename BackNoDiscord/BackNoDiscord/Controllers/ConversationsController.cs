@@ -1,5 +1,6 @@
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
+using BackNoDiscord.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,19 +17,23 @@ public sealed class ConversationsController : ControllerBase
     private const int MaxConversationTitleLength = 120;
     private const int MaxConversationMembers = 24;
     private const int MaxMuteMinutes = 7 * 24 * 60;
+    private const long MaxConversationAvatarSizeBytes = 50L * 1024L * 1024L;
 
     private readonly AppDbContext _context;
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly UserPresenceService _userPresenceService;
+    private readonly UploadStoragePaths _uploadStoragePaths;
 
     public ConversationsController(
         AppDbContext context,
         IHubContext<ChatHub> chatHubContext,
-        UserPresenceService userPresenceService)
+        UserPresenceService userPresenceService,
+        UploadStoragePaths uploadStoragePaths)
     {
         _context = context;
         _chatHubContext = chatHubContext;
         _userPresenceService = userPresenceService;
+        _uploadStoragePaths = uploadStoragePaths;
     }
 
     [HttpGet]
@@ -92,6 +97,8 @@ public sealed class ConversationsController : ControllerBase
             return BadRequest(new { message = "Название беседы обязательно." });
         }
 
+        var avatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(request?.AvatarUrl, "/avatars/");
+
         var requestedMemberIds = (request?.MemberUserIds?.AsEnumerable() ?? Array.Empty<int>())
             .Where(item => item > 0 && item != currentUserId)
             .Distinct()
@@ -115,6 +122,7 @@ public sealed class ConversationsController : ControllerBase
         {
             OwnerUserId = currentUserId,
             Title = title,
+            AvatarUrl = avatarUrl,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -152,6 +160,50 @@ public sealed class ConversationsController : ControllerBase
         await BroadcastConversationsUpdatedAsync(members.Select(item => item.UserId), cancellationToken);
 
         return Ok(BuildConversationPayload(conversation, members, users, currentUserId));
+    }
+
+    [HttpPost("upload-avatar")]
+    [RequestSizeLimit(MaxConversationAvatarSizeBytes)]
+    public async Task<IActionResult> UploadConversationAvatar([FromForm] UploadConversationAvatarRequest request, CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var avatar = request.Avatar;
+        if (avatar == null || avatar.Length == 0)
+        {
+            return BadRequest(new { message = "Avatar file is required" });
+        }
+
+        if (avatar.Length > MaxConversationAvatarSizeBytes)
+        {
+            return BadRequest(new { message = "Avatar size must be less than or equal to 50 MB" });
+        }
+
+        if (!UploadPolicies.TryValidateAvatar(avatar, out var extension, out _, out var error))
+        {
+            return BadRequest(new { message = error });
+        }
+
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("avatars");
+        Directory.CreateDirectory(uploadsDirectory);
+
+        var fileName = $"conversation-{UploadPolicies.SanitizeIdentifier(currentUser.UserId)}-{Guid.NewGuid():N}{extension}";
+        var filePath = Path.Combine(uploadsDirectory, fileName);
+
+        await using (var stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.SequentialScan))
+        {
+            await avatar.CopyToAsync(stream, cancellationToken);
+        }
+
+        var avatarUrl = $"/avatars/{fileName}";
+        return Ok(new
+        {
+            avatarUrl,
+            avatar_url = avatarUrl
+        });
     }
 
     [HttpPost("{conversationId:int}/members")]
@@ -477,6 +529,7 @@ public sealed class ConversationsController : ControllerBase
             id = conversation.Id,
             kind = "conversation",
             title = conversation.Title,
+            avatar_url = conversation.AvatarUrl ?? string.Empty,
             ownerUserId = conversation.OwnerUserId.ToString(),
             directChannelId = ConversationChannels.BuildChatChannelId(conversation.Id),
             voiceChannelId = ConversationChannels.BuildVoiceChannelName(conversation.Id),
@@ -498,7 +551,13 @@ public sealed class ConversationsController : ControllerBase
     public sealed class CreateConversationRequest
     {
         public string? Title { get; set; }
+        public string? AvatarUrl { get; set; }
         public List<int>? MemberUserIds { get; set; }
+    }
+
+    public sealed class UploadConversationAvatarRequest
+    {
+        public IFormFile? Avatar { get; set; }
     }
 
     public sealed class AddConversationMemberRequest

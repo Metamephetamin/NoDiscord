@@ -2150,6 +2150,7 @@ export default function TextChat({
     voiceRecordingState,
     voiceRecordingDurationMs,
     speechRecognitionActive,
+    speechMicLevel,
     stopSpeechRecognition,
     handleVoiceRecordPointerDown,
     handleVoiceRecordPointerMove,
@@ -2842,6 +2843,7 @@ export default function TextChat({
       voiceRecordingState={voiceRecordingState}
       voiceRecordingDurationMs={voiceRecordingDurationMs}
       speechRecognitionActive={speechRecognitionActive}
+      speechMicLevel={speechMicLevel}
       composerEmojiButtonRef={composerEmojiButtonRef}
       composerEmojiPickerOpen={composerEmojiPickerOpen}
       composerEmojiPickerRef={composerEmojiPickerRef}

@@ -284,6 +284,9 @@ public class GroupConversationRecord
     [Column("title")]
     public string Title { get; set; } = string.Empty;
 
+    [Column("avatar_url")]
+    public string? AvatarUrl { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 
