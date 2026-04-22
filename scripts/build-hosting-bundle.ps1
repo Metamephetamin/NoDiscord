@@ -14,7 +14,7 @@ $runtimeEnvExample = Join-Path $projectRoot ".env.example"
 $productionSettingsExample = Join-Path $projectRoot "BackNoDiscord\BackNoDiscord\appsettings.Production.json.example"
 $liveKitComposeSource = Join-Path $projectRoot "src\livekit\docker-compose.yml"
 $liveKitConfigSource = Join-Path $projectRoot "src\livekit\config.local.yaml"
-$serverReadyEnvPath = Join-Path $bundleRoot ".env.server-85.198.68.187"
+$serverReadyEnvPath = Join-Path $bundleRoot ".env.server-195.93.180.236"
 $appEnvPath = Join-Path $appRoot ".env"
 
 Write-Host "Building frontend..." -ForegroundColor Cyan
@@ -87,12 +87,12 @@ Email__Smtp__Port=465
 Email__Smtp__Username=YOUR_SMTP_LOGIN
 Email__Smtp__Password=YOUR_SMTP_PASSWORD
 Email__Smtp__EnableSsl=true
-ND_API_URL=https://api.85.198.68.187.sslip.io
-ND_PUBLIC_APP_URL=https://api.85.198.68.187.sslip.io
-ND_ALLOWED_ORIGINS=https://api.85.198.68.187.sslip.io
-ND_LIVEKIT_URL=wss://live.85.198.68.187.sslip.io
+ND_API_URL=https://api.195.93.180.236.sslip.io
+ND_PUBLIC_APP_URL=https://api.195.93.180.236.sslip.io
+ND_ALLOWED_ORIGINS=https://api.195.93.180.236.sslip.io
+ND_LIVEKIT_URL=wss://live.195.93.180.236.sslip.io
 ND_ICE_TRANSPORT_POLICY=all
-LiveKit__Url=wss://live.85.198.68.187.sslip.io
+LiveKit__Url=wss://live.195.93.180.236.sslip.io
 LIVEKIT_KEYS=devkey: REPLACE_WITH_YOUR_OWN_LIVEKIT_SECRET
 ClientUpdates__LatestVersion=1.0.0
 ClientUpdates__MinimumVersion=1.0.0
@@ -135,7 +135,7 @@ Important:
 - this bundle already serves the web frontend from the backend root
 - voice/screen share still require LiveKit
 - avatars and chat-files folders are created empty on purpose
-- app/.env is already prefilled for 85.198.68.187.sslip.io
+- app/.env is already prefilled for 195.93.180.236.sslip.io
 '@ | Set-Content -Path $readmePath -Encoding UTF8
 
 Write-Host ""

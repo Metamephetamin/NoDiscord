@@ -81,6 +81,7 @@ export function isCompressibleImageUpload(upload) {
 export function createPendingUpload(file) {
   const kind = getPendingUploadKind(file);
   const previewUrl = createPendingUploadPreview(file);
+  const thumbnailUrl = kind === "image" ? previewUrl : "";
 
   return {
     id: buildUploadId(),
@@ -90,7 +91,7 @@ export function createPendingUpload(file) {
     type: String(file?.type || "").trim(),
     kind,
     previewUrl,
-    thumbnailUrl: "",
+    thumbnailUrl,
     status: "queued",
     progress: 0,
     error: "",
@@ -110,8 +111,7 @@ export function createPendingUploadPreview(fileOrUpload) {
 }
 
 export function revokePendingUploadPreview(upload) {
-  [upload?.previewUrl, upload?.thumbnailUrl]
-    .filter(Boolean)
+  Array.from(new Set([upload?.previewUrl, upload?.thumbnailUrl].filter(Boolean)))
     .forEach((url) => {
       try {
         URL.revokeObjectURL(url);
@@ -335,6 +335,16 @@ export async function createPendingUploadThumbnail(fileOrUpload) {
   const kind = getPendingUploadKind(file);
   if (!(file instanceof File) || kind !== "image") {
     return "";
+  }
+
+  const existingThumbnailUrl = String(fileOrUpload?.thumbnailUrl || "").trim();
+  if (existingThumbnailUrl) {
+    return existingThumbnailUrl;
+  }
+
+  const existingPreviewUrl = String(fileOrUpload?.previewUrl || "").trim();
+  if (existingPreviewUrl.startsWith("blob:") || existingPreviewUrl.startsWith("data:")) {
+    return existingPreviewUrl;
   }
 
   try {

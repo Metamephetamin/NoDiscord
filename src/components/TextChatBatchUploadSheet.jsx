@@ -44,6 +44,36 @@ function getBatchTileClassName(fileCount, index) {
   return fileCount >= 6 ? "batch-upload-sheet__tile--six" : "batch-upload-sheet__tile--default";
 }
 
+function getPendingMediaShellLayout(fileCount, waitingForPicker = false) {
+  const normalizedCount = Math.max(0, Number(fileCount) || 0);
+
+  if (waitingForPicker) {
+    return {
+      fileCount: 6,
+      placeholderCount: 6,
+    };
+  }
+
+  if (normalizedCount >= 6) {
+    return {
+      fileCount: 6,
+      placeholderCount: 6,
+    };
+  }
+
+  if (normalizedCount >= 1) {
+    return {
+      fileCount: normalizedCount,
+      placeholderCount: normalizedCount,
+    };
+  }
+
+  return {
+    fileCount: 1,
+    placeholderCount: 1,
+  };
+}
+
 function getSelectedItemsLabel(fileCount, { layoutMode = "media", sendAsDocuments = false } = {}) {
   const mod10 = fileCount % 10;
   const mod100 = fileCount % 100;
@@ -195,15 +225,17 @@ function BatchUploadToggle({
   );
 }
 
-function PendingBatchUploadMediaShell({ fileCount }) {
-  const placeholderCount = Math.min(Math.max(fileCount, 1), 6);
+function PendingBatchUploadMediaShell({ fileCount, waitingForPicker = false }) {
+  const layout = getPendingMediaShellLayout(fileCount, waitingForPicker);
+  const effectiveFileCount = layout.fileCount;
+  const placeholderCount = layout.placeholderCount;
 
   return (
-    <div className={`batch-upload-sheet__grid batch-upload-sheet__grid--count-${Math.min(fileCount, 6)}`}>
+    <div className={`batch-upload-sheet__grid batch-upload-sheet__grid--count-${Math.min(effectiveFileCount, 6)}`}>
       {Array.from({ length: placeholderCount }, (_, index) => (
         <div
           key={`pending-media-shell-${index}`}
-          className={`batch-upload-sheet__tile ${getBatchTileClassName(fileCount, index)} batch-upload-sheet__tile--pending-shell`}
+          className={`batch-upload-sheet__tile ${getBatchTileClassName(effectiveFileCount, index)} batch-upload-sheet__tile--pending-shell ${waitingForPicker ? "batch-upload-sheet__tile--pending-shell-waiting" : ""}`}
           aria-hidden="true"
         >
           <span className="batch-upload-sheet__tile-pending-shimmer" />
@@ -507,7 +539,7 @@ function TextChatBatchUploadSheet({
             pendingPreviewItems.length ? (
               <PendingBatchUploadMediaPreviewGrid items={pendingPreviewItems} fileCount={resolvedFileCount} />
             ) : (
-              <PendingBatchUploadMediaShell fileCount={resolvedFileCount} />
+              <PendingBatchUploadMediaShell fileCount={resolvedFileCount} waitingForPicker={waitingForPicker} />
             )
           )
         ) : useDocumentLayout ? (

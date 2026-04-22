@@ -1,11 +1,11 @@
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { memo, useDeferredValue, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import PendingUploadPreview from "./PendingUploadPreview";
 import TextChatBatchUploadSheet from "./TextChatBatchUploadSheet";
 import TextChatLocationPickerModal from "./TextChatLocationPickerModal";
 import TextChatPollComposerModal from "./TextChatPollComposerModal";
+import useTextChatAttachmentPickerFlow from "../hooks/useTextChatAttachmentPickerFlow";
 import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
 import {
   buildVoiceMessageLabel,
@@ -15,7 +15,6 @@ import {
   resolveAnimatedEmojiFallbackGlyph,
 } from "../utils/textChatModel";
 import { formatFileSize } from "../utils/textChatHelpers";
-import { recordPerfEvent, startPerfTrace } from "../utils/perf";
 
 function normalizePendingUploadProgress(progressValue) {
   const numericProgress = Number(progressValue);
@@ -28,106 +27,6 @@ function normalizePendingUploadProgress(progressValue) {
   }
 
   return Math.max(0, Math.min(100, Math.round(numericProgress)));
-}
-
-const SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG = "__TEND_SKIP_NEXT_WINDOW_FOCUS_REFRESH__";
-const NATIVE_ATTACHMENT_PICKER_DISABLED_FLAG = "__TEND_NATIVE_ATTACHMENT_PICKER_DISABLED__";
-const NATIVE_ATTACHMENT_PICKER_DEBUG_FLAG = "nodiscord.debug.nativeAttachmentPicker";
-
-function getPerfNow() {
-  return typeof performance !== "undefined" && typeof performance.now === "function"
-    ? performance.now()
-    : Date.now();
-}
-
-function logUploadDiagnostic(action, payload = {}, durationMs = 0) {
-  if (!import.meta.env.DEV) {
-    return;
-  }
-
-  try {
-    console.warn("[upload-diagnostics]", JSON.stringify({
-      action,
-      durationMs: Number((Number(durationMs) || 0).toFixed(2)),
-      at: new Date().toISOString(),
-      ...payload,
-    }));
-  } catch {
-    console.warn(`[upload-diagnostics] ${action}`);
-  }
-}
-
-function createFileFromNativePickerPayload(payload) {
-  const bytes = payload?.bytes;
-  let fileBytes = null;
-
-  if (bytes instanceof ArrayBuffer) {
-    fileBytes = bytes;
-  } else if (ArrayBuffer.isView(bytes)) {
-    fileBytes = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
-      ? bytes.buffer
-      : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  } else if (Array.isArray(bytes)) {
-    fileBytes = new Uint8Array(bytes).buffer;
-  }
-
-  if (!fileBytes) {
-    return null;
-  }
-
-  return new File([fileBytes], String(payload?.name || "attachment").trim() || "attachment", {
-    type: String(payload?.type || "").trim() || "application/octet-stream",
-    lastModified: Number(payload?.lastModified) || Date.now(),
-  });
-}
-
-function buildNativePickerQueueSource(kind) {
-  return kind === "document" ? "electron-document-picker" : "electron-media-picker";
-}
-
-function buildPendingSelectionPreviewItems(items) {
-  if (!Array.isArray(items) || !items.length) {
-    return [];
-  }
-
-  return items
-    .map((item, index) => {
-      if (item instanceof File) {
-        return null;
-      }
-
-      const previewUrl = String(item?.previewUrl || "").trim();
-      const kind = String(item?.kind || "").trim() || (
-        String(item?.type || "").startsWith("image/")
-          ? "image"
-          : String(item?.type || "").startsWith("video/")
-            ? "video"
-            : "file"
-      );
-
-      return {
-        id: String(item?.token || item?.id || `pending-preview-${index}`),
-        name: String(item?.name || "attachment").trim() || "attachment",
-        size: Number(item?.size || 0) || 0,
-        kind,
-        previewUrl,
-        thumbnailUrl: String(item?.thumbnailUrl || "").trim(),
-      };
-    })
-    .filter(Boolean);
-}
-
-function shouldPreferNativeAttachmentPicker() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(NATIVE_ATTACHMENT_PICKER_DEBUG_FLAG);
-    return rawValue === "1" || rawValue === "true";
-  } catch {
-    return false;
-  }
 }
 
 function TextChatComposer({
@@ -191,25 +90,9 @@ function TextChatComposer({
   const [locationPickerLocating, setLocationPickerLocating] = useState(false);
   const [locationPickerError, setLocationPickerError] = useState("");
   const [locationPickerCurrentPosition, setLocationPickerCurrentPosition] = useState(null);
-  const [pendingBatchSelection, setPendingBatchSelection] = useState(null);
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
-  const mediaFileInputRef = useRef(null);
-  const documentFileInputRef = useRef(null);
-  const pendingBatchQueueFrameRef = useRef([]);
-  const pendingPickerShellTimeoutRef = useRef(0);
-  const pendingPickerFocusShellTimeoutRef = useRef(0);
   const attachMenuCloseTimeoutRef = useRef(0);
-  const pendingBatchSelectionRef = useRef(null);
-  const selectedFilesLengthRef = useRef(0);
-  const instantAttachmentSendRef = useRef(false);
-  const messageEditStateRef = useRef(null);
-  const attachPickerKindRef = useRef("media");
-  const pickerDiagnosticRef = useRef({
-    active: false,
-    openedAt: 0,
-    kind: "media",
-  });
   const deferredMessage = useDeferredValue(message);
   const composerMentionSegments = useMemo(
     () => {
@@ -225,82 +108,26 @@ function TextChatComposer({
     },
     [deferredMessage, serverMembers, serverRoles]
   );
-  pendingBatchSelectionRef.current = pendingBatchSelection;
-  selectedFilesLengthRef.current = selectedFiles.length;
-  instantAttachmentSendRef.current = Boolean(instantAttachmentSend);
-  messageEditStateRef.current = messageEditState;
   const shouldRenderComposerHighlight = composerMentionSegments.some((segment) => segment?.isMention);
-  const cancelPendingBatchQueue = () => {
-    if (!pendingBatchQueueFrameRef.current.length || typeof window === "undefined") {
-      return;
-    }
-
-    const cancelFrame =
-      typeof window.cancelAnimationFrame === "function"
-        ? window.cancelAnimationFrame.bind(window)
-        : window.clearTimeout.bind(window);
-
-    pendingBatchQueueFrameRef.current.forEach((handle) => {
-      if (handle?.kind === "timeout") {
-        window.clearTimeout(handle.id);
-        return;
-      }
-
-      cancelFrame(handle?.id ?? handle);
-    });
-    pendingBatchQueueFrameRef.current = [];
-  };
-
-  const scheduleSelectedFilesQueue = (
-    selectedInputFiles,
-    {
-      inputChangeStartedAt,
-      shouldPreferSendAsDocuments,
-      source,
-    }
-  ) => {
-    if (typeof onQueueFiles !== "function" || typeof window === "undefined") {
-      return;
-    }
-
-    cancelPendingBatchQueue();
-    const timeoutId = window.setTimeout(() => {
-      pendingBatchQueueFrameRef.current = [];
-      recordPerfEvent("text-chat", "file-picker:queue-files-callback", {
-        selectedFileCount: selectedInputFiles.length,
-        source,
-      }, getPerfNow() - inputChangeStartedAt);
-      logUploadDiagnostic("queue-files-callback-after-paint", {
-        selectedFileCount: selectedInputFiles.length,
-        source,
-      }, getPerfNow() - inputChangeStartedAt);
-      const queueResult = onQueueFiles(selectedInputFiles, {
-        preferSendAsDocuments: shouldPreferSendAsDocuments,
-        source,
-      });
-      handleQueueFilesResult(queueResult);
-    }, 0);
-
-    pendingBatchQueueFrameRef.current = [{ kind: "timeout", id: timeoutId }];
-  };
-
-  const clearPendingPickerShellTimeout = () => {
-    if (!pendingPickerShellTimeoutRef.current || typeof window === "undefined") {
-      return;
-    }
-
-    window.clearTimeout(pendingPickerShellTimeoutRef.current);
-    pendingPickerShellTimeoutRef.current = 0;
-  };
-
-  const clearPendingPickerFocusShellTimeout = () => {
-    if (!pendingPickerFocusShellTimeoutRef.current || typeof window === "undefined") {
-      return;
-    }
-
-    window.clearTimeout(pendingPickerFocusShellTimeoutRef.current);
-    pendingPickerFocusShellTimeoutRef.current = 0;
-  };
+  const {
+    mediaFileInputRef,
+    documentFileInputRef,
+    pendingBatchSelection,
+    shouldShowPendingBatchSheet,
+    handleAttachFileChange,
+    openMediaAttachFilePicker,
+    openDocumentAttachFilePicker,
+    dismissPendingBatchSelection,
+  } = useTextChatAttachmentPickerFlow({
+    messageComposerRef,
+    selectedFiles,
+    uploadingFile,
+    instantAttachmentSend,
+    messageEditState,
+    onFileChange,
+    onQueueFiles,
+    onToggleBatchUploadSendAsDocuments,
+  });
 
   const clearAttachMenuCloseTimeout = () => {
     if (!attachMenuCloseTimeoutRef.current || typeof window === "undefined") {
@@ -309,411 +136,6 @@ function TextChatComposer({
 
     window.clearTimeout(attachMenuCloseTimeoutRef.current);
     attachMenuCloseTimeoutRef.current = 0;
-  };
-
-  const showPickerReturnShell = ({ kind = "media", source = "file-picker-focus" } = {}) => {
-    if (typeof onQueueFiles !== "function") {
-      return;
-    }
-
-    const normalizedKind = kind === "document" ? "document" : "media";
-    if (pendingBatchSelectionRef.current || selectedFilesLengthRef.current > 0) {
-      return;
-    }
-
-    flushSync(() => {
-      setPendingBatchSelection({
-        fileCount: 1,
-        firstFileName: "",
-        layout: normalizedKind === "document" ? "document" : "media",
-        waitingForPicker: true,
-        previewItems: [],
-      });
-    });
-    logUploadDiagnostic("picker-return-shell-shown", {
-      kind: normalizedKind,
-      source,
-    });
-
-    clearPendingPickerShellTimeout();
-    if (typeof window !== "undefined") {
-      pendingPickerShellTimeoutRef.current = window.setTimeout(() => {
-        pendingPickerShellTimeoutRef.current = 0;
-        setPendingBatchSelection((previous) => (previous?.waitingForPicker ? null : previous));
-      }, 15000);
-    }
-  };
-
-  const handleQueueFilesResult = (queueResult) => {
-    if (queueResult !== "optimistic-send") {
-      return;
-    }
-
-    clearPendingPickerShellTimeout();
-    setPendingBatchSelection(null);
-  };
-
-  const openPendingBatchSheetForFiles = (
-    selectedInputFiles,
-    {
-      inputChangeStartedAt,
-      shouldPreferSendAsDocuments,
-      source,
-      pendingLogAction = "pending-selection-flushed",
-      skipQueue = false,
-    }
-  ) => {
-    if (!selectedInputFiles.length || typeof onQueueFiles !== "function") {
-      return false;
-    }
-
-    if (typeof window !== "undefined") {
-      window.__TEND_PENDING_UPLOAD_SHELL_TRACE_ID__ = startPerfTrace("text-chat", "batch-upload-sheet:pending-shell-visible", {
-        selectedFileCount: selectedInputFiles.length,
-        source,
-      });
-    }
-
-    flushSync(() => {
-      setPendingBatchSelection({
-        fileCount: selectedInputFiles.length,
-        firstFileName: selectedInputFiles[0]?.name || "",
-        layout: shouldPreferSendAsDocuments ? "document" : "media",
-        waitingForPicker: false,
-        previewItems: buildPendingSelectionPreviewItems(selectedInputFiles),
-      });
-    });
-    recordPerfEvent("text-chat", "file-picker:pending-selection-flushed", {
-      selectedFileCount: selectedInputFiles.length,
-      source,
-    }, getPerfNow() - inputChangeStartedAt);
-    logUploadDiagnostic(pendingLogAction, {
-      selectedFileCount: selectedInputFiles.length,
-      source,
-    }, getPerfNow() - inputChangeStartedAt);
-
-    onToggleBatchUploadSendAsDocuments(shouldPreferSendAsDocuments);
-    if (!skipQueue) {
-      scheduleSelectedFilesQueue(selectedInputFiles, {
-        inputChangeStartedAt,
-        shouldPreferSendAsDocuments,
-        source,
-      });
-    }
-    return true;
-  };
-
-  const handleAttachFileChange = (event) => {
-    const inputChangeStartedAt = getPerfNow();
-    const pickerOpenedAt = typeof window !== "undefined"
-      ? Number(window.__TEND_FILE_PICKER_OPENED_AT__ || 0)
-      : 0;
-    const pickerDiagnostic = pickerDiagnosticRef.current;
-    messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
-    const selectedInputFiles = Array.from(event?.target?.files || []);
-    const selectedFromDocumentPicker = attachPickerKindRef.current === "document";
-    const allSelectedAreImages = selectedInputFiles.length > 0
-      && selectedInputFiles.every((file) => String(file?.type || "").startsWith("image/"));
-    const shouldPreferSendAsDocuments = selectedFromDocumentPicker || !allSelectedAreImages;
-    const shouldOpenPendingBatchSheet = selectedInputFiles.length > 0
-      && typeof onQueueFiles === "function";
-    logUploadDiagnostic("input-change-start", {
-      selectedFileCount: selectedInputFiles.length,
-      selectedFromDocumentPicker,
-      allSelectedAreImages,
-      shouldPreferSendAsDocuments,
-      shouldOpenPendingBatchSheet,
-      msSincePickerOpen: pickerOpenedAt ? inputChangeStartedAt - pickerOpenedAt : 0,
-      pickerActive: Boolean(pickerDiagnostic.active),
-      pickerKind: pickerDiagnostic.kind,
-      fileSummary: selectedInputFiles.slice(0, 8).map((file) => ({
-        name: String(file?.name || ""),
-        type: String(file?.type || ""),
-        size: Number(file?.size || 0),
-      })),
-    });
-    recordPerfEvent("text-chat", "file-picker:input-change", {
-      selectedFileCount: selectedInputFiles.length,
-      selectedFromDocumentPicker,
-      allSelectedAreImages,
-      shouldPreferSendAsDocuments,
-      shouldOpenPendingBatchSheet,
-      fileSummary: selectedInputFiles.slice(0, 8).map((file) => ({
-        name: String(file?.name || ""),
-        type: String(file?.type || ""),
-        size: Number(file?.size || 0),
-      })),
-    });
-
-    if (!selectedInputFiles.length) {
-      clearPendingPickerShellTimeout();
-      setPendingBatchSelection(null);
-    } else if (shouldOpenPendingBatchSheet) {
-      clearPendingPickerShellTimeout();
-      if (instantAttachmentSend && selectedFilesLengthRef.current < 1 && !messageEditState) {
-        onToggleBatchUploadSendAsDocuments(shouldPreferSendAsDocuments);
-        const queueResult = onQueueFiles(selectedInputFiles, {
-          preferSendAsDocuments: shouldPreferSendAsDocuments,
-          source: selectedFromDocumentPicker ? "document-input" : "file-input",
-        });
-        handleQueueFilesResult(queueResult);
-      } else {
-        openPendingBatchSheetForFiles(selectedInputFiles, {
-          inputChangeStartedAt,
-          selectedFromDocumentPicker,
-          shouldPreferSendAsDocuments,
-          source: selectedFromDocumentPicker ? "document-input" : "file-input",
-        });
-      }
-    } else {
-      onFileChange(event);
-    }
-
-    if (event?.target) {
-      event.target.value = "";
-      event.target.blur?.();
-    }
-
-    pickerDiagnosticRef.current = {
-      active: false,
-      openedAt: 0,
-      kind: "media",
-    };
-    attachPickerKindRef.current = "media";
-  };
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-
-    const handleWindowBlur = () => {
-      const pickerDiagnostic = pickerDiagnosticRef.current;
-      if (!pickerDiagnostic.active) {
-        return;
-      }
-
-      clearPendingPickerFocusShellTimeout();
-      logUploadDiagnostic("picker-window-blur", {
-        kind: pickerDiagnostic.kind,
-      }, getPerfNow() - pickerDiagnostic.openedAt);
-    };
-
-    const handleWindowFocus = () => {
-      const pickerDiagnostic = pickerDiagnosticRef.current;
-      if (!pickerDiagnostic.active) {
-        return;
-      }
-
-      logUploadDiagnostic("picker-window-focus", {
-        kind: pickerDiagnostic.kind,
-      }, getPerfNow() - pickerDiagnostic.openedAt);
-      if (instantAttachmentSendRef.current && selectedFilesLengthRef.current < 1 && !messageEditStateRef.current) {
-        return;
-      }
-
-      clearPendingPickerFocusShellTimeout();
-      pendingPickerFocusShellTimeoutRef.current = window.setTimeout(() => {
-        pendingPickerFocusShellTimeoutRef.current = 0;
-        const activePickerDiagnostic = pickerDiagnosticRef.current;
-        if (!activePickerDiagnostic?.active) {
-          return;
-        }
-
-        showPickerReturnShell({
-          kind: activePickerDiagnostic.kind,
-          source: "window-focus-delayed",
-        });
-      }, 180);
-    };
-
-    window.addEventListener("blur", handleWindowBlur);
-    window.addEventListener("focus", handleWindowFocus);
-
-    return () => {
-      window.removeEventListener("blur", handleWindowBlur);
-      window.removeEventListener("focus", handleWindowFocus);
-    };
-  }, []);
-
-  const releaseAttachMenuFocusForFilePicker = () => {
-    if (typeof document !== "undefined") {
-      document.activeElement?.blur?.();
-    }
-  };
-
-  const suppressAttachMenuForFilePicker = () => {
-    releaseAttachMenuFocusForFilePicker();
-    messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
-  };
-
-  const openNativeAttachFilePicker = async (kind) => {
-    const pickerApi = typeof window !== "undefined" ? window.electronAttachmentPicker : null;
-    if (
-      (typeof window !== "undefined" && window[NATIVE_ATTACHMENT_PICKER_DISABLED_FLAG])
-      || !pickerApi
-      || typeof pickerApi.open !== "function"
-      || typeof pickerApi.readFiles !== "function"
-    ) {
-      return false;
-    }
-
-    const normalizedKind = kind === "document" ? "document" : "media";
-    const nativePickerStartedAt = getPerfNow();
-    suppressAttachMenuForFilePicker();
-    if (typeof window !== "undefined") {
-      window[SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG] = true;
-      window.__TEND_FILE_PICKER_OPENED_AT__ = nativePickerStartedAt;
-    }
-    pickerDiagnosticRef.current = {
-      active: true,
-      openedAt: nativePickerStartedAt,
-      kind: normalizedKind,
-    };
-    logUploadDiagnostic("native-picker-open", {
-      kind: normalizedKind,
-    });
-
-    let descriptors = [];
-    let preservePickerKindForFallback = false;
-    try {
-      const result = await pickerApi.open({ kind: normalizedKind });
-      const pickerResolvedAt = getPerfNow();
-      clearPendingPickerFocusShellTimeout();
-      descriptors = Array.isArray(result?.files) ? result.files : [];
-      const tokens = descriptors.map((item) => String(item?.token || "").trim()).filter(Boolean);
-      logUploadDiagnostic("native-picker-result", {
-        kind: normalizedKind,
-        canceled: Boolean(result?.canceled) || descriptors.length < 1,
-        selectedFileCount: descriptors.length,
-      }, pickerResolvedAt - nativePickerStartedAt);
-
-      if (result?.canceled || descriptors.length < 1 || tokens.length < 1) {
-        clearPendingPickerShellTimeout();
-        setPendingBatchSelection(null);
-        pickerDiagnosticRef.current = {
-          active: false,
-          openedAt: 0,
-          kind: "media",
-        };
-        attachPickerKindRef.current = "media";
-        return true;
-      }
-
-      const selectedFromDocumentPicker = normalizedKind === "document";
-      const allSelectedAreImages = descriptors.every((file) => String(file?.type || "").startsWith("image/"));
-      const shouldPreferSendAsDocuments = selectedFromDocumentPicker || !allSelectedAreImages;
-      const shouldUseInstantAttachmentSend = instantAttachmentSend && selectedFilesLengthRef.current < 1 && !messageEditState;
-      clearPendingPickerShellTimeout();
-      clearPendingPickerFocusShellTimeout();
-      if (shouldUseInstantAttachmentSend) {
-        onToggleBatchUploadSendAsDocuments(shouldPreferSendAsDocuments);
-      } else {
-        openPendingBatchSheetForFiles(descriptors, {
-          inputChangeStartedAt: pickerResolvedAt,
-          shouldPreferSendAsDocuments,
-          source: buildNativePickerQueueSource(normalizedKind),
-          pendingLogAction: "native-pending-selection-flushed",
-          skipQueue: true,
-        });
-      }
-
-      const readStartedAt = getPerfNow();
-      logUploadDiagnostic("native-picker-read-start", {
-        kind: normalizedKind,
-        selectedFileCount: descriptors.length,
-      });
-      let queuedFileCount = 0;
-      const queueSource = buildNativePickerQueueSource(normalizedKind);
-      const readTokens = descriptors.map((descriptor) => String(descriptor?.token || "").trim()).filter(Boolean);
-      let readyFiles = [];
-
-      if (readTokens.length) {
-        try {
-          const readResult = await pickerApi.readFiles({ tokens: readTokens });
-          readyFiles = (Array.isArray(readResult?.files) ? readResult.files : [])
-            .map(createFileFromNativePickerPayload)
-            .filter((file) => file instanceof File);
-          queuedFileCount = readyFiles.length;
-        } catch (readError) {
-          logUploadDiagnostic("native-picker-read-batch-error", {
-            kind: normalizedKind,
-            requestedFileCount: readTokens.length,
-            reason: String(readError?.message || readError || "unknown"),
-          }, getPerfNow() - readStartedAt);
-          readyFiles = [];
-        }
-      }
-
-      if (shouldUseInstantAttachmentSend) {
-        if (readyFiles.length) {
-          logUploadDiagnostic("native-picker-files-queued", {
-            kind: normalizedKind,
-            queuedFileCount,
-            selectedFileCount: descriptors.length,
-            batchFileCount: readyFiles.length,
-          }, getPerfNow() - readStartedAt);
-          const queueResult = onQueueFiles(readyFiles, {
-            preferSendAsDocuments: shouldPreferSendAsDocuments,
-            source: queueSource,
-          });
-          handleQueueFilesResult(queueResult);
-        } else {
-          setPendingBatchSelection(null);
-        }
-      }
-
-      logUploadDiagnostic("native-picker-read-finished", {
-        kind: normalizedKind,
-        selectedFileCount: queuedFileCount,
-        requestedFileCount: descriptors.length,
-      }, getPerfNow() - readStartedAt);
-
-      if (!shouldUseInstantAttachmentSend && readyFiles.length) {
-        logUploadDiagnostic("native-picker-files-queued", {
-          kind: normalizedKind,
-          queuedFileCount,
-          selectedFileCount: descriptors.length,
-          batchFileCount: readyFiles.length,
-        }, getPerfNow() - readStartedAt);
-        const queueResult = onQueueFiles(readyFiles, {
-          preferSendAsDocuments: shouldPreferSendAsDocuments,
-          source: queueSource,
-        });
-        handleQueueFilesResult(queueResult);
-      }
-
-      if (!queuedFileCount) {
-        setPendingBatchSelection(null);
-      }
-      return true;
-    } catch (error) {
-      console.error("Native attachment picker failed:", error);
-      const tokens = descriptors.map((item) => String(item?.token || "").trim()).filter(Boolean);
-      if (tokens.length && typeof pickerApi.releaseFiles === "function") {
-        pickerApi.releaseFiles({ tokens }).catch(() => {});
-      }
-      preservePickerKindForFallback = descriptors.length < 1;
-      if (String(error?.message || "").includes("No handler registered")) {
-        window[NATIVE_ATTACHMENT_PICKER_DISABLED_FLAG] = true;
-      }
-      logUploadDiagnostic("native-picker-fallback-to-input", {
-        kind: normalizedKind,
-        reason: String(error?.message || error || "unknown"),
-      });
-      clearPendingPickerShellTimeout();
-      clearPendingPickerFocusShellTimeout();
-      setPendingBatchSelection(null);
-      return descriptors.length > 0;
-    } finally {
-      clearPendingPickerFocusShellTimeout();
-      pickerDiagnosticRef.current = {
-        active: false,
-        openedAt: 0,
-        kind: "media",
-      };
-      attachPickerKindRef.current = preservePickerKindForFallback ? normalizedKind : "media";
-    }
   };
 
   const openAttachMenu = () => {
@@ -757,56 +179,6 @@ function TextChatComposer({
     messageComposerRef.current?.classList.add("message-composer--attach-menu-open");
   };
 
-  const openAttachFilePicker = async (inputRef) => {
-    if (uploadingFile) {
-      return;
-    }
-
-    if (shouldPreferNativeAttachmentPicker()) {
-      const nativePickerHandled = await openNativeAttachFilePicker(attachPickerKindRef.current);
-      if (nativePickerHandled) {
-        return;
-      }
-    }
-
-    suppressAttachMenuForFilePicker();
-    if (typeof window !== "undefined") {
-      window[SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG] = true;
-      window.__TEND_FILE_PICKER_OPENED_AT__ = getPerfNow();
-    }
-    pickerDiagnosticRef.current = {
-      active: true,
-      openedAt: getPerfNow(),
-      kind: attachPickerKindRef.current,
-    };
-    logUploadDiagnostic("picker-open", {
-      kind: attachPickerKindRef.current,
-    });
-    inputRef.current?.click();
-  };
-
-  const openMediaAttachFilePicker = () => {
-    if (uploadingFile) {
-      return;
-    }
-
-    attachPickerKindRef.current = "media";
-    void openAttachFilePicker(mediaFileInputRef);
-  };
-
-  const openDocumentAttachFilePicker = () => {
-    if (uploadingFile) {
-      return;
-    }
-
-    attachPickerKindRef.current = "document";
-    void openAttachFilePicker(documentFileInputRef);
-  };
-
-  useEffect(() => () => {
-    clearAttachMenuCloseTimeout();
-  }, []);
-
 
   const loadMoreEmojiPreviews = () => {
     setEmojiPreviewCount((previous) => Math.min(previous + 8, COMPOSER_EMOJI_OPTIONS.length));
@@ -820,7 +192,6 @@ function TextChatComposer({
   };
 
   const hasBatchUploadSheet = selectedFiles.length >= 1;
-  const shouldShowPendingBatchSheet = Boolean(pendingBatchSelection) && selectedFiles.length < 1;
   const hasSendPayload = Boolean(String(message || "").trim()) || selectedFiles.length > 0;
   const shouldShowSendButton = hasSendPayload && voiceRecordingState === "idle";
   const voiceButtonStateClass = voiceRecordingState !== "idle" ? `composer-tool--recording-${voiceRecordingState}` : "";
@@ -832,24 +203,6 @@ function TextChatComposer({
       onRequestScrollToLatest?.();
     }
     return onSend();
-  };
-  const handleDismissPendingBatchSelection = () => {
-    if (pendingBatchQueueFrameRef.current.length) {
-      const cancelFrame =
-        typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
-          ? window.cancelAnimationFrame.bind(window)
-          : window.clearTimeout.bind(window);
-      pendingBatchQueueFrameRef.current.forEach((handle) => {
-        if (handle?.kind === "timeout") {
-          window.clearTimeout(handle.id);
-          return;
-        }
-
-        cancelFrame(handle?.id ?? handle);
-      });
-      pendingBatchQueueFrameRef.current = [];
-    }
-    setPendingBatchSelection(null);
   };
 
   const requestCurrentLocation = async () => {
@@ -933,47 +286,6 @@ function TextChatComposer({
     return selectedFile?.kind === "image" ? "Изображение" : selectedFile?.kind === "video" ? "Видео" : "Файл";
   };
 
-  useEffect(() => {
-    if (!pendingBatchSelection || selectedFiles.length < 1) {
-      return undefined;
-    }
-
-    const expectedFileCount = Math.max(0, Number(pendingBatchSelection?.fileCount) || 0);
-    if (expectedFileCount > selectedFiles.length) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setPendingBatchSelection(null);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [pendingBatchSelection, selectedFiles.length]);
-
-  useEffect(() => () => {
-    clearPendingPickerShellTimeout();
-    clearPendingPickerFocusShellTimeout();
-    if (!pendingBatchQueueFrameRef.current.length) {
-      return;
-    }
-
-    const cancelFrame =
-      typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
-        ? window.cancelAnimationFrame.bind(window)
-        : window.clearTimeout.bind(window);
-    pendingBatchQueueFrameRef.current.forEach((handle) => {
-      if (handle?.kind === "timeout") {
-        window.clearTimeout(handle.id);
-        return;
-      }
-
-      cancelFrame(handle?.id ?? handle);
-    });
-    pendingBatchQueueFrameRef.current = [];
-  }, []);
-
   return (
     <div
       className={`input-area ${composerDropActive ? "input-area--drag-active" : ""}`}
@@ -994,7 +306,7 @@ function TextChatComposer({
             onFileChange={onFileChange}
             onSend={handleSendMessage}
             pendingSelection={pendingBatchSelection}
-            onDismissPendingSelection={handleDismissPendingBatchSelection}
+            onDismissPendingSelection={dismissPendingBatchSelection}
           />
         ) : null}
 

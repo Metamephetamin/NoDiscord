@@ -194,8 +194,25 @@ export default function TextChatView(props) {
     onLoadOlderHistory,
   });
   const stableScrollToMessage = useStableCallback(scrollToMessage);
+  const latestOwnMessageSignatureRef = useRef("");
+  const scheduleAggressiveScrollToLatest = useStableCallback(() => {
+    forceScrollToLatest("auto");
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      forceScrollToLatest("auto");
+    });
+    window.setTimeout(() => {
+      forceScrollToLatest("auto");
+    }, 60);
+    window.setTimeout(() => {
+      forceScrollToLatest("auto");
+    }, 180);
+  });
   const stableRequestScrollToLatest = useStableCallback(() => {
-    scrollToLatest("auto");
+    scheduleAggressiveScrollToLatest();
   });
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
@@ -211,6 +228,47 @@ export default function TextChatView(props) {
       selectedFileCount: selectedFiles.length,
     });
   }, [selectedFiles]);
+
+  useEffect(() => {
+    latestOwnMessageSignatureRef.current = "";
+  }, [scopedChannelId]);
+
+  useEffect(() => {
+    const latestMessage = Array.isArray(messages) && messages.length ? messages[messages.length - 1] : null;
+    const latestAuthorId = String(
+      latestMessage?.authorUserId
+      || latestMessage?.userId
+      || latestMessage?.senderId
+      || latestMessage?.fromUserId
+      || ""
+    );
+    const latestMessageId = String(latestMessage?.id || "");
+    const nextSignature = latestMessageId
+      ? `${scopedChannelId}:${latestMessageId}`
+      : "";
+
+    if (!nextSignature) {
+      latestOwnMessageSignatureRef.current = "";
+      return;
+    }
+
+    if (!latestOwnMessageSignatureRef.current) {
+      latestOwnMessageSignatureRef.current = nextSignature;
+      return;
+    }
+
+    if (latestOwnMessageSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    latestOwnMessageSignatureRef.current = nextSignature;
+
+    if (!currentUserId || latestAuthorId !== currentUserId) {
+      return;
+    }
+
+    scheduleAggressiveScrollToLatest();
+  }, [currentUserId, messages, scopedChannelId, scheduleAggressiveScrollToLatest]);
 
   useEffect(() => {
     if (typeof onNavigationIndexChange !== "function") {

@@ -61,7 +61,7 @@ Set these repository secrets:
 
 Recommended values for the current production server:
 
-- `DEPLOY_HOST=85.198.68.187`
+- `DEPLOY_HOST=195.93.180.236`
 - `DEPLOY_USER=root`
 - `DEPLOY_PORT=22`
 

@@ -5,7 +5,6 @@ import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
-  createPendingUploadThumbnail,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
@@ -53,8 +52,6 @@ export default function useTextChatSendActions({
 }) {
   const pendingUploadPatchQueueRef = useRef(new Map());
   const pendingUploadPatchFrameRef = useRef(0);
-  const pendingUploadPreviewQueueRef = useRef(new Map());
-  const pendingUploadPreviewFrameRef = useRef(0);
   const activeUploadAbortControllersRef = useRef(new Map());
   const cancelledPendingUploadIdsRef = useRef(new Set());
   const uploadProgressSnapshotRef = useRef(new Map());
@@ -97,84 +94,6 @@ export default function useTextChatSendActions({
     }
 
     return true;
-  };
-
-  const hydratePendingUploadPreviews = (uploads) => {
-    const queuedUploads = Array.isArray(uploads) ? uploads.filter((item) => item?.id) : [];
-    if (!queuedUploads.length) {
-      return;
-    }
-
-    queuedUploads.forEach((upload) => {
-      pendingUploadPreviewQueueRef.current.set(String(upload.id), upload);
-    });
-
-    if (pendingUploadPreviewFrameRef.current) {
-      return;
-    }
-
-    const scheduleFrame =
-      typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
-        ? window.requestAnimationFrame.bind(window)
-        : (callback) => setTimeout(callback, 16);
-
-    pendingUploadPreviewFrameRef.current = scheduleFrame(() => {
-      pendingUploadPreviewFrameRef.current = 0;
-      const nextQueuedUploads = Array.from(pendingUploadPreviewQueueRef.current.values())
-        .filter((upload) => upload?.kind === "image" && !upload?.thumbnailUrl);
-      pendingUploadPreviewQueueRef.current.clear();
-      if (!nextQueuedUploads.length) {
-        return;
-      }
-
-      Promise.all(nextQueuedUploads.map(async (upload) => ({
-        uploadId: String(upload.id || ""),
-        thumbnailUrl: await createPendingUploadThumbnail(upload).catch(() => ""),
-      }))).then((thumbnailResults) => {
-        const thumbnailUrlMap = new Map(
-          thumbnailResults
-            .filter((entry) => entry?.uploadId && entry?.thumbnailUrl)
-            .map((entry) => [entry.uploadId, entry.thumbnailUrl])
-        );
-
-        if (!thumbnailUrlMap.size) {
-          return;
-        }
-
-        setSelectedFiles((previous) => {
-          const activeUploadIds = new Set(previous.map((item) => String(item?.id || "")).filter(Boolean));
-          let didChange = false;
-
-          const nextUploads = previous.map((item) => {
-            const uploadId = String(item?.id || "");
-            const nextThumbnailUrl = thumbnailUrlMap.get(uploadId);
-            if (!nextThumbnailUrl || item?.thumbnailUrl) {
-              return item;
-            }
-
-            didChange = true;
-            return {
-              ...item,
-              thumbnailUrl: nextThumbnailUrl,
-            };
-          });
-
-          thumbnailUrlMap.forEach((thumbnailUrl, uploadId) => {
-            if (activeUploadIds.has(uploadId)) {
-              return;
-            }
-
-            try {
-              URL.revokeObjectURL(thumbnailUrl);
-            } catch {
-              // Ignore revocation failures for thumbnails that were never mounted.
-            }
-          });
-
-          return didChange ? nextUploads : previous;
-        });
-      });
-    });
   };
 
   const flushPendingUploadPatches = () => {
@@ -252,16 +171,7 @@ export default function useTextChatSendActions({
       cancelFrame(pendingUploadPatchFrameRef.current);
       pendingUploadPatchFrameRef.current = 0;
     }
-    if (pendingUploadPreviewFrameRef.current) {
-      const cancelFrame =
-        typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
-          ? window.cancelAnimationFrame.bind(window)
-          : window.clearTimeout.bind(window);
-      cancelFrame(pendingUploadPreviewFrameRef.current);
-      pendingUploadPreviewFrameRef.current = 0;
-    }
     pendingUploadPatchQueueRef.current.clear();
-    pendingUploadPreviewQueueRef.current.clear();
     activeUploadAbortControllersRef.current.clear();
     cancelledPendingUploadIdsRef.current.clear();
     uploadProgressSnapshotRef.current.clear();
@@ -302,7 +212,6 @@ export default function useTextChatSendActions({
         return [...previous, ...nextUploads];
       });
     });
-    hydratePendingUploadPreviews(nextUploads);
     return true;
   };
 
