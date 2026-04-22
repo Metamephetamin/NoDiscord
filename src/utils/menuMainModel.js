@@ -750,13 +750,16 @@ export const normalizeFriendRequest = (request) => ({
   createdAt: String(request?.created_at || request?.createdAt || ""),
   sender: normalizeFriend(request?.sender || {}),
 });
+const UI_SOUND_ASSET_VERSION = "2026-04-22-voice-refresh-1";
+const withUiSoundVersion = (path) => resolveStaticAssetUrl(`${path}?v=${UI_SOUND_ASSET_VERSION}`);
+
 export const UI_SOUND_PATHS = {
-  join: resolveStaticAssetUrl("/sounds/tend-voice-join.wav"),
-  leave: resolveStaticAssetUrl("/sounds/tend-voice-leave.wav"),
-  shareStart: resolveStaticAssetUrl("/sounds/screen-share-start.wav"),
-  shareStop: resolveStaticAssetUrl("/sounds/screen-share-stop.wav"),
-  mute: resolveStaticAssetUrl("/sounds/tend-mute.wav"),
-  unmute: resolveStaticAssetUrl("/sounds/tend-unmute.wav"),
+  join: withUiSoundVersion("/sounds/tend-voice-join.wav"),
+  leave: withUiSoundVersion("/sounds/tend-voice-leave.wav"),
+  shareStart: withUiSoundVersion("/sounds/screen-share-start.wav"),
+  shareStop: withUiSoundVersion("/sounds/screen-share-stop.wav"),
+  mute: withUiSoundVersion("/sounds/tend-mute.wav"),
+  unmute: withUiSoundVersion("/sounds/tend-unmute.wav"),
 };
 export const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 export const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone-svgrepo-com.svg");
