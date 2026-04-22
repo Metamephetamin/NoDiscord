@@ -184,10 +184,10 @@ jobs:
           else
             echo "DEPLOY_USER matches expected root: no"
           fi
-          if [ "$DEPLOY_HOST" = "195.93.180.236" ]; then
-            echo "DEPLOY_HOST matches expected 195.93.180.236: yes"
+          if [ "$DEPLOY_HOST" = "185.233.193.162" ]; then
+            echo "DEPLOY_HOST matches expected 185.233.193.162: yes"
           else
-            echo "DEPLOY_HOST matches expected 195.93.180.236: no"
+            echo "DEPLOY_HOST matches expected 185.233.193.162: no"
           fi
 
       - name: Debug SSH preflight
@@ -365,8 +365,9 @@ jobs:
         shell: bash
         env:
           HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          HEALTHCHECK="${HEALTHCHECK_URL:-https://tendsec.ru}"
+          HEALTHCHECK="${HEALTHCHECK_URL:-http://${DEPLOY_HOST}}"
           API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
           CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
           VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"

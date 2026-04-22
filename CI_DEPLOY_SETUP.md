@@ -61,9 +61,9 @@ Set these repository secrets:
 
 Recommended values for the current production server:
 
-- `DEPLOY_HOST=195.93.180.236`
+- `DEPLOY_HOST=185.233.193.162`
 - `DEPLOY_USER=root`
-- `DEPLOY_PORT=22`
+- `DEPLOY_PORT=2222`
 
 `DEPLOY_SSH_KEY` must be the private key content for a key that is already allowed on the server in `~/.ssh/authorized_keys`.
 
@@ -87,7 +87,7 @@ Only needed if you want to override the defaults:
 - `BACKEND_SERVICE_NAME` default `nodiscord-backend.service`
 - `FRONTEND_DEPLOY_OWNER` default `www-data:www-data`
 - `BACKEND_DEPLOY_OWNER` default `nodiscord:nodiscord`
-- `HEALTHCHECK_URL` default `https://tendsec.ru`
+- `HEALTHCHECK_URL` default `http://185.233.193.162`
 - `LANDING_DEPLOY_PATH` default `/var/www/tend-land/current`
 - `LANDING_DEPLOY_OWNER` default `www-data:www-data`
 - `LANDING_HEALTHCHECK_URL` default `https://land.tendsec.ru`
