@@ -152,8 +152,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
 
       - name: Add deploy host to known_hosts
         if: steps.validate.outputs.ready == 'true'
@@ -178,7 +178,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           echo "Resolved deploy target: ${DEPLOY_USER}@${DEPLOY_HOST}:${PORT}"
           echo "Deploy key fingerprint:"
-          ssh-keygen -lf ~/.ssh/deploy_key
+          ssh-keygen -lf "$HOME/.ssh/deploy_key"
 
       - name: Sync frontend artifact to server
         if: steps.validate.outputs.ready == 'true'
@@ -198,7 +198,7 @@ jobs:
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_FRONTEND_ARCHIVE="$TEMP_ROOT/frontend-dist.tar.gz"
           FRONTEND_ARCHIVE="./frontend-package/frontend-dist.tar.gz"
-          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Frontend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH"
           if [ ! -f "$FRONTEND_ARCHIVE" ]; then
@@ -253,7 +253,7 @@ jobs:
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
           TEMP_ARCHIVE_FILE="$TEMP_ROOT/backend-publish.tar.gz"
           BACKEND_ARCHIVE="./backend-package/backend-publish.tar.gz"
-          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Backend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_PATH"
           if [ ! -f "$BACKEND_ARCHIVE" ]; then
@@ -316,7 +316,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Restarting backend service and reloading nginx"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 10m bash -lc '
