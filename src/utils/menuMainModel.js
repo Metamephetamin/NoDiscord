@@ -743,9 +743,12 @@ export const normalizeFriendRequest = (request) => ({
   sender: normalizeFriend(request?.sender || {}),
 });
 export const UI_SOUND_PATHS = {
-  join: resolveStaticAssetUrl("/sounds/voice-input.wav"),
-  leave: resolveStaticAssetUrl("/sounds/voice-output.wav"),
-  share: resolveStaticAssetUrl("/sounds/screen-share.wav"),
+  join: resolveStaticAssetUrl("/sounds/tend-voice-join.wav"),
+  leave: resolveStaticAssetUrl("/sounds/tend-voice-leave.wav"),
+  shareStart: resolveStaticAssetUrl("/sounds/screen-share-start.wav"),
+  shareStop: resolveStaticAssetUrl("/sounds/screen-share-stop.wav"),
+  mute: resolveStaticAssetUrl("/sounds/tend-mute.wav"),
+  unmute: resolveStaticAssetUrl("/sounds/tend-unmute.wav"),
 };
 export const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 export const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone-svgrepo-com.svg");

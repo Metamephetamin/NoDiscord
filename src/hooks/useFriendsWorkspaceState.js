@@ -7,6 +7,7 @@ import {
 } from "../utils/auth";
 import {
   getDisplayName,
+  normalizeConversationTarget,
   normalizeFriend,
   normalizeFriendRequest,
   parseFriendSearchInput,
@@ -37,6 +38,9 @@ export default function useFriendsWorkspaceState({
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
   const [friendRequestsError, setFriendRequestsError] = useState("");
   const [friendRequestActionId, setFriendRequestActionId] = useState(0);
+  const [conversations, setConversations] = useState([]);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [conversationsError, setConversationsError] = useState("");
 
   const latestSearchRef = useRef("");
 
@@ -128,6 +132,35 @@ export default function useFriendsWorkspaceState({
       setFriendRequestsError(error.message || "Не удалось загрузить заявки в друзья.");
     } finally {
       setFriendRequestsLoading(false);
+    }
+  };
+
+  const loadConversations = async () => {
+    try {
+      setConversationsLoading(true);
+      setConversationsError("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations`, { method: "GET" });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить беседы."));
+      }
+
+      setConversations(
+        Array.isArray(data)
+          ? data
+              .map(normalizeConversationTarget)
+              .filter((conversation) => conversation.conversationId && conversation.directChannelId)
+              .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+          : []
+      );
+    } catch (error) {
+      console.error("Ошибка загрузки бесед:", error);
+      setConversations([]);
+      setConversationsError(error.message || "Не удалось загрузить беседы.");
+    } finally {
+      setConversationsLoading(false);
     }
   };
 
@@ -281,12 +314,14 @@ export default function useFriendsWorkspaceState({
   const resetFriendsState = () => {
     setFriends([]);
     setIncomingFriendRequests([]);
+    setConversations([]);
     setFriendEmail("");
     setFriendLookupResults([]);
     setFriendLookupPerformed(false);
     setFriendsError("");
     setFriendActionStatus("");
     setFriendRequestsError("");
+    setConversationsError("");
   };
 
   const updateFriendProfile = (updatedUserId, updater) => {
@@ -306,6 +341,7 @@ export default function useFriendsWorkspaceState({
 
     loadFriends().catch(() => {});
     loadFriendRequests().catch(() => {});
+    loadConversations().catch(() => {});
   }, [user?.id, user?.email]);
 
   useEffect(() => {
@@ -319,6 +355,9 @@ export default function useFriendsWorkspaceState({
     const handleFriendRequestsUpdated = () => {
       loadFriendRequests().catch(() => {});
       rerunFriendSearch();
+    };
+    const handleConversationsUpdated = () => {
+      loadConversations().catch(() => {});
     };
     const handleFriendPresenceUpdated = (payload) => {
       const updatedUserId = String(payload?.userId || payload?.user_id || "").trim();
@@ -357,10 +396,12 @@ export default function useFriendsWorkspaceState({
 
       loadFriends().catch(() => {});
       loadFriendRequests().catch(() => {});
+      loadConversations().catch(() => {});
     };
 
     chatConnection.on("FriendListUpdated", handleFriendListUpdated);
     chatConnection.on("FriendRequestsUpdated", handleFriendRequestsUpdated);
+    chatConnection.on("ConversationsUpdated", handleConversationsUpdated);
     chatConnection.on("FriendPresenceUpdated", handleFriendPresenceUpdated);
     window.addEventListener("focus", handleWindowFocus);
 
@@ -371,11 +412,13 @@ export default function useFriendsWorkspaceState({
 
       loadFriends().catch(() => {});
       loadFriendRequests().catch(() => {});
+      loadConversations().catch(() => {});
     }, 45000);
 
     return () => {
       chatConnection.off("FriendListUpdated", handleFriendListUpdated);
       chatConnection.off("FriendRequestsUpdated", handleFriendRequestsUpdated);
+      chatConnection.off("ConversationsUpdated", handleConversationsUpdated);
       chatConnection.off("FriendPresenceUpdated", handleFriendPresenceUpdated);
       window.removeEventListener("focus", handleWindowFocus);
       window.clearInterval(intervalId);
@@ -424,12 +467,16 @@ export default function useFriendsWorkspaceState({
     friendRequestsLoading,
     friendRequestsError,
     friendRequestActionId,
+    conversations,
+    conversationsLoading,
+    conversationsError,
     setFriends,
     setFriendEmail: setFriendSearchValue,
     setFriendsError,
     setFriendActionStatus,
     refreshFriends: loadFriends,
     refreshFriendRequests: loadFriendRequests,
+    refreshConversations: loadConversations,
     rerunFriendSearch,
     updateFriendProfile,
     resetFriendsState,

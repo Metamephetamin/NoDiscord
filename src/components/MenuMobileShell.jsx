@@ -3,6 +3,7 @@ export default function MenuMobileShell({
   mobileSection,
   mobileServersPane,
   currentDirectFriend,
+  currentConversationTarget,
   totalServerUnreadCount,
   totalFriendsAttentionCount,
   onBack,
@@ -53,7 +54,7 @@ export default function MenuMobileShell({
           renderMobileProfileScreen()
         ) : mobileSection === "friends" ? (
           <div className="mobile-shell__workspace mobile-shell__workspace--friends">
-            {currentDirectFriend ? renderMobileDirectChat() : renderFriendsMain()}
+            {currentDirectFriend || currentConversationTarget ? renderMobileDirectChat() : renderFriendsMain()}
           </div>
         ) : (
           <div className="mobile-shell__panel mobile-shell__panel--servers">

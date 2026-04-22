@@ -13,6 +13,7 @@ export const FriendsSidebar = ({
   incomingFriendRequestCount,
   filteredFriends,
   activeDirectFriendId,
+  activeConversationId,
   directUnreadCounts,
   chatDraftPresence,
   currentUserId,
@@ -46,7 +47,7 @@ export const FriendsSidebar = ({
             <button
               key={item.id}
               type="button"
-              className={`friends-nav__item ${item.id === "friends" && friendsPageSection === "friends" && !activeDirectFriendId ? "friends-nav__item--active" : ""}`}
+              className={`friends-nav__item ${item.id === "friends" && friendsPageSection === "friends" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
               onClick={() => {
                 if (item.id === "friends") {
                   onOpenFriendsWorkspace();
@@ -65,7 +66,7 @@ export const FriendsSidebar = ({
 
           <button
             type="button"
-            className={`friends-nav__item ${friendsPageSection === "add" && !activeDirectFriendId ? "friends-nav__item--active friends-nav__item--accent" : ""}`}
+            className={`friends-nav__item ${friendsPageSection === "add" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active friends-nav__item--accent" : ""}`}
             onClick={() => {
               onOpenFriendsWorkspace();
               onResetDirect();
@@ -75,6 +76,18 @@ export const FriendsSidebar = ({
             <span className="friends-nav__icon">+</span>
             <span>Добавить в друзья</span>
             {incomingFriendRequestCount > 0 ? <span className="friends-nav__badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
+          </button>
+          <button
+            type="button"
+            className={`friends-nav__item ${friendsPageSection === "conversations" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
+            onClick={() => {
+              onOpenFriendsWorkspace();
+              onResetDirect();
+              onSetFriendsSection("conversations");
+            }}
+          >
+            <span className="friends-nav__icon">#</span>
+            <span>Беседы</span>
           </button>
         </div>
 
@@ -138,7 +151,10 @@ export const FriendsSidebar = ({
 export const FriendsMain = ({
   user,
   currentDirectFriend,
+  currentConversationTarget,
+  activeConversationId,
   currentDirectChannelId,
+  currentConversationChannelId,
   directConversationTargets,
   directSearchQuery,
   textChatLocalStateVersion = 0,
@@ -158,9 +174,13 @@ export const FriendsMain = ({
   friendActionStatus,
   isAddingFriend,
   activeContacts,
+  conversations,
+  conversationsLoading,
+  conversationsError,
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
+  onOpenConversationChat,
   onStartDirectCall,
   onOpenDirectActions,
   onFriendRequestAction,
@@ -182,7 +202,7 @@ export const FriendsMain = ({
           <div className="friends-main__tabs">
             <button
               type="button"
-              className={`friends-main__tab ${friendsPageSection === "friends" && !currentDirectFriend ? "friends-main__tab--active" : ""}`}
+              className={`friends-main__tab ${friendsPageSection === "friends" && !currentDirectFriend && !activeConversationId ? "friends-main__tab--active" : ""}`}
               onClick={() => {
                 onResetDirect();
                 onSetFriendsSection("friends");
@@ -192,7 +212,7 @@ export const FriendsMain = ({
             </button>
             <button
               type="button"
-              className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend ? "friends-main__tab--accent" : ""}`}
+              className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend && !activeConversationId ? "friends-main__tab--accent" : ""}`}
               onClick={() => {
                 onResetDirect();
                 onSetFriendsSection("add");
@@ -201,18 +221,32 @@ export const FriendsMain = ({
               <span>Добавить в друзья</span>
               {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
             </button>
+            <button
+              type="button"
+              className={`friends-main__tab ${friendsPageSection === "conversations" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
+              onClick={() => {
+                onResetDirect();
+                onSetFriendsSection("conversations");
+              }}
+            >
+              Беседы
+            </button>
           </div>
         </div>
 
-        {currentDirectFriend ? (
+        {currentDirectFriend || currentConversationTarget ? (
           <div className="friends-main__chat">
             <div className="chat__topbar friends-direct-chat-topbar">
               <div className="chat__topbar-title friends-direct-chat-topbar__title">
                 <div className="chat__topbar-copy">
-                  <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>
-                    {getDisplayName(currentDirectFriend)}
+                  <strong className={currentDirectFriend && isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>
+                    {currentConversationTarget ? currentConversationTarget.title : getDisplayName(currentDirectFriend)}
                   </strong>
-                  <span>{formatUserPresenceStatus(currentDirectFriend)}</span>
+                  <span>
+                    {currentConversationTarget
+                      ? `${Number(currentConversationTarget.memberCount || currentConversationTarget.members?.length || 0)} участников`
+                      : formatUserPresenceStatus(currentDirectFriend)}
+                  </span>
                 </div>
               </div>
 
@@ -228,30 +262,34 @@ export const FriendsMain = ({
                   />
                 </label>
 
-                <button
-                  type="button"
-                  className="chat__topbar-icon"
-                  onClick={() => onStartDirectCall?.(currentDirectFriend.id)}
-                  aria-label="Позвонить"
-                  title="Позвонить"
-                >
-                  {phoneIcon ? <img src={phoneIcon} alt="" /> : <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">📞</span>}
-                </button>
+                {!currentConversationTarget ? (
+                  <button
+                    type="button"
+                    className="chat__topbar-icon"
+                    onClick={() => onStartDirectCall?.(currentDirectFriend.id)}
+                    aria-label="Позвонить"
+                    title="Позвонить"
+                  >
+                    {phoneIcon ? <img src={phoneIcon} alt="" /> : <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">📞</span>}
+                  </button>
+                ) : null}
 
-                <button
-                  type="button"
-                  className="chat__topbar-icon"
-                  onClick={(event) => onOpenDirectActions?.(event, currentDirectFriend)}
-                  aria-label="Ещё"
-                  title="Ещё"
-                >
-                  <span className="friends-direct-chat-topbar__glyph friends-direct-chat-topbar__glyph--dots" aria-hidden="true">⋮</span>
-                </button>
+                {!currentConversationTarget ? (
+                  <button
+                    type="button"
+                    className="chat__topbar-icon"
+                    onClick={(event) => onOpenDirectActions?.(event, currentDirectFriend)}
+                    aria-label="Ещё"
+                    title="Ещё"
+                  >
+                    <span className="friends-direct-chat-topbar__glyph friends-direct-chat-topbar__glyph--dots" aria-hidden="true">⋮</span>
+                  </button>
+                ) : null}
               </div>
             </div>
 
             <TextChat
-              resolvedChannelId={currentDirectChannelId}
+              resolvedChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}
               localMessageStateVersion={textChatLocalStateVersion}
               user={user}
               searchQuery={directSearchQuery}
@@ -285,6 +323,46 @@ export const FriendsMain = ({
               ) : (
                 <div className="friends-panel__empty">У вас пока нет друзей. Перейдите во вкладку добавления и найдите пользователя.</div>
               )}
+            </div>
+          </div>
+        ) : friendsPageSection === "conversations" ? (
+          <div className="friends-main__content">
+            <div className="friends-hero">
+              <h1>Беседы</h1>
+              <p>Здесь находятся групповые чаты, куда можно добавлять друзей и общаться в отдельном канале.</p>
+              {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
+              {conversationsLoading ? <div className="friends-panel__empty">Загружаем беседы...</div> : null}
+              {!conversationsLoading && conversations.length ? (
+                <div className="friends-results">
+                  {conversations.map((conversation) => (
+                    <div key={conversation.conversationId || conversation.id} className="friends-results__item">
+                      <div className="friends-results__identity">
+                        <AnimatedAvatar
+                          className="friends-results__avatar"
+                          src={conversation.avatar || ""}
+                          alt={conversation.title || "Беседа"}
+                          loading="eager"
+                          decoding="sync"
+                        />
+                        <div className="friends-results__meta">
+                          <strong>{conversation.title || "Новая беседа"}</strong>
+                          <span>{`${Number(conversation.memberCount || conversation.members?.length || 0)} участников`}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="friends-results__action"
+                        onClick={() => onOpenConversationChat(conversation.conversationId || conversation.id)}
+                      >
+                        Открыть чат
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {!conversationsLoading && !conversationsError && !conversations.length ? (
+                <div className="friends-panel__empty">Пока нет ни одной беседы.</div>
+              ) : null}
             </div>
           </div>
         ) : (

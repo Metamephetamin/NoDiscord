@@ -1253,8 +1253,13 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
+  const useSevenTileLayout = (
+    visualAttachments.length === 7
+    && !fileAttachments.length
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
+  );
   const useWideTopMosaicLayout = (
-    visualAttachments.length >= 7
+    visualAttachments.length >= 8
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
@@ -1301,6 +1306,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
               featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
             } ${useFiveTileLayout ? "message-attachment-grid--five-tile" : ""
             } ${useSixTileLayout ? "message-attachment-grid--six-tile" : ""
+            } ${useSevenTileLayout ? "message-attachment-grid--seven-tile" : ""
             } ${useWideTopMosaicLayout ? "message-attachment-grid--wide-top-mosaic" : ""
             }`}
           >

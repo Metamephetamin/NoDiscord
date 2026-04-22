@@ -3,7 +3,9 @@ export default function useMenuMobileNavigation({
   setMobileSection,
   workspaceMode,
   currentDirectFriend,
+  currentConversationTarget,
   setActiveDirectFriendId,
+  setActiveConversationId,
   setFriendsPageSection,
   isLocalSharePreviewVisible,
   setIsLocalSharePreviewVisible,
@@ -39,9 +41,10 @@ export default function useMenuMobileNavigation({
       return;
     }
 
-    if (mobileSection === "friends" && currentDirectFriend) {
+    if (mobileSection === "friends" && (currentDirectFriend || currentConversationTarget)) {
       setActiveDirectFriendId("");
-      setFriendsPageSection("friends");
+      setActiveConversationId("");
+      setFriendsPageSection(currentConversationTarget ? "conversations" : "friends");
       return;
     }
 
@@ -90,17 +93,44 @@ export default function useMenuMobileNavigation({
       };
     }
 
+    if (mobileSection === "friends" && currentConversationTarget) {
+      return {
+        title: currentConversationTarget.title || "Беседа",
+        subtitle: `${Number(currentConversationTarget.memberCount || currentConversationTarget.members?.length || 0)} участников`,
+        badge: 0,
+        canGoBack: true,
+        actionLabel: "Беседы",
+        onAction: () => {
+          setActiveConversationId("");
+          setFriendsPageSection("conversations");
+        },
+      };
+    }
+
     if (mobileSection === "friends") {
       return {
         title: "Личные сообщения",
-        subtitle: friendsPageSection === "add" ? "Поиск и добавление друзей" : `${friends.length} контактов`,
+        subtitle: friendsPageSection === "add"
+          ? "Поиск и добавление друзей"
+          : friendsPageSection === "conversations"
+            ? "Групповые чаты"
+            : `${friends.length} контактов`,
         badge: friendsPageSection === "add" ? incomingFriendRequestCount : totalFriendsAttentionCount,
         canGoBack: false,
-        actionLabel: friendsPageSection === "add" ? "Друзья" : "Добавить",
+        actionLabel: friendsPageSection === "add" ? "Друзья" : friendsPageSection === "conversations" ? "Добавить" : "Беседы",
         actionBadge: friendsPageSection === "add" ? 0 : incomingFriendRequestCount,
         onAction: () => {
           setActiveDirectFriendId("");
-          setFriendsPageSection((previousSection) => (previousSection === "add" ? "friends" : "add"));
+          setActiveConversationId("");
+          setFriendsPageSection((previousSection) => {
+            if (previousSection === "add") {
+              return "friends";
+            }
+            if (previousSection === "friends") {
+              return "conversations";
+            }
+            return "add";
+          });
         },
       };
     }

@@ -10,7 +10,9 @@ export default function MenuMainMobileLayout({
   setMobileSection,
   workspaceMode,
   currentDirectFriend,
+  currentConversationTarget,
   setActiveDirectFriendId,
+  setActiveConversationId,
   setFriendsPageSection,
   isLocalSharePreviewVisible,
   setIsLocalSharePreviewVisible,
@@ -52,7 +54,9 @@ export default function MenuMainMobileLayout({
     setMobileSection,
     workspaceMode,
     currentDirectFriend,
+    currentConversationTarget,
     setActiveDirectFriendId,
+    setActiveConversationId,
     setFriendsPageSection,
     isLocalSharePreviewVisible,
     setIsLocalSharePreviewVisible,
@@ -89,6 +93,7 @@ export default function MenuMainMobileLayout({
       mobileSection={mobileSection}
       mobileServersPane={mobileServersPane}
       currentDirectFriend={currentDirectFriend}
+      currentConversationTarget={currentConversationTarget}
       totalServerUnreadCount={totalServerUnreadCount}
       totalFriendsAttentionCount={totalFriendsAttentionCount}
       onBack={handleMobileBack}

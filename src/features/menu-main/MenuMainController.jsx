@@ -198,7 +198,8 @@ const readWorkspaceStateFromStorageKey = (storageKey) => {
     return {
       workspaceMode: parsedValue.workspaceMode === "friends" ? "friends" : parsedValue.workspaceMode === "servers" ? "servers" : "",
       activeDirectFriendId: String(parsedValue.activeDirectFriendId || ""),
-      friendsPageSection: parsedValue.friendsPageSection === "add" ? "add" : "friends",
+      activeConversationId: String(parsedValue.activeConversationId || ""),
+      friendsPageSection: ["friends", "add", "conversations"].includes(parsedValue.friendsPageSection) ? parsedValue.friendsPageSection : "friends",
       activeServerId: String(parsedValue.activeServerId || ""),
       currentTextChannelId: String(parsedValue.currentTextChannelId || ""),
       desktopServerPane: parsedValue.desktopServerPane === "voice" ? "voice" : "text",
@@ -231,7 +232,8 @@ const writeWorkspaceStateToStorageKey = (storageKey, state) => {
     window.localStorage.setItem(storageKey, JSON.stringify({
       workspaceMode: state?.workspaceMode === "friends" ? "friends" : "servers",
       activeDirectFriendId: String(state?.activeDirectFriendId || ""),
-      friendsPageSection: state?.friendsPageSection === "add" ? "add" : "friends",
+      activeConversationId: String(state?.activeConversationId || ""),
+      friendsPageSection: ["friends", "add", "conversations"].includes(state?.friendsPageSection) ? state.friendsPageSection : "friends",
       activeServerId: String(state?.activeServerId || ""),
       currentTextChannelId: String(state?.currentTextChannelId || ""),
       desktopServerPane: state?.desktopServerPane === "voice" ? "voice" : "text",
@@ -570,6 +572,7 @@ export default function MenuMain({
   const [textChatLocalStateVersion, setTextChatLocalStateVersion] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState(() => readWorkspaceState(user).workspaceMode || "servers");
   const [friendsPageSection, setFriendsPageSection] = useState(() => readWorkspaceState(user).friendsPageSection || "friends");
+  const [activeConversationId, setActiveConversationId] = useState(() => readWorkspaceState(user).activeConversationId || "");
   const [friendsSidebarQuery, setFriendsSidebarQuery] = useState("");
   const {
     friends,
@@ -584,12 +587,16 @@ export default function MenuMain({
     friendRequestsLoading,
     friendRequestsError,
     friendRequestActionId,
+    conversations,
+    conversationsLoading,
+    conversationsError,
     setFriends,
     setFriendEmail,
     setFriendsError,
     setFriendActionStatus,
     refreshFriends,
     refreshFriendRequests,
+    refreshConversations,
     rerunFriendSearch,
     updateFriendProfile,
     resetFriendsState,
@@ -668,7 +675,9 @@ export default function MenuMain({
   const voiceClientRef = useRef(null);
   const previousVoiceChannelRef = useRef(null);
   const voiceTransitionSoundTimeoutRef = useRef(null);
-  const previousScreenShareRef = useRef(false);
+  const previousMicMutedRef = useRef(null);
+  const previousVoiceParticipantIdsRef = useRef({ channelId: "", participantIds: [] });
+  const previousLiveVoiceUserIdsRef = useRef({ channelId: "", userIds: [] });
   const joinedDirectChannelsRef = useRef(new Set());
   const joinedServerNotificationChannelsRef = useRef(new Set());
   const hasBoundChatReconnectHandlerRef = useRef(false);
@@ -828,6 +837,10 @@ export default function MenuMain({
     () => [selfDirectEntry, ...friends].filter(Boolean),
     [friends, selfDirectEntry]
   );
+  const conversationTargets = useMemo(
+    () => conversations.filter(Boolean),
+    [conversations]
+  );
   const serverSidebarIcons = useMemo(() => ({
     pencil: PENCIL_ICON_URL,
     microphone: MICROPHONE_ICON_URL,
@@ -846,12 +859,27 @@ export default function MenuMain({
     () => directConversationTargets.find((friend) => String(friend.id) === String(activeDirectFriendId)) || null,
     [directConversationTargets, activeDirectFriendId]
   );
+  const currentConversationTarget = useMemo(
+    () => conversationTargets.find((conversation) => String(conversation.conversationId || conversation.id) === String(activeConversationId)) || null,
+    [conversationTargets, activeConversationId]
+  );
   const currentDirectChannelId = useMemo(
     () => currentDirectFriend?.directChannelId || buildDirectMessageChannelId(currentUserId, currentDirectFriend?.id),
     [currentDirectFriend?.directChannelId, currentDirectFriend?.id, currentUserId]
   );
+  const currentConversationChannelId = useMemo(
+    () => String(currentConversationTarget?.directChannelId || ""),
+    [currentConversationTarget?.directChannelId]
+  );
   const resetActiveDirectFriend = useCallback(() => {
     setActiveDirectFriendId("");
+  }, []);
+  const resetActiveConversation = useCallback(() => {
+    setActiveConversationId("");
+  }, []);
+  const resetActiveFriendWorkspaceSelection = useCallback(() => {
+    setActiveDirectFriendId("");
+    setActiveConversationId("");
   }, []);
   const closeSelectedStream = useCallback(() => {
     setSelectedStreamUserId(null);
@@ -965,6 +993,7 @@ export default function MenuMain({
     activeServerId: String(activeServerId || ""),
     currentTextChannelId: String(currentTextChannelId || ""),
     activeDirectFriendId: String(activeDirectFriendId || ""),
+    activeConversationId: String(activeConversationId || ""),
     desktopServerPane: String(desktopServerPane || "text"),
     selectedStreamUserId: selectedStreamUserId ? String(selectedStreamUserId) : "",
     mobileSection: String(mobileSection || "servers"),
@@ -979,6 +1008,7 @@ export default function MenuMain({
     setActiveServerId(String(snapshot.activeServerId || ""));
     setCurrentTextChannelId(String(snapshot.currentTextChannelId || ""));
     setActiveDirectFriendId(String(snapshot.activeDirectFriendId || ""));
+    setActiveConversationId(String(snapshot.activeConversationId || ""));
     setDesktopServerPane(snapshot.desktopServerPane === "voice" ? "voice" : "text");
     setSelectedStreamUserId(snapshot.selectedStreamUserId ? String(snapshot.selectedStreamUserId) : null);
     if (isMobileViewport) {
@@ -1058,6 +1088,7 @@ export default function MenuMain({
   useEffect(() => {
     lastNavigationSnapshotRef.current = buildNavigationSnapshot();
   }, [
+    activeConversationId,
     activeDirectFriendId,
     activeServerId,
     currentTextChannelId,
@@ -1078,6 +1109,7 @@ export default function MenuMain({
     const storedWorkspaceState = readWorkspaceStateFromStorageKey(workspaceStateStorageKey);
     setWorkspaceMode(storedWorkspaceState.workspaceMode || "servers");
     setActiveDirectFriendId(storedWorkspaceState.activeDirectFriendId || "");
+    setActiveConversationId(storedWorkspaceState.activeConversationId || "");
     setFriendsPageSection(storedWorkspaceState.friendsPageSection || "friends");
     if (storedWorkspaceState.activeServerId) {
       setActiveServerId(storedWorkspaceState.activeServerId);
@@ -1102,6 +1134,7 @@ export default function MenuMain({
     writeWorkspaceStateToStorageKey(workspaceStateStorageKey, {
       workspaceMode,
       activeDirectFriendId,
+      activeConversationId,
       friendsPageSection,
       activeServerId,
       currentTextChannelId,
@@ -1110,6 +1143,7 @@ export default function MenuMain({
       mobileServersPane,
     });
   }, [
+    activeConversationId,
     activeDirectFriendId,
     activeServerId,
     currentTextChannelId,
@@ -1836,6 +1870,7 @@ export default function MenuMain({
     });
     pushNavigationHistory(() => {
       setActiveDirectFriendId(String(friendId || ""));
+      setActiveConversationId("");
       setWorkspaceMode("friends");
       setFriendsPageSection("friends");
       setSelectedStreamUserId(null);
@@ -1845,6 +1880,27 @@ export default function MenuMain({
     });
     finishPerfTraceOnNextFrame(traceId, {
       friendId: String(friendId || ""),
+      isMobileViewport,
+    });
+  };
+
+  const openConversationChat = (conversationId) => {
+    const traceId = startPerfTrace("menu-main", "open-conversation-chat", {
+      conversationId: String(conversationId || ""),
+      isMobileViewport,
+    });
+    pushNavigationHistory(() => {
+      setActiveDirectFriendId("");
+      setActiveConversationId(String(conversationId || ""));
+      setWorkspaceMode("friends");
+      setFriendsPageSection("conversations");
+      setSelectedStreamUserId(null);
+      if (isMobileViewport) {
+        setMobileSection("friends");
+      }
+    });
+    finishPerfTraceOnNextFrame(traceId, {
+      conversationId: String(conversationId || ""),
       isMobileViewport,
     });
   };
@@ -3217,9 +3273,9 @@ export default function MenuMain({
       return;
     }
 
-    const desiredChannelIds = new Set(
-      directConversationTargets
-        .map((friend) => friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id))
+  const desiredChannelIds = new Set(
+      [...directConversationTargets, ...conversationTargets]
+        .map((target) => target.directChannelId || buildDirectMessageChannelId(currentUserId, target.id))
         .filter(Boolean)
     );
 
@@ -3260,7 +3316,7 @@ export default function MenuMain({
     };
 
     syncDirectChannels().catch(() => {});
-  }, [chatSyncTick, currentUserId, directConversationTargets, user]);
+  }, [chatSyncTick, conversationTargets, currentUserId, directConversationTargets, user]);
 
   useEffect(() => {
     if (!user) {
@@ -4254,11 +4310,94 @@ export default function MenuMain({
     }
   }, []);
   useEffect(() => {
-    if (!previousScreenShareRef.current && isSharingScreen) {
-      playUiTone("share");
+    if (!currentVoiceChannel) {
+      previousVoiceParticipantIdsRef.current = { channelId: "", participantIds: [] };
+      return;
     }
-    previousScreenShareRef.current = isSharingScreen;
-  }, [isSharingScreen]);
+
+    const nextParticipantIds = currentVoiceParticipants
+      .map((participant) => String(participant?.userId || ""))
+      .filter(Boolean);
+    const previousSnapshot = previousVoiceParticipantIdsRef.current;
+
+    if (previousSnapshot.channelId !== String(currentVoiceChannel)) {
+      previousVoiceParticipantIdsRef.current = {
+        channelId: String(currentVoiceChannel),
+        participantIds: nextParticipantIds,
+      };
+      return;
+    }
+
+    const previousParticipantSet = new Set(previousSnapshot.participantIds);
+    const nextParticipantSet = new Set(nextParticipantIds);
+    const selfUserId = String(currentUserId || "");
+    const joinedRemoteParticipants = nextParticipantIds.filter((userId) => userId !== selfUserId && !previousParticipantSet.has(userId));
+    const leftRemoteParticipants = previousSnapshot.participantIds.filter((userId) => userId !== selfUserId && !nextParticipantSet.has(userId));
+
+    if (joinedRemoteParticipants.length) {
+      playUiTone("join");
+    } else if (leftRemoteParticipants.length) {
+      playUiTone("leave");
+    }
+
+    previousVoiceParticipantIdsRef.current = {
+      channelId: String(currentVoiceChannel),
+      participantIds: nextParticipantIds,
+    };
+  }, [currentUserId, currentVoiceChannel, currentVoiceParticipants]);
+  useEffect(() => {
+    if (!currentVoiceChannel) {
+      previousLiveVoiceUserIdsRef.current = { channelId: "", userIds: [] };
+      return;
+    }
+
+    const nextLiveUserIds = currentVoiceParticipants
+      .filter((participant) => participant?.isLive)
+      .map((participant) => String(participant?.userId || ""))
+      .filter(Boolean);
+    const previousSnapshot = previousLiveVoiceUserIdsRef.current;
+
+    if (previousSnapshot.channelId !== String(currentVoiceChannel)) {
+      previousLiveVoiceUserIdsRef.current = {
+        channelId: String(currentVoiceChannel),
+        userIds: nextLiveUserIds,
+      };
+      return;
+    }
+
+    const previousLiveSet = new Set(previousSnapshot.userIds);
+    const nextLiveSet = new Set(nextLiveUserIds);
+    const startedShares = nextLiveUserIds.filter((userId) => !previousLiveSet.has(userId));
+    const stoppedShares = previousSnapshot.userIds.filter((userId) => !nextLiveSet.has(userId));
+
+    if (startedShares.length) {
+      playUiTone("shareStart");
+    } else if (stoppedShares.length) {
+      playUiTone("shareStop");
+    }
+
+    previousLiveVoiceUserIdsRef.current = {
+      channelId: String(currentVoiceChannel),
+      userIds: nextLiveUserIds,
+    };
+  }, [currentVoiceChannel, currentVoiceParticipants]);
+  useEffect(() => {
+    if (!currentVoiceChannel) {
+      previousMicMutedRef.current = isMicMuted;
+      return;
+    }
+
+    if (previousMicMutedRef.current === null) {
+      previousMicMutedRef.current = isMicMuted;
+      return;
+    }
+
+    if (previousMicMutedRef.current !== isMicMuted) {
+      playUiTone(isMicMuted ? "mute" : "unmute");
+    }
+
+    previousMicMutedRef.current = isMicMuted;
+  }, [currentVoiceChannel, isMicMuted]);
 
   const replaceServerSnapshot = (snapshot, { activate = false } = {}) => {
     if (!snapshot) return;
@@ -6032,6 +6171,7 @@ export default function MenuMain({
       incomingFriendRequestCount={incomingFriendRequestCount}
       filteredFriends={filteredFriends}
       activeDirectFriendId={activeDirectFriendId}
+      activeConversationId={activeConversationId}
       directUnreadCounts={directUnreadCounts}
       chatDraftPresence={chatDraftPresence}
       currentUserId={currentUserId}
@@ -6039,7 +6179,7 @@ export default function MenuMain({
       onQueryChange={setFriendsSidebarQuery}
       onOpenFriendsWorkspace={openFriendsWorkspace}
       onOpenServersWorkspace={openServersWorkspace}
-      onResetDirect={resetActiveDirectFriend}
+      onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
@@ -6101,7 +6241,10 @@ export default function MenuMain({
     <FriendsMain
       user={user}
       currentDirectFriend={currentDirectFriend}
+      currentConversationTarget={currentConversationTarget}
+      activeConversationId={activeConversationId}
       currentDirectChannelId={currentDirectChannelId}
+      currentConversationChannelId={currentConversationChannelId}
       directConversationTargets={directConversationTargets}
       directSearchQuery={channelSearchQuery}
       textChatLocalStateVersion={textChatLocalStateVersion}
@@ -6121,9 +6264,13 @@ export default function MenuMain({
       friendActionStatus={friendActionStatus}
       isAddingFriend={isAddingFriend}
       activeContacts={activeContacts}
-      onResetDirect={resetActiveDirectFriend}
+      conversations={conversations}
+      conversationsLoading={conversationsLoading}
+      conversationsError={conversationsError}
+      onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
+      onOpenConversationChat={openConversationChat}
       onStartDirectCall={startDirectCallWithUser}
       onOpenDirectActions={openFriendListUserContextMenu}
       onFriendRequestAction={handleFriendRequestAction}
@@ -6230,8 +6377,8 @@ export default function MenuMain({
   );
   const renderMobileDirectChat = () => (
     <MobileDirectChat
-      currentDirectFriend={currentDirectFriend}
-      currentDirectChannelId={currentDirectChannelId}
+      currentDirectFriend={currentConversationTarget || currentDirectFriend}
+      currentDirectChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}
       textChatLocalStateVersion={textChatLocalStateVersion}
       user={user}
       directConversationTargets={directConversationTargets}
@@ -6325,11 +6472,29 @@ export default function MenuMain({
         };
       }
 
+      if (currentConversationTarget) {
+        return {
+          title: currentConversationTarget.title || "Беседа",
+          iconType: currentConversationTarget?.avatar ? "image" : "glyph",
+          iconSrc: currentConversationTarget?.avatar || "",
+          iconAlt: currentConversationTarget.title || "Беседа",
+          iconGlyph: "#",
+        };
+      }
+
       if (friendsPageSection === "add") {
         return {
           title: "Добавить друзей",
           iconType: "glyph",
           iconGlyph: "+",
+        };
+      }
+
+      if (friendsPageSection === "conversations") {
+        return {
+          title: "Беседы",
+          iconType: "glyph",
+          iconGlyph: "#",
         };
       }
 
@@ -6359,6 +6524,7 @@ export default function MenuMain({
   }, [
     activeServer,
     activeSettingsTabMeta?.label,
+    currentConversationTarget,
     currentDirectFriend,
     directCallState,
     friendsPageSection,
@@ -6458,7 +6624,9 @@ export default function MenuMain({
       setMobileSection={setMobileSection}
       workspaceMode={workspaceMode}
       currentDirectFriend={currentDirectFriend}
+      currentConversationTarget={currentConversationTarget}
       setActiveDirectFriendId={setActiveDirectFriendId}
+      setActiveConversationId={setActiveConversationId}
       setFriendsPageSection={setFriendsPageSection}
       isLocalSharePreviewVisible={isLocalSharePreviewVisible}
       setIsLocalSharePreviewVisible={setIsLocalSharePreviewVisible}
