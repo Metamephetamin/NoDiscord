@@ -1345,7 +1345,7 @@ public class ChatHub : Hub
             return [];
         }
 
-        var memberLookup = (_serverState.GetSnapshot(serverId)?.Members ?? [])
+        var serverMemberLookup = (_serverState.GetSnapshot(serverId)?.Members ?? [])
             .Where(member => !string.IsNullOrWhiteSpace(member.UserId))
             .GroupBy(member => member.UserId.Trim(), StringComparer.Ordinal)
             .ToDictionary(
@@ -1360,7 +1360,7 @@ public class ChatHub : Hub
                 var userId = UploadPolicies.TrimToLength(item?.UserId, 64);
                 var handle = NormalizeMentionHandle(item?.Handle);
 
-                return string.IsNullOrWhiteSpace(userId) || !memberLookup.TryGetValue(userId, out var memberName)
+                return string.IsNullOrWhiteSpace(userId) || !serverMemberLookup.TryGetValue(userId, out var memberName)
                     ? null
                     : new ChatMentionPayload
                     {

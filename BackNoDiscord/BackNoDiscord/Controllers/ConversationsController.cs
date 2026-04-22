@@ -1,4 +1,5 @@
 using BackNoDiscord.Security;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -91,7 +92,7 @@ public sealed class ConversationsController : ControllerBase
             return BadRequest(new { message = "Название беседы обязательно." });
         }
 
-        var requestedMemberIds = (request?.MemberUserIds ?? Array.Empty<int>())
+        var requestedMemberIds = (request?.MemberUserIds?.AsEnumerable() ?? Array.Empty<int>())
             .Where(item => item > 0 && item != currentUserId)
             .Distinct()
             .Take(MaxConversationMembers - 1)
@@ -334,6 +335,12 @@ public sealed class ConversationsController : ControllerBase
         var recipientsWithoutCaller = recipientIds.Where(item => item != currentUserId).Distinct().ToArray();
         if (recipientsWithoutCaller.Length > 0)
         {
+            var callerAvatarUrl = await _context.Users
+                .AsNoTracking()
+                .Where(item => item.id == currentUserId)
+                .Select(item => item.avatar_url)
+                .FirstOrDefaultAsync(cancellationToken);
+
             await _chatHubContext.Clients.Users(recipientsWithoutCaller.Select(item => item.ToString())).SendAsync("ConversationCallRing", new
             {
                 conversationId,
@@ -343,7 +350,7 @@ public sealed class ConversationsController : ControllerBase
                 voiceChannelId,
                 fromUserId = currentUser.UserId,
                 fromName = currentUser.DisplayName,
-                fromAvatar = UploadPolicies.SanitizeRelativeAssetUrl(currentUser.AvatarUrl, "/avatars/"),
+                fromAvatar = UploadPolicies.SanitizeRelativeAssetUrl(callerAvatarUrl, "/avatars/"),
                 startedAt = conversation.ActiveCallStartedAt
             }, cancellationToken);
         }
