@@ -106,9 +106,7 @@ function buildVoiceRuntimeConfig() {
       ? "relay"
       : configuredIceTransportPolicy === "all"
         ? "all"
-        : hasTurnRelay
-          ? "relay"
-          : "all";
+        : "all";
   const defaultApiUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_API_URL : DEFAULT_LOCAL_API_URL;
   const defaultLiveKitUrl = isPackagedRuntime() ? DEFAULT_PACKAGED_LIVEKIT_URL : DEFAULT_LOCAL_LIVEKIT_URL;
 

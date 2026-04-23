@@ -6042,9 +6042,7 @@ export default function MenuMain({
   const displayedPingMs = currentVoiceChannel ? resolvedVoicePingMs : resolvedApiPingMs;
   const pingTone = getPingTone(displayedPingMs);
   const pingTooltip =
-    currentVoiceChannel
-      ? (displayedPingMs ? `Голосовой RTT: ${displayedPingMs} мс` : "Голосовой RTT недоступен")
-      : (displayedPingMs ? `Пинг API: ${displayedPingMs} мс` : "Пинг недоступен");
+    displayedPingMs ? `Пинг: ${displayedPingMs} мс` : "Пинг недоступен";
 
   const toggleMicrophoneTestPreview = () => {
     setIsMicTestActive((previous) => !previous);

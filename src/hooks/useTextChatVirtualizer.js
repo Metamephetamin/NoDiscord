@@ -279,7 +279,8 @@ export default function useTextChatVirtualizer({
 
     window.requestAnimationFrame(() => {
       if (scrollAnchorDelta) {
-        list.scrollTop = clampScrollTop(list, previousScrollTop + scrollAnchorDelta);
+        const latestScrollTop = Math.max(0, Number(list.scrollTop) || 0);
+        list.scrollTop = clampScrollTop(list, latestScrollTop + scrollAnchorDelta);
       }
 
       scheduleMetricsUpdate();

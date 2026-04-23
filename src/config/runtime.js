@@ -93,9 +93,7 @@ function buildBrowserVoiceRtcConfig() {
       ? "relay"
       : configuredIceTransportPolicy === "all"
         ? "all"
-        : hasTurnRelay
-          ? "relay"
-          : DEFAULT_VOICE_RTC_CONFIGURATION.iceTransportPolicy;
+        : DEFAULT_VOICE_RTC_CONFIGURATION.iceTransportPolicy;
 
   return {
     iceServers: normalizedIceServers,
