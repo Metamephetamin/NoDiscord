@@ -464,6 +464,7 @@ export const DirectCallOverlayView = ({
   call,
   history = [],
   isMicMuted,
+  isSoundMuted = false,
   selfName = "Вы",
   selfAvatar = "",
   selfAvatarFrame = null,
@@ -476,6 +477,7 @@ export const DirectCallOverlayView = ({
   onDecline,
   onEnd,
   onToggleMic,
+  onToggleSound,
   onSelectInputDevice,
   onSelectOutputDevice,
   onToggleMiniMode,
@@ -559,40 +561,51 @@ export const DirectCallOverlayView = ({
         <div className="direct-call-inline__actions">
           {isIncoming ? (
             <>
-              <button type="button" className="direct-call-inline__button direct-call-inline__button--danger" onClick={onDecline}>
-                Отклонить
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--danger" onClick={onDecline} aria-label="Отклонить">
+                <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
               </button>
-              <button type="button" className="direct-call-inline__button direct-call-inline__button--accept" onClick={onAccept}>
-                Принять
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--accept" onClick={onAccept} aria-label="Принять">
+                <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
               </button>
             </>
           ) : isFinished ? (
             <>
               {call.canRetry ? (
-                <button type="button" className="direct-call-inline__button direct-call-inline__button--accept" onClick={onRetry}>
-                  Перезвонить
+                <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--accept" onClick={onRetry} aria-label="Перезвонить">
+                  <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
                 </button>
               ) : null}
-              <button type="button" className="direct-call-inline__button direct-call-inline__button--danger" onClick={onDismiss}>
-                Закрыть
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--danger" onClick={onDismiss} aria-label="Закрыть">
+                <span className="direct-call-inline__icon direct-call-inline__icon--close" aria-hidden="true" />
               </button>
             </>
           ) : (
             <>
               <button
                 type="button"
-                className={`direct-call-inline__button ${isMicMuted ? "direct-call-inline__button--active" : ""}`}
+                className={`direct-call-inline__button direct-call-inline__button--icon ${isMicMuted ? "direct-call-inline__button--active" : ""}`}
                 onClick={onToggleMic}
                 disabled={!isConnected}
+                aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
               >
-                {isMicMuted ? "Микрофон выкл" : "Микрофон"}
+                <span className="direct-call-inline__icon direct-call-inline__icon--mic" aria-hidden="true" />
               </button>
               <button
                 type="button"
-                className="direct-call-inline__button direct-call-inline__button--danger"
-                onClick={isConnected ? onEnd : onDecline}
+                className={`direct-call-inline__button direct-call-inline__button--icon ${isSoundMuted ? "direct-call-inline__button--active" : ""}`}
+                onClick={onToggleSound}
+                disabled={!isConnected}
+                aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
               >
-                {isConnected ? "Завершить" : "Отменить"}
+                <span className="direct-call-inline__icon direct-call-inline__icon--headphones" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--danger"
+                onClick={isConnected ? onEnd : onDecline}
+                aria-label={isConnected ? "Завершить звонок" : "Отменить звонок"}
+              >
+                <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
               </button>
             </>
           )}

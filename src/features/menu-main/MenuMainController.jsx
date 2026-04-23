@@ -6225,6 +6225,7 @@ export default function MenuMain({
     call: directCallState,
     history: directCallHistory,
     isMicMuted,
+    isSoundMuted,
     selfName: getDisplayName(user),
     selfAvatar: getUserAvatar(user),
     selfAvatarFrame: getUserAvatarFrame(user),
@@ -6237,6 +6238,7 @@ export default function MenuMain({
     onDecline: declineDirectCall,
     onEnd: endDirectCall,
     onToggleMic: toggleMicMute,
+    onToggleSound: toggleSoundMute,
     onSelectInputDevice: setSelectedInputDeviceId,
     onSelectOutputDevice: setSelectedOutputDeviceId,
     onToggleMiniMode: setDirectCallMiniMode,
@@ -6244,12 +6246,6 @@ export default function MenuMain({
     onRetry: retryDirectCall,
     onRedialHistoryItem: startDirectCallWithUser,
   };
-  const isDirectCallInlineVisible = Boolean(
-    !isMobileViewport &&
-    currentDirectFriend &&
-    directCallState.phase !== "idle" &&
-    String(directCallState.peerUserId || "") === String(currentDirectFriend.id || "")
-  );
   const profilePanelProps = {
     currentVoiceChannel,
     currentVoiceChannelName,
@@ -6548,6 +6544,7 @@ export default function MenuMain({
       directUnreadCounts={directUnreadCounts}
       chatDraftPresence={chatDraftPresence}
       currentUserId={currentUserId}
+      activeDirectCall={directCallState.phase !== "idle" ? directCallState : null}
       profilePanel={renderProfilePanel()}
       onQueryChange={setFriendsSidebarQuery}
       onOpenFriendsWorkspace={openFriendsWorkspace}
@@ -6555,6 +6552,13 @@ export default function MenuMain({
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
+      onOpenDirectCallChat={(targetUserId) => {
+        if (!targetUserId) {
+          return;
+        }
+
+        openDirectChat(targetUserId);
+      }}
       onOpenConversationChat={openConversationChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
       overlayContent={friendListOverlayElement}
@@ -7155,14 +7159,15 @@ export default function MenuMain({
       closeQuickSwitcher={closeQuickSwitcher}
       directCallState={directCallState}
       directCallHistory={directCallHistory}
-      isDirectCallInlineVisible={isDirectCallInlineVisible}
       isMicMuted={isMicMuted}
+      isSoundMuted={isSoundMuted}
       audioInputDevices={audioInputDevices}
       audioOutputDevices={audioOutputDevices}
       selectedInputDeviceId={selectedInputDeviceId}
       selectedOutputDeviceId={selectedOutputDeviceId}
       outputSelectionSupported={outputSelectionSupported}
       toggleMicMute={toggleMicMute}
+      toggleSoundMute={toggleSoundMute}
       setSelectedInputDeviceId={setSelectedInputDeviceId}
       setSelectedOutputDeviceId={setSelectedOutputDeviceId}
       setDirectCallMiniMode={setDirectCallMiniMode}

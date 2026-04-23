@@ -1249,6 +1249,71 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   box-shadow: 0 10px 20px rgba(217, 45, 32, 0.24);
 }
 
+.friends-call-dock {
+  margin: 14px 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.friends-call-dock__button {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(31, 38, 58, 0.92), rgba(18, 22, 34, 0.94));
+  color: #eef3ff;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.friends-call-dock__icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: rgba(95, 224, 145, 0.18);
+  position: relative;
+}
+
+.friends-call-dock__icon::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  background: #65d695;
+  -webkit-mask: url("/icons/phone.png") center / contain no-repeat;
+  mask: url("/icons/phone.png") center / contain no-repeat;
+}
+
+.friends-call-dock__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.friends-call-dock__copy strong,
+.friends-call-dock__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friends-call-dock__copy strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.friends-call-dock__copy small {
+  color: #9faac2;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .friends-directs {
   min-height: 0;
 }
@@ -8928,7 +8993,7 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline {
-  width: min(100%, 620px);
+  width: 100%;
   margin: 0 auto;
   padding: 14px;
   border-radius: 22px;
@@ -9122,6 +9187,62 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 
 .direct-call-inline__button--active {
   color: #ffd9df;
+}
+
+.direct-call-inline__button--icon {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.direct-call-inline__icon {
+  width: 19px;
+  height: 19px;
+  background: currentColor;
+  display: block;
+}
+
+.direct-call-inline__icon--mic {
+  -webkit-mask: url("/icons/microphone-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/microphone-svgrepo-com.svg") center / contain no-repeat;
+}
+
+.direct-call-inline__icon--headphones {
+  -webkit-mask: url("/icons/headphones-fill-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/headphones-fill-svgrepo-com.svg") center / contain no-repeat;
+}
+
+.direct-call-inline__icon--phone {
+  -webkit-mask: url("/icons/phone.png") center / contain no-repeat;
+  mask: url("/icons/phone.png") center / contain no-repeat;
+}
+
+.direct-call-inline__icon--close {
+  position: relative;
+  background: transparent;
+}
+
+.direct-call-inline__icon--close::before,
+.direct-call-inline__icon--close::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.direct-call-inline__icon--close::before {
+  transform: rotate(45deg);
+}
+
+.direct-call-inline__icon--close::after {
+  transform: rotate(-45deg);
 }
 
 .direct-call-overlay--embedded {

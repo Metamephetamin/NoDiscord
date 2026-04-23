@@ -98,6 +98,7 @@ export const FriendsSidebar = ({
   directUnreadCounts,
   chatDraftPresence,
   currentUserId,
+  activeDirectCall = null,
   profilePanel,
   onQueryChange,
   onOpenFriendsWorkspace,
@@ -105,6 +106,7 @@ export const FriendsSidebar = ({
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
+  onOpenDirectCallChat,
   onOpenConversationChat,
   onOpenUserContextMenu,
   overlayContent = null,
@@ -172,6 +174,18 @@ export const FriendsSidebar = ({
             <span>Беседы</span>
           </button>
         </div>
+
+        {activeDirectCall ? (
+          <div className="friends-call-dock">
+            <button type="button" className="friends-call-dock__button" onClick={() => onOpenDirectCallChat?.(activeDirectCall.peerUserId)}>
+              <span className="friends-call-dock__icon" aria-hidden="true" />
+              <span className="friends-call-dock__copy">
+                <strong>{activeDirectCall.peerName || "Личный звонок"}</strong>
+                <small>{activeDirectCall.statusLabel || "Идёт звонок"}</small>
+              </span>
+            </button>
+          </div>
+        ) : null}
 
         <div className="friends-directs">
           <div className="friends-directs__header">
