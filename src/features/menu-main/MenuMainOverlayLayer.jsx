@@ -96,6 +96,7 @@ export default function MenuMainOverlayLayer({
   closeQuickSwitcher,
   directCallState,
   directCallHistory,
+  isDirectCallInlineVisible = false,
   isMicMuted,
   audioInputDevices,
   audioOutputDevices,
@@ -151,11 +152,14 @@ export default function MenuMainOverlayLayer({
         onSelect={handleQuickSwitcherSelect}
       />
 
-      {isMobileViewport ? (
+      {isMobileViewport || !isDirectCallInlineVisible ? (
         <DirectCallOverlayView
           call={directCallState}
           history={directCallHistory}
           isMicMuted={isMicMuted}
+          selfName={getDisplayName(user)}
+          selfAvatar={getUserAvatar(user)}
+          selfAvatarFrame={getUserAvatarFrame(user)}
           audioInputDevices={audioInputDevices}
           audioOutputDevices={audioOutputDevices}
           selectedInputDeviceId={selectedInputDeviceId}
@@ -171,6 +175,7 @@ export default function MenuMainOverlayLayer({
           onDismiss={dismissDirectCallOverlay}
           onRetry={retryDirectCall}
           onRedialHistoryItem={onDirectCallHistoryRedial}
+          compact={!isMobileViewport}
         />
       ) : null}
 

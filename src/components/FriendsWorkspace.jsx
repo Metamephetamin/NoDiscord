@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
+import { DirectCallOverlayView } from "./MenuMainOverlays";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
 import useMobileLongPress from "../hooks/useMobileLongPress";
@@ -284,6 +285,7 @@ export const FriendsMain = ({
   directConversationTargets,
   directSearchQuery,
   textChatLocalStateVersion = 0,
+  directCallPanelProps = null,
   friendsPageSection,
   friends,
   incomingFriendRequestCount,
@@ -350,6 +352,15 @@ export const FriendsMain = ({
   const [conversationSettingsAvatarPreview, setConversationSettingsAvatarPreview] = useState("");
   const [conversationSettingsSearch, setConversationSettingsSearch] = useState("");
   const [activeConversationMemberActionId, setActiveConversationMemberActionId] = useState("");
+  const activeDirectCall = directCallPanelProps?.call;
+  const activeDirectCallPanelProps =
+    !currentConversationTarget &&
+    currentDirectFriend &&
+    activeDirectCall &&
+    String(activeDirectCall.phase || activeDirectCall.status || "") !== "idle" &&
+    String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
+      ? directCallPanelProps
+      : null;
 
   const currentConversationMemberIds = useMemo(
     () => new Set((currentConversationTarget?.members || []).map((member) => String(member?.id || ""))),
@@ -795,7 +806,7 @@ export const FriendsMain = ({
         </div>
 
         {currentDirectFriend || currentConversationTarget ? (
-          <div className="friends-main__chat">
+          <div className={`friends-main__chat ${activeDirectCallPanelProps ? "friends-main__chat--with-call" : ""}`}>
             <div className="chat__topbar friends-direct-chat-topbar">
               <div className="chat__topbar-title friends-direct-chat-topbar__title">
                 <div className="chat__topbar-copy">
@@ -906,6 +917,12 @@ export const FriendsMain = ({
               </div>
             ) : null}
 
+            {activeDirectCallPanelProps ? (
+              <div className="friends-main__call-stage">
+                <DirectCallOverlayView {...activeDirectCallPanelProps} embedded />
+              </div>
+            ) : null}
+
             <TextChat
               resolvedChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}
               localMessageStateVersion={textChatLocalStateVersion}
@@ -1001,40 +1018,43 @@ export const FriendsMain = ({
             <div className="friends-hero">
               <h1>Добавить в друзья</h1>
               <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
-              <div className="friends-requests">
-                <div className="friends-requests__header">
-                  <h2>Входящие заявки</h2>
-                  {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
-                </div>
-                {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
-                {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
-                {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
-                  <div className="friends-results friends-results--requests">
-                    {incomingFriendRequests.map((request) => (
-                      <div key={request.id} className="friends-results__item friends-results__item--request">
-                        <div className="friends-results__identity">
-                          <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
-                          <div className="friends-results__meta">
-                            <strong>{getDisplayName(request.sender)}</strong>
-                            <span>{request.sender.email || "Без email"}</span>
+              {friendRequestsLoading || friendRequestsError || incomingFriendRequests.length ? (
+                <div className="friends-requests">
+                  <div className="friends-requests__header">
+                    <h2>Входящие заявки</h2>
+                    {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
+                  </div>
+                  {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
+                  {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
+                  {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
+                    <div className="friends-results friends-results--requests">
+                      {incomingFriendRequests.map((request) => (
+                        <div key={request.id} className="friends-results__item friends-results__item--request">
+                          <div className="friends-results__identity">
+                            <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
+                            <div className="friends-results__meta">
+                              <strong>{getDisplayName(request.sender)}</strong>
+                              <span>{request.sender.email || "Без email"}</span>
+                            </div>
+                          </div>
+                          <div className="friends-results__actions">
+                            <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
+                              {friendRequestActionId === request.id ? "..." : "✓"}
+                            </button>
+                            <button type="button" className="friends-results__action friends-results__action--decline" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
+                              {friendRequestActionId === request.id ? "..." : (
+                                <svg className="friends-results__action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                  <path d="M4 4l8 8M12 4l-8 8" />
+                                </svg>
+                              )}
+                            </button>
                           </div>
                         </div>
-                        <div className="friends-results__actions">
-                          <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
-                            {friendRequestActionId === request.id ? "..." : "✓"}
-                          </button>
-                          <button type="button" className="friends-results__action friends-results__action--decline" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                            {friendRequestActionId === request.id ? "..." : "Г—"}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {!friendRequestsLoading && !friendRequestsError && !incomingFriendRequests.length ? (
-                  <div className="friends-panel__empty">Новых заявок пока нет.</div>
-                ) : null}
-              </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
                 <input

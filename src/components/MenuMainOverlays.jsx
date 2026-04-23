@@ -464,6 +464,9 @@ export const DirectCallOverlayView = ({
   call,
   history = [],
   isMicMuted,
+  selfName = "Вы",
+  selfAvatar = "",
+  selfAvatarFrame = null,
   audioInputDevices = [],
   audioOutputDevices = [],
   selectedInputDeviceId = "",
@@ -480,6 +483,7 @@ export const DirectCallOverlayView = ({
   onRetry,
   onRedialHistoryItem,
   embedded = false,
+  compact = false,
 }) => {
   if (!call || call.phase === "idle") {
     return null;
@@ -511,6 +515,102 @@ export const DirectCallOverlayView = ({
   const recentHistory = history
     .filter((entry) => String(entry?.peerUserId || "") === String(call.peerUserId || ""))
     .slice(0, 4);
+
+  const compactCallCard = (
+      <section className={`direct-call-inline ${compact ? "direct-call-inline--floating" : ""} ${isConnected ? "direct-call-inline--connected" : ""} ${isIncoming ? "direct-call-inline--incoming" : ""} ${isFinished ? "direct-call-inline--finished" : ""}`}>
+        <div className="direct-call-inline__header">
+          <div className="direct-call-inline__copy">
+            <span>{isIncoming ? "Входящий звонок" : isConnected ? "Личный разговор" : isFinished ? "Звонок завершён" : "Личный звонок"}</span>
+            <strong>{callTitle}</strong>
+            <small>{statusLabel}</small>
+          </div>
+          <div className="direct-call-inline__quality">
+            <span className={`direct-call-inline__quality-dot direct-call-inline__quality-dot--${call.connectionQuality || "unknown"}`} />
+            {qualityLabel}
+          </div>
+        </div>
+
+        <div className="direct-call-inline__participants" aria-label="Участники личного звонка">
+          <div className="direct-call-inline__participant">
+            <AnimatedAvatar
+              className="direct-call-inline__avatar"
+              src={selfAvatar || ""}
+              alt={selfName}
+              frame={selfAvatarFrame}
+              loading="eager"
+              decoding="sync"
+            />
+            <span>{selfName}</span>
+          </div>
+          <div className="direct-call-inline__link" aria-hidden="true" />
+          <div className="direct-call-inline__participant">
+            <AnimatedAvatar
+              className="direct-call-inline__avatar"
+              src={call.peerAvatar || ""}
+              alt={callTitle}
+              frame={call.peerAvatarFrame}
+              loading="eager"
+              decoding="sync"
+            />
+            <span>{callTitle}</span>
+          </div>
+        </div>
+
+        <div className="direct-call-inline__actions">
+          {isIncoming ? (
+            <>
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--danger" onClick={onDecline}>
+                Отклонить
+              </button>
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--accept" onClick={onAccept}>
+                Принять
+              </button>
+            </>
+          ) : isFinished ? (
+            <>
+              {call.canRetry ? (
+                <button type="button" className="direct-call-inline__button direct-call-inline__button--accept" onClick={onRetry}>
+                  Перезвонить
+                </button>
+              ) : null}
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--danger" onClick={onDismiss}>
+                Закрыть
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`direct-call-inline__button ${isMicMuted ? "direct-call-inline__button--active" : ""}`}
+                onClick={onToggleMic}
+                disabled={!isConnected}
+              >
+                {isMicMuted ? "Микрофон выкл" : "Микрофон"}
+              </button>
+              <button
+                type="button"
+                className="direct-call-inline__button direct-call-inline__button--danger"
+                onClick={isConnected ? onEnd : onDecline}
+              >
+                {isConnected ? "Завершить" : "Отменить"}
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+  );
+
+  if (embedded) {
+    return compactCallCard;
+  }
+
+  if (compact) {
+    return (
+      <div className="direct-call-floating-layer">
+        {compactCallCard}
+      </div>
+    );
+  }
 
   return (
     <div className={`direct-call-overlay direct-call-overlay--v2 ${isMiniMode ? "direct-call-overlay--mini" : ""} ${embedded ? "direct-call-overlay--embedded" : ""}`}>

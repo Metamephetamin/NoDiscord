@@ -337,6 +337,8 @@ const getDirectCallConnectionQuality = (pingMs, phase) => {
   return "stable";
 };
 
+const DIRECT_CALL_NO_ANSWER_TIMEOUT_MS = 180000;
+
 const createDirectCallState = () => ({
   phase: "idle",
   status: "idle",
@@ -969,6 +971,43 @@ export default function MenuMain({
   useEffect(() => {
     directCallStateRef.current = directCallState;
   }, [directCallState]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    if (directCallState.phase !== "outgoing" || !directCallState.startedAt) {
+      return undefined;
+    }
+
+    const startedAtMs = new Date(directCallState.startedAt).getTime();
+    if (!Number.isFinite(startedAtMs)) {
+      return undefined;
+    }
+
+    const timeoutDelay = Math.max(0, DIRECT_CALL_NO_ANSWER_TIMEOUT_MS - (Date.now() - startedAtMs));
+    const timeoutId = window.setTimeout(() => {
+      const currentCall = directCallStateRef.current;
+      if (currentCall.phase !== "outgoing" || currentCall.channelId !== directCallState.channelId) {
+        return;
+      }
+
+      voiceClientRef.current?.declineDirectCall(currentCall.peerUserId, currentCall.channelId, "no-answer", user).catch((error) => {
+        console.error("Не удалось завершить личный звонок по таймауту:", error);
+      });
+      setDirectCallState(buildDirectCallState({
+        ...currentCall,
+        phase: "declined",
+        statusLabel: "Нет ответа",
+        canRetry: true,
+        isMiniMode: true,
+        lastReason: "no-answer",
+        endedAt: new Date().toISOString(),
+      }));
+    }, timeoutDelay);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [directCallState.channelId, directCallState.phase, directCallState.startedAt, user]);
   useEffect(() => {
     setDirectCallHistory(readDirectCallHistory(directCallHistoryStorageKey));
   }, [directCallHistoryStorageKey]);
@@ -6182,6 +6221,35 @@ export default function MenuMain({
       {renderSettingsContent()}
     </MenuMainMobileSettingsShell>
   );
+  const directCallPanelProps = {
+    call: directCallState,
+    history: directCallHistory,
+    isMicMuted,
+    selfName: getDisplayName(user),
+    selfAvatar: getUserAvatar(user),
+    selfAvatarFrame: getUserAvatarFrame(user),
+    audioInputDevices,
+    audioOutputDevices,
+    selectedInputDeviceId,
+    selectedOutputDeviceId,
+    outputSelectionSupported,
+    onAccept: acceptDirectCall,
+    onDecline: declineDirectCall,
+    onEnd: endDirectCall,
+    onToggleMic: toggleMicMute,
+    onSelectInputDevice: setSelectedInputDeviceId,
+    onSelectOutputDevice: setSelectedOutputDeviceId,
+    onToggleMiniMode: setDirectCallMiniMode,
+    onDismiss: dismissDirectCallOverlay,
+    onRetry: retryDirectCall,
+    onRedialHistoryItem: startDirectCallWithUser,
+  };
+  const isDirectCallInlineVisible = Boolean(
+    !isMobileViewport &&
+    currentDirectFriend &&
+    directCallState.phase !== "idle" &&
+    String(directCallState.peerUserId || "") === String(currentDirectFriend.id || "")
+  );
   const profilePanelProps = {
     currentVoiceChannel,
     currentVoiceChannelName,
@@ -6234,26 +6302,6 @@ export default function MenuMain({
     restoreTooltipOnLeave,
     leaveVoiceActionLabel: isDirectCallChannelId(currentVoiceChannel) && directCallState.phase !== "idle" ? "Завершить звонок" : "Отключиться",
     leaveVoiceActionAriaLabel: isDirectCallChannelId(currentVoiceChannel) && directCallState.phase !== "idle" ? "Завершить личный звонок" : "Отключиться от голосового канала",
-    directCallPanelProps: {
-      call: directCallState,
-      history: directCallHistory,
-      isMicMuted,
-      audioInputDevices,
-      audioOutputDevices,
-      selectedInputDeviceId,
-      selectedOutputDeviceId,
-      outputSelectionSupported,
-      onAccept: acceptDirectCall,
-      onDecline: declineDirectCall,
-      onEnd: endDirectCall,
-      onToggleMic: toggleMicMute,
-      onSelectInputDevice: setSelectedInputDeviceId,
-      onSelectOutputDevice: setSelectedOutputDeviceId,
-      onToggleMiniMode: setDirectCallMiniMode,
-      onDismiss: dismissDirectCallOverlay,
-      onRetry: retryDirectCall,
-      onRedialHistoryItem: startDirectCallWithUser,
-    },
   };
   const profilePanelElement = useMemo(() => <MenuMainProfilePanelSlot {...profilePanelProps} />, [
     activeMicMenuBars,
@@ -6265,7 +6313,6 @@ export default function MenuMain({
     currentVoiceChannelName,
     deviceInputLabel,
     deviceOutputLabel,
-    directCallHistory,
     directCallState,
     echoCancellationEnabled,
     isCameraShareActive,
@@ -6385,6 +6432,21 @@ export default function MenuMain({
         onClick: () => {
           handleFriendListDirectChat(friendListUserContextMenu?.userId, friendListUserContextMenu?.isSelf);
           setFriendListUserContextMenu(null);
+        },
+      },
+      {
+        id: "direct-call",
+        label: "Позвонить",
+        icon: "☎",
+        disabled: Boolean(friendListUserContextMenu?.isSelf || !friendListUserContextMenu?.userId),
+        onClick: () => {
+          const targetUserId = friendListUserContextMenu?.userId;
+          if (!targetUserId || friendListUserContextMenu?.isSelf) {
+            return;
+          }
+
+          setFriendListUserContextMenu(null);
+          void startDirectCallWithUser(targetUserId);
         },
       },
       {
@@ -6560,6 +6622,7 @@ export default function MenuMain({
       directConversationTargets={directConversationTargets}
       directSearchQuery={channelSearchQuery}
       textChatLocalStateVersion={textChatLocalStateVersion}
+      directCallPanelProps={directCallPanelProps}
       friendsPageSection={friendsPageSection}
       friends={friends}
       incomingFriendRequestCount={incomingFriendRequestCount}
@@ -7092,6 +7155,7 @@ export default function MenuMain({
       closeQuickSwitcher={closeQuickSwitcher}
       directCallState={directCallState}
       directCallHistory={directCallHistory}
+      isDirectCallInlineVisible={isDirectCallInlineVisible}
       isMicMuted={isMicMuted}
       audioInputDevices={audioInputDevices}
       audioOutputDevices={audioOutputDevices}

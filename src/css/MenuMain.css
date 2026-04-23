@@ -1535,6 +1535,15 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   margin-bottom: 0;
 }
 
+.friends-main__call-stage {
+  flex: 0 0 auto;
+  padding: 14px 18px 0;
+}
+
+.friends-main__call-stage + .textchat-container {
+  min-height: 0;
+}
+
 .friends-hero,
 .friends-discovery {
   margin: 18px;
@@ -1746,6 +1755,15 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.friends-results__action-icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  fill: none;
 }
 
 .friends-results__action--accept,
@@ -8907,6 +8925,203 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 
 .direct-call-overlay--v2 .direct-call-overlay__workspace {
   pointer-events: auto;
+}
+
+.direct-call-inline {
+  width: min(100%, 620px);
+  margin: 0 auto;
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(circle at top, rgba(92, 119, 255, 0.13), transparent 58%),
+    linear-gradient(180deg, rgba(24, 29, 44, 0.96), rgba(12, 15, 24, 0.98));
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.24);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.direct-call-inline--floating {
+  width: 280px;
+  grid-template-columns: 1fr;
+  padding: 16px;
+}
+
+.direct-call-floating-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  pointer-events: none;
+}
+
+.direct-call-floating-layer .direct-call-inline {
+  pointer-events: auto;
+}
+
+.direct-call-inline__header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.direct-call-inline--floating .direct-call-inline__header {
+  justify-content: center;
+  text-align: center;
+}
+
+.direct-call-inline__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.direct-call-inline__copy span {
+  color: #8fa5ec;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.direct-call-inline__copy strong {
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.direct-call-inline__copy small {
+  color: #aeb8cf;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.direct-call-inline__quality {
+  justify-self: end;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #dce5fb;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.direct-call-inline--floating .direct-call-inline__quality {
+  justify-self: center;
+}
+
+.direct-call-inline__quality-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8392b6;
+}
+
+.direct-call-inline__quality-dot--stable {
+  background: #65d695;
+}
+
+.direct-call-inline__quality-dot--weak {
+  background: #f4bf4f;
+}
+
+.direct-call-inline__quality-dot--reconnecting {
+  background: #ff8d7a;
+}
+
+.direct-call-inline__participants {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.direct-call-inline--floating .direct-call-inline__participants {
+  padding: 12px 8px;
+}
+
+.direct-call-inline__participant {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  color: #edf3ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.direct-call-inline__avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.direct-call-inline--floating .direct-call-inline__avatar {
+  width: 70px;
+  height: 70px;
+}
+
+.direct-call-inline__link {
+  width: 42px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(101, 214, 149, 0.1), rgba(101, 214, 149, 0.75), rgba(101, 214, 149, 0.1));
+}
+
+.direct-call-inline__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.direct-call-inline__button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #edf3ff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.direct-call-inline__button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.direct-call-inline__button--accept {
+  background: linear-gradient(180deg, rgba(89, 210, 139, 0.95), rgba(50, 162, 105, 0.95));
+}
+
+.direct-call-inline__button--danger {
+  background: linear-gradient(180deg, rgba(217, 58, 76, 0.95), rgba(176, 42, 61, 0.95));
+}
+
+.direct-call-inline__button--active {
+  color: #ffd9df;
 }
 
 .direct-call-overlay--embedded {

@@ -1,5 +1,4 @@
 import MenuProfilePanel from "../../components/MenuProfilePanel";
-import { DirectCallOverlayView } from "../../components/MenuMainOverlays";
 import {
   getDisplayName,
   getUserAvatarFrame,
@@ -58,7 +57,6 @@ export default function MenuMainProfilePanelSlot({
   restoreTooltipOnLeave,
   leaveVoiceActionLabel,
   leaveVoiceActionAriaLabel,
-  directCallPanelProps,
 }) {
   return (
     <MenuProfilePanel
@@ -116,7 +114,7 @@ export default function MenuMainProfilePanelSlot({
       onRestoreTooltip={restoreTooltipOnLeave}
       leaveVoiceActionLabel={leaveVoiceActionLabel}
       leaveVoiceActionAriaLabel={leaveVoiceActionAriaLabel}
-      directCallPanel={directCallPanelProps ? <DirectCallOverlayView {...directCallPanelProps} embedded /> : null}
+      directCallPanel={null}
     />
   );
 }
