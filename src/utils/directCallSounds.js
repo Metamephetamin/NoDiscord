@@ -12,6 +12,8 @@ const DIRECT_CALL_TONE_CONFIG = {
   },
 };
 
+const directCallAudioCache = new Map();
+
 const createOscillatorBurst = (audioContext, destination, {
   frequency,
   type = "sine",
@@ -90,10 +92,35 @@ const stopHtmlAudio = (audio) => {
   try {
     audio.pause();
     audio.currentTime = 0;
-    audio.removeAttribute("src");
-    audio.load();
   } catch {
     // ignore cleanup failures
+  }
+};
+
+const getDirectCallAudioElement = (kind) => {
+  if (typeof window === "undefined" || typeof Audio === "undefined") {
+    return null;
+  }
+
+  if (directCallAudioCache.has(kind)) {
+    return directCallAudioCache.get(kind);
+  }
+
+  const toneConfig = DIRECT_CALL_TONE_CONFIG[kind];
+  if (!toneConfig?.path) {
+    return null;
+  }
+
+  try {
+    const audio = new Audio(toneConfig.path);
+    audio.preload = "auto";
+    audio.loop = true;
+    audio.playsInline = true;
+    audio.load();
+    directCallAudioCache.set(kind, audio);
+    return audio;
+  } catch {
+    return null;
   }
 };
 
@@ -108,11 +135,14 @@ const startLoopingAudioTone = async (kind) => {
   }
 
   try {
-    const audio = new Audio(toneConfig.path);
-    audio.preload = "auto";
+    const audio = getDirectCallAudioElement(kind);
+    if (!audio) {
+      return null;
+    }
+
     audio.loop = true;
     audio.volume = toneConfig.volume;
-    audio.playsInline = true;
+    audio.currentTime = 0;
 
     await audio.play();
 
@@ -124,16 +154,7 @@ const startLoopingAudioTone = async (kind) => {
   }
 };
 
-export const startDirectCallTone = async (kind = "outgoing") => {
-  if (typeof window === "undefined") {
-    return () => {};
-  }
-
-  const htmlAudioStop = await startLoopingAudioTone(kind);
-  if (htmlAudioStop) {
-    return htmlAudioStop;
-  }
-
+const startSynthTone = async (kind = "outgoing") => {
   const audioContext = createPreferredAudioContext();
   if (!audioContext) {
     return () => {};
@@ -163,5 +184,71 @@ export const startDirectCallTone = async (kind = "outgoing") => {
   return () => {
     window.clearInterval(intervalId);
     audioContext.close().catch(() => {});
+  };
+};
+
+export const startDirectCallTone = async (kind = "outgoing") => {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const fallbackDelayMs = kind === "incoming" ? 140 : 180;
+  let stopped = false;
+  let htmlToneActive = false;
+  let synthStop = null;
+  let fallbackTimerId = 0;
+
+  const ensureSynthTone = async () => {
+    if (stopped || htmlToneActive || synthStop) {
+      return synthStop || (() => {});
+    }
+
+    synthStop = await startSynthTone(kind);
+    if (stopped || htmlToneActive) {
+      synthStop?.();
+      synthStop = null;
+      return () => {};
+    }
+
+    return synthStop;
+  };
+
+  const synthStartPromise = new Promise((resolve) => {
+    fallbackTimerId = window.setTimeout(() => {
+      void ensureSynthTone().then(resolve);
+    }, fallbackDelayMs);
+  });
+
+  const htmlAudioStop = await startLoopingAudioTone(kind);
+  if (htmlAudioStop) {
+    htmlToneActive = true;
+    stopped = false;
+    window.clearTimeout(fallbackTimerId);
+    synthStop?.();
+    synthStop = null;
+    return () => {
+      stopped = true;
+      htmlToneActive = false;
+      window.clearTimeout(fallbackTimerId);
+      synthStop?.();
+      synthStop = null;
+      htmlAudioStop?.();
+    };
+  }
+
+  window.clearTimeout(fallbackTimerId);
+  if (!synthStop) {
+    synthStop = await Promise.race([
+      synthStartPromise,
+      ensureSynthTone(),
+    ]);
+  }
+
+  return () => {
+    stopped = true;
+    htmlToneActive = false;
+    window.clearTimeout(fallbackTimerId);
+    synthStop?.();
+    synthStop = null;
   };
 };

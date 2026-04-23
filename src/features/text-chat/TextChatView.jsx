@@ -75,6 +75,7 @@ export default function TextChatView(props) {
     messageEditState,
     voiceRecordingState,
     voiceRecordingDurationMs,
+    voiceMicLevel,
     speechRecognitionActive,
     speechMicLevel,
     speechCaptureState,
@@ -508,6 +509,7 @@ export default function TextChatView(props) {
             messageEditState={messageEditState}
             voiceRecordingState={voiceRecordingState}
             voiceRecordingDurationMs={voiceRecordingDurationMs}
+            voiceMicLevel={voiceMicLevel}
             speechRecognitionActive={speechRecognitionActive}
             speechMicLevel={speechMicLevel}
             speechCaptureState={speechCaptureState}
@@ -574,6 +576,7 @@ export default function TextChatView(props) {
           messageEditState={messageEditState}
           voiceRecordingState={voiceRecordingState}
           voiceRecordingDurationMs={voiceRecordingDurationMs}
+          voiceMicLevel={voiceMicLevel}
           speechRecognitionActive={speechRecognitionActive}
           speechMicLevel={speechMicLevel}
           speechCaptureState={speechCaptureState}

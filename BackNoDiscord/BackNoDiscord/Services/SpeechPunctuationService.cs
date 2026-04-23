@@ -30,6 +30,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "^(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex QuestionEndRegex = new("\\bли\\b|(?:,\\s*)?(правда|верно)\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex QuestionTailRegex = new("(кто|что|где|куда|откуда|когда|почему|зачем|как|чего)\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ComparativePairRegex = new("\\bкак\\b.+\\bтак и\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex ExclamationStartRegex = new(
         "^(привет|здравствуйте|спасибо|пожалуйста|срочно|осторожно|внимание|ура|класс|супер|отлично)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -50,6 +52,12 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex SentenceOpeningParentheticalRegex = new(
         "(^|[.!?]\\s+)(ну|в общем|короче|слушай|смотри|кстати|например|честно говоря|если честно|по правде говоря|к счастью|к сожалению|как ни странно|как правило|безусловно|разумеется|наверное|возможно|кажется|пожалуй|вообще-то)\\s+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex SentenceOpeningInterjectionRegex = new(
+        "(^|[.!?…]\\s+)(блин|бля|блинчик|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда|ух|эх)\\s+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex InlineInterjectionRegex = new(
+        "\\s+(блин|бля|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly IReadOnlyList<(Regex Regex, string Replacement)> SpokenPunctuationRules =
@@ -72,10 +80,10 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
 
     private static readonly IReadOnlyList<Regex> CommaBeforeRules =
     [
-        new Regex("\\s+(а|но|однако|зато)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
-        new Regex("\\s+(если|когда|хотя|чтобы|будто|словно|так как|потому что|несмотря на то что|так что)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
-        new Regex("\\s+(что|чем|где|куда|откуда|который|которая|которое|которые)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
-        new Regex("\\s+(например|конечно|кстати|наверное|возможно|может быть|кажется|по-моему|по сути|во-первых|во-вторых|с одной стороны|с другой стороны)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex("\\s+(а|но|однако|зато|хотя|причем|причём|притом|то есть)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex("\\s+(если|когда|пока|хотя|чтобы|будто|словно|как будто|так как|потому что|из-за того что|для того чтобы|перед тем как|после того как|несмотря на то что|так что|раз уж|едва|как только)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex("\\s+(что|чем|где|куда|откуда|почему|зачем|который|которая|которое|которые|которого|которой|которым|которыми)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex("\\s+(например|конечно|кстати|наверное|возможно|может быть|кажется|по-моему|по сути|во-первых|во-вторых|в-третьих|с одной стороны|с другой стороны|как правило|скорее всего|безусловно|разумеется)\\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
     ];
 
     private static readonly IReadOnlyList<(Regex Regex, string Replacement)> ComplexPhraseReplacements =
@@ -84,6 +92,9 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         (new Regex("\\b(дело в том)\\s+что\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, что"),
         (new Regex("\\b(да|нет)\\s+(конечно|наверное|пожалуй|думаю)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, $2"),
         (new Regex("\\b(пожалуйста)\\s+(если|когда|передай|напиши|посмотри|скажи)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, $2"),
+        (new Regex("\\b(не только)\\s+(.+?)\\s+(но и)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1 $2, $3"),
+        (new Regex("\\b(как)\\s+(.+?)\\s+(так и)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1 $2, $3"),
+        (new Regex("\\b(не столько)\\s+(.+?)\\s+(сколько)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1 $2, $3"),
         (new Regex("\\b(привет|здравствуйте|добрый день|добрый вечер)\\s+([а-яёa-z-]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, $2"),
     ];
 
@@ -100,6 +111,12 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "по-моему",
         "по сути",
         "как правило",
+        "безусловно",
+        "разумеется",
+        "вообще-то",
+        "скорее всего",
+        "к счастью",
+        "к сожалению",
     ];
     private static readonly string[] LeadingSubordinatePhrases =
     [
@@ -123,6 +140,20 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
     private static readonly HashSet<string> CompoundClauseConjunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "и", "или", "либо", "да",
+    };
+    private static readonly HashSet<string> AddressLeadStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "я", "мы", "ты", "вы", "он", "она", "оно", "они", "это", "кто", "что", "где", "когда", "зачем",
+        "почему", "как", "если", "когда", "пока", "хотя", "чтобы", "будто", "словно", "так", "просто",
+        "ладно", "давай", "сегодня", "завтра", "вчера", "сейчас", "потом", "вообще", "кстати", "например",
+        "ну", "блин", "капец", "жесть", "господи", "чёрт", "черт", "привет", "здравствуйте", "добрый", "доброе",
+    };
+    private static readonly HashSet<string> AddressFollowerTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ты", "вы", "посмотри", "смотри", "слушай", "скажи", "напиши", "ответь", "подскажи", "подойди",
+        "глянь", "зацени", "пожалуйста", "помоги", "давай", "иди", "проверь", "кинь", "пришли", "можешь",
+        "можете", "где", "как", "что", "чего", "когда", "зачем", "почему", "нужно", "надо", "будешь",
+        "будете", "помнишь", "знаешь",
     };
 
     private readonly ILogger<SpeechPunctuationService> _logger;
@@ -199,6 +230,13 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             return $"{prefix}{phrase}, ";
         });
 
+        normalizedText = SentenceOpeningInterjectionRegex.Replace(normalizedText, static match =>
+        {
+            var prefix = match.Groups[1].Value;
+            var phrase = match.Groups[2].Value;
+            return $"{prefix}{phrase}, ";
+        });
+
         normalizedText = IntroductoryPhrasesRegex.Replace(normalizedText, static match =>
         {
             var prefix = match.Groups[1].Value;
@@ -211,6 +249,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             normalizedText = regex.Replace(normalizedText, replacement);
         }
 
+        normalizedText = InsertSentenceOpeningAddressComma(normalizedText);
+        normalizedText = InsertInlineInterjectionCommas(normalizedText);
         normalizedText = InsertInlineParentheticalPhraseCommas(normalizedText);
         normalizedText = InsertIntroductoryWordCommas(normalizedText);
         normalizedText = InsertConditionalPairComma(normalizedText);
@@ -230,7 +270,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             return normalizedText;
         }
 
-        if (QuestionStartRegex.IsMatch(normalizedText) || QuestionEndRegex.IsMatch(normalizedText))
+        if (ShouldEndWithQuestionMark(normalizedText))
         {
             return $"{normalizedText}?";
         }
@@ -420,6 +460,40 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         });
     }
 
+    private static string InsertInlineInterjectionCommas(string text)
+    {
+        return InlineInterjectionRegex.Replace(text, static match =>
+        {
+            var phrase = match.Groups[1].Value.Trim();
+            return $", {phrase}, ";
+        });
+    }
+
+    private static string InsertSentenceOpeningAddressComma(string text)
+    {
+        return Regex.Replace(
+            text,
+            @"(^|[.!?…]\s+)([А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z0-9_-]{1,31})\s+([А-ЯЁа-яёA-Za-z-]+)",
+            static match =>
+            {
+                var prefix = match.Groups[1].Value;
+                var candidate = TrimWordToken(match.Groups[2].Value);
+                var follower = TrimWordToken(match.Groups[3].Value);
+                if (string.IsNullOrWhiteSpace(candidate)
+                    || string.IsNullOrWhiteSpace(follower)
+                    || AddressLeadStopWords.Contains(candidate)
+                    || !AddressFollowerTokens.Contains(follower)
+                    || LooksLikeFiniteVerb(candidate)
+                    || candidate.Contains(',', StringComparison.Ordinal))
+                {
+                    return match.Value;
+                }
+
+                return $"{prefix}{candidate}, {follower}";
+            },
+            RegexOptions.IgnoreCase);
+    }
+
     private static string InsertConditionalPairComma(string text)
     {
         return Regex.Replace(
@@ -594,6 +668,18 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         }
 
         return builder.ToString().Trim();
+    }
+
+    private static bool ShouldEndWithQuestionMark(string text)
+    {
+        if (ComparativePairRegex.IsMatch(text))
+        {
+            return false;
+        }
+
+        return QuestionStartRegex.IsMatch(text)
+            || QuestionEndRegex.IsMatch(text)
+            || QuestionTailRegex.IsMatch(text);
     }
 
     private static bool StartsWithWords(IReadOnlyList<string> sourceWords, IReadOnlyList<string> prefixWords)

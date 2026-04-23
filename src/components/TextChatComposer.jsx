@@ -38,6 +38,7 @@ function TextChatComposer({
   messageEditState,
   voiceRecordingState,
   voiceRecordingDurationMs,
+  voiceMicLevel = 0,
   speechRecognitionActive,
   speechMicLevel = 0,
   speechCaptureState = "idle",
@@ -203,15 +204,24 @@ function TextChatComposer({
   const hasSendPayload = Boolean(String(message || "").trim()) || selectedFiles.length > 0;
   const shouldShowSendButton = hasSendPayload && voiceRecordingState === "idle";
   const voiceButtonStateClass = voiceRecordingState !== "idle" ? `composer-tool--recording-${voiceRecordingState}` : "";
+  const normalizedVoiceMicLevel = Math.max(0, Math.min(1, Number(voiceMicLevel) || 0));
   const normalizedSpeechMicLevel = Math.max(0, Math.min(1, Number(speechMicLevel) || 0));
-  const speechMicStyle = speechRecognitionActive
+  const activeMicLevel = voiceRecordingState !== "idle" ? normalizedVoiceMicLevel : normalizedSpeechMicLevel;
+  const speechMicStyle = (speechRecognitionActive || voiceRecordingState !== "idle")
     ? {
-      "--speech-level-scale": (1 + normalizedSpeechMicLevel * 0.68).toFixed(3),
-      "--speech-level-opacity": (0.28 + normalizedSpeechMicLevel * 0.6).toFixed(3),
+      "--speech-level-scale": (1.08 + activeMicLevel * 1.32).toFixed(3),
+      "--speech-level-opacity": (0.58 + activeMicLevel * 0.34).toFixed(3),
     }
     : undefined;
   const speechIsHolding = speechCaptureState === "holding";
   const speechIsLocked = speechCaptureState === "locked";
+  const hybridMicStateClass = voiceRecordingState !== "idle"
+    ? `composer-tool--gesture-${voiceRecordingState}`
+    : speechIsLocked
+      ? "composer-tool--gesture-locked"
+      : speechIsHolding
+        ? "composer-tool--gesture-holding"
+        : "";
   const handleClearPendingUploads = () => {
     onClearPendingUploads();
   };
@@ -391,7 +401,7 @@ function TextChatComposer({
 
         {errorMessage ? <div className="chat-error chat-error--composer">{errorMessage}</div> : null}
 
-        {replyState || messageEditState || (ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle") ? (
+        {replyState || messageEditState || voiceRecordingState !== "idle" || speechRecognitionActive ? (
           <div className="composer-status-strip">
             {replyState ? (
               <div className="composer-status composer-status--reply">
@@ -419,17 +429,17 @@ function TextChatComposer({
               </div>
             ) : null}
 
-            {ENABLE_VOICE_MESSAGE_BUTTON && voiceRecordingState !== "idle" ? (
+            {voiceRecordingState !== "idle" ? (
               <div className={`composer-status composer-status--voice composer-status--${voiceRecordingState}`}>
                 <span className="composer-status__dot" aria-hidden="true" />
                 <div className="composer-status__copy">
                   <strong>{buildVoiceMessageLabel(voiceRecordingDurationMs)}</strong>
                   <span>
                     {voiceRecordingState === "locked"
-                      ? "Запись зафиксирована. Нажмите на кнопку микрофона ещё раз, чтобы отправить."
+                      ? "Голосовое готово к отправке. Нажмите на микрофон ещё раз, чтобы отправить."
                       : voiceRecordingState === "sending"
                         ? "Отправляем голосовое сообщение..."
-                        : "Удерживайте кнопку и отпустите для отправки или потяните вверх для фиксации."}
+                        : "Держите и говорите. Отпустите - отправим как голосовое. Свайп вверх - включим голосовой ввод текста."}
                   </span>
                 </div>
                 {voiceRecordingState === "holding" || voiceRecordingState === "locked" ? (
@@ -437,6 +447,23 @@ function TextChatComposer({
                     Отмена
                   </button>
                 ) : null}
+              </div>
+            ) : null}
+
+            {speechRecognitionActive ? (
+              <div className={`composer-status composer-status--voice ${speechIsLocked ? "composer-status--locked" : ""}`}>
+                <span className="composer-status__dot" aria-hidden="true" />
+                <div className="composer-status__copy">
+                  <strong>Голосовой ввод текста</strong>
+                  <span>
+                    {speechIsLocked
+                      ? "Говорите - текст добавляется в поле. Он не отправится сам, можно спокойно исправить ошибки."
+                      : "Говорите фразу. Свайп вверх фиксирует диктовку, потом можно отредактировать текст."}
+                  </span>
+                </div>
+                <button type="button" className="composer-status__action" onClick={() => onStopSpeechRecognition(true)}>
+                  Готово
+                </button>
               </div>
             ) : null}
 
@@ -797,7 +824,7 @@ function TextChatComposer({
               ) : ENABLE_SPEECH_INPUT_BUTTON ? (
                 <button
                   type="button"
-                  className={`composer-tool composer-tool--speech composer-tool--action-slot ${speechRecognitionActive ? "composer-tool--active" : ""}`}
+                  className={`composer-tool composer-tool--speech composer-tool--action-slot ${speechRecognitionActive || voiceRecordingState !== "idle" ? "composer-tool--active" : ""} ${hybridMicStateClass}`}
                   onClick={() => {
                     if (suppressSpeechClickRef.current) {
                       suppressSpeechClickRef.current = false;
@@ -823,19 +850,20 @@ function TextChatComposer({
                     }
                     await onSpeechRecognitionPointerCancel?.(event);
                   }}
-                  disabled={uploadingFile || voiceRecordingState !== "idle"}
+                  disabled={uploadingFile || voiceRecordingState === "sending"}
                   style={speechMicStyle}
-                  title="Голосовой ввод текста"
-                  aria-label="Голосовой ввод текста"
+                  title={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Удерживайте для голосового сообщения, свайп вверх для голосового ввода текста"}
+                  aria-label={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Микрофон: удерживайте для голосового сообщения, свайп вверх для диктовки"}
                 >
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--outer" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--inner" aria-hidden="true" />
+                  <span className="composer-tool__speech-ring composer-tool__speech-ring--pulse" aria-hidden="true" />
                   <span className="composer-tool__mic" aria-hidden="true" />
-                  {speechIsHolding ? (
-                    <span className="composer-tool__speech-hint" aria-hidden="true">^</span>
+                  {voiceRecordingState === "holding" || speechIsHolding ? (
+                    <span className="composer-tool__speech-hint" aria-hidden="true">↑</span>
                   ) : null}
-                  {speechIsLocked ? (
-                    <span className="composer-tool__lock composer-tool__lock--speech" aria-hidden="true">?</span>
+                  {speechIsLocked || voiceRecordingState === "locked" ? (
+                    <span className="composer-tool__lock composer-tool__lock--speech" aria-hidden="true">●</span>
                   ) : null}
                 </button>
               ) : ENABLE_VOICE_MESSAGE_BUTTON ? (
@@ -989,6 +1017,7 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
     && areMessageEditStatesEqual(previousProps.messageEditState, nextProps.messageEditState)
     && previousProps.voiceRecordingState === nextProps.voiceRecordingState
     && previousProps.voiceRecordingDurationMs === nextProps.voiceRecordingDurationMs
+    && previousProps.voiceMicLevel === nextProps.voiceMicLevel
     && previousProps.speechRecognitionActive === nextProps.speechRecognitionActive
     && previousProps.speechMicLevel === nextProps.speechMicLevel
     && previousProps.speechCaptureState === nextProps.speechCaptureState

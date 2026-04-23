@@ -355,7 +355,7 @@ export const FriendsMain = ({
     !currentConversationTarget &&
     currentDirectFriend &&
     activeDirectCall &&
-    !["idle", "incoming", "outgoing"].includes(String(activeDirectCall.phase || activeDirectCall.status || "")) &&
+    ["connected", "connecting", "reconnecting"].includes(String(activeDirectCall.phase || activeDirectCall.status || "")) &&
     String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
       ? directCallPanelProps
       : null;

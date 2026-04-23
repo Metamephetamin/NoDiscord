@@ -42,7 +42,7 @@ export default function useTextChatVoiceSpeech({
 }) {
   const [voiceRecordingState, setVoiceRecordingState] = useState("idle");
   const [voiceRecordingDurationMs, setVoiceRecordingDurationMs] = useState(0);
-  const [, setVoiceMicLevel] = useState(0);
+  const [voiceMicLevel, setVoiceMicLevel] = useState(0);
   const [speechRecognitionActive, setSpeechRecognitionActive] = useState(false);
   const [speechMicLevel, setSpeechMicLevel] = useState(0);
   const [speechCaptureState, setSpeechCaptureState] = useState("idle");
@@ -605,7 +605,7 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    if (voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+    if (voiceRecordingState === "holding" || voiceRecordingState === "sending") {
       return;
     }
 
@@ -618,18 +618,51 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
+    if (voiceRecordingState === "locked") {
+      void finalizeVoiceRecording(true);
+      return;
+    }
+
+    void startVoiceRecording(event);
+  };
+
+  const switchHeldVoiceRecordingToSpeechRecognition = async (event) => {
+    const pointerState = voicePointerStateRef.current;
+    if (voiceRecordingState !== "holding" || pointerState.pointerId !== event.pointerId || pointerState.locked) {
+      return;
+    }
+
+    voicePointerStateRef.current = { ...pointerState, locked: true };
+    setSpeechCaptureState("locked");
+    await finalizeVoiceRecording(false);
     startSpeechRecognition();
     if (speechRecognitionRef.current) {
       speechPointerStateRef.current = {
         pointerId: event.pointerId ?? null,
-        startY: event.clientY ?? 0,
-        locked: false,
+        startY: event.clientY ?? pointerState.startY ?? 0,
+        locked: true,
       };
-      setSpeechCaptureState("holding");
+      setSpeechCaptureState("locked");
+      return;
     }
+
+    resetSpeechPointerState();
   };
 
   const handleSpeechRecognitionPointerMove = (event) => {
+    if (voiceRecordingState === "holding") {
+      const pointerState = voicePointerStateRef.current;
+      if (pointerState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const dragDistance = pointerState.startY - event.clientY;
+      if (dragDistance >= VOICE_LOCK_DRAG_THRESHOLD_PX) {
+        void switchHeldVoiceRecordingToSpeechRecognition(event);
+      }
+      return;
+    }
+
     if (speechCaptureState !== "holding") {
       return;
     }
@@ -646,14 +679,26 @@ export default function useTextChatVoiceSpeech({
     }
   };
 
-  const handleSpeechRecognitionPointerUp = (event) => {
+  const handleSpeechRecognitionPointerUp = async (event) => {
+    const voicePointerState = voicePointerStateRef.current;
+    if (voiceRecordingState === "holding" && voicePointerState.pointerId === event.pointerId && !voicePointerState.locked) {
+      await finalizeVoiceRecording(true);
+      return;
+    }
+
     const pointerState = speechPointerStateRef.current;
     if (speechCaptureState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
       stopSpeechRecognition(true);
     }
   };
 
-  const handleSpeechRecognitionPointerCancel = (event) => {
+  const handleSpeechRecognitionPointerCancel = async (event) => {
+    const voicePointerState = voicePointerStateRef.current;
+    if (voiceRecordingState === "holding" && voicePointerState.pointerId === event.pointerId && !voicePointerState.locked) {
+      await finalizeVoiceRecording(false);
+      return;
+    }
+
     const pointerState = speechPointerStateRef.current;
     if (speechCaptureState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
       stopSpeechRecognition(false);
@@ -966,6 +1011,7 @@ export default function useTextChatVoiceSpeech({
   return {
     voiceRecordingState,
     voiceRecordingDurationMs,
+    voiceMicLevel,
     speechRecognitionActive,
     speechMicLevel,
     speechCaptureState,

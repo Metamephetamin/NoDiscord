@@ -2172,6 +2172,7 @@ export default function TextChat({
   const {
     voiceRecordingState,
     voiceRecordingDurationMs,
+    voiceMicLevel,
     speechRecognitionActive,
     speechMicLevel,
     speechCaptureState,

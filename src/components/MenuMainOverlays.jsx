@@ -38,9 +38,11 @@ function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }
       }}
     >
       <span className="direct-call-inline__voice-wave-glow" />
-      <span className="direct-call-inline__voice-wave-ribbon direct-call-inline__voice-wave-ribbon--one" />
-      <span className="direct-call-inline__voice-wave-ribbon direct-call-inline__voice-wave-ribbon--two" />
-      <span className="direct-call-inline__voice-wave-ribbon direct-call-inline__voice-wave-ribbon--three" />
+      <span className="direct-call-inline__voice-wave-core" />
+      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--teal" />
+      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--rose" />
+      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--blue" />
+      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--mint" />
     </div>
   );
 }

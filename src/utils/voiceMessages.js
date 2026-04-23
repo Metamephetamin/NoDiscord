@@ -10,6 +10,8 @@ const VOICE_RECORDING_MIME_CANDIDATES = [
 
 const QUESTION_START_REGEX = /^(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\b/i;
 const QUESTION_END_REGEX = /\bли\b|(?:,\s*)?(правда|верно)\s*$/i;
+const QUESTION_TAIL_REGEX = /(кто|что|где|куда|откуда|когда|почему|зачем|как|чего)\s*$/i;
+const COMPARATIVE_PAIR_REGEX = /\bкак\b.+\bтак и\b/i;
 const EXCLAMATION_START_REGEX = /^(привет|спасибо|пожалуйста|срочно|осторожно|внимание|ура|класс|супер|отлично)\b/i;
 
 const SPOKEN_PUNCTUATION_RULES = [
@@ -30,19 +32,24 @@ const SPOKEN_PUNCTUATION_RULES = [
 ];
 
 const COMMA_BEFORE_RULES = [
-  /\s+(а|но|однако|зато|либо)\s+/gi,
-  /\s+(если|когда|пока|хотя|чтобы|будто|словно|как будто|так как|потому что|из-за того что|для того чтобы|перед тем как|после того как|несмотря на то что|так что)\s+/gi,
+  /\s+(а|но|однако|зато|либо|хотя|причем|причём|притом|то есть)\s+/gi,
+  /\s+(если|когда|пока|хотя|чтобы|будто|словно|как будто|так как|потому что|из-за того что|для того чтобы|перед тем как|после того как|несмотря на то что|так что|раз уж|едва|как только)\s+/gi,
   /\s+(что|чем|где|куда|откуда|почему|зачем|который|которая|которое|которые|которого|которой|которым|которыми)\s+/gi,
-  /\s+(например|конечно|кстати|наверное|возможно|может быть|кажется|вероятно|по-моему|по сути|во-первых|во-вторых|с одной стороны|с другой стороны)\s+/gi,
+  /\s+(например|конечно|кстати|наверное|возможно|может быть|кажется|вероятно|по-моему|по сути|во-первых|во-вторых|в-третьих|с одной стороны|с другой стороны|как правило|скорее всего|безусловно|разумеется)\s+/gi,
 ];
 
 const INTRODUCTORY_PHRASES_REGEX = /(^|[.!?]\s+)(ну|в общем|короче|слушай|смотри|кстати|например)\s+/gi;
+const SENTENCE_OPENING_INTERJECTION_REGEX = /(^|[.!?…]\s+)(блин|бля|блинчик|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда|ух|эх)\s+/gi;
+const INLINE_INTERJECTION_REGEX = /\s+(блин|бля|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда)\s+/gi;
 
 const COMPLEX_PHRASE_REPLACEMENTS = [
   [/\b(я думаю|я считаю|я уверен|я надеюсь|мне кажется|по-моему|скорее всего|вероятно)\s+что\b/gi, "$1, что"],
   [/\b(дело в том)\s+что\b/gi, "$1, что"],
   [/\b(да|нет)\s+(конечно|наверное|пожалуй|думаю)\b/gi, "$1, $2"],
   [/\b(пожалуйста)\s+(если|когда|передай|напиши|посмотри|скажи)\b/gi, "$1, $2"],
+  [/\b(не только)\s+(.+?)\s+(но и)\b/gi, "$1 $2, $3"],
+  [/\b(как)\s+(.+?)\s+(так и)\b/gi, "$1 $2, $3"],
+  [/\b(не столько)\s+(.+?)\s+(сколько)\b/gi, "$1 $2, $3"],
   [/\b(с одной стороны)\s+(.+?)\s+(с другой стороны)\b/gi, "$1, $2, $3"],
   [/\b(во-первых|во-вторых|в-третьих)\s+/gi, "$1, "],
   [/\b(привет|здравствуйте|добрый день|добрый вечер)\s+([А-ЯЁA-Z][а-яёa-z-]+)/g, "$1, $2"],
@@ -63,10 +70,27 @@ const INTRODUCTORY_WORDS = [
   "по сути",
   "как правило",
   "скорее всего",
+  "безусловно",
+  "разумеется",
+  "вообще-то",
+  "к счастью",
+  "к сожалению",
 ];
 
 const GERUND_SUFFIX_REGEX = /(в|вши|вшись|ши|я|ясь|учи|ючи|аясь|яясь|ившись|ыв|ывши|ывшись)$/i;
 const CLAUSE_START_REGEX = /^(я|мы|ты|вы|он|она|оно|они|это|тот|та|те|кто|все|всё|мне|нам|ему|ей|им|меня|тебя|его|её|их|[а-яё-]+(?:л|ла|ло|ли|ет|ют|ут|ит|ат|ят|ем|им|ешь|ишь|ете|ите|ался|алась|алось|ались|ется|ются|утся|ится|ятся))$/i;
+const ADDRESS_LEAD_STOP_WORDS = new Set([
+  "я", "мы", "ты", "вы", "он", "она", "оно", "они", "это", "кто", "что", "где", "когда", "зачем",
+  "почему", "как", "если", "пока", "хотя", "чтобы", "будто", "словно", "так", "просто", "ладно", "давай",
+  "сегодня", "завтра", "вчера", "сейчас", "потом", "вообще", "кстати", "например", "ну", "блин", "капец",
+  "жесть", "господи", "чёрт", "черт", "привет", "здравствуйте", "добрый", "доброе",
+]);
+const ADDRESS_FOLLOWER_TOKENS = new Set([
+  "ты", "вы", "посмотри", "смотри", "слушай", "скажи", "напиши", "ответь", "подскажи", "подойди",
+  "глянь", "зацени", "пожалуйста", "помоги", "давай", "иди", "проверь", "кинь", "пришли", "можешь",
+  "можете", "где", "как", "что", "чего", "когда", "зачем", "почему", "нужно", "надо", "будешь",
+  "будете", "помнишь", "знаешь",
+]);
 
 function applySpokenPunctuation(text) {
   let normalizedText = ` ${String(text || "").trim()} `;
@@ -110,6 +134,36 @@ function insertIntroductoryWordCommas(text) {
   return normalizedText;
 }
 
+function looksLikeFiniteVerb(token) {
+  const normalizedToken = String(token || "").trim().replace(/^[,.;:!?…"'`]+|[,.;:!?…"'`]+$/g, "");
+  return /(?:л|ла|ло|ли|ет|ют|ут|ит|ат|ят|ем|им|ешь|ишь|ете|ите|ался|алась|алось|ались|ется|ются|утся|ится|ятся|будет|будут|был|была|было|были|можно|нужно|стоит|получится|выйдет|лся|лась|лось|лись)$/i.test(normalizedToken);
+}
+
+function insertSentenceOpeningAddressComma(text) {
+  return String(text || "").replace(
+    /(^|[.!?…]\s+)([А-ЯЁа-яёA-Za-z][А-ЯЁа-яёA-Za-z0-9_-]{1,31})\s+([А-ЯЁа-яёA-Za-z-]+)/g,
+    (match, prefix, candidate, follower) => {
+      const normalizedCandidate = String(candidate || "").trim();
+      const normalizedFollower = String(follower || "").trim().toLowerCase();
+      if (
+        !normalizedCandidate
+        || !normalizedFollower
+        || ADDRESS_LEAD_STOP_WORDS.has(normalizedCandidate.toLowerCase())
+        || !ADDRESS_FOLLOWER_TOKENS.has(normalizedFollower)
+        || looksLikeFiniteVerb(normalizedCandidate)
+      ) {
+        return match;
+      }
+
+      return `${prefix}${normalizedCandidate}, ${follower}`;
+    }
+  );
+}
+
+function insertInlineInterjectionCommas(text) {
+  return String(text || "").replace(INLINE_INTERJECTION_REGEX, (match, phrase) => `, ${String(phrase || "").trim()}, `);
+}
+
 function insertInitialGerundComma(text) {
   return String(text || "").replace(
     /(^|[.!?…]\s+)([А-ЯЁа-яё-]+(?:\s+[А-ЯЁа-яё-]+){0,5})\s+([А-ЯЁа-яё-]+)/g,
@@ -142,6 +196,21 @@ function normalizeSpacing(text) {
     .replace(/([.!?…])\s*,/g, "$1 ")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+function shouldEndWithQuestionMark(text) {
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText) {
+    return false;
+  }
+
+  if (COMPARATIVE_PAIR_REGEX.test(normalizedText)) {
+    return false;
+  }
+
+  return QUESTION_START_REGEX.test(normalizedText)
+    || QUESTION_END_REGEX.test(normalizedText)
+    || QUESTION_TAIL_REGEX.test(normalizedText);
 }
 
 export function getSupportedVoiceRecordingMimeType() {
@@ -226,12 +295,15 @@ export function restoreRussianSpeechPunctuation(text, { finalize = true } = {}) 
     normalizedText = normalizedText.replace(regex, ", $1 ");
   });
 
+  normalizedText = normalizedText.replace(SENTENCE_OPENING_INTERJECTION_REGEX, (match, prefix, phrase) => `${prefix}${phrase}, `);
   normalizedText = normalizedText.replace(INTRODUCTORY_PHRASES_REGEX, (match, prefix, phrase) => `${prefix}${phrase}, `);
 
   COMPLEX_PHRASE_REPLACEMENTS.forEach(([regex, replacement]) => {
     normalizedText = normalizedText.replace(regex, replacement);
   });
 
+  normalizedText = insertSentenceOpeningAddressComma(normalizedText);
+  normalizedText = insertInlineInterjectionCommas(normalizedText);
   normalizedText = insertIntroductoryWordCommas(normalizedText);
   normalizedText = insertInitialGerundComma(normalizedText);
   normalizedText = normalizeSpacing(normalizedText);
@@ -245,7 +317,7 @@ export function restoreRussianSpeechPunctuation(text, { finalize = true } = {}) 
     return normalizedText;
   }
 
-  if (QUESTION_START_REGEX.test(normalizedText) || QUESTION_END_REGEX.test(normalizedText)) {
+  if (shouldEndWithQuestionMark(normalizedText)) {
     return `${normalizedText}?`;
   }
 
