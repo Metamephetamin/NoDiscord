@@ -1497,6 +1497,13 @@ export default function MenuMain({
         return rightWeight - leftWeight;
       });
   }, [activeVoiceParticipantsMap, currentUserId, currentVoiceChannel, liveUserIds, memberNameByUserId, memberRoleColorByUserId, roomVoiceParticipants, speakingUserIds]);
+  const directCallPeerIsSpeaking = useMemo(
+    () => currentVoiceParticipants.some((participant) => (
+      String(participant?.userId || "") === String(directCallState.peerUserId || "")
+      && Boolean(participant?.isSpeaking)
+    )),
+    [currentVoiceParticipants, directCallState.peerUserId]
+  );
   const spotlightVoiceParticipant = useMemo(
     () =>
       currentVoiceParticipants.find((participant) => participant.isSpeaking)
@@ -2204,7 +2211,6 @@ export default function MenuMain({
     }
 
     try {
-      openDirectChat(normalizedTargetUserId);
       if (currentVoiceChannelRef.current && currentVoiceChannelRef.current !== channelId) {
         await disconnectFromActiveVoiceContext();
       }
@@ -6444,6 +6450,8 @@ export default function MenuMain({
     history: directCallHistory,
     isMicMuted,
     isSoundMuted,
+    micLevel,
+    peerIsSpeaking: directCallPeerIsSpeaking,
     selfName: getDisplayName(user),
     selfAvatar: getUserAvatar(user),
     selfAvatarFrame: getUserAvatarFrame(user),
@@ -7387,6 +7395,8 @@ export default function MenuMain({
       directCallHistory={directCallHistory}
       isMicMuted={isMicMuted}
       isSoundMuted={isSoundMuted}
+      micLevel={micLevel}
+      directCallPeerIsSpeaking={directCallPeerIsSpeaking}
       audioInputDevices={audioInputDevices}
       audioOutputDevices={audioOutputDevices}
       selectedInputDeviceId={selectedInputDeviceId}

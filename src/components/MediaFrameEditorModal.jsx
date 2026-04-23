@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedMedia from "./AnimatedMedia";
+import PercentageSlider from "./PercentageSlider";
 import { getDefaultMediaFrame, getMediaFramePositionBounds, normalizeMediaFrame } from "../utils/mediaFrames";
 
 const TARGET_COPY = {
@@ -210,13 +211,14 @@ export default function MediaFrameEditorModal({
             <div className="media-frame-editor__avatar-toolbar">
               <label className="media-frame-editor__slider-field media-frame-editor__slider-field--avatar">
                 <span className="media-frame-editor__slider-label">Масштаб</span>
-                <input
-                  type="range"
-                  min="0.2"
-                  max="5"
-                  step="0.01"
+                <PercentageSlider
+                  min={0.2}
+                  max={5}
+                  step={0.01}
                   value={normalizedDraftFrame.zoom}
                   onChange={handleZoomChange}
+                  ariaLabel="Масштаб аватара"
+                  formatValue={(nextValue) => `${Math.round(Number(nextValue) * 100)}%`}
                 />
                 <strong>{Math.round(normalizedDraftFrame.zoom * 100)}%</strong>
               </label>
@@ -378,13 +380,14 @@ export default function MediaFrameEditorModal({
               </div>
               <label className="media-frame-editor__slider-field">
                 <span>Масштаб</span>
-                <input
-                  type="range"
-                  min="0.2"
-                  max="5"
-                  step="0.01"
+                <PercentageSlider
+                  min={0.2}
+                  max={5}
+                  step={0.01}
                   value={normalizedDraftFrame.zoom}
                   onChange={handleZoomChange}
+                  ariaLabel="Масштаб изображения"
+                  formatValue={(nextValue) => `${Math.round(Number(nextValue) * 100)}%`}
                 />
                 <strong>{normalizedDraftFrame.zoom.toFixed(2)}x</strong>
               </label>

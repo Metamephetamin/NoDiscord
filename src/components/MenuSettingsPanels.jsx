@@ -2,6 +2,7 @@
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
+import PercentageSlider from "./PercentageSlider";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -169,11 +170,23 @@ export const VoiceSettingsPanel = ({
 
         <label className="voice-settings-field">
           <span>Громкость микрофона</span>
-          <input type="range" min="0" max="200" value={micVolume} onChange={(event) => onMicVolumeChange(Number(event.target.value))} />
+          <PercentageSlider
+            min={0}
+            max={200}
+            value={micVolume}
+            onChange={(event) => onMicVolumeChange(Number(event.target.value))}
+            ariaLabel="Громкость микрофона"
+          />
         </label>
         <label className="voice-settings-field">
           <span>Громкость динамика</span>
-          <input type="range" min="0" max="200" value={audioVolume} onChange={(event) => onAudioVolumeChange(Number(event.target.value))} />
+          <PercentageSlider
+            min={0}
+            max={200}
+            value={audioVolume}
+            onChange={(event) => onAudioVolumeChange(Number(event.target.value))}
+            ariaLabel="Громкость динамика"
+          />
         </label>
       </div>
 

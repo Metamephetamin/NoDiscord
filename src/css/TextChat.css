@@ -459,9 +459,11 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overflow-anchor: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  overscroll-behavior-x: none;
   scroll-behavior: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--chat-scrollbar-thumb) transparent;
@@ -568,6 +570,7 @@
   align-items: flex-start;
   gap: 14px;
   width: fit-content;
+  min-width: 0;
   max-width: min(100%, 78%);
   padding: 0;
   border-radius: 0;
@@ -797,6 +800,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   color: #f8fafc;
   font-size: 14px;
   font-weight: 700;
@@ -814,6 +818,8 @@
   align-items: center;
   gap: 6px;
   min-height: 18px;
+  min-width: 0;
+  max-width: 100%;
   line-height: 18px;
   padding: 0;
   border: 0;
@@ -1098,6 +1104,7 @@
   display: inline-flex;
   align-items: flex-end;
   gap: 8px;
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -1251,6 +1258,7 @@
 .message-invite-card {
   margin-top: 10px;
   width: min(100%, 380px);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1273,6 +1281,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .message-invite-card__badge {
@@ -1290,14 +1300,18 @@
 }
 
 .message-invite-card__status {
+  min-width: 0;
+  max-width: 100%;
   color: #bcc5d9;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .message-invite-card__body {
   display: flex;
   align-items: flex-start;
   gap: 14px;
+  min-width: 0;
 }
 
 .message-invite-card__icon {
@@ -1376,6 +1390,7 @@
   align-items: center;
   gap: 12px;
   width: fit-content;
+  min-width: 0;
   max-width: 100%;
   padding: 10px 12px;
   border-radius: 14px;
@@ -1425,6 +1440,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
   width: 100%;
   container-type: inline-size;
 }
@@ -1432,6 +1448,7 @@
 .message-attachments-stack--with-overlay {
   position: relative;
   width: fit-content;
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -2219,6 +2236,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-attachment-list__item .message-attachment {
@@ -2237,6 +2256,7 @@
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
+  min-width: 0;
   width: 100%;
 }
 
@@ -5197,6 +5217,7 @@
 
 .message-poll-card {
   width: min(100%, 420px);
+  min-width: 0;
   margin-top: 10px;
   padding: 14px 14px 12px;
   border-radius: 22px;
@@ -5210,11 +5231,16 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .message-poll-card__header strong {
+  min-width: 0;
+  max-width: 100%;
   font-size: 18px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .message-poll-card__badge {
@@ -5303,12 +5329,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .message-poll-card__meta,
 .message-poll-card__add-option {
   color: rgba(225, 236, 255, 0.76);
   font-size: 14px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .message-poll-card__add-option {

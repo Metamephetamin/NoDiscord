@@ -5,6 +5,46 @@ import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
 import { formatTimestamp } from "../utils/textChatHelpers";
 
+const clampDirectCallWaveLevel = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, numericValue));
+};
+
+function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }) {
+  const isConnected = phase === "connected";
+  const isPending = phase === "incoming" || phase === "outgoing";
+  const isTransitioning = phase === "connecting" || phase === "reconnecting";
+  const normalizedLevel = clampDirectCallWaveLevel(level);
+  const baseLevel = isConnected
+    ? 0.24
+    : isPending
+      ? 0.34
+      : isTransitioning
+        ? 0.28
+        : 0.18;
+  const resolvedLevel = Math.max(baseLevel, normalizedLevel, peerSpeaking && isConnected ? 0.44 : 0);
+
+  return (
+    <div
+      className={`direct-call-inline__link direct-call-inline__voice-wave ${isConnected || isPending || isTransitioning ? "direct-call-inline__voice-wave--live" : ""}`}
+      aria-hidden="true"
+      style={{
+        "--direct-call-wave-level": resolvedLevel.toFixed(3),
+        "--direct-call-wave-peer": peerSpeaking ? 1 : 0,
+      }}
+    >
+      <span className="direct-call-inline__voice-wave-glow" />
+      <span className="direct-call-inline__voice-wave-ribbon direct-call-inline__voice-wave-ribbon--one" />
+      <span className="direct-call-inline__voice-wave-ribbon direct-call-inline__voice-wave-ribbon--two" />
+      <span className="direct-call-inline__voice-wave-ribbon direct-call-inline__voice-wave-ribbon--three" />
+    </div>
+  );
+}
+
 export const SettingsOverlay = ({
   open,
   isMobileViewport,
@@ -467,6 +507,8 @@ export const DirectCallOverlayView = ({
   history = [],
   isMicMuted,
   isSoundMuted = false,
+  micLevel = 0,
+  peerIsSpeaking = false,
   selfName = "Вы",
   selfAvatar = "",
   selfAvatarFrame = null,
@@ -502,6 +544,7 @@ export const DirectCallOverlayView = ({
   const isConnected = call.phase === "connected";
   const isConnecting = call.phase === "connecting" || call.phase === "reconnecting";
   const isFinished = call.phase === "ended" || call.phase === "declined" || call.phase === "disconnected";
+  const isPending = call.phase === "incoming" || call.phase === "outgoing";
   const isMiniMode = !embedded && Boolean(call.isMiniMode) && !isIncoming;
   const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
   const callTitle = call.peerName || "Пользователь";
@@ -552,14 +595,7 @@ export const DirectCallOverlayView = ({
             />
             <span>{selfName}</span>
           </div>
-          <div className="direct-call-inline__link direct-call-inline__voice-wave" aria-hidden="true">
-            <svg viewBox="0 0 76 34" focusable="false">
-              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--one" d="M2 17 C9 9 16 25 23 17 S37 9 44 17 S58 25 74 13" />
-              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--two" d="M2 18 C11 4 19 31 28 18 S46 5 55 18 S68 28 74 19" />
-              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--three" d="M2 16 C13 12 16 22 27 17 S44 8 53 17 S64 24 74 15" />
-              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--four" d="M2 19 C12 2 18 32 31 16 S49 4 58 19 S69 30 74 17" />
-            </svg>
-          </div>
+          <DirectCallVoiceWave level={micLevel} peerSpeaking={peerIsSpeaking} phase={call.phase} />
           <div className="direct-call-inline__participant">
             <AnimatedAvatar
               className="direct-call-inline__avatar"
@@ -583,6 +619,15 @@ export const DirectCallOverlayView = ({
                 <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
               </button>
             </>
+          ) : isPending ? (
+            <button
+              type="button"
+              className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--danger"
+              onClick={onDecline}
+              aria-label="Отменить звонок"
+            >
+              <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
+            </button>
           ) : isFinished ? (
             <>
               {call.canRetry ? (

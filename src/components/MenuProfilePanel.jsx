@@ -1,4 +1,5 @@
 import AnimatedAvatar from "./AnimatedAvatar";
+import PercentageSlider from "./PercentageSlider";
 
 const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   <button type="button" className="device-menu__settings" onClick={onClick}>
@@ -71,7 +72,13 @@ const MicMenuPanel = ({
 
     <div className="device-menu__slider">
       <span>Громкость микрофона</span>
-      <input type="range" min="0" max="200" value={micVolume} onChange={(event) => onMicVolumeChange(Number(event.target.value))} />
+      <PercentageSlider
+        min={0}
+        max={200}
+        value={micVolume}
+        onChange={(event) => onMicVolumeChange(Number(event.target.value))}
+        ariaLabel="Громкость микрофона"
+      />
       <div className="device-menu__meter" aria-hidden="true">
         {Array.from({ length: 24 }).map((_, index) => (
           <span key={index} className={index < activeMicMenuBars ? "is-active" : ""} />
@@ -111,7 +118,13 @@ const SoundMenuPanel = ({
 
     <div className="device-menu__slider">
       <span>Громкость звука</span>
-      <input type="range" min="0" max="200" value={audioVolume} onChange={(event) => onAudioVolumeChange(Number(event.target.value))} />
+      <PercentageSlider
+        min={0}
+        max={200}
+        value={audioVolume}
+        onChange={(event) => onAudioVolumeChange(Number(event.target.value))}
+        ariaLabel="Громкость звука"
+      />
     </div>
 
     <DeviceSettingsButton settingsIcon={settingsIcon} onClick={onOpenVoiceSettings} />

@@ -101,6 +101,8 @@ export default function MenuMainOverlayLayer({
   directCallHistory,
   isMicMuted,
   isSoundMuted,
+  micLevel,
+  directCallPeerIsSpeaking,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -120,6 +122,10 @@ export default function MenuMainOverlayLayer({
 }) {
   const availableFpsOptions =
     STREAM_FPS_OPTIONS.filter((option) => (SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"]).includes(option.value));
+  const showPendingDirectCallPopup = directCallState?.phase === "incoming" || directCallState?.phase === "outgoing";
+  const showDirectCallOverlay = isMobileViewport
+    ? directCallState?.phase && directCallState.phase !== "idle"
+    : showPendingDirectCallPopup;
 
   return (
     <>
@@ -156,12 +162,14 @@ export default function MenuMainOverlayLayer({
         onSelect={handleQuickSwitcherSelect}
       />
 
-      {isMobileViewport ? (
+      {showDirectCallOverlay ? (
         <DirectCallOverlayView
           call={directCallState}
           history={directCallHistory}
           isMicMuted={isMicMuted}
           isSoundMuted={isSoundMuted}
+          micLevel={micLevel}
+          peerIsSpeaking={directCallPeerIsSpeaking}
           selfName={getDisplayName(user)}
           selfAvatar={getUserAvatar(user)}
           selfAvatarFrame={getUserAvatarFrame(user)}
@@ -181,6 +189,7 @@ export default function MenuMainOverlayLayer({
           onDismiss={dismissDirectCallOverlay}
           onRetry={retryDirectCall}
           onRedialHistoryItem={onDirectCallHistoryRedial}
+          compact={!isMobileViewport && showPendingDirectCallPopup}
         />
       ) : null}
 
