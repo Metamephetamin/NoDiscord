@@ -4,6 +4,7 @@ export default function ScreenShareViewer({
   stream,
   videoSrc,
   imageSrc,
+  muted = true,
   title,
   subtitle,
   debugInfo,
@@ -23,7 +24,7 @@ export default function ScreenShareViewer({
     const mediaElement = videoRef.current;
     mediaElement.srcObject = stream || null;
     mediaElement.src = stream ? "" : videoSrc || "";
-    mediaElement.muted = true;
+    mediaElement.muted = muted;
 
     if (stream) {
       mediaElement.play().catch((error) => console.error("Ошибка запуска просмотра трансляции:", error));
@@ -35,7 +36,7 @@ export default function ScreenShareViewer({
       mediaElement.srcObject = null;
       mediaElement.src = "";
     };
-  }, [stream, videoSrc]);
+  }, [muted, stream, videoSrc]);
 
   useEffect(() => {
     if (!videoSrc || !videoRef.current) {

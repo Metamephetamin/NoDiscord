@@ -517,26 +517,36 @@ function isLikelyHtmlPayload(value) {
 }
 
 export function getApiErrorMessage(response, data, fallbackMessage) {
+  const backendMessage =
+    data &&
+    typeof data === "object" &&
+    typeof data.message === "string" &&
+    data.message.trim() &&
+    !isLikelyHtmlPayload(data.message)
+      ? data.message.trim()
+      : "";
+
   if (response?.status === 401) {
     return "Сессия истекла. Войдите снова.";
   }
 
   if (response?.status === 429) {
-    if (data && typeof data === "object" && typeof data.message === "string" && data.message.trim()) {
-      return data.message.trim();
+    if (backendMessage) {
+      return backendMessage;
     }
     return "Слишком много попыток. Подождите немного и попробуйте снова.";
   }
 
   if ([500, 502, 503, 504].includes(response?.status)) {
+    if (backendMessage) {
+      return backendMessage;
+    }
     return "Сервис временно недоступен. Попробуйте позже.";
   }
 
   if (data && typeof data === "object") {
-    if (typeof data.message === "string" && data.message.trim()) {
-      if (!isLikelyHtmlPayload(data.message)) {
-        return data.message.trim();
-      }
+    if (backendMessage) {
+      return backendMessage;
     }
 
     if (data.errors && typeof data.errors === "object") {

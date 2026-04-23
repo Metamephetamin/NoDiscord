@@ -684,10 +684,16 @@ export default function MenuMain({
   const cameraPreviewRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const voiceClientRef = useRef(null);
+  const initializeVoiceClientRef = useRef(null);
+  const voiceClientInitPromiseRef = useRef(null);
   const previousVoiceChannelRef = useRef(null);
   const voiceTransitionSoundTimeoutRef = useRef(null);
   const previousMicMutedRef = useRef(null);
   const previousSoundMutedRef = useRef(null);
+  const pendingLocalVoiceTransitionRef = useRef(null);
+  const pendingLocalMicToneRef = useRef("");
+  const pendingLocalSoundToneRef = useRef("");
+  const pendingLocalScreenShareToneRef = useRef("");
   const previousVoiceParticipantIdsRef = useRef({ channelId: "", participantIds: [] });
   const previousLiveVoiceUserIdsRef = useRef({ channelId: "", userIds: [] });
   const joinedDirectChannelsRef = useRef(new Set());
@@ -753,12 +759,35 @@ export default function MenuMain({
     });
   }, [activeServer]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
+  const ensureVoiceClientReady = useCallback(async () => {
+    if (voiceClientRef.current) {
+      return voiceClientRef.current;
+    }
+
+    if (!initializeVoiceClientRef.current) {
+      return null;
+    }
+
+    if (!voiceClientInitPromiseRef.current) {
+      voiceClientInitPromiseRef.current = Promise.resolve(initializeVoiceClientRef.current())
+        .catch((error) => {
+          logVoiceHubError("Ошибка ранней инициализации голосового клиента:", error);
+          throw error;
+        })
+        .finally(() => {
+          voiceClientInitPromiseRef.current = null;
+        });
+    }
+
+    return voiceClientInitPromiseRef.current;
+  }, []);
   const { prewarmVoiceChannel } = useVoiceRoomWarmup({
     voiceClientRef,
     user,
     activeServerId: activeServer?.id || "",
     voiceChannels: activeServer?.voiceChannels || [],
     getScopedVoiceChannelId,
+    ensureVoiceClientReady,
   });
   const activeVoiceParticipantsMap = useMemo(() => {
     if (!activeServer?.id) {
@@ -799,6 +828,32 @@ export default function MenuMain({
 
     return nextMap;
   }, [activeServer?.id, participantsMap]);
+  const likelyVoiceWarmupChannelId = useMemo(() => {
+    const voiceChannels = Array.isArray(activeServer?.voiceChannels) ? activeServer.voiceChannels : [];
+    if (!voiceChannels.length || currentVoiceChannel) {
+      return "";
+    }
+
+    const rankedChannels = voiceChannels
+      .map((channel) => {
+        const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
+        const participants = activeVoiceParticipantsMap?.[channel.id] || activeVoiceParticipantsMap?.[scopedChannelId] || [];
+        return {
+          id: channel.id,
+          participantCount: Array.isArray(participants) ? participants.length : 0,
+        };
+      })
+      .sort((left, right) => right.participantCount - left.participantCount);
+
+    return String(rankedChannels[0]?.id || "");
+  }, [activeServer?.id, activeServer?.voiceChannels, activeVoiceParticipantsMap, currentVoiceChannel, getScopedVoiceChannelId]);
+  useEffect(() => {
+    if (!likelyVoiceWarmupChannelId) {
+      return;
+    }
+
+    prewarmVoiceChannel(likelyVoiceWarmupChannelId);
+  }, [likelyVoiceWarmupChannelId, prewarmVoiceChannel]);
   const currentVoiceChannelName = useMemo(() => {
     if (isDirectCallChannelId(currentVoiceChannel)) {
       return "Личный звонок";
@@ -1659,6 +1714,42 @@ export default function MenuMain({
       audio.play().catch(() => {});
     } catch {
       // ignore ui sound failures
+    }
+  };
+  const playImmediateVoiceTransitionTone = (nextChannelId) => {
+    const previousChannelId = String(currentVoiceChannelRef.current || "");
+    const normalizedNextChannelId = String(nextChannelId || "");
+
+    if (previousChannelId === normalizedNextChannelId) {
+      return;
+    }
+
+    pendingLocalVoiceTransitionRef.current = {
+      from: previousChannelId,
+      to: normalizedNextChannelId,
+    };
+
+    if (voiceTransitionSoundTimeoutRef.current) {
+      clearTimeout(voiceTransitionSoundTimeoutRef.current);
+      voiceTransitionSoundTimeoutRef.current = null;
+    }
+
+    if (!previousChannelId && normalizedNextChannelId) {
+      playUiTone("join");
+      return;
+    }
+
+    if (previousChannelId && !normalizedNextChannelId) {
+      playUiTone("leave");
+      return;
+    }
+
+    if (previousChannelId && normalizedNextChannelId) {
+      playUiTone("leave");
+      voiceTransitionSoundTimeoutRef.current = window.setTimeout(() => {
+        playUiTone("join");
+        voiceTransitionSoundTimeoutRef.current = null;
+      }, 90);
     }
   };
   const playNotificationSound = () => {
@@ -3870,11 +3961,16 @@ export default function MenuMain({
     let disposed = false;
     let client = null;
     let initializeTimeoutId = 0;
+    let idleInitRequestId = 0;
 
     const initializeVoiceClient = async () => {
+      if (voiceClientRef.current) {
+        return voiceClientRef.current;
+      }
+
       const createVoiceRoomClient = await loadVoiceRoomClientFactory();
       if (disposed) {
-        return;
+        return null;
       }
 
       client = createVoiceRoomClient({
@@ -4178,17 +4274,36 @@ export default function MenuMain({
       console.error("Ошибка применения стартового эхоподавления:", error);
     });
     client.connect(user).catch((error) => logVoiceHubError("Ошибка подключения к голосовому хабу:", error));
+      return client;
     };
 
-    initializeTimeoutId = window.setTimeout(() => {
-      initializeVoiceClient().catch((error) => {
+    initializeVoiceClientRef.current = initializeVoiceClient;
+
+    const scheduleVoiceClientInit = () => {
+      ensureVoiceClientReady().catch((error) => {
         logVoiceHubError("Voice client initialization failed:", error);
       });
-    }, 1800);
+    };
+
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleInitRequestId = window.requestIdleCallback(() => {
+        scheduleVoiceClientInit();
+      }, { timeout: 900 });
+    } else {
+      initializeTimeoutId = window.setTimeout(() => {
+        scheduleVoiceClientInit();
+      }, 450);
+    }
 
     return () => {
       disposed = true;
       window.clearTimeout(initializeTimeoutId);
+      if (typeof window !== "undefined" && typeof window.cancelIdleCallback === "function" && idleInitRequestId) {
+        window.cancelIdleCallback(idleInitRequestId);
+      }
+      if (initializeVoiceClientRef.current === initializeVoiceClient) {
+        initializeVoiceClientRef.current = null;
+      }
       if (client) {
         client.disconnect().catch((error) => logVoiceHubError("Ошибка отключения от голосового хаба:", error));
       }
@@ -4203,6 +4318,7 @@ export default function MenuMain({
     handleRoomParticipantsChanged,
     handleSelfVoiceStateChanged,
     handleSpeakingUsersChanged,
+    ensureVoiceClientReady,
     user?.id,
   ]);
   useEffect(() => {
@@ -4321,6 +4437,17 @@ export default function MenuMain({
       voiceTransitionSoundTimeoutRef.current = null;
     }
 
+    const pendingLocalTransition = pendingLocalVoiceTransitionRef.current;
+    if (
+      pendingLocalTransition
+      && String(pendingLocalTransition.from || "") === String(previousChannel || "")
+      && String(pendingLocalTransition.to || "") === String(currentVoiceChannel || "")
+    ) {
+      pendingLocalVoiceTransitionRef.current = null;
+      previousVoiceChannelRef.current = currentVoiceChannel;
+      return;
+    }
+
     if (!previousChannel && currentVoiceChannel) {
       playUiTone("join");
     } else if (previousChannel && !currentVoiceChannel) {
@@ -4332,6 +4459,8 @@ export default function MenuMain({
         voiceTransitionSoundTimeoutRef.current = null;
       }, 90);
     }
+
+    pendingLocalVoiceTransitionRef.current = null;
     previousVoiceChannelRef.current = currentVoiceChannel;
   }, [currentVoiceChannel]);
   useEffect(() => () => {
@@ -4400,18 +4529,29 @@ export default function MenuMain({
     const nextLiveSet = new Set(nextLiveUserIds);
     const startedShares = nextLiveUserIds.filter((userId) => !previousLiveSet.has(userId));
     const stoppedShares = previousSnapshot.userIds.filter((userId) => !nextLiveSet.has(userId));
+    const selfUserId = String(currentUserId || "");
+    const onlyLocalStart = Boolean(selfUserId) && startedShares.length > 0 && startedShares.every((userId) => userId === selfUserId);
+    const onlyLocalStop = Boolean(selfUserId) && stoppedShares.length > 0 && stoppedShares.every((userId) => userId === selfUserId);
 
     if (startedShares.length) {
-      playUiTone("shareStart");
+      if (onlyLocalStart && pendingLocalScreenShareToneRef.current === "shareStart") {
+        pendingLocalScreenShareToneRef.current = "";
+      } else {
+        playUiTone("shareStart");
+      }
     } else if (stoppedShares.length) {
-      playUiTone("shareStop");
+      if (onlyLocalStop && pendingLocalScreenShareToneRef.current === "shareStop") {
+        pendingLocalScreenShareToneRef.current = "";
+      } else {
+        playUiTone("shareStop");
+      }
     }
 
     previousLiveVoiceUserIdsRef.current = {
       channelId: String(currentVoiceChannel),
       userIds: nextLiveUserIds,
     };
-  }, [currentVoiceChannel, currentVoiceParticipants]);
+  }, [currentUserId, currentVoiceChannel, currentVoiceParticipants]);
   useEffect(() => {
     if (!currentVoiceChannel) {
       previousMicMutedRef.current = isMicMuted;
@@ -4424,7 +4564,12 @@ export default function MenuMain({
     }
 
     if (previousMicMutedRef.current !== isMicMuted) {
-      playUiTone(isMicMuted ? "mute" : "unmute");
+      const nextTone = isMicMuted ? "mute" : "unmute";
+      if (pendingLocalMicToneRef.current === nextTone) {
+        pendingLocalMicToneRef.current = "";
+      } else {
+        playUiTone(nextTone);
+      }
     }
 
     previousMicMutedRef.current = isMicMuted;
@@ -4441,7 +4586,12 @@ export default function MenuMain({
     }
 
     if (previousSoundMutedRef.current !== isSoundMuted) {
-      playUiTone(isSoundMuted ? "mute" : "unmute");
+      const nextTone = isSoundMuted ? "mute" : "unmute";
+      if (pendingLocalSoundToneRef.current === nextTone) {
+        pendingLocalSoundToneRef.current = "";
+      } else {
+        playUiTone(nextTone);
+      }
     }
 
     previousSoundMutedRef.current = isSoundMuted;
@@ -5004,7 +5154,11 @@ export default function MenuMain({
     markServerAsShared,
   });
   const joinVoiceChannel = async (channel) => {
-    if (!voiceClientRef.current || !user?.id || !channel?.id || !activeServer?.id) return;
+    if (!user?.id || !channel?.id || !activeServer?.id) return;
+    if (!voiceClientRef.current) {
+      await ensureVoiceClientReady();
+    }
+    if (!voiceClientRef.current) return;
     const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
     if (voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current === scopedChannelId) {
       return;
@@ -5037,6 +5191,8 @@ export default function MenuMain({
         }
       });
     };
+
+    playImmediateVoiceTransitionTone(scopedChannelId);
 
     const joinAttemptId = voiceJoinAttemptRef.current + 1;
     voiceJoinAttemptRef.current = joinAttemptId;
@@ -5073,6 +5229,7 @@ export default function MenuMain({
           const message = error?.message || "Микрофон не удалось запустить. Закройте приложения, которые могут использовать микрофон, или выберите другой вход в настройках голоса.";
           showServerInviteFeedback(message);
           console.error("Ошибка входа в голосовой канал:", error);
+          pendingLocalVoiceTransitionRef.current = null;
           setCurrentVoiceChannel(null);
           setJoiningVoiceChannelId("");
           finishJoinTrace({
@@ -5105,6 +5262,7 @@ export default function MenuMain({
           const message = retryError?.message || error?.message || "Не удалось подключиться к голосовому каналу.";
           showServerInviteFeedback(message);
           console.error("Ошибка входа в голосовой канал:", retryError);
+          pendingLocalVoiceTransitionRef.current = null;
           setCurrentVoiceChannel(null);
           setJoiningVoiceChannelId("");
           finishJoinTrace({
@@ -5122,6 +5280,10 @@ export default function MenuMain({
         setJoiningVoiceChannelId("");
       }
 
+      if (!joinSucceeded && voiceJoinAttemptRef.current === joinAttemptId) {
+        pendingLocalVoiceTransitionRef.current = null;
+      }
+
       finishJoinTrace({
         channelId: String(channel.id || ""),
         retry: false,
@@ -5133,6 +5295,7 @@ export default function MenuMain({
   const leaveVoiceChannel = async () => {
     if (!voiceClientRef.current) return;
     const cancelledChannelId = String(pendingVoiceChannelTargetRef.current || currentVoiceChannelRef.current || "");
+    playImmediateVoiceTransitionTone("");
     const leaveTraceId = startPerfTrace("voice", "leave-voice-channel", {
       currentVoiceChannel: String(currentVoiceChannel || ""),
     });
@@ -5193,6 +5356,8 @@ export default function MenuMain({
     }
 
     setScreenShareError("");
+    pendingLocalScreenShareToneRef.current = "shareStart";
+    playUiTone("shareStart");
 
     try {
       await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
@@ -5200,6 +5365,7 @@ export default function MenuMain({
       setSelectedStreamUserId(null);
       setIsLocalSharePreviewVisible(true);
     } catch (error) {
+      pendingLocalScreenShareToneRef.current = "";
       const message = error?.message || "Не удалось запустить трансляцию экрана.";
       setScreenShareError(message);
       showServerInviteFeedback(message);
@@ -5212,12 +5378,15 @@ export default function MenuMain({
     }
 
     setScreenShareError("");
+    pendingLocalScreenShareToneRef.current = "shareStop";
+    playUiTone("shareStop");
 
     try {
       await voiceClientRef.current.stopScreenShare();
       setShowModal(false);
       setIsLocalSharePreviewVisible(false);
     } catch (error) {
+      pendingLocalScreenShareToneRef.current = "";
       const message = error?.message || "Не удалось остановить трансляцию экрана.";
       setScreenShareError(message);
       showServerInviteFeedback(message);
@@ -5527,7 +5696,14 @@ export default function MenuMain({
         return previous;
       }
 
-      return !previous;
+      const nextValue = !previous;
+      if (currentVoiceChannelRef.current) {
+        const nextTone = nextValue ? "mute" : "unmute";
+        pendingLocalMicToneRef.current = nextTone;
+        playUiTone(nextTone);
+      }
+
+      return nextValue;
     });
   }
   function toggleSoundMute() {
@@ -5536,7 +5712,14 @@ export default function MenuMain({
         return previous;
       }
 
-      return !previous;
+      const nextValue = !previous;
+      if (currentVoiceChannelRef.current) {
+        const nextTone = nextValue ? "mute" : "unmute";
+        pendingLocalSoundToneRef.current = nextTone;
+        playUiTone(nextTone);
+      }
+
+      return nextValue;
     });
   }
   const suppressTooltipOnClick = (event) => {
@@ -6356,6 +6539,7 @@ export default function MenuMain({
         }
       }}
       onDirectSearchQueryChange={setChannelSearchQuery}
+      onClearDirectSearchQuery={() => setChannelSearchQuery("")}
       onAddFriend={handleAddFriend}
       onOpenServersWorkspace={openServersWorkspace}
       onImportServer={handleImportServer}
@@ -6397,6 +6581,7 @@ export default function MenuMain({
       onOpenLocalSharePreview={openLocalSharePreview}
       onWatchStream={handleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}
+      onClearChannelSearch={() => setChannelSearchQuery("")}
       onAddServer={handleAddServer}
       onCloseSelectedStream={closeSelectedStream}
       onStopCameraShare={stopCameraShare}

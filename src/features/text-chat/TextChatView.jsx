@@ -25,6 +25,7 @@ export default function TextChatView(props) {
   const {
     searchQuery,
     searchResults,
+    onClearSearchQuery,
     scopedChannelId,
     navigationRequest,
     onNavigationIndexChange,
@@ -208,6 +209,7 @@ export default function TextChatView(props) {
       highlight: true,
       highlightDurationMs: 2800,
     });
+    onClearSearchQuery?.("");
   });
   const latestOwnMessageSignatureRef = useRef("");
   const scheduleAggressiveScrollToLatest = useStableCallback(() => {
@@ -316,7 +318,14 @@ export default function TextChatView(props) {
     }
 
     if (navigationRequest.type === "message" && navigationRequest.messageId) {
-      scrollToMessage(navigationRequest.messageId, { behavior: "auto", block: "center", rememberCurrent: true });
+      scrollToMessage(navigationRequest.messageId, {
+        behavior: "auto",
+        block: "center",
+        rememberCurrent: true,
+        highlight: true,
+        highlightDurationMs: 2800,
+      });
+      onClearSearchQuery?.("");
       return;
     }
 

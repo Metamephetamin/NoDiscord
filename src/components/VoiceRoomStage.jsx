@@ -165,7 +165,7 @@ const extractAccentFromImage = (src, seed) =>
     image.src = src;
   });
 
-function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain = false }) {
+function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain = false, muted = true }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -176,7 +176,7 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
     const mediaElement = videoRef.current;
     mediaElement.srcObject = stream || null;
     mediaElement.src = stream ? "" : videoSrc || "";
-    mediaElement.muted = true;
+    mediaElement.muted = muted;
 
     mediaElement.play().catch(() => {});
 
@@ -184,7 +184,7 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
       mediaElement.srcObject = null;
       mediaElement.src = "";
     };
-  }, [stream, videoSrc]);
+  }, [muted, stream, videoSrc]);
 
   useEffect(() => {
     if (!videoSrc || !videoRef.current) {
@@ -264,7 +264,7 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
   }, [videoSrc]);
 
   if (stream || videoSrc) {
-    return <video ref={videoRef} className={`${className} ${contain ? "voice-room-stage__media--contain" : ""}`.trim()} autoPlay playsInline muted />;
+    return <video ref={videoRef} className={`${className} ${contain ? "voice-room-stage__media--contain" : ""}`.trim()} autoPlay playsInline muted={muted} />;
   }
 
   if (imageSrc) {
@@ -272,6 +272,113 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
   }
 
   return null;
+}
+
+function captureVoiceStagePreviewFrame({ stream, videoSrc }) {
+  return new Promise((resolve) => {
+    if (typeof document === "undefined" || (!stream && !videoSrc)) {
+      resolve("");
+      return;
+    }
+
+    const mediaElement = document.createElement("video");
+    mediaElement.playsInline = true;
+    mediaElement.muted = true;
+    mediaElement.preload = "metadata";
+    mediaElement.srcObject = stream || null;
+    mediaElement.src = stream ? "" : videoSrc || "";
+
+    let settled = false;
+    let timeoutId = 0;
+
+    const cleanup = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      mediaElement.pause();
+      mediaElement.srcObject = null;
+      mediaElement.src = "";
+      mediaElement.load();
+    };
+
+    const finish = (value = "") => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const drawFrame = () => {
+      const width = Number(mediaElement.videoWidth || 0);
+      const height = Number(mediaElement.videoHeight || 0);
+      if (!width || !height) {
+        finish("");
+        return;
+      }
+
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) {
+          finish("");
+          return;
+        }
+
+        context.drawImage(mediaElement, 0, 0, width, height);
+        finish(canvas.toDataURL("image/jpeg", 0.82));
+      } catch {
+        finish("");
+      }
+    };
+
+    mediaElement.addEventListener("loadeddata", drawFrame, { once: true });
+    mediaElement.addEventListener("error", () => finish(""), { once: true });
+    timeoutId = window.setTimeout(() => finish(""), 2200);
+    mediaElement.play().catch(() => {});
+  });
+}
+
+function VoiceStagePreviewMedia({ share, alt, className }) {
+  const [previewSrc, setPreviewSrc] = useState(() => String(share?.imageSrc || "").trim());
+
+  useEffect(() => {
+    let cancelled = false;
+    const staticPreview = String(share?.imageSrc || "").trim();
+    if (staticPreview) {
+      setPreviewSrc(staticPreview);
+      return undefined;
+    }
+
+    setPreviewSrc("");
+
+    if (!share?.stream && !share?.videoSrc) {
+      return undefined;
+    }
+
+    captureVoiceStagePreviewFrame({
+      stream: share?.stream || null,
+      videoSrc: share?.videoSrc || "",
+    }).then((nextPreviewSrc) => {
+      if (!cancelled && nextPreviewSrc) {
+        setPreviewSrc(nextPreviewSrc);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [share?.imageSrc, share?.stream, share?.updatedAt, share?.videoSrc]);
+
+  if (previewSrc) {
+    return <img src={previewSrc} alt={alt} className={className} />;
+  }
+
+  return <div className={`${className} voice-room-stage__strip-preview-placeholder`.trim()} aria-hidden="true" />;
 }
 
 function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) {
@@ -488,6 +595,7 @@ export default function VoiceRoomStage({
         stream: selectedStream?.stream || null,
         videoSrc: selectedStream?.videoSrc || "",
         imageSrc: selectedStream?.imageSrc || "",
+        hasAudio: Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length),
         width: selectedStream?.width || 0,
         height: selectedStream?.height || 0,
         fps: selectedStream?.fps || 0,
@@ -503,6 +611,7 @@ export default function VoiceRoomStage({
         stream: localSharePreview.stream || null,
         videoSrc: "",
         imageSrc: "",
+        hasAudio: false,
         width: Number(localSharePreview.stream?.getVideoTracks?.()[0]?.getSettings?.().width || 0),
         height: Number(localSharePreview.stream?.getVideoTracks?.()[0]?.getSettings?.().height || 0),
         fps: Number(localSharePreview.stream?.getVideoTracks?.()[0]?.getSettings?.().frameRate || 0),
@@ -638,10 +747,8 @@ export default function VoiceRoomStage({
         >
           <div className="voice-room-stage__strip-media">
             {participant.share ? (
-              <VoiceStageMedia
-                stream={participant.share.stream || null}
-                videoSrc={participant.share.videoSrc || ""}
-                imageSrc={participant.share.imageSrc || ""}
+              <VoiceStagePreviewMedia
+                share={participant.share}
                 alt={participant.name}
                 className="voice-room-stage__strip-video"
               />
@@ -651,6 +758,14 @@ export default function VoiceRoomStage({
               </div>
             )}
             {participant.isLive ? <span className="voice-room-stage__strip-badge">В ЭФИРЕ</span> : null}
+            {participant.share ? (
+              <>
+                <div className="voice-room-stage__card-scrim" aria-hidden="true" />
+                <div className="voice-room-stage__card-cta" aria-hidden="true">
+                  <span className="voice-room-stage__card-watch">Смотреть</span>
+                </div>
+              </>
+            ) : null}
           </div>
           <div className="voice-room-stage__strip-copy">
             <strong>{participant.name}</strong>
@@ -817,6 +932,7 @@ export default function VoiceRoomStage({
             alt={activeStage.name}
             className="voice-room-stage__hero-media"
             contain
+            muted={activeStage.kind !== "remote" || !activeStage.hasAudio}
           />
           {!activeStage.stream && !activeStage.videoSrc && !activeStage.imageSrc ? (
             <div className="voice-room-stage__hero-empty">
@@ -857,10 +973,8 @@ export default function VoiceRoomStage({
               <div className="voice-room-stage__card-media">
                 {participant.share ? (
                   <>
-                    <VoiceStageMedia
-                      stream={participant.share.stream || null}
-                      videoSrc={participant.share.videoSrc || ""}
-                      imageSrc={participant.share.imageSrc || ""}
+                    <VoiceStagePreviewMedia
+                      share={participant.share}
                       alt={participant.name}
                       className="voice-room-stage__card-video"
                     />

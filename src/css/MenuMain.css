@@ -1762,7 +1762,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .friends-hero__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 18px;
 }
@@ -1773,6 +1773,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .friends-create-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
   min-height: 44px;
   padding: 0 18px;
   border: 0;
@@ -2615,6 +2619,14 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   font-weight: 800;
 }
 
+.voice-room-stage__strip-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(var(--voice-stage-accent-rgb, 123, 137, 168), 0.28), rgba(0, 0, 0, 0) 54%),
+    linear-gradient(180deg, rgba(var(--voice-stage-accent-rgb, 123, 137, 168), 0.18), rgba(7, 10, 15, 0.96));
+}
+
 .voice-room-stage__card-meta {
   display: flex;
   align-items: flex-end;
@@ -2890,6 +2902,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   position: absolute;
   top: 8px;
   left: 8px;
+  z-index: 2;
   min-height: 24px;
   padding: 0 8px;
   display: inline-flex;

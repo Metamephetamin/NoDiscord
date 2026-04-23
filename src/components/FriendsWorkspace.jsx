@@ -324,6 +324,7 @@ export const FriendsMain = ({
   onFriendSearchSubmit,
   onFriendSearchChange,
   onDirectSearchQueryChange,
+  onClearDirectSearchQuery,
   onAddFriend,
   onOpenServersWorkspace,
   onImportServer,
@@ -910,6 +911,7 @@ export const FriendsMain = ({
               localMessageStateVersion={textChatLocalStateVersion}
               user={user}
               searchQuery={directSearchQuery}
+              onClearSearchQuery={onClearDirectSearchQuery}
               directTargets={directConversationTargets}
               onOpenDirectChat={onOpenDirectChat}
               onStartDirectCall={onStartDirectCall}

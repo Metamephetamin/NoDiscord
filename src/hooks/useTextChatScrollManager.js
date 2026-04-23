@@ -544,12 +544,13 @@ export default function useTextChatScrollManager({
       setCanReturnToJumpPoint(Boolean(jumpSnapshotRef.current));
     }
 
+    if (highlight) {
+      applyHighlight(normalizedMessageId, highlightDurationMs);
+    }
+
     const attemptScroll = (attempt = 0) => {
       const element = messageRefs.current.get(normalizedMessageId);
       if (element) {
-        if (highlight) {
-          applyHighlight(normalizedMessageId, highlightDurationMs);
-        }
         const targetTop = getTargetScrollTopForBlock(list, element.offsetTop, element.offsetHeight, block);
         scrollToPosition(targetTop, { behavior, scrollIntent: "jump" });
         return;

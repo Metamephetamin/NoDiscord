@@ -434,6 +434,7 @@ export default function TextChat({
   onNavigationIndexChange = null,
   onOpenDirectChat = null,
   onStartDirectCall = null,
+  onClearSearchQuery = null,
 }) {
   const [message, setMessage] = useState("");
   const [messageEditState, setMessageEditState] = useState(null);
@@ -2798,6 +2799,7 @@ export default function TextChat({
     <TextChatView
       searchQuery={searchQuery}
       searchResults={searchResults}
+      onClearSearchQuery={onClearSearchQuery}
       scopedChannelId={scopedChannelId}
       navigationRequest={navigationRequest}
       onNavigationIndexChange={onNavigationIndexChange}

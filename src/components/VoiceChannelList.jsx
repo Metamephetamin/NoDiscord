@@ -81,6 +81,9 @@ const VoiceChannelList = ({
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
         const canJoinFromRow = !isEditing && !isJoining;
+        const triggerPrewarm = () => {
+          onPrewarmChannel?.(channel.id);
+        };
 
         const handleRowJoin = (event) => {
           if (!canJoinFromRow) {
@@ -100,7 +103,9 @@ const VoiceChannelList = ({
           <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""}`}>
             <div
               className={`voice-channel__row ${canJoinFromRow ? "voice-channel__row--interactive" : ""}`}
-              onMouseEnter={() => onPrewarmChannel?.(channel.id)}
+              onMouseEnter={triggerPrewarm}
+              onPointerEnter={triggerPrewarm}
+              onTouchStart={triggerPrewarm}
               onPointerDown={(event) => {
                 if (event.target instanceof Element && event.target.closest(".channel-edit-button")) {
                   return;
@@ -108,7 +113,7 @@ const VoiceChannelList = ({
 
                 event.preventDefault();
                 event.stopPropagation();
-                onPrewarmChannel?.(channel.id);
+                triggerPrewarm();
               }}
               onClick={handleRowJoin}
             >
@@ -139,7 +144,7 @@ const VoiceChannelList = ({
                 <button
                   type="button"
                   className="voice-channel__button"
-                  onFocus={() => onPrewarmChannel?.(channel.id)}
+                  onFocus={triggerPrewarm}
                   onClick={handleRowJoin}
                   disabled={isJoining}
                 >

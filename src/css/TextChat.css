@@ -904,12 +904,8 @@
 }
 
 .message-item--dm.message-item--highlighted .msg-content--dm {
-  border-color: rgba(137, 177, 255, 0.54);
-  box-shadow:
-    0 0 0 1px rgba(137, 177, 255, 0.34),
-    0 0 28px rgba(88, 132, 255, 0.22),
-    0 10px 26px rgba(0, 0, 0, 0.2);
-  animation: message-highlight-pulse 1.2s ease-in-out 0s 3;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+  animation: none;
 }
 
 .message-item--dm .msg-content--attachments,
@@ -2033,6 +2029,11 @@
   max-width: 100%;
 }
 
+.message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-anchor {
+  width: fit-content !important;
+  max-width: 100%;
+}
+
 .msg-content--media-only .message-bottom-row {
   position: absolute;
   right: 8px;
@@ -2089,6 +2090,14 @@
   transform: translateZ(0);
   backface-visibility: hidden;
   will-change: transform;
+}
+
+.message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-footer {
+  right: 10px;
+  bottom: 10px;
+  padding: 4px 10px;
+  gap: 5px;
+  background: rgba(12, 14, 19, 0.42);
 }
 
 .msg-content--media-only .message-footer .message-time,
@@ -3204,12 +3213,7 @@
 }
 
 .message-item:not(.message-item--dm).message-item--highlighted .msg-content {
-  border-color: rgba(137, 177, 255, 0.48);
-  box-shadow:
-    0 0 0 1px rgba(137, 177, 255, 0.3),
-    0 0 26px rgba(88, 132, 255, 0.2),
-    0 12px 28px rgba(0, 0, 0, 0.18);
-  animation: message-highlight-pulse 1.2s ease-in-out 0s 3;
+  animation: none;
 }
 
 @keyframes message-row-highlight-pulse {

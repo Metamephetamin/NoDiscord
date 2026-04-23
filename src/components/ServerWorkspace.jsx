@@ -437,6 +437,7 @@ function ServerMainComponent({
   onOpenLocalSharePreview,
   onWatchStream,
   onChannelSearchChange,
+  onClearChannelSearch,
   onAddServer,
   onCloseSelectedStream,
   onStopCameraShare,
@@ -536,6 +537,7 @@ function ServerMainComponent({
             stream={selectedStream?.stream || null}
             videoSrc={selectedStream?.videoSrc || ""}
             imageSrc={selectedStream?.imageSrc || ""}
+            muted={!Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
             hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
             title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`}
             subtitle="Просмотр видеопотока участника"
@@ -560,6 +562,7 @@ function ServerMainComponent({
               channelId={currentTextChannel.id}
               user={user}
               searchQuery={channelSearchQuery}
+              onClearSearchQuery={onClearChannelSearch}
               directTargets={directConversationTargets}
               serverMembers={serverMembers}
               serverRoles={serverRoles}
@@ -751,6 +754,7 @@ export const MobileDirectChat = ({
         resolvedChannelId={currentDirectChannelId}
         localMessageStateVersion={textChatLocalStateVersion}
         user={user}
+        onClearSearchQuery={onClearChannelSearch}
         directTargets={directConversationTargets}
         navigationRequest={textChatNavigationRequest}
         onNavigationIndexChange={onTextChatNavigationIndexChange}

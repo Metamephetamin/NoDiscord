@@ -15,6 +15,7 @@ function TextChat(props) {
   const stableOnNavigationIndexChange = useStableCallback(props.onNavigationIndexChange);
   const stableOnOpenDirectChat = useStableCallback(props.onOpenDirectChat);
   const stableOnStartDirectCall = useStableCallback(props.onStartDirectCall);
+  const stableOnClearSearchQuery = useStableCallback(props.onClearSearchQuery);
 
   return (
     <TextChatContainer
@@ -22,6 +23,7 @@ function TextChat(props) {
       onNavigationIndexChange={stableOnNavigationIndexChange}
       onOpenDirectChat={stableOnOpenDirectChat}
       onStartDirectCall={stableOnStartDirectCall}
+      onClearSearchQuery={stableOnClearSearchQuery}
     />
   );
 }

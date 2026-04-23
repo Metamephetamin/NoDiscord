@@ -5,11 +5,12 @@ export default function useVoiceRoomWarmup({
   user,
   activeServerId,
   getScopedVoiceChannelId,
+  ensureVoiceClientReady,
 }) {
   const lastWarmedChannelRef = useRef("");
 
   const prewarmVoiceChannel = useCallback((channelId) => {
-    if (!voiceClientRef.current || !user?.id || !activeServerId || !channelId) {
+    if (!user?.id || !activeServerId || !channelId) {
       return;
     }
 
@@ -19,8 +20,11 @@ export default function useVoiceRoomWarmup({
     }
 
     lastWarmedChannelRef.current = scopedChannelId;
-    voiceClientRef.current.prewarmChannel(scopedChannelId, user).catch(() => {});
-  }, [activeServerId, getScopedVoiceChannelId, user, voiceClientRef]);
+    Promise.resolve(ensureVoiceClientReady?.())
+      .catch(() => null)
+      .then(() => voiceClientRef.current?.prewarmChannel(scopedChannelId, user))
+      .catch(() => {});
+  }, [activeServerId, ensureVoiceClientReady, getScopedVoiceChannelId, user, voiceClientRef]);
 
   return {
     prewarmVoiceChannel,

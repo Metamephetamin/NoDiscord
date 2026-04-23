@@ -372,6 +372,27 @@ export function createVoiceRoomClient({
     }
     logVoiceDebug(reason, snapshot);
   };
+  const createRoomInstance = () => new Room({
+    adaptiveStream: true,
+    dynacast: true,
+    disconnectOnPageLeave: false,
+    stopLocalTrackOnUnpublish: false,
+  });
+  const prepareLiveKitConnection = (session) => {
+    if (!session?.serverUrl || !session?.participantToken) {
+      return;
+    }
+
+    try {
+      const preparedRoom = createRoomInstance();
+      preparedRoom.prepareConnection(session.serverUrl, session.participantToken);
+    } catch (error) {
+      logVoiceDebug("livekit-session:prepare-failed", {
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+    }
+  };
 
   const emitSpeakingUsers = () => {
     onSpeakingUsersChanged?.(Array.from(roomActiveSpeakerIds.values()));
@@ -1724,6 +1745,7 @@ const handleDeviceChange = () => {
       createdAt: Date.now(),
       value: nextSession,
     };
+    prepareLiveKitConnection(nextSession);
     logVoiceDebug("livekit-session:prewarmed", {
       channelName,
       userId: user.id || "",
@@ -1976,12 +1998,7 @@ const handleDeviceChange = () => {
       const session = await fetchLiveKitSession(channelName, user);
       let nextRoom = null;
       try {
-        nextRoom = new Room({
-          adaptiveStream: true,
-          dynacast: true,
-          disconnectOnPageLeave: false,
-          stopLocalTrackOnUnpublish: false,
-        });
+        nextRoom = createRoomInstance();
         bindRoomEvents(nextRoom);
 
         nextRoom.prepareConnection(session.serverUrl, session.participantToken);
@@ -2278,6 +2295,22 @@ const handleDeviceChange = () => {
         await this.leaveChannel();
       }
 
+      const sessionPrewarmPromise = prewarmLiveKitSession(channelName, user).catch((error) => {
+        logVoiceDebug("livekit-session:prewarm-on-join-failed", {
+          channelName,
+          errorName: error?.name || "",
+          error: error?.message || String(error),
+        });
+        return null;
+      });
+      void ensureAudioPipeline().catch((error) => {
+        logVoiceDebug("local-audio:prewarm-on-join-failed", {
+          channelName,
+          errorName: error?.name || "",
+          error: error?.message || String(error),
+        });
+      });
+
       const joinResponse = await signalConnection.invoke(
         "JoinChannel",
         channelName,
@@ -2287,6 +2320,7 @@ const handleDeviceChange = () => {
       );
 
       try {
+        await sessionPrewarmPromise;
         await ensureRoomConnection(channelName, user, Array.isArray(joinResponse?.participants) ? joinResponse.participants : []);
         currentChannel = channelName;
         onChannelChanged?.(channelName);
