@@ -232,6 +232,7 @@ export default function TextChatView(props) {
     scheduleAggressiveScrollToLatest();
   });
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const firstSearchResultId = String(searchResults?.[0]?.id || "");
   const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
       messageCount: messages.length,
@@ -343,6 +344,38 @@ export default function TextChatView(props) {
       returnToJumpPoint();
     }
   }, [jumpToFirstUnread, navigationRequest, returnToJumpPoint, scopedChannelId, scrollToLatest, scrollToMessage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || normalizedSearchQuery.length < 2 || !firstSearchResultId) {
+      return undefined;
+    }
+
+    const handleSearchEnter = (event) => {
+      if (
+        event.key !== "Enter"
+        || event.shiftKey
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || event.isComposing
+      ) {
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      if (!(activeElement instanceof HTMLInputElement) || !activeElement.classList.contains("chat__topbar-search")) {
+        return;
+      }
+
+      event.preventDefault();
+      handleSearchPanelOpenMessage(firstSearchResultId);
+    };
+
+    window.addEventListener("keydown", handleSearchEnter);
+    return () => {
+      window.removeEventListener("keydown", handleSearchEnter);
+    };
+  }, [firstSearchResultId, handleSearchPanelOpenMessage, normalizedSearchQuery]);
 
   return (
     <div

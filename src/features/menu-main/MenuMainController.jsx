@@ -49,6 +49,8 @@ import { isUserMentioned } from "../../utils/messageMentions";
 import {
   areNamesUsingSameScript,
   detectNameScript,
+  isNicknameUsingSingleScript,
+  normalizeScriptAwareNicknameInput,
   normalizeSingleWordNameInput,
 } from "../../utils/nameScripts";
 import { getPinnedStorageKey, readPinnedMessages } from "../../utils/textChatHelpers";
@@ -95,6 +97,7 @@ import {
   getCanonicalSharedServerId,
   getChannelDisplayName,
   getCurrentUserId,
+  getConversationNotificationsStorageKey,
   getDirectNotificationsStorageKey,
   getDisplayName,
   getEchoCancellationStorageKey,
@@ -145,6 +148,7 @@ import {
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../../utils/perf";
 
 const MAX_PROFILE_NICKNAME_LENGTH = 50;
+const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
 let voiceRoomClientFactoryPromise = null;
 
 function loadVoiceRoomClientFactory() {
@@ -157,11 +161,7 @@ function loadVoiceRoomClientFactory() {
 }
 
 const normalizeProfileNicknameInput = (value) =>
-  String(value || "")
-    .replace(/[^\p{L}\p{M}\p{N} ]/gu, "")
-    .replace(/\s+/g, " ")
-    .slice(0, MAX_PROFILE_NICKNAME_LENGTH)
-    .trimStart();
+  normalizeScriptAwareNicknameInput(value, MAX_PROFILE_NICKNAME_LENGTH);
 const getLocalApiStorageScope = () => {
   try {
     const parsed = new URL(String(API_URL || "").trim());
@@ -565,9 +565,11 @@ export default function MenuMain({
   const [channelRenameState, setChannelRenameState] = useState(null);
   const [activeDirectFriendId, setActiveDirectFriendId] = useState(() => readWorkspaceState(user).activeDirectFriendId || "");
   const [directNotificationsEnabled, setDirectNotificationsEnabled] = useState(true);
+  const [conversationNotificationsEnabled, setConversationNotificationsEnabled] = useState(true);
   const [directMessageToasts, setDirectMessageToasts] = useState([]);
   const [serverNotificationsEnabled, setServerNotificationsEnabled] = useState(true);
   const [serverMessageToasts, setServerMessageToasts] = useState([]);
+  const [workspaceStatusToasts, setWorkspaceStatusToasts] = useState([]);
   const [directUnreadCounts, setDirectUnreadCounts] = useState({});
   const [serverUnreadCounts, setServerUnreadCounts] = useState({});
   const [notificationSoundEnabled, setNotificationSoundEnabled] = useState(true);
@@ -713,6 +715,7 @@ export default function MenuMain({
   const userSessionActiveRef = useRef(false);
   const directToastTimeoutsRef = useRef(new Map());
   const serverToastTimeoutsRef = useRef(new Map());
+  const workspaceStatusToastTimeoutsRef = useRef(new Map());
   const serverLongPressTimeoutRef = useRef(null);
   const serverLongPressTriggeredRef = useRef(false);
   const suppressedServerClickRef = useRef("");
@@ -730,6 +733,7 @@ export default function MenuMain({
   const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
   const echoCancellationStorageKey = useMemo(() => getEchoCancellationStorageKey(user), [user?.id, user?.email]);
   const directNotificationsStorageKey = useMemo(() => getDirectNotificationsStorageKey(user), [user?.id, user?.email]);
+  const conversationNotificationsStorageKey = useMemo(() => getConversationNotificationsStorageKey(user), [user?.id, user?.email]);
   const serverNotificationsStorageKey = useMemo(() => getServerNotificationsStorageKey(user), [user?.id, user?.email]);
   const directMessageSoundEnabledStorageKey = useMemo(() => getDirectMessageSoundEnabledStorageKey(user), [user?.id, user?.email]);
   const directMessageSendSoundStorageKey = useMemo(() => getDirectMessageSendSoundStorageKey(user), [user?.id, user?.email]);
@@ -1322,6 +1326,18 @@ export default function MenuMain({
           .filter(Boolean)
       ),
     [currentUserId, directConversationTargets]
+  );
+  const conversationChannelMap = useMemo(
+    () =>
+      new Map(
+        conversationTargets
+          .map((conversation) => {
+            const channelId = String(conversation?.directChannelId || "");
+            return channelId ? [channelId, conversation] : null;
+          })
+          .filter(Boolean)
+      ),
+    [conversationTargets]
   );
   const isDefaultServer = useMemo(() => isPersonalDefaultServer(activeServer, user), [activeServer, user]);
   const isServerOwner = useMemo(() => String(activeServer?.ownerId || "") === String(currentUserId), [activeServer?.ownerId, currentUserId]);
@@ -2352,7 +2368,9 @@ export default function MenuMain({
     }
 
     try {
-      setDirectCallState((previous) => ({ ...previous, lastReason: "expected-end" }));
+      const expectedEndCall = { ...currentCall, lastReason: "expected-end" };
+      directCallStateRef.current = expectedEndCall;
+      setDirectCallState(expectedEndCall);
       await voiceClientRef.current.endDirectCall(currentCall.peerUserId, currentCall.channelId, user);
       if (currentVoiceChannelRef.current === currentCall.channelId) {
         await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
@@ -2379,6 +2397,43 @@ export default function MenuMain({
         direction: currentCall.direction || "outgoing",
         endedAt: new Date().toISOString(),
       }));
+    }
+  };
+
+  const clearRemoteDirectCall = async ({
+    channelName,
+    fromName = "",
+    outcome = "ended",
+    feedbackMessage = "",
+  }) => {
+    const currentCall = directCallStateRef.current;
+    if (!channelName || currentCall.channelId !== channelName || currentCall.phase === "idle") {
+      return;
+    }
+
+    const fallbackName = String(fromName || currentCall.peerName || "Пользователь");
+    const expectedEndCall = { ...currentCall, lastReason: "expected-end" };
+    directCallStateRef.current = expectedEndCall;
+    setDirectCallState(expectedEndCall);
+
+    try {
+      if (currentVoiceChannelRef.current === channelName) {
+        await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
+      }
+    } catch (error) {
+      console.error("Не удалось сбросить личный звонок после удалённого завершения:", error);
+    } finally {
+      appendDirectCallHistoryEntry({
+        peerUserId: currentCall.peerUserId,
+        peerName: fallbackName,
+        peerAvatar: currentCall.peerAvatar,
+        direction: currentCall.direction || "incoming",
+        outcome,
+      });
+      setDirectCallState(createDirectCallState());
+      if (feedbackMessage) {
+        showServerInviteFeedback(feedbackMessage);
+      }
     }
   };
 
@@ -2624,6 +2679,30 @@ export default function MenuMain({
     setDirectMessageToasts((previous) => previous.filter((toast) => toast.id !== toastId));
   };
 
+  const clearDirectToastsByKind = useCallback((kind) => {
+    const normalizedKind = String(kind || "").trim();
+    if (!normalizedKind) {
+      return;
+    }
+
+    setDirectMessageToasts((previous) => {
+      const removedToasts = previous.filter((toast) => toast.kind === normalizedKind);
+      if (!removedToasts.length) {
+        return previous;
+      }
+
+      removedToasts.forEach((toast) => {
+        const timeoutId = directToastTimeoutsRef.current.get(toast.id);
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+          directToastTimeoutsRef.current.delete(toast.id);
+        }
+      });
+
+      return previous.filter((toast) => toast.kind !== normalizedKind);
+    });
+  }, []);
+
   const dismissServerToast = (toastId) => {
     const timeoutId = serverToastTimeoutsRef.current.get(toastId);
     if (timeoutId) {
@@ -2633,6 +2712,39 @@ export default function MenuMain({
 
     setServerMessageToasts((previous) => previous.filter((toast) => toast.id !== toastId));
   };
+
+  const dismissWorkspaceStatusToast = useCallback((toastId) => {
+    const timeoutId = workspaceStatusToastTimeoutsRef.current.get(toastId);
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+      workspaceStatusToastTimeoutsRef.current.delete(toastId);
+    }
+
+    setWorkspaceStatusToasts((previous) => previous.filter((toast) => toast.id !== toastId));
+  }, []);
+
+  const pushWorkspaceStatusToast = useCallback((message, tone = "success") => {
+    const normalizedMessage = String(message || "").trim();
+    if (!normalizedMessage) {
+      return;
+    }
+
+    const toastId = createId("workspace-status-toast");
+    setWorkspaceStatusToasts((previous) => [
+      {
+        id: toastId,
+        message: normalizedMessage,
+        tone,
+      },
+      ...previous,
+    ].slice(0, 3));
+
+    const timeoutId = window.setTimeout(() => {
+      dismissWorkspaceStatusToast(toastId);
+    }, 3200);
+
+    workspaceStatusToastTimeoutsRef.current.set(toastId, timeoutId);
+  }, [dismissWorkspaceStatusToast]);
 
   const pushDirectToast = (toast) => {
     playDirectMessageReceiveSound();
@@ -2689,6 +2801,26 @@ export default function MenuMain({
 
     serverToastTimeoutsRef.current.set(toast.id, timeoutId);
   };
+
+  useEffect(() => {
+    const statusMessage = String(conversationActionStatus || "").trim();
+    if (!statusMessage) {
+      return;
+    }
+
+    pushWorkspaceStatusToast(statusMessage);
+    setConversationActionStatus("");
+  }, [conversationActionStatus, pushWorkspaceStatusToast, setConversationActionStatus]);
+
+  useEffect(() => {
+    const statusMessage = String(friendActionStatus || "").trim();
+    if (!statusMessage) {
+      return;
+    }
+
+    pushWorkspaceStatusToast(statusMessage);
+    setFriendActionStatus("");
+  }, [friendActionStatus, pushWorkspaceStatusToast, setFriendActionStatus]);
 
   const showElectronDesktopNotification = ({ title, body }) => {
     if (!window?.electronDesktopNotifications?.show) {
@@ -2808,6 +2940,7 @@ export default function MenuMain({
       setDirectCallState(createDirectCallState());
       setDirectMessageToasts([]);
       setServerMessageToasts([]);
+      setWorkspaceStatusToasts([]);
       setDirectUnreadCounts({});
       setServerUnreadCounts({});
       setCustomNotificationSoundData("");
@@ -2819,6 +2952,8 @@ export default function MenuMain({
       directToastTimeoutsRef.current.clear();
       serverToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
       serverToastTimeoutsRef.current.clear();
+      workspaceStatusToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      workspaceStatusToastTimeoutsRef.current.clear();
     }
   }, [user]);
 
@@ -2979,6 +3114,8 @@ export default function MenuMain({
     directToastTimeoutsRef.current.clear();
     serverToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     serverToastTimeoutsRef.current.clear();
+    workspaceStatusToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    workspaceStatusToastTimeoutsRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -3052,6 +3189,20 @@ export default function MenuMain({
       setDirectNotificationsEnabled(true);
     }
   }, [directNotificationsStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setConversationNotificationsEnabled(true);
+      return;
+    }
+
+    try {
+      const storedSetting = localStorage.getItem(conversationNotificationsStorageKey);
+      setConversationNotificationsEnabled(storedSetting !== "false");
+    } catch {
+      setConversationNotificationsEnabled(true);
+    }
+  }, [conversationNotificationsStorageKey, user]);
 
   useEffect(() => {
     if (!user) {
@@ -3186,6 +3337,18 @@ export default function MenuMain({
       // ignore storage failures
     }
   }, [directNotificationsEnabled, directNotificationsStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(conversationNotificationsStorageKey, String(conversationNotificationsEnabled));
+    } catch {
+      // ignore storage failures
+    }
+  }, [conversationNotificationsEnabled, conversationNotificationsStorageKey, user]);
 
   useEffect(() => {
     if (!user) {
@@ -3341,10 +3504,16 @@ export default function MenuMain({
       return;
     }
 
-    setDirectMessageToasts([]);
-    directToastTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
-    directToastTimeoutsRef.current.clear();
-  }, [directNotificationsEnabled]);
+    clearDirectToastsByKind("direct");
+  }, [clearDirectToastsByKind, directNotificationsEnabled]);
+
+  useEffect(() => {
+    if (conversationNotificationsEnabled) {
+      return;
+    }
+
+    clearDirectToastsByKind("conversation");
+  }, [clearDirectToastsByKind, conversationNotificationsEnabled]);
 
   useEffect(() => {
     if (serverNotificationsEnabled) {
@@ -3363,6 +3532,14 @@ export default function MenuMain({
 
     clearDirectUnread(currentDirectChannelId);
   }, [currentDirectChannelId, workspaceMode]);
+
+  useEffect(() => {
+    if (workspaceMode !== "friends" || !currentConversationChannelId) {
+      return;
+    }
+
+    clearDirectUnread(currentConversationChannelId);
+  }, [currentConversationChannelId, workspaceMode]);
 
   useEffect(() => {
     if (workspaceMode !== "servers" || !activeServerId || !currentTextChannelId || activeDirectFriendId) {
@@ -3613,7 +3790,10 @@ export default function MenuMain({
       });
       pushDirectToast({
         id: createDirectToastId(),
+        kind: "direct",
         channelId,
+        title: getDisplayName(friend) || "Новое сообщение",
+        avatarSrc: getUserAvatar(friend),
         friend,
         preview,
       });
@@ -3629,6 +3809,71 @@ export default function MenuMain({
       chatConnection.off("ReceiveMessage", handleReceiveDirectMessage);
     };
   }, [currentDirectChannelId, currentUserId, directChannelFriendMap, directNotificationsEnabled, user]);
+
+  useEffect(() => {
+    if (!user || !currentUserId) {
+      return undefined;
+    }
+
+    const handleReceiveConversationMessage = async (messageItem) => {
+      const channelId = String(messageItem?.channelId || "");
+      if (!channelId || channelId.startsWith("dm:")) {
+        return;
+      }
+
+      if (parseServerChatChannelId(channelId)) {
+        return;
+      }
+
+      const conversation = conversationChannelMap.get(channelId);
+      if (!conversation) {
+        return;
+      }
+
+      if (String(messageItem?.authorUserId || "") === String(currentUserId)) {
+        return;
+      }
+
+      if (channelId === currentConversationChannelId) {
+        return;
+      }
+
+      incrementDirectUnread(channelId);
+
+      if (!conversationNotificationsEnabled) {
+        return;
+      }
+
+      const preview = await resolveIncomingMessagePreview(messageItem, user, {
+        fallbackText: "Новое сообщение",
+      });
+      pushDirectToast({
+        id: createDirectToastId(),
+        kind: "conversation",
+        channelId,
+        title: String(conversation?.title || "Беседа"),
+        avatarSrc: String(conversation?.avatar || ""),
+        friend: conversation,
+        preview,
+      });
+      showElectronDesktopNotification({
+        title: String(conversation?.title || "Беседа"),
+        body: `${String(messageItem?.username || "User")}: ${preview}`,
+      });
+    };
+
+    chatConnection.on("ReceiveMessage", handleReceiveConversationMessage);
+
+    return () => {
+      chatConnection.off("ReceiveMessage", handleReceiveConversationMessage);
+    };
+  }, [
+    conversationChannelMap,
+    conversationNotificationsEnabled,
+    currentConversationChannelId,
+    currentUserId,
+    user,
+  ]);
 
   useEffect(() => {
     if (!user || !currentUserId) {
@@ -4304,67 +4549,25 @@ export default function MenuMain({
               : normalizedReason === "cancelled"
                 ? `${fallbackName} отменил звонок.`
                 : `${fallbackName} отклонил звонок.`;
-        appendDirectCallHistoryEntry({
-          peerUserId: directCallStateRef.current.peerUserId,
-          peerName: fallbackName,
-          peerAvatar: directCallStateRef.current.peerAvatar,
-          direction: directCallStateRef.current.direction || "outgoing",
+        void clearRemoteDirectCall({
+          channelName,
+          fromName: fallbackName,
           outcome: normalizedReason || "declined",
+          feedbackMessage: statusMessage,
         });
-        setDirectCallState(buildDirectCallState({
-          phase: "declined",
-          statusLabel: statusMessage,
-          channelId: channelName,
-          peerUserId: directCallStateRef.current.peerUserId,
-          peerName: fallbackName,
-          peerAvatar: directCallStateRef.current.peerAvatar,
-          peerAvatarFrame: directCallStateRef.current.peerAvatarFrame,
-          canRetry: true,
-          isMiniMode: true,
-          direction: directCallStateRef.current.direction || "outgoing",
-          lastReason: normalizedReason,
-          endedAt: new Date().toISOString(),
-        }));
-        showServerInviteFeedback(statusMessage);
       },
       onDirectCallEnded: ({ channelName, fromName }) => {
         if (!channelName || directCallStateRef.current.channelId !== channelName) {
           return;
         }
 
-        setDirectCallState((previous) => ({ ...previous, lastReason: "expected-end" }));
-        void (async () => {
-          try {
-            if (currentVoiceChannelRef.current === channelName) {
-              await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
-            }
-          } catch (error) {
-            console.error("Не удалось завершить личный звонок:", error);
-          } finally {
-            const fallbackName = String(fromName || directCallStateRef.current.peerName || "Пользователь");
-            appendDirectCallHistoryEntry({
-              peerUserId: directCallStateRef.current.peerUserId,
-              peerName: fallbackName,
-              peerAvatar: directCallStateRef.current.peerAvatar,
-              direction: directCallStateRef.current.direction || "incoming",
-              outcome: "ended",
-            });
-            setDirectCallState(buildDirectCallState({
-              phase: "ended",
-              statusLabel: `${fallbackName} завершил звонок`,
-              channelId: channelName,
-              peerUserId: directCallStateRef.current.peerUserId,
-              peerName: fallbackName,
-              peerAvatar: directCallStateRef.current.peerAvatar,
-              peerAvatarFrame: directCallStateRef.current.peerAvatarFrame,
-              canRetry: true,
-              isMiniMode: true,
-              direction: directCallStateRef.current.direction || "incoming",
-              endedAt: new Date().toISOString(),
-            }));
-            showServerInviteFeedback(`${fallbackName} завершил звонок.`);
-          }
-        })();
+        const fallbackName = String(fromName || directCallStateRef.current.peerName || "Пользователь");
+        void clearRemoteDirectCall({
+          channelName,
+          fromName: fallbackName,
+          outcome: "ended",
+          feedbackMessage: `${fallbackName} завершил звонок.`,
+        });
       },
     });
     voiceClientRef.current = client;
@@ -5721,6 +5924,14 @@ export default function MenuMain({
     });
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
   };
+  const handlePreviewStream = (userId) => {
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) {
+      return;
+    }
+
+    voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Screen share preview request failed:", error));
+  };
   const handleImportServer = (snapshot) => {
     if (!snapshot) return;
     replaceServerSnapshot({ ...snapshot, isShared: true }, { activate: true });
@@ -5985,6 +6196,11 @@ export default function MenuMain({
       return;
     }
 
+    if (!isNicknameUsingSingleScript(nextNickname)) {
+      setProfileStatus("Никнейм должен быть полностью на одном языке: либо на русском, либо на английском.");
+      return;
+    }
+
     setProfileStatus("Сохраняем профиль...");
 
     try {
@@ -6160,6 +6376,7 @@ export default function MenuMain({
     toggleEchoCancellation,
     setAutoInputSensitivity,
     directNotificationsEnabled,
+    conversationNotificationsEnabled,
     serverNotificationsEnabled,
     directMessageSoundEnabled,
     directMessageSendSoundId,
@@ -6172,6 +6389,7 @@ export default function MenuMain({
     notificationSoundError,
     notificationSoundInputRef,
     setDirectNotificationsEnabled,
+    setConversationNotificationsEnabled,
     setServerNotificationsEnabled,
     setDirectMessageSoundEnabled,
     setDirectMessageSendSoundId,
@@ -6234,11 +6452,16 @@ export default function MenuMain({
     selectedInputDeviceId,
     selectedOutputDeviceId,
     outputSelectionSupported,
+    isScreenShareActive,
+    isCameraShareActive,
+    isScreenShareSupported,
     onAccept: acceptDirectCall,
     onDecline: declineDirectCall,
     onEnd: endDirectCall,
     onToggleMic: toggleMicMute,
     onToggleSound: toggleSoundMute,
+    onScreenShareAction: handleScreenShareAction,
+    onOpenCamera: openCameraModal,
     onSelectInputDevice: setSelectedInputDeviceId,
     onSelectOutputDevice: setSelectedOutputDeviceId,
     onToggleMiniMode: setDirectCallMiniMode,
@@ -6544,7 +6767,6 @@ export default function MenuMain({
       directUnreadCounts={directUnreadCounts}
       chatDraftPresence={chatDraftPresence}
       currentUserId={currentUserId}
-      activeDirectCall={directCallState.phase !== "idle" ? directCallState : null}
       profilePanel={renderProfilePanel()}
       onQueryChange={setFriendsSidebarQuery}
       onOpenFriendsWorkspace={openFriendsWorkspace}
@@ -6552,13 +6774,6 @@ export default function MenuMain({
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
-      onOpenDirectCallChat={(targetUserId) => {
-        if (!targetUserId) {
-          return;
-        }
-
-        openDirectChat(targetUserId);
-      }}
       onOpenConversationChat={openConversationChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
       overlayContent={friendListOverlayElement}
@@ -6640,14 +6855,12 @@ export default function MenuMain({
       friendLookupResults={friendLookupResults}
       friendLookupPerformed={friendLookupPerformed}
       friendsError={friendsError}
-      friendActionStatus={friendActionStatus}
       isAddingFriend={isAddingFriend}
       activeContacts={activeContacts}
       conversations={conversations}
       conversationsLoading={conversationsLoading}
       conversationsError={conversationsError}
       conversationActionLoading={conversationActionLoading}
-      conversationActionStatus={conversationActionStatus}
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
       onOpenDirectChat={openDirectChat}
@@ -6729,6 +6942,7 @@ export default function MenuMain({
       onOpenDirectChat={openDirectChat}
       onStartDirectCall={startDirectCallWithUser}
       onOpenLocalSharePreview={openLocalSharePreview}
+      onPreviewStream={handlePreviewStream}
       onWatchStream={handleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}
       onClearChannelSearch={() => setChannelSearchQuery("")}
@@ -6755,9 +6969,17 @@ export default function MenuMain({
       servers={servers}
       workspaceMode={workspaceMode}
       activeServer={activeServer}
+      activeDirectCall={directCallState.phase !== "idle" ? directCallState : null}
       defaultServerIcon={DEFAULT_SERVER_ICON}
       smsIcon={SMS_ICON_URL}
       onOpenFriendsWorkspace={openFriendsWorkspace}
+      onOpenDirectCallChat={(targetUserId) => {
+        if (!targetUserId) {
+          return;
+        }
+
+        openDirectChat(targetUserId);
+      }}
       onServerShortcutClick={handleServerShortcutClick}
       onServerContextMenu={openServerContextMenu}
       onServerPointerDown={handleServerShortcutPointerDown}
@@ -6791,6 +7013,7 @@ export default function MenuMain({
       getDisplayName={getDisplayName}
       textChatNavigationRequest={textChatNavigationRequest}
       onTextChatNavigationIndexChange={setTextChatNavigationIndex}
+      onClearChannelSearch={() => setChannelSearchQuery("")}
       onStartDirectCall={startDirectCallWithUser}
     />
   );
@@ -6849,7 +7072,7 @@ export default function MenuMain({
   const canNavigateBack = navigationHistoryRef.current.back.length > 0;
   const canNavigateForward = navigationHistoryRef.current.forward.length > 0;
   const desktopTitlebarContext = useMemo(() => {
-    if (directCallState.phase !== "idle") {
+    if (SHOW_DIRECT_CALL_IN_TITLEBAR && directCallState.phase !== "idle") {
       return {
         title: directCallState.peerName || "Личный звонок",
         iconType: directCallState.peerAvatar ? "image" : "glyph",
@@ -7144,11 +7367,14 @@ export default function MenuMain({
       closeMediaFrameEditor={closeMediaFrameEditor}
       handleMediaFrameConfirm={handleMediaFrameConfirm}
       directMessageToasts={directMessageToasts}
+      openConversationChat={openConversationChat}
       openDirectChat={openDirectChat}
       dismissDirectToast={dismissDirectToast}
       serverMessageToasts={serverMessageToasts}
       openServerChannelFromToast={openServerChannelFromToast}
       dismissServerToast={dismissServerToast}
+      workspaceStatusToasts={workspaceStatusToasts}
+      dismissWorkspaceStatusToast={dismissWorkspaceStatusToast}
       quickSwitcherOpen={quickSwitcherOpen}
       quickSwitcherQuery={quickSwitcherQuery}
       quickSwitcherItems={quickSwitcherItems}

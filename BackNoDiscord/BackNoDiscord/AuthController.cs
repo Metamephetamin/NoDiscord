@@ -408,6 +408,12 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Этот номер уже используется." });
         }
 
+        var nicknameLookup = nickname.ToLowerInvariant();
+        if (await _context.Users.AnyAsync(u => u.nickname.ToLower() == nicknameLookup))
+        {
+            return BadRequest(new { message = "Этот никнейм уже занят." });
+        }
+
         PhoneVerificationCodeRecord? phoneVerification = null;
         if (!string.IsNullOrWhiteSpace(normalizedPhone) && RequireRegistrationVerification)
         {

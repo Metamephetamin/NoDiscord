@@ -318,6 +318,27 @@ function buildLocalEchoSignature(messageItem) {
   });
 }
 
+function normalizeChatSystemEvent(rawEvent) {
+  if (!rawEvent || typeof rawEvent !== "object") {
+    return null;
+  }
+
+  const type = String(rawEvent.type || rawEvent.Type || "").trim();
+  if (!type) {
+    return null;
+  }
+
+  return {
+    type,
+    actorUserId: String(rawEvent.actorUserId || rawEvent.ActorUserId || "").trim(),
+    actorDisplayName: String(rawEvent.actorDisplayName || rawEvent.ActorDisplayName || "").trim(),
+    targetUserId: String(rawEvent.targetUserId || rawEvent.TargetUserId || "").trim(),
+    targetDisplayName: String(rawEvent.targetDisplayName || rawEvent.TargetDisplayName || "").trim(),
+    conversationTitle: String(rawEvent.conversationTitle || rawEvent.ConversationTitle || "").trim(),
+    avatarUrl: String(rawEvent.avatarUrl || rawEvent.AvatarUrl || "").trim(),
+  };
+}
+
 function findMatchingLocalEchoMessageIndex(channelMessages, incomingMessage, currentUserId) {
   const normalizedCurrentUserId = String(currentUserId || "");
   if (!normalizedCurrentUserId || String(incomingMessage?.authorUserId || "") !== normalizedCurrentUserId) {
@@ -901,7 +922,7 @@ export default function TextChat({
       .map((member) => {
         const handle = getMentionHandleForMember(member);
         const displayName = String(member?.name || "User").trim() || "User";
-        const userId = String(member?.userId || "").trim();
+        const userId = String(member?.userId || member?.id || "").trim();
         const avatar = String(member?.avatar || member?.avatarUrl || "").trim();
         if (!handle || !userId) {
           return null;
@@ -986,6 +1007,7 @@ export default function TextChat({
       clientTempId: String(messageItem?.clientTempId || messageItem?.ClientTempId || "").trim(),
       username: String(messageItem?.username || messageItem?.Username || messageItem?.name || messageItem?.Name || "User").trim() || "User",
       message: decrypted.text,
+      systemEvent: normalizeChatSystemEvent(messageItem?.systemEvent || messageItem?.SystemEvent),
       encryption: null,
       attachments,
       attachmentEncryption: null,

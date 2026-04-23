@@ -1,4 +1,4 @@
-import AnimatedAvatar from "./AnimatedAvatar";
+﻿import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
@@ -238,6 +238,7 @@ export const VoiceSettingsPanel = ({
 
 export const NotificationsSettings = ({
   directNotificationsEnabled,
+  conversationNotificationsEnabled,
   serverNotificationsEnabled,
   directMessageSoundEnabled,
   directMessageSendSoundId,
@@ -250,6 +251,7 @@ export const NotificationsSettings = ({
   notificationSoundError,
   notificationSoundInputRef,
   onToggleDirectNotifications,
+  onToggleConversationNotifications,
   onToggleServerNotifications,
   onToggleDirectMessageSound,
   onSendSoundChange,
@@ -264,7 +266,7 @@ export const NotificationsSettings = ({
     <div className="settings-shell__content-header">
       <div>
         <h2>Уведомления</h2>
-        <p>Настройте личные, серверные и звуковые уведомления так, как вам удобно.</p>
+        <p>Настройте личные, групповые, серверные и звуковые уведомления так, как вам удобно.</p>
       </div>
     </div>
 
@@ -275,6 +277,14 @@ export const NotificationsSettings = ({
           <span>Показывать всплывающие уведомления, когда личный чат не открыт.</span>
         </div>
         <VoiceSwitch active={directNotificationsEnabled} onClick={onToggleDirectNotifications} label="Личные уведомления" />
+      </div>
+
+      <div className="voice-toggle-row">
+        <div>
+          <strong>Беседы</strong>
+          <span>Показывать уведомления о новых сообщениях в беседах, когда они не открыты.</span>
+        </div>
+        <VoiceSwitch active={conversationNotificationsEnabled} onClick={onToggleConversationNotifications} label="Уведомления бесед" />
       </div>
 
       <div className="voice-toggle-row">

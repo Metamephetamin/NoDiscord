@@ -602,6 +602,49 @@
   padding: 6px 24px 6px 6px;
 }
 
+.message-item--system,
+.message-item:not(.message-item--dm).message-item--system {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 24px;
+  gap: 0;
+}
+
+.chat-system-event {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, 92%);
+  color: rgba(220, 228, 245, 0.74);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.chat-system-event__text {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 25, 36, 0.74);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.chat-system-event__image {
+  display: block;
+  width: 112px;
+  height: 112px;
+  border-radius: 28px;
+  object-fit: cover;
+  border: 1px solid rgba(145, 170, 230, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+}
+
 .message-item--highlighted {
   background: transparent;
   box-shadow: none;
@@ -4446,7 +4489,8 @@
 .location-picker-modal__header,
 .location-picker-modal__toolbar,
 .location-picker-modal__actions,
-.location-picker-modal__meta {
+.location-picker-modal__meta,
+.location-picker-modal__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4469,7 +4513,6 @@
 .location-picker-modal__close,
 .location-picker-modal__toolbar-button,
 .location-picker-modal__icon-button,
-.location-picker-map__nav-button,
 .location-picker-modal__button {
   appearance: none;
   border: 0;
@@ -4478,8 +4521,7 @@
 }
 
 .location-picker-modal__close,
-.location-picker-modal__icon-button,
-.location-picker-map__nav-button {
+.location-picker-modal__icon-button {
   width: 36px;
   height: 36px;
   border-radius: 12px;
@@ -4488,8 +4530,7 @@
 }
 
 .location-picker-modal__close:hover,
-.location-picker-modal__icon-button:hover,
-.location-picker-map__nav-button:hover {
+.location-picker-modal__icon-button:hover {
   background: rgba(255, 255, 255, 0.12);
 }
 
@@ -4525,11 +4566,13 @@
 }
 
 .location-picker-modal__zoom-value {
-  min-width: 30px;
+  min-width: 34px;
   text-align: center;
   color: rgba(235, 242, 255, 0.82);
   font-size: 13px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
 .location-picker-map {
@@ -4539,21 +4582,18 @@
 .location-picker-map__viewport {
   position: relative;
   width: 100%;
-  padding: 0;
-  border: 0;
+  height: min(52vh, 480px);
   border-radius: 18px;
   overflow: hidden;
   background: rgba(9, 13, 19, 0.92);
   cursor: crosshair;
 }
 
-.location-picker-map__image {
-  display: block;
+.location-picker-map__viewport .leaflet-container {
   width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  user-select: none;
-  pointer-events: none;
+  height: 100%;
+  background: rgba(9, 13, 19, 0.92);
+  font: inherit;
 }
 
 .location-picker-map__marker {
@@ -4576,19 +4616,10 @@
   background: #ffffff;
 }
 
-.location-picker-map__nav {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.location-picker-map__nav-row {
-  display: flex;
-  gap: 6px;
+.location-picker-map .leaflet-control-container,
+.location-picker-map .leaflet-bottom,
+.location-picker-map .leaflet-top {
+  display: none;
 }
 
 .location-picker-modal__notice {
@@ -4605,6 +4636,7 @@
   justify-content: flex-start;
   gap: 10px;
   flex-wrap: wrap;
+  flex: 1 1 auto;
 }
 
 .location-picker-modal__meta-item {
@@ -4625,19 +4657,24 @@
 .location-picker-modal__meta-item strong {
   color: #ffffff;
   font-size: 14px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
 .location-picker-modal__actions {
   justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.location-picker-modal__footer {
+  align-items: flex-end;
 }
 
 .location-picker-modal__button {
   background: linear-gradient(180deg, rgba(90, 154, 255, 0.96), rgba(63, 126, 235, 0.96));
   color: #ffffff;
-}
-
-.location-picker-modal__button:hover {
-  transform: translateY(-1px);
+  transition: none;
 }
 
 .location-picker-modal__button--ghost {
@@ -4653,9 +4690,14 @@
 
   .location-picker-modal__header,
   .location-picker-modal__toolbar,
-  .location-picker-modal__actions {
+  .location-picker-modal__actions,
+  .location-picker-modal__footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .location-picker-map__viewport {
+    height: min(44vh, 360px);
   }
 
   .location-picker-modal__meta-item {

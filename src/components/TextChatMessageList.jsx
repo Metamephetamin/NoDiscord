@@ -26,9 +26,54 @@ import { recordPerfEvent } from "../utils/perf";
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
 const invitePreviewCache = new Map();
 const TEXT_CHAT_STATIC_EMOJI_IN_FEED = true;
+const CHAT_SYSTEM_EVENT_MEMBER_ADDED = "conversation_member_added";
+const CHAT_SYSTEM_EVENT_TITLE_UPDATED = "conversation_title_updated";
+const CHAT_SYSTEM_EVENT_AVATAR_UPDATED = "conversation_avatar_updated";
 
 function getMessageRenderId(messageItem) {
   return String(messageItem?.id || messageItem?.clientId || messageItem?.localId || "");
+}
+
+function getChatSystemEventText(systemEvent) {
+  const actorName = String(systemEvent?.actorDisplayName || "").trim() || "Кто-то";
+  const targetName = String(systemEvent?.targetDisplayName || "").trim() || "участника";
+  const conversationTitle = String(systemEvent?.conversationTitle || "").trim();
+
+  switch (String(systemEvent?.type || "")) {
+    case CHAT_SYSTEM_EVENT_MEMBER_ADDED:
+      return `${actorName} пригласил ${targetName}`;
+    case CHAT_SYSTEM_EVENT_TITLE_UPDATED:
+      return `${actorName} изменил название беседы${conversationTitle ? ` на «${conversationTitle}»` : ""}`;
+    case CHAT_SYSTEM_EVENT_AVATAR_UPDATED:
+      return systemEvent?.avatarUrl ? `${actorName} изменил фото беседы на такую` : `${actorName} удалил фото беседы`;
+    default:
+      return "";
+  }
+}
+
+function ChatSystemEventMessage({ systemEvent }) {
+  const text = getChatSystemEventText(systemEvent);
+  const avatarUrl = String(systemEvent?.avatarUrl || "").trim();
+  const resolvedAvatarUrl = avatarUrl ? resolveMediaUrl(avatarUrl, avatarUrl) : "";
+
+  if (!text) {
+    return null;
+  }
+
+  return (
+    <div className="chat-system-event">
+      <div className="chat-system-event__text">{text}</div>
+      {resolvedAvatarUrl ? (
+        <img
+          className="chat-system-event__image"
+          src={resolvedAvatarUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+        />
+      ) : null}
+    </div>
+  );
 }
 
 const getPreviewableMediaItems = (messageItem, attachments) =>
@@ -1751,6 +1796,19 @@ function TextChatMessageList({
           const messageRenderKey = duplicateMessageIdSet.has(messageRenderId)
             ? `${messageRenderId || "message"}:${messageIndex}`
             : messageRenderId || `message:${messageIndex}`;
+          const systemEvent = messageItem?.systemEvent || null;
+
+          if (systemEvent) {
+            return (
+              <div
+                key={messageRenderKey}
+                ref={(node) => registerMessageNode(messageItem.id, node)}
+                className={`message-item message-item--system ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
+              >
+                <ChatSystemEventMessage systemEvent={systemEvent} />
+              </div>
+            );
+          }
 
           const handleMessageClick = selectionMode
             ? (event) => {

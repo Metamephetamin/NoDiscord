@@ -435,6 +435,7 @@ function ServerMainComponent({
   onOpenDirectChat,
   onStartDirectCall,
   onOpenLocalSharePreview,
+  onPreviewStream,
   onWatchStream,
   onChannelSearchChange,
   onClearChannelSearch,
@@ -514,6 +515,7 @@ function ServerMainComponent({
             hasLocalSharePreview={hasLocalSharePreview}
             isLocalSharePreviewVisible={isLocalSharePreviewVisible}
             localSharePreview={localSharePreview}
+            onPreviewStream={onPreviewStream}
             onWatchStream={onWatchStream}
             onOpenLocalSharePreview={onOpenLocalSharePreview}
             onCloseSelectedStream={onCloseSelectedStream}
@@ -607,6 +609,7 @@ function areServerMainPropsEqual(previousProps, nextProps) {
     && previousProps.onOpenDirectChat === nextProps.onOpenDirectChat
     && previousProps.onStartDirectCall === nextProps.onStartDirectCall
     && previousProps.onOpenLocalSharePreview === nextProps.onOpenLocalSharePreview
+    && previousProps.onPreviewStream === nextProps.onPreviewStream
     && previousProps.onWatchStream === nextProps.onWatchStream
     && previousProps.onChannelSearchChange === nextProps.onChannelSearchChange
     && previousProps.onAddServer === nextProps.onAddServer
@@ -635,9 +638,11 @@ export const DesktopServerRail = ({
   servers,
   workspaceMode,
   activeServer,
+  activeDirectCall = null,
   defaultServerIcon,
   smsIcon,
   onOpenFriendsWorkspace,
+  onOpenDirectCallChat,
   onServerShortcutClick,
   onServerContextMenu,
   onServerPointerDown,
@@ -651,6 +656,17 @@ export const DesktopServerRail = ({
       <img src={smsIcon} alt="" />
       <span>Друзья</span>
     </button>
+    {activeDirectCall ? (
+      <button
+        type="button"
+        className="btn__direct-call"
+        onClick={() => onOpenDirectCallChat?.(activeDirectCall.peerUserId)}
+        aria-label={`Открыть звонок с ${activeDirectCall.peerName || "пользователем"}`}
+        title={activeDirectCall.peerName ? `${activeDirectCall.peerName}: ${activeDirectCall.statusLabel || "Идет звонок"}` : "Личный звонок"}
+      >
+        <span className="btn__direct-call-icon" aria-hidden="true" />
+      </button>
+    ) : null}
     {servers.map((server) => (
       <button
         key={server.id}
@@ -738,6 +754,7 @@ export const MobileDirectChat = ({
   getDisplayName,
   textChatNavigationRequest,
   onTextChatNavigationIndexChange,
+  onClearChannelSearch,
   onStartDirectCall,
 }) => (
   <main className="chat__wrapper chat__wrapper--friends chat__wrapper--mobile-direct">

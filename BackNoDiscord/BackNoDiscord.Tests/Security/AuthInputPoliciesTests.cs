@@ -69,4 +69,33 @@ public class AuthInputPoliciesTests
         Assert.True(result);
         Assert.Equal(string.Empty, error);
     }
+    [Fact]
+    public void TryNormalizeNickname_AllowsSingleScriptNickname()
+    {
+        var result = AuthInputPolicies.TryNormalizeNickname("Тестер 123", out var normalized, out var error);
+
+        Assert.True(result);
+        Assert.Equal("Тестер 123", normalized);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
+    public void TryNormalizeNickname_RejectsMixedScripts()
+    {
+        var result = AuthInputPolicies.TryNormalizeNickname("Тester", out var normalized, out var error);
+
+        Assert.False(result);
+        Assert.Equal("Тester", normalized);
+        Assert.Contains("одном языке", error);
+    }
+
+    [Fact]
+    public void TryNormalizeNickname_RejectsSymbols()
+    {
+        var result = AuthInputPolicies.TryNormalizeNickname("nick!!!", out var normalized, out var error);
+
+        Assert.False(result);
+        Assert.Equal("nick!!!", normalized);
+        Assert.Contains("буквы", error);
+    }
 }

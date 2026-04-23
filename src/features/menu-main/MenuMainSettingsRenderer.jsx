@@ -59,6 +59,7 @@ export function MenuMainSettingsContent({
   toggleEchoCancellation,
   setAutoInputSensitivity,
   directNotificationsEnabled,
+  conversationNotificationsEnabled,
   serverNotificationsEnabled,
   directMessageSoundEnabled,
   directMessageSendSoundId,
@@ -71,6 +72,7 @@ export function MenuMainSettingsContent({
   notificationSoundError,
   notificationSoundInputRef,
   setDirectNotificationsEnabled,
+  setConversationNotificationsEnabled,
   setServerNotificationsEnabled,
   setDirectMessageSoundEnabled,
   setDirectMessageSendSoundId,
@@ -131,6 +133,7 @@ export function MenuMainSettingsContent({
       return (
         <NotificationsSettings
           directNotificationsEnabled={directNotificationsEnabled}
+          conversationNotificationsEnabled={conversationNotificationsEnabled}
           serverNotificationsEnabled={serverNotificationsEnabled}
           directMessageSoundEnabled={directMessageSoundEnabled}
           directMessageSendSoundId={directMessageSendSoundId}
@@ -144,6 +147,7 @@ export function MenuMainSettingsContent({
           notificationSoundInputRef={notificationSoundInputRef}
           getDirectMessageSoundOptions={getDirectMessageSoundOptions}
           onToggleDirectNotifications={() => setDirectNotificationsEnabled((previous) => !previous)}
+          onToggleConversationNotifications={() => setConversationNotificationsEnabled((previous) => !previous)}
           onToggleServerNotifications={() => setServerNotificationsEnabled((previous) => !previous)}
           onToggleDirectMessageSound={() => setDirectMessageSoundEnabled((previous) => !previous)}
           onSendSoundChange={setDirectMessageSendSoundId}

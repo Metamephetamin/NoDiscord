@@ -98,7 +98,6 @@ export const FriendsSidebar = ({
   directUnreadCounts,
   chatDraftPresence,
   currentUserId,
-  activeDirectCall = null,
   profilePanel,
   onQueryChange,
   onOpenFriendsWorkspace,
@@ -106,7 +105,6 @@ export const FriendsSidebar = ({
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
-  onOpenDirectCallChat,
   onOpenConversationChat,
   onOpenUserContextMenu,
   overlayContent = null,
@@ -174,18 +172,6 @@ export const FriendsSidebar = ({
             <span>Беседы</span>
           </button>
         </div>
-
-        {activeDirectCall ? (
-          <div className="friends-call-dock">
-            <button type="button" className="friends-call-dock__button" onClick={() => onOpenDirectCallChat?.(activeDirectCall.peerUserId)}>
-              <span className="friends-call-dock__icon" aria-hidden="true" />
-              <span className="friends-call-dock__copy">
-                <strong>{activeDirectCall.peerName || "Личный звонок"}</strong>
-                <small>{activeDirectCall.statusLabel || "Идёт звонок"}</small>
-              </span>
-            </button>
-          </div>
-        ) : null}
 
         <div className="friends-directs">
           <div className="friends-directs__header">
@@ -313,14 +299,12 @@ export const FriendsMain = ({
   friendLookupResults,
   friendLookupPerformed,
   friendsError,
-  friendActionStatus,
   isAddingFriend,
   activeContacts,
   conversations,
   conversationsLoading,
   conversationsError,
   conversationActionLoading,
-  conversationActionStatus,
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
@@ -459,6 +443,27 @@ export const FriendsMain = ({
   const canRemoveConversationMembers = Boolean(currentConversationTarget?.canRemoveMembers ?? derivedCanRemoveConversationMembers);
   const canLeaveConversation = Boolean(currentConversationTarget?.canLeave ?? currentConversationTarget);
   const canDeleteConversation = Boolean(currentConversationTarget?.canDeleteConversation ?? currentConversationRole === "owner");
+  const currentConversationMentionMembers = useMemo(
+    () => (currentConversationTarget?.members || [])
+      .map((member) => {
+        const userId = String(member?.userId || member?.id || "").trim();
+        if (!userId) {
+          return null;
+        }
+
+        const displayName = getDisplayName(member);
+        return {
+          ...member,
+          id: userId,
+          userId,
+          name: displayName,
+          displayName,
+          avatar: member?.avatar || member?.avatarUrl || "",
+        };
+      })
+      .filter(Boolean),
+    [currentConversationTarget?.members, getDisplayName]
+  );
 
   useEffect(() => () => {
     if (conversationAvatarPreview?.startsWith("blob:")) {
@@ -728,19 +733,31 @@ export const FriendsMain = ({
 
   useEffect(() => {
     if (!currentConversationTarget) {
-      setShowAddConversationMemberForm(false);
-      setShowConversationSettings(false);
-      setActiveConversationMemberActionId("");
-      setAddConversationMemberSearch("");
-      setPendingConversationMemberId("");
-      resetConversationSettingsDraft();
+      const timeoutId = window.setTimeout(() => {
+        setShowAddConversationMemberForm(false);
+        setShowConversationSettings(false);
+        setActiveConversationMemberActionId("");
+        setAddConversationMemberSearch("");
+        setPendingConversationMemberId("");
+        resetConversationSettingsDraft();
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
+
+    return undefined;
   }, [currentConversationTarget]);
 
   useEffect(() => {
     if (!showConversationSettings) {
-      setActiveConversationMemberActionId("");
+      const timeoutId = window.setTimeout(() => {
+        setActiveConversationMemberActionId("");
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
+
+    return undefined;
   }, [showConversationSettings]);
 
   useEffect(() => {
@@ -748,13 +765,17 @@ export const FriendsMain = ({
       return;
     }
 
-    setConversationSettingsTitle(String(currentConversationTarget.title || ""));
-    setConversationSettingsAvatarPreview((previous) => {
-      if (previous?.startsWith("blob:")) {
-        return previous;
-      }
-      return String(currentConversationTarget.avatar || "");
-    });
+    const timeoutId = window.setTimeout(() => {
+      setConversationSettingsTitle(String(currentConversationTarget.title || ""));
+      setConversationSettingsAvatarPreview((previous) => {
+        if (previous?.startsWith("blob:")) {
+          return previous;
+        }
+        return String(currentConversationTarget.avatar || "");
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [
     showConversationSettings,
     currentConversationTarget?.conversationId,
@@ -902,35 +923,6 @@ export const FriendsMain = ({
               </div>
             </div>
 
-            {false ? (
-              <div className="friends-hero friends-hero--conversation-inline">
-                <form className="friends-hero__form" onSubmit={handleAddConversationMemberSubmit}>
-                  <select
-                    value={pendingConversationMemberId}
-                    onChange={(event) => {
-                      onClearConversationStatus?.();
-                      setPendingConversationMemberId(event.target.value);
-                    }}
-                    disabled={conversationActionLoading || !addableConversationFriends.length}
-                  >
-                    <option value="">Выберите друга для добавления</option>
-                    {addableConversationFriends.map((friend) => (
-                      <option key={friend.id} value={String(friend.id)}>
-                        {getDisplayName(friend)}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="submit" disabled={conversationActionLoading || !pendingConversationMemberId}>
-                    {conversationActionLoading ? "Добавляем..." : "Добавить"}
-                  </button>
-                </form>
-                {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
-                {!addableConversationFriends.length ? (
-                  <div className="friends-panel__empty">Все ваши друзья уже добавлены в эту беседу.</div>
-                ) : null}
-              </div>
-            ) : null}
-
             {activeDirectCallPanelProps ? (
               <div className="friends-main__call-stage">
                 <DirectCallOverlayView {...activeDirectCallPanelProps} embedded />
@@ -944,6 +936,7 @@ export const FriendsMain = ({
               searchQuery={directSearchQuery}
               onClearSearchQuery={onClearDirectSearchQuery}
               directTargets={directConversationTargets}
+              serverMembers={currentConversationTarget ? currentConversationMentionMembers : []}
               onOpenDirectChat={onOpenDirectChat}
               onStartDirectCall={onStartDirectCall}
             />
@@ -992,7 +985,6 @@ export const FriendsMain = ({
                 </button>
               </div>
               {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
-              {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
               {conversationsLoading ? <div className="friends-panel__empty">Загружаем беседы...</div> : null}
               {!conversationsLoading && conversations.length ? (
                 <div className="friends-results">
@@ -1082,7 +1074,6 @@ export const FriendsMain = ({
                 </button>
               </form>
               {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
-              {friendActionStatus ? <div className="friends-panel__success">{friendActionStatus}</div> : null}
               <div className="friends-results">
                 {friendLookupResults.map((friend) => (
                   <div key={friend.id} className="friends-results__item">
@@ -1195,7 +1186,6 @@ export const FriendsMain = ({
                   onChange={handleConversationAvatarChange}
                 />
                 {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
-                {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
 
                 <div className="friends-modal__actions">
                   <button type="button" className="friends-modal__action friends-modal__action--ghost" onClick={handleCloseConversationFlow}>
@@ -1261,7 +1251,6 @@ export const FriendsMain = ({
                   )}
                 </div>
                 {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
-                {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
 
                 <div className="friends-modal__actions">
                   <button type="button" className="friends-modal__action friends-modal__action--ghost" onClick={handleBackToConversationDetails}>
@@ -1445,7 +1434,6 @@ export const FriendsMain = ({
             </div>
 
             {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
-            {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
 
             <div className="friends-conversation-settings-actions">
               <button
@@ -1539,7 +1527,6 @@ export const FriendsMain = ({
               )}
             </div>
             {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
-            {conversationActionStatus ? <div className="friends-panel__success">{conversationActionStatus}</div> : null}
 
             <div className="friends-modal__actions">
               <button

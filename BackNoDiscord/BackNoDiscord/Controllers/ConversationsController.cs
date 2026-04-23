@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace BackNoDiscord.Controllers;
 
@@ -18,6 +19,10 @@ public sealed class ConversationsController : ControllerBase
     private const int MaxConversationMembers = 24;
     private const int MaxMuteMinutes = 7 * 24 * 60;
     private const long MaxConversationAvatarSizeBytes = 50L * 1024L * 1024L;
+    private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
+    private const string ConversationSystemMemberAdded = "conversation_member_added";
+    private const string ConversationSystemTitleUpdated = "conversation_title_updated";
+    private const string ConversationSystemAvatarUpdated = "conversation_avatar_updated";
     private const string ConversationPermissionEditInfo = "edit_info";
     private const string ConversationPermissionAddMembers = "add_members";
     private const string ConversationPermissionRemoveMembers = "remove_members";
@@ -42,17 +47,20 @@ public sealed class ConversationsController : ControllerBase
     };
 
     private readonly AppDbContext _context;
+    private readonly CryptoService _crypto;
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly UserPresenceService _userPresenceService;
     private readonly UploadStoragePaths _uploadStoragePaths;
 
     public ConversationsController(
         AppDbContext context,
+        CryptoService crypto,
         IHubContext<ChatHub> chatHubContext,
         UserPresenceService userPresenceService,
         UploadStoragePaths uploadStoragePaths)
     {
         _context = context;
+        _crypto = crypto;
         _chatHubContext = chatHubContext;
         _userPresenceService = userPresenceService;
         _uploadStoragePaths = uploadStoragePaths;
@@ -281,19 +289,37 @@ public sealed class ConversationsController : ControllerBase
             return Ok(new { status = "already_member" });
         }
 
+        var now = DateTimeOffset.UtcNow;
         _context.GroupConversationMembers.Add(new GroupConversationMemberRecord
         {
             ConversationId = conversationId,
             UserId = userId,
             Role = "member",
-            JoinedAt = DateTimeOffset.UtcNow,
+            JoinedAt = now,
             AddedByUserId = currentUserId,
             IsBanned = false
         });
-        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        conversation.UpdatedAt = now;
+
+        var eventUsers = await LoadUsersAsync([currentUserId, userId], cancellationToken);
+        eventUsers.TryGetValue(currentUserId, out var actorUser);
+        eventUsers.TryGetValue(userId, out var targetUser);
+        var systemMessage = AddConversationSystemMessage(
+            conversationId,
+            new ChatSystemEventPayload
+            {
+                Type = ConversationSystemMemberAdded,
+                ActorUserId = currentUserId.ToString(),
+                ActorDisplayName = GetUserDisplayName(actorUser, currentUserId),
+                TargetUserId = userId.ToString(),
+                TargetDisplayName = GetUserDisplayName(targetUser, userId)
+            },
+            now);
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var recipientIds = await GetConversationRecipientIdsAsync(conversationId, includeBanned: false, cancellationToken);
+        await BroadcastConversationSystemMessageAsync(systemMessage, cancellationToken);
         await BroadcastConversationsUpdatedAsync(recipientIds.Append(userId), cancellationToken);
 
         return Ok(new { status = "member_added" });
@@ -327,6 +353,14 @@ public sealed class ConversationsController : ControllerBase
             return Forbid();
         }
 
+        var previousTitle = conversation.Title;
+        var previousAvatarUrl = conversation.AvatarUrl ?? string.Empty;
+        var now = DateTimeOffset.UtcNow;
+        var systemMessages = new List<(Message Entity, ChatMessagePayload Payload)>();
+        var actorUsers = await LoadUsersAsync([currentUserId], cancellationToken);
+        actorUsers.TryGetValue(currentUserId, out var actorUser);
+        var actorDisplayName = GetUserDisplayName(actorUser, currentUserId);
+
         if (request?.Title is not null)
         {
             var title = NormalizeTitle(request.Title);
@@ -336,15 +370,42 @@ public sealed class ConversationsController : ControllerBase
             }
 
             conversation.Title = title;
+            if (!string.Equals(previousTitle, title, StringComparison.Ordinal))
+            {
+                systemMessages.Add(AddConversationSystemMessage(
+                    conversationId,
+                    new ChatSystemEventPayload
+                    {
+                        Type = ConversationSystemTitleUpdated,
+                        ActorUserId = currentUserId.ToString(),
+                        ActorDisplayName = actorDisplayName,
+                        ConversationTitle = title
+                    },
+                    now));
+            }
         }
 
         if (request?.AvatarUrl is not null)
         {
             var normalizedAvatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(request.AvatarUrl, "/avatars/");
             conversation.AvatarUrl = string.IsNullOrWhiteSpace(normalizedAvatarUrl) ? null : normalizedAvatarUrl;
+            var nextAvatarUrl = conversation.AvatarUrl ?? string.Empty;
+            if (!string.Equals(previousAvatarUrl, nextAvatarUrl, StringComparison.Ordinal))
+            {
+                systemMessages.Add(AddConversationSystemMessage(
+                    conversationId,
+                    new ChatSystemEventPayload
+                    {
+                        Type = ConversationSystemAvatarUpdated,
+                        ActorUserId = currentUserId.ToString(),
+                        ActorDisplayName = actorDisplayName,
+                        AvatarUrl = nextAvatarUrl
+                    },
+                    now.AddMilliseconds(systemMessages.Count)));
+            }
         }
 
-        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        conversation.UpdatedAt = now;
         await _context.SaveChangesAsync(cancellationToken);
 
         var members = await _context.GroupConversationMembers
@@ -352,6 +413,10 @@ public sealed class ConversationsController : ControllerBase
             .Where(item => item.ConversationId == conversationId)
             .ToListAsync(cancellationToken);
         var users = await LoadUsersAsync(members.Select(item => item.UserId), cancellationToken);
+        foreach (var systemMessage in systemMessages)
+        {
+            await BroadcastConversationSystemMessageAsync(systemMessage, cancellationToken);
+        }
         await BroadcastConversationsUpdatedAsync(members.Where(item => !item.IsBanned).Select(item => item.UserId), cancellationToken);
 
         return Ok(BuildConversationPayload(conversation, members, users, currentUserId));
@@ -755,6 +820,91 @@ public sealed class ConversationsController : ControllerBase
             .AsNoTracking()
             .Where(item => normalizedUserIds.Contains(item.id))
             .ToDictionaryAsync(item => item.id, cancellationToken);
+    }
+
+    private (Message Entity, ChatMessagePayload Payload) AddConversationSystemMessage(
+        int conversationId,
+        ChatSystemEventPayload systemEvent,
+        DateTimeOffset timestamp)
+    {
+        var normalizedEvent = systemEvent ?? new ChatSystemEventPayload();
+        normalizedEvent.ActorDisplayName = UploadPolicies.TrimToLength(normalizedEvent.ActorDisplayName, 160).Trim();
+        normalizedEvent.TargetDisplayName = UploadPolicies.TrimToLength(normalizedEvent.TargetDisplayName, 160).Trim();
+        normalizedEvent.ConversationTitle = UploadPolicies.TrimToLength(normalizedEvent.ConversationTitle, MaxConversationTitleLength).Trim();
+        normalizedEvent.AvatarUrl = UploadPolicies.SanitizeRelativeAssetUrl(normalizedEvent.AvatarUrl, "/avatars/");
+
+        var payload = new ChatMessagePayload
+        {
+            AuthorUserId = normalizedEvent.ActorUserId,
+            Message = string.Empty,
+            SystemEvent = normalizedEvent
+        };
+
+        var message = new Message
+        {
+            ChannelId = ConversationChannels.BuildChatChannelId(conversationId),
+            Username = string.IsNullOrWhiteSpace(normalizedEvent.ActorDisplayName) ? "System" : normalizedEvent.ActorDisplayName,
+            Content = null,
+            EncryptedContent = _crypto.Encrypt(SerializePayload(payload)),
+            PhotoUrl = null,
+            Timestamp = timestamp.UtcDateTime,
+            IsDeleted = false
+        };
+
+        _context.Messages.Add(message);
+        return (message, payload);
+    }
+
+    private async Task BroadcastConversationSystemMessageAsync(
+        (Message Entity, ChatMessagePayload Payload) systemMessage,
+        CancellationToken cancellationToken)
+    {
+        await _chatHubContext.Clients
+            .Group(systemMessage.Entity.ChannelId)
+            .SendAsync("ReceiveMessage", ToMessageDto(systemMessage.Entity, systemMessage.Payload), cancellationToken);
+    }
+
+    private static MessageDto ToMessageDto(Message message, ChatMessagePayload payload)
+    {
+        return new MessageDto
+        {
+            Id = message.Id,
+            ChannelId = message.ChannelId,
+            AuthorUserId = payload.AuthorUserId,
+            Username = message.Username,
+            Message = payload.Message,
+            SystemEvent = payload.SystemEvent,
+            PhotoUrl = message.PhotoUrl,
+            Attachments = [],
+            Mentions = [],
+            Timestamp = message.Timestamp,
+            IsRead = message.ReadAt.HasValue,
+            ReadAt = message.ReadAt,
+            ReadByUserId = message.ReadByUserId,
+            Reactions = []
+        };
+    }
+
+    private static string SerializePayload(ChatMessagePayload payload)
+    {
+        return $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
+    }
+
+    private static string GetUserDisplayName(User? user, int fallbackUserId)
+    {
+        if (user is null)
+        {
+            return $"User {fallbackUserId}";
+        }
+
+        var nickname = UploadPolicies.TrimToLength(user.nickname, 160).Trim();
+        if (!string.IsNullOrWhiteSpace(nickname))
+        {
+            return nickname;
+        }
+
+        var fullName = $"{user.first_name} {user.last_name}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? (user.email ?? $"User {fallbackUserId}") : fullName;
     }
 
     private async Task BroadcastConversationsUpdatedAsync(IEnumerable<int> userIds, CancellationToken cancellationToken)

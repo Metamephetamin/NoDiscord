@@ -4,6 +4,8 @@ export const NAME_SCRIPT_MIXED = "mixed";
 
 const LETTER_MARK_REGEX = /\p{M}/u;
 const GENERIC_LETTER_REGEX = /\p{L}/u;
+const NUMBER_REGEX = /\p{N}/u;
+const WHITESPACE_REGEX = /\s/u;
 const NAME_PUNCTUATION_REGEX = /['-]/;
 
 function isCyrillicLetter(char) {
@@ -125,4 +127,66 @@ export function areNamesUsingSameScript(firstName, lastName) {
       lastScript !== NAME_SCRIPT_MIXED &&
       firstScript === lastScript
   );
+}
+
+export function normalizeScriptAwareNicknameInput(value, maxLength, forcedScript = "") {
+  const effectiveScript =
+    forcedScript === NAME_SCRIPT_CYRILLIC || forcedScript === NAME_SCRIPT_LATIN
+      ? forcedScript
+      : "";
+  const sanitized = [];
+  let resolvedScript = effectiveScript;
+  let previousWasSpace = true;
+
+  for (const char of String(value || "")) {
+    if (isCyrillicLetter(char)) {
+      if (!resolvedScript) {
+        resolvedScript = NAME_SCRIPT_CYRILLIC;
+      }
+
+      if (resolvedScript === NAME_SCRIPT_CYRILLIC) {
+        sanitized.push(char);
+        previousWasSpace = false;
+      }
+      continue;
+    }
+
+    if (isLatinLetter(char)) {
+      if (!resolvedScript) {
+        resolvedScript = NAME_SCRIPT_LATIN;
+      }
+
+      if (resolvedScript === NAME_SCRIPT_LATIN) {
+        sanitized.push(char);
+        previousWasSpace = false;
+      }
+      continue;
+    }
+
+    if (LETTER_MARK_REGEX.test(char)) {
+      if (sanitized.length > 0 && !previousWasSpace) {
+        sanitized.push(char);
+      }
+      continue;
+    }
+
+    if (NUMBER_REGEX.test(char)) {
+      sanitized.push(char);
+      previousWasSpace = false;
+      continue;
+    }
+
+    if (WHITESPACE_REGEX.test(char)) {
+      if (sanitized.length > 0 && !previousWasSpace) {
+        sanitized.push(" ");
+        previousWasSpace = true;
+      }
+    }
+  }
+
+  return sanitized.join("").slice(0, maxLength).trimEnd();
+}
+
+export function isNicknameUsingSingleScript(value) {
+  return detectNameScript(value) !== NAME_SCRIPT_MIXED;
 }

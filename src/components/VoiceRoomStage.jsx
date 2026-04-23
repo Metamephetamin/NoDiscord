@@ -344,35 +344,54 @@ function captureVoiceStagePreviewFrame({ stream, videoSrc }) {
 }
 
 function VoiceStagePreviewMedia({ share, alt, className }) {
-  const [previewSrc, setPreviewSrc] = useState(() => String(share?.imageSrc || "").trim());
+  const [capturedPreview, setCapturedPreview] = useState({
+    stream: null,
+    videoSrc: "",
+    updatedAt: "",
+    src: "",
+  });
+
+  const staticPreview = String(share?.imageSrc || "").trim();
+  const previewStream = share?.stream || null;
+  const previewVideoSrc = String(share?.videoSrc || "").trim();
+  const previewUpdatedAt = String(share?.updatedAt || "");
 
   useEffect(() => {
-    let cancelled = false;
-    const staticPreview = String(share?.imageSrc || "").trim();
     if (staticPreview) {
-      setPreviewSrc(staticPreview);
       return undefined;
     }
 
-    setPreviewSrc("");
-
-    if (!share?.stream && !share?.videoSrc) {
+    if (!previewStream && !previewVideoSrc) {
       return undefined;
     }
 
+    let cancelled = false;
     captureVoiceStagePreviewFrame({
-      stream: share?.stream || null,
-      videoSrc: share?.videoSrc || "",
+      stream: previewStream,
+      videoSrc: previewVideoSrc,
     }).then((nextPreviewSrc) => {
-      if (!cancelled && nextPreviewSrc) {
-        setPreviewSrc(nextPreviewSrc);
+      if (!cancelled) {
+        setCapturedPreview({
+          stream: previewStream,
+          videoSrc: previewVideoSrc,
+          updatedAt: previewUpdatedAt,
+          src: nextPreviewSrc || "",
+        });
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [share?.imageSrc, share?.stream, share?.updatedAt, share?.videoSrc]);
+  }, [previewStream, previewUpdatedAt, previewVideoSrc, staticPreview]);
+
+  const previewSrc = staticPreview || (
+    capturedPreview.stream === previewStream
+      && capturedPreview.videoSrc === previewVideoSrc
+      && capturedPreview.updatedAt === previewUpdatedAt
+      ? capturedPreview.src
+      : ""
+  );
 
   if (previewSrc) {
     return <img src={previewSrc} alt={alt} className={className} />;
@@ -510,6 +529,7 @@ export default function VoiceRoomStage({
   hasLocalSharePreview,
   isLocalSharePreviewVisible,
   localSharePreview,
+  onPreviewStream,
   onWatchStream,
   onOpenLocalSharePreview,
   onCloseSelectedStream,
@@ -531,6 +551,8 @@ export default function VoiceRoomStage({
 }) {
   const shellRef = useRef(null);
   const [avatarAccentMap, setAvatarAccentMap] = useState({});
+  const [inlineStreamUserIds, setInlineStreamUserIds] = useState(() => new Set());
+  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
   const remoteShareByUserId = useMemo(
     () => new Map((remoteShares || []).map((share) => [String(share.userId || ""), share])),
     [remoteShares]
@@ -702,21 +724,55 @@ export default function VoiceRoomStage({
       return;
     }
 
+    const participantUserId = String(participant.userId || "");
+    const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantUserId));
+
     if (participant.isSelf && participant.share) {
-      onOpenLocalSharePreview?.();
+      if (isInlineStreamActive) {
+        onOpenLocalSharePreview?.();
+        return;
+      }
+
+      setInlineStreamUserIds((previous) => {
+        const next = new Set(previous);
+        next.add(participantUserId);
+        return next;
+      });
+      onPreviewStream?.(participant.userId);
+      return;
+    }
+
+    if (participant.isLive && isInlineStreamActive) {
+      onWatchStream?.(participant.userId);
       return;
     }
 
     if (participant.isLive) {
-      onWatchStream?.(participant.userId);
+      setInlineStreamUserIds((previous) => {
+        const next = new Set(previous);
+        next.add(participantUserId);
+        return next;
+      });
+      onPreviewStream?.(participant.userId);
+      return;
     }
   };
 
-  const renderParticipantMeta = (participant) => (
+  const renderParticipantMeta = (participant) => {
+    const isStreamCard = Boolean(participant.share || participant.isLive);
+    const subtitle = isStreamCard
+      ? ""
+      : participant.isSpeaking
+        ? "Сейчас говорит"
+        : participant.isSelf
+          ? "Это вы"
+          : "В голосовом канале";
+
+    return (
     <div className="voice-room-stage__card-meta">
       <div className="voice-room-stage__card-copy">
         <strong>{participant.name || "Участник"}</strong>
-        <span>
+        {subtitle ? <span>
           {participant.isLive
             ? "Смотреть стрим"
             : participant.isSpeaking
@@ -724,7 +780,7 @@ export default function VoiceRoomStage({
               : participant.isSelf
                 ? "Это вы"
                 : "В голосовом канале"}
-        </span>
+        </span> : null}
       </div>
       <div className="voice-room-stage__card-flags">
         <span className="voice-room-stage__card-role" style={buildAccentVariables(getParticipantAccent(participant))} aria-hidden="true" />
@@ -732,7 +788,8 @@ export default function VoiceRoomStage({
         {participant.isDeafened ? <VoiceStageStatusBadge name="headphones" label="Звук отключен" /> : null}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderStripCards = () => (
     <div className="voice-room-stage__strip" role="list" aria-label="Участники голосового канала">
@@ -812,7 +869,7 @@ export default function VoiceRoomStage({
             icon: "mic",
             label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
             onClick: onToggleMic,
-            muted: isMicMuted,
+            muted: isEffectiveMicMuted,
           })}
           {renderToolbarButton({
             key: "headphones",
@@ -961,11 +1018,16 @@ export default function VoiceRoomStage({
         </div>
       ) : stageCards.length ? (
         <div className="voice-room-stage__grid">
-          {stageCards.map((participant) => (
+          {stageCards.map((participant) => {
+            const participantUserId = String(participant.userId || "");
+            const isStreamCard = Boolean(participant.share || participant.isLive);
+            const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantUserId));
+
+            return (
             <button
               key={participant.userId || participant.name}
               type="button"
-              className={`voice-room-stage__card ${participant.isSelf ? "voice-room-stage__card--self" : ""} ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""}`}
+              className={`voice-room-stage__card ${participant.isSelf ? "voice-room-stage__card--self" : ""} ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""} ${isStreamCard ? "voice-room-stage__card--stream" : ""} ${isInlineStreamActive ? "voice-room-stage__card--stream-inline" : ""}`}
               onClick={() => handleCardClick(participant)}
               disabled={!participant.canOpen}
               style={buildAccentVariables(getParticipantAccent(participant))}
@@ -978,7 +1040,7 @@ export default function VoiceRoomStage({
                       alt={participant.name}
                       className="voice-room-stage__card-video"
                     />
-                    <div className="voice-room-stage__card-scrim" aria-hidden="true" />
+                    {!isInlineStreamActive ? <div className="voice-room-stage__card-scrim" aria-hidden="true" /> : null}
                   </>
                 ) : (
                   <div className="voice-room-stage__card-placeholder">
@@ -986,15 +1048,17 @@ export default function VoiceRoomStage({
                   </div>
                 )}
 
-                {participant.isLive ? (
+                {participant.isLive && !isInlineStreamActive ? (
                   <div className="voice-room-stage__card-cta">
                     <span className="voice-room-stage__card-watch">Смотреть стрим</span>
                   </div>
                 ) : null}
+                {isStreamCard ? renderParticipantMeta(participant) : null}
               </div>
-              {renderParticipantMeta(participant)}
+              {!isStreamCard ? renderParticipantMeta(participant) : null}
             </button>
-          ))}
+            );
+          })}
         </div>
       ) : isJoining ? (
         <div className="voice-room-stage__empty voice-room-stage__empty--pending">

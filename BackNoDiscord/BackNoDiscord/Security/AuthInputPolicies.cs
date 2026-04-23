@@ -181,6 +181,13 @@ public static partial class AuthInputPolicies
             return false;
         }
 
+        var nicknameScript = DetectPersonNameScript(normalizedNickname);
+        if (nicknameScript == PersonNameScript.Mixed)
+        {
+            error = "Никнейм должен быть полностью на одном языке: либо на русском, либо на английском.";
+            return false;
+        }
+
         return true;
     }
 

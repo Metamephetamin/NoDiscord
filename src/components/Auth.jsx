@@ -7,6 +7,8 @@ import { parseMediaFrame } from "../utils/mediaFrames";
 import {
   areNamesUsingSameScript,
   detectNameScript,
+  isNicknameUsingSingleScript,
+  normalizeScriptAwareNicknameInput,
   normalizeSingleWordNameInput,
 } from "../utils/nameScripts";
 
@@ -209,11 +211,7 @@ function mapAuthUser(data) {
 }
 
 function normalizeNicknameInput(value) {
-  return String(value || "")
-    .replace(/[^\p{L}\p{M}\p{N} ]+/gu, "")
-    .replace(/\s+/g, " ")
-    .slice(0, MAX_AUTH_NICKNAME_LENGTH)
-    .trimStart();
+  return normalizeScriptAwareNicknameInput(value, MAX_AUTH_NICKNAME_LENGTH);
 }
 
 function mapAuthSession(data) {
@@ -676,6 +674,11 @@ export default function Auth({ onAuthSuccess }) {
 
     if (!registerNameScript || (payload.last_name && !areNamesUsingSameScript(payload.first_name, payload.last_name))) {
       setMessage("Имя и фамилия должны быть полностью на одном языке: либо на русском, либо на английском.");
+      return;
+    }
+
+    if (!isNicknameUsingSingleScript(payload.nickname)) {
+      setMessage("Никнейм должен быть полностью на одном языке: либо на русском, либо на английском.");
       return;
     }
 

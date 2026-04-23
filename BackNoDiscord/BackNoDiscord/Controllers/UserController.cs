@@ -81,6 +81,18 @@ public class UserController : ControllerBase
             return BadRequest(new { message = nicknameError });
         }
 
+        if (nicknameInput != null)
+        {
+            var nicknameLookup = nickname.ToLowerInvariant();
+            var nicknameTaken = await _dbContext.Users.AnyAsync(
+                item => item.id != currentUserId && item.nickname.ToLower() == nicknameLookup,
+                cancellationToken);
+            if (nicknameTaken)
+            {
+                return BadRequest(new { message = "Этот никнейм уже занят." });
+            }
+        }
+
         var user = await _dbContext.Users.FirstOrDefaultAsync(item => item.id == currentUserId, cancellationToken);
         if (user == null)
         {

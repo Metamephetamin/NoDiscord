@@ -582,6 +582,7 @@ public class ChatHub : Hub
             AuthorUserId = payload.AuthorUserId,
             Username = message.Username,
             Message = payload.Message,
+            SystemEvent = payload.SystemEvent,
             Encryption = payload.Encryption,
             ForwardedFromUserId = payload.ForwardedFromUserId,
             ForwardedFromUsername = payload.ForwardedFromUsername,
@@ -1390,6 +1391,7 @@ public class MessageDto
     public string AuthorUserId { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public ChatSystemEventPayload? SystemEvent { get; set; }
     public ChatMessageEncryptionEnvelope? Encryption { get; set; }
     public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? ForwardedFromUserId { get; set; }
@@ -1464,6 +1466,7 @@ public class ChatMessagePayload
 {
     public string AuthorUserId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public ChatSystemEventPayload? SystemEvent { get; set; }
     public ChatMessageEncryptionEnvelope? Encryption { get; set; }
     public ChatAttachmentEncryptionEnvelope? AttachmentEncryption { get; set; }
     public string? ForwardedFromUserId { get; set; }
@@ -1494,6 +1497,17 @@ public class ChatAttachmentInput
     public bool AttachmentSpoiler { get; set; }
     public bool AttachmentAsFile { get; set; }
     public ChatVoiceMessageInput? VoiceMessage { get; set; }
+}
+
+public class ChatSystemEventPayload
+{
+    public string Type { get; set; } = string.Empty;
+    public string ActorUserId { get; set; } = string.Empty;
+    public string ActorDisplayName { get; set; } = string.Empty;
+    public string TargetUserId { get; set; } = string.Empty;
+    public string TargetDisplayName { get; set; } = string.Empty;
+    public string ConversationTitle { get; set; } = string.Empty;
+    public string AvatarUrl { get; set; } = string.Empty;
 }
 
 public class ChatAttachmentPayload

@@ -120,6 +120,7 @@ public sealed class ChatMessagesController : ControllerBase
             AuthorUserId = payload.AuthorUserId,
             Username = message.Username,
             Message = payload.Message,
+            SystemEvent = payload.SystemEvent,
             Encryption = payload.Encryption,
             ForwardedFromUserId = payload.ForwardedFromUserId,
             ForwardedFromUsername = payload.ForwardedFromUsername,

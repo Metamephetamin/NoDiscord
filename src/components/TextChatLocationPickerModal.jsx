@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const DEFAULT_CENTER = {
   latitude: 55.751244,
@@ -9,8 +11,6 @@ const DEFAULT_CENTER = {
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 18;
 const DEFAULT_ZOOM = 15;
-const MAP_IMAGE_WIDTH = 960;
-const MAP_IMAGE_HEIGHT = 540;
 const DEGREE_SYMBOL = "\u00B0";
 
 function clampLatitude(value) {
@@ -32,43 +32,8 @@ function clampZoom(value) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(Number(value) || DEFAULT_ZOOM)));
 }
 
-function projectLatLng(latitude, longitude, zoom) {
-  const scale = 256 * (2 ** zoom);
-  const normalizedLatitude = clampLatitude(latitude);
-  const normalizedLongitude = normalizeLongitude(longitude);
-  const sinLatitude = Math.sin((normalizedLatitude * Math.PI) / 180);
-
-  return {
-    x: ((normalizedLongitude + 180) / 360) * scale,
-    y: (0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) * scale,
-  };
-}
-
-function unprojectLatLng(x, y, zoom) {
-  const scale = 256 * (2 ** zoom);
-  const normalizedX = ((x % scale) + scale) % scale;
-  const normalizedY = Math.max(0, Math.min(scale, y));
-  const longitude = (normalizedX / scale) * 360 - 180;
-  const mercator = Math.PI - ((2 * Math.PI * normalizedY) / scale);
-  const latitude = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(mercator) - Math.exp(-mercator)));
-
-  return {
-    latitude: clampLatitude(latitude),
-    longitude: normalizeLongitude(longitude),
-  };
-}
-
 function formatCoordinate(value) {
   return Number(value || 0).toFixed(6);
-}
-
-function buildStaticMapUrl(center, marker, zoom) {
-  const centerLatitude = formatCoordinate(center?.latitude);
-  const centerLongitude = formatCoordinate(center?.longitude);
-  const markerLatitude = formatCoordinate(marker?.latitude ?? center?.latitude);
-  const markerLongitude = formatCoordinate(marker?.longitude ?? center?.longitude);
-
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLatitude},${centerLongitude}&zoom=${zoom}&size=${MAP_IMAGE_WIDTH}x${MAP_IMAGE_HEIGHT}&maptype=mapnik&markers=${markerLatitude},${markerLongitude},red-pushpin`;
 }
 
 export default function TextChatLocationPickerModal({
@@ -84,49 +49,146 @@ export default function TextChatLocationPickerModal({
   const [center, setCenter] = useState(initialLocation);
   const [marker, setMarker] = useState(initialLocation);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const mapElementRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const suppressMoveSyncRef = useRef(false);
 
-  const mapImageUrl = useMemo(
-    () => buildStaticMapUrl(center, marker, zoom),
-    [center, marker, zoom]
-  );
+  useEffect(() => {
+    if (!open || !mapElementRef.current || mapInstanceRef.current) {
+      return undefined;
+    }
+
+    const initialMapLocation = currentLocation || DEFAULT_CENTER;
+    const map = L.map(mapElementRef.current, {
+      zoomControl: false,
+      attributionControl: false,
+      preferCanvas: true,
+    });
+
+    const syncSelectionFromMap = () => {
+      if (suppressMoveSyncRef.current) {
+        suppressMoveSyncRef.current = false;
+        return;
+      }
+
+      const nextCenter = map.getCenter();
+      const nextZoom = clampZoom(map.getZoom());
+      const nextLocation = {
+        latitude: clampLatitude(nextCenter.lat),
+        longitude: normalizeLongitude(nextCenter.lng),
+      };
+
+      setCenter(nextLocation);
+      setMarker(nextLocation);
+      setZoom(nextZoom);
+    };
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      subdomains: ["a", "b", "c"],
+      minZoom: MIN_ZOOM,
+      maxZoom: 19,
+      crossOrigin: true,
+    }).addTo(map);
+
+    const handleMapClick = (event) => {
+      const nextLocation = {
+        latitude: clampLatitude(event.latlng.lat),
+        longitude: normalizeLongitude(event.latlng.lng),
+      };
+
+      suppressMoveSyncRef.current = true;
+      map.setView([nextLocation.latitude, nextLocation.longitude], map.getZoom(), {
+        animate: false,
+      });
+      setCenter(nextLocation);
+      setMarker(nextLocation);
+      setZoom(clampZoom(map.getZoom()));
+    };
+
+    map.on("moveend", syncSelectionFromMap);
+    map.on("zoomend", syncSelectionFromMap);
+    map.on("click", handleMapClick);
+    mapInstanceRef.current = map;
+    map.setView([initialMapLocation.latitude, initialMapLocation.longitude], DEFAULT_ZOOM, {
+      animate: false,
+    });
+    map.whenReady(syncSelectionFromMap);
+
+    return () => {
+      map.off("moveend", syncSelectionFromMap);
+      map.off("zoomend", syncSelectionFromMap);
+      map.off("click", handleMapClick);
+      map.remove();
+      mapInstanceRef.current = null;
+      suppressMoveSyncRef.current = false;
+    };
+  }, [open, currentLocation]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const map = mapInstanceRef.current;
+    if (!map) {
+      return undefined;
+    }
+
+    const mapCenter = map.getCenter();
+    const mapZoom = clampZoom(map.getZoom());
+    const latitudeChanged = Math.abs(mapCenter.lat - center.latitude) > 0.000001;
+    const longitudeChanged = Math.abs(mapCenter.lng - center.longitude) > 0.000001;
+    const zoomChanged = mapZoom !== zoom;
+
+    if (!latitudeChanged && !longitudeChanged && !zoomChanged) {
+      return undefined;
+    }
+
+    suppressMoveSyncRef.current = true;
+    map.setView([center.latitude, center.longitude], zoom, {
+      animate: false,
+    });
+
+    return undefined;
+  }, [open, center, zoom]);
+
+  useEffect(() => {
+    if (!open || !currentLocation) {
+      return undefined;
+    }
+
+    const map = mapInstanceRef.current;
+    if (!map) {
+      return undefined;
+    }
+
+    map.setView([currentLocation.latitude, currentLocation.longitude], map.getZoom(), {
+      animate: false,
+    });
+
+    return undefined;
+  }, [open, currentLocation]);
 
   if (!open) {
     return null;
   }
 
+  const handleClose = () => {
+    const resetLocation = currentLocation || DEFAULT_CENTER;
+    setCenter(resetLocation);
+    setMarker(resetLocation);
+    setZoom(DEFAULT_ZOOM);
+    onClose?.();
+  };
+
   const handleBackdropPointerDown = (event) => {
     if (event.target === event.currentTarget) {
-      onClose?.();
+      handleClose();
     }
   };
 
-  const updateCenterByPixelOffset = (deltaX, deltaY) => {
-    const projectedCenter = projectLatLng(center.latitude, center.longitude, zoom);
-    const nextCenter = unprojectLatLng(projectedCenter.x + deltaX, projectedCenter.y + deltaY, zoom);
-    setCenter(nextCenter);
-    setMarker(nextCenter);
-  };
-
-  const handleMapClick = (event) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const clickX = event.clientX - bounds.left;
-    const clickY = event.clientY - bounds.top;
-    const projectedCenter = projectLatLng(center.latitude, center.longitude, zoom);
-    const scaleX = MAP_IMAGE_WIDTH / Math.max(1, bounds.width);
-    const scaleY = MAP_IMAGE_HEIGHT / Math.max(1, bounds.height);
-    const nextPoint = unprojectLatLng(
-      projectedCenter.x + ((clickX - bounds.width / 2) * scaleX),
-      projectedCenter.y + ((clickY - bounds.height / 2) * scaleY),
-      zoom
-    );
-
-    setMarker(nextPoint);
-    setCenter(nextPoint);
-  };
-
   const handleZoomChange = (delta) => {
-    setZoom((current) => clampZoom(current + delta));
-    setMarker(center);
+    setZoom((currentZoom) => clampZoom(currentZoom + delta));
   };
 
   const handleConfirm = async () => {
@@ -137,7 +199,7 @@ export default function TextChatLocationPickerModal({
     });
 
     if (submitResult) {
-      onClose?.();
+      handleClose();
     }
   };
 
@@ -149,7 +211,7 @@ export default function TextChatLocationPickerModal({
             <h3>Отправить локацию</h3>
             <p>Нажмите по карте, чтобы точно отметить точку.</p>
           </div>
-          <button type="button" className="location-picker-modal__close" onClick={onClose} aria-label="Закрыть">
+          <button type="button" className="location-picker-modal__close" onClick={handleClose} aria-label="Закрыть">
             ×
           </button>
         </div>
@@ -165,31 +227,29 @@ export default function TextChatLocationPickerModal({
           </button>
 
           <div className="location-picker-modal__zoom">
-            <button type="button" className="location-picker-modal__icon-button" onClick={() => handleZoomChange(-1)} aria-label="Уменьшить карту">−</button>
-            <span className="location-picker-modal__zoom-value">z{zoom}</span>
-            <button type="button" className="location-picker-modal__icon-button" onClick={() => handleZoomChange(1)} aria-label="Увеличить карту">+</button>
+            <button
+              type="button"
+              className="location-picker-modal__icon-button"
+              onClick={() => handleZoomChange(-1)}
+              aria-label="Уменьшить карту"
+            >
+              −
+            </button>
+            <span className="location-picker-modal__zoom-value">Z{zoom}</span>
+            <button
+              type="button"
+              className="location-picker-modal__icon-button"
+              onClick={() => handleZoomChange(1)}
+              aria-label="Увеличить карту"
+            >
+              +
+            </button>
           </div>
         </div>
 
         <div className="location-picker-map">
-          <button
-            type="button"
-            className="location-picker-map__viewport"
-            onClick={handleMapClick}
-            aria-label="Карта для выбора точки"
-          >
-            <img src={mapImageUrl} alt="" className="location-picker-map__image" draggable="false" />
-            <span className="location-picker-map__marker" aria-hidden="true" />
-          </button>
-
-          <div className="location-picker-map__nav">
-            <button type="button" className="location-picker-map__nav-button" onClick={() => updateCenterByPixelOffset(0, -96)} aria-label="Сдвинуть вверх">↑</button>
-            <div className="location-picker-map__nav-row">
-              <button type="button" className="location-picker-map__nav-button" onClick={() => updateCenterByPixelOffset(-96, 0)} aria-label="Сдвинуть влево">←</button>
-              <button type="button" className="location-picker-map__nav-button" onClick={() => updateCenterByPixelOffset(96, 0)} aria-label="Сдвинуть вправо">→</button>
-            </div>
-            <button type="button" className="location-picker-map__nav-button" onClick={() => updateCenterByPixelOffset(0, 96)} aria-label="Сдвинуть вниз">↓</button>
-          </div>
+          <div ref={mapElementRef} className="location-picker-map__viewport" aria-label="Карта для выбора точки" />
+          <span className="location-picker-map__marker" aria-hidden="true" />
         </div>
 
         {locationError ? (
@@ -198,24 +258,26 @@ export default function TextChatLocationPickerModal({
           </div>
         ) : null}
 
-        <div className="location-picker-modal__meta">
-          <div className="location-picker-modal__meta-item">
-            <span>Широта</span>
-            <strong>{formatCoordinate(marker.latitude)}{DEGREE_SYMBOL}</strong>
+        <div className="location-picker-modal__footer">
+          <div className="location-picker-modal__meta">
+            <div className="location-picker-modal__meta-item">
+              <span>Широта</span>
+              <strong>{formatCoordinate(marker.latitude)}{DEGREE_SYMBOL}</strong>
+            </div>
+            <div className="location-picker-modal__meta-item">
+              <span>Долгота</span>
+              <strong>{formatCoordinate(marker.longitude)}{DEGREE_SYMBOL}</strong>
+            </div>
           </div>
-          <div className="location-picker-modal__meta-item">
-            <span>Долгота</span>
-            <strong>{formatCoordinate(marker.longitude)}{DEGREE_SYMBOL}</strong>
-          </div>
-        </div>
 
-        <div className="location-picker-modal__actions">
-          <button type="button" className="location-picker-modal__button location-picker-modal__button--ghost" onClick={onClose}>
-            Отмена
-          </button>
-          <button type="button" className="location-picker-modal__button" onClick={() => void handleConfirm()}>
-            Отправить точку
-          </button>
+          <div className="location-picker-modal__actions">
+            <button type="button" className="location-picker-modal__button location-picker-modal__button--ghost" onClick={handleClose}>
+              Отмена
+            </button>
+            <button type="button" className="location-picker-modal__button" onClick={() => void handleConfirm()}>
+              Отправить точку
+            </button>
+          </div>
         </div>
       </div>
     </div>

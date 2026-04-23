@@ -360,6 +360,7 @@ export const CameraModal = ({
 export const DirectCallOverlay = ({
   call,
   isMicMuted,
+  isSoundMuted = false,
   onAccept,
   onDecline,
   onEnd,
@@ -372,6 +373,7 @@ export const DirectCallOverlay = ({
   const isIncoming = call.status === "incoming";
   const isConnected = call.status === "connected";
   const isConnecting = call.status === "connecting";
+  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
   const callTitle = call.peerName || "Пользователь";
   const statusLabel =
     call.statusLabel
@@ -438,11 +440,11 @@ export const DirectCallOverlay = ({
             <>
               <button
                 type="button"
-                className={`direct-call-overlay__button direct-call-overlay__button--mute ${isMicMuted ? "direct-call-overlay__button--active" : ""}`}
+                className={`direct-call-overlay__button direct-call-overlay__button--mute ${isEffectiveMicMuted ? "direct-call-overlay__button--active" : ""}`}
                 onClick={onToggleMic}
                 disabled={!isConnected}
               >
-                {isMicMuted ? "Микрофон выкл" : "Микрофон"}
+                {isEffectiveMicMuted ? "Микрофон выкл" : "Микрофон"}
               </button>
               <button
                 type="button"
@@ -473,11 +475,16 @@ export const DirectCallOverlayView = ({
   selectedInputDeviceId = "",
   selectedOutputDeviceId = "",
   outputSelectionSupported = false,
+  isScreenShareActive = false,
+  isCameraShareActive = false,
+  isScreenShareSupported = true,
   onAccept,
   onDecline,
   onEnd,
   onToggleMic,
   onToggleSound,
+  onScreenShareAction,
+  onOpenCamera,
   onSelectInputDevice,
   onSelectOutputDevice,
   onToggleMiniMode,
@@ -496,6 +503,7 @@ export const DirectCallOverlayView = ({
   const isConnecting = call.phase === "connecting" || call.phase === "reconnecting";
   const isFinished = call.phase === "ended" || call.phase === "declined" || call.phase === "disconnected";
   const isMiniMode = !embedded && Boolean(call.isMiniMode) && !isIncoming;
+  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
   const callTitle = call.peerName || "Пользователь";
   const statusLabel =
     call.statusLabel
@@ -544,7 +552,14 @@ export const DirectCallOverlayView = ({
             />
             <span>{selfName}</span>
           </div>
-          <div className="direct-call-inline__link" aria-hidden="true" />
+          <div className="direct-call-inline__link direct-call-inline__voice-wave" aria-hidden="true">
+            <svg viewBox="0 0 76 34" focusable="false">
+              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--one" d="M2 17 C9 9 16 25 23 17 S37 9 44 17 S58 25 74 13" />
+              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--two" d="M2 18 C11 4 19 31 28 18 S46 5 55 18 S68 28 74 19" />
+              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--three" d="M2 16 C13 12 16 22 27 17 S44 8 53 17 S64 24 74 15" />
+              <path className="direct-call-inline__voice-wave-path direct-call-inline__voice-wave-path--four" d="M2 19 C12 2 18 32 31 16 S49 4 58 19 S69 30 74 17" />
+            </svg>
+          </div>
           <div className="direct-call-inline__participant">
             <AnimatedAvatar
               className="direct-call-inline__avatar"
@@ -583,7 +598,7 @@ export const DirectCallOverlayView = ({
             <>
               <button
                 type="button"
-                className={`direct-call-inline__button direct-call-inline__button--icon ${isMicMuted ? "direct-call-inline__button--active" : ""}`}
+                className={`direct-call-inline__button direct-call-inline__button--icon ${isEffectiveMicMuted ? "direct-call-inline__button--muted" : ""}`}
                 onClick={onToggleMic}
                 disabled={!isConnected}
                 aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
@@ -592,12 +607,30 @@ export const DirectCallOverlayView = ({
               </button>
               <button
                 type="button"
-                className={`direct-call-inline__button direct-call-inline__button--icon ${isSoundMuted ? "direct-call-inline__button--active" : ""}`}
+                className={`direct-call-inline__button direct-call-inline__button--icon ${isSoundMuted ? "direct-call-inline__button--muted" : ""}`}
                 onClick={onToggleSound}
                 disabled={!isConnected}
                 aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
               >
                 <span className="direct-call-inline__icon direct-call-inline__icon--headphones" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`direct-call-inline__button direct-call-inline__button--icon ${isScreenShareActive ? "direct-call-inline__button--active" : ""}`}
+                onClick={onScreenShareAction}
+                disabled={!isConnected || !isScreenShareSupported}
+                aria-label={isScreenShareActive ? "Остановить стрим экрана" : "Показать экран"}
+              >
+                <span className="direct-call-inline__icon direct-call-inline__icon--screen" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`direct-call-inline__button direct-call-inline__button--icon ${isCameraShareActive ? "direct-call-inline__button--active" : ""}`}
+                onClick={onOpenCamera}
+                disabled={!isConnected}
+                aria-label={isCameraShareActive ? "Управление камерой" : "Показать вебку"}
+              >
+                <span className="direct-call-inline__icon direct-call-inline__icon--camera" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -720,7 +753,7 @@ export const DirectCallOverlayView = ({
               <>
                 <button
                   type="button"
-                  className={`direct-call-overlay__button direct-call-overlay__button--mute ${isMicMuted ? "direct-call-overlay__button--active" : ""}`}
+                  className={`direct-call-overlay__button direct-call-overlay__button--mute ${isEffectiveMicMuted ? "direct-call-overlay__button--active" : ""}`}
                   onClick={onToggleMic}
                   disabled={!isConnected}
                 >
@@ -826,7 +859,7 @@ export const MediaFrameEditorOverlay = ({
   />
 );
 
-export const DirectToastStack = ({ toasts, onOpenToast, onDismiss, getAvatar, getDisplayName }) => {
+export const DirectToastStack = ({ toasts, onOpenToast, onDismiss }) => {
   if (!toasts.length) {
     return null;
   }
@@ -838,13 +871,13 @@ export const DirectToastStack = ({ toasts, onOpenToast, onDismiss, getAvatar, ge
           <button type="button" className="direct-toast__main" onClick={() => onOpenToast(toast)}>
             <AnimatedAvatar
               className="direct-toast__avatar"
-              src={getAvatar(toast.friend)}
-              alt={getDisplayName(toast.friend)}
+              src={toast.avatarSrc || ""}
+              alt={toast.title || "Уведомление"}
               loading="eager"
               decoding="sync"
             />
             <span className="direct-toast__content">
-              <span className="direct-toast__title">{getDisplayName(toast.friend)}</span>
+              <span className="direct-toast__title">{toast.title || "Уведомление"}</span>
               {toast.grouped ? <span className="direct-toast__subtitle">{`${toast.count} новых сообщений`}</span> : null}
               <span className="direct-toast__text">{toast.preview}</span>
             </span>

@@ -331,7 +331,7 @@ export default function ServerInvitePage({ user, onInviteAccepted, inviteCode: i
                 Отклонить
               </button>
               <button type="button" className="server-invite-card__button" onClick={handleAcceptInvite} disabled={isSubmitting}>
-                {isSubmitting ? "Принимаем..." : user ? "Принять приглашение" : "Войти и принять"}
+                {isSubmitting ? "Принимаем..." : user ? "Принять" : "Войти и принять"}
               </button>
             </div>
           </div>

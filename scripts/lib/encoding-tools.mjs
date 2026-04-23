@@ -45,7 +45,7 @@ const symbolMojibakePattern = new RegExp(`[вр][${symbolMojibakeCharClass}]{2,}
 const replacementCharacterPattern = /\uFFFD/u;
 const questionPlaceholderPattern = /(["'`])(?:(?!\1).)*\?{3,}(?:(?!\1).)*\1/u;
 const repairTokenPattern = /[\p{L}\p{M}\p{N}\u0080-\u00FF\u0400-\u04FF\u2010-\u203A\u20AC\u2116\u2122]+/gu;
-const repairSegmentPattern = new RegExp(`(?:[Р РЎ][${pairSecondCharClass}])+|[РІСЂ][${symbolMojibakeCharClass}]{2,}`, "gu");
+const repairSegmentPattern = new RegExp(`(?:[Р\u00A0РЎ][${pairSecondCharClass}])+|[РІСЂ][${symbolMojibakeCharClass}]{2,}`, "gu");
 
 const cp1251SpecialByteByCodePoint = new Map([
   [0x0402, 0x80],

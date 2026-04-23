@@ -8,6 +8,7 @@ export const ACTIVE_TEXT_CHANNEL_STORAGE_KEY = "nd_active_text_channel_by_server
 export const NOISE_SUPPRESSION_STORAGE_KEY = "nd_noise_suppression_mode";
 export const ECHO_CANCELLATION_STORAGE_KEY = "nd_echo_cancellation_enabled";
 export const DIRECT_NOTIFICATIONS_STORAGE_KEY = "nd_direct_notifications";
+export const CONVERSATION_NOTIFICATIONS_STORAGE_KEY = "nd_conversation_notifications";
 export const SERVER_NOTIFICATIONS_STORAGE_KEY = "nd_server_notifications";
 export const NOTIFICATION_SOUND_ENABLED_STORAGE_KEY = "nd_notification_sound_enabled";
 export const NOTIFICATION_SOUND_STORAGE_KEY = "nd_notification_sound";
@@ -315,6 +316,7 @@ export const getCanonicalSharedServerId = (serverId, ownerUserId) => {
 export const getNoiseSuppressionStorageKey = (user) => `${NOISE_SUPPRESSION_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const getEchoCancellationStorageKey = (user) => `${ECHO_CANCELLATION_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const getDirectNotificationsStorageKey = (user) => `${DIRECT_NOTIFICATIONS_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
+export const getConversationNotificationsStorageKey = (user) => `${CONVERSATION_NOTIFICATIONS_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const getServerNotificationsStorageKey = (user) => `${SERVER_NOTIFICATIONS_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const getNotificationSoundEnabledStorageKey = (user) => `${NOTIFICATION_SOUND_ENABLED_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;
 export const getNotificationSoundStorageKey = (user) => `${NOTIFICATION_SOUND_STORAGE_KEY}:${getScopedUserStorageScope(user)}`;

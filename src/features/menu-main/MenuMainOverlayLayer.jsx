@@ -81,11 +81,14 @@ export default function MenuMainOverlayLayer({
   closeMediaFrameEditor,
   handleMediaFrameConfirm,
   directMessageToasts,
+  openConversationChat,
   openDirectChat,
   dismissDirectToast,
   serverMessageToasts,
   openServerChannelFromToast,
   dismissServerToast,
+  workspaceStatusToasts,
+  dismissWorkspaceStatusToast,
   quickSwitcherOpen,
   quickSwitcherQuery,
   quickSwitcherItems,
@@ -268,12 +271,14 @@ export default function MenuMainOverlayLayer({
       <DirectToastStack
         toasts={directMessageToasts}
         onOpenToast={(toast) => {
-          openDirectChat(toast.friend.id);
+          if (toast.kind === "conversation") {
+            openConversationChat(toast.friend.conversationId || toast.friend.id);
+          } else {
+            openDirectChat(toast.friend.id);
+          }
           dismissDirectToast(toast.id);
         }}
         onDismiss={dismissDirectToast}
-        getAvatar={getUserAvatar}
-        getDisplayName={getDisplayName}
       />
 
       <ServerToastStack
@@ -281,6 +286,25 @@ export default function MenuMainOverlayLayer({
         onOpenToast={openServerChannelFromToast}
         onDismiss={dismissServerToast}
       />
+
+      {workspaceStatusToasts?.length ? (
+        <div className={`workspace-status-toast-stack ${isMobileViewport ? "workspace-status-toast-stack--mobile" : ""}`} role="status" aria-live="polite">
+          {workspaceStatusToasts.map((toast) => (
+            <div key={toast.id} className={`workspace-status-toast workspace-status-toast--${toast.tone || "success"}`}>
+              <span className="workspace-status-toast__dot" aria-hidden="true" />
+              <span className="workspace-status-toast__text">{toast.message}</span>
+              <button
+                type="button"
+                className="workspace-status-toast__close"
+                onClick={() => dismissWorkspaceStatusToast?.(toast.id)}
+                aria-label="Закрыть уведомление"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </>
   );
 }

@@ -30,6 +30,8 @@ export default function MobileVoiceRoom({
   onOpenCamera,
   onLeave,
 }) {
+  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
+
   return (
     <section className="mobile-voice-room">
       <div className="mobile-voice-room__stage">
@@ -144,12 +146,12 @@ export default function MobileVoiceRoom({
       <div className="mobile-voice-room__controls" role="toolbar" aria-label="Управление голосовым чатом">
         <button
           type="button"
-          className={`mobile-voice-room__control ${isMicMuted || isSoundMuted ? "mobile-voice-room__control--muted" : ""}`}
+          className={`mobile-voice-room__control ${isEffectiveMicMuted ? "mobile-voice-room__control--muted" : ""}`}
           onClick={onToggleMic}
           aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
           title={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
         >
-          <span className={`mobile-voice-room__control-icon ${isMicMuted || isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
+          <span className={`mobile-voice-room__control-icon ${isEffectiveMicMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <span className="mobile-voice-room__control-glyph mobile-voice-room__control-glyph--microphone" aria-hidden="true" />
           </span>
         </button>

@@ -394,6 +394,76 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
 }
 
+.btn__direct-call {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(56, 97, 79, 0.92), rgba(24, 48, 40, 0.96));
+  color: #dfffea;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(72, 211, 135, 0.18), inset 0 0 0 1px rgba(132, 255, 184, 0.12);
+  overflow: visible;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.btn__direct-call::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -9px;
+  width: 6px;
+  height: 28px;
+  border-radius: 999px;
+  background: #65d695;
+  transform: translateY(-50%);
+  box-shadow: 0 0 14px rgba(101, 214, 149, 0.42);
+}
+
+.btn__direct-call::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #65d695;
+  box-shadow: 0 0 0 0 rgba(101, 214, 149, 0.46);
+  animation: directCallDockPulse 1.7s ease-out infinite;
+}
+
+.btn__direct-call:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 16px 34px rgba(72, 211, 135, 0.24), inset 0 0 0 1px rgba(132, 255, 184, 0.18);
+}
+
+.btn__direct-call-icon {
+  width: 22px;
+  height: 22px;
+  background: currentColor;
+  -webkit-mask: url("/icons/phone.png") center / contain no-repeat;
+  mask: url("/icons/phone.png") center / contain no-repeat;
+}
+
+@keyframes directCallDockPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(101, 214, 149, 0.46);
+  }
+
+  70% {
+    box-shadow: 0 0 0 8px rgba(101, 214, 149, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(101, 214, 149, 0);
+  }
+}
+
 .sidebar__channels {
   display: flex;
   flex-direction: column;
@@ -1124,6 +1194,26 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   overflow: visible;
 }
 
+.sidebar__channels--friends .channels__top {
+  margin-right: -10px;
+  padding-right: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.sidebar__channels--friends .channels__top::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar__channels--friends .channels__top::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar__channels--friends .channels__top::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
 .friends-search-input {
   width: 100%;
   box-sizing: border-box;
@@ -1247,71 +1337,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   font-weight: 800;
   line-height: 1;
   box-shadow: 0 10px 20px rgba(217, 45, 32, 0.24);
-}
-
-.friends-call-dock {
-  margin: 14px 0;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.friends-call-dock__button {
-  width: 100%;
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border: 0;
-  border-radius: 15px;
-  background: linear-gradient(180deg, rgba(31, 38, 58, 0.92), rgba(18, 22, 34, 0.94));
-  color: #eef3ff;
-  cursor: pointer;
-  text-align: left;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-}
-
-.friends-call-dock__icon {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  border-radius: 11px;
-  background: rgba(95, 224, 145, 0.18);
-  position: relative;
-}
-
-.friends-call-dock__icon::before {
-  content: "";
-  position: absolute;
-  inset: 7px;
-  background: #65d695;
-  -webkit-mask: url("/icons/phone.png") center / contain no-repeat;
-  mask: url("/icons/phone.png") center / contain no-repeat;
-}
-
-.friends-call-dock__copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.friends-call-dock__copy strong,
-.friends-call-dock__copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.friends-call-dock__copy strong {
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.friends-call-dock__copy small {
-  color: #9faac2;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .friends-directs {
@@ -2635,6 +2660,31 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   background: #0a0d14;
 }
 
+.voice-room-stage__card--stream .voice-room-stage__card-media {
+  height: 100%;
+  flex: 1 1 auto;
+}
+
+.voice-room-stage__card--stream .voice-room-stage__card-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  align-items: center;
+  padding: 42px 16px 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(5, 7, 11, 0.78));
+}
+
+.voice-room-stage__card--stream .voice-room-stage__card-copy span,
+.voice-room-stage__card--stream .voice-room-stage__status-badge {
+  display: none;
+}
+
+.voice-room-stage__card--stream-inline .voice-room-stage__card-meta {
+  opacity: 0.96;
+}
+
 .voice-room-stage__card-video,
 .voice-room-stage__hero-media,
 .voice-room-stage__strip-video,
@@ -2786,15 +2836,27 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   color: currentColor;
 }
 
+.voice-room-stage__status-badge--slashed {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  color: #ff5f72;
+  box-shadow: none;
+}
+
+.voice-room-stage__status-badge--slashed .voice-room-stage__status-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .voice-room-stage__status-badge--slashed::after {
   content: "";
   position: absolute;
-  width: 18px;
-  height: 2px;
+  width: 20px;
+  height: 1.5px;
   border-radius: 999px;
-  background: #ff8e8e;
+  background: currentColor;
   transform: rotate(-45deg);
-  box-shadow: 0 0 8px rgba(255, 94, 94, 0.2);
 }
 
 .voice-room-stage__card-flags:empty {
@@ -8073,6 +8135,104 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.workspace-status-toast-stack {
+  position: fixed;
+  left: 50%;
+  top: 24px;
+  z-index: 5100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.workspace-status-toast-stack--mobile {
+  top: calc(12px + env(safe-area-inset-top, 0px));
+}
+
+.workspace-status-toast {
+  min-width: min(320px, 100%);
+  max-width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(20, 26, 35, 0.96), rgba(13, 17, 25, 0.96));
+  color: #eef6ff;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+  animation: workspaceStatusToastLife 3.2s ease forwards;
+  pointer-events: auto;
+}
+
+.workspace-status-toast--success {
+  border-color: rgba(101, 214, 149, 0.2);
+}
+
+.workspace-status-toast__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #65d695;
+  box-shadow: 0 0 14px rgba(101, 214, 149, 0.44);
+}
+
+.workspace-status-toast__text {
+  min-width: 0;
+  flex: 1;
+  color: #dfe8f7;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-status-toast__close {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #dce5f5;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.workspace-status-toast__close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+@keyframes workspaceStatusToastLife {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+
+  12%,
+  82% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+}
+
 @keyframes uiFadeIn {
   from {
     opacity: 0;
@@ -9148,10 +9308,73 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline__link {
-  width: 42px;
-  height: 2px;
+  width: 76px;
+  height: 34px;
+  position: relative;
+  flex: 0 0 76px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(101, 214, 149, 0.1), rgba(101, 214, 149, 0.75), rgba(101, 214, 149, 0.1));
+  overflow: hidden;
+}
+
+.direct-call-inline__voice-wave {
+  opacity: 0.92;
+  filter: drop-shadow(0 0 12px rgba(91, 228, 174, 0.22));
+}
+
+.direct-call-inline__voice-wave svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.direct-call-inline__voice-wave-path {
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-dasharray: 36 90;
+  animation: directCallVoiceWave 2.25s ease-in-out infinite;
+  opacity: 0.5;
+}
+
+.direct-call-inline__voice-wave-path--one {
+  stroke: rgba(99, 224, 163, 0.72);
+}
+
+.direct-call-inline__voice-wave-path--two {
+  stroke: rgba(88, 169, 255, 0.5);
+  animation-delay: -0.48s;
+  animation-duration: 2.7s;
+}
+
+.direct-call-inline__voice-wave-path--three {
+  stroke: rgba(255, 118, 211, 0.42);
+  animation-delay: -0.92s;
+  animation-duration: 2.05s;
+}
+
+.direct-call-inline__voice-wave-path--four {
+  stroke: rgba(255, 216, 113, 0.34);
+  animation-delay: -1.18s;
+  animation-duration: 3s;
+}
+
+@keyframes directCallVoiceWave {
+  0% {
+    stroke-dashoffset: 96;
+    transform: translateY(1px) scaleY(0.62);
+    opacity: 0.18;
+  }
+
+  45% {
+    transform: translateY(-1px) scaleY(1.16);
+    opacity: 0.9;
+  }
+
+  100% {
+    stroke-dashoffset: -96;
+    transform: translateY(1px) scaleY(0.72);
+    opacity: 0.22;
+  }
 }
 
 .direct-call-inline__actions {
@@ -9186,7 +9409,33 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline__button--active {
-  color: #ffd9df;
+  background: linear-gradient(180deg, rgba(82, 111, 255, 0.95), rgba(61, 78, 208, 0.95));
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(73, 95, 220, 0.24);
+}
+
+.direct-call-inline__button--muted {
+  position: relative;
+  background: rgba(217, 45, 32, 0.2);
+  color: #ff6b6b;
+  box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.34);
+}
+
+.direct-call-inline__button--muted::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 2px;
+  border-radius: 999px;
+  background: #ff5b5b;
+  transform: rotate(-45deg);
+  box-shadow: 0 0 8px rgba(255, 91, 91, 0.3);
+  pointer-events: none;
+}
+
+.direct-call-inline__button--muted:hover:not(:disabled) {
+  background: rgba(217, 45, 32, 0.26);
+  color: #ff8080;
 }
 
 .direct-call-inline__button--icon {
@@ -9213,6 +9462,16 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 .direct-call-inline__icon--headphones {
   -webkit-mask: url("/icons/headphones-fill-svgrepo-com.svg") center / contain no-repeat;
   mask: url("/icons/headphones-fill-svgrepo-com.svg") center / contain no-repeat;
+}
+
+.direct-call-inline__icon--screen {
+  -webkit-mask: url("/icons/monitor.svg") center / contain no-repeat;
+  mask: url("/icons/monitor.svg") center / contain no-repeat;
+}
+
+.direct-call-inline__icon--camera {
+  -webkit-mask: url("/icons/camera.png") center / contain no-repeat;
+  mask: url("/icons/camera.png") center / contain no-repeat;
 }
 
 .direct-call-inline__icon--phone {
