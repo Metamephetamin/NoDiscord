@@ -251,6 +251,19 @@ function getTrackDebugInfo(track) {
   };
 }
 
+async function loadNoiseSuppressionProcessor(rnnoiseModulePromiseRef) {
+  if (!rnnoiseModulePromiseRef.current) {
+    rnnoiseModulePromiseRef.current = import("@shiguredo/noise-suppression")
+      .then((module) => module?.NoiseSuppressionProcessor || null)
+      .catch((error) => {
+        rnnoiseModulePromiseRef.current = null;
+        throw error;
+      });
+  }
+
+  return rnnoiseModulePromiseRef.current;
+}
+
 export function createVoiceRoomClient({
   onParticipantsMapChanged,
   onChannelChanged,
@@ -292,7 +305,7 @@ export function createVoiceRoomClient({
   let remoteVolume = 0.7;
   let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_TRANSPARENT;
   let echoCancellationEnabled = true;
-  let rnnoiseModulePromise = null;
+  const rnnoiseModulePromiseRef = { current: null };
   let rnnoiseProcessor = null;
   let rnnoiseProcessedTrack = null;
   let localScreenStream = null;
@@ -340,6 +353,8 @@ export function createVoiceRoomClient({
       sourceTracks: localMicSourceStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
       outputTracks: localAudioStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
       audioContextState: audioContext?.state || "",
+      rnnoiseActive: Boolean(rnnoiseProcessor?.isProcessing?.()),
+      rnnoiseTrack: getTrackDebugInfo(rnnoiseProcessedTrack || null),
       micVolume,
       isSelfMicMuted,
       isSelfDeafened,
@@ -874,7 +889,42 @@ const handleDeviceChange = () => {
 
   const applyRnnoiseToTrack = async (track) => {
     await stopRnnoiseNoiseSuppression();
-    return track;
+
+    if (!track) {
+      return track;
+    }
+
+    try {
+      const NoiseSuppressionProcessor = await loadNoiseSuppressionProcessor(rnnoiseModulePromiseRef);
+      if (!NoiseSuppressionProcessor?.isSupported?.()) {
+        logVoiceDebug("local-audio:rnnoise-unsupported", {
+          track: getTrackDebugInfo(track),
+        });
+        return track;
+      }
+
+      rnnoiseProcessor = new NoiseSuppressionProcessor();
+      rnnoiseProcessedTrack = await rnnoiseProcessor.startProcessing(track);
+
+      if (rnnoiseProcessedTrack) {
+        rnnoiseProcessedTrack.contentHint = "speech";
+      }
+
+      logVoiceDebug("local-audio:rnnoise-started", {
+        originalTrack: getTrackDebugInfo(track),
+        processedTrack: getTrackDebugInfo(rnnoiseProcessedTrack || null),
+      });
+
+      return rnnoiseProcessedTrack || track;
+    } catch (error) {
+      logVoiceDebug("local-audio:rnnoise-start-failed", {
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+        track: getTrackDebugInfo(track),
+      });
+      await stopRnnoiseNoiseSuppression();
+      return track;
+    }
   };
 
   const startLocalMetering = (analyser) => {
