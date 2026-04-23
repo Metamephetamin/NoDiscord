@@ -356,6 +356,13 @@ const createDirectCallState = () => ({
   lastReason: "",
 });
 
+const normalizeMeasuredPingMs = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0
+    ? Math.max(1, Math.round(numericValue))
+    : null;
+};
+
 const buildDirectCallState = (overrides = {}) => {
   const phase = String(overrides.phase || overrides.status || "idle");
   const peer = {
@@ -544,6 +551,7 @@ export default function MenuMain({
   const [isMicForced, setIsMicForced] = useState(false);
   const [isSoundForced, setIsSoundForced] = useState(false);
   const [pingMs, setPingMs] = useState(null);
+  const [voicePingMs, setVoicePingMs] = useState(null);
   const [selectedStreamUserId, setSelectedStreamUserId] = useState(null);
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
   const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
@@ -688,6 +696,7 @@ export default function MenuMain({
   const voiceClientInitPromiseRef = useRef(null);
   const previousVoiceChannelRef = useRef(null);
   const voiceTransitionSoundTimeoutRef = useRef(null);
+  const screenShareStartToneTimeoutRef = useRef(null);
   const previousMicMutedRef = useRef(null);
   const previousSoundMutedRef = useRef(null);
   const pendingLocalVoiceTransitionRef = useRef(null);
@@ -1014,18 +1023,21 @@ export default function MenuMain({
   useEffect(() => {
     currentVoiceChannelRef.current = currentVoiceChannel;
   }, [currentVoiceChannel]);
+  const resolvedVoicePingMs = normalizeMeasuredPingMs(voicePingMs);
+  const resolvedApiPingMs = normalizeMeasuredPingMs(pingMs);
+  const activeLatencyMs = resolvedVoicePingMs ?? resolvedApiPingMs;
   useEffect(() => {
     setDirectCallState((previous) => {
       if (previous.phase === "idle") {
         return previous;
       }
 
-      const nextQuality = getDirectCallConnectionQuality(pingMs, previous.phase);
+      const nextQuality = getDirectCallConnectionQuality(activeLatencyMs, previous.phase);
       return previous.connectionQuality === nextQuality
         ? previous
         : { ...previous, connectionQuality: nextQuality };
     });
-  }, [pingMs]);
+  }, [activeLatencyMs]);
   useEffect(() => {
     let disposed = false;
 
@@ -1716,6 +1728,19 @@ export default function MenuMain({
       // ignore ui sound failures
     }
   };
+  const clearScreenShareStartToneTimeout = () => {
+    if (screenShareStartToneTimeoutRef.current) {
+      window.clearTimeout(screenShareStartToneTimeoutRef.current);
+      screenShareStartToneTimeoutRef.current = null;
+    }
+  };
+  const scheduleScreenShareStartTone = (delayMs = 140) => {
+    clearScreenShareStartToneTimeout();
+    screenShareStartToneTimeoutRef.current = window.setTimeout(() => {
+      screenShareStartToneTimeoutRef.current = null;
+      playUiTone("shareStart");
+    }, Math.max(0, Number(delayMs) || 0));
+  };
   const playImmediateVoiceTransitionTone = (nextChannelId) => {
     const previousChannelId = String(currentVoiceChannelRef.current || "");
     const normalizedNextChannelId = String(nextChannelId || "");
@@ -2196,7 +2221,7 @@ export default function MenuMain({
         statusLabel: "Идёт разговор",
         isMiniMode: true,
         canRetry: false,
-        connectionQuality: getDirectCallConnectionQuality(pingMs, "connected"),
+        connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
       }));
     } catch (error) {
       console.error("Не удалось принять личный звонок:", error);
@@ -3935,21 +3960,43 @@ export default function MenuMain({
 
   useEffect(() => {
     let disposed = false;
-    const measurePing = async () => {
+    const measurePing = async ({ commit = true } = {}) => {
       if (document.visibilityState === "hidden") {
         return;
       }
 
       const startedAt = performance.now();
       try {
-        await fetch(`${API_URL}/api/ping`, { method: "GET", cache: "no-store" });
-        if (!disposed) setPingMs(Math.max(1, Math.round(performance.now() - startedAt)));
+        const response = await fetch(`${API_URL}/api/ping`, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          throw new Error(`Ping failed with status ${response.status}`);
+        }
+
+        if (!disposed && commit) {
+          setPingMs(Math.max(1, Math.round(performance.now() - startedAt)));
+        }
       } catch {
-        if (!disposed) setPingMs(null);
+        if (!disposed && commit) {
+          setPingMs(null);
+        }
       }
     };
-    measurePing();
-    const intervalId = window.setInterval(measurePing, 15000);
+
+    const bootstrapPing = async () => {
+      await measurePing({ commit: false }).catch(() => {});
+      if (disposed) {
+        return;
+      }
+
+      await measurePing();
+    };
+
+    bootstrapPing();
+    const intervalId = window.setInterval(measurePing, 5000);
     return () => {
       disposed = true;
       window.clearInterval(intervalId);
@@ -3990,6 +4037,10 @@ export default function MenuMain({
 
         if (!nextChannel && voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current) {
           return;
+        }
+
+        if (String(currentVoiceChannelRef.current || "") !== normalizedNextChannel) {
+          setVoicePingMs((previousValue) => (previousValue === null ? previousValue : null));
         }
 
         if (!normalizedNextChannel) {
@@ -4064,6 +4115,12 @@ export default function MenuMain({
       onSelfVoiceStateChanged: handleSelfVoiceStateChanged,
       onMicLevelChanged: handleMicLevelChanged,
       onAudioDevicesChanged: handleAudioDevicesChanged,
+      onVoicePingChanged: (nextPingMs) => {
+        const normalizedPingMs = normalizeMeasuredPingMs(nextPingMs);
+        setVoicePingMs((previousValue) => (
+          previousValue === normalizedPingMs ? previousValue : normalizedPingMs
+        ));
+      },
       onIncomingDirectCall: ({ channelName, fromUserId, fromName, fromAvatar }) => {
         if (!channelName || !fromUserId) {
           return;
@@ -4141,7 +4198,7 @@ export default function MenuMain({
               status: "connected",
               statusLabel: "Идёт разговор",
               isMiniMode: true,
-              connectionQuality: getDirectCallConnectionQuality(pingMs, "connected"),
+              connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
             }));
           } catch (error) {
             console.error("Не удалось подключить исходящий звонок:", error);
@@ -4505,6 +4562,9 @@ export default function MenuMain({
       participantIds: nextParticipantIds,
     };
   }, [currentUserId, currentVoiceChannel, currentVoiceParticipants]);
+  useEffect(() => () => {
+    clearScreenShareStartToneTimeout();
+  }, []);
   useEffect(() => {
     if (!currentVoiceChannel) {
       previousLiveVoiceUserIdsRef.current = { channelId: "", userIds: [] };
@@ -4540,6 +4600,7 @@ export default function MenuMain({
         playUiTone("shareStart");
       }
     } else if (stoppedShares.length) {
+      clearScreenShareStartToneTimeout();
       if (onlyLocalStop && pendingLocalScreenShareToneRef.current === "shareStop") {
         pendingLocalScreenShareToneRef.current = "";
       } else {
@@ -5357,15 +5418,17 @@ export default function MenuMain({
 
     setScreenShareError("");
     pendingLocalScreenShareToneRef.current = "shareStart";
-    playUiTone("shareStart");
+    clearScreenShareStartToneTimeout();
 
     try {
       await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
+      scheduleScreenShareStartTone(140);
       setShowModal(false);
       setSelectedStreamUserId(null);
       setIsLocalSharePreviewVisible(true);
     } catch (error) {
       pendingLocalScreenShareToneRef.current = "";
+      clearScreenShareStartToneTimeout();
       const message = error?.message || "Не удалось запустить трансляцию экрана.";
       setScreenShareError(message);
       showServerInviteFeedback(message);
@@ -5379,6 +5442,7 @@ export default function MenuMain({
 
     setScreenShareError("");
     pendingLocalScreenShareToneRef.current = "shareStop";
+    clearScreenShareStartToneTimeout();
     playUiTone("shareStop");
 
     try {
@@ -5975,8 +6039,12 @@ export default function MenuMain({
   ];
   const activeNoiseProfile =
     noiseProfileOptions.find((option) => option.id === noiseSuppressionMode) || noiseProfileOptions[0];
-  const pingTone = getPingTone(pingMs);
-  const pingTooltip = Number.isFinite(Number(pingMs)) && Number(pingMs) > 0 ? `Пинг: ${pingMs} мс` : "Пинг недоступен";
+  const displayedPingMs = currentVoiceChannel ? resolvedVoicePingMs : resolvedApiPingMs;
+  const pingTone = getPingTone(displayedPingMs);
+  const pingTooltip =
+    currentVoiceChannel
+      ? (displayedPingMs ? `Голосовой RTT: ${displayedPingMs} мс` : "Голосовой RTT недоступен")
+      : (displayedPingMs ? `Пинг API: ${displayedPingMs} мс` : "Пинг недоступен");
 
   const toggleMicrophoneTestPreview = () => {
     setIsMicTestActive((previous) => !previous);

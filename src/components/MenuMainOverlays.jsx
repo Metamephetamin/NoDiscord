@@ -336,7 +336,7 @@ export const CameraModal = ({
             type="button"
             className={`stream-modal__action ${isCameraShareActive ? "stream-modal__action--danger" : ""}`}
             onClick={isCameraShareActive ? onStopCameraShare : onStartCameraShare}
-            disabled={!currentVoiceChannel || (!hasPreview && !isCameraShareActive)}
+            disabled={!currentVoiceChannel || (!isCameraShareActive && devices.length === 0)}
           >
             {isCameraShareActive ? "Остановить трансляцию камеры" : "Начать трансляцию камеры"}
           </button>

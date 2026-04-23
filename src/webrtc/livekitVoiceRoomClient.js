@@ -264,6 +264,7 @@ export function createVoiceRoomClient({
   onSelfVoiceStateChanged,
   onMicLevelChanged,
   onAudioDevicesChanged,
+  onVoicePingChanged,
   onIncomingDirectCall,
   onDirectCallAccepted,
   onDirectCallDeclined,
@@ -307,6 +308,9 @@ export function createVoiceRoomClient({
   let isSelfDeafened = false;
   let preferredRemoteShareUserId = "";
   let prewarmedSession = null;
+  let voicePingPollIntervalId = 0;
+  let voicePingPollInFlight = false;
+  let lastVoicePingMs = null;
 
   const remoteScreenShares = new Map();
   const remoteAudioElements = new Map();
@@ -371,6 +375,97 @@ export function createVoiceRoomClient({
       };
     }
     logVoiceDebug(reason, snapshot);
+  };
+  const emitVoicePing = (nextPingMs) => {
+    const normalizedPing =
+      Number.isFinite(Number(nextPingMs)) && Number(nextPingMs) > 0
+        ? Math.max(1, Math.round(Number(nextPingMs)))
+        : null;
+
+    if (lastVoicePingMs === normalizedPing) {
+      return;
+    }
+
+    lastVoicePingMs = normalizedPing;
+    onVoicePingChanged?.(normalizedPing);
+  };
+  const clearVoicePingPolling = ({ reset = true } = {}) => {
+    if (voicePingPollIntervalId) {
+      window.clearInterval(voicePingPollIntervalId);
+      voicePingPollIntervalId = 0;
+    }
+
+    voicePingPollInFlight = false;
+    if (reset) {
+      emitVoicePing(null);
+    }
+  };
+  const readTransportRttMs = async (transport) => {
+    if (!transport?.getStats) {
+      return null;
+    }
+
+    const stats = await transport.getStats();
+    let selectedCandidatePairId = "";
+    let fallbackRttMs = null;
+
+    stats?.forEach((stat) => {
+      if (stat?.type === "transport" && stat.selectedCandidatePairId) {
+        selectedCandidatePairId = stat.selectedCandidatePairId;
+      }
+    });
+
+    stats?.forEach((stat) => {
+      if (stat?.type !== "candidate-pair") {
+        return;
+      }
+
+      const hasRtt = Number.isFinite(Number(stat.currentRoundTripTime)) && Number(stat.currentRoundTripTime) > 0;
+      if (!hasRtt) {
+        return;
+      }
+
+      const nextRttMs = Number(stat.currentRoundTripTime) * 1000;
+      if (selectedCandidatePairId && stat.id === selectedCandidatePairId) {
+        fallbackRttMs = nextRttMs;
+        return;
+      }
+
+      if (!selectedCandidatePairId && (stat.nominated || stat.selected)) {
+        fallbackRttMs = nextRttMs;
+      }
+    });
+
+    return Number.isFinite(Number(fallbackRttMs)) && Number(fallbackRttMs) > 0
+      ? Math.max(1, Math.round(Number(fallbackRttMs)))
+      : null;
+  };
+  const sampleVoicePing = async () => {
+    if (voicePingPollInFlight || !room?.engine?.pcManager) {
+      return;
+    }
+
+    voicePingPollInFlight = true;
+    try {
+      const publisherTransport = room.engine.pcManager.publisher;
+      const subscriberTransport = room.engine.pcManager.subscriber;
+      const [publisherRttMs, subscriberRttMs] = await Promise.all([
+        readTransportRttMs(publisherTransport).catch(() => null),
+        readTransportRttMs(subscriberTransport).catch(() => null),
+      ]);
+
+      const samples = [publisherRttMs, subscriberRttMs].filter((value) => Number.isFinite(Number(value)) && Number(value) > 0);
+      emitVoicePing(samples.length ? Math.max(...samples) : null);
+    } finally {
+      voicePingPollInFlight = false;
+    }
+  };
+  const startVoicePingPolling = () => {
+    clearVoicePingPolling({ reset: false });
+    void sampleVoicePing().catch(() => {});
+    voicePingPollIntervalId = window.setInterval(() => {
+      void sampleVoicePing().catch(() => {});
+    }, 5000);
   };
   const createRoomInstance = () => new Room({
     adaptiveStream: true,
@@ -1480,6 +1575,7 @@ const handleDeviceChange = () => {
 
   const stopRoom = async ({ preserveChannel = false } = {}) => {
     if (!room) {
+      clearVoicePingPolling();
       if (!preserveChannel) {
         currentChannel = null;
         onChannelChanged?.(null);
@@ -1489,6 +1585,7 @@ const handleDeviceChange = () => {
 
     const activeRoom = room;
     await stopRnnoiseNoiseSuppression().catch(() => {});
+    clearVoicePingPolling();
     room = null;
     roomConnectPromise = null;
     micPublication = null;
@@ -1939,6 +2036,7 @@ const handleDeviceChange = () => {
         roomState: nextRoom.state,
         remoteParticipants: nextRoom.remoteParticipants.size,
       });
+      startVoicePingPolling();
       syncAllRemoteShares();
       emitRoomParticipants();
     });
@@ -1948,6 +2046,7 @@ const handleDeviceChange = () => {
         roomState: nextRoom.state,
         remoteParticipants: nextRoom.remoteParticipants.size,
       });
+      startVoicePingPolling();
       syncAllRemoteShares();
       emitRoomParticipants();
     });
@@ -1961,6 +2060,7 @@ const handleDeviceChange = () => {
         return;
       }
 
+      clearVoicePingPolling();
       clearRemoteScreens();
       removeAllRemoteAudioElements();
       remoteParticipantMedia.clear();
@@ -2028,6 +2128,7 @@ const handleDeviceChange = () => {
 
         room = nextRoom;
         currentChannel = channelName;
+        startVoicePingPolling();
         emitRoomParticipants();
         void syncPublishedMicrophoneTrack().catch((error) => {
           logVoiceDebug("local-audio:publish-after-connect-failed", {
@@ -2043,6 +2144,7 @@ const handleDeviceChange = () => {
 
         return nextRoom;
       } catch (error) {
+        clearVoicePingPolling();
         if (room === nextRoom) {
           room = null;
         }
