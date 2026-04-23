@@ -311,6 +311,10 @@ export function createVoiceRoomClient({
   let voicePingPollIntervalId = 0;
   let voicePingPollInFlight = false;
   let lastVoicePingMs = null;
+  let lastVoiceRouteSnapshot = null;
+  let lastVoiceRouteSignature = "";
+  let currentLiveKitServerUrl = "";
+  let currentLiveKitRoomName = "";
 
   const remoteScreenShares = new Map();
   const remoteAudioElements = new Map();
@@ -323,6 +327,11 @@ export function createVoiceRoomClient({
     hasRoom: Boolean(room),
     roomState: room?.state || "",
     connectionState: room?.engine?.client?.connectionState || "",
+    liveKit: {
+      serverUrl: currentLiveKitServerUrl,
+      roomName: currentLiveKitRoomName,
+    },
+    voiceRoute: lastVoiceRouteSnapshot,
     localParticipant: {
       identity: room?.localParticipant?.identity || "",
       sid: room?.localParticipant?.sid || "",
@@ -398,47 +407,124 @@ export function createVoiceRoomClient({
     voicePingPollInFlight = false;
     if (reset) {
       emitVoicePing(null);
+      emitVoiceRoute(null);
     }
   };
-  const readTransportRttMs = async (transport) => {
+  const normalizeCandidateStats = (candidate) => {
+    if (!candidate) {
+      return null;
+    }
+
+    return {
+      id: candidate.id || "",
+      candidateType: candidate.candidateType || "",
+      protocol: candidate.protocol || "",
+      address: candidate.address || candidate.ip || "",
+      port: candidate.port || "",
+      networkType: candidate.networkType || "",
+      relayProtocol: candidate.relayProtocol || "",
+      url: candidate.url || "",
+    };
+  };
+  const getCandidateAddress = (candidate) => {
+    if (!candidate?.address) {
+      return "";
+    }
+
+    return candidate.port ? `${candidate.address}:${candidate.port}` : candidate.address;
+  };
+  const getRouteType = (localCandidate, remoteCandidate) => {
+    const localType = String(localCandidate?.candidateType || "").toLowerCase();
+    const remoteType = String(remoteCandidate?.candidateType || "").toLowerCase();
+    if (localType === "relay" || remoteType === "relay") {
+      return "relay";
+    }
+
+    if (localType || remoteType) {
+      return "direct";
+    }
+
+    return "unknown";
+  };
+  const emitVoiceRoute = (routeSnapshot) => {
+    const normalizedSnapshot = routeSnapshot || null;
+    const signature = JSON.stringify(normalizedSnapshot);
+    if (signature === lastVoiceRouteSignature) {
+      return;
+    }
+
+    lastVoiceRouteSignature = signature;
+    lastVoiceRouteSnapshot = normalizedSnapshot;
+    if (typeof window !== "undefined") {
+      window.__ndVoiceRoute = normalizedSnapshot;
+      window.__ndVoiceRouteDump = () => {
+        console.info(`${VOICE_DEBUG_PREFIX} route`, window.__ndVoiceRoute || null);
+        return window.__ndVoiceRoute || null;
+      };
+    }
+  };
+  const readTransportRoute = async (transport, label) => {
     if (!transport?.getStats) {
       return null;
     }
 
     const stats = await transport.getStats();
     let selectedCandidatePairId = "";
-    let fallbackRttMs = null;
+    let selectedCandidatePair = null;
+    const candidatePairs = new Map();
+    const localCandidates = new Map();
+    const remoteCandidates = new Map();
 
     stats?.forEach((stat) => {
       if (stat?.type === "transport" && stat.selectedCandidatePairId) {
         selectedCandidatePairId = stat.selectedCandidatePairId;
       }
-    });
 
-    stats?.forEach((stat) => {
-      if (stat?.type !== "candidate-pair") {
-        return;
-      }
-
-      const hasRtt = Number.isFinite(Number(stat.currentRoundTripTime)) && Number(stat.currentRoundTripTime) > 0;
-      if (!hasRtt) {
-        return;
-      }
-
-      const nextRttMs = Number(stat.currentRoundTripTime) * 1000;
-      if (selectedCandidatePairId && stat.id === selectedCandidatePairId) {
-        fallbackRttMs = nextRttMs;
-        return;
-      }
-
-      if (!selectedCandidatePairId && (stat.nominated || stat.selected)) {
-        fallbackRttMs = nextRttMs;
+      if (stat?.type === "candidate-pair") {
+        candidatePairs.set(stat.id, stat);
+      } else if (stat?.type === "local-candidate") {
+        localCandidates.set(stat.id, stat);
+      } else if (stat?.type === "remote-candidate") {
+        remoteCandidates.set(stat.id, stat);
       }
     });
 
-    return Number.isFinite(Number(fallbackRttMs)) && Number(fallbackRttMs) > 0
-      ? Math.max(1, Math.round(Number(fallbackRttMs)))
-      : null;
+    selectedCandidatePair =
+      (selectedCandidatePairId && candidatePairs.get(selectedCandidatePairId))
+      || Array.from(candidatePairs.values()).find((candidatePair) => candidatePair.selected)
+      || Array.from(candidatePairs.values()).find((candidatePair) => candidatePair.nominated)
+      || null;
+
+    if (!selectedCandidatePair) {
+      return null;
+    }
+
+    const localCandidate = normalizeCandidateStats(localCandidates.get(selectedCandidatePair.localCandidateId));
+    const remoteCandidate = normalizeCandidateStats(remoteCandidates.get(selectedCandidatePair.remoteCandidateId));
+    const rttMs =
+      Number.isFinite(Number(selectedCandidatePair.currentRoundTripTime)) && Number(selectedCandidatePair.currentRoundTripTime) > 0
+        ? Math.max(1, Math.round(Number(selectedCandidatePair.currentRoundTripTime) * 1000))
+        : null;
+
+    return {
+      label,
+      routeType: getRouteType(localCandidate, remoteCandidate),
+      rttMs,
+      candidatePairId: selectedCandidatePair.id || "",
+      state: selectedCandidatePair.state || "",
+      selected: Boolean(selectedCandidatePair.selected),
+      nominated: Boolean(selectedCandidatePair.nominated),
+      protocol: localCandidate?.protocol || remoteCandidate?.protocol || "",
+      localCandidate,
+      remoteCandidate,
+      localAddress: getCandidateAddress(localCandidate),
+      remoteAddress: getCandidateAddress(remoteCandidate),
+      availableOutgoingBitrate: Number.isFinite(Number(selectedCandidatePair.availableOutgoingBitrate))
+        ? Math.round(Number(selectedCandidatePair.availableOutgoingBitrate))
+        : null,
+      bytesSent: Number.isFinite(Number(selectedCandidatePair.bytesSent)) ? Math.round(Number(selectedCandidatePair.bytesSent)) : null,
+      bytesReceived: Number.isFinite(Number(selectedCandidatePair.bytesReceived)) ? Math.round(Number(selectedCandidatePair.bytesReceived)) : null,
+    };
   };
   const sampleVoicePing = async () => {
     if (voicePingPollInFlight || !room?.engine?.pcManager) {
@@ -449,12 +535,25 @@ export function createVoiceRoomClient({
     try {
       const publisherTransport = room.engine.pcManager.publisher;
       const subscriberTransport = room.engine.pcManager.subscriber;
-      const [publisherRttMs, subscriberRttMs] = await Promise.all([
-        readTransportRttMs(publisherTransport).catch(() => null),
-        readTransportRttMs(subscriberTransport).catch(() => null),
+      const [publisherRoute, subscriberRoute] = await Promise.all([
+        readTransportRoute(publisherTransport, "publisher").catch(() => null),
+        readTransportRoute(subscriberTransport, "subscriber").catch(() => null),
       ]);
 
-      const samples = [publisherRttMs, subscriberRttMs].filter((value) => Number.isFinite(Number(value)) && Number(value) > 0);
+      const routes = [publisherRoute, subscriberRoute].filter(Boolean);
+      const samples = routes.map((route) => route.rttMs).filter((value) => Number.isFinite(Number(value)) && Number(value) > 0);
+      emitVoiceRoute({
+        routeType: routes.some((route) => route.routeType === "relay")
+          ? "relay"
+          : routes.some((route) => route.routeType === "direct")
+            ? "direct"
+            : "unknown",
+        rttMs: samples.length ? Math.max(...samples) : null,
+        serverUrl: currentLiveKitServerUrl,
+        roomName: currentLiveKitRoomName,
+        sampledAt: new Date().toISOString(),
+        transports: routes,
+      });
       emitVoicePing(samples.length ? Math.max(...samples) : null);
     } finally {
       voicePingPollInFlight = false;
@@ -1588,6 +1687,8 @@ const handleDeviceChange = () => {
     clearVoicePingPolling();
     room = null;
     roomConnectPromise = null;
+    currentLiveKitServerUrl = "";
+    currentLiveKitRoomName = "";
     micPublication = null;
     localShareVideoPublication = null;
     localShareAudioPublication = null;
@@ -2100,6 +2201,8 @@ const handleDeviceChange = () => {
       try {
         nextRoom = createRoomInstance();
         bindRoomEvents(nextRoom);
+        currentLiveKitServerUrl = session.serverUrl || "";
+        currentLiveKitRoomName = session.roomName || channelName || "";
 
         nextRoom.prepareConnection(session.serverUrl, session.participantToken);
         await nextRoom.connect(session.serverUrl, session.participantToken, {
@@ -2150,6 +2253,8 @@ const handleDeviceChange = () => {
         }
         if (currentChannel === channelName) {
           currentChannel = null;
+          currentLiveKitServerUrl = "";
+          currentLiveKitRoomName = "";
           onRoomParticipantsChanged?.({ channel: "", participants: [] });
         }
         await nextRoom?.disconnect?.().catch(() => {});

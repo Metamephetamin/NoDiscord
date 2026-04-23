@@ -1127,7 +1127,7 @@ export const FriendsMain = ({
                     aria-label="Выбрать аватар беседы"
                   >
                     {conversationAvatarPreview ? (
-                      <img src={conversationAvatarPreview} alt="" />
+                      <img src={conversationAvatarPreview} alt="" loading="eager" decoding="sync" />
                     ) : (
                       <span className="friends-conversation-avatar-picker__glyph" aria-hidden="true">📷</span>
                     )}
@@ -1270,7 +1270,7 @@ export const FriendsMain = ({
                 disabled={!canEditConversationInfo}
               >
                 {conversationSettingsAvatarPreview ? (
-                  <img src={conversationSettingsAvatarPreview} alt="" />
+                  <img src={conversationSettingsAvatarPreview} alt="" loading="eager" decoding="sync" />
                 ) : (
                   <span className="friends-conversation-avatar-picker__glyph" aria-hidden="true">+</span>
                 )}

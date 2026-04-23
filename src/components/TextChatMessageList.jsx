@@ -947,7 +947,16 @@ function MessageInviteCardBase({ inviteCode }) {
         <span className="message-invite-card__status">Код: {preview.inviteCode || inviteCode}</span>
       </div>
       <div className="message-invite-card__body">
-        <AnimatedAvatar className="message-invite-card__icon" src={rawServerIconValue} fallback={DEFAULT_SERVER_ICON} alt={preview.serverName || "Сервер"} frame={serverIconFrame} />
+        <AnimatedAvatar
+          className="message-invite-card__icon"
+          src={rawServerIconValue}
+          fallback={DEFAULT_SERVER_ICON}
+          alt={preview.serverName || "Сервер"}
+          frame={serverIconFrame}
+          loading="lazy"
+          decoding="async"
+          fetchPriority="low"
+        />
         <div className="message-invite-card__copy">
           <strong>{preview.serverName || "Без названия"}</strong>
           <div className="message-invite-card__meta">
@@ -1097,7 +1106,14 @@ function MessageAttachmentCard({
               fallbackText={fallbackGlyph}
             />
           ) : (
-            <img className="message-inline-emoji__image" src={attachmentItem.attachmentUrl} alt={attachmentItem.attachmentName || "emoji"} />
+            <img
+              className="message-inline-emoji__image"
+              src={attachmentItem.attachmentUrl}
+              alt={attachmentItem.attachmentName || "emoji"}
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+            />
           )}
         </button>
       );
@@ -1176,7 +1192,7 @@ function MessageAttachmentCard({
       >
         {showDocumentPreview ? (
           <span className="message-attachment__preview" aria-hidden="true">
-            <img src={attachmentItem.attachmentUrl} alt="" loading="lazy" decoding="async" />
+            <img src={attachmentItem.attachmentUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" />
           </span>
         ) : (
           <span className="message-attachment__icon" aria-hidden="true" />
@@ -1948,6 +1964,8 @@ function TextChatMessageList({
                                       className="message-reaction__avatar"
                                       src={reactor.avatarUrl}
                                       alt={reactor.displayName}
+                                      loading="lazy"
+                                      decoding="async"
                                     />
                                   ))}
                                 </span>

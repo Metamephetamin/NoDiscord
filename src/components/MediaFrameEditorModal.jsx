@@ -275,6 +275,8 @@ export default function MediaFrameEditorModal({
                         fallback={avatarSource}
                         alt={avatarAlt}
                         frame={avatarFrame}
+                        loading="eager"
+                        decoding="sync"
                       />
                     </div>
                     <div className="media-frame-editor__profile-copy">

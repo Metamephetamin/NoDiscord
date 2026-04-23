@@ -46,7 +46,13 @@ export default function TextChatForwardModal({
                   className={`forward-modal__target ${isSelectedTarget ? "forward-modal__target--active" : ""}`}
                   onClick={() => onToggleTarget(target.id)}
                 >
-                  <AnimatedAvatar className="forward-modal__target-avatar" src={target.avatar || ""} alt={getTargetDisplayName(target)} />
+                  <AnimatedAvatar
+                    className="forward-modal__target-avatar"
+                    src={target.avatar || ""}
+                    alt={getTargetDisplayName(target)}
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <span className="forward-modal__target-copy">
                     <strong>{getTargetDisplayName(target)}</strong>
                     <small>{target.email || "Без email"}</small>

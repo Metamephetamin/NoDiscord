@@ -54,6 +54,8 @@ export default function TextChatProfileModal({
               src={backgroundSrc}
               alt={profile.username || "Фон профиля"}
               frame={profile.backgroundFrame}
+              loading="eager"
+              decoding="sync"
             />
           ) : (
             <div className="chat-profile-modal__hero-fallback" aria-hidden="true" />
@@ -65,6 +67,8 @@ export default function TextChatProfileModal({
               src={profile.avatarUrl}
               alt={profile.username || "Аватар"}
               frame={profile.avatarFrame}
+              loading="eager"
+              decoding="sync"
             />
             <div className="chat-profile-modal__identity">
               <strong>{profile.username || "User"}</strong>

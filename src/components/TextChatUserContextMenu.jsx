@@ -22,7 +22,13 @@ export default function TextChatUserContextMenu({
         <div className="chat-user-menu__header">
           <div className="chat-user-menu__avatar">
             {menu.avatarUrl ? (
-              <AnimatedAvatar className="chat-user-menu__avatar-media" src={menu.avatarUrl} alt={menu.username} />
+              <AnimatedAvatar
+                className="chat-user-menu__avatar-media"
+                src={menu.avatarUrl}
+                alt={menu.username}
+                loading="eager"
+                decoding="sync"
+              />
             ) : (
               <span>{String(menu.username || "U").trim().charAt(0) || "U"}</span>
             )}

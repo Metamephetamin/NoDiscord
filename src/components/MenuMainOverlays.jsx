@@ -157,6 +157,8 @@ export const CreateServerModal = ({
                 fallback={defaultServerIcon}
                 alt="Иконка сервера"
                 frame={iconFrame}
+                loading="eager"
+                decoding="sync"
               />
             </span>
             <span className="create-server-modal__cover-text">
@@ -401,6 +403,8 @@ export const DirectCallOverlay = ({
             src={call.peerAvatar || ""}
             alt={callTitle}
             frame={call.peerAvatarFrame}
+            loading="eager"
+            decoding="sync"
           />
           <div className="direct-call-overlay__copy">
             <strong>{callTitle}</strong>
@@ -547,6 +551,8 @@ export const DirectCallOverlayView = ({
             src={call.peerAvatar || ""}
             alt={callTitle}
             frame={call.peerAvatarFrame}
+            loading="eager"
+            decoding="sync"
           />
           <div className="direct-call-overlay__copy">
             <strong>{callTitle}</strong>
@@ -717,7 +723,13 @@ export const DirectToastStack = ({ toasts, onOpenToast, onDismiss, getAvatar, ge
       {toasts.map((toast) => (
         <div key={toast.id} className="direct-toast">
           <button type="button" className="direct-toast__main" onClick={() => onOpenToast(toast)}>
-            <AnimatedAvatar className="direct-toast__avatar" src={getAvatar(toast.friend)} alt={getDisplayName(toast.friend)} />
+            <AnimatedAvatar
+              className="direct-toast__avatar"
+              src={getAvatar(toast.friend)}
+              alt={getDisplayName(toast.friend)}
+              loading="eager"
+              decoding="sync"
+            />
             <span className="direct-toast__content">
               <span className="direct-toast__title">{getDisplayName(toast.friend)}</span>
               {toast.grouped ? <span className="direct-toast__subtitle">{`${toast.count} новых сообщений`}</span> : null}
