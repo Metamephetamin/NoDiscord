@@ -8,6 +8,7 @@ const MIN_MESSAGES_FOR_VIRTUALIZATION = 80;
 const MIN_MEASURED_MESSAGE_HEIGHT = 72;
 const SIZE_CHANGE_EPSILON_PX = 2;
 const SCROLL_METRIC_EPSILON_PX = 1;
+const SCROLL_ANCHOR_EPSILON_PX = 1;
 const TEXT_CHAT_DEBUG_FLAG_PREFIX = "nodiscord.debug.textchat.";
 
 function readTextChatDebugFlag(name) {
@@ -62,6 +63,7 @@ export default function useTextChatVirtualizer({
 }) {
   const virtualizationDebugDisabled = readTextChatDebugFlag("disableVirtualizer");
   const observerByMessageIdRef = useRef(new Map());
+  const nodeByMessageIdRef = useRef(new Map());
   const scrollMetricsRafRef = useRef(0);
   const pendingSizeFlushRafRef = useRef(0);
   const pendingSizeByMessageIdRef = useRef(new Map());
@@ -76,6 +78,76 @@ export default function useTextChatVirtualizer({
   const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, viewportHeight: 0 });
   const virtualizationEnabled = !virtualizationDebugDisabled && messages.length >= MIN_MESSAGES_FOR_VIRTUALIZATION;
   const estimatedVirtualizedMessageHeight = estimatedMessageHeight + VIRTUALIZED_MESSAGE_GAP_PX;
+
+  const captureScrollAnchor = useCallback((list) => {
+    if (!list || !nodeByMessageIdRef.current.size) {
+      return null;
+    }
+
+    const listRect = list.getBoundingClientRect();
+    const probeTop = listRect.top + Math.min(96, Math.max(24, (Number(list.clientHeight) || 0) * 0.12));
+    const probeBottom = listRect.bottom;
+    let fallbackAnchor = null;
+    let fallbackDistance = Number.POSITIVE_INFINITY;
+    let bestAnchor = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const [messageId, node] of nodeByMessageIdRef.current.entries()) {
+      if (!node || !node.isConnected) {
+        continue;
+      }
+
+      const nodeRect = node.getBoundingClientRect();
+      if (nodeRect.bottom < listRect.top || nodeRect.top > probeBottom) {
+        continue;
+      }
+
+      const anchor = {
+        messageId,
+        offsetTop: nodeRect.top - listRect.top,
+      };
+
+      if (nodeRect.bottom >= probeTop) {
+        const distance = Math.abs(nodeRect.top - probeTop);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestAnchor = anchor;
+        }
+        continue;
+      }
+
+      const distance = Math.abs(nodeRect.bottom - probeTop);
+      if (distance < fallbackDistance) {
+        fallbackDistance = distance;
+        fallbackAnchor = anchor;
+      }
+    }
+
+    return bestAnchor || fallbackAnchor;
+  }, []);
+
+  const restoreScrollAnchor = useCallback((anchor) => {
+    const list = messagesListRef.current;
+    if (!list || !anchor?.messageId) {
+      return false;
+    }
+
+    const node = nodeByMessageIdRef.current.get(String(anchor.messageId));
+    if (!node || !node.isConnected) {
+      return false;
+    }
+
+    const listRect = list.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const nextOffsetTop = nodeRect.top - listRect.top;
+    const delta = nextOffsetTop - Number(anchor.offsetTop || 0);
+    if (Math.abs(delta) < SCROLL_ANCHOR_EPSILON_PX) {
+      return true;
+    }
+
+    list.scrollTop = clampScrollTop(list, Math.max(0, Number(list.scrollTop) || 0) + delta);
+    return true;
+  }, [messagesListRef]);
 
   useLayoutEffect(() => {
     if (!virtualizationEnabled) {
@@ -146,6 +218,7 @@ export default function useTextChatVirtualizer({
     if (!virtualizationEnabled) {
       observerByMessageIdRef.current.forEach((observer) => observer.disconnect());
       observerByMessageIdRef.current.clear();
+      nodeByMessageIdRef.current.clear();
       pendingSizeByMessageIdRef.current.clear();
       return undefined;
     }
@@ -158,6 +231,7 @@ export default function useTextChatVirtualizer({
 
       observerByMessageIdRef.current.get(messageId)?.disconnect();
       observerByMessageIdRef.current.delete(messageId);
+      nodeByMessageIdRef.current.delete(messageId);
     });
 
     const pruneTimeoutId = window.setTimeout(() => {
@@ -216,6 +290,7 @@ export default function useTextChatVirtualizer({
     const list = messagesListRef.current;
     const previousMeasurements = measurementsRef.current;
     const previousScrollTop = Math.max(0, Number(list?.scrollTop) || 0);
+    const scrollAnchor = captureScrollAnchor(list);
     let scrollAnchorDelta = 0;
 
     if (list && previousMeasurements?.offsets?.length) {
@@ -278,6 +353,11 @@ export default function useTextChatVirtualizer({
     }
 
     window.requestAnimationFrame(() => {
+      if (scrollAnchor && restoreScrollAnchor(scrollAnchor)) {
+        scheduleMetricsUpdate();
+        return;
+      }
+
       if (scrollAnchorDelta) {
         const latestScrollTop = Math.max(0, Number(list.scrollTop) || 0);
         list.scrollTop = clampScrollTop(list, latestScrollTop + scrollAnchorDelta);
@@ -285,7 +365,7 @@ export default function useTextChatVirtualizer({
 
       scheduleMetricsUpdate();
     });
-  }, [estimatedVirtualizedMessageHeight, messagesListRef, scheduleMetricsUpdate]);
+  }, [captureScrollAnchor, estimatedVirtualizedMessageHeight, messagesListRef, restoreScrollAnchor, scheduleMetricsUpdate]);
 
   const scheduleSizeFlush = useCallback(() => {
     if (pendingSizeFlushRafRef.current) {
@@ -371,8 +451,13 @@ export default function useTextChatVirtualizer({
     }
 
     if (!node || !normalizedMessageId) {
+      if (normalizedMessageId) {
+        nodeByMessageIdRef.current.delete(normalizedMessageId);
+      }
       return;
     }
+
+    nodeByMessageIdRef.current.set(normalizedMessageId, node);
 
     const measureNodeHeight = () => {
       const nextHeight = Math.max(

@@ -286,6 +286,31 @@ namespace BackNoDiscord
             }
         }
 
+        public RemoveUserResult LeaveChannel(string userId)
+        {
+            lock (_syncRoot)
+            {
+                var removedFromChannel = _userChannels.TryRemove(userId, out var channelName)
+                    ? channelName
+                    : null;
+
+                foreach (var channel in _channels.Values)
+                {
+                    channel.RemoveAll(user => user.UserId == userId);
+                }
+
+                _screenSharingUsers.TryRemove(userId, out _);
+
+                return new RemoveUserResult
+                {
+                    ChannelName = removedFromChannel,
+                    Participant = _participantsByUserId.TryGetValue(userId, out var participant)
+                        ? CloneParticipant(participant)
+                        : null,
+                };
+            }
+        }
+
         public RemoveUserResult RemoveConnection(string connectionId)
         {
             if (!TryGetUserId(connectionId, out var userId))

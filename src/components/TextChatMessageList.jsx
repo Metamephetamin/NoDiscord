@@ -1697,17 +1697,6 @@ function TextChatMessageList({
           const isForwardGroupFollow = areMessagesInSameForwardGroup(messageItem, previousMessage);
           const isForwardGroupStart = !isForwardGroupFollow && areMessagesInSameForwardGroup(messageItem, nextMessage);
           const isForwardGroupEnd = isForwardGroupFollow && !areMessagesInSameForwardGroup(messageItem, nextMessage);
-          const isMediaOnlyMessage =
-            !messageText.trim()
-            && !inviteCode
-            && !messagePoll
-            && hasRenderableAttachments
-            && !reactions.length
-            && !messageItem.forwardedFromUsername
-            && !messageItem.replyToMessageId;
-          const isInlineEmojiOnlyMessage = isMediaOnlyMessage
-            && attachments.length === 1
-            && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
           const hasVisualAttachmentGroup = hasRenderableAttachments
             && attachments.length > 0
             && attachments.every((attachmentItem) => (
@@ -1720,6 +1709,18 @@ function TextChatMessageList({
               Boolean(attachmentItem?.attachmentAsFile)
               || (!attachmentItem?.isVoice && !attachmentItem?.isImage && !attachmentItem?.isVideo)
             ));
+          const isMediaOnlyMessage =
+            !hasFileLikeAttachments
+            && !messageText.trim()
+            && !inviteCode
+            && !messagePoll
+            && hasRenderableAttachments
+            && !reactions.length
+            && !messageItem.forwardedFromUsername
+            && !messageItem.replyToMessageId;
+          const isInlineEmojiOnlyMessage = isMediaOnlyMessage
+            && attachments.length === 1
+            && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;

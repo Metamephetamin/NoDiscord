@@ -19,6 +19,7 @@ const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
 const AUTH_BRAND_LOGO_URL = resolveStaticAssetUrl("/image/image.png");
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
+const REQUIRE_REGISTRATION_VERIFICATION = false;
 
 const initialRegisterForm = {
   firstName: "",
@@ -689,7 +690,7 @@ export default function Auth({ onAuthSuccess }) {
         return;
       }
 
-      if (!phoneVerificationStatus.verified || !phoneVerificationToken) {
+      if (REQUIRE_REGISTRATION_VERIFICATION && (!phoneVerificationStatus.verified || !phoneVerificationToken)) {
         setMessage("Сначала подтвердите номер телефона кодом.");
         return;
       }
@@ -949,7 +950,7 @@ export default function Auth({ onAuthSuccess }) {
                 maxLength={MAX_AUTH_IDENTIFIER_LENGTH}
                 required
               />
-              {registerContactKind === "phone" ? (
+              {REQUIRE_REGISTRATION_VERIFICATION && registerContactKind === "phone" ? (
                 <div className="auth-phone-verify">
                   <button
                     className="auth-submit auth-submit--secondary"

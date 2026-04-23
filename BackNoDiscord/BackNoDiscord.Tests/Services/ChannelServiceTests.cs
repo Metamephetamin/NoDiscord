@@ -81,4 +81,27 @@ public class ChannelServiceTests
         Assert.False(service.TryGetConnectionId("user-3", out _));
         Assert.False(service.TryGetUserId("conn-remove", out _));
     }
+
+    [Fact]
+    public void LeaveChannel_PreservesConnectionForDirectCallSignaling()
+    {
+        var service = new ChannelService();
+        service.SetUserChannel("voice:general", new Participant
+        {
+            UserId = "user-4",
+            Name = "Daria"
+        }, "conn-direct-call");
+        service.SetScreenShareState("user-4", true);
+
+        var result = service.LeaveChannel("user-4");
+
+        Assert.Equal("voice:general", result.ChannelName);
+        Assert.NotNull(result.Participant);
+        Assert.Empty(service.GetParticipantsInChannel("voice:general"));
+        Assert.Empty(service.GetScreenSharingUserIds());
+        Assert.True(service.TryGetConnectionId("user-4", out var connectionId));
+        Assert.Equal("conn-direct-call", connectionId);
+        Assert.True(service.TryGetUserId("conn-direct-call", out var userId));
+        Assert.Equal("user-4", userId);
+    }
 }

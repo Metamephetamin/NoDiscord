@@ -238,6 +238,20 @@ export default function useTextChatAttachmentPickerFlow({
     pendingSelectionPreviewObjectUrlsRef.current = [];
   };
 
+  const getPickerInputNode = (kind = attachPickerKindRef.current) => (
+    kind === "document" ? documentFileInputRef.current : mediaFileInputRef.current
+  );
+
+  const resetPickerDiagnostic = () => {
+    pickerDiagnosticRef.current = {
+      active: false,
+      openedAt: 0,
+      focusedAt: 0,
+      kind: "media",
+    };
+    attachPickerKindRef.current = "media";
+  };
+
   const showPickerReturnShell = ({ kind = "media", source = "file-picker-focus" } = {}) => {
     if (typeof onQueueFiles !== "function") {
       return;
@@ -414,6 +428,7 @@ export default function useTextChatAttachmentPickerFlow({
 
     if (!selectedInputFiles.length) {
       clearPendingPickerShellTimeout();
+      clearPendingPickerFocusShellTimeout();
       clearPendingSelectionPreviewHydrationTimeout();
       resetPendingSelectionPreviewObjectUrls();
       setPendingBatchSelection(null);
@@ -447,13 +462,7 @@ export default function useTextChatAttachmentPickerFlow({
       event.target.blur?.();
     }
 
-    pickerDiagnosticRef.current = {
-      active: false,
-      openedAt: 0,
-      focusedAt: 0,
-      kind: "media",
-    };
-    attachPickerKindRef.current = "media";
+    resetPickerDiagnostic();
   };
 
   useEffect(() => {
@@ -495,6 +504,16 @@ export default function useTextChatAttachmentPickerFlow({
         pendingPickerFocusShellTimeoutRef.current = 0;
         const activePickerDiagnostic = pickerDiagnosticRef.current;
         if (!activePickerDiagnostic?.active) {
+          return;
+        }
+
+        const inputNode = getPickerInputNode(activePickerDiagnostic.kind);
+        if (!inputNode?.files?.length) {
+          clearPendingPickerShellTimeout();
+          clearPendingSelectionPreviewHydrationTimeout();
+          resetPendingSelectionPreviewObjectUrls();
+          setPendingBatchSelection(null);
+          resetPickerDiagnostic();
           return;
         }
 

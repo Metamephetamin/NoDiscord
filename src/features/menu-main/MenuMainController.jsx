@@ -2123,7 +2123,16 @@ export default function MenuMain({
 
   const startDirectCallWithUser = async (targetUserId) => {
     const normalizedTargetUserId = String(targetUserId || "").trim();
-    if (!normalizedTargetUserId || normalizedTargetUserId === currentUserId || !voiceClientRef.current || !user?.id) {
+    if (!normalizedTargetUserId || normalizedTargetUserId === currentUserId || !user?.id) {
+      return;
+    }
+
+    if (!voiceClientRef.current) {
+      await ensureVoiceClientReady();
+    }
+
+    if (!voiceClientRef.current) {
+      showServerInviteFeedback("Не удалось подготовить голосовой клиент для звонка.");
       return;
     }
 
@@ -2194,11 +2203,19 @@ export default function MenuMain({
 
   const acceptDirectCall = async () => {
     const currentCall = directCallStateRef.current;
-    if (currentCall.phase !== "incoming" || !currentCall.peerUserId || !currentCall.channelId || !voiceClientRef.current || !user?.id) {
+    if (currentCall.phase !== "incoming" || !currentCall.peerUserId || !currentCall.channelId || !user?.id) {
       return;
     }
 
     try {
+      if (!voiceClientRef.current) {
+        await ensureVoiceClientReady();
+      }
+
+      if (!voiceClientRef.current) {
+        throw new Error("Не удалось подготовить голосовой клиент для звонка.");
+      }
+
       setDirectCallState((previous) => ({
         ...previous,
         phase: "connecting",

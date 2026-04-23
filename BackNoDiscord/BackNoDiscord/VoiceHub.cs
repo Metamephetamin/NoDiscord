@@ -129,7 +129,7 @@ public class VoiceHub : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, currentChannel);
         }
 
-        _channels.RemoveUser(currentUser.UserId);
+        _channels.LeaveChannel(currentUser.UserId);
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
     }
