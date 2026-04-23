@@ -210,7 +210,7 @@ export const FriendsSidebar = ({
                   >
                     <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
                     <span className="friends-directs__meta">
-                      <span className="friends-directs__name">{getDisplayName(friend)}</span>
+                      <span className={`friends-directs__name ${isUserCurrentlyOnline(friend) ? "friends-directs__name--online" : ""}`}>{getDisplayName(friend)}</span>
                       {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
                     </span>
                     {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}

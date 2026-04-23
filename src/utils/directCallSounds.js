@@ -1,4 +1,16 @@
+import { resolveStaticAssetUrl } from "./media";
 import { createPreferredAudioContext } from "../webrtc/voiceClientUtils";
+
+const DIRECT_CALL_TONE_CONFIG = {
+  outgoing: {
+    path: resolveStaticAssetUrl("/sounds/direct-call-outgoing.wav"),
+    volume: 0.42,
+  },
+  incoming: {
+    path: resolveStaticAssetUrl("/sounds/direct-call-incoming.wav"),
+    volume: 0.5,
+  },
+};
 
 const createOscillatorBurst = (audioContext, destination, {
   frequency,
@@ -70,9 +82,56 @@ const scheduleIncomingLoop = (audioContext) => {
   });
 };
 
+const stopHtmlAudio = (audio) => {
+  if (!audio) {
+    return;
+  }
+
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+    audio.removeAttribute("src");
+    audio.load();
+  } catch {
+    // ignore cleanup failures
+  }
+};
+
+const startLoopingAudioTone = async (kind) => {
+  if (typeof window === "undefined" || typeof Audio === "undefined") {
+    return null;
+  }
+
+  const toneConfig = DIRECT_CALL_TONE_CONFIG[kind];
+  if (!toneConfig?.path) {
+    return null;
+  }
+
+  try {
+    const audio = new Audio(toneConfig.path);
+    audio.preload = "auto";
+    audio.loop = true;
+    audio.volume = toneConfig.volume;
+    audio.playsInline = true;
+
+    await audio.play();
+
+    return () => {
+      stopHtmlAudio(audio);
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const startDirectCallTone = async (kind = "outgoing") => {
   if (typeof window === "undefined") {
     return () => {};
+  }
+
+  const htmlAudioStop = await startLoopingAudioTone(kind);
+  if (htmlAudioStop) {
+    return htmlAudioStop;
   }
 
   const audioContext = createPreferredAudioContext();
