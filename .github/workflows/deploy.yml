@@ -270,6 +270,7 @@ jobs:
           BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
           BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
@@ -277,6 +278,7 @@ jobs:
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
+          TEMP_SMTP_ENV_FILE="$TEMP_ROOT/backend-smtp.env"
           TEMP_ARCHIVE_FILE="$TEMP_ROOT/backend-publish.tar.gz"
           BACKEND_ARCHIVE="./backend-package/backend-publish.tar.gz"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
@@ -295,6 +297,21 @@ jobs:
             echo "Uploading backend .env file"
             printf '%s\n' "$BACKEND_ENV_FILE" | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
           fi
+          if [ -n "$SMTP_PASSWORD" ]; then
+            echo "Uploading backend SMTP env patch"
+            {
+              printf '%s\n' 'Email__Mode=smtp'
+              printf '%s\n' 'Email__FromAddress=code@tendsec.ru'
+              printf '%s\n' 'Email__FromName=MAX'
+              printf '%s\n' 'Email__Smtp__Host=smtp.beget.com'
+              printf '%s\n' 'Email__Smtp__Port=465'
+              printf '%s\n' 'Email__Smtp__Username=code@tendsec.ru'
+              printf '%s\n' "Email__Smtp__Password=$SMTP_PASSWORD"
+              printf '%s\n' 'Email__Smtp__EnableSsl=true'
+              printf '%s\n' 'Auth__RequireEmailVerification=true'
+              printf '%s\n' 'Auth__RequirePhoneVerification=false'
+            } | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_SMTP_ENV_FILE'"
+          fi
 
           echo "Applying backend artifact on server"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 15m bash -lc '
@@ -302,6 +319,7 @@ jobs:
             BACKEND_PATH='$BACKEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
             TEMP_ENV_FILE='$TEMP_ENV_FILE'
+            TEMP_SMTP_ENV_FILE='$TEMP_SMTP_ENV_FILE'
             TEMP_ARCHIVE_FILE='$TEMP_ARCHIVE_FILE'
             BACKEND_OWNER='$BACKEND_OWNER'
             case \"\$BACKEND_PATH\" in
@@ -324,6 +342,20 @@ jobs:
               echo \"Backend environment file is missing: \$BACKEND_PATH/.env\"
               echo \"Continuing deploy without .env replacement because BACKEND_ENV_FILE is optional for this server.\"
             else
+              chmod 600 \"\$BACKEND_PATH/.env\"
+            fi
+            if [ -f \"\$TEMP_SMTP_ENV_FILE\" ]; then
+              touch \"\$BACKEND_PATH/.env\"
+              while IFS= read -r line || [ -n \"\$line\" ]; do
+                key=\"\${line%%=*}\"
+                [ -n \"\$key\" ] || continue
+                if grep -q \"^\${key}=\" \"\$BACKEND_PATH/.env\"; then
+                  escaped_line=\$(printf \"%s\" \"\$line\" | sed \"s/[&\\\\]/\\\\&/g\")
+                  sed -i \"s|^\${key}=.*|\$escaped_line|\" \"\$BACKEND_PATH/.env\"
+                else
+                  printf \"%s\\n\" \"\$line\" >> \"\$BACKEND_PATH/.env\"
+                fi
+              done < \"\$TEMP_SMTP_ENV_FILE\"
               chmod 600 \"\$BACKEND_PATH/.env\"
             fi
             echo \"Backend deploy apply completed\"
