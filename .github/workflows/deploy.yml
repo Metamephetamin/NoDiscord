@@ -396,7 +396,6 @@ jobs:
             set -e
             BACKEND_SERVICE='$BACKEND_SERVICE'
             TEMP_ROOT='$TEMP_ROOT'
-            sudo -u postgres psql -c \"ALTER USER postgres WITH PASSWORD '\''admin'\'';\"
             systemctl restart \"\$BACKEND_SERVICE\"
             systemctl is-active \"\$BACKEND_SERVICE\"
             systemctl reload nginx
