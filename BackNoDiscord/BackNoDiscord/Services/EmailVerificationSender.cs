@@ -173,8 +173,16 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
             return;
         }
 
-        using var socket = new Socket(preferredAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-        await socket.ConnectAsync(preferredAddress, port, cancellationToken);
-        await client.ConnectAsync(socket, host, port, socketOptions, cancellationToken);
+        Socket? socket = new(preferredAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            await socket.ConnectAsync(preferredAddress, port, cancellationToken);
+            await client.ConnectAsync(socket, host, port, socketOptions, cancellationToken);
+            socket = null;
+        }
+        finally
+        {
+            socket?.Dispose();
+        }
     }
 }
