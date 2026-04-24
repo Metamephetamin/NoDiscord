@@ -54,10 +54,10 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "(^|[.!?]\\s+)(ну|в общем|короче|слушай|смотри|кстати|например|честно говоря|если честно|по правде говоря|к счастью|к сожалению|как ни странно|как правило|безусловно|разумеется|наверное|возможно|кажется|пожалуй|вообще-то)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex SentenceOpeningInterjectionRegex = new(
-        "(^|[.!?…]\\s+)(блин|бля|блинчик|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда|ух|эх)\\s+",
+        "(^|[.!?…]\\s+)(блин|бля|блядь|блинчик|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда|ух|эх)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex InlineInterjectionRegex = new(
-        "\\s+(блин|бля|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда)\\s+",
+        "\\s+(блин|бля|блядь|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly IReadOnlyList<(Regex Regex, string Replacement)> SpokenPunctuationRules =
@@ -92,6 +92,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         (new Regex("\\b(дело в том)\\s+что\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, что"),
         (new Regex("\\b(да|нет)\\s+(конечно|наверное|пожалуй|думаю)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, $2"),
         (new Regex("\\b(пожалуйста)\\s+(если|когда|передай|напиши|посмотри|скажи)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, $2"),
+        (new Regex("\\b(не знаю)\\s+(похоже)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1, $2"),
         (new Regex("\\b(не только)\\s+(.+?)\\s+(но и)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1 $2, $3"),
         (new Regex("\\b(как)\\s+(.+?)\\s+(так и)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1 $2, $3"),
         (new Regex("\\b(не столько)\\s+(.+?)\\s+(сколько)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled), "$1 $2, $3"),
@@ -117,6 +118,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "скорее всего",
         "к счастью",
         "к сожалению",
+        "похоже",
     ];
     private static readonly string[] LeadingSubordinatePhrases =
     [

@@ -22,6 +22,10 @@
       "EnableSsl": true
     }
   },
+  "Auth": {
+    "RequireEmailVerification": true,
+    "RequirePhoneVerification": false
+  },
   "Cors": {
     "AllowedOrigins": [
       "https://app.your-domain.example",

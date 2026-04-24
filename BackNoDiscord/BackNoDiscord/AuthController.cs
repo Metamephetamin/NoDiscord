@@ -27,7 +27,8 @@ public class AuthController : ControllerBase
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
     private const int MaxPhoneVerificationAttempts = 5;
     private const int MaxEmailVerificationAttempts = 5;
-    private static bool RequireRegistrationVerification => false;
+    private bool RequireEmailRegistrationVerification => _config.GetValue<bool?>("Auth:RequireEmailVerification") ?? true;
+    private bool RequirePhoneRegistrationVerification => _config.GetValue<bool?>("Auth:RequirePhoneVerification") ?? false;
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _config;
@@ -415,7 +416,7 @@ public class AuthController : ControllerBase
         }
 
         PhoneVerificationCodeRecord? phoneVerification = null;
-        if (!string.IsNullOrWhiteSpace(normalizedPhone) && RequireRegistrationVerification)
+        if (!string.IsNullOrWhiteSpace(normalizedPhone) && RequirePhoneRegistrationVerification)
         {
             var verificationToken = (dto.phone_verification_token ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(verificationToken))
@@ -443,7 +444,7 @@ public class AuthController : ControllerBase
             last_name = lastName,
             nickname = nickname,
             email = normalizedEmail,
-            is_email_verified = string.IsNullOrWhiteSpace(normalizedEmail) || !RequireRegistrationVerification,
+            is_email_verified = string.IsNullOrWhiteSpace(normalizedEmail) || !RequireEmailRegistrationVerification,
             phone_number = normalizedPhone,
             is_phone_verified = !string.IsNullOrWhiteSpace(normalizedPhone)
         };
@@ -458,7 +459,7 @@ public class AuthController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        if (!string.IsNullOrWhiteSpace(normalizedEmail) && RequireRegistrationVerification)
+        if (!string.IsNullOrWhiteSpace(normalizedEmail) && RequireEmailRegistrationVerification)
         {
             try
             {
@@ -665,7 +666,7 @@ public class AuthController : ControllerBase
             await _context.SaveChangesAsync();
         }
 
-        if (RequireRegistrationVerification && !string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
+        if (RequireEmailRegistrationVerification && !string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
         {
             try
             {
