@@ -1,0 +1,40 @@
+name: Backend Diagnostics
+
+on:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  collect:
+    name: Collect Backend Logs
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Collect backend diagnostics
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          BACKEND_SERVICE_NAME: ${{ vars.BACKEND_SERVICE_NAME }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "bash -lc '
+            echo \"=== systemctl status ===\"
+            systemctl status \"$BACKEND_SERVICE\" --no-pager || true
+            echo \"=== recent auth/mail logs ===\"
+            journalctl -u \"$BACKEND_SERVICE\" --since \"20 minutes ago\" --no-pager | grep -Ei \"auth/register|email|smtp|mailkit|verification|failed|exception|ошиб|код|почт\" || true
+            echo \"=== journalctl tail ===\"
+            journalctl -u \"$BACKEND_SERVICE\" -n 240 --no-pager || true
+          '"
