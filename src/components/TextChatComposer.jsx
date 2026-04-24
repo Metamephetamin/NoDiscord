@@ -8,7 +8,6 @@ import TextChatPollComposerModal from "./TextChatPollComposerModal";
 import useTextChatAttachmentPickerFlow from "../hooks/useTextChatAttachmentPickerFlow";
 import { extractMentionsFromText, segmentMessageTextByMentions } from "../utils/messageMentions";
 import {
-  buildVoiceMessageLabel,
   COMPOSER_EMOJI_OPTIONS,
   ENABLE_SPEECH_INPUT_BUTTON,
   ENABLE_VOICE_MESSAGE_BUTTON,
@@ -37,7 +36,6 @@ function TextChatComposer({
   replyState,
   messageEditState,
   voiceRecordingState,
-  voiceRecordingDurationMs,
   voiceMicLevel = 0,
   speechRecognitionActive,
   speechMicLevel = 0,
@@ -401,7 +399,7 @@ function TextChatComposer({
 
         {errorMessage ? <div className="chat-error chat-error--composer">{errorMessage}</div> : null}
 
-        {replyState || messageEditState || voiceRecordingState !== "idle" || speechRecognitionActive ? (
+        {replyState || messageEditState ? (
           <div className="composer-status-strip">
             {replyState ? (
               <div className="composer-status composer-status--reply">
@@ -428,45 +426,6 @@ function TextChatComposer({
                 </button>
               </div>
             ) : null}
-
-            {voiceRecordingState !== "idle" ? (
-              <div className={`composer-status composer-status--voice composer-status--${voiceRecordingState}`}>
-                <span className="composer-status__dot" aria-hidden="true" />
-                <div className="composer-status__copy">
-                  <strong>{buildVoiceMessageLabel(voiceRecordingDurationMs)}</strong>
-                  <span>
-                    {voiceRecordingState === "locked"
-                      ? "Голосовое готово к отправке. Нажмите на микрофон ещё раз, чтобы отправить."
-                      : voiceRecordingState === "sending"
-                        ? "Отправляем голосовое сообщение..."
-                        : "Держите и говорите. Отпустите - отправим как голосовое. Свайп вверх - включим голосовой ввод текста."}
-                  </span>
-                </div>
-                {voiceRecordingState === "holding" || voiceRecordingState === "locked" ? (
-                  <button type="button" className="composer-status__action" onClick={() => void onCancelVoiceRecording()}>
-                    Отмена
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {speechRecognitionActive ? (
-              <div className={`composer-status composer-status--voice ${speechIsLocked ? "composer-status--locked" : ""}`}>
-                <span className="composer-status__dot" aria-hidden="true" />
-                <div className="composer-status__copy">
-                  <strong>Голосовой ввод текста</strong>
-                  <span>
-                    {speechIsLocked
-                      ? "Говорите - текст добавляется в поле. Он не отправится сам, можно спокойно исправить ошибки."
-                      : "Говорите фразу. Свайп вверх фиксирует диктовку, потом можно отредактировать текст."}
-                  </span>
-                </div>
-                <button type="button" className="composer-status__action" onClick={() => onStopSpeechRecognition(true)}>
-                  Готово
-                </button>
-              </div>
-            ) : null}
-
           </div>
         ) : null}
 
@@ -1016,7 +975,6 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
     && areReplyStatesEqual(previousProps.replyState, nextProps.replyState)
     && areMessageEditStatesEqual(previousProps.messageEditState, nextProps.messageEditState)
     && previousProps.voiceRecordingState === nextProps.voiceRecordingState
-    && previousProps.voiceRecordingDurationMs === nextProps.voiceRecordingDurationMs
     && previousProps.voiceMicLevel === nextProps.voiceMicLevel
     && previousProps.speechRecognitionActive === nextProps.speechRecognitionActive
     && previousProps.speechMicLevel === nextProps.speechMicLevel

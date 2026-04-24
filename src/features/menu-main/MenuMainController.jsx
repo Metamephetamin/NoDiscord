@@ -1504,6 +1504,24 @@ export default function MenuMain({
     )),
     [currentVoiceParticipants, directCallState.peerUserId]
   );
+  const directCallPeerStreamShare = useMemo(() => {
+    const peerUserId = String(directCallState.peerUserId || "");
+    if (!peerUserId) {
+      return null;
+    }
+
+    return remoteScreenShares.find((item) => String(item?.userId || "") === peerUserId) || null;
+  }, [directCallState.peerUserId, remoteScreenShares]);
+  const isDirectCallPeerStreamLive = useMemo(() => {
+    const peerUserId = String(directCallState.peerUserId || "");
+    return Boolean(
+      peerUserId &&
+      (directCallPeerStreamShare || liveUserIds.some((id) => String(id) === peerUserId))
+    );
+  }, [directCallPeerStreamShare, directCallState.peerUserId, liveUserIds]);
+  const isWatchingDirectCallPeerStream =
+    Boolean(selectedStreamUserId) &&
+    String(selectedStreamUserId) === String(directCallState.peerUserId || "");
   const spotlightVoiceParticipant = useMemo(
     () =>
       currentVoiceParticipants.find((participant) => participant.isSpeaking)
@@ -6463,6 +6481,9 @@ export default function MenuMain({
     isScreenShareActive,
     isCameraShareActive,
     isScreenShareSupported,
+    isPeerStreamLive: isDirectCallPeerStreamLive,
+    isWatchingPeerStream: isWatchingDirectCallPeerStream,
+    peerStreamMode: directCallPeerStreamShare?.mode || "",
     onAccept: acceptDirectCall,
     onDecline: declineDirectCall,
     onEnd: endDirectCall,
@@ -6470,6 +6491,7 @@ export default function MenuMain({
     onToggleSound: toggleSoundMute,
     onScreenShareAction: handleScreenShareAction,
     onOpenCamera: openCameraModal,
+    onWatchPeerStream: () => handleWatchStream(directCallState.peerUserId),
     onSelectInputDevice: setSelectedInputDeviceId,
     onSelectOutputDevice: setSelectedOutputDeviceId,
     onToggleMiniMode: setDirectCallMiniMode,
@@ -6850,6 +6872,10 @@ export default function MenuMain({
       directSearchQuery={channelSearchQuery}
       textChatLocalStateVersion={textChatLocalStateVersion}
       directCallPanelProps={directCallPanelProps}
+      selectedStreamUserId={selectedStreamUserId}
+      selectedStream={selectedStream}
+      selectedStreamParticipant={selectedStreamParticipant}
+      selectedStreamDebugInfo={selectedStreamDebugInfo}
       friendsPageSection={friendsPageSection}
       friends={friends}
       incomingFriendRequestCount={incomingFriendRequestCount}
@@ -6898,6 +6924,7 @@ export default function MenuMain({
       onClearConversationStatus={() => setConversationActionStatus("")}
       onStartDirectCall={startDirectCallWithUser}
       onOpenDirectActions={openFriendListUserContextMenu}
+      onCloseSelectedStream={closeSelectedStream}
       onFriendRequestAction={handleFriendRequestAction}
       onFriendSearchSubmit={handleFriendSearchSubmit}
       onFriendSearchChange={(value) => {
@@ -7397,6 +7424,9 @@ export default function MenuMain({
       isSoundMuted={isSoundMuted}
       micLevel={micLevel}
       directCallPeerIsSpeaking={directCallPeerIsSpeaking}
+      isDirectCallPeerStreamLive={isDirectCallPeerStreamLive}
+      isWatchingDirectCallPeerStream={isWatchingDirectCallPeerStream}
+      directCallPeerStreamMode={directCallPeerStreamShare?.mode || ""}
       audioInputDevices={audioInputDevices}
       audioOutputDevices={audioOutputDevices}
       selectedInputDeviceId={selectedInputDeviceId}
@@ -7410,6 +7440,7 @@ export default function MenuMain({
       dismissDirectCallOverlay={dismissDirectCallOverlay}
       retryDirectCall={retryDirectCall}
       onDirectCallHistoryRedial={startDirectCallWithUser}
+      onWatchDirectCallPeerStream={() => handleWatchStream(directCallState.peerUserId)}
       acceptDirectCall={acceptDirectCall}
       declineDirectCall={declineDirectCall}
       endDirectCall={endDirectCall}

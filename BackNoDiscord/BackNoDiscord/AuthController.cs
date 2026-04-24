@@ -271,13 +271,6 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Пользователь с такой почтой не найден." });
         }
 
-        if (user.is_email_verified)
-        {
-            await RevokeActiveRefreshTokensAsync(user.id);
-            var existingSession = await IssueAuthSessionAsync(user);
-            return Ok(BuildAuthResponse(user, existingSession));
-        }
-
         var now = DateTimeOffset.UtcNow;
         var record = await _context.EmailVerificationCodes
             .Where(item =>
@@ -327,7 +320,75 @@ public class AuthController : ControllerBase
         return Ok(BuildAuthResponse(user, authSession));
     }
 
-        [HttpPost("register")]
+    [HttpPost("request-login-code")]
+    [EnableRateLimiting("email-send")]
+    public async Task<IActionResult> RequestLoginCode([FromBody] LoginCodeRequestDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        var rawIdentifier = dto.identifier ?? string.Empty;
+        if (rawIdentifier.Any(char.IsWhiteSpace))
+        {
+            return BadRequest(CreateLoginError("identifier_invalid", "Логин не должен содержать пробелы.", identifier: "Логин не должен содержать пробелы."));
+        }
+
+        var identifier = rawIdentifier.Trim();
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return BadRequest(CreateLoginError("identifier_required", "Введите email или номер телефона.", identifier: "Введите email или номер телефона."));
+        }
+
+        User? user;
+        if (identifier.Contains('@'))
+        {
+            if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
+            {
+                return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
+            }
+
+            user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        }
+        else
+        {
+            if (!AuthInputPolicies.TryNormalizeRussianPhone(identifier, out var normalizedPhone, out var phoneError))
+            {
+                return BadRequest(CreateLoginError("identifier_invalid", phoneError, identifier: phoneError));
+            }
+
+            user = await _context.Users.FirstOrDefaultAsync(item => item.phone_number == normalizedPhone);
+        }
+
+        if (user == null)
+        {
+            return BadRequest(CreateInvalidCredentialsError());
+        }
+
+        if (string.IsNullOrWhiteSpace(user.email))
+        {
+            return BadRequest(CreateLoginError(
+                "email_required",
+                "Для входа по коду к аккаунту должна быть привязана почта.",
+                identifier: "Для входа по коду к аккаунту должна быть привязана почта."));
+        }
+
+        try
+        {
+            var payload = await CreateEmailVerificationAsync(user, ignoreResendCooldown: true);
+            return Ok(payload.ToResponse());
+        }
+        catch (EmailDeliveryException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Не удалось отправить код входа на почту. Попробуйте немного позже."
+            });
+        }
+    }
+
+    [HttpPost("register")]
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
@@ -1072,6 +1133,11 @@ public class LoginDto
 
     [Required]
     public string password { get; set; } = string.Empty;
+}
+
+public class LoginCodeRequestDto
+{
+    public string? identifier { get; set; }
 }
 
 public class PhoneVerificationRequestDto

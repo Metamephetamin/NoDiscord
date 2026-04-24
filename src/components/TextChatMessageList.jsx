@@ -482,18 +482,32 @@ const MessageMediaImage = memo(function MessageMediaImage({
 
     return Array.from(new Set(candidates));
   }, [attachmentItem?.attachmentSourceUrl, attachmentItem?.attachmentUrl, directSourceUrl]);
-  const [sourceIndex, setSourceIndex] = useState(0);
-  const [isUnavailable, setIsUnavailable] = useState(false);
+  const sourceKey = sourceCandidates.join("\n");
+  const [sourceState, setSourceState] = useState({
+    sourceKey,
+    sourceIndex: 0,
+    isUnavailable: false,
+  });
+  const sourceIndex = sourceState.sourceKey === sourceKey ? sourceState.sourceIndex : 0;
+  const isUnavailable = sourceState.sourceKey === sourceKey ? sourceState.isUnavailable : false;
   const resolvedSourceUrl = sourceCandidates[sourceIndex] || "";
 
   const handleError = useCallback(() => {
     if (sourceIndex < sourceCandidates.length - 1) {
-      setSourceIndex((currentIndex) => Math.min(currentIndex + 1, sourceCandidates.length - 1));
+      setSourceState({
+        sourceKey,
+        sourceIndex: Math.min(sourceIndex + 1, sourceCandidates.length - 1),
+        isUnavailable: false,
+      });
       return;
     }
 
-    setIsUnavailable(true);
-  }, [sourceCandidates.length, sourceIndex]);
+    setSourceState({
+      sourceKey,
+      sourceIndex,
+      isUnavailable: true,
+    });
+  }, [sourceCandidates.length, sourceIndex, sourceKey]);
 
   if (!resolvedSourceUrl || isUnavailable) {
     return (
@@ -512,6 +526,7 @@ const MessageMediaImage = memo(function MessageMediaImage({
       decoding="async"
       fetchPriority={priorityMedia ? "auto" : "low"}
       draggable={false}
+      onLoad={() => setSourceState({ sourceKey, sourceIndex, isUnavailable: false })}
       onError={handleError}
     />
   );

@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
+import ScreenShareViewer from "./ScreenShareViewer";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
 import useMobileLongPress from "../hooks/useMobileLongPress";
@@ -286,6 +287,10 @@ export const FriendsMain = ({
   directSearchQuery,
   textChatLocalStateVersion = 0,
   directCallPanelProps = null,
+  selectedStreamUserId = null,
+  selectedStream = null,
+  selectedStreamParticipant = null,
+  selectedStreamDebugInfo = null,
   friendsPageSection,
   friends,
   incomingFriendRequestCount,
@@ -320,6 +325,7 @@ export const FriendsMain = ({
   onClearConversationStatus,
   onStartDirectCall,
   onOpenDirectActions,
+  onCloseSelectedStream,
   onFriendRequestAction,
   onFriendSearchSubmit,
   onFriendSearchChange,
@@ -359,6 +365,11 @@ export const FriendsMain = ({
     String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
       ? directCallPanelProps
       : null;
+  const isWatchingCurrentDirectStream =
+    !currentConversationTarget &&
+    currentDirectFriend &&
+    selectedStreamUserId &&
+    String(selectedStreamUserId) === String(currentDirectFriend.id || "");
 
   const currentConversationMemberIds = useMemo(
     () => new Set((currentConversationTarget?.members || []).map((member) => String(member?.id || ""))),
@@ -929,17 +940,30 @@ export const FriendsMain = ({
               </div>
             ) : null}
 
-            <TextChat
-              resolvedChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}
-              localMessageStateVersion={textChatLocalStateVersion}
-              user={user}
-              searchQuery={directSearchQuery}
-              onClearSearchQuery={onClearDirectSearchQuery}
-              directTargets={directConversationTargets}
-              serverMembers={currentConversationTarget ? currentConversationMentionMembers : []}
-              onOpenDirectChat={onOpenDirectChat}
-              onStartDirectCall={onStartDirectCall}
-            />
+            {isWatchingCurrentDirectStream ? (
+              <ScreenShareViewer
+                stream={selectedStream?.stream || null}
+                videoSrc={selectedStream?.videoSrc || ""}
+                imageSrc={selectedStream?.imageSrc || ""}
+                muted={!Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
+                title={`Трансляция ${selectedStreamParticipant?.name || getDisplayName(currentDirectFriend)}`}
+                subtitle="Личный звонок"
+                onClose={onCloseSelectedStream}
+                debugInfo={selectedStreamDebugInfo}
+              />
+            ) : (
+              <TextChat
+                resolvedChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}
+                localMessageStateVersion={textChatLocalStateVersion}
+                user={user}
+                searchQuery={directSearchQuery}
+                onClearSearchQuery={onClearDirectSearchQuery}
+                directTargets={directConversationTargets}
+                serverMembers={currentConversationTarget ? currentConversationMentionMembers : []}
+                onOpenDirectChat={onOpenDirectChat}
+                onStartDirectCall={onStartDirectCall}
+              />
+            )}
           </div>
         ) : friendsPageSection === "friends" ? (
           <div className="friends-main__content">

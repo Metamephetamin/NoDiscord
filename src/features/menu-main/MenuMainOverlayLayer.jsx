@@ -103,6 +103,9 @@ export default function MenuMainOverlayLayer({
   isSoundMuted,
   micLevel,
   directCallPeerIsSpeaking,
+  isDirectCallPeerStreamLive,
+  isWatchingDirectCallPeerStream,
+  directCallPeerStreamMode,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -116,6 +119,7 @@ export default function MenuMainOverlayLayer({
   dismissDirectCallOverlay,
   retryDirectCall,
   onDirectCallHistoryRedial,
+  onWatchDirectCallPeerStream,
   acceptDirectCall,
   declineDirectCall,
   endDirectCall,
@@ -178,6 +182,12 @@ export default function MenuMainOverlayLayer({
           selectedInputDeviceId={selectedInputDeviceId}
           selectedOutputDeviceId={selectedOutputDeviceId}
           outputSelectionSupported={outputSelectionSupported}
+          isScreenShareActive={isScreenShareActive}
+          isCameraShareActive={isCameraShareActive}
+          isScreenShareSupported={isScreenShareSupported}
+          isPeerStreamLive={isDirectCallPeerStreamLive}
+          isWatchingPeerStream={isWatchingDirectCallPeerStream}
+          peerStreamMode={directCallPeerStreamMode}
           onAccept={acceptDirectCall}
           onDecline={declineDirectCall}
           onEnd={endDirectCall}
@@ -189,6 +199,7 @@ export default function MenuMainOverlayLayer({
           onDismiss={dismissDirectCallOverlay}
           onRetry={retryDirectCall}
           onRedialHistoryItem={onDirectCallHistoryRedial}
+          onWatchPeerStream={onWatchDirectCallPeerStream}
           compact={!isMobileViewport && showPendingDirectCallPopup}
         />
       ) : null}

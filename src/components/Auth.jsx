@@ -53,6 +53,7 @@ const initialPhoneVerificationStatus = {
 
 const initialEmailVerificationModal = {
   open: false,
+  purpose: "registration",
   email: "",
   verificationToken: "",
   deliveryMode: "",
@@ -265,6 +266,7 @@ export default function Auth({ onAuthSuccess }) {
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [emailVerificationModal, setEmailVerificationModal] = useState(initialEmailVerificationModal);
   const [emailResendSecondsLeft, setEmailResendSecondsLeft] = useState(0);
+  const [isRequestingLoginCode, setIsRequestingLoginCode] = useState(false);
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
   const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
@@ -315,6 +317,7 @@ export default function Auth({ onAuthSuccess }) {
   const canResendEmailCode =
     Boolean(emailVerificationModal.email) &&
     emailResendSecondsLeft === 0 &&
+    !isRequestingLoginCode &&
     !isResendingEmailCode;
   const registerNameScript = useMemo(
     () => detectNameScript(registerForm.firstName) || detectNameScript(registerForm.lastName),
@@ -324,6 +327,7 @@ export default function Auth({ onAuthSuccess }) {
     () => sloganWords[activeSloganWordIndex % sloganWords.length] || "",
     [activeSloganWordIndex]
   );
+  const isLoginEmailVerification = emailVerificationModal.purpose === "login";
 
   const resetPhoneVerification = () => {
     setPhoneVerificationCode("");
@@ -550,6 +554,7 @@ export default function Auth({ onAuthSuccess }) {
         setEmailVerificationCode("");
         setEmailVerificationModal({
           open: true,
+          purpose: "login",
           email: verification.email || payload.identifier,
           verificationToken: verification.verificationToken || "",
           deliveryMode: verification.deliveryMode || "mock",
@@ -579,6 +584,74 @@ export default function Auth({ onAuthSuccess }) {
       }
 
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRequestLoginCode = async () => {
+    setMessage("");
+    setLoginErrors(initialLoginErrors);
+
+    const identifier = loginForm.identifier.trim();
+    if (!identifier) {
+      setLoginErrors({
+        identifier: "Введите email или номер телефона.",
+        password: "",
+      });
+      return;
+    }
+
+    if (identifier.includes("@") && !isSupportedEmail(identifier)) {
+      setLoginErrors({
+        identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
+        password: "",
+      });
+      return;
+    }
+
+    if (!identifier.includes("@") && !normalizeRussianPhone(identifier)) {
+      setLoginErrors({
+        identifier: "Введите номер телефона в формате +79891112233.",
+        password: "",
+      });
+      return;
+    }
+
+    setIsRequestingLoginCode(true);
+
+    try {
+      const data = await submitAuthRequest(
+        "/auth/request-login-code",
+        { identifier },
+        "Не удалось отправить код входа."
+      );
+
+      setEmailVerificationCode("");
+      setEmailVerificationModal({
+        open: true,
+        purpose: "login",
+        email: data?.email || identifier,
+        verificationToken: data?.verificationToken || "",
+        deliveryMode: data?.deliveryMode || "mock",
+        debugCode: data?.debugCode || "",
+        resendAvailableAt: data?.resendAvailableAt || "",
+      });
+
+      setMessage(data?.debugCode ? `Тестовый код входа: ${data.debugCode}` : "Код входа отправлен на почту.");
+    } catch (error) {
+      const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
+        ? error.data.fieldErrors
+        : null;
+
+      if (backendFieldErrors) {
+        setLoginErrors({
+          identifier: typeof backendFieldErrors.identifier === "string" ? backendFieldErrors.identifier : "",
+          password: typeof backendFieldErrors.password === "string" ? backendFieldErrors.password : "",
+        });
+      } else {
+        setMessage(error.message || "Не удалось отправить код входа.");
+      }
+    } finally {
+      setIsRequestingLoginCode(false);
     }
   };
 
@@ -722,6 +795,7 @@ export default function Auth({ onAuthSuccess }) {
       setEmailVerificationCode("");
       setEmailVerificationModal({
         open: true,
+        purpose: "registration",
         email: verification?.email || payload.email,
         verificationToken: verification?.verificationToken || "",
         deliveryMode: verification?.deliveryMode || "mock",
@@ -756,24 +830,37 @@ export default function Auth({ onAuthSuccess }) {
     setMessage("");
 
     try {
-      const data = await submitAuthRequest(
-        "/auth/resend-email-verification",
-        { email: emailVerificationModal.email },
-        "Не удалось повторно отправить код на почту."
-      );
+      const data = isLoginEmailVerification
+        ? await submitAuthRequest(
+            "/auth/request-login-code",
+            { identifier: emailVerificationModal.email },
+            "Не удалось повторно отправить код входа."
+          )
+        : await submitAuthRequest(
+            "/auth/resend-email-verification",
+            { email: emailVerificationModal.email },
+            "Не удалось повторно отправить код на почту."
+          );
 
       const nextResendAvailableAt = data?.resendAvailableAt || "";
 
       setEmailVerificationModal((previous) => ({
         ...previous,
         open: true,
+        purpose: previous.purpose,
         verificationToken: data?.verificationToken || previous.verificationToken,
         deliveryMode: data?.deliveryMode || previous.deliveryMode || "mock",
         debugCode: data?.debugCode || "",
         resendAvailableAt: nextResendAvailableAt,
       }));
 
-      setMessage(data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "Код подтверждения повторно отправлен на почту.");
+      setMessage(
+        data?.debugCode
+          ? `Новый тестовый email-код: ${data.debugCode}`
+          : isLoginEmailVerification
+            ? "Код входа повторно отправлен на почту."
+            : "Код подтверждения повторно отправлен на почту."
+      );
     } catch (error) {
       setMessage(error.message || "Не удалось повторно отправить код на почту.");
     } finally {
@@ -823,6 +910,7 @@ export default function Auth({ onAuthSuccess }) {
     setIsSubmitting(false);
     setIsRequestingPhoneCode(false);
     setIsVerifyingPhoneCode(false);
+    setIsRequestingLoginCode(false);
     setIsResendingEmailCode(false);
     setIsVerifyingEmailCode(false);
     resetEmailVerificationModal();
@@ -1010,11 +1098,22 @@ export default function Auth({ onAuthSuccess }) {
                 : "Зарегистрироваться"}
           </button>
 
+          {mode === "login" ? (
+            <button
+              type="button"
+              className="auth-switch-link"
+              onClick={handleRequestLoginCode}
+              disabled={isSubmitting || isRequestingLoginCode}
+            >
+              {isRequestingLoginCode ? "Отправляем код..." : "Войти по коду из письма"}
+            </button>
+          ) : null}
+
           <button
             type="button"
             className="auth-switch-link"
             onClick={() => switchMode(mode === "login" ? "register" : "login")}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isRequestingLoginCode}
           >
             {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт?"}
           </button>
@@ -1083,13 +1182,13 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-verify-modal__backdrop">
           <form className="auth-verify-modal" onSubmit={handleVerifyEmailCode}>
             <div className="auth-verify-modal__header">
-              <h3>Подтвердите почту</h3>
+              <h3>{isLoginEmailVerification ? "Код входа" : "Подтвердите почту"}</h3>
               <button type="button" className="auth-verify-modal__close" onClick={resetEmailVerificationModal}>
                 ×
               </button>
             </div>
             <p className="auth-verify-modal__text">
-              Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы завершить регистрацию. Если письма нет, проверьте папку со спамом.
+              Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы {isLoginEmailVerification ? "войти в аккаунт" : "завершить регистрацию"}. Если письма нет, проверьте папку со спамом.
             </p>
             {emailVerificationModal.deliveryMode === "mock" && emailVerificationModal.debugCode ? (
               <div className="auth-hint">Тестовый код: {emailVerificationModal.debugCode}</div>

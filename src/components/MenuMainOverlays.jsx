@@ -522,6 +522,9 @@ export const DirectCallOverlayView = ({
   isScreenShareActive = false,
   isCameraShareActive = false,
   isScreenShareSupported = true,
+  isPeerStreamLive = false,
+  isWatchingPeerStream = false,
+  peerStreamMode = "",
   onAccept,
   onDecline,
   onEnd,
@@ -529,6 +532,7 @@ export const DirectCallOverlayView = ({
   onToggleSound,
   onScreenShareAction,
   onOpenCamera,
+  onWatchPeerStream,
   onSelectInputDevice,
   onSelectOutputDevice,
   onToggleMiniMode,
@@ -550,6 +554,8 @@ export const DirectCallOverlayView = ({
   const isMiniMode = !embedded && Boolean(call.isMiniMode) && !isIncoming;
   const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
   const callTitle = call.peerName || "Пользователь";
+  const hasPeerStream = isConnected && Boolean(isPeerStreamLive);
+  const peerStreamLabel = peerStreamMode === "camera" ? "Видео собеседника" : "Стрим собеседника";
   const statusLabel =
     call.statusLabel
     || (isIncoming
@@ -559,14 +565,6 @@ export const DirectCallOverlayView = ({
         : isConnecting
           ? "Подключаем звонок"
           : "Ожидаем ответ");
-  const qualityLabel =
-    call.connectionQuality === "weak"
-      ? "Соединение слабое"
-      : call.connectionQuality === "reconnecting"
-        ? "Переподключение"
-        : call.connectionQuality === "stable"
-          ? "Связь стабильная"
-          : "Качество неизвестно";
   const recentHistory = history
     .filter((entry) => String(entry?.peerUserId || "") === String(call.peerUserId || ""))
     .slice(0, 4);
@@ -578,10 +576,6 @@ export const DirectCallOverlayView = ({
             <span>{isIncoming ? "Входящий звонок" : isConnected ? "Личный разговор" : isFinished ? "Звонок завершён" : "Личный звонок"}</span>
             <strong>{callTitle}</strong>
             <small>{statusLabel}</small>
-          </div>
-          <div className="direct-call-inline__quality">
-            <span className={`direct-call-inline__quality-dot direct-call-inline__quality-dot--${call.connectionQuality || "unknown"}`} />
-            {qualityLabel}
           </div>
         </div>
 
@@ -611,13 +605,25 @@ export const DirectCallOverlayView = ({
           </div>
         </div>
 
+        {hasPeerStream ? (
+          <button
+            type="button"
+            className={`direct-call-inline__stream ${isWatchingPeerStream ? "direct-call-inline__stream--active" : ""}`}
+            onClick={onWatchPeerStream}
+          >
+            <span className="direct-call-inline__stream-live">LIVE</span>
+            <span>{peerStreamLabel}</span>
+            <strong>{isWatchingPeerStream ? "Открыто" : "Смотреть"}</strong>
+          </button>
+        ) : null}
+
         <div className="direct-call-inline__actions">
           {isIncoming ? (
             <>
-              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--danger" onClick={onDecline} aria-label="Отклонить">
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--accept" onClick={onAccept} aria-label="Принять">
                 <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
               </button>
-              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--accept" onClick={onAccept} aria-label="Принять">
+              <button type="button" className="direct-call-inline__button direct-call-inline__button--icon direct-call-inline__button--danger" onClick={onDecline} aria-label="Отклонить">
                 <span className="direct-call-inline__icon direct-call-inline__icon--phone" aria-hidden="true" />
               </button>
             </>
@@ -751,10 +757,6 @@ export const DirectCallOverlayView = ({
             <strong>{callTitle}</strong>
             <span>{statusLabel}</span>
           </div>
-          <div className="direct-call-overlay__quality">
-            <span className={`direct-call-overlay__quality-dot direct-call-overlay__quality-dot--${call.connectionQuality || "unknown"}`} />
-            <strong>{qualityLabel}</strong>
-          </div>
           {!isMiniMode ? (
             <div className="direct-call-overlay__hint">
               {isIncoming
@@ -765,6 +767,17 @@ export const DirectCallOverlayView = ({
                     ? "Звонок можно свернуть поверх переписки и продолжать чат без потери контекста."
                     : "Соединяем звонок и держим переписку рядом, без ощущения другого приложения."}
             </div>
+          ) : null}
+          {hasPeerStream ? (
+            <button
+              type="button"
+              className={`direct-call-overlay__stream-card ${isWatchingPeerStream ? "direct-call-overlay__stream-card--active" : ""}`}
+              onClick={onWatchPeerStream}
+            >
+              <span className="direct-call-overlay__stream-live">LIVE</span>
+              <span>{peerStreamLabel}</span>
+              <strong>{isWatchingPeerStream ? "Сейчас открыто" : "Смотреть стрим"}</strong>
+            </button>
           ) : null}
         </div>
 
@@ -778,11 +791,11 @@ export const DirectCallOverlayView = ({
           <div className="direct-call-overlay__actions">
             {isIncoming ? (
               <>
-                <button type="button" className="direct-call-overlay__button direct-call-overlay__button--decline" onClick={onDecline}>
-                  Отклонить
-                </button>
                 <button type="button" className="direct-call-overlay__button direct-call-overlay__button--accept" onClick={onAccept}>
                   Принять
+                </button>
+                <button type="button" className="direct-call-overlay__button direct-call-overlay__button--decline" onClick={onDecline}>
+                  Отклонить
                 </button>
               </>
             ) : isFinished ? (

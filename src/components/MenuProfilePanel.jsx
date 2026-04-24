@@ -8,18 +8,17 @@ const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   </button>
 );
 
-const DeviceToggleButton = ({ active, title, description, onClick }) => (
+const DeviceToggleButton = ({ active, title, onClick }) => (
   <button
     type="button"
     className={`device-menu__toggle ${active ? "device-menu__toggle--active" : ""}`}
     onClick={onClick}
     aria-pressed={active}
   >
-    <span className="device-menu__toggle-copy">
-      <span className="device-menu__label">{title}</span>
-      <span className="device-menu__value">{description}</span>
+    <span className="device-menu__label">{title}</span>
+    <span className="device-menu__toggle-switch" aria-hidden="true">
+      <span />
     </span>
-    <span className="device-menu__toggle-state">{active ? "Вкл" : "Выкл"}</span>
   </button>
 );
 
@@ -65,7 +64,6 @@ const MicMenuPanel = ({
       <DeviceToggleButton
         active={echoCancellationEnabled}
         title="Эхоподавление"
-        description="Отдельно убирает звук из динамиков, который попадает обратно в микрофон."
         onClick={onToggleEchoCancellation}
       />
     </div>

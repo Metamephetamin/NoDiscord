@@ -51,7 +51,7 @@ Avoid:
 - expensive work inside render
 - duplicated async requests
 - unnecessary abstractions
-- architecture for architecture’s sake
+- architecture for architecture's sake
 
 ---
 
@@ -60,7 +60,7 @@ Avoid:
 Architecture is important only as a tool to keep performance and development speed under control.
 
 ## Hard rules
-- Do not let a component grow into a giant 3000–5000 line file if it can be split cleanly
+- Do not let a component grow into a giant 3000-5000 line file if it can be split cleanly
 - Separate heavy logic from rendering
 - Keep hot UI paths as small and cheap as possible
 - Large files should be split into:
@@ -210,7 +210,7 @@ Good code here means:
 
 Do NOT optimize for:
 - clever abstractions
-- “beautiful” patterns that add indirection
+- "beautiful" patterns that add indirection
 - excessive generic helpers
 - refactors with no product impact
 
@@ -230,6 +230,96 @@ If a slightly ugly solution is faster, safer, and easier to ship, prefer it.
   - TextChatMediaPreview
 
 Continue splitting very large files into smaller focused components/hooks when it improves performance, readability, or change safety.
+
+---
+
+# DEFAULT WORKFLOW RULES
+
+When a user reports a bug or asks for a change:
+- inspect the real code path before changing behavior
+- identify the likely root cause in the smallest affected area
+- prefer a small patch that fixes the observed issue
+- keep unrelated refactors out of the same change
+- preserve existing UX patterns unless the user asks to redesign them
+- verify with the cheapest relevant checks first, then broader checks if the touched area is risky
+
+When the request is ambiguous:
+- make a reasonable product-minded assumption if the safe path is obvious
+- ask a short clarifying question only when guessing could break data, auth, billing, deploy, or user privacy
+- state the assumption in the final answer
+
+When touching a hot path:
+- check if the change affects render frequency, scroll stability, realtime joins/leaves, media playback, or input latency
+- avoid adding state to a high-level controller unless lower-level state would be worse
+- avoid creating new arrays/objects/functions in render when they are passed deep into memoized children
+- prefer refs for transient transport/media state that should not rerender the UI
+
+When touching cold/admin/setup paths:
+- keep the solution simple and readable
+- do not over-optimize code that does not affect user interaction speed
+
+---
+
+# TEXT AND TYPO RULES
+
+Fix obvious typos when touching nearby code, especially in Russian UI text.
+
+Rules:
+- correct spelling, grammar, duplicated letters, broken punctuation, and awkward button labels when the intent is clear
+- keep meaning unchanged unless the user asks for copywriting
+- keep UI text short, natural, and consistent with nearby labels
+- do not rewrite large unrelated text blocks just for style
+- do not modify user-generated content, message history, logs, database data, or API payload examples unless explicitly requested
+- do not replace Russian text with placeholders
+- never leave mojibake, question-mark placeholders, or mixed encodings
+- prefer "ё" only when nearby UI already uses it or the word is ambiguous without it
+- after changing Russian text, run `npm run check:encoding`
+
+Common typo cleanup examples:
+- "отображаються" -> "отображаются"
+- "сообщения" instead of duplicated-letter variants
+- "эхоподавление" consistently as one word
+- "включить" / "выключить" for toggles
+- "собеседник" for direct call peer wording
+
+---
+
+# REGRESSION SAFETY RULES
+
+Before finishing a change, think through:
+- first load / empty state
+- loading state
+- error state
+- reconnect or retry
+- mobile viewport
+- desktop viewport
+- long lists
+- media-heavy messages
+- slow network
+- repeated fast clicks/taps
+- cleanup on unmount
+
+For chat changes, consider:
+- scroll position should not jump while the user reads history
+- new own messages should still jump to latest
+- incoming messages should not steal scroll if the user is reading older messages
+- media load should not cause visible scroll fighting
+- virtualized ranges should remain stable during wheel and touch scrolling
+
+For voice/video changes, consider:
+- join and leave can be called more than once
+- tracks can publish/unpublish late
+- remote streams can appear before the UI is ready
+- screen share and camera share can replace each other
+- mini/full call UI should show the same important state
+
+For auth/security changes, consider:
+- rate limits
+- replay attempts
+- stale codes/tokens
+- missing or malformed inputs
+- user enumeration risks
+- logging sensitive data
 
 ---
 

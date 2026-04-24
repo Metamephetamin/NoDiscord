@@ -9,6 +9,7 @@ const MIN_MEASURED_MESSAGE_HEIGHT = 72;
 const SIZE_CHANGE_EPSILON_PX = 2;
 const SCROLL_METRIC_EPSILON_PX = 1;
 const SCROLL_ANCHOR_EPSILON_PX = 1;
+const ACTIVE_SCROLL_SIZE_FLUSH_DELAY_MS = 120;
 const TEXT_CHAT_DEBUG_FLAG_PREFIX = "nodiscord.debug.textchat.";
 
 function readTextChatDebugFlag(name) {
@@ -66,6 +67,9 @@ export default function useTextChatVirtualizer({
   const nodeByMessageIdRef = useRef(new Map());
   const scrollMetricsRafRef = useRef(0);
   const pendingSizeFlushRafRef = useRef(0);
+  const pendingSizeFlushTimeoutRef = useRef(0);
+  const activeScrollTimeoutRef = useRef(0);
+  const isActivelyScrollingRef = useRef(false);
   const pendingSizeByMessageIdRef = useRef(new Map());
   const previousVisibleRangeRef = useRef({ startIndex: -1, endIndex: -1 });
   const measurementsRef = useRef({
@@ -78,6 +82,19 @@ export default function useTextChatVirtualizer({
   const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, viewportHeight: 0 });
   const virtualizationEnabled = !virtualizationDebugDisabled && messages.length >= MIN_MESSAGES_FOR_VIRTUALIZATION;
   const estimatedVirtualizedMessageHeight = estimatedMessageHeight + VIRTUALIZED_MESSAGE_GAP_PX;
+
+  const markActiveScroll = useCallback(() => {
+    isActivelyScrollingRef.current = true;
+
+    if (activeScrollTimeoutRef.current) {
+      window.clearTimeout(activeScrollTimeoutRef.current);
+    }
+
+    activeScrollTimeoutRef.current = window.setTimeout(() => {
+      activeScrollTimeoutRef.current = 0;
+      isActivelyScrollingRef.current = false;
+    }, ACTIVE_SCROLL_SIZE_FLUSH_DELAY_MS);
+  }, []);
 
   const captureScrollAnchor = useCallback((list) => {
     if (!list || !nodeByMessageIdRef.current.size) {
@@ -198,6 +215,7 @@ export default function useTextChatVirtualizer({
     }
 
     const handleScroll = () => {
+      markActiveScroll();
       scheduleMetricsUpdate();
     };
 
@@ -211,8 +229,13 @@ export default function useTextChatVirtualizer({
         window.cancelAnimationFrame(scrollMetricsRafRef.current);
         scrollMetricsRafRef.current = 0;
       }
+      if (activeScrollTimeoutRef.current) {
+        window.clearTimeout(activeScrollTimeoutRef.current);
+        activeScrollTimeoutRef.current = 0;
+      }
+      isActivelyScrollingRef.current = false;
     };
-  }, [messagesListRef, scheduleMetricsUpdate, virtualizationEnabled]);
+  }, [markActiveScroll, messagesListRef, scheduleMetricsUpdate, virtualizationEnabled]);
 
   useEffect(() => {
     if (!virtualizationEnabled) {
@@ -372,6 +395,27 @@ export default function useTextChatVirtualizer({
       return;
     }
 
+    const scheduleFlushAfterScrollIdle = () => {
+      pendingSizeFlushTimeoutRef.current = window.setTimeout(() => {
+        pendingSizeFlushTimeoutRef.current = 0;
+        if (isActivelyScrollingRef.current) {
+          scheduleFlushAfterScrollIdle();
+          return;
+        }
+
+        pendingSizeFlushRafRef.current = window.requestAnimationFrame(flushPendingSizeChanges);
+      }, ACTIVE_SCROLL_SIZE_FLUSH_DELAY_MS);
+    };
+
+    if (isActivelyScrollingRef.current) {
+      if (pendingSizeFlushTimeoutRef.current) {
+        return;
+      }
+
+      scheduleFlushAfterScrollIdle();
+      return;
+    }
+
     pendingSizeFlushRafRef.current = window.requestAnimationFrame(flushPendingSizeChanges);
   }, [flushPendingSizeChanges]);
 
@@ -379,6 +423,14 @@ export default function useTextChatVirtualizer({
     if (pendingSizeFlushRafRef.current) {
       window.cancelAnimationFrame(pendingSizeFlushRafRef.current);
       pendingSizeFlushRafRef.current = 0;
+    }
+    if (pendingSizeFlushTimeoutRef.current) {
+      window.clearTimeout(pendingSizeFlushTimeoutRef.current);
+      pendingSizeFlushTimeoutRef.current = 0;
+    }
+    if (activeScrollTimeoutRef.current) {
+      window.clearTimeout(activeScrollTimeoutRef.current);
+      activeScrollTimeoutRef.current = 0;
     }
   }, []);
 
