@@ -859,7 +859,7 @@ export default function Auth({ onAuthSuccess }) {
             ) : null}
           </span>
           <h1 className="auth-brand__title">
-            <span className="auth-brand__title-static">максимум возможностей для</span>
+            <span className="auth-brand__title-static">- симум возможностей для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">
               <span className={`auth-brand__title-typewriter ${isDeletingSlogan ? "auth-brand__title-typewriter--deleting" : ""}`}>
                 <span className="auth-brand__title-typewriter-sizer" aria-hidden="true">

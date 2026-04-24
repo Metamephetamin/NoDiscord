@@ -12,13 +12,13 @@
   },
   "Email": {
     "Mode": "smtp",
-    "FromAddress": "no-reply@your-domain.example",
+    "FromAddress": "code@tendsec.ru",
     "FromName": "MAX",
     "Smtp": {
-      "Host": "smtp.your-provider.example",
-      "Port": 587,
-      "Username": "smtp-user",
-      "Password": "smtp-password",
+      "Host": "smtp.beget.com",
+      "Port": 465,
+      "Username": "code@tendsec.ru",
+      "Password": "REPLACE_WITH_SMTP_PASSWORD",
       "EnableSsl": true
     }
   },
