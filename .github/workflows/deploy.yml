@@ -342,6 +342,7 @@ jobs:
               echo \"Backend environment file is missing: \$BACKEND_PATH/.env\"
               echo \"Continuing deploy without .env replacement because BACKEND_ENV_FILE is optional for this server.\"
             else
+              chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
             fi
             if [ -f \"\$TEMP_SMTP_ENV_FILE\" ]; then
@@ -356,6 +357,7 @@ jobs:
                   printf \"%s\\n\" \"\$line\" >> \"\$BACKEND_PATH/.env\"
                 fi
               done < \"\$TEMP_SMTP_ENV_FILE\"
+              chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
             fi
             echo \"Backend deploy apply completed\"
