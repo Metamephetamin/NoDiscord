@@ -294,6 +294,18 @@ jobs:
           echo "Uploading backend archive"
           rsync -az --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" "$BACKEND_ARCHIVE" "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ARCHIVE_FILE"
           if [ -n "$BACKEND_ENV_FILE" ]; then
+            if ! printf '%s\n' "$BACKEND_ENV_FILE" | grep -q '^ConnectionStrings__DefaultConnection='; then
+              echo "BACKEND_ENV_FILE must contain ConnectionStrings__DefaultConnection." >&2
+              exit 1
+            fi
+            if ! printf '%s\n' "$BACKEND_ENV_FILE" | grep -q '^Jwt__Key='; then
+              echo "BACKEND_ENV_FILE must contain Jwt__Key." >&2
+              exit 1
+            fi
+            if ! printf '%s\n' "$BACKEND_ENV_FILE" | grep -q '^Crypto__Key='; then
+              echo "BACKEND_ENV_FILE must contain Crypto__Key." >&2
+              exit 1
+            fi
             echo "Uploading backend .env file"
             printf '%s\n' "$BACKEND_ENV_FILE" | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
           fi
@@ -340,7 +352,8 @@ jobs:
             fi
             if [ ! -f \"\$BACKEND_PATH/.env\" ]; then
               echo \"Backend environment file is missing: \$BACKEND_PATH/.env\"
-              echo \"Continuing deploy without .env replacement because BACKEND_ENV_FILE is optional for this server.\"
+              echo \"Set BACKEND_ENV_FILE to the full production .env before deploying.\" >&2
+              exit 1
             else
               chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
