@@ -16,7 +16,7 @@
     "FromName": "MAX",
     "Smtp": {
       "Host": "smtp.beget.com",
-      "Port": 465,
+      "Port": 2525,
       "Username": "code@tendsec.ru",
       "Password": "REPLACE_WITH_SMTP_PASSWORD",
       "EnableSsl": true

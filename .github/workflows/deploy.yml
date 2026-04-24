@@ -304,7 +304,7 @@ jobs:
               printf '%s\n' 'Email__FromAddress=code@tendsec.ru'
               printf '%s\n' 'Email__FromName=MAX'
               printf '%s\n' 'Email__Smtp__Host=smtp.beget.com'
-              printf '%s\n' 'Email__Smtp__Port=465'
+              printf '%s\n' 'Email__Smtp__Port=2525'
               printf '%s\n' 'Email__Smtp__Username=code@tendsec.ru'
               printf '%s\n' "Email__Smtp__Password=$SMTP_PASSWORD"
               printf '%s\n' 'Email__Smtp__EnableSsl=true'
