@@ -83,73 +83,56 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
             throw new EmailDeliveryException("Email:Smtp:Port must be greater than zero.");
         }
 
-        var subject = "Подтверждение почты MAX";
+        var subject = "Код MAX";
         var expiresLocal = expiresAt.ToLocalTime().ToString("HH:mm");
         var plainTextBody =
-            $"Код подтверждения MAX: {verificationCode}{Environment.NewLine}{Environment.NewLine}" +
-            $"Введите этот код в приложении, чтобы подтвердить адрес почты.{Environment.NewLine}" +
-            $"Код действует до {expiresLocal}.{Environment.NewLine}{Environment.NewLine}" +
-            "Если вы не запрашивали этот код, просто проигнорируйте письмо.";
+            $"Код MAX: {verificationCode}{Environment.NewLine}" +
+            $"Действует до {expiresLocal}.{Environment.NewLine}{Environment.NewLine}" +
+            "Если вы не запрашивали код, просто проигнорируйте письмо.";
 
-        var htmlBody = $"""
-            <div style="font-family:Arial,sans-serif;background:#0f1117;color:#f3f5ff;padding:24px;">
-              <div style="max-width:520px;margin:0 auto;background:#171b24;border-radius:18px;padding:28px;border:1px solid rgba(255,255,255,0.08);">
-                <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#9ea7bb;margin-bottom:16px;">MAX</div>
-                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.2;">Подтвердите адрес почты</h1>
-                <p style="margin:0 0 18px;color:#c8d0e2;line-height:1.6;">Введите этот код в приложении, чтобы завершить регистрацию.</p>
-                <div style="margin:0 0 18px;padding:18px 20px;border-radius:16px;background:linear-gradient(135deg, rgba(111,44,255,0.58) 0%, rgba(177,62,246,0.48) 52%, rgba(255,77,184,0.58) 100%);font-size:32px;font-weight:700;letter-spacing:0.24em;text-align:center;">
-                  {verificationCode}
-                </div>
-                <p style="margin:0 0 8px;color:#c8d0e2;line-height:1.6;">Код действует до {expiresLocal}.</p>
-                <p style="margin:0;color:#8f98ae;line-height:1.6;">Если вы не запрашивали это письмо, просто проигнорируйте его.</p>
-              </div>
-            </div>
-            """;
-
-        subject = "Подтверждение почты MAX";
-        plainTextBody =
-            $"Код подтверждения MAX: {verificationCode}{Environment.NewLine}{Environment.NewLine}" +
-            $"Введите этот код в приложении, чтобы подтвердить адрес почты.{Environment.NewLine}" +
-            $"Код действует до {expiresLocal}.{Environment.NewLine}{Environment.NewLine}" +
-            "Если вы не запрашивали этот код, просто проигнорируйте письмо.";
-
-        htmlBody = $$"""
+        var htmlBody = $$"""
             <!doctype html>
             <html>
             <head>
               <meta name="color-scheme" content="light dark">
               <meta name="supported-color-schemes" content="light dark">
               <style>
-                .mail-bg { background:#f5f7fb !important; color:#172033 !important; }
-                .mail-card { background:#ffffff !important; border-color:#dfe4ef !important; }
-                .mail-brand { color:#4d6eea !important; }
-                .mail-title { color:#111827 !important; }
-                .mail-text { color:#3f4a5f !important; }
-                .mail-muted { color:#758197 !important; }
-                .mail-code { color:#ffffff !important; background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 48%,#e0489a 100%) !important; }
+                .mail-bg { background:#eef2f9 !important; color:#101827 !important; }
+                .mail-card { background:#ffffff !important; border-color:#dce3f0 !important; box-shadow:0 24px 70px rgba(31,42,68,0.14) !important; }
+                .mail-brand { color:#5a48ea !important; }
+                .mail-title { color:#121827 !important; }
+                .mail-text { color:#3d4659 !important; }
+                .mail-muted { color:#7a8496 !important; }
+                .mail-code { color:#ffffff !important; background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%) !important; }
+                .mail-chip { background:#eef1ff !important; color:#5a48ea !important; }
 
                 @media (prefers-color-scheme: dark) {
-                  .mail-bg { background:#0f1117 !important; color:#f3f5ff !important; }
-                  .mail-card { background:#171b24 !important; border-color:#2a3040 !important; }
-                  .mail-brand { color:#9db6ff !important; }
+                  .mail-bg { background:#0e1119 !important; color:#f3f5ff !important; }
+                  .mail-card { background:#171b26 !important; border-color:#2a3142 !important; box-shadow:none !important; }
+                  .mail-brand { color:#aebcff !important; }
                   .mail-title { color:#f7f8ff !important; }
-                  .mail-text { color:#d8def0 !important; }
+                  .mail-text { color:#dbe1f2 !important; }
                   .mail-muted { color:#98a2b8 !important; }
-                  .mail-code { color:#ffffff !important; background:linear-gradient(135deg,#5b2cff 0%,#8c35c8 52%,#d54699 100%) !important; }
+                  .mail-code { color:#ffffff !important; background:linear-gradient(135deg,#6366ff 0%,#8c4bff 48%,#e052a6 100%) !important; }
+                  .mail-chip { background:#202845 !important; color:#b8c4ff !important; }
                 }
               </style>
             </head>
             <body style="margin:0;padding:0;">
-              <div class="mail-bg" style="font-family:Arial,sans-serif;background:#f5f7fb;color:#172033;padding:32px 24px;">
-                <div class="mail-card" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:18px;padding:28px;border:1px solid #dfe4ef;">
-                  <div class="mail-brand" style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#4d6eea;margin-bottom:16px;">MAX</div>
-                  <h1 class="mail-title" style="margin:0 0 14px;font-size:24px;line-height:1.2;color:#111827;">Подтвердите адрес почты</h1>
-                  <p class="mail-text" style="margin:0 0 18px;color:#3f4a5f;line-height:1.6;">Введите этот код в приложении, чтобы завершить регистрацию.</p>
-                  <div class="mail-code" style="margin:0 0 18px;padding:18px 20px;border-radius:16px;background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 48%,#e0489a 100%);color:#ffffff;font-size:32px;font-weight:700;letter-spacing:0.24em;text-align:center;">
+              <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Код MAX: {{verificationCode}}</div>
+              <div class="mail-bg" style="font-family:Arial,Helvetica,sans-serif;background:#eef2f9;color:#101827;padding:34px 18px;">
+                <div class="mail-card" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:22px;padding:0;border:1px solid #dce3f0;box-shadow:0 24px 70px rgba(31,42,68,0.14);overflow:hidden;">
+                  <div class="mail-code" style="height:7px;background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%);"></div>
+                  <div style="padding:30px;">
+                  <div class="mail-brand" style="font-size:13px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#5a48ea;margin-bottom:18px;">MAX</div>
+                  <h1 class="mail-title" style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#121827;">Ваш код</h1>
+                  <p class="mail-text" style="margin:0 0 20px;color:#3d4659;font-size:15px;line-height:1.55;">Введите его в приложении, чтобы продолжить.</p>
+                  <div class="mail-code" style="margin:0 0 18px;padding:20px 18px;border-radius:18px;background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%);color:#ffffff;font-size:36px;font-weight:800;letter-spacing:0.28em;text-align:center;">
                     {{verificationCode}}
                   </div>
-                  <p class="mail-text" style="margin:0 0 8px;color:#3f4a5f;line-height:1.6;">Код действует до {{expiresLocal}}.</p>
-                  <p class="mail-muted" style="margin:0;color:#758197;line-height:1.6;">Если вы не запрашивали это письмо, просто проигнорируйте его.</p>
+                  <div class="mail-chip" style="display:inline-block;margin:0 0 18px;padding:8px 12px;border-radius:999px;background:#eef1ff;color:#5a48ea;font-size:13px;font-weight:700;">Действует до {{expiresLocal}}</div>
+                  <p class="mail-muted" style="margin:0;color:#7a8496;font-size:13px;line-height:1.55;">Если вы не запрашивали код, просто проигнорируйте письмо.</p>
+                  </div>
                 </div>
               </div>
             </body>

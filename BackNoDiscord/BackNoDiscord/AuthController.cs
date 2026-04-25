@@ -106,13 +106,14 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
 
         var deliveryMode = GetSmsDeliveryMode();
+        var smsBody = BuildPhoneVerificationMessage(verificationCode);
         if (string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogInformation("Phone verification code for {PhoneNumber}: {VerificationCode}", normalizedPhone, verificationCode);
+            _logger.LogInformation("Phone verification message for {PhoneNumber}: {SmsBody}", normalizedPhone, smsBody);
         }
         else
         {
-            _logger.LogInformation("Phone verification code generated for {PhoneNumber} using {DeliveryMode} delivery.", normalizedPhone, deliveryMode);
+            _logger.LogInformation("Phone verification message prepared for {PhoneNumber} using {DeliveryMode} delivery.", normalizedPhone, deliveryMode);
         }
 
         return Ok(new
@@ -1039,6 +1040,11 @@ public class AuthController : ControllerBase
     private string GetSmsDeliveryMode()
     {
         return string.IsNullOrWhiteSpace(_config["Sms:Mode"]) ? "mock" : _config["Sms:Mode"]!.Trim().ToLowerInvariant();
+    }
+
+    private static string BuildPhoneVerificationMessage(string verificationCode)
+    {
+        return $"Код MAX: {verificationCode}";
     }
 
     private string GetEmailDeliveryMode()

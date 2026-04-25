@@ -140,7 +140,7 @@ export default function MediaFrameEditorModal({
   };
 
   const handleZoomChange = (event) => {
-    const nextZoom = clamp(Number(event.target.value) || 1, 0.2, 5);
+    const nextZoom = clamp(Number(event.target.value) || 1, 1, 5);
     setDraftFrame((previous) => ({
       ...normalizeMediaFrame(previous),
       zoom: nextZoom,
@@ -212,7 +212,7 @@ export default function MediaFrameEditorModal({
               <label className="media-frame-editor__slider-field media-frame-editor__slider-field--avatar">
                 <span className="media-frame-editor__slider-label">Масштаб</span>
                 <PercentageSlider
-                  min={0.2}
+                  min={1}
                   max={5}
                   step={0.01}
                   value={normalizedDraftFrame.zoom}
@@ -381,7 +381,7 @@ export default function MediaFrameEditorModal({
               <label className="media-frame-editor__slider-field">
                 <span>Масштаб</span>
                 <PercentageSlider
-                  min={0.2}
+                  min={1}
                   max={5}
                   step={0.01}
                   value={normalizedDraftFrame.zoom}

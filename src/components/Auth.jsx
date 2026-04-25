@@ -252,6 +252,7 @@ async function submitAuthRequest(endpoint, payload, fallbackMessage) {
 
 export default function Auth({ onAuthSuccess }) {
   const [mode, setMode] = useState("login");
+  const [loginMethod, setLoginMethod] = useState("code");
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
   const [loginForm, setLoginForm] = useState(initialLoginForm);
   const [loginErrors, setLoginErrors] = useState(initialLoginErrors);
@@ -587,7 +588,8 @@ export default function Auth({ onAuthSuccess }) {
     }
   };
 
-  const handleRequestLoginCode = async () => {
+  const handleRequestLoginCode = async (event) => {
+    event?.preventDefault?.();
     setMessage("");
     setLoginErrors(initialLoginErrors);
 
@@ -905,6 +907,7 @@ export default function Auth({ onAuthSuccess }) {
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
+    setLoginMethod("code");
     setMessage("");
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
@@ -914,6 +917,28 @@ export default function Auth({ onAuthSuccess }) {
     setIsResendingEmailCode(false);
     setIsVerifyingEmailCode(false);
     resetEmailVerificationModal();
+  };
+
+  const switchLoginMethod = () => {
+    setLoginMethod((previous) => (previous === "code" ? "password" : "code"));
+    setMessage("");
+    setLoginErrors(initialLoginErrors);
+    setIsSubmitting(false);
+    setIsRequestingLoginCode(false);
+  };
+
+  const handleAuthSubmit = (event) => {
+    if (mode !== "login") {
+      handleRegister(event);
+      return;
+    }
+
+    if (loginMethod === "code") {
+      handleRequestLoginCode(event);
+      return;
+    }
+
+    handleLogin(event);
   };
 
   return (
@@ -967,7 +992,7 @@ export default function Auth({ onAuthSuccess }) {
 
       <form
         className={`auth-card auth-card--wide ${mode === "login" ? "auth-card--login" : ""}`}
-        onSubmit={mode === "login" ? handleLogin : handleRegister}
+        onSubmit={handleAuthSubmit}
       >
         <div className="auth-card__main">
           <div className="auth-card__heading">
@@ -987,19 +1012,24 @@ export default function Auth({ onAuthSuccess }) {
                   maxLength={MAX_AUTH_IDENTIFIER_LENGTH}
                   required
                 />
+                {loginMethod === "code" ? (
+                  <span className="auth-field__error">{loginErrors.identifier}</span>
+                ) : null}
               </label>
-              <label className="auth-field auth-field--with-error-slot">
-                <input
-                  className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
-                  placeholder="Пароль"
-                  type="password"
-                  value={loginForm.password}
-                  onChange={handleLoginFieldChange("password")}
-                  maxLength={MAX_AUTH_PASSWORD_LENGTH}
-                  required
-                />
-                <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
-              </label>
+              {loginMethod === "password" ? (
+                <label className="auth-field auth-field--with-error-slot">
+                  <input
+                    className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
+                    placeholder="Пароль"
+                    type="password"
+                    value={loginForm.password}
+                    onChange={handleLoginFieldChange("password")}
+                    maxLength={MAX_AUTH_PASSWORD_LENGTH}
+                    required
+                  />
+                  <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
+                </label>
+              ) : null}
             </div>
           ) : (
             <div className="auth-section">
@@ -1088,13 +1118,17 @@ export default function Auth({ onAuthSuccess }) {
             </div>
           )}
 
-          <button className="auth-submit" type="submit" disabled={isSubmitting}>
-            {isSubmitting
-              ? mode === "login"
-                ? "Входим..."
-                : "Создаём аккаунт..."
-              : mode === "login"
-                ? "Войти"
+          <button className="auth-submit" type="submit" disabled={isSubmitting || isRequestingLoginCode}>
+            {mode === "login"
+              ? loginMethod === "code"
+                ? isRequestingLoginCode
+                  ? "Отправляем код..."
+                  : "Войти"
+                : isSubmitting
+                  ? "Входим..."
+                  : "Войти"
+              : isSubmitting
+                ? "Создаём аккаунт..."
                 : "Зарегистрироваться"}
           </button>
 
@@ -1102,10 +1136,10 @@ export default function Auth({ onAuthSuccess }) {
             <button
               type="button"
               className="auth-switch-link"
-              onClick={handleRequestLoginCode}
+              onClick={switchLoginMethod}
               disabled={isSubmitting || isRequestingLoginCode}
             >
-              {isRequestingLoginCode ? "Отправляем код..." : "Войти по коду из письма"}
+              {loginMethod === "code" ? "Войти по паролю" : "Войти по коду из письма"}
             </button>
           ) : null}
 

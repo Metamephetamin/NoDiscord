@@ -3,7 +3,7 @@ const DEFAULT_FRAME = Object.freeze({
   y: 50,
   zoom: 1,
 });
-const MIN_MEDIA_FRAME_ZOOM = 0.2;
+const MIN_MEDIA_FRAME_ZOOM = 1;
 const MAX_MEDIA_FRAME_ZOOM = 5;
 const MEDIA_FRAME_TRAVEL_MULTIPLIER = 160;
 
