@@ -399,6 +399,65 @@ export const CameraModal = ({
   );
 };
 
+export const QrScannerModal = ({
+  open,
+  devices,
+  selectedDeviceId,
+  previewRef,
+  hasPreview,
+  error,
+  status,
+  onClose,
+  onDeviceChange,
+  onStartPreview,
+}) => {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="camera-modal qr-scanner-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="camera-modal__header">
+          <div>
+            <h3>Подключить устройство</h3>
+            <p>Наведите камеру на QR-код входа. После распознавания мы сразу подтвердим подключение.</p>
+          </div>
+          <button type="button" className="stream-modal__close" onClick={onClose}>x</button>
+        </div>
+
+        <label className="camera-modal__field">
+          <span>Камера</span>
+          <select value={selectedDeviceId} onChange={(event) => onDeviceChange(event.target.value)}>
+            {devices.length > 0 ? devices.map((device) => (
+              <option key={device.id} value={device.id}>{device.label}</option>
+            )) : <option value="">Камера не найдена</option>}
+          </select>
+        </label>
+
+        <div className="camera-modal__preview qr-scanner-modal__preview">
+          <video ref={previewRef} className="camera-modal__video" autoPlay playsInline muted />
+          {!hasPreview ? (
+            <div className="camera-modal__placeholder">
+              <span>Предпросмотр камеры появится здесь.</span>
+            </div>
+          ) : null}
+          <div className="qr-scanner-modal__frame" aria-hidden="true" />
+        </div>
+
+        {error ? <div className="camera-modal__error">{error}</div> : null}
+        {status ? <div className="stream-modal__status">{status}</div> : null}
+
+        <div className="camera-modal__actions">
+          <button type="button" className="stream-modal__action" onClick={() => onStartPreview(selectedDeviceId)}>
+            {hasPreview ? "Обновить камеру" : "Включить камеру"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const DirectCallOverlay = ({
   call,
   isMicMuted,

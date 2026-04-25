@@ -1,5 +1,6 @@
 import {
   AppearanceAccessibilitySettings,
+  DevicesSettings,
   MobileSettingsShell,
   NotificationsSettings,
   PersonalProfileSettings,
@@ -42,6 +43,11 @@ export function MenuMainSettingsContent({
   verifyTotpSetup,
   disableTotp,
   handleLogout,
+  deviceSessions,
+  deviceSessionsLoading,
+  deviceSessionsError,
+  refreshDeviceSessions,
+  openQrDeviceScanner,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -139,6 +145,16 @@ export function MenuMainSettingsContent({
           onVerifyTotpSetup={verifyTotpSetup}
           onDisableTotp={disableTotp}
           onLogout={handleLogout}
+        />
+      );
+    case "devices":
+      return (
+        <DevicesSettings
+          deviceSessions={deviceSessions}
+          deviceSessionsLoading={deviceSessionsLoading}
+          deviceSessionsError={deviceSessionsError}
+          onRefreshSessions={refreshDeviceSessions}
+          onOpenQrScanner={openQrDeviceScanner}
         />
       );
     case "notifications":

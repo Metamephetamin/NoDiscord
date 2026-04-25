@@ -169,6 +169,95 @@ export const PersonalProfileSettings = ({
   </div>
 );
 
+const formatDeviceSessionDate = (value) => {
+  const parsed = Date.parse(String(value || ""));
+  if (!Number.isFinite(parsed)) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(parsed));
+};
+
+export const DevicesSettings = ({
+  deviceSessions,
+  deviceSessionsLoading,
+  deviceSessionsError,
+  onRefreshSessions,
+  onOpenQrScanner,
+}) => (
+  <div className="settings-shell__content">
+    <div className="settings-shell__content-header">
+      <div>
+        <h2>Устройства</h2>
+        <p>Подключайте новые устройства по QR-коду и проверяйте, где сейчас открыт ваш аккаунт.</p>
+      </div>
+      <div className="settings-shell__actions">
+        <button type="button" className="settings-inline-button" onClick={onRefreshSessions} disabled={deviceSessionsLoading}>
+          {deviceSessionsLoading ? "Обновляем..." : "Обновить"}
+        </button>
+        <button type="button" className="settings-inline-button device-connect-button" onClick={onOpenQrScanner}>
+          Подключить устройство
+        </button>
+      </div>
+    </div>
+
+    <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Подключение по QR</div>
+      <div className="device-connect-guide">
+        <div className="device-connect-guide__item">
+          <strong>Из приложения</strong>
+          <span>Нажмите кнопку выше, и мы сразу откроем внутреннюю камеру для сканирования QR-кода.</span>
+        </div>
+        <div className="device-connect-guide__item">
+          <strong>Через обычную камеру телефона</strong>
+          <span>Если вы уже отсканировали QR системной камерой, откроется только экран подтверждения входа без повторного запуска камеры.</span>
+        </div>
+      </div>
+    </section>
+
+    <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Активные сессии</div>
+
+      {deviceSessionsError ? (
+        <div className="profile-settings-form__status">{deviceSessionsError}</div>
+      ) : null}
+
+      {!deviceSessionsLoading && deviceSessions.length === 0 ? (
+        <div className="settings-empty-state">
+          <h3>Устройств пока нет</h3>
+          <p>После входа на новом телефоне, планшете или компьютере он появится здесь автоматически.</p>
+        </div>
+      ) : (
+        <div className="device-sessions-list">
+          {deviceSessions.map((session) => (
+            <div key={session.id} className={`device-session-card ${session.isCurrent ? "device-session-card--current" : ""}`}>
+              <div className="device-session-card__row">
+                <div className="device-session-card__copy">
+                  <strong>{session.deviceLabel || "Устройство"}</strong>
+                  <span>{session.userAgent || "Браузер"}</span>
+                </div>
+                {session.isCurrent ? <span className="device-session-card__badge">Это устройство</span> : null}
+              </div>
+
+              <div className="device-session-card__meta">
+                <span>Последняя активность: {formatDeviceSessionDate(session.lastUsedAt) || "недавно"}</span>
+                <span>Истекает: {formatDeviceSessionDate(session.expiresAt) || "позже"}</span>
+                {session.lastIp ? <span>IP: {session.lastIp}</span> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  </div>
+);
+
 export const VoiceSettingsPanel = ({
   audioInputDevices,
   audioOutputDevices,

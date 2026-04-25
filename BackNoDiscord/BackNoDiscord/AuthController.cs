@@ -693,7 +693,10 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Refresh token has expired." });
         }
 
-        storedToken.RevokedAt = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow;
+        storedToken.RevokedAt = now;
+        storedToken.LastUsedAt = now;
+        storedToken.LastIp = GetClientIp();
         var authSession = await IssueAuthSessionAsync(storedToken.User);
         storedToken.ReplacedByTokenHash = HashToken(authSession.RefreshToken);
         await _context.SaveChangesAsync();
@@ -724,6 +727,62 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { revoked = true });
+    }
+
+    [HttpGet("devices")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    public async Task<IActionResult> GetDevices()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var currentRefreshTokenHash = GetCurrentRefreshTokenHash();
+        var sessions = await _context.RefreshTokens
+            .AsNoTracking()
+            .Where(item =>
+                item.UserId == user.id &&
+                !item.RevokedAt.HasValue &&
+                item.ExpiresAt > now)
+            .OrderByDescending(item => item.LastUsedAt)
+            .ThenByDescending(item => item.CreatedAt)
+            .ToListAsync();
+
+        return Ok(new
+        {
+            sessions = sessions.Select(item => BuildDeviceSessionPayload(item, currentRefreshTokenHash))
+        });
+    }
+
+    [HttpDelete("devices/{sessionId:int}")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> RevokeDeviceSession([FromRoute] int sessionId)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var session = await _context.RefreshTokens.FirstOrDefaultAsync(item => item.Id == sessionId && item.UserId == user.id);
+        if (session == null)
+        {
+            return NotFound(new { message = "Сессия не найдена." });
+        }
+
+        if (!session.RevokedAt.HasValue)
+        {
+            session.RevokedAt = DateTimeOffset.UtcNow;
+            session.LastUsedAt = DateTimeOffset.UtcNow;
+            session.LastIp = GetClientIp();
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(new { revoked = true, sessionId });
     }
 
     [HttpGet("me")]
@@ -769,16 +828,23 @@ public class AuthController : ControllerBase
 
     private async Task<AuthSessionResult> IssueAuthSessionAsync(User user)
     {
-        var accessTokenExpiresAt = DateTimeOffset.UtcNow.AddMinutes(GetAccessTokenLifetimeMinutes());
-        var refreshTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(GetRefreshTokenLifetimeDays());
+        var now = DateTimeOffset.UtcNow;
+        var accessTokenExpiresAt = now.AddMinutes(GetAccessTokenLifetimeMinutes());
+        var refreshTokenExpiresAt = now.AddDays(GetRefreshTokenLifetimeDays());
         var refreshToken = GenerateRefreshToken();
+        var userAgent = GetUserAgent();
+        var clientIp = GetClientIp();
 
         _context.RefreshTokens.Add(new RefreshTokenRecord
         {
             UserId = user.id,
             TokenHash = HashToken(refreshToken),
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = refreshTokenExpiresAt
+            CreatedAt = now,
+            ExpiresAt = refreshTokenExpiresAt,
+            UserAgent = userAgent,
+            DeviceLabel = BuildDeviceLabel(userAgent),
+            LastIp = clientIp,
+            LastUsedAt = now,
         });
 
         await _context.SaveChangesAsync();
@@ -839,6 +905,24 @@ public class AuthController : ControllerBase
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
             refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O")
+        };
+    }
+
+    private object BuildDeviceSessionPayload(RefreshTokenRecord session, string? currentRefreshTokenHash)
+    {
+        var isCurrent = !string.IsNullOrWhiteSpace(currentRefreshTokenHash)
+            && string.Equals(session.TokenHash, currentRefreshTokenHash, StringComparison.Ordinal);
+
+        return new
+        {
+            id = session.Id,
+            deviceLabel = string.IsNullOrWhiteSpace(session.DeviceLabel) ? "Устройство" : session.DeviceLabel,
+            userAgent = session.UserAgent ?? string.Empty,
+            lastIp = session.LastIp ?? string.Empty,
+            createdAt = session.CreatedAt.ToString("O"),
+            lastUsedAt = session.LastUsedAt.ToString("O"),
+            expiresAt = session.ExpiresAt.ToString("O"),
+            isCurrent,
         };
     }
 
@@ -1042,6 +1126,46 @@ public class AuthController : ControllerBase
     {
         var userAgent = Request.Headers.UserAgent.ToString().Trim();
         return userAgent.Length <= 512 ? userAgent : userAgent[..512];
+    }
+
+    private string? GetCurrentRefreshTokenHash()
+    {
+        var rawRefreshToken = Request.Headers["X-Refresh-Token"].ToString().Trim();
+        if (string.IsNullOrWhiteSpace(rawRefreshToken))
+        {
+            return null;
+        }
+
+        return HashToken(rawRefreshToken);
+    }
+
+    private static string BuildDeviceLabel(string userAgent)
+    {
+        var normalized = (userAgent ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return "Неизвестное устройство";
+        }
+
+        var lower = normalized.ToLowerInvariant();
+        var platform =
+            lower.Contains("iphone") ? "iPhone" :
+            lower.Contains("ipad") ? "iPad" :
+            lower.Contains("android") ? "Android" :
+            lower.Contains("windows") ? "Windows" :
+            lower.Contains("mac os x") || lower.Contains("macintosh") ? "macOS" :
+            lower.Contains("linux") ? "Linux" :
+            "Устройство";
+        var browser =
+            lower.Contains("edg/") ? "Edge" :
+            lower.Contains("opr/") || lower.Contains("opera") ? "Opera" :
+            lower.Contains("firefox/") ? "Firefox" :
+            lower.Contains("electron/") ? "Electron" :
+            lower.Contains("chrome/") && !lower.Contains("edg/") && !lower.Contains("opr/") ? "Chrome" :
+            lower.Contains("safari/") && !lower.Contains("chrome/") ? "Safari" :
+            "Браузер";
+
+        return $"{browser} на {platform}";
     }
 
     private static string NormalizeQrLoginToken(string? value)

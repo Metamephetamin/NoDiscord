@@ -777,6 +777,7 @@ export const FRIENDS_SIDEBAR_ITEMS = [
 ];
 export const SETTINGS_NAV_ITEMS = [
   { id: "personal_profile", label: "Личный профиль", section: "Пользователь" },
+  { id: "devices", label: "Устройства", section: "Пользователь" },
   { id: "notifications", label: "Уведомления", section: "Пользователь" },
   { id: "voice_video", label: "Голос и видео", section: "Приложение" },
   { id: "appearance_accessibility", label: "Внешний вид и доступность", section: "Приложение" },

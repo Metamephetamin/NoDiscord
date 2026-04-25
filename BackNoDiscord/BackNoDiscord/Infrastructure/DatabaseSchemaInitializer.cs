@@ -19,7 +19,11 @@ public static class DatabaseSchemaInitializer
                 created_at timestamptz NOT NULL,
                 expires_at timestamptz NOT NULL,
                 revoked_at timestamptz NULL,
-                replaced_by_token_hash text NULL
+                replaced_by_token_hash text NULL,
+                user_agent text NOT NULL DEFAULT '',
+                device_label text NOT NULL DEFAULT '',
+                last_ip text NOT NULL DEFAULT '',
+                last_used_at timestamptz NOT NULL DEFAULT NOW()
             );
             CREATE UNIQUE INDEX IF NOT EXISTS ix_refresh_tokens_token_hash ON refresh_tokens (token_hash);
             CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user_id_expires_at ON refresh_tokens (user_id, expires_at);
@@ -229,6 +233,14 @@ public static class DatabaseSchemaInitializer
                 ADD COLUMN IF NOT EXISTS last_seen_at timestamptz NULL;
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS nickname character varying(50) NULL;
+            ALTER TABLE IF EXISTS refresh_tokens
+                ADD COLUMN IF NOT EXISTS user_agent text NOT NULL DEFAULT '';
+            ALTER TABLE IF EXISTS refresh_tokens
+                ADD COLUMN IF NOT EXISTS device_label text NOT NULL DEFAULT '';
+            ALTER TABLE IF EXISTS refresh_tokens
+                ADD COLUMN IF NOT EXISTS last_ip text NOT NULL DEFAULT '';
+            ALTER TABLE IF EXISTS refresh_tokens
+                ADD COLUMN IF NOT EXISTS last_used_at timestamptz NOT NULL DEFAULT NOW();
             ALTER TABLE IF EXISTS push_subscriptions
                 ADD COLUMN IF NOT EXISTS user_agent text NOT NULL DEFAULT '';
             ALTER TABLE IF EXISTS push_subscriptions

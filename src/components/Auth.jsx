@@ -1173,6 +1173,7 @@ export default function Auth({ onAuthSuccess }) {
         <aside className={`auth-card__side ${mode === "login" ? "auth-card__side--qr" : ""}`}>
           {mode === "login" ? (
             <div className="auth-qr-login" aria-live="polite">
+              <div className="auth-qr-login__title">Вход по QR-коду</div>
               <div className={`auth-qr-login__code ${qrLoginStatus === "expired" ? "auth-qr-login__code--muted" : ""}`}>
                 {qrLoginSvg ? (
                   <>

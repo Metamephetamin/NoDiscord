@@ -5,6 +5,7 @@ import {
   DirectToastStack,
   MediaFrameEditorOverlay,
   QuickSwitcherModal,
+  QrScannerModal,
   ScreenShareModal,
   ServerToastStack,
   SettingsOverlay,
@@ -77,6 +78,16 @@ export default function MenuMainOverlayLayer({
   startCameraPreview,
   startCameraShare,
   stopCameraShare,
+  showQrScannerModal,
+  qrScannerDevices,
+  selectedQrScannerDeviceId,
+  qrScannerPreviewRef,
+  hasQrScannerPreview,
+  qrScannerError,
+  qrScannerStatus,
+  closeQrScannerModal,
+  handleQrScannerDeviceChange,
+  startQrScannerPreview,
   mediaFrameEditorState,
   closeMediaFrameEditor,
   handleMediaFrameConfirm,
@@ -275,6 +286,19 @@ export default function MenuMainOverlayLayer({
         onOpenPreview={openLocalSharePreview}
         onStartCameraShare={startCameraShare}
         onStopCameraShare={stopCameraShare}
+      />
+
+      <QrScannerModal
+        open={showQrScannerModal}
+        devices={qrScannerDevices}
+        selectedDeviceId={selectedQrScannerDeviceId}
+        previewRef={qrScannerPreviewRef}
+        hasPreview={hasQrScannerPreview}
+        error={qrScannerError}
+        status={qrScannerStatus}
+        onClose={closeQrScannerModal}
+        onDeviceChange={handleQrScannerDeviceChange}
+        onStartPreview={startQrScannerPreview}
       />
 
       <MediaFrameEditorOverlay

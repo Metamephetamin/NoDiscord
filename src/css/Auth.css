@@ -722,8 +722,8 @@
 .auth-card__side--qr {
   justify-content: center;
   padding: 20px;
-  background: rgba(216, 216, 216, 0.548);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: transparent;
+  border-color: transparent;
   box-shadow: none;
 }
 
@@ -737,16 +737,26 @@
   text-align: center;
 }
 
+.auth-qr-login__title {
+  margin: 0;
+  color: #172133;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
 .auth-qr-login__code {
   position: relative;
-  width: 198px;
-  height: 198px;
+  width: 182px;
+  height: 182px;
   display: grid;
   place-items: center;
-  border-radius: 20px;
-  background: #ffffff;
-  border: 8px solid #ffffff;
-  box-shadow: 0 18px 34px rgba(17, 28, 48, 0.12);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   overflow: hidden;
 }
 

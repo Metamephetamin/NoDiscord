@@ -235,6 +235,18 @@ public class RefreshTokenRecord
     [Column("replaced_by_token_hash")]
     public string? ReplacedByTokenHash { get; set; }
 
+    [Column("user_agent")]
+    public string UserAgent { get; set; } = string.Empty;
+
+    [Column("device_label")]
+    public string DeviceLabel { get; set; } = string.Empty;
+
+    [Column("last_ip")]
+    public string LastIp { get; set; } = string.Empty;
+
+    [Column("last_used_at")]
+    public DateTimeOffset LastUsedAt { get; set; }
+
     public User? User { get; set; }
 }
 

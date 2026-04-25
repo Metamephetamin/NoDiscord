@@ -106,10 +106,10 @@ export default function QrLoginConfirmPage({ user }) {
     <div className="auth-page auth-page--qr-confirm">
       <div className="auth-qr-confirm-card">
         <div>
-          <h1>Вход по QR</h1>
+          <h1>Вход по QR-коду</h1>
           <p>
             {status === "ready"
-              ? "Подтвердите вход на другом устройстве."
+              ? "QR-код уже считан. Остаётся только подтвердить вход на этом устройстве."
               : status === "approved"
                 ? "Готово"
                 : "Проверяем QR-ссылку."}
@@ -146,7 +146,7 @@ export default function QrLoginConfirmPage({ user }) {
             disabled={status !== "ready" || isApproving}
             onClick={approveQrLogin}
           >
-            {isApproving ? "Подтверждаем..." : "Подтвердить"}
+            {isApproving ? "Подтверждаем..." : "Подтвердить вход"}
           </button>
         </div>
       </div>
