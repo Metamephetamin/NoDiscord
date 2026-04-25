@@ -986,7 +986,14 @@ export default function Auth({ onAuthSuccess }) {
       >
         <div className="auth-card__main">
           <div className="auth-card__heading">
-            <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
+            {mode === "login" ? (
+              <h2 className="auth-card__title auth-card__title--login" aria-label="Вход">
+                <span className="auth-card__title-primary">ВХ</span>
+                <span className="auth-card__title-accent">ОД</span>
+              </h2>
+            ) : (
+              <h2 className="auth-card__title">Регистрация</h2>
+            )}
           </div>
 
           {mode === "login" ? (
@@ -1145,25 +1152,27 @@ export default function Auth({ onAuthSuccess }) {
                 : "Зарегистрироваться"}
           </button>
 
-          {mode === "login" ? (
+          <div className="auth-card__links">
+            {mode === "login" ? (
+              <button
+                type="button"
+                className="auth-switch-link"
+                onClick={switchLoginMethod}
+                disabled={isSubmitting || isRequestingLoginCode}
+              >
+                {loginMethod === "code" ? "Войти по паролю" : "Войти по коду из письма"}
+              </button>
+            ) : null}
+
             <button
               type="button"
               className="auth-switch-link"
-              onClick={switchLoginMethod}
+              onClick={() => switchMode(mode === "login" ? "register" : "login")}
               disabled={isSubmitting || isRequestingLoginCode}
             >
-              {loginMethod === "code" ? "Войти по паролю" : "Войти по коду из письма"}
+              {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт?"}
             </button>
-          ) : null}
-
-          <button
-            type="button"
-            className="auth-switch-link"
-            onClick={() => switchMode(mode === "login" ? "register" : "login")}
-            disabled={isSubmitting || isRequestingLoginCode}
-          >
-            {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт?"}
-          </button>
+          </div>
 
           {mode === "register" ? <div className="auth-beta-note">Beta 0.1</div> : null}
 

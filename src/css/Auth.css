@@ -279,7 +279,7 @@
   grid-template-columns: minmax(0, 1.06fr) minmax(280px, 0.86fr);
   gap: 16px;
   padding: 20px;
-  border-radius: 28px;
+  border-radius: 32px;
   background: rgba(216, 216, 216, 0.548);
   /* box-shadow: 0 24px 60px rgba(4, 13, 27, 0.22); */
   backdrop-filter: none;
@@ -324,6 +324,8 @@
 .auth-card--login {
   width: min(100%, 820px);
   grid-template-columns: minmax(0, 1fr) minmax(250px, 0.72fr);
+  padding: 18px 20px;
+  border-radius: 34px;
 }
 
 .auth-card__main {
@@ -333,7 +335,12 @@
   min-width: 0;
 }
 
-.auth-card__heading h2 {
+.auth-card__heading {
+  min-height: 42px;
+}
+
+.auth-card__heading h2,
+.auth-card__title {
   margin: 0;
   color: #172133;
   font-size: 30px;
@@ -341,6 +348,41 @@
   font-family: var(--font-heading);
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+
+.auth-card__title--login {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.02em;
+  font-size: clamp(38px, 4vw, 48px);
+  line-height: 0.9;
+  letter-spacing: 0.015em;
+}
+
+.auth-card__title-primary,
+.auth-card__title-accent {
+  display: inline-block;
+}
+
+.auth-card__title-primary {
+  color: #152033;
+}
+
+.auth-card__title-accent {
+  color: #222c3f;
+  transform: translateY(0.035em);
+}
+
+.auth-card--login .auth-card__main {
+  gap: 14px;
+}
+
+.auth-card--login .auth-section {
+  gap: 9px;
+}
+
+.auth-card--login .auth-input {
+  min-height: 44px;
 }
 
 .auth-subtitle {
@@ -474,9 +516,9 @@
 }
 
 .auth-submit {
-  margin-top: 4px;
+  margin-top: 2px;
   width: 100%;
-  min-height: 48px;
+  min-height: 46px;
   border: none;
   outline: none;
   border-radius: 16px;
@@ -542,6 +584,14 @@
   color: #4a5973;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.auth-card__links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
 }
 
 .auth-hint__code {
@@ -721,7 +771,7 @@
 
 .auth-card__side--qr {
   justify-content: center;
-  padding: 20px;
+  padding: 14px 16px;
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -733,7 +783,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 9px;
   text-align: center;
 }
 
@@ -749,11 +799,11 @@
 
 .auth-qr-login__code {
   position: relative;
-  width: 182px;
-  height: 182px;
+  width: 174px;
+  height: 174px;
   display: grid;
   place-items: center;
-  border-radius: 0;
+  border-radius: 18px;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -767,8 +817,9 @@
 .auth-qr-login__svg,
 .auth-qr-login__svg svg {
   display: block;
-  width: 182px;
-  height: 182px;
+  width: 174px;
+  height: 174px;
+  border-radius: 18px;
 }
 
 .auth-qr-login__logo {
