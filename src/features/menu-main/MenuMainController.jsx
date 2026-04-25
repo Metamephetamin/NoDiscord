@@ -4405,15 +4405,6 @@ export default function MenuMain({
     stopQrScannerPreview();
   }, []);
   useEffect(() => {
-    if (!openSettings || settingsTab !== "devices") {
-      return;
-    }
-
-    refreshDeviceSessions().catch((error) => {
-      console.error("Ошибка загрузки устройств:", error);
-    });
-  }, [openSettings, refreshDeviceSessions, settingsTab]);
-  useEffect(() => {
     const previousChannel = previousVoiceChannelRef.current;
     if (voiceTransitionSoundTimeoutRef.current) {
       clearTimeout(voiceTransitionSoundTimeoutRef.current);
@@ -5659,6 +5650,15 @@ export default function MenuMain({
       setDeviceSessionsLoading(false);
     }
   }, [user?.id]);
+  useEffect(() => {
+    if (!openSettings || settingsTab !== "devices") {
+      return;
+    }
+
+    refreshDeviceSessions().catch((error) => {
+      console.error("Ошибка загрузки устройств:", error);
+    });
+  }, [openSettings, refreshDeviceSessions, settingsTab]);
   const closeQrScannerModal = () => {
     setShowQrScannerModal(false);
     setQrScannerError("");
