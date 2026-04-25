@@ -115,32 +115,6 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
-    options.AddPolicy("phone-send", context =>
-    {
-        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"phone-send:{remoteIp}",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 4,
-                Window = TimeSpan.FromMinutes(5),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            });
-    });
-    options.AddPolicy("phone-verify", context =>
-    {
-        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"phone-verify:{remoteIp}",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 12,
-                Window = TimeSpan.FromMinutes(5),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            });
-    });
     options.AddPolicy("email-send", context =>
     {
         var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -163,6 +137,19 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 12,
                 Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+    options.AddPolicy("qr-login-poll", context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"qr-login-poll:{remoteIp}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 80,
+                Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             });

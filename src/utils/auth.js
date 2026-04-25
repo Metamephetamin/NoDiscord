@@ -627,6 +627,7 @@ export async function refreshAccessToken() {
             isPhoneVerified: Boolean(
               data.is_phone_verified ?? sessionCache.user?.isPhoneVerified ?? sessionCache.user?.phone_verified ?? false
             ),
+            isTotpEnabled: Boolean(data.is_totp_enabled ?? sessionCache.user?.isTotpEnabled ?? false),
             avatarUrl: data.avatar_url || sessionCache.user?.avatarUrl || sessionCache.user?.avatar || "",
             avatar: data.avatar_url || sessionCache.user?.avatar || sessionCache.user?.avatarUrl || "",
             avatarFrame: parseMediaFrame(

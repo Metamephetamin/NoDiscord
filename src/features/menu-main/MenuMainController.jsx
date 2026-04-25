@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
@@ -38,12 +38,7 @@ import { copyTextToClipboard } from "../../utils/clipboard";
 import { getChatDraftUpdatedEventName, hasChatDraft } from "../../utils/chatDrafts";
 import { buildDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { getDirectCallChannelId, isDirectCallChannelId } from "../../utils/directCallModel";
-import {
-  getDirectMessageReceiveSoundStorageKey,
-  getDirectMessageSendSoundStorageKey,
-  getDirectMessageSoundEnabledStorageKey,
-  getDirectMessageSoundOptions,
-} from "../../utils/directMessageSounds";
+import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
 import { startDirectCallTone } from "../../utils/directCallSounds";
 import { isUserMentioned } from "../../utils/messageMentions";
 import {
@@ -53,7 +48,6 @@ import {
   normalizeScriptAwareNicknameInput,
   normalizeSingleWordNameInput,
 } from "../../utils/nameScripts";
-import { getPinnedStorageKey, readPinnedMessages } from "../../utils/textChatHelpers";
 import {
   clearCachedTextChatMessages,
   writeTextChatChannelClearedAt,
@@ -62,6 +56,7 @@ import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
 import useVoiceRoomWarmup from "../../hooks/useVoiceRoomWarmup";
+import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
 import {
   MenuMainMobileSettingsShell,
   MenuMainSettingsContent,
@@ -69,6 +64,32 @@ import {
 import MenuMainProfilePanelSlot from "./MenuMainProfilePanelSlot";
 import MenuMainOverlayLayer from "./MenuMainOverlayLayer";
 import MenuMainMobileLayout from "./MenuMainMobileLayout";
+import {
+  getInitialTextChannelId,
+  getStoredTextChannelId,
+  readWorkspaceState,
+  readWorkspaceStateFromStorageKey,
+  useMenuMainStorageKeys,
+  writeStoredTextChannelId,
+  writeWorkspaceStateToStorageKey,
+} from "./menuMainWorkspaceStorage";
+import {
+  buildDirectCallState,
+  createDirectCallState,
+  DIRECT_CALL_NO_ANSWER_TIMEOUT_MS,
+  getDirectCallConnectionQuality,
+  normalizeMeasuredPingMs,
+  readDirectCallHistory,
+  writeDirectCallHistory,
+} from "./menuMainDirectCallState";
+import {
+  areObjectArraysEqual,
+  areParticipantMapsEqual,
+  areRemoteScreenSharesEqual,
+  areStringArraysEqual,
+  normalizeMicLevel,
+} from "./menuMainRealtimeComparators";
+import { buildMenuMainQuickSwitcherItems } from "./menuMainQuickSwitcher";
 import {
   DEFAULT_SERVER_ICON,
   resolveMediaUrl,
@@ -91,34 +112,19 @@ import {
   createServerToastId,
   FRIENDS_SIDEBAR_ITEMS,
   getActiveServerStorageKey,
-  getActiveTextChannelStorageKey,
-  getAudioInputDeviceStorageKey,
-  getAudioOutputDeviceStorageKey,
   getCanonicalSharedServerId,
   getChannelDisplayName,
-  getCurrentUserId,
-  getConversationNotificationsStorageKey,
-  getDirectNotificationsStorageKey,
   getDisplayName,
-  getEchoCancellationStorageKey,
   getFriendSearchModeForQuery,
   getMeterActiveBars,
-  getNoiseSuppressionStorageKey,
-  getNotificationSoundCustomDataStorageKey,
-  getNotificationSoundCustomNameStorageKey,
-  getNotificationSoundEnabledStorageKey,
-  getNotificationSoundStorageKey,
   getPingTone,
   getScopedChatChannelId,
   getScopedVoiceChannelId,
   getServerIconFrame,
-  getServerNotificationsStorageKey,
-  getServersStorageKey,
   getUserAvatar,
   getUserAvatarFrame,
   getUserProfileBackground,
   getUserProfileBackgroundFrame,
-  getVideoInputDeviceStorageKey,
   hasServerPermission,
   HEADPHONES_ICON_URL,
   isPersonalDefaultServer,
@@ -162,56 +168,6 @@ function loadVoiceRoomClientFactory() {
 
 const normalizeProfileNicknameInput = (value) =>
   normalizeScriptAwareNicknameInput(value, MAX_PROFILE_NICKNAME_LENGTH);
-const getLocalApiStorageScope = () => {
-  try {
-    const parsed = new URL(String(API_URL || "").trim());
-    return String(parsed.origin || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-  } catch {
-    return String(API_URL || "default").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-  }
-};
-const getUiDensityStorageKey = (user) => `nd:ui-density:${getCurrentUserId(user) || "guest"}`;
-const getUiFontScaleStorageKey = (user) => `nd:ui-font-scale:${getCurrentUserId(user) || "guest"}`;
-const getUiReduceMotionStorageKey = (user) => `nd:ui-reduce-motion:${getCurrentUserId(user) || "guest"}`;
-const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUserId(user) || "guest"}`;
-const getDirectCallHistoryStorageKey = (user) => {
-  const userId = String(user?.id || user?.email || "").trim();
-  return userId ? `nd:direct-call-history:${getLocalApiStorageScope()}:${userId}` : "";
-};
-const getWorkspaceStateStorageKey = (user) => {
-  const userId = String(user?.id || user?.email || "").trim();
-  return userId ? `nd:workspace-state:${getLocalApiStorageScope()}:${userId}` : "";
-};
-
-const readWorkspaceStateFromStorageKey = (storageKey) => {
-  if (!storageKey || typeof window === "undefined") {
-    return {};
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(storageKey);
-    const parsedValue = rawValue ? JSON.parse(rawValue) : {};
-    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
-      return {};
-    }
-
-    return {
-      workspaceMode: parsedValue.workspaceMode === "friends" ? "friends" : parsedValue.workspaceMode === "servers" ? "servers" : "",
-      activeDirectFriendId: String(parsedValue.activeDirectFriendId || ""),
-      activeConversationId: String(parsedValue.activeConversationId || ""),
-      friendsPageSection: ["friends", "add", "conversations"].includes(parsedValue.friendsPageSection) ? parsedValue.friendsPageSection : "friends",
-      activeServerId: String(parsedValue.activeServerId || ""),
-      currentTextChannelId: String(parsedValue.currentTextChannelId || ""),
-      desktopServerPane: parsedValue.desktopServerPane === "voice" ? "voice" : "text",
-      mobileSection: ["servers", "friends", "profile"].includes(parsedValue.mobileSection) ? parsedValue.mobileSection : "",
-      mobileServersPane: ["channels", "chat", "voice"].includes(parsedValue.mobileServersPane) ? parsedValue.mobileServersPane : "",
-    };
-  } catch {
-    return {};
-  }
-};
-
-const readWorkspaceState = (user) => readWorkspaceStateFromStorageKey(getWorkspaceStateStorageKey(user));
 
 const MAX_DEVICE_VOLUME_PERCENT = 200;
 const clampDeviceVolumePercent = (value, fallback = 100) => {
@@ -222,283 +178,6 @@ const clampDeviceVolumePercent = (value, fallback = 100) => {
 
   return Math.max(0, Math.min(MAX_DEVICE_VOLUME_PERCENT, Math.round(numericValue)));
 };
-
-const writeWorkspaceStateToStorageKey = (storageKey, state) => {
-  if (!storageKey || typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify({
-      workspaceMode: state?.workspaceMode === "friends" ? "friends" : "servers",
-      activeDirectFriendId: String(state?.activeDirectFriendId || ""),
-      activeConversationId: String(state?.activeConversationId || ""),
-      friendsPageSection: ["friends", "add", "conversations"].includes(state?.friendsPageSection) ? state.friendsPageSection : "friends",
-      activeServerId: String(state?.activeServerId || ""),
-      currentTextChannelId: String(state?.currentTextChannelId || ""),
-      desktopServerPane: state?.desktopServerPane === "voice" ? "voice" : "text",
-      mobileSection: ["servers", "friends", "profile"].includes(state?.mobileSection) ? state.mobileSection : "servers",
-      mobileServersPane: ["channels", "chat", "voice"].includes(state?.mobileServersPane) ? state.mobileServersPane : "channels",
-      updatedAt: Date.now(),
-    }));
-  } catch {
-    // Workspace restore is a convenience only.
-  }
-};
-
-const readActiveTextChannelMap = (storageKey) => {
-  if (!storageKey) {
-    return {};
-  }
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-const getStoredTextChannelId = (storageKey, server) => {
-  if (!server?.id || !Array.isArray(server?.textChannels)) {
-    return "";
-  }
-
-  const storedChannelId = String(readActiveTextChannelMap(storageKey)[server.id] || "");
-  return server.textChannels.some((channel) => String(channel.id) === storedChannelId)
-    ? storedChannelId
-    : "";
-};
-
-const writeStoredTextChannelId = (storageKey, serverId, channelId) => {
-  if (!storageKey || !serverId || !channelId) {
-    return;
-  }
-
-  try {
-    const nextMap = {
-      ...readActiveTextChannelMap(storageKey),
-      [serverId]: String(channelId),
-    };
-    window.localStorage.setItem(storageKey, JSON.stringify(nextMap));
-  } catch {
-    // ignore storage failures
-  }
-};
-
-const getInitialTextChannelId = (user) => {
-  const storedServers = readStoredServers(user);
-  const activeServerId = window.localStorage.getItem(getActiveServerStorageKey(user)) || storedServers[0]?.id || "";
-  const activeServer = storedServers.find((server) => String(server.id) === String(activeServerId)) || storedServers[0];
-  return getStoredTextChannelId(getActiveTextChannelStorageKey(user), activeServer) || activeServer?.textChannels?.[0]?.id || "";
-};
-
-const readDirectCallHistory = (storageKey) => {
-  if (!storageKey) {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const writeDirectCallHistory = (storageKey, history) => {
-  if (!storageKey) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(Array.isArray(history) ? history : []));
-  } catch {
-    // ignore storage failures
-  }
-};
-
-const getDirectCallConnectionQuality = (pingMs, phase) => {
-  if (phase === "reconnecting") {
-    return "reconnecting";
-  }
-
-  const numericPing = Number(pingMs);
-  if (!Number.isFinite(numericPing) || numericPing <= 0) {
-    return phase === "connected" ? "stable" : "unknown";
-  }
-
-  if (numericPing >= 240) {
-    return "weak";
-  }
-
-  return "stable";
-};
-
-const DIRECT_CALL_NO_ANSWER_TIMEOUT_MS = 180000;
-
-const createDirectCallState = () => ({
-  phase: "idle",
-  status: "idle",
-  statusLabel: "",
-  channelId: "",
-  peerUserId: "",
-  peerName: "",
-  peerAvatar: "",
-  peerAvatarFrame: null,
-  peer: null,
-  connectionQuality: "unknown",
-  canRetry: false,
-  isMiniMode: false,
-  direction: "",
-  startedAt: "",
-  endedAt: "",
-  lastReason: "",
-});
-
-const normalizeMeasuredPingMs = (value) => {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) && numericValue > 0
-    ? Math.max(1, Math.round(numericValue))
-    : null;
-};
-
-const buildDirectCallState = (overrides = {}) => {
-  const phase = String(overrides.phase || overrides.status || "idle");
-  const peer = {
-    userId: String(overrides.peer?.userId || overrides.peerUserId || "").trim(),
-    name: String(overrides.peer?.name || overrides.peerName || "").trim(),
-    avatar: String(overrides.peer?.avatar || overrides.peerAvatar || "").trim(),
-    avatarFrame: overrides.peer?.avatarFrame ?? overrides.peerAvatarFrame ?? null,
-  };
-
-  return {
-    ...createDirectCallState(),
-    ...overrides,
-    phase,
-    status: phase,
-    peerUserId: peer.userId,
-    peerName: peer.name,
-    peerAvatar: peer.avatar,
-    peerAvatarFrame: peer.avatarFrame,
-    peer,
-  };
-};
-
-const areStringArraysEqual = (previousValue = [], nextValue = []) => {
-  if (previousValue === nextValue) {
-    return true;
-  }
-
-  if (previousValue.length !== nextValue.length) {
-    return false;
-  }
-
-  for (let index = 0; index < previousValue.length; index += 1) {
-    if (String(previousValue[index] || "") !== String(nextValue[index] || "")) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const areShallowObjectsEqual = (previousValue = {}, nextValue = {}) => {
-  if (previousValue === nextValue) {
-    return true;
-  }
-
-  const previousKeys = Object.keys(previousValue);
-  const nextKeys = Object.keys(nextValue);
-
-  if (previousKeys.length !== nextKeys.length) {
-    return false;
-  }
-
-  for (const key of previousKeys) {
-    if (previousValue[key] !== nextValue[key]) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const areObjectArraysEqual = (previousValue = [], nextValue = []) => {
-  if (previousValue === nextValue) {
-    return true;
-  }
-
-  if (previousValue.length !== nextValue.length) {
-    return false;
-  }
-
-  for (let index = 0; index < previousValue.length; index += 1) {
-    if (!areShallowObjectsEqual(previousValue[index], nextValue[index])) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const areParticipantMapsEqual = (previousValue = {}, nextValue = {}) => {
-  if (previousValue === nextValue) {
-    return true;
-  }
-
-  const previousKeys = Object.keys(previousValue);
-  const nextKeys = Object.keys(nextValue);
-
-  if (previousKeys.length !== nextKeys.length) {
-    return false;
-  }
-
-  for (const key of previousKeys) {
-    if (!Object.hasOwn(nextValue, key) || !areObjectArraysEqual(previousValue[key], nextValue[key])) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const areRemoteScreenSharesEqual = (previousValue = [], nextValue = []) => {
-  if (previousValue === nextValue) {
-    return true;
-  }
-
-  if (previousValue.length !== nextValue.length) {
-    return false;
-  }
-
-  for (let index = 0; index < previousValue.length; index += 1) {
-    const previousShare = previousValue[index] || {};
-    const nextShare = nextValue[index] || {};
-
-    if (
-      String(previousShare.userId || "") !== String(nextShare.userId || "")
-      || String(previousShare.name || "") !== String(nextShare.name || "")
-      || String(previousShare.avatar || "") !== String(nextShare.avatar || "")
-      || previousShare.stream !== nextShare.stream
-      || String(previousShare.videoSrc || "") !== String(nextShare.videoSrc || "")
-      || String(previousShare.imageSrc || "") !== String(nextShare.imageSrc || "")
-      || Boolean(previousShare.hasAudio) !== Boolean(nextShare.hasAudio)
-      || String(previousShare.mode || "") !== String(nextShare.mode || "")
-      || Number(previousShare.width || 0) !== Number(nextShare.width || 0)
-      || Number(previousShare.height || 0) !== Number(nextShare.height || 0)
-      || Number(previousShare.fps || 0) !== Number(nextShare.fps || 0)
-    ) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const normalizeMicLevel = (value) => Math.max(0, Math.min(1, Number(value) || 0));
 
 export default function MenuMain({
   user,
@@ -727,31 +406,41 @@ export default function MenuMain({
   const restoredWorkspaceStateKeyRef = useRef("");
   const skipNextWorkspaceStatePersistRef = useRef(false);
   const lastServerSyncFingerprintRef = useRef("");
-  const serversStorageKey = useMemo(() => getServersStorageKey(user), [user?.id, user?.email]);
-  const activeServerStorageKey = useMemo(() => getActiveServerStorageKey(user), [user?.id, user?.email]);
-  const activeTextChannelStorageKey = useMemo(() => getActiveTextChannelStorageKey(user), [user?.id, user?.email]);
-  const noiseSuppressionStorageKey = useMemo(() => getNoiseSuppressionStorageKey(user), [user?.id, user?.email]);
-  const echoCancellationStorageKey = useMemo(() => getEchoCancellationStorageKey(user), [user?.id, user?.email]);
-  const directNotificationsStorageKey = useMemo(() => getDirectNotificationsStorageKey(user), [user?.id, user?.email]);
-  const conversationNotificationsStorageKey = useMemo(() => getConversationNotificationsStorageKey(user), [user?.id, user?.email]);
-  const serverNotificationsStorageKey = useMemo(() => getServerNotificationsStorageKey(user), [user?.id, user?.email]);
-  const directMessageSoundEnabledStorageKey = useMemo(() => getDirectMessageSoundEnabledStorageKey(user), [user?.id, user?.email]);
-  const directMessageSendSoundStorageKey = useMemo(() => getDirectMessageSendSoundStorageKey(user), [user?.id, user?.email]);
-  const directMessageReceiveSoundStorageKey = useMemo(() => getDirectMessageReceiveSoundStorageKey(user), [user?.id, user?.email]);
-  const notificationSoundEnabledStorageKey = useMemo(() => getNotificationSoundEnabledStorageKey(user), [user?.id, user?.email]);
-  const notificationSoundStorageKey = useMemo(() => getNotificationSoundStorageKey(user), [user?.id, user?.email]);
-  const notificationSoundCustomDataStorageKey = useMemo(() => getNotificationSoundCustomDataStorageKey(user), [user?.id, user?.email]);
-  const notificationSoundCustomNameStorageKey = useMemo(() => getNotificationSoundCustomNameStorageKey(user), [user?.id, user?.email]);
-  const audioInputDeviceStorageKey = useMemo(() => getAudioInputDeviceStorageKey(user), [user?.id, user?.email]);
-  const audioOutputDeviceStorageKey = useMemo(() => getAudioOutputDeviceStorageKey(user), [user?.id, user?.email]);
-  const videoInputDeviceStorageKey = useMemo(() => getVideoInputDeviceStorageKey(user), [user?.id, user?.email]);
-  const currentUserId = useMemo(() => getCurrentUserId(user), [user?.id, user?.email]);
-  const directCallHistoryStorageKey = useMemo(() => getDirectCallHistoryStorageKey(user), [user?.id, user?.email]);
-  const workspaceStateStorageKey = useMemo(() => getWorkspaceStateStorageKey(user), [user?.id, user?.email]);
-  const uiDensityStorageKey = useMemo(() => getUiDensityStorageKey(user), [user?.id, user?.email]);
-  const uiFontScaleStorageKey = useMemo(() => getUiFontScaleStorageKey(user), [user?.id, user?.email]);
-  const uiReduceMotionStorageKey = useMemo(() => getUiReduceMotionStorageKey(user), [user?.id, user?.email]);
-  const uiTouchTargetStorageKey = useMemo(() => getUiTouchTargetStorageKey(user), [user?.id, user?.email]);
+  const {
+    serversStorageKey,
+    activeServerStorageKey,
+    activeTextChannelStorageKey,
+    noiseSuppressionStorageKey,
+    echoCancellationStorageKey,
+    directNotificationsStorageKey,
+    conversationNotificationsStorageKey,
+    serverNotificationsStorageKey,
+    directMessageSoundEnabledStorageKey,
+    directMessageSendSoundStorageKey,
+    directMessageReceiveSoundStorageKey,
+    notificationSoundEnabledStorageKey,
+    notificationSoundStorageKey,
+    notificationSoundCustomDataStorageKey,
+    notificationSoundCustomNameStorageKey,
+    audioInputDeviceStorageKey,
+    audioOutputDeviceStorageKey,
+    videoInputDeviceStorageKey,
+    currentUserId,
+    directCallHistoryStorageKey,
+    workspaceStateStorageKey,
+    uiDensityStorageKey,
+    uiFontScaleStorageKey,
+    uiReduceMotionStorageKey,
+    uiTouchTargetStorageKey,
+  } = useMenuMainStorageKeys(user);
+  const {
+    isTotpEnabled,
+    totpSetup,
+    updateTotpCode,
+    startTotpSetup,
+    verifyTotpSetup,
+    disableTotp,
+  } = useMenuMainTotpSettings({ user, setUser });
 
   const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
   const activeServerSyncFingerprint = useMemo(() => {
@@ -1581,140 +1270,30 @@ export default function MenuMain({
       ? getScopedChatChannelId(activeServer.id, currentTextChannel.id)
       : "";
   }, [activeServer?.id, currentDirectChannelId, currentTextChannel?.id, workspaceMode]);
-  const quickSwitcherItems = useMemo(() => {
-    const normalizedQuery = String(quickSwitcherQuery || "").trim().toLowerCase();
-    const currentPinnedMessages = activeTextNavigationChannelId
-      ? readPinnedMessages(getPinnedStorageKey(currentUserId, activeTextNavigationChannelId))
-      : [];
-
-    const baseItems = [
-      ...(textChatNavigationIndex?.firstUnreadMessageId ? [{
-        id: "chat:first-unread",
-        kind: "chatAction",
-        kindLabel: "Chat",
-        shortLabel: "U",
-        title: "Первое непрочитанное",
-        subtitle: "Перейти к первой новой точке в текущем чате",
-        action: "firstUnread",
-        channelId: activeTextNavigationChannelId,
-      }] : []),
-      ...(textChatNavigationIndex?.canReturnToJumpPoint ? [{
-        id: "chat:jump-back",
-        kind: "chatAction",
-        kindLabel: "Chat",
-        shortLabel: "B",
-        title: "Вернуться назад",
-        subtitle: "Назад после перехода к сообщению",
-        action: "jumpBack",
-        channelId: activeTextNavigationChannelId,
-      }] : []),
-      ...servers.map((server) => ({
-        id: `server:${server.id}`,
-        kind: "server",
-        kindLabel: "Server",
-        shortLabel: "S",
-        title: server.name || "Server",
-        subtitle: `${(server.textChannels || []).length} текстовых • ${(server.voiceChannels || []).length} голосовых`,
-        serverId: server.id,
-      })),
-      ...servers.flatMap((server) => (server.textChannels || []).map((channel) => ({
-        id: `text:${server.id}:${channel.id}`,
-        kind: "channel",
-        kindLabel: "Text",
-        shortLabel: "#",
-        title: `${server.name || "Server"} / ${getChannelDisplayName(channel.name, "text")}`,
-        subtitle: "Текстовый канал",
-        serverId: server.id,
-        channelId: channel.id,
-      }))),
-      ...servers.flatMap((server) => (server.voiceChannels || []).map((channel) => ({
-        id: `voice:${server.id}:${channel.id}`,
-        kind: "voice",
-        kindLabel: "Voice",
-        shortLabel: "V",
-        title: `${server.name || "Server"} / ${getChannelDisplayName(channel.name, "voice")}`,
-        subtitle: "Голосовой канал",
-        serverId: server.id,
-        channelId: channel.id,
-      }))),
-      ...directConversationTargets.map((friend) => ({
-        id: `dm:${friend.id}`,
-        kind: "dm",
-        kindLabel: "DM",
-        shortLabel: "@",
-        title: getDisplayName(friend),
-        subtitle: friend.isSelf ? "Личные заметки" : "Личный чат",
-        friendId: friend.id,
-      })),
-      ...currentPinnedMessages.map((messageItem) => ({
-        id: `pin:${messageItem.id}`,
-        kind: "pin",
-        kindLabel: "Pin",
-        shortLabel: "P",
-        title: messageItem.username || "User",
-        subtitle: messageItem.preview || "Закреплённое сообщение",
-        channelId: activeTextNavigationChannelId,
-        messageId: messageItem.id,
-      })),
-      ...((textChatNavigationIndex?.searchResults || []).slice(0, 10).map((messageItem) => ({
-        id: `search:${messageItem.id}`,
-        kind: "message",
-        kindLabel: "Find",
-        shortLabel: "F",
-        title: messageItem.username || "User",
-        subtitle: messageItem.preview || "Найденное сообщение",
-        channelId: activeTextNavigationChannelId,
-        messageId: messageItem.id,
-      }))),
-      ...((textChatNavigationIndex?.mentionMessages || []).slice(-6).reverse().map((messageItem) => ({
-        id: `mention:${messageItem.id}`,
-        kind: "mention",
-        kindLabel: "Mention",
-        shortLabel: "@",
-        title: messageItem.username || "User",
-        subtitle: messageItem.message || "Упоминание",
-        channelId: activeTextNavigationChannelId,
-        messageId: messageItem.id,
-      }))),
-      ...((textChatNavigationIndex?.replyMessages || []).slice(-6).reverse().map((messageItem) => ({
-        id: `reply:${messageItem.id}`,
-        kind: "reply",
-        kindLabel: "Reply",
-        shortLabel: "R",
-        title: messageItem.username || "User",
-        subtitle: messageItem.replyPreview || messageItem.message || "Ответ",
-        channelId: activeTextNavigationChannelId,
-        messageId: messageItem.id,
-      }))),
-      ...(currentVoiceParticipants || []).map((participant) => ({
-        id: `focus:${participant.userId}`,
-        kind: "focus",
-        kindLabel: "Stage",
-        shortLabel: "L",
-        title: participant.name || "Участник",
-        subtitle: participant.isLive ? "Фокус на эфире" : participant.isSpeaking ? "Фокус на говорящем" : "Фокус на участнике",
-        userId: participant.userId,
-      })),
-    ];
-
-    if (!normalizedQuery) {
-      return baseItems.slice(0, 24);
-    }
-
-    return baseItems
-      .filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(normalizedQuery))
-      .slice(0, 28);
-  }, [
-    activeTextNavigationChannelId,
-    currentUserId,
-    currentVoiceParticipants,
-    directConversationTargets,
-    getChannelDisplayName,
-    quickSwitcherQuery,
-    servers,
-    textChatNavigationIndex,
-  ]);
-  useEffect(() => {
+  const quickSwitcherItems = useMemo(
+    () => buildMenuMainQuickSwitcherItems({
+      activeTextNavigationChannelId,
+      currentUserId,
+      currentVoiceParticipants,
+      directConversationTargets,
+      getChannelDisplayName,
+      getDisplayName,
+      query: quickSwitcherQuery,
+      servers,
+      textChatNavigationIndex,
+    }),
+    [
+      activeTextNavigationChannelId,
+      currentUserId,
+      currentVoiceParticipants,
+      directConversationTargets,
+      getChannelDisplayName,
+      getDisplayName,
+      quickSwitcherQuery,
+      servers,
+      textChatNavigationIndex,
+    ]
+  );  useEffect(() => {
     setQuickSwitcherSelectedIndex((previous) => {
       if (!quickSwitcherItems.length) {
         return 0;
@@ -6288,7 +5867,6 @@ export default function MenuMain({
     }
   };
 
-
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
   const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
     if (!sections[item.section]) {
@@ -6369,6 +5947,8 @@ export default function MenuMain({
       last_name: profileDraft.lastName,
     }),
     profileStatus,
+    isTotpEnabled,
+    totpSetup,
     maxProfileNicknameLength: MAX_PROFILE_NICKNAME_LENGTH,
     user,
     avatarInputRef,
@@ -6376,6 +5956,10 @@ export default function MenuMain({
     serverIconInputRef,
     handleProfileSave,
     updateProfileDraft,
+    updateTotpCode,
+    startTotpSetup,
+    verifyTotpSetup,
+    disableTotp,
     handleLogout,
     audioInputDevices,
     audioOutputDevices,

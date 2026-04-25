@@ -829,6 +829,7 @@ function TextChatComposer({
                 <button
                   type="button"
                   className={`composer-tool composer-tool--voice composer-tool--voice-slot ${voiceButtonStateClass}`}
+                  style={voiceRecordingState !== "idle" ? { "--voice-level-scale": (1.08 + normalizedVoiceMicLevel * 1.24).toFixed(3) } : undefined}
                   onPointerDown={async (event) => {
                     event.currentTarget.setPointerCapture?.(event.pointerId);
                     await onVoiceRecordPointerDown?.(event);
@@ -862,6 +863,8 @@ function TextChatComposer({
                         : "Удерживайте для записи голосового сообщения"
                   }
                 >
+                  <span className="composer-tool__voice-wave composer-tool__voice-wave--outer" aria-hidden="true" />
+                  <span className="composer-tool__voice-wave composer-tool__voice-wave--inner" aria-hidden="true" />
                   <span className="composer-tool__ring" aria-hidden="true" />
                   <span className="composer-tool__mic" aria-hidden="true" />
                   {voiceRecordingState === "locked" ? (

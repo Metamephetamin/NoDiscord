@@ -5904,6 +5904,50 @@
   color: #d2d9e8;
 }
 
+.composer-tool__voice-wave {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.78);
+}
+
+.composer-tool__voice-wave--outer {
+  border: 1px solid rgba(255, 118, 151, 0.34);
+  box-shadow: 0 0 18px rgba(255, 105, 140, 0.22);
+  animation: composer-voice-wave 1.18s ease-out infinite;
+}
+
+.composer-tool__voice-wave--inner {
+  inset: 9px;
+  border: 1px solid rgba(255, 176, 198, 0.4);
+  animation: composer-voice-wave 1.18s ease-out infinite;
+  animation-delay: 0.32s;
+}
+
+.composer-tool--recording-holding .composer-tool__voice-wave,
+.composer-tool--recording-locked .composer-tool__voice-wave,
+.composer-tool--recording-sending .composer-tool__voice-wave {
+  opacity: 0.82;
+}
+
+@keyframes composer-voice-wave {
+  0% {
+    opacity: 0.82;
+    transform: scale(0.72);
+  }
+
+  70% {
+    opacity: 0.18;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(calc(var(--voice-level-scale, 1) + 0.56));
+  }
+}
+
 .composer-send-button {
   width: 38px;
   height: 38px;

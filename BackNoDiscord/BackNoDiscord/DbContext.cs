@@ -64,6 +64,15 @@ public class User
     [Column("is_phone_verified")]
     public bool is_phone_verified { get; set; }
 
+    [Column("totp_secret")]
+    public string? totp_secret { get; set; }
+
+    [Column("is_totp_enabled")]
+    public bool is_totp_enabled { get; set; }
+
+    [Column("totp_enabled_at")]
+    public DateTimeOffset? totp_enabled_at { get; set; }
+
     [Column("avatar_url")]
     public string? avatar_url { get; set; }
 
@@ -118,6 +127,54 @@ public class EmailVerificationCodeRecord
 
     [Column("consumed_at")]
     public DateTimeOffset? ConsumedAt { get; set; }
+}
+
+[Table("qr_login_sessions")]
+public class QrLoginSessionRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("session_id")]
+    public string SessionId { get; set; } = string.Empty;
+
+    [Column("browser_token_hash")]
+    public string BrowserTokenHash { get; set; } = string.Empty;
+
+    [Column("scanner_token_hash")]
+    public string ScannerTokenHash { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("expires_at")]
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    [Column("approved_at")]
+    public DateTimeOffset? ApprovedAt { get; set; }
+
+    [Column("approved_user_id")]
+    public int? ApprovedUserId { get; set; }
+
+    [Column("consumed_at")]
+    public DateTimeOffset? ConsumedAt { get; set; }
+
+    [Column("canceled_at")]
+    public DateTimeOffset? CanceledAt { get; set; }
+
+    [Column("requested_ip")]
+    public string RequestedIp { get; set; } = string.Empty;
+
+    [Column("requested_user_agent")]
+    public string RequestedUserAgent { get; set; } = string.Empty;
+
+    [Column("approved_ip")]
+    public string? ApprovedIp { get; set; }
+
+    [Column("approved_user_agent")]
+    public string? ApprovedUserAgent { get; set; }
+
+    public User? ApprovedUser { get; set; }
 }
 
 [Table("phone_verification_codes")]
@@ -420,6 +477,7 @@ public class AppDbContext : DbContext
     public DbSet<GroupConversationMemberRecord> GroupConversationMembers => Set<GroupConversationMemberRecord>();
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
+    public DbSet<QrLoginSessionRecord> QrLoginSessions => Set<QrLoginSessionRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
 
@@ -497,6 +555,9 @@ public class AppDbContext : DbContext
             entity.Property(x => x.is_email_verified).HasDefaultValue(true);
             entity.Property(x => x.phone_number).IsRequired(false);
             entity.Property(x => x.is_phone_verified).HasDefaultValue(false);
+            entity.Property(x => x.totp_secret).IsRequired(false);
+            entity.Property(x => x.is_totp_enabled).HasDefaultValue(false);
+            entity.Property(x => x.totp_enabled_at).IsRequired(false);
             entity.Property(x => x.avatar_url).IsRequired(false);
             entity.Property(x => x.avatar_frame_json).IsRequired(false);
             entity.Property(x => x.profile_background_url).IsRequired(false);
@@ -527,6 +588,24 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Email).IsRequired();
             entity.Property(x => x.VerificationTokenHash).IsRequired();
             entity.Property(x => x.CodeHash).IsRequired();
+        });
+
+        modelBuilder.Entity<QrLoginSessionRecord>(entity =>
+        {
+            entity.ToTable("qr_login_sessions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.SessionId).IsUnique();
+            entity.HasIndex(x => x.BrowserTokenHash).IsUnique();
+            entity.HasIndex(x => new { x.ExpiresAt, x.ConsumedAt });
+            entity.Property(x => x.SessionId).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.BrowserTokenHash).IsRequired();
+            entity.Property(x => x.ScannerTokenHash).IsRequired();
+            entity.Property(x => x.RequestedIp).IsRequired();
+            entity.Property(x => x.RequestedUserAgent).IsRequired();
+            entity.HasOne(x => x.ApprovedUser)
+                .WithMany()
+                .HasForeignKey(x => x.ApprovedUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<PhoneVerificationCodeRecord>(entity =>

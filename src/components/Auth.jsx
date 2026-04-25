@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import "../css/Auth.css";
-import { API_BASE_URL } from "../config/runtime";
+import { API_BASE_URL, API_URL } from "../config/runtime";
 import { getApiErrorMessage, getNetworkErrorMessage, parseApiResponse } from "../utils/auth";
 import { resolveStaticAssetUrl } from "../utils/media";
 import { parseMediaFrame } from "../utils/mediaFrames";
@@ -14,6 +15,7 @@ import {
 
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
+const QR_LOGIN_POLL_INTERVAL_MS = 1800;
 const MAX_AUTH_NAME_LENGTH = 32;
 const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
@@ -21,8 +23,6 @@ const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
 const AUTH_BRAND_LOGO_URL = resolveStaticAssetUrl("/image/image.png");
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
-const REQUIRE_REGISTRATION_VERIFICATION = false;
-
 const initialRegisterForm = {
   firstName: "",
   lastName: "",
@@ -37,18 +37,13 @@ const initialRegisterForm = {
 const initialLoginForm = {
   identifier: "",
   password: "",
+  totpCode: "",
 };
 
 const initialLoginErrors = {
   identifier: "",
   password: "",
-};
-
-const initialPhoneVerificationStatus = {
-  verified: false,
-  deliveryMode: "",
-  debugCode: "",
-  resendAvailableAt: "",
+  totpCode: "",
 };
 
 const initialEmailVerificationModal = {
@@ -87,8 +82,6 @@ const formatCardExpiry = (value) => {
   return `${digits.slice(0, 2)}/${digits.slice(2)}`;
 };
 
-const formatPhoneInput = (value) => value.replace(/[^\d+\-()\s]/g, "").slice(0, 22);
-
 function getRemainingSeconds(availableAt) {
   if (!availableAt) {
     return 0;
@@ -112,37 +105,10 @@ function formatCooldown(seconds) {
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
-function normalizeContactInput(value) {
-  const candidate = String(value || "");
-
-  if (candidate.includes("@") || /[a-zA-Z\u0400-\u04FF]/.test(candidate)) {
-    return candidate.trimStart().slice(0, MAX_AUTH_IDENTIFIER_LENGTH);
-  }
-
-  return formatPhoneInput(candidate);
-}
-
 function normalizeIdentifierInput(value) {
   return String(value || "")
     .replace(/\s+/g, "")
     .slice(0, MAX_AUTH_IDENTIFIER_LENGTH);
-}
-
-function normalizeRussianPhone(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (!digits) {
-    return "";
-  }
-
-  if (digits.length === 11 && digits[0] === "8") {
-    return `+7${digits.slice(1)}`;
-  }
-
-  if (digits.length === 11 && digits[0] === "7") {
-    return `+${digits}`;
-  }
-
-  return "";
 }
 
 function isSupportedEmail(value) {
@@ -153,24 +119,6 @@ function isSupportedEmail(value) {
   }
 
   return SUPPORTED_EMAIL_DOMAINS.includes(normalized.slice(separatorIndex + 1));
-}
-
-function detectContactKind(value) {
-  const candidate = String(value || "").trim();
-  if (!candidate) {
-    return "";
-  }
-
-  if (candidate.includes("@")) {
-    return "email";
-  }
-
-  const digits = candidate.replace(/\D/g, "");
-  if (digits.length > 0) {
-    return "phone";
-  }
-
-  return "";
 }
 
 function shouldUseLiteAuthVisualMode() {
@@ -200,6 +148,7 @@ function mapAuthUser(data) {
     isEmailVerified: Boolean(data?.is_email_verified),
     phoneNumber: data?.phone_number || "",
     isPhoneVerified: Boolean(data?.is_phone_verified),
+    isTotpEnabled: Boolean(data?.is_totp_enabled),
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
     avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
@@ -221,6 +170,37 @@ function mapAuthSession(data) {
     refreshToken: data?.refreshToken || "",
     accessTokenExpiresAt: data?.accessTokenExpiresAt || "",
   };
+}
+
+function stripTrailingSlash(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function isLocalhostUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+function buildQrLoginLink(session) {
+  const runtime = typeof window !== "undefined" && window.electronRuntime && typeof window.electronRuntime === "object"
+    ? window.electronRuntime
+    : {};
+  const configuredPublicAppUrl = stripTrailingSlash(runtime.publicAppUrl || import.meta.env.VITE_PUBLIC_APP_URL);
+  const browserOrigin =
+    typeof window !== "undefined" && /^https?:$/i.test(String(window.location?.protocol || ""))
+      ? stripTrailingSlash(window.location.origin)
+      : "";
+  const apiUrl = stripTrailingSlash(API_URL);
+  const baseUrl = configuredPublicAppUrl || (!isLocalhostUrl(browserOrigin) ? browserOrigin : "") || apiUrl;
+  const qrUrl = new URL("/qr-login", `${baseUrl}/`);
+  qrUrl.searchParams.set("sid", session.sessionId);
+  qrUrl.searchParams.set("token", session.scannerToken);
+  return qrUrl.toString();
 }
 
 async function submitAuthRequest(endpoint, payload, fallbackMessage) {
@@ -258,18 +238,19 @@ export default function Auth({ onAuthSuccess }) {
   const [loginErrors, setLoginErrors] = useState(initialLoginErrors);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRequestingPhoneCode, setIsRequestingPhoneCode] = useState(false);
-  const [isVerifyingPhoneCode, setIsVerifyingPhoneCode] = useState(false);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
-  const [phoneVerificationCode, setPhoneVerificationCode] = useState("");
-  const [phoneVerificationToken, setPhoneVerificationToken] = useState("");
-  const [phoneVerificationStatus, setPhoneVerificationStatus] = useState(initialPhoneVerificationStatus);
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
+  const [emailVerificationTotpCode, setEmailVerificationTotpCode] = useState("");
   const [emailVerificationModal, setEmailVerificationModal] = useState(initialEmailVerificationModal);
   const [emailResendSecondsLeft, setEmailResendSecondsLeft] = useState(0);
   const [isRequestingLoginCode, setIsRequestingLoginCode] = useState(false);
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
+  const [qrLoginSession, setQrLoginSession] = useState(null);
+  const [qrLoginSvg, setQrLoginSvg] = useState("");
+  const [qrLoginStatus, setQrLoginStatus] = useState("loading");
+  const [qrLoginError, setQrLoginError] = useState("");
+  const [qrLoginRefreshIndex, setQrLoginRefreshIndex] = useState(0);
   const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
   const [typedSloganLength, setTypedSloganLength] = useState(0);
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
@@ -297,24 +278,11 @@ export default function Auth({ onAuthSuccess }) {
     return digits || "000";
   }, [registerForm.cardCvc]);
 
-  const registerContactKind = useMemo(() => detectContactKind(registerForm.contact), [registerForm.contact]);
-  const normalizedRegisterPhone = useMemo(
-    () => (registerContactKind === "phone" ? normalizeRussianPhone(registerForm.contact) : ""),
-    [registerContactKind, registerForm.contact]
-  );
   const normalizedRegisterEmail = useMemo(
-    () => (registerContactKind === "email" ? registerForm.contact.trim().toLowerCase() : ""),
-    [registerContactKind, registerForm.contact]
+    () => registerForm.contact.trim().toLowerCase(),
+    [registerForm.contact]
   );
 
-  const canRequestPhoneCode =
-    registerContactKind === "phone" && Boolean(normalizedRegisterPhone) && !isSubmitting && !isRequestingPhoneCode;
-  const canVerifyPhoneCode =
-    registerContactKind === "phone" &&
-    Boolean(phoneVerificationToken) &&
-    phoneVerificationCode.trim().length === 6 &&
-    !phoneVerificationStatus.verified &&
-    !isVerifyingPhoneCode;
   const canResendEmailCode =
     Boolean(emailVerificationModal.email) &&
     emailResendSecondsLeft === 0 &&
@@ -330,14 +298,9 @@ export default function Auth({ onAuthSuccess }) {
   );
   const isLoginEmailVerification = emailVerificationModal.purpose === "login";
 
-  const resetPhoneVerification = () => {
-    setPhoneVerificationCode("");
-    setPhoneVerificationToken("");
-    setPhoneVerificationStatus(initialPhoneVerificationStatus);
-  };
-
   const resetEmailVerificationModal = () => {
     setEmailVerificationCode("");
+    setEmailVerificationTotpCode("");
     setEmailResendSecondsLeft(0);
     setEmailVerificationModal(initialEmailVerificationModal);
   };
@@ -452,6 +415,118 @@ export default function Auth({ onAuthSuccess }) {
     return () => window.clearInterval(intervalId);
   }, [emailVerificationModal.open, emailVerificationModal.resendAvailableAt]);
 
+  useEffect(() => {
+    if (mode !== "login") {
+      setQrLoginSession(null);
+      setQrLoginSvg("");
+      setQrLoginStatus("idle");
+      setQrLoginError("");
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const createQrLoginSession = async () => {
+      setQrLoginStatus("loading");
+      setQrLoginError("");
+
+      try {
+        const session = await submitAuthRequest("/auth/qr-login/session", {}, "Не удалось создать QR-код.");
+        if (disposed) {
+          return;
+        }
+
+        const qrPayload = buildQrLoginLink(session);
+        const svg = await QRCode.toString(qrPayload, {
+          type: "svg",
+          width: 188,
+          margin: 1,
+          color: {
+            dark: "#121826",
+            light: "#ffffff",
+          },
+        });
+
+        if (disposed) {
+          return;
+        }
+
+        setQrLoginSession(session);
+        setQrLoginSvg(svg);
+        setQrLoginStatus("pending");
+      } catch (error) {
+        if (!disposed) {
+          setQrLoginSession(null);
+          setQrLoginSvg("");
+          setQrLoginStatus("error");
+          setQrLoginError(error.message || "Не удалось создать QR-код.");
+        }
+      }
+    };
+
+    createQrLoginSession();
+
+    return () => {
+      disposed = true;
+    };
+  }, [mode, qrLoginRefreshIndex]);
+
+  useEffect(() => {
+    if (mode !== "login" || !qrLoginSession?.sessionId || !qrLoginSession?.browserToken || qrLoginStatus !== "pending") {
+      return undefined;
+    }
+
+    let disposed = false;
+    let isPolling = false;
+
+    const pollQrLoginSession = async () => {
+      if (isPolling) {
+        return;
+      }
+
+      isPolling = true;
+      try {
+        const params = new URLSearchParams({ browserToken: qrLoginSession.browserToken });
+        const response = await fetch(`${API_BASE_URL}/auth/qr-login/session/${encodeURIComponent(qrLoginSession.sessionId)}?${params}`);
+        const data = await parseApiResponse(response);
+
+        if (disposed) {
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(getApiErrorMessage(response, data, "Не удалось проверить QR-вход."));
+        }
+
+        const status = String(data?.status || "").trim().toLowerCase();
+        if (status === "approved" && data?.token) {
+          setQrLoginStatus("approved");
+          onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
+          return;
+        }
+
+        if (status === "expired" || status === "consumed" || status === "canceled") {
+          setQrLoginStatus(status);
+        }
+      } catch (error) {
+        if (!disposed) {
+          setQrLoginStatus("error");
+          setQrLoginError(error.message || "Не удалось проверить QR-вход.");
+        }
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    pollQrLoginSession();
+    const intervalId = window.setInterval(pollQrLoginSession, QR_LOGIN_POLL_INTERVAL_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [mode, onAuthSuccess, qrLoginSession, qrLoginStatus]);
+
   const handleRegisterFieldChange = (field) => (event) => {
     let nextValue = event.target.value;
 
@@ -479,7 +554,7 @@ export default function Auth({ onAuthSuccess }) {
       setMessage("");
       return;
     } else if (field === "contact") {
-      nextValue = normalizeContactInput(nextValue);
+      nextValue = normalizeIdentifierInput(nextValue);
     } else if (field === "nickname") {
       nextValue = normalizeNicknameInput(nextValue);
     } else if (field === "password") {
@@ -488,9 +563,6 @@ export default function Auth({ onAuthSuccess }) {
 
     setRegisterForm((previous) => ({ ...previous, [field]: nextValue }));
 
-    if (field === "contact") {
-      resetPhoneVerification();
-    }
   };
 
   const handleLoginFieldChange = (field) => (event) => {
@@ -499,10 +571,15 @@ export default function Auth({ onAuthSuccess }) {
         ? normalizeIdentifierInput(event.target.value)
         : field === "password"
           ? event.target.value.slice(0, MAX_AUTH_PASSWORD_LENGTH)
+          : field === "totpCode"
+            ? event.target.value.replace(/\D/g, "").slice(0, 6)
           : event.target.value;
 
     setLoginForm((previous) => ({ ...previous, [field]: nextValue }));
     setLoginErrors((previous) => ({ ...previous, [field]: "" }));
+    if (field === "identifier" && emailVerificationModal.purpose === "login") {
+      resetEmailVerificationModal();
+    }
     setMessage("");
   };
 
@@ -514,27 +591,20 @@ export default function Auth({ onAuthSuccess }) {
     const payload = {
       identifier: loginForm.identifier.trim(),
       password: loginForm.password,
+      totpCode: loginForm.totpCode.trim(),
     };
 
     if (!payload.identifier || !payload.password) {
       setLoginErrors({
-        identifier: payload.identifier ? "" : "Введите email или номер телефона.",
+        identifier: payload.identifier ? "" : "Введите email.",
         password: payload.password ? "" : "Введите пароль.",
       });
       return;
     }
 
-    if (payload.identifier.includes("@") && !isSupportedEmail(payload.identifier)) {
+    if (!isSupportedEmail(payload.identifier)) {
       setLoginErrors({
         identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
-        password: "",
-      });
-      return;
-    }
-
-    if (!payload.identifier.includes("@") && !normalizeRussianPhone(payload.identifier)) {
-      setLoginErrors({
-        identifier: "Введите номер телефона в формате +79891112233.",
         password: "",
       });
       return;
@@ -553,6 +623,7 @@ export default function Auth({ onAuthSuccess }) {
 
       if (pendingEmailVerification && verification) {
         setEmailVerificationCode("");
+        setEmailVerificationTotpCode("");
         setEmailVerificationModal({
           open: true,
           purpose: "login",
@@ -561,6 +632,7 @@ export default function Auth({ onAuthSuccess }) {
           deliveryMode: verification.deliveryMode || "mock",
           debugCode: verification.debugCode || "",
           resendAvailableAt: verification.resendAvailableAt || "",
+          requiresTotp: false,
         });
         setMessage(
           verification.debugCode
@@ -596,23 +668,15 @@ export default function Auth({ onAuthSuccess }) {
     const identifier = loginForm.identifier.trim();
     if (!identifier) {
       setLoginErrors({
-        identifier: "Введите email или номер телефона.",
+        identifier: "Введите email.",
         password: "",
       });
       return;
     }
 
-    if (identifier.includes("@") && !isSupportedEmail(identifier)) {
+    if (!isSupportedEmail(identifier)) {
       setLoginErrors({
         identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
-        password: "",
-      });
-      return;
-    }
-
-    if (!identifier.includes("@") && !normalizeRussianPhone(identifier)) {
-      setLoginErrors({
-        identifier: "Введите номер телефона в формате +79891112233.",
         password: "",
       });
       return;
@@ -628,6 +692,7 @@ export default function Auth({ onAuthSuccess }) {
       );
 
       setEmailVerificationCode("");
+      setEmailVerificationTotpCode("");
       setEmailVerificationModal({
         open: true,
         purpose: "login",
@@ -636,9 +701,10 @@ export default function Auth({ onAuthSuccess }) {
         deliveryMode: data?.deliveryMode || "mock",
         debugCode: data?.debugCode || "",
         resendAvailableAt: data?.resendAvailableAt || "",
+        requiresTotp: false,
       });
 
-      setMessage(data?.debugCode ? `Тестовый код входа: ${data.debugCode}` : "Код входа отправлен на почту.");
+      setMessage("Код входа отправлен на почту.");
     } catch (error) {
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
@@ -648,79 +714,13 @@ export default function Auth({ onAuthSuccess }) {
         setLoginErrors({
           identifier: typeof backendFieldErrors.identifier === "string" ? backendFieldErrors.identifier : "",
           password: typeof backendFieldErrors.password === "string" ? backendFieldErrors.password : "",
+          totpCode: typeof backendFieldErrors.totpCode === "string" ? backendFieldErrors.totpCode : "",
         });
       } else {
         setMessage(error.message || "Не удалось отправить код входа.");
       }
     } finally {
       setIsRequestingLoginCode(false);
-    }
-  };
-
-  const handleRequestPhoneCode = async () => {
-    setMessage("");
-
-    if (!normalizedRegisterPhone) {
-      setMessage("Введите российский номер телефона в формате +7XXXXXXXXXX.");
-      return;
-    }
-
-    setIsRequestingPhoneCode(true);
-
-    try {
-      const data = await submitAuthRequest(
-        "/auth/request-phone-verification",
-        { phone: normalizedRegisterPhone },
-        "Не удалось отправить код подтверждения."
-      );
-
-      setPhoneVerificationToken(data?.verificationToken || "");
-      setPhoneVerificationStatus({
-        verified: false,
-        deliveryMode: data?.deliveryMode || "mock",
-        debugCode: data?.debugCode || "",
-        resendAvailableAt: data?.resendAvailableAt || "",
-      });
-
-      setMessage(
-        data?.debugCode
-          ? `Код подтверждения получен. Тестовый код: ${data.debugCode}`
-          : "Код подтверждения отправлен на номер телефона."
-      );
-    } catch (error) {
-      setMessage(error.message || "Не удалось отправить код подтверждения.");
-    } finally {
-      setIsRequestingPhoneCode(false);
-    }
-  };
-
-  const handleVerifyPhoneCode = async () => {
-    setMessage("");
-
-    if (!normalizedRegisterPhone || !phoneVerificationToken) {
-      setMessage("Сначала запросите код подтверждения.");
-      return;
-    }
-
-    setIsVerifyingPhoneCode(true);
-
-    try {
-      await submitAuthRequest(
-        "/auth/verify-phone-code",
-        {
-          phone: normalizedRegisterPhone,
-          verificationToken: phoneVerificationToken,
-          code: phoneVerificationCode.trim(),
-        },
-        "Не удалось подтвердить номер телефона."
-      );
-
-      setPhoneVerificationStatus((previous) => ({ ...previous, verified: true }));
-      setMessage("Номер телефона подтверждён.");
-    } catch (error) {
-      setMessage(error.message || "Не удалось подтвердить номер телефона.");
-    } finally {
-      setIsVerifyingPhoneCode(false);
     }
   };
 
@@ -733,13 +733,7 @@ export default function Auth({ onAuthSuccess }) {
       last_name: registerForm.lastName.trim(),
       nickname: registerForm.nickname.trim(),
       password: registerForm.password,
-      ...(registerContactKind === "email" ? { email: normalizedRegisterEmail } : {}),
-      ...(registerContactKind === "phone"
-        ? {
-            phone: normalizedRegisterPhone,
-            phone_verification_token: phoneVerificationToken,
-          }
-        : {}),
+      email: normalizedRegisterEmail,
     };
 
     if (!payload.first_name || !payload.nickname || !registerForm.contact.trim()) {
@@ -757,23 +751,8 @@ export default function Auth({ onAuthSuccess }) {
       return;
     }
 
-    if (registerContactKind === "email") {
-      if (!isSupportedEmail(payload.email)) {
-        setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
-        return;
-      }
-    } else if (registerContactKind === "phone") {
-      if (!normalizedRegisterPhone) {
-        setMessage("Введите российский номер телефона в формате +7XXXXXXXXXX.");
-        return;
-      }
-
-      if (REQUIRE_REGISTRATION_VERIFICATION && (!phoneVerificationStatus.verified || !phoneVerificationToken)) {
-        setMessage("Сначала подтвердите номер телефона кодом.");
-        return;
-      }
-    } else {
-      setMessage("Введите email или номер телефона.");
+    if (!isSupportedEmail(payload.email)) {
+      setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
       return;
     }
 
@@ -893,12 +872,16 @@ export default function Auth({ onAuthSuccess }) {
           email: emailVerificationModal.email,
           verificationToken: emailVerificationModal.verificationToken,
           code: emailVerificationCode.trim(),
+          totpCode: emailVerificationTotpCode.trim(),
         },
         "Не удалось подтвердить почту."
       );
       resetEmailVerificationModal();
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
+      if (error?.data?.requiresTotp) {
+        setEmailVerificationModal((previous) => ({ ...previous, requiresTotp: true }));
+      }
       setMessage(error.message || "Не удалось подтвердить почту.");
     } finally {
       setIsVerifyingEmailCode(false);
@@ -911,8 +894,6 @@ export default function Auth({ onAuthSuccess }) {
     setMessage("");
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
-    setIsRequestingPhoneCode(false);
-    setIsVerifyingPhoneCode(false);
     setIsRequestingLoginCode(false);
     setIsResendingEmailCode(false);
     setIsVerifyingEmailCode(false);
@@ -927,6 +908,10 @@ export default function Auth({ onAuthSuccess }) {
     setIsRequestingLoginCode(false);
   };
 
+  const refreshQrLoginSession = () => {
+    setQrLoginRefreshIndex((previous) => previous + 1);
+  };
+
   const handleAuthSubmit = (event) => {
     if (mode !== "login") {
       handleRegister(event);
@@ -934,6 +919,11 @@ export default function Auth({ onAuthSuccess }) {
     }
 
     if (loginMethod === "code") {
+      if (isLoginEmailVerification && emailVerificationModal.open) {
+        handleVerifyEmailCode(event);
+        return;
+      }
+
       handleRequestLoginCode(event);
       return;
     }
@@ -1005,7 +995,7 @@ export default function Auth({ onAuthSuccess }) {
               <label className="auth-field">
                 <input
                   className={`auth-input ${loginErrors.identifier ? "auth-input--error" : ""}`}
-                  placeholder="Email или телефон"
+                  placeholder="Email"
                   type="text"
                   value={loginForm.identifier}
                   onChange={handleLoginFieldChange("identifier")}
@@ -1016,19 +1006,71 @@ export default function Auth({ onAuthSuccess }) {
                   <span className="auth-field__error">{loginErrors.identifier}</span>
                 ) : null}
               </label>
-              {loginMethod === "password" ? (
-                <label className="auth-field auth-field--with-error-slot">
+              {loginMethod === "code" && isLoginEmailVerification && emailVerificationModal.open ? (
+                <div className="auth-inline-code">
+                  <p className="auth-inline-code__text">
+                    Код отправлен на <strong>{emailVerificationModal.email}</strong>.
+                  </p>
+                  {emailVerificationModal.deliveryMode === "mock" && emailVerificationModal.debugCode ? (
+                    <div className="auth-hint">Тестовый код: <span className="auth-hint__code">{emailVerificationModal.debugCode}</span></div>
+                  ) : null}
                   <input
-                    className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
-                    placeholder="Пароль"
-                    type="password"
-                    value={loginForm.password}
-                    onChange={handleLoginFieldChange("password")}
-                    maxLength={MAX_AUTH_PASSWORD_LENGTH}
-                    required
+                    className="auth-input"
+                    placeholder="Код из письма"
+                    value={emailVerificationCode}
+                    onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    maxLength={6}
+                    inputMode="numeric"
+                    autoFocus
                   />
-                  <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
-                </label>
+                  {emailVerificationModal.requiresTotp ? (
+                    <input
+                      className="auth-input"
+                      placeholder="Код Google Authenticator"
+                      inputMode="numeric"
+                      value={emailVerificationTotpCode}
+                      onChange={(event) => setEmailVerificationTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      maxLength={6}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    className="auth-switch-link auth-inline-code__resend"
+                    onClick={handleResendEmailCode}
+                    disabled={!canResendEmailCode}
+                  >
+                    {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? `Повторить через ${formatCooldown(emailResendSecondsLeft)}` : "Отправить код снова"}
+                  </button>
+                </div>
+              ) : null}
+              {loginMethod === "password" ? (
+                <>
+                  <label className="auth-field auth-field--with-error-slot">
+                    <input
+                      className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
+                      placeholder="Пароль"
+                      type="password"
+                      value={loginForm.password}
+                      onChange={handleLoginFieldChange("password")}
+                      maxLength={MAX_AUTH_PASSWORD_LENGTH}
+                      required
+                    />
+                    <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
+                  </label>
+                  {loginErrors.totpCode || loginForm.totpCode ? (
+                    <label className="auth-field auth-field--with-error-slot">
+                      <input
+                        className={`auth-input ${loginErrors.totpCode ? "auth-input--error" : ""}`}
+                        placeholder="Код Google Authenticator"
+                        inputMode="numeric"
+                        value={loginForm.totpCode}
+                        onChange={handleLoginFieldChange("totpCode")}
+                        maxLength={6}
+                      />
+                      <span className="auth-field__error auth-field__error-slot">{loginErrors.totpCode}</span>
+                    </label>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : (
@@ -1064,46 +1106,13 @@ export default function Auth({ onAuthSuccess }) {
 
               <input
                 className="auth-input"
-                placeholder="Email или телефон"
+                placeholder="Email"
                 type="text"
                 value={registerForm.contact}
                 onChange={handleRegisterFieldChange("contact")}
                 maxLength={MAX_AUTH_IDENTIFIER_LENGTH}
                 required
               />
-              {REQUIRE_REGISTRATION_VERIFICATION && registerContactKind === "phone" ? (
-                <div className="auth-phone-verify">
-                  <button
-                    className="auth-submit auth-submit--secondary"
-                    type="button"
-                    onClick={handleRequestPhoneCode}
-                    disabled={!canRequestPhoneCode}
-                  >
-                    {isRequestingPhoneCode ? "Отправляем код..." : "Получить код"}
-                  </button>
-
-                  <div className="auth-grid auth-grid--double auth-grid--verify">
-                    <input
-                      className="auth-input"
-                      placeholder="Код из SMS"
-                      value={phoneVerificationCode}
-                      onChange={(event) => setPhoneVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    />
-                    <button
-                      className="auth-submit auth-submit--secondary"
-                      type="button"
-                      onClick={handleVerifyPhoneCode}
-                      disabled={!canVerifyPhoneCode}
-                    >
-                      {isVerifyingPhoneCode ? "Проверяем..." : phoneVerificationStatus.verified ? "Номер подтверждён" : "Подтвердить"}
-                    </button>
-                  </div>
-
-                  {phoneVerificationStatus.deliveryMode === "mock" && phoneVerificationStatus.debugCode ? (
-                    <div className="auth-hint">Тестовый код: {phoneVerificationStatus.debugCode}</div>
-                  ) : null}
-                </div>
-              ) : null}
 
               <input
                 className="auth-input"
@@ -1118,12 +1127,16 @@ export default function Auth({ onAuthSuccess }) {
             </div>
           )}
 
-          <button className="auth-submit" type="submit" disabled={isSubmitting || isRequestingLoginCode}>
+          <button className="auth-submit" type="submit" disabled={isSubmitting || isRequestingLoginCode || isVerifyingEmailCode}>
             {mode === "login"
               ? loginMethod === "code"
                 ? isRequestingLoginCode
                   ? "Отправляем код..."
-                  : "Войти"
+                  : isLoginEmailVerification && emailVerificationModal.open
+                    ? isVerifyingEmailCode
+                      ? "Проверяем..."
+                      : "Подтвердить"
+                    : "Войти"
                 : isSubmitting
                   ? "Входим..."
                   : "Войти"
@@ -1157,62 +1170,96 @@ export default function Auth({ onAuthSuccess }) {
           {message ? <p className="auth-message">{message}</p> : null}
         </div>
 
-        <aside className="auth-card__side">
-          <div className="auth-side__title">Платёжная карта</div>
-          <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
-            <div className="bank-card__face bank-card__face--front">
-              <div className="bank-card__brand">MAX PAY</div>
-              <div className="bank-card__number">{displayedCardNumber}</div>
-              <div className="bank-card__meta">
-                <div>
-                  <span className="bank-card__label">Держатель</span>
-                  <span className="bank-card__value">{cardHolderName}</span>
+        <aside className={`auth-card__side ${mode === "login" ? "auth-card__side--qr" : ""}`}>
+          {mode === "login" ? (
+            <div className="auth-qr-login" aria-live="polite">
+              <div>
+                <div className="auth-side__title">Вход по QR</div>
+                <p className="auth-side__subtitle">Отсканируйте код на устройстве, где уже выполнен вход.</p>
+              </div>
+              <div className={`auth-qr-login__code ${qrLoginStatus === "expired" ? "auth-qr-login__code--muted" : ""}`}>
+                {qrLoginSvg ? (
+                  <div className="auth-qr-login__svg" dangerouslySetInnerHTML={{ __html: qrLoginSvg }} />
+                ) : (
+                  <div className="auth-qr-login__loader" />
+                )}
+              </div>
+              <div className="auth-qr-login__status">
+                {qrLoginStatus === "loading"
+                  ? "Готовим QR-код..."
+                  : qrLoginStatus === "approved"
+                    ? "Вход подтверждён."
+                    : qrLoginStatus === "expired"
+                      ? "QR-код устарел."
+                      : qrLoginStatus === "error"
+                        ? qrLoginError || "QR-вход недоступен."
+                        : "Ожидаем подтверждение на втором устройстве."}
+              </div>
+              {qrLoginStatus === "expired" || qrLoginStatus === "error" ? (
+                <button type="button" className="auth-switch-link auth-qr-login__refresh" onClick={refreshQrLoginSession}>
+                  Обновить QR-код
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="auth-side__title">Платёжная карта</div>
+              <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
+                <div className="bank-card__face bank-card__face--front">
+                  <div className="bank-card__brand">MAX PAY</div>
+                  <div className="bank-card__number">{displayedCardNumber}</div>
+                  <div className="bank-card__meta">
+                    <div>
+                      <span className="bank-card__label">Держатель</span>
+                      <span className="bank-card__value">{cardHolderName}</span>
+                    </div>
+                    <div>
+                      <span className="bank-card__label">Срок</span>
+                      <span className="bank-card__value">{displayedCardExpiry}</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span className="bank-card__label">Срок</span>
-                  <span className="bank-card__value">{displayedCardExpiry}</span>
+
+                <div className="bank-card__face bank-card__face--back">
+                  <div className="bank-card__stripe" />
+                  <div className="bank-card__cvc-box">
+                    <span className="bank-card__label">CVC</span>
+                    <span>Показываем только визуальный макет</span>
+                    <span className="bank-card__cvc">{displayedCardCvc}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="bank-card__face bank-card__face--back">
-              <div className="bank-card__stripe" />
-              <div className="bank-card__cvc-box">
-                <span className="bank-card__label">CVC</span>
-                <span>Показываем только визуальный макет</span>
-                <span className="bank-card__cvc">{displayedCardCvc}</span>
+              <div className="auth-grid auth-grid--double auth-grid--card">
+                <input
+                  className="auth-input"
+                  placeholder="Номер карты"
+                  value={registerForm.cardNumber}
+                  onChange={handleRegisterFieldChange("cardNumber")}
+                  onFocus={() => setIsCardFlipped(false)}
+                />
+                <input
+                  className="auth-input"
+                  placeholder="Срок действия"
+                  value={registerForm.cardExpiry}
+                  onChange={handleRegisterFieldChange("cardExpiry")}
+                  onFocus={() => setIsCardFlipped(false)}
+                />
+                <input
+                  className="auth-input auth-input--compact"
+                  placeholder="CVC"
+                  value={registerForm.cardCvc}
+                  onChange={handleRegisterFieldChange("cardCvc")}
+                  onFocus={() => setIsCardFlipped(true)}
+                  onBlur={() => setIsCardFlipped(false)}
+                />
               </div>
-            </div>
-          </div>
-
-          <div className="auth-grid auth-grid--double auth-grid--card">
-            <input
-              className="auth-input"
-              placeholder="Номер карты"
-              value={registerForm.cardNumber}
-              onChange={handleRegisterFieldChange("cardNumber")}
-              onFocus={() => setIsCardFlipped(false)}
-            />
-            <input
-              className="auth-input"
-              placeholder="Срок действия"
-              value={registerForm.cardExpiry}
-              onChange={handleRegisterFieldChange("cardExpiry")}
-              onFocus={() => setIsCardFlipped(false)}
-            />
-            <input
-              className="auth-input auth-input--compact"
-              placeholder="CVC"
-              value={registerForm.cardCvc}
-              onChange={handleRegisterFieldChange("cardCvc")}
-              onFocus={() => setIsCardFlipped(true)}
-              onBlur={() => setIsCardFlipped(false)}
-            />
-          </div>
+            </>
+          )}
         </aside>
       </form>
 
-      {emailVerificationModal.open ? (
+      {emailVerificationModal.open && !isLoginEmailVerification ? (
         <div className="auth-verify-modal__backdrop">
           <form className="auth-verify-modal" onSubmit={handleVerifyEmailCode}>
             <div className="auth-verify-modal__header">
@@ -1225,7 +1272,7 @@ export default function Auth({ onAuthSuccess }) {
               Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы {isLoginEmailVerification ? "войти в аккаунт" : "завершить регистрацию"}. Если письма нет, проверьте папку со спамом.
             </p>
             {emailVerificationModal.deliveryMode === "mock" && emailVerificationModal.debugCode ? (
-              <div className="auth-hint">Тестовый код: {emailVerificationModal.debugCode}</div>
+              <div className="auth-hint">Тестовый код: <span className="auth-hint__code">{emailVerificationModal.debugCode}</span></div>
             ) : null}
             <input
               className="auth-input"
@@ -1234,6 +1281,16 @@ export default function Auth({ onAuthSuccess }) {
               onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
               autoFocus
             />
+            {emailVerificationModal.requiresTotp ? (
+              <input
+                className="auth-input"
+                placeholder="Код Google Authenticator"
+                inputMode="numeric"
+                value={emailVerificationTotpCode}
+                onChange={(event) => setEmailVerificationTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                maxLength={6}
+              />
+            ) : null}
             {emailResendSecondsLeft > 0 ? (
               <div className="auth-hint">Повторная отправка будет доступна через {formatCooldown(emailResendSecondsLeft)}.</div>
             ) : null}

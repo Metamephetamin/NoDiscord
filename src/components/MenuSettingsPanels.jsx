@@ -25,12 +25,18 @@ export const PersonalProfileSettings = ({
   email,
   profileDraft,
   profileStatus,
+  isTotpEnabled,
+  totpSetup,
   maxProfileNameLength,
   maxNicknameLength,
   onSubmit,
   onChangeAvatar,
   onChangeBackground,
   onUpdateDraft,
+  onTotpCodeChange,
+  onStartTotpSetup,
+  onVerifyTotpSetup,
+  onDisableTotp,
   onLogout,
 }) => (
   <div className="settings-shell__content">
@@ -99,6 +105,58 @@ export const PersonalProfileSettings = ({
         </div>
 
         {profileStatus ? <div className="profile-settings-form__status">{profileStatus}</div> : null}
+
+        <div className="voice-settings-card">
+          <div className="voice-settings-card__title">Google Authenticator</div>
+          <div className="voice-settings-grid">
+            <div className="voice-settings-field voice-settings-field--stacked profile-settings-form__field--full">
+              <span>{isTotpEnabled ? "Подключён" : "Не подключён"}</span>
+              <span className="voice-settings-caption">
+                Код из приложения будет запрашиваться при входе по паролю и при входе по коду из письма.
+              </span>
+              {totpSetup?.secret ? (
+                <>
+                  <input className="settings-input" value={totpSetup.secret} readOnly />
+                  <span className="voice-settings-caption">В Google Authenticator выберите ввод ключа вручную и добавьте аккаунт MAX.</span>
+                </>
+              ) : null}
+            </div>
+
+            {(totpSetup?.secret || isTotpEnabled) ? (
+              <label className="voice-settings-field voice-settings-field--stacked">
+                <span>Код из приложения</span>
+                <input
+                  className="settings-input"
+                  inputMode="numeric"
+                  value={totpSetup?.code || ""}
+                  onChange={(event) => onTotpCodeChange(event.target.value)}
+                  maxLength={6}
+                  placeholder="123456"
+                />
+              </label>
+            ) : null}
+          </div>
+
+          {totpSetup?.status ? <div className="profile-settings-form__status">{totpSetup.status}</div> : null}
+
+          <div className="settings-shell__actions">
+            {!isTotpEnabled && !totpSetup?.secret ? (
+              <button type="button" className="settings-inline-button" onClick={onStartTotpSetup} disabled={totpSetup?.isBusy}>
+                {totpSetup?.isBusy ? "Готовим..." : "Подключить"}
+              </button>
+            ) : null}
+            {!isTotpEnabled && totpSetup?.secret ? (
+              <button type="button" className="settings-inline-button" onClick={onVerifyTotpSetup} disabled={totpSetup?.isBusy}>
+                {totpSetup?.isBusy ? "Проверяем..." : "Подтвердить"}
+              </button>
+            ) : null}
+            {isTotpEnabled ? (
+              <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
+                {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         <div className="settings-shell__actions">
           <button type="submit" className="settings-inline-button">Сохранить профиль</button>
@@ -208,10 +266,9 @@ export const VoiceSettingsPanel = ({
 
     <section className="voice-settings-card">
       <div className="voice-settings-card__title">Профиль ввода</div>
-      <div className="voice-toggle-row voice-toggle-row--first">
+      <div className="voice-toggle-row voice-toggle-row--first voice-toggle-row--compact">
         <div>
           <strong>Эхоподавление</strong>
-          <span>Убирает обратный звук из динамиков и теперь включается отдельно от шумоподавления.</span>
         </div>
         <VoiceSwitch active={echoCancellationEnabled} onClick={onToggleEchoCancellation} label="Эхоподавление" />
       </div>

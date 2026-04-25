@@ -5646,13 +5646,13 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   --slider-tooltip-edge-offset: 28px;
   position: relative;
   width: 100%;
-  padding-top: 34px;
+  padding-top: 38px;
 }
 
 .slider-with-tooltip__bubble {
   position: absolute;
   left: clamp(var(--slider-tooltip-edge-offset), var(--slider-tooltip-position), calc(100% - var(--slider-tooltip-edge-offset)));
-  top: -8px;
+  top: -16px;
   min-width: 52px;
   min-height: 34px;
   padding: 8px 10px;
@@ -5671,7 +5671,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(4px);
+  transform: translateX(-50%) translateY(0);
   transition: opacity 0.18s ease, transform 0.18s ease;
   z-index: 8;
 }
@@ -5691,7 +5691,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .slider-with-tooltip--active .slider-with-tooltip__bubble {
   opacity: 1;
-  transform: translateX(-50%) translateY(-2px);
+  transform: translateX(-50%) translateY(-6px);
 }
 
 .device-menu__slider input,
@@ -6173,6 +6173,15 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .voice-toggle-row--first {
   padding-top: 0;
+}
+
+.voice-toggle-row--compact {
+  min-height: 42px;
+  padding: 8px 0;
+}
+
+.voice-toggle-row--compact > div {
+  min-width: 0;
 }
 
 .voice-toggle-row strong {
@@ -9302,10 +9311,10 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline--floating {
-  width: min(380px, calc(100vw - 32px));
-  max-width: min(380px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
+  max-width: min(480px, calc(100vw - 32px));
   grid-template-columns: 1fr;
-  padding: 18px;
+  padding: 20px;
 }
 
 .direct-call-floating-layer {
@@ -9407,7 +9416,8 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 
 .direct-call-inline__participants {
   grid-column: 1 / -1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   justify-content: center;
   gap: clamp(12px, 4vw, 18px);
@@ -9426,7 +9436,6 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 
 .direct-call-inline__participant {
   min-width: 0;
-  flex: 0 1 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -9451,8 +9460,8 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline--floating .direct-call-inline__avatar {
-  width: 70px;
-  height: 70px;
+  width: 76px;
+  height: 76px;
 }
 
 .direct-call-inline__link {
@@ -9465,9 +9474,8 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline--floating .direct-call-inline__link {
-  width: 112px;
+  width: 124px;
   height: 48px;
-  flex-basis: 112px;
 }
 
 .direct-call-inline__voice-wave {

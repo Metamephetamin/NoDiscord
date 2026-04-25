@@ -363,12 +363,23 @@ const parseRendererRouteFromDeepLink = (rawUrl) => {
     }
 
     const action = String(parsed.hostname || "").trim().toLowerCase();
-    if (action !== "invite") {
-      return "";
+    if (action === "invite") {
+      const inviteCode = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).trim().toUpperCase();
+      return inviteCode ? `/invite/${encodeURIComponent(inviteCode)}` : "";
     }
 
-    const inviteCode = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).trim().toUpperCase();
-    return inviteCode ? `/invite/${encodeURIComponent(inviteCode)}` : "";
+    if (action === "qr-login") {
+      const sid = String(parsed.searchParams.get("sid") || "").trim();
+      const token = String(parsed.searchParams.get("token") || "").trim();
+      if (!sid || !token) {
+        return "";
+      }
+
+      const query = new URLSearchParams({ sid, token });
+      return `/qr-login?${query}`;
+    }
+
+    return "";
   } catch {
     return "";
   }

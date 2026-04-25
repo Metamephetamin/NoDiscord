@@ -21,180 +21,23 @@ namespace BackNoDiscord;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private static readonly TimeSpan PhoneVerificationLifetime = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan PhoneVerificationResendCooldown = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan QrLoginLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
-    private const int MaxPhoneVerificationAttempts = 5;
     private const int MaxEmailVerificationAttempts = 5;
     private bool RequireEmailRegistrationVerification => _config.GetValue<bool?>("Auth:RequireEmailVerification") ?? true;
-    private bool RequirePhoneRegistrationVerification => _config.GetValue<bool?>("Auth:RequirePhoneVerification") ?? false;
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _config;
     private readonly IEmailVerificationSender _emailVerificationSender;
     private readonly PasswordHasher<User> _passwordHasher;
-    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AppDbContext context, IConfiguration config, IEmailVerificationSender emailVerificationSender, ILogger<AuthController> logger)
+    public AuthController(AppDbContext context, IConfiguration config, IEmailVerificationSender emailVerificationSender)
     {
         _context = context;
         _config = config;
         _emailVerificationSender = emailVerificationSender;
-        _logger = logger;
         _passwordHasher = new PasswordHasher<User>();
-    }
-
-    [HttpPost("request-phone-verification")]
-    [EnableRateLimiting("phone-send")]
-    public async Task<IActionResult> RequestPhoneVerification([FromBody] PhoneVerificationRequestDto dto)
-    {
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
-        if (!AuthInputPolicies.TryNormalizeRussianPhone(dto.phone, out var normalizedPhone, out var phoneError))
-        {
-            return BadRequest(new { message = phoneError });
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var latestActive = await _context.PhoneVerificationCodes
-            .Where(item => item.PhoneNumber == normalizedPhone && !item.ConsumedAt.HasValue)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync();
-
-        if (latestActive != null &&
-            latestActive.LastSentAt + PhoneVerificationResendCooldown > now)
-        {
-            var waitSeconds = Math.Max(1, (int)Math.Ceiling((latestActive.LastSentAt + PhoneVerificationResendCooldown - now).TotalSeconds));
-            return StatusCode(StatusCodes.Status429TooManyRequests, new
-            {
-                message = $"Повторно отправить код можно через {waitSeconds} сек."
-            });
-        }
-
-        if (await _context.Users.AnyAsync(user => user.phone_number == normalizedPhone))
-        {
-            return BadRequest(new { message = "Этот номер уже используется." });
-        }
-
-        var verificationCode = GeneratePhoneVerificationCode();
-        var verificationToken = GenerateVerificationToken();
-
-        var activeCodes = await _context.PhoneVerificationCodes
-            .Where(item => item.PhoneNumber == normalizedPhone && !item.ConsumedAt.HasValue)
-            .ToListAsync();
-
-        foreach (var activeCode in activeCodes)
-        {
-            activeCode.ConsumedAt = now;
-        }
-
-        _context.PhoneVerificationCodes.Add(new PhoneVerificationCodeRecord
-        {
-            PhoneNumber = normalizedPhone,
-            VerificationTokenHash = AuthInputPolicies.HashSecret(verificationToken),
-            CodeHash = AuthInputPolicies.HashSecret(verificationCode),
-            CreatedAt = now,
-            ExpiresAt = now.Add(PhoneVerificationLifetime),
-            LastSentAt = now,
-            AttemptCount = 0
-        });
-
-        await _context.SaveChangesAsync();
-
-        var deliveryMode = GetSmsDeliveryMode();
-        var smsBody = BuildPhoneVerificationMessage(verificationCode);
-        if (string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("Phone verification message for {PhoneNumber}: {SmsBody}", normalizedPhone, smsBody);
-        }
-        else
-        {
-            _logger.LogInformation("Phone verification message prepared for {PhoneNumber} using {DeliveryMode} delivery.", normalizedPhone, deliveryMode);
-        }
-
-        return Ok(new
-        {
-            phone = normalizedPhone,
-            verificationToken,
-            expiresAt = now.Add(PhoneVerificationLifetime).ToString("O"),
-            resendAvailableAt = now.Add(PhoneVerificationResendCooldown).ToString("O"),
-            deliveryMode,
-            debugCode = string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase) ? verificationCode : null
-        });
-    }
-
-    [HttpPost("verify-phone-code")]
-    [EnableRateLimiting("phone-verify")]
-    public async Task<IActionResult> VerifyPhoneCode([FromBody] VerifyPhoneCodeDto dto)
-    {
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
-        if (!AuthInputPolicies.TryNormalizeRussianPhone(dto.phone, out var normalizedPhone, out var phoneError))
-        {
-            return BadRequest(new { message = phoneError });
-        }
-
-        var verificationToken = (dto.verificationToken ?? string.Empty).Trim();
-        var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
-        if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
-        {
-            return BadRequest(new { message = "Введите корректный шестизначный код." });
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var record = await _context.PhoneVerificationCodes
-            .Where(item =>
-                item.PhoneNumber == normalizedPhone &&
-                item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
-                !item.ConsumedAt.HasValue)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync();
-
-        if (record == null)
-        {
-            return BadRequest(new { message = "Сессия подтверждения номера не найдена. Запросите код заново." });
-        }
-
-        if (record.ExpiresAt <= now)
-        {
-            record.ConsumedAt = now;
-            await _context.SaveChangesAsync();
-            return BadRequest(new { message = "Срок действия кода истёк. Запросите новый код." });
-        }
-
-        if (record.AttemptCount >= MaxPhoneVerificationAttempts)
-        {
-            return BadRequest(new { message = "Лимит попыток исчерпан. Запросите новый код." });
-        }
-
-        if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
-        {
-            record.AttemptCount += 1;
-            if (record.AttemptCount >= MaxPhoneVerificationAttempts)
-            {
-                record.ConsumedAt = now;
-            }
-
-            await _context.SaveChangesAsync();
-            return BadRequest(new { message = "Неверный код подтверждения." });
-        }
-
-        record.VerifiedAt = now;
-        await _context.SaveChangesAsync();
-
-        return Ok(new
-        {
-            verified = true,
-            phone = normalizedPhone,
-            verificationToken
-        });
     }
 
     [HttpPost("resend-email-verification")]
@@ -299,6 +142,17 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Лимит попыток исчерпан. Запросите новый код." });
         }
 
+        var wasEmailVerified = user.is_email_verified;
+        if (wasEmailVerified && user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, dto.totpCode, now))
+        {
+            return BadRequest(new
+            {
+                code = "totp_required",
+                message = "Введите код из Google Authenticator.",
+                requiresTotp = true
+            });
+        }
+
         if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
         {
             record.AttemptCount += 1;
@@ -321,6 +175,215 @@ public class AuthController : ControllerBase
         return Ok(BuildAuthResponse(user, authSession));
     }
 
+    [HttpPost("totp/setup")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> SetupTotp()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        if (user.is_totp_enabled)
+        {
+            return BadRequest(new { message = "Google Authenticator уже подключён." });
+        }
+
+        var secret = TotpService.GenerateSecret();
+        user.totp_secret = secret;
+        user.is_totp_enabled = false;
+        user.totp_enabled_at = null;
+        await _context.SaveChangesAsync();
+
+        var accountName = !string.IsNullOrWhiteSpace(user.email)
+            ? user.email
+            : user.nickname;
+
+        return Ok(new
+        {
+            secret,
+            accountName,
+            otpauthUri = TotpService.BuildOtpAuthUri("MAX", accountName, secret),
+            isTotpEnabled = user.is_totp_enabled
+        });
+    }
+
+    [HttpPost("totp/verify")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> VerifyTotpSetup([FromBody] TotpCodeDto dto)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        if (!TotpService.VerifyCode(user.totp_secret, dto.code, DateTimeOffset.UtcNow))
+        {
+            return BadRequest(new { message = "Неверный код из Google Authenticator." });
+        }
+
+        user.is_totp_enabled = true;
+        user.totp_enabled_at = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { isTotpEnabled = true, enabledAt = user.totp_enabled_at?.ToString("O") });
+    }
+
+    [HttpPost("totp/disable")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> DisableTotp([FromBody] TotpCodeDto dto)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        if (user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, dto.code, DateTimeOffset.UtcNow))
+        {
+            return BadRequest(new { message = "Неверный код из Google Authenticator." });
+        }
+
+        user.totp_secret = null;
+        user.is_totp_enabled = false;
+        user.totp_enabled_at = null;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { isTotpEnabled = false });
+    }
+
+    [HttpPost("qr-login/session")]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> CreateQrLoginSession()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sessionId = GeneratePublicToken(16);
+        var browserToken = GenerateVerificationToken();
+        var scannerToken = GenerateVerificationToken();
+
+        await _context.QrLoginSessions
+            .Where(item =>
+                item.ExpiresAt < now.AddMinutes(-10) ||
+                (item.ConsumedAt.HasValue && item.ConsumedAt < now.AddMinutes(-10)) ||
+                (item.CanceledAt.HasValue && item.CanceledAt < now.AddMinutes(-10)))
+            .ExecuteDeleteAsync();
+
+        _context.QrLoginSessions.Add(new QrLoginSessionRecord
+        {
+            SessionId = sessionId,
+            BrowserTokenHash = AuthInputPolicies.HashSecret(browserToken),
+            ScannerTokenHash = AuthInputPolicies.HashSecret(scannerToken),
+            CreatedAt = now,
+            ExpiresAt = now.Add(QrLoginLifetime),
+            RequestedIp = GetClientIp(),
+            RequestedUserAgent = GetUserAgent()
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            sessionId,
+            browserToken,
+            scannerToken,
+            expiresAt = now.Add(QrLoginLifetime).ToString("O")
+        });
+    }
+
+    [HttpGet("qr-login/session/{sessionId}")]
+    [EnableRateLimiting("qr-login-poll")]
+    public async Task<IActionResult> GetQrLoginSessionStatus([FromRoute] string sessionId, [FromQuery] string? browserToken)
+    {
+        var normalizedSessionId = NormalizeQrLoginToken(sessionId);
+        var normalizedBrowserToken = NormalizeQrLoginToken(browserToken);
+        if (string.IsNullOrWhiteSpace(normalizedSessionId) || string.IsNullOrWhiteSpace(normalizedBrowserToken))
+        {
+            return BadRequest(new { status = "invalid", message = "QR-сессия не найдена." });
+        }
+
+        var browserTokenHash = AuthInputPolicies.HashSecret(normalizedBrowserToken);
+        var record = await _context.QrLoginSessions
+            .Include(item => item.ApprovedUser)
+            .FirstOrDefaultAsync(item =>
+                item.SessionId == normalizedSessionId &&
+                item.BrowserTokenHash == browserTokenHash);
+
+        if (record == null)
+        {
+            return BadRequest(new { status = "invalid", message = "QR-сессия не найдена." });
+        }
+
+        var status = GetQrLoginStatus(record, DateTimeOffset.UtcNow);
+        if (status == "approved" && record.ApprovedUser != null)
+        {
+            record.ConsumedAt = DateTimeOffset.UtcNow;
+            var authSession = await IssueAuthSessionAsync(record.ApprovedUser);
+            await _context.SaveChangesAsync();
+
+            return Ok(BuildQrAuthResponse(record.ApprovedUser, authSession));
+        }
+
+        return Ok(new
+        {
+            status,
+            expiresAt = record.ExpiresAt.ToString("O"),
+            requestedIp = record.RequestedIp,
+            requestedUserAgent = record.RequestedUserAgent
+        });
+    }
+
+    [HttpGet("qr-login/session/{sessionId}/preview")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> PreviewQrLoginSession([FromRoute] string sessionId, [FromQuery] string? scannerToken)
+    {
+        var record = await FindPendingQrLoginSessionAsync(sessionId, scannerToken);
+        if (record == null)
+        {
+            return BadRequest(new { status = "invalid", message = "QR-код устарел или уже использован." });
+        }
+
+        return Ok(new
+        {
+            status = "pending",
+            expiresAt = record.ExpiresAt.ToString("O"),
+            requestedIp = record.RequestedIp,
+            requestedUserAgent = record.RequestedUserAgent
+        });
+    }
+
+    [HttpPost("qr-login/approve")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> ApproveQrLoginSession([FromBody] QrLoginApproveDto dto)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var record = await FindPendingQrLoginSessionAsync(dto.sessionId, dto.scannerToken);
+        if (record == null)
+        {
+            return BadRequest(new { status = "invalid", message = "QR-код устарел или уже использован." });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        record.ApprovedUserId = user.id;
+        record.ApprovedAt = now;
+        record.ApprovedIp = GetClientIp();
+        record.ApprovedUserAgent = GetUserAgent();
+        await _context.SaveChangesAsync();
+
+        return Ok(new { status = "approved" });
+    }
+
     [HttpPost("request-login-code")]
     [EnableRateLimiting("email-send")]
     public async Task<IActionResult> RequestLoginCode([FromBody] LoginCodeRequestDto dto)
@@ -339,29 +402,15 @@ public class AuthController : ControllerBase
         var identifier = rawIdentifier.Trim();
         if (string.IsNullOrWhiteSpace(identifier))
         {
-            return BadRequest(CreateLoginError("identifier_required", "Введите email или номер телефона.", identifier: "Введите email или номер телефона."));
+            return BadRequest(CreateLoginError("identifier_required", "Введите email.", identifier: "Введите email."));
         }
 
-        User? user;
-        if (identifier.Contains('@'))
+        if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
         {
-            if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
-            {
-                return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
-            }
-
-            user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
-        }
-        else
-        {
-            if (!AuthInputPolicies.TryNormalizeRussianPhone(identifier, out var normalizedPhone, out var phoneError))
-            {
-                return BadRequest(CreateLoginError("identifier_invalid", phoneError, identifier: phoneError));
-            }
-
-            user = await _context.Users.FirstOrDefaultAsync(item => item.phone_number == normalizedPhone);
+            return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
         }
 
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
         if (user == null)
         {
             return BadRequest(CreateInvalidCredentialsError());
@@ -419,41 +468,14 @@ public class AuthController : ControllerBase
         }
 
         var rawEmail = (dto.email ?? string.Empty).Trim();
-        var rawPhone = (dto.phone ?? string.Empty).Trim();
-        var hasEmail = !string.IsNullOrWhiteSpace(rawEmail);
-        var hasPhone = !string.IsNullOrWhiteSpace(rawPhone);
-
-        if (!hasEmail && !hasPhone)
+        if (string.IsNullOrWhiteSpace(rawEmail))
         {
-            return BadRequest(new { message = "Введите email или номер телефона." });
+            return BadRequest(new { message = "Введите email." });
         }
 
-        if (hasEmail && hasPhone)
+        if (!AuthInputPolicies.TryNormalizeEmail(rawEmail, out var normalizedEmail, out var emailError))
         {
-            return BadRequest(new { message = "Укажите только один способ регистрации: email или телефон." });
-        }
-
-        string? normalizedEmail = null;
-        string? normalizedPhone = null;
-
-        if (hasEmail)
-        {
-            if (!AuthInputPolicies.TryNormalizeEmail(rawEmail, out var emailValue, out var emailError))
-            {
-                return BadRequest(new { message = emailError });
-            }
-
-            normalizedEmail = emailValue;
-        }
-
-        if (hasPhone)
-        {
-            if (!AuthInputPolicies.TryNormalizeRussianPhone(rawPhone, out var phoneValue, out var phoneError))
-            {
-                return BadRequest(new { message = phoneError });
-            }
-
-            normalizedPhone = phoneValue;
+            return BadRequest(new { message = emailError });
         }
 
         if (dto.password.Trim().Length < 6)
@@ -461,14 +483,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Пароль должен быть не короче 6 символов." });
         }
 
-        if (!string.IsNullOrWhiteSpace(normalizedEmail) && await _context.Users.AnyAsync(u => u.email == normalizedEmail))
+        if (await _context.Users.AnyAsync(u => u.email == normalizedEmail))
         {
             return BadRequest(new { message = "Email already exists" });
-        }
-
-        if (!string.IsNullOrWhiteSpace(normalizedPhone) && await _context.Users.AnyAsync(u => u.phone_number == normalizedPhone))
-        {
-            return BadRequest(new { message = "Этот номер уже используется." });
         }
 
         var nicknameLookup = nickname.ToLowerInvariant();
@@ -477,47 +494,20 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Этот никнейм уже занят." });
         }
 
-        PhoneVerificationCodeRecord? phoneVerification = null;
-        if (!string.IsNullOrWhiteSpace(normalizedPhone) && RequirePhoneRegistrationVerification)
-        {
-            var verificationToken = (dto.phone_verification_token ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(verificationToken))
-            {
-                return BadRequest(new { message = "Сначала подтвердите номер телефона." });
-            }
-
-            phoneVerification = await _context.PhoneVerificationCodes
-                .Where(item =>
-                    item.PhoneNumber == normalizedPhone &&
-                    item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
-                    !item.ConsumedAt.HasValue)
-                .OrderByDescending(item => item.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            if (phoneVerification == null || !phoneVerification.VerifiedAt.HasValue || phoneVerification.ExpiresAt <= DateTimeOffset.UtcNow)
-            {
-                return BadRequest(new { message = "Номер телефона не подтверждён." });
-            }
-        }
-
         var user = new User
         {
             first_name = firstName,
             last_name = lastName,
             nickname = nickname,
             email = normalizedEmail,
-            is_email_verified = string.IsNullOrWhiteSpace(normalizedEmail) || !RequireEmailRegistrationVerification,
-            phone_number = normalizedPhone,
-            is_phone_verified = !string.IsNullOrWhiteSpace(normalizedPhone)
+            is_email_verified = !RequireEmailRegistrationVerification,
+            phone_number = null,
+            is_phone_verified = false
         };
 
         user.password_hash = _passwordHasher.HashPassword(user, dto.password);
 
         _context.Users.Add(user);
-        if (phoneVerification != null)
-        {
-            phoneVerification.ConsumedAt = DateTimeOffset.UtcNow;
-        }
 
         await _context.SaveChangesAsync();
 
@@ -597,79 +587,12 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        if (ModelState.IsValid)
-        {
-            return await HandleLoginAsync(dto);
-        }
-
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var rawIdentifier = dto.identifier ?? dto.email ?? string.Empty;
-        if (rawIdentifier.Any(char.IsWhiteSpace))
-        {
-            return BadRequest(CreateLoginError("identifier_invalid", "Логин не должен содержать пробелы.", identifier: "Логин не должен содержать пробелы."));
-        }
-
-        var identifier = rawIdentifier.Trim();
-        if (string.IsNullOrWhiteSpace(identifier))
-        {
-            return BadRequest(CreateLoginError("identifier_required", "Введите email или номер телефона.", identifier: "Введите email или номер телефона."));
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.password))
-        {
-            return BadRequest(CreateLoginError("password_required", "Введите пароль.", password: "Введите пароль."));
-        }
-
-        User? user;
-        if (identifier.Contains('@'))
-        {
-            if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
-            {
-                return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
-            }
-
-            user = await _context.Users.FirstOrDefaultAsync(u => u.email == normalizedEmail);
-        }
-        else
-        {
-            if (!AuthInputPolicies.TryNormalizeRussianPhone(identifier, out var normalizedPhone, out var phoneError))
-            {
-                return BadRequest(CreateLoginError("identifier_invalid", phoneError, identifier: phoneError));
-            }
-
-            user = await _context.Users.FirstOrDefaultAsync(u => u.phone_number == normalizedPhone);
-        }
-
-        if (user == null)
-        {
-            return BadRequest(CreateLoginError("user_not_found", "Пользователь с таким логином не найден.", identifier: "Пользователь с таким логином не найден."));
-        }
-
-        // Temporarily disabled email verification check.
-        // if (!string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
-        // {
-        //     return BadRequest(new { message = "Сначала подтвердите email." });
-        // }
-
-        var result = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password);
-        if (result == PasswordVerificationResult.Failed)
-        {
-            return BadRequest(CreateLoginError("invalid_password", "Неверный пароль.", password: "Неверный пароль."));
-        }
-
-        if (result == PasswordVerificationResult.SuccessRehashNeeded)
-        {
-            user.password_hash = _passwordHasher.HashPassword(user, dto.password);
-            await _context.SaveChangesAsync();
-        }
-
-        await RevokeActiveRefreshTokensAsync(user.id);
-        var authSession = await IssueAuthSessionAsync(user);
-        return Ok(BuildAuthResponse(user, authSession));
+        return await HandleLoginAsync(dto);
     }
 
     private async Task<IActionResult> HandleLoginAsync(LoginDto dto)
@@ -683,7 +606,7 @@ public class AuthController : ControllerBase
         var identifier = rawIdentifier.Trim();
         if (string.IsNullOrWhiteSpace(identifier))
         {
-            return BadRequest(CreateLoginError("identifier_required", "Введите email или номер телефона.", identifier: "Введите email или номер телефона."));
+            return BadRequest(CreateLoginError("identifier_required", "Введите email.", identifier: "Введите email."));
         }
 
         if (string.IsNullOrWhiteSpace(dto.password))
@@ -691,26 +614,12 @@ public class AuthController : ControllerBase
             return BadRequest(CreateLoginError("password_required", "Введите пароль.", password: "Введите пароль."));
         }
 
-        User? user;
-        if (identifier.Contains('@'))
+        if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
         {
-            if (!AuthInputPolicies.TryNormalizeEmail(identifier, out var normalizedEmail, out var emailError))
-            {
-                return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
-            }
-
-            user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
-        }
-        else
-        {
-            if (!AuthInputPolicies.TryNormalizeRussianPhone(identifier, out var normalizedPhone, out var phoneError))
-            {
-                return BadRequest(CreateLoginError("identifier_invalid", phoneError, identifier: phoneError));
-            }
-
-            user = await _context.Users.FirstOrDefaultAsync(item => item.phone_number == normalizedPhone);
+            return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
         }
 
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
         if (user == null)
         {
             return BadRequest(CreateInvalidCredentialsError());
@@ -748,6 +657,11 @@ public class AuthController : ControllerBase
                     message = "Не удалось отправить код подтверждения email. Попробуйте немного позже."
                 });
             }
+        }
+
+        if (user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, dto.totpCode, DateTimeOffset.UtcNow))
+        {
+            return BadRequest(CreateTotpRequiredError());
         }
 
         await RevokeActiveRefreshTokensAsync(user.id);
@@ -890,11 +804,38 @@ public class AuthController : ControllerBase
             user.is_email_verified,
             user.phone_number,
             user.is_phone_verified,
+            is_totp_enabled = user.is_totp_enabled,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
             profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
             token = authSession.AccessToken,
+            refreshToken = authSession.RefreshToken,
+            accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
+            refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O")
+        };
+    }
+
+    private object BuildQrAuthResponse(User user, AuthSessionResult authSession)
+    {
+        return new
+        {
+            status = "approved",
+            user.id,
+            user.first_name,
+            user.last_name,
+            user.nickname,
+            email = user.email ?? string.Empty,
+            user.is_email_verified,
+            user.phone_number,
+            user.is_phone_verified,
+            is_totp_enabled = user.is_totp_enabled,
+            avatar_url = user.avatar_url ?? string.Empty,
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
+            profile_background_url = user.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            token = authSession.AccessToken,
+            accessToken = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
             refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O")
@@ -913,6 +854,7 @@ public class AuthController : ControllerBase
             is_email_verified = user.is_email_verified,
             phone_number = user.phone_number ?? string.Empty,
             is_phone_verified = user.is_phone_verified,
+            is_totp_enabled = user.is_totp_enabled,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1037,19 +979,74 @@ public class AuthController : ControllerBase
             : 14;
     }
 
-    private string GetSmsDeliveryMode()
-    {
-        return string.IsNullOrWhiteSpace(_config["Sms:Mode"]) ? "mock" : _config["Sms:Mode"]!.Trim().ToLowerInvariant();
-    }
-
-    private static string BuildPhoneVerificationMessage(string verificationCode)
-    {
-        return $"Код MAX: {verificationCode}";
-    }
-
     private string GetEmailDeliveryMode()
     {
         return string.IsNullOrWhiteSpace(_config["Email:Mode"]) ? "mock" : _config["Email:Mode"]!.Trim().ToLowerInvariant();
+    }
+
+    private async Task<User?> GetCurrentUserAsync()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                          ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        return int.TryParse(userIdClaim, out var userId)
+            ? await _context.Users.FirstOrDefaultAsync(user => user.id == userId)
+            : null;
+    }
+
+    private async Task<QrLoginSessionRecord?> FindPendingQrLoginSessionAsync(string? sessionId, string? scannerToken)
+    {
+        var normalizedSessionId = NormalizeQrLoginToken(sessionId);
+        var normalizedScannerToken = NormalizeQrLoginToken(scannerToken);
+        if (string.IsNullOrWhiteSpace(normalizedSessionId) || string.IsNullOrWhiteSpace(normalizedScannerToken))
+        {
+            return null;
+        }
+
+        var scannerTokenHash = AuthInputPolicies.HashSecret(normalizedScannerToken);
+        var now = DateTimeOffset.UtcNow;
+        return await _context.QrLoginSessions.FirstOrDefaultAsync(item =>
+            item.SessionId == normalizedSessionId &&
+            item.ScannerTokenHash == scannerTokenHash &&
+            item.ExpiresAt > now &&
+            !item.ApprovedAt.HasValue &&
+            !item.ConsumedAt.HasValue &&
+            !item.CanceledAt.HasValue);
+    }
+
+    private static string GetQrLoginStatus(QrLoginSessionRecord record, DateTimeOffset now)
+    {
+        if (record.CanceledAt.HasValue)
+        {
+            return "canceled";
+        }
+
+        if (record.ConsumedAt.HasValue)
+        {
+            return "consumed";
+        }
+
+        if (record.ExpiresAt <= now)
+        {
+            return "expired";
+        }
+
+        return record.ApprovedAt.HasValue ? "approved" : "pending";
+    }
+
+    private string GetClientIp()
+    {
+        return (HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown").Trim();
+    }
+
+    private string GetUserAgent()
+    {
+        var userAgent = Request.Headers.UserAgent.ToString().Trim();
+        return userAgent.Length <= 512 ? userAgent : userAgent[..512];
+    }
+
+    private static string NormalizeQrLoginToken(string? value)
+    {
+        return new string((value ?? string.Empty).Where(Uri.IsHexDigit).ToArray()).ToUpperInvariant();
     }
 
     private static string GenerateRefreshToken()
@@ -1081,7 +1078,7 @@ public class AuthController : ControllerBase
 
     private static object CreateInvalidCredentialsError()
     {
-        const string message = "Неверный email, телефон или пароль.";
+        const string message = "Неверный email или пароль.";
         return CreateLoginError(
             "invalid_credentials",
             message,
@@ -1089,14 +1086,28 @@ public class AuthController : ControllerBase
             password: message);
     }
 
+    private static object CreateTotpRequiredError()
+    {
+        return new
+        {
+            code = "totp_required",
+            message = "Введите код из Google Authenticator.",
+            requiresTotp = true,
+            fieldErrors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["totpCode"] = "Введите код из Google Authenticator."
+            }
+        };
+    }
+
     private static string GenerateVerificationToken()
     {
         return Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     }
 
-    private static string GeneratePhoneVerificationCode()
+    private static string GeneratePublicToken(int byteCount)
     {
-        return RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        return Convert.ToHexString(RandomNumberGenerator.GetBytes(byteCount));
     }
 
     private static string GenerateEmailVerificationCode()
@@ -1122,10 +1133,6 @@ public class RegisterDto
 
     public string? email { get; set; }
 
-    public string? phone { get; set; }
-
-    public string? phone_verification_token { get; set; }
-
     [Required]
     [MinLength(6)]
     public string password { get; set; } = string.Empty;
@@ -1139,6 +1146,8 @@ public class LoginDto
 
     [Required]
     public string password { get; set; } = string.Empty;
+
+    public string? totpCode { get; set; }
 }
 
 public class LoginCodeRequestDto
@@ -1146,21 +1155,16 @@ public class LoginCodeRequestDto
     public string? identifier { get; set; }
 }
 
-public class PhoneVerificationRequestDto
+public class QrLoginApproveDto
 {
-    public string? phone { get; set; }
+    public string? sessionId { get; set; }
+
+    public string? scannerToken { get; set; }
 }
 
-public class VerifyPhoneCodeDto
+public class TotpCodeDto
 {
-    [Required]
-    public string? phone { get; set; }
-
-    [Required]
-    public string verificationToken { get; set; } = string.Empty;
-
-    [Required]
-    public string code { get; set; } = string.Empty;
+    public string? code { get; set; }
 }
 
 public class ResendEmailVerificationDto
@@ -1179,6 +1183,8 @@ public class VerifyEmailCodeDto
 
     [Required]
     public string code { get; set; } = string.Empty;
+
+    public string? totpCode { get; set; }
 }
 
 public class RefreshTokenDto

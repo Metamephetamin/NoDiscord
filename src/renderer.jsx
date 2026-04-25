@@ -33,6 +33,7 @@ const MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY = "nd_media_permissions_bootstrap_v
 const rendererBootstrapTraceId = startPerfTrace("app-shell", "renderer-bootstrap");
 const MenuMain = lazy(() => import("./components/MenuMain"));
 const ServerInvitePage = lazy(() => import("./components/ServerInvitePage"));
+const QrLoginConfirmPage = lazy(() => import("./components/QrLoginConfirmPage"));
 
 function readMediaPermissionBootstrapState() {
   if (typeof window === "undefined") {
@@ -327,13 +328,15 @@ export default function Renderer() {
   const rendererBootstrapFinishedRef = useRef(false);
 
   const isInviteRoute = /^\/invite\/[^/]+$/i.test(location.pathname);
+  const isQrLoginRoute = /^\/qr-login$/i.test(location.pathname);
   const handleRootProfilerRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("app-shell", id, phase, actualDuration, baseDuration, startTime, commitTime, {
       path: location.pathname,
       isInviteRoute,
+      isQrLoginRoute,
       loading,
     });
-  }, [isInviteRoute, loading, location.pathname]);
+  }, [isInviteRoute, isQrLoginRoute, loading, location.pathname]);
 
   useEffect(() => {
     initRendererPerfMonitoring();
@@ -421,6 +424,7 @@ export default function Renderer() {
           isPhoneVerified: Boolean(
             data.is_phone_verified ?? savedUser.isPhoneVerified ?? savedUser.phone_verified ?? false
           ),
+          isTotpEnabled: Boolean(data.is_totp_enabled ?? savedUser.isTotpEnabled ?? false),
           avatarUrl: data.avatar_url || savedUser.avatarUrl || savedUser.avatar || "",
           avatar: data.avatar_url || savedUser.avatar || savedUser.avatarUrl || "",
           avatarFrame: parseMediaFrame(data.avatar_frame, data.avatarFrame, savedUser.avatarFrame, savedUser.avatar_frame),
@@ -592,8 +596,9 @@ export default function Renderer() {
       sessionHydrated,
       authenticated: Boolean(token && user),
       inviteRoute: isInviteRoute,
+      qrLoginRoute: isQrLoginRoute,
     }, 2);
-  }, [isInviteRoute, loading, sessionHydrated, token, user]);
+  }, [isInviteRoute, isQrLoginRoute, loading, sessionHydrated, token, user]);
 
   useEffect(() => {
     const updaterApi = window?.electronAppUpdate;
@@ -693,6 +698,27 @@ export default function Renderer() {
           <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
         </div>
       </div>
+    );
+  }
+
+  if (isQrLoginRoute) {
+    return (
+      <>
+        <AppUpdateBanner
+          state={appUpdateState}
+          onInstall={handleInstallDownloadedUpdate}
+          onRetry={handleRetryAppUpdateCheck}
+        />
+        <Suspense fallback={shellFallback}>
+          {PERF_ENABLED ? (
+            <Profiler id="QrLoginConfirmPage" onRender={handleRootProfilerRender}>
+              <QrLoginConfirmPage user={user} />
+            </Profiler>
+          ) : (
+            <QrLoginConfirmPage user={user} />
+          )}
+        </Suspense>
+      </>
     );
   }
 

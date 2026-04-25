@@ -23,8 +23,7 @@
     }
   },
   "Auth": {
-    "RequireEmailVerification": true,
-    "RequirePhoneVerification": false
+    "RequireEmailVerification": true
   },
   "Cors": {
     "AllowedOrigins": [

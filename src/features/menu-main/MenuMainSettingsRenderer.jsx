@@ -28,6 +28,8 @@ export function MenuMainSettingsContent({
   profileDraft,
   profileDisplayName,
   profileStatus,
+  isTotpEnabled,
+  totpSetup,
   maxProfileNicknameLength,
   user,
   avatarInputRef,
@@ -35,6 +37,10 @@ export function MenuMainSettingsContent({
   serverIconInputRef,
   handleProfileSave,
   updateProfileDraft,
+  updateTotpCode,
+  startTotpSetup,
+  verifyTotpSetup,
+  disableTotp,
   handleLogout,
   audioInputDevices,
   audioOutputDevices,
@@ -120,12 +126,18 @@ export function MenuMainSettingsContent({
           email={profileDraft.email}
           profileDraft={profileDraft}
           profileStatus={profileStatus}
+          isTotpEnabled={isTotpEnabled}
+          totpSetup={totpSetup}
           maxProfileNameLength={MAX_PROFILE_NAME_LENGTH}
           maxNicknameLength={maxProfileNicknameLength}
           onSubmit={handleProfileSave}
           onChangeAvatar={() => avatarInputRef.current?.click()}
           onChangeBackground={() => profileBackgroundInputRef.current?.click()}
           onUpdateDraft={updateProfileDraft}
+          onTotpCodeChange={updateTotpCode}
+          onStartTotpSetup={startTotpSetup}
+          onVerifyTotpSetup={verifyTotpSetup}
+          onDisableTotp={disableTotp}
           onLogout={handleLogout}
         />
       );
