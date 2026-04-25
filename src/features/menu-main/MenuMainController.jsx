@@ -2738,7 +2738,7 @@ export default function MenuMain({
         storedMode === "voice_isolation"
           ? "hard_gate"
           : storedMode === "rnnoise" || storedMode === "krisp"
-            ? "broadcast"
+            ? "ai_noise_suppression"
             : storedMode;
       setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "transparent");
     } catch {
@@ -4965,7 +4965,7 @@ export default function MenuMain({
       mode === "voice_isolation"
         ? "hard_gate"
         : mode === "rnnoise" || mode === "krisp"
-          ? "broadcast"
+          ? "ai_noise_suppression"
           : mode;
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : "transparent");
     setShowNoiseMenu(false);
@@ -5904,6 +5904,11 @@ export default function MenuMain({
       id: "broadcast",
       title: "Эфир",
       description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
+    },
+    {
+      id: "ai_noise_suppression",
+      title: "AI шумодав",
+      description: "Тяжелая RNNoise/WASM-модель перед отправкой голоса: лучше режет клавиатуру, вентилятор и фон.",
     },
     {
       id: "hard_gate",

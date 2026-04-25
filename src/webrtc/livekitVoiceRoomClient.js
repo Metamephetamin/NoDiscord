@@ -20,6 +20,7 @@ import {
 import { isDirectCallChannelId } from "../utils/directCallModel";
 import {
   DEFAULT_AVATAR,
+  NOISE_SUPPRESSION_MODE_AI,
   NOISE_SUPPRESSION_MODE_BROADCAST,
   NOISE_SUPPRESSION_MODE_HARD_GATE,
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
@@ -189,12 +190,16 @@ function normalizeNoiseSuppressionMode(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT
     return NOISE_SUPPRESSION_MODE_HARD_GATE;
   }
 
+  if (mode === NOISE_SUPPRESSION_MODE_AI) {
+    return NOISE_SUPPRESSION_MODE_AI;
+  }
+
   if (mode === LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
     return NOISE_SUPPRESSION_MODE_HARD_GATE;
   }
 
   if (mode === LEGACY_NOISE_SUPPRESSION_MODE_RNNOISE || mode === LEGACY_NOISE_SUPPRESSION_MODE_KRISP) {
-    return NOISE_SUPPRESSION_MODE_BROADCAST;
+    return NOISE_SUPPRESSION_MODE_AI;
   }
 
   return NOISE_SUPPRESSION_MODE_TRANSPARENT;
@@ -749,7 +754,7 @@ const handleDeviceChange = () => {
     noiseSuppression: true,
     autoGainControl: mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
     voiceIsolation:
-      mode === NOISE_SUPPRESSION_MODE_HARD_GATE
+      mode === NOISE_SUPPRESSION_MODE_HARD_GATE || mode === NOISE_SUPPRESSION_MODE_AI
         ? true
         : undefined,
     googEchoCancellation: echoCancellationEnabled,
@@ -894,6 +899,10 @@ const handleDeviceChange = () => {
       return track;
     }
 
+    if (noiseSuppressionMode !== NOISE_SUPPRESSION_MODE_AI && noiseSuppressionMode !== NOISE_SUPPRESSION_MODE_HARD_GATE) {
+      return track;
+    }
+
     try {
       const NoiseSuppressionProcessor = await loadNoiseSuppressionProcessor(rnnoiseModulePromiseRef);
       if (!NoiseSuppressionProcessor?.isSupported?.()) {
@@ -948,6 +957,17 @@ const handleDeviceChange = () => {
   };
 
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
+    if (mode === NOISE_SUPPRESSION_MODE_AI) {
+      return {
+        openThreshold: 0.027,
+        closeThreshold: 0.016,
+        floorGain: 0.018,
+        attackTime: 0.004,
+        releaseTime: 0.075,
+        holdMs: 220,
+      };
+    }
+
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
         openThreshold: 0.043,
@@ -1176,9 +1196,35 @@ const handleDeviceChange = () => {
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
   });
 
+  const buildAiNoiseSuppressionVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
+    highPassFrequency: 130,
+    highPassQ: 0.95,
+    mudCutFrequency: 285,
+    mudCutQ: 1.18,
+    mudCutGain: -3.4,
+    boxCutFrequency: 720,
+    boxCutQ: 1.25,
+    boxCutGain: -2.3,
+    presenceFrequency: 2450,
+    presenceQ: 1.2,
+    presenceGain: 3.8,
+    airFrequency: 5200,
+    airGain: 0.8,
+    lowPassFrequency: 7600,
+    lowPassQ: 0.85,
+    threshold: -29,
+    knee: 10,
+    ratio: 7.5,
+    attack: 0.002,
+    release: 0.12,
+    noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_AI),
+  });
+
   const connectLocalAudioGraph = (sourceNode) => {
     let inputNode = sourceNode;
-    if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
+    if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_AI) {
+      inputNode = buildAiNoiseSuppressionVoiceChain(sourceNode);
+    } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       inputNode = buildBroadcastVoiceChain(sourceNode);
     } else if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       inputNode = buildHardGateVoiceChain(sourceNode);
