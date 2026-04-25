@@ -4,6 +4,9 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+const SLIDER_THUMB_SIZE_PX = 20;
+const SLIDER_THUMB_RADIUS_PX = SLIDER_THUMB_SIZE_PX / 2;
+
 export default function PercentageSlider({
   value,
   min = 0,
@@ -28,6 +31,8 @@ export default function PercentageSlider({
   const positionPercent = range > 0
     ? ((normalizedValue - normalizedMin) / range) * 100
     : 0;
+  const thumbCenterOffsetPx = SLIDER_THUMB_RADIUS_PX - (positionPercent / 100) * SLIDER_THUMB_SIZE_PX;
+  const tooltipPosition = `calc(${positionPercent}% + ${thumbCenterOffsetPx}px)`;
 
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -67,7 +72,7 @@ export default function PercentageSlider({
   return (
     <div
       className={wrapperClassName}
-      style={{ "--slider-tooltip-position": `${positionPercent}%` }}
+      style={{ "--slider-tooltip-position": tooltipPosition }}
     >
       <span className="slider-with-tooltip__bubble" aria-hidden="true">{valueLabel}</span>
       <input

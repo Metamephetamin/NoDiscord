@@ -5643,7 +5643,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .slider-with-tooltip {
   --slider-tooltip-position: 50%;
-  --slider-tooltip-edge-offset: 28px;
   position: relative;
   width: 100%;
   padding-top: 38px;
@@ -5651,8 +5650,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .slider-with-tooltip__bubble {
   position: absolute;
-  left: clamp(var(--slider-tooltip-edge-offset), var(--slider-tooltip-position), calc(100% - var(--slider-tooltip-edge-offset)));
-  top: -16px;
+  left: var(--slider-tooltip-position);
+  top: -12px;
   min-width: 52px;
   min-height: 34px;
   padding: 8px 10px;
@@ -5691,7 +5690,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .slider-with-tooltip--active .slider-with-tooltip__bubble {
   opacity: 1;
-  transform: translateX(-50%) translateY(-6px);
+  transform: translateX(-50%) translateY(-3px);
 }
 
 .device-menu__slider input,

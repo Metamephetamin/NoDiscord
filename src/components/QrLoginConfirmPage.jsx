@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
-import { getApiErrorMessage, getStoredToken, parseApiResponse, authFetch } from "../utils/auth";
+import { authFetch, getApiErrorMessage, getStoredToken, parseApiResponse } from "../utils/auth";
 
 export default function QrLoginConfirmPage({ user }) {
   const location = useLocation();
@@ -133,7 +133,11 @@ export default function QrLoginConfirmPage({ user }) {
         {message ? <div className="auth-qr-confirm-message">{message}</div> : null}
 
         <div className="auth-qr-confirm-actions">
-          <button type="button" className="auth-submit auth-submit--secondary" onClick={() => navigate("/", { replace: true })}>
+          <button
+            type="button"
+            className="auth-submit auth-submit--secondary"
+            onClick={() => navigate("/", { replace: true })}
+          >
             Отмена
           </button>
           <button

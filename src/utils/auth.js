@@ -78,6 +78,14 @@ function getWebSessionStorage() {
   }
 }
 
+function getWebPersistentStorage() {
+  try {
+    return window?.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
 function readSessionFromStorage(storage) {
   if (!storage) {
     return {
@@ -166,19 +174,12 @@ function writeTransientSession(payload) {
   writeSessionToStorage(getWebSessionStorage(), payload);
 }
 
+function writePersistentSession(payload) {
+  writeSessionToStorage(getWebPersistentStorage(), payload);
+}
+
 function readLegacySession() {
-  try {
-    return readSessionFromStorage(window?.localStorage || null);
-  } catch {
-    return {
-      user: null,
-      accessToken: "",
-      refreshToken: "",
-      accessTokenExpiresAt: "",
-      apiUrl: "",
-      updatedAt: "",
-    };
-  }
+  return readSessionFromStorage(getWebPersistentStorage());
 }
 
 function clearStorageSession(storage) {
@@ -203,11 +204,7 @@ function clearTransientSession() {
 }
 
 function clearLegacySession() {
-  try {
-    clearStorageSession(window?.localStorage || null);
-  } catch {
-    // ignore storage failures
-  }
+  clearStorageSession(getWebPersistentStorage());
 }
 
 function normalizeSessionUpdatedAt(value) {
@@ -286,13 +283,25 @@ export async function hydrateStoredSession() {
   const baseSession = transientSession.accessToken || transientSession.user ? transientSession : legacySession;
 
   if (!isElectronSecureSessionAvailable()) {
+    const transientUpdatedAtMs = getSessionUpdatedAtMs(transientSession.updatedAt);
+    const legacyUpdatedAtMs = getSessionUpdatedAtMs(legacySession.updatedAt);
+    const hasTransientSession = Boolean(transientSession.accessToken || transientSession.user);
+    const hasLegacySession = Boolean(legacySession.accessToken || legacySession.user);
+    const shouldPreferLegacy =
+      hasLegacySession
+      && (!hasTransientSession || legacyUpdatedAtMs > transientUpdatedAtMs);
     const resolvedSession =
-      legacySession.accessToken || legacySession.user
+      shouldPreferLegacy
         ? {
-            ...baseSession,
-            updatedAt: normalizeSessionUpdatedAt(baseSession.updatedAt) || new Date().toISOString(),
+            ...legacySession,
+            updatedAt: normalizeSessionUpdatedAt(legacySession.updatedAt) || new Date(legacyUpdatedAtMs || Date.now()).toISOString(),
           }
-        : baseSession;
+        : hasTransientSession
+          ? {
+              ...transientSession,
+              updatedAt: normalizeSessionUpdatedAt(transientSession.updatedAt) || new Date(transientUpdatedAtMs || Date.now()).toISOString(),
+            }
+          : baseSession;
 
     if (shouldDiscardSessionForApiScope(resolvedSession)) {
       clearTransientSession();
@@ -309,9 +318,9 @@ export async function hydrateStoredSession() {
     }
 
     applySessionCache(resolvedSession);
-    if (legacySession.accessToken || legacySession.user) {
+    if (resolvedSession.accessToken || resolvedSession.user) {
       writeTransientSession(resolvedSession);
-      clearLegacySession();
+      writePersistentSession(resolvedSession);
     }
     return resolvedSession;
   }
@@ -398,7 +407,8 @@ export function getStoredToken() {
     return sessionCache.accessToken;
   }
 
-  return readTransientSession().accessToken;
+  const transientToken = readTransientSession().accessToken;
+  return transientToken || readLegacySession().accessToken;
 }
 
 export function hasStoredToken() {
@@ -410,7 +420,7 @@ export function getStoredUser() {
     return sessionCache.user;
   }
 
-  return readTransientSession().user;
+  return readTransientSession().user || readLegacySession().user;
 }
 
 export function getStoredRefreshToken() {
@@ -418,7 +428,7 @@ export function getStoredRefreshToken() {
     return sessionCache.refreshToken;
   }
 
-  return readTransientSession().refreshToken;
+  return readTransientSession().refreshToken || readLegacySession().refreshToken;
 }
 
 export function getStoredAccessTokenExpiresAt() {
@@ -426,7 +436,7 @@ export function getStoredAccessTokenExpiresAt() {
     return sessionCache.accessTokenExpiresAt;
   }
 
-  return readTransientSession().accessTokenExpiresAt;
+  return readTransientSession().accessTokenExpiresAt || readLegacySession().accessTokenExpiresAt;
 }
 
 export async function storeSession(user, tokenOrSession, refreshToken = "", accessTokenExpiresAt = "") {
@@ -435,7 +445,7 @@ export async function storeSession(user, tokenOrSession, refreshToken = "", acce
 
   if (!isElectronSecureSessionAvailable()) {
     writeTransientSession(nextSession);
-    clearLegacySession();
+    writePersistentSession(nextSession);
     return;
   }
 

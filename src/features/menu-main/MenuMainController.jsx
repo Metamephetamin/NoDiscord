@@ -1970,6 +1970,8 @@ export default function MenuMain({
       return;
     }
 
+    let endedSuccessfully = false;
+
     try {
       const expectedEndCall = { ...currentCall, lastReason: "expected-end" };
       directCallStateRef.current = expectedEndCall;
@@ -1978,6 +1980,7 @@ export default function MenuMain({
       if (currentVoiceChannelRef.current === currentCall.channelId) {
         await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
       }
+      endedSuccessfully = true;
     } catch (error) {
       console.error("Не удалось завершить личный звонок:", error);
     } finally {
@@ -1988,18 +1991,23 @@ export default function MenuMain({
         direction: currentCall.direction || "outgoing",
         outcome: "ended",
       });
-      setDirectCallState(buildDirectCallState({
-        phase: "ended",
-        statusLabel: "Звонок завершён",
-        peerUserId: currentCall.peerUserId,
-        peerName: currentCall.peerName,
-        peerAvatar: currentCall.peerAvatar,
-        peerAvatarFrame: currentCall.peerAvatarFrame,
-        canRetry: true,
-        isMiniMode: true,
-        direction: currentCall.direction || "outgoing",
-        endedAt: new Date().toISOString(),
-      }));
+      setDirectCallState(
+        endedSuccessfully
+          ? createDirectCallState()
+          : buildDirectCallState({
+              phase: "disconnected",
+              statusLabel: "Не удалось завершить звонок",
+              peerUserId: currentCall.peerUserId,
+              peerName: currentCall.peerName,
+              peerAvatar: currentCall.peerAvatar,
+              peerAvatarFrame: currentCall.peerAvatarFrame,
+              canRetry: true,
+              isMiniMode: true,
+              direction: currentCall.direction || "outgoing",
+              lastReason: "end-failed",
+              endedAt: new Date().toISOString(),
+            })
+      );
     }
   };
 
@@ -3958,6 +3966,7 @@ export default function MenuMain({
         if (!nextChannel && isDirectCallChannelId(directCallStateRef.current.channelId)) {
           const currentCall = directCallStateRef.current;
           if (currentCall.lastReason === "expected-end") {
+            setDirectCallState(createDirectCallState());
             return;
           }
 

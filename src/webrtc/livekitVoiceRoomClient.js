@@ -171,7 +171,7 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
 }
 
 function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) {
-  const useSpeechPreset = mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT;
+  const useSpeechPreset = mode === NOISE_SUPPRESSION_MODE_HARD_GATE;
 
   return {
     audioPreset: useSpeechPreset ? VOICE_ISOLATION_MIC_AUDIO_PRESET : HIGH_QUALITY_MIC_AUDIO_PRESET,
@@ -745,27 +745,28 @@ const handleDeviceChange = () => {
         }
   );
 
+  const usesModelNoiseSuppression = (mode = noiseSuppressionMode) => (
+    mode === NOISE_SUPPRESSION_MODE_AI || mode === NOISE_SUPPRESSION_MODE_HARD_GATE
+  );
+
   const buildMicConstraints = ({ deviceId = selectedInputDeviceId, mode = noiseSuppressionMode, relaxed = false } = {}) => ({
     deviceId:
       deviceId && deviceId !== "default"
         ? { exact: deviceId }
         : undefined,
     echoCancellation: echoCancellationEnabled,
-    noiseSuppression: true,
-    autoGainControl: mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
-    voiceIsolation:
-      mode === NOISE_SUPPRESSION_MODE_HARD_GATE || mode === NOISE_SUPPRESSION_MODE_AI
-        ? true
-        : undefined,
+    noiseSuppression: usesModelNoiseSuppression(mode) ? false : true,
+    autoGainControl: usesModelNoiseSuppression(mode) ? false : mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
+    voiceIsolation: undefined,
     googEchoCancellation: echoCancellationEnabled,
     googEchoCancellation2: echoCancellationEnabled,
     googDAEchoCancellation: echoCancellationEnabled,
     googExperimentalEchoCancellation: echoCancellationEnabled,
-    googAutoGainControl: mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
-    googNoiseSuppression: true,
-    googNoiseSuppression2: true,
-    googHighpassFilter: true,
-    googTypingNoiseDetection: true,
+    googAutoGainControl: usesModelNoiseSuppression(mode) ? false : mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
+    googNoiseSuppression: usesModelNoiseSuppression(mode) ? false : true,
+    googNoiseSuppression2: usesModelNoiseSuppression(mode) ? false : true,
+    googHighpassFilter: usesModelNoiseSuppression(mode) ? false : true,
+    googTypingNoiseDetection: usesModelNoiseSuppression(mode) ? false : true,
     channelCount: relaxed ? undefined : 1,
     sampleRate: relaxed ? undefined : AUDIO_SAMPLE_RATE,
     latency: relaxed ? undefined : 0.01,
@@ -959,12 +960,12 @@ const handleDeviceChange = () => {
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_AI) {
       return {
-        openThreshold: 0.027,
-        closeThreshold: 0.016,
-        floorGain: 0.018,
-        attackTime: 0.004,
-        releaseTime: 0.075,
-        holdMs: 220,
+        openThreshold: 0.024,
+        closeThreshold: 0.013,
+        floorGain: 0.072,
+        attackTime: 0.003,
+        releaseTime: 0.055,
+        holdMs: 110,
       };
     }
 
@@ -1197,26 +1198,26 @@ const handleDeviceChange = () => {
   });
 
   const buildAiNoiseSuppressionVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 130,
-    highPassQ: 0.95,
-    mudCutFrequency: 285,
-    mudCutQ: 1.18,
-    mudCutGain: -3.4,
-    boxCutFrequency: 720,
-    boxCutQ: 1.25,
-    boxCutGain: -2.3,
-    presenceFrequency: 2450,
-    presenceQ: 1.2,
-    presenceGain: 3.8,
-    airFrequency: 5200,
-    airGain: 0.8,
-    lowPassFrequency: 7600,
-    lowPassQ: 0.85,
-    threshold: -29,
-    knee: 10,
-    ratio: 7.5,
-    attack: 0.002,
-    release: 0.12,
+    highPassFrequency: 96,
+    highPassQ: 0.82,
+    mudCutFrequency: 250,
+    mudCutQ: 1.05,
+    mudCutGain: -2.0,
+    boxCutFrequency: 640,
+    boxCutQ: 1.08,
+    boxCutGain: -1.2,
+    presenceFrequency: 2700,
+    presenceQ: 1.0,
+    presenceGain: 2.0,
+    airFrequency: 6100,
+    airGain: 1.2,
+    lowPassFrequency: 9800,
+    lowPassQ: 0.7,
+    threshold: -22,
+    knee: 16,
+    ratio: 3.2,
+    attack: 0.003,
+    release: 0.1,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_AI),
   });
 
