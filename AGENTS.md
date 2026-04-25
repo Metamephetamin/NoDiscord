@@ -284,6 +284,91 @@ Common typo cleanup examples:
 
 ---
 
+# USER TEXT AUTOCORRECT RULES
+
+These rules apply when building or changing user-facing autocorrect, speech-to-text cleanup, composer text cleanup, or draft correction features.
+
+Main goal:
+- make typed or dictated text cleaner without changing the user's meaning, tone, names, links, commands, or intentional style
+- prefer conservative corrections over aggressive rewriting
+- if confidence is low, suggest a correction instead of silently applying it
+
+Always correct when confidence is high:
+- duplicated letters from accidental key repeat: "сообщщение" -> "сообщение", "привееет" -> "привет" unless the elongation is clearly expressive
+- missing soft/hard signs in common words: "обясни" -> "объясни", "подезд" -> "подъезд"
+- common endings and agreement mistakes when the sentence is obvious: "фотки не отображаються" -> "фотки не отображаются"
+- nearby-key typos: "пРивет", "сообшение", "клавиаутра"
+- swapped adjacent letters: "собешедник" -> "собеседник", "настройик" -> "настройки"
+- missing spaces after punctuation: "Привет,как дела?" -> "Привет, как дела?"
+- extra spaces before punctuation: "Привет , как дела ?" -> "Привет, как дела?"
+- repeated spaces, tabs, and broken line spacing inside plain text
+- lowercase sentence start after `.`, `!`, `?` when it is normal prose
+- accidental Caps Lock while preserving acronyms: "ПРИВЕТ КАК ДЕЛА" -> "Привет как дела" only when the whole phrase is accidental shouting
+- keyboard layout mistakes when the whole word or phrase is clearly typed in the wrong layout: "ghbdtn" -> "привет", "руддщ" -> "hello"
+- common chat typos: "щас" may stay as slang, but "счас" can become "сейчас" if the surrounding style is neutral
+
+Russian-specific rules:
+- preserve the user's style: do not turn casual chat into formal writing
+- keep slang, memes, deliberate stretching, and emotional punctuation when intentional
+- use `е` by default; use `ё` only where ambiguity matters or the surrounding text already uses it
+- correct common `тся` / `ться` mistakes when grammar is clear
+- correct `жи/ши`, `ча/ща`, `чу/щу` mistakes in normal words
+- correct common preposition spacing: "вобщем" -> "в общем", "потому-что" -> "потому что"
+- correct common particles: "что бы" -> "чтобы" only when it means purpose; keep "что бы" when it means "what would"
+- correct `не` / `ни` only when the context is unambiguous
+- do not guess complex cases that require understanding the user's intent
+
+Punctuation cleanup:
+- normalize repeated punctuation gently: "привет!!!" can stay expressive; "привет!!!!!!!!!" -> "привет!!!"
+- add a final period only in formal UI text, not casual chat
+- preserve question/exclamation emotion in messages
+- normalize comma spacing but do not over-insert commas if grammar confidence is low
+- convert three dots to an ellipsis only if the app already uses ellipsis typography consistently
+- keep markdown lists, code blocks, quotes, and commands structurally intact
+- do not add punctuation inside URLs, file paths, commands, mentions, or hashtags
+
+Do not autocorrect:
+- URLs, domains, emails, phone numbers, IPs, invite codes, tokens, hashes
+- usernames, nicknames, display names, server names, channel names, role names, custom emoji names
+- @mentions, #channels, slash commands, bot commands, markdown code spans, code blocks
+- file paths, registry paths, shell commands, environment variables, config keys
+- product names, library names, package names, branch names, commit hashes
+- passwords, 2FA codes, login codes, recovery codes, API keys
+- message history already sent by users unless explicitly editing that message
+
+Mixed-language text:
+- preserve language switches inside one sentence
+- do not translate words during autocorrect
+- correct English typos only when the surrounding word is clearly English
+- keep common abbreviations: lol, brb, btw, idk, asap, gg, npm, API, UI, UX
+- preserve casing for acronyms and product names: SignalR, LiveKit, PostgreSQL, GitHub, iPhone
+
+Confidence and UX:
+- silent autocorrect is allowed only for high-confidence mechanical fixes
+- for meaning-changing corrections, show a suggestion/chip that the user can accept
+- allow undo for any automatic change in composer text
+- do not move the cursor unexpectedly after correction
+- do not trigger expensive correction on every keystroke in long messages; debounce or run on word boundary/send
+- keep autocorrect local and fast where possible
+- never send text to an external service without explicit product approval and privacy review
+- keep a user setting to disable autocorrect if the feature becomes automatic
+
+Speech-to-text cleanup:
+- remove obvious filler only when configured: "ээ", "ну", "как бы" should not always be deleted
+- convert spoken punctuation: "точка", "запятая", "вопросительный знак", "новая строка" when the phrase is clearly a command
+- do not convert spoken words when they are part of the actual sentence: "слово точка в домене" should stay readable
+- fix casing at sentence boundaries after punctuation insertion
+- avoid over-formatting dictated casual messages
+
+Testing autocorrect:
+- include tests for Russian typos, English typos, mixed layouts, links, mentions, commands, code, emoji, slang, and long messages
+- include negative tests where text must stay unchanged
+- test cursor position preservation in the composer
+- test mobile keyboard input and IME/composition events
+- test that autocorrect does not run on passwords, codes, tokens, or hidden inputs
+
+---
+
 # REGRESSION SAFETY RULES
 
 Before finishing a change, think through:

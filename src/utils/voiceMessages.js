@@ -1,3 +1,5 @@
+import { autocorrectUserText } from "./textAutocorrect";
+
 export const MAX_VOICE_MESSAGE_DURATION_MS = 10 * 60 * 1000;
 export const VOICE_WAVEFORM_BAR_COUNT = 42;
 
@@ -35,23 +37,29 @@ const COMMA_BEFORE_RULES = [
   /\s+(а|но|однако|зато|либо|хотя|причем|причём|притом|то есть)\s+/gi,
   /\s+(если|когда|пока|хотя|чтобы|будто|словно|как будто|так как|потому что|из-за того что|для того чтобы|перед тем как|после того как|несмотря на то что|так что|раз уж|едва|как только)\s+/gi,
   /\s+(что|чем|где|куда|откуда|почему|зачем|который|которая|которое|которые|которого|которой|которым|которыми)\s+/gi,
-  /\s+(например|конечно|кстати|наверное|возможно|может быть|кажется|вероятно|по-моему|по сути|во-первых|во-вторых|в-третьих|с одной стороны|с другой стороны|как правило|скорее всего|безусловно|разумеется)\s+/gi,
+  /\s+(например|конечно|кстати|наверное|возможно|может быть|кажется|вероятно|по-моему|по сути|во-первых|во-вторых|в-третьих|с одной стороны|с другой стороны|как правило|скорее всего|безусловно|разумеется|к счастью|к сожалению|по идее|по правде|честно говоря|грубо говоря|мягко говоря|собственно|значит|видимо)\s+/gi,
 ];
 
-const INTRODUCTORY_PHRASES_REGEX = /(^|[.!?]\s+)(ну|в общем|короче|слушай|смотри|кстати|например)\s+/gi;
+const INTRODUCTORY_PHRASES_REGEX = /(^|[.!?]\s+)(ну|в общем|короче|слушай|смотри|кстати|например|честно говоря|по правде|по идее|по сути|в принципе|кажется|похоже|видимо|значит)\s+/gi;
 const SENTENCE_OPENING_INTERJECTION_REGEX = /(^|[.!?…]\s+)(блин|бля|блядь|блинчик|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда|ух|эх)\s+/gi;
 const INLINE_INTERJECTION_REGEX = /\s+(блин|бля|блядь|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда)\s+/gi;
 
 const COMPLEX_PHRASE_REPLACEMENTS = [
-  [/\b(я думаю|я считаю|я уверен|я надеюсь|мне кажется|по-моему|скорее всего|вероятно)\s+что\b/gi, "$1, что"],
-  [/\b(дело в том)\s+что\b/gi, "$1, что"],
+  [/\b(я думаю|я считаю|я уверен|я надеюсь|мне кажется|по-моему|скорее всего|вероятно|кажется|похоже|видимо|очевидно)\s+что\b/gi, "$1, что"],
+  [/\b(дело в том|проблема в том|суть в том|прикол в том|факт в том)\s+что\b/gi, "$1, что"],
+  [/\b(главное|важно|хорошо|плохо|странно|понятно|ясно|обидно|приятно|жаль|видно|слышно|заметно)\s+что\b/gi, "$1, что"],
+  [/\b(значит|получается|выходит)\s+что\b/gi, "$1, что"],
   [/\b(да|нет)\s+(конечно|наверное|пожалуй|думаю)\b/gi, "$1, $2"],
-  [/\b(пожалуйста)\s+(если|когда|передай|напиши|посмотри|скажи)\b/gi, "$1, $2"],
+  [/\b(пожалуйста)\s+(если|когда|передай|напиши|посмотри|скажи|проверь|глянь|помоги|скинь|кинь)\b/gi, "$1, $2"],
   [/\b(не знаю)\s+(похоже)\b/gi, "$1, $2"],
+  [/\b(ладно|окей|хорошо)\s+(если|когда|давай|попробуй|проверь|посмотри|напиши|скинь|кинь)\b/gi, "$1, $2"],
+  [/\b(давай|можешь|можете)\s+(если|когда|как только)\b/gi, "$1, $2"],
   [/\b(не только)\s+(.+?)\s+(но и)\b/gi, "$1 $2, $3"],
   [/\b(как)\s+(.+?)\s+(так и)\b/gi, "$1 $2, $3"],
   [/\b(не столько)\s+(.+?)\s+(сколько)\b/gi, "$1 $2, $3"],
   [/\b(с одной стороны)\s+(.+?)\s+(с другой стороны)\b/gi, "$1, $2, $3"],
+  [/\b(с одной стороны)\s+/gi, "$1, "],
+  [/\b(с другой стороны)\s+/gi, "$1, "],
   [/\b(во-первых|во-вторых|в-третьих)\s+/gi, "$1, "],
   [/\b(привет|здравствуйте|добрый день|добрый вечер)\s+([А-ЯЁA-Z][а-яёa-z-]+)/g, "$1, $2"],
 ];
@@ -69,11 +77,20 @@ const INTRODUCTORY_WORDS = [
   "в-третьих",
   "по-моему",
   "по сути",
+  "по идее",
+  "по правде",
   "как правило",
   "скорее всего",
   "безусловно",
   "разумеется",
   "вообще-то",
+  "собственно",
+  "значит",
+  "видимо",
+  "очевидно",
+  "честно говоря",
+  "грубо говоря",
+  "мягко говоря",
   "к счастью",
   "к сожалению",
   "похоже",
@@ -87,6 +104,8 @@ const ADDRESS_LEAD_STOP_WORDS = new Set([
   "сегодня", "завтра", "вчера", "сейчас", "потом", "вообще", "кстати", "например", "ну", "блин", "капец",
   "жесть", "господи", "чёрт", "черт", "привет", "здравствуйте", "добрый", "доброе",
 ]);
+
+const SENTENCE_START_SUBORDINATE_REGEX = /(^|[.!?…]\s+)((?:если|когда|пока|хотя|раз|раз уж|как только|перед тем как|после того как|потому что|так как|несмотря на то что|для того чтобы|чтобы)\s+[А-ЯЁа-яё0-9'"-]+(?:\s+[А-ЯЁа-яё0-9'"-]+){0,7})\s+([А-ЯЁа-яё-]+)/gi;
 const ADDRESS_FOLLOWER_TOKENS = new Set([
   "ты", "вы", "посмотри", "смотри", "слушай", "скажи", "напиши", "ответь", "подскажи", "подойди",
   "глянь", "зацени", "пожалуйста", "помоги", "давай", "иди", "проверь", "кинь", "пришли", "можешь",
@@ -124,9 +143,17 @@ function insertIntroductoryWordCommas(text) {
   INTRODUCTORY_WORDS.forEach((word) => {
     const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`(^|[,.!?]\\s+|\\s+)(${escapedWord})(\\s+)`, "gi");
-    normalizedText = normalizedText.replace(regex, (match, prefix, foundWord, spacing) => {
+    normalizedText = normalizedText.replace(regex, (match, prefix, foundWord, spacing, offset, source) => {
       if (String(prefix).endsWith(",")) {
         return `${prefix}${foundWord}${spacing}`;
+      }
+
+      if (/^\s+$/.test(prefix)) {
+        const previousText = String(source || "").slice(0, offset).trimEnd();
+        const previousChar = previousText.charAt(previousText.length - 1);
+        if (previousChar && !/[.!?…,(;-]/.test(previousChar)) {
+          return `${prefix}, ${foundWord}, `;
+        }
       }
 
       return `${prefix}${foundWord}, `;
@@ -134,6 +161,22 @@ function insertIntroductoryWordCommas(text) {
   });
 
   return normalizedText;
+}
+
+function insertSentenceStartSubordinateComma(text) {
+  return String(text || "").replace(SENTENCE_START_SUBORDINATE_REGEX, (match, prefix, clause, nextWord) => {
+    const normalizedClause = String(clause || "").trim();
+    const normalizedNextWord = String(nextWord || "").trim();
+    if (!normalizedClause || !normalizedNextWord || String(normalizedClause).includes(",")) {
+      return match;
+    }
+
+    if (!CLAUSE_START_REGEX.test(normalizedNextWord)) {
+      return match;
+    }
+
+    return `${prefix}${normalizedClause}, ${normalizedNextWord}`;
+  });
 }
 
 function looksLikeFiniteVerb(token) {
@@ -287,7 +330,7 @@ export function normalizeVoiceMessageMetadata(rawVoiceMessage) {
 }
 
 export function restoreRussianSpeechPunctuation(text, { finalize = true } = {}) {
-  let normalizedText = applySpokenPunctuation(text);
+  let normalizedText = autocorrectUserText(applySpokenPunctuation(text), { capitalize: false });
 
   if (!normalizedText) {
     return "";
@@ -308,7 +351,9 @@ export function restoreRussianSpeechPunctuation(text, { finalize = true } = {}) 
   normalizedText = insertInlineInterjectionCommas(normalizedText);
   normalizedText = insertIntroductoryWordCommas(normalizedText);
   normalizedText = insertInitialGerundComma(normalizedText);
+  normalizedText = insertSentenceStartSubordinateComma(normalizedText);
   normalizedText = normalizeSpacing(normalizedText);
+  normalizedText = autocorrectUserText(normalizedText, { capitalize: false });
   normalizedText = capitalizeSentences(normalizedText);
 
   if (!finalize) {

@@ -2,6 +2,7 @@ import lottiefilesEmojiCatalog from "./lottiefilesEmojiCatalog.json";
 import { resolveStaticAssetUrl } from "./media";
 import { getPollPreview, parsePollMessage } from "./pollMessages";
 import { formatVoiceMessageDuration, normalizeVoiceMessageMetadata, restoreRussianSpeechPunctuation } from "./voiceMessages";
+import { autocorrectUserText } from "./textAutocorrect";
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 export const MESSAGE_SEND_COOLDOWN_MS = 0;
 export const COMPAT_FORWARD_DELAY_MS = 0;
@@ -476,12 +477,12 @@ export function shouldAutoPunctuateTypedText(text) {
 }
 
 export function formatTypedMessageText(text) {
-  const normalizedText = String(text || "").trim();
+  const normalizedText = autocorrectUserText(String(text || "").trim());
   if (!shouldAutoPunctuateTypedText(normalizedText)) {
     return normalizedText;
   }
 
-  return restoreRussianSpeechPunctuation(normalizedText, { finalize: true });
+  return autocorrectUserText(restoreRussianSpeechPunctuation(normalizedText, { finalize: true }));
 }
 
 export function getChatErrorMessage(error, fallbackMessage) {
