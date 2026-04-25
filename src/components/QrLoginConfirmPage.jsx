@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
-import { getApiErrorMessage, parseApiResponse, authFetch } from "../utils/auth";
+import { getApiErrorMessage, getStoredToken, parseApiResponse, authFetch } from "../utils/auth";
 
 export default function QrLoginConfirmPage({ user }) {
   const location = useLocation();
@@ -21,7 +21,7 @@ export default function QrLoginConfirmPage({ user }) {
   }, [location.search]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user && !getStoredToken()) {
       setStatus("locked");
       setMessage("Откройте ссылку на устройстве, где уже выполнен вход.");
       return undefined;

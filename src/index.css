@@ -126,6 +126,9 @@ body,
 html {
   scroll-behavior: smooth;
   font-size: var(--ui-font-size-base);
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -138,6 +141,7 @@ body {
   font-family: var(--font-body);
   background: #0f1115;
   color: #f8fafc;
+  touch-action: manipulation;
 }
 
 html[data-ui-font-scale="sm"] {
