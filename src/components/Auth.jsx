@@ -1173,13 +1173,14 @@ export default function Auth({ onAuthSuccess }) {
         <aside className={`auth-card__side ${mode === "login" ? "auth-card__side--qr" : ""}`}>
           {mode === "login" ? (
             <div className="auth-qr-login" aria-live="polite">
-              <div>
-                <div className="auth-side__title">Вход по QR</div>
-                <p className="auth-side__subtitle">Отсканируйте код на устройстве, где уже выполнен вход.</p>
-              </div>
               <div className={`auth-qr-login__code ${qrLoginStatus === "expired" ? "auth-qr-login__code--muted" : ""}`}>
                 {qrLoginSvg ? (
-                  <div className="auth-qr-login__svg" dangerouslySetInnerHTML={{ __html: qrLoginSvg }} />
+                  <>
+                    <div className="auth-qr-login__svg" dangerouslySetInnerHTML={{ __html: qrLoginSvg }} />
+                    <span className="auth-qr-login__logo" aria-hidden="true">
+                      <img src={AUTH_BRAND_LOGO_URL} alt="" />
+                    </span>
+                  </>
                 ) : (
                   <div className="auth-qr-login__loader" />
                 )}
@@ -1193,7 +1194,7 @@ export default function Auth({ onAuthSuccess }) {
                       ? "QR-код устарел."
                       : qrLoginStatus === "error"
                         ? qrLoginError || "QR-вход недоступен."
-                        : "Ожидаем подтверждение на втором устройстве."}
+                        : ""}
               </div>
               {qrLoginStatus === "expired" || qrLoginStatus === "error" ? (
                 <button type="button" className="auth-switch-link auth-qr-login__refresh" onClick={refreshQrLoginSession}>
