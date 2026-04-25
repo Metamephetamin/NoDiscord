@@ -295,6 +295,7 @@ export function createVoiceRoomClient({
   let currentUser = null;
   let currentChannel = null;
   let localMicSourceStream = null;
+  let localAudioProcessingStream = null;
   let localAudioStream = null;
   let localAudioPipelinePromise = null;
   let audioContext = null;
@@ -356,6 +357,7 @@ export function createVoiceRoomClient({
     },
     localMic: {
       sourceTracks: localMicSourceStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      processingTracks: localAudioProcessingStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
       outputTracks: localAudioStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
       audioContextState: audioContext?.state || "",
       rnnoiseActive: Boolean(rnnoiseProcessor?.isProcessing?.()),
@@ -893,7 +895,7 @@ const handleDeviceChange = () => {
     logVoiceDebug("local-audio:rnnoise-stopped");
   };
 
-  const applyRnnoiseToTrack = async (track) => {
+  const createNoiseSuppressedInputTrack = async (track) => {
     await stopRnnoiseNoiseSuppression();
 
     if (!track) {
@@ -1245,6 +1247,7 @@ const handleDeviceChange = () => {
     void stopRnnoiseNoiseSuppression().catch(() => {});
     logVoiceDebug("local-mic:stop", {
       sourceTracks: localMicSourceStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      processingTracks: localAudioProcessingStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
       outputTracks: localAudioStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
       audioContextState: audioContext?.state || "",
     });
@@ -1261,6 +1264,7 @@ const handleDeviceChange = () => {
 
     localMicSourceStream?.getTracks().forEach((track) => track.stop());
     localMicSourceStream = null;
+    localAudioProcessingStream = null;
     localAudioStream = null;
     localAudioPipelinePromise = null;
     localOutputAnalyser = null;
@@ -1294,12 +1298,17 @@ const handleDeviceChange = () => {
       }
       await emitAudioDevices().catch(() => {});
 
+      const processingTrack = await createNoiseSuppressedInputTrack(capturedMicTrack);
+      localAudioProcessingStream = processingTrack
+        ? new MediaStream([processingTrack])
+        : localMicSourceStream;
+
       audioContext = createPreferredAudioContext();
       if (!audioContext) {
         throw new Error("Unable to initialize audio context.");
       }
 
-      const sourceNode = audioContext.createMediaStreamSource(localMicSourceStream);
+      const sourceNode = audioContext.createMediaStreamSource(localAudioProcessingStream || localMicSourceStream);
       gainNode = audioContext.createGain();
       destinationNode = audioContext.createMediaStreamDestination();
       gainNode.gain.value = micVolume;
@@ -1310,6 +1319,7 @@ const handleDeviceChange = () => {
 
       logVoiceDebug("local-audio:pipeline-create:success", {
         sourceTracks: localMicSourceStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+        processingTracks: localAudioProcessingStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
         outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
         audioContextState: audioContext?.state || "",
         echoCancellationEnabled,
@@ -1328,6 +1338,7 @@ const handleDeviceChange = () => {
         await audioContext.resume();
       }
       logVoiceDebug("local-audio:pipeline-reuse", {
+        processingTracks: localAudioProcessingStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
         outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
         audioContextState: audioContext?.state || "",
       });
@@ -1780,7 +1791,6 @@ const handleDeviceChange = () => {
     }
 
     const activeRoom = room;
-    await stopRnnoiseNoiseSuppression().catch(() => {});
     clearVoicePingPolling();
     room = null;
     roomConnectPromise = null;
@@ -1918,19 +1928,19 @@ const handleDeviceChange = () => {
     nextTrack.enabled = !(isSelfMicMuted || isSelfDeafened);
 
     if (micPublication?.track?.replaceTrack) {
-      const publishedTrack = await applyRnnoiseToTrack(nextTrack);
-      await micPublication.track.replaceTrack(publishedTrack, true);
+      nextTrack.contentHint = "speech";
+      await micPublication.track.replaceTrack(nextTrack, true);
       await applyPublishedAudioState();
       logVoiceDebug("local-audio:track-replaced", {
         publicationSid: micPublication.trackSid,
-        track: getTrackDebugInfo(publishedTrack),
+        track: getTrackDebugInfo(nextTrack),
       });
       publishVoiceDebugSnapshot("local-audio:track-replaced:snapshot");
       return;
     }
 
-    const publishedTrack = await applyRnnoiseToTrack(nextTrack);
-    micPublication = await room.localParticipant.publishTrack(publishedTrack, {
+    nextTrack.contentHint = "speech";
+    micPublication = await room.localParticipant.publishTrack(nextTrack, {
       source: Track.Source.Microphone,
       name: MICROPHONE_TRACK_NAME,
       ...getMicrophonePublishOptions(noiseSuppressionMode),
@@ -1939,14 +1949,13 @@ const handleDeviceChange = () => {
     logVoiceDebug("local-audio:published", {
       publicationSid: micPublication?.trackSid || "",
       publicationMuted: micPublication?.isMuted,
-      track: getTrackDebugInfo(publishedTrack),
+      track: getTrackDebugInfo(nextTrack),
     });
     publishVoiceDebugSnapshot("local-audio:published:snapshot");
   };
 
   const rebuildLocalAudioPipeline = async () => {
     const hadMicTrack = Boolean(localMicSourceStream || localAudioStream);
-    await stopRnnoiseNoiseSuppression();
     stopLocalMic();
 
     if (!hadMicTrack) {
@@ -1957,21 +1966,21 @@ const handleDeviceChange = () => {
     const nextTrack = nextStream?.getAudioTracks?.()?.[0] || null;
 
     if (nextTrack && micPublication?.track?.replaceTrack) {
-      const publishedTrack = await applyRnnoiseToTrack(nextTrack);
-      await micPublication.track.replaceTrack(publishedTrack, true);
+      nextTrack.contentHint = "speech";
+      await micPublication.track.replaceTrack(nextTrack, true);
       logVoiceDebug("local-audio:rebuild-replaced-track", {
-        track: getTrackDebugInfo(publishedTrack),
+        track: getTrackDebugInfo(nextTrack),
       });
     } else if (nextTrack && room && currentChannel) {
-      const publishedTrack = await applyRnnoiseToTrack(nextTrack);
-      micPublication = await room.localParticipant.publishTrack(publishedTrack, {
+      nextTrack.contentHint = "speech";
+      micPublication = await room.localParticipant.publishTrack(nextTrack, {
         source: Track.Source.Microphone,
         name: MICROPHONE_TRACK_NAME,
         ...getMicrophonePublishOptions(noiseSuppressionMode),
       });
       logVoiceDebug("local-audio:rebuild-published-track", {
         publicationSid: micPublication?.trackSid || "",
-        track: getTrackDebugInfo(publishedTrack),
+        track: getTrackDebugInfo(nextTrack),
       });
     }
 
