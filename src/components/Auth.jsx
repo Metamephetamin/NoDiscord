@@ -505,7 +505,13 @@ export default function Auth({ onAuthSuccess }) {
           return;
         }
 
-        if (status === "expired" || status === "consumed" || status === "canceled") {
+        if (status === "expired") {
+          setQrLoginStatus("loading");
+          refreshQrLoginSession();
+          return;
+        }
+
+        if (status === "consumed" || status === "canceled") {
           setQrLoginStatus(status);
         }
       } catch (error) {

@@ -279,7 +279,7 @@
   grid-template-columns: minmax(0, 1.06fr) minmax(280px, 0.86fr);
   gap: 16px;
   padding: 20px;
-  border-radius: 32px;
+  border-radius: 26px;
   background: rgba(216, 216, 216, 0.548);
   /* box-shadow: 0 24px 60px rgba(4, 13, 27, 0.22); */
   backdrop-filter: none;
@@ -325,7 +325,7 @@
   width: min(100%, 820px);
   grid-template-columns: minmax(0, 1fr) minmax(250px, 0.72fr);
   padding: 18px 20px;
-  border-radius: 34px;
+  border-radius: 26px;
 }
 
 .auth-card__main {
@@ -357,6 +357,7 @@
   font-size: clamp(38px, 4vw, 48px);
   line-height: 0.9;
   letter-spacing: 0.015em;
+  margin-top: 8px;
 }
 
 .auth-card__title-primary,
@@ -793,7 +794,8 @@
   font-size: 18px;
   font-weight: 800;
   line-height: 1.15;
-  text-transform: uppercase;
+  font-family: var(--font-body);
+  text-transform: none;
   letter-spacing: 0;
 }
 
@@ -803,7 +805,7 @@
   height: 174px;
   display: grid;
   place-items: center;
-  border-radius: 18px;
+  border-radius: 10px;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -819,7 +821,7 @@
   display: block;
   width: 174px;
   height: 174px;
-  border-radius: 18px;
+  border-radius: 10px;
 }
 
 .auth-qr-login__logo {
