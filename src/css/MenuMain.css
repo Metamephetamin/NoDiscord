@@ -7588,6 +7588,17 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
 }
 
+.settings-shell__actions .settings-inline-button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.09));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f7f9ff;
+}
+
+.settings-shell__actions .settings-inline-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.13));
+  color: #ffffff;
+}
+
 .channel-add-button:disabled,
 .settings-inline-button:disabled,
 .settings-input:disabled {
@@ -7703,6 +7714,9 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .device-connect-button {
   min-width: 190px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.1));
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .device-connect-guide {
@@ -7715,17 +7729,17 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   gap: 4px;
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(16, 24, 38, 0.05);
-  border: 1px solid rgba(84, 102, 132, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.085);
 }
 
 .device-connect-guide__item strong {
-  color: #182236;
+  color: #ffffff;
   font-size: 14px;
 }
 
 .device-connect-guide__item span {
-  color: #55647d;
+  color: #c4cde0;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -7735,13 +7749,14 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   gap: 12px;
   padding: 16px 18px;
   border-radius: 18px;
-  background: rgba(16, 24, 38, 0.06);
-  border: 1px solid rgba(84, 102, 132, 0.16);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.085);
 }
 
 .device-session-card--current {
-  border-color: rgba(93, 122, 255, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(93, 122, 255, 0.08);
+  border-color: rgba(118, 144, 255, 0.58);
+  background: rgba(96, 119, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(118, 144, 255, 0.16);
 }
 
 .device-session-card__row {
@@ -7757,13 +7772,13 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .device-session-card__copy strong {
-  color: #182236;
+  color: #ffffff;
   font-size: 15px;
 }
 
 .device-session-card__copy span,
 .device-session-card__meta span {
-  color: #55647d;
+  color: #bac5db;
   font-size: 13px;
   line-height: 1.4;
 }
@@ -7778,8 +7793,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   align-self: flex-start;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(93, 122, 255, 0.14);
-  color: #3347c9;
+  background: rgba(107, 129, 255, 0.24);
+  color: #dce3ff;
   font-size: 12px;
   font-weight: 700;
 }
@@ -8168,6 +8183,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .camera-modal__video {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   min-height: 316px;
@@ -8185,6 +8202,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   color: #b9c3d9;
   text-align: center;
   background: linear-gradient(180deg, rgba(12, 15, 21, 0.18), rgba(12, 15, 21, 0.48));
+  z-index: 2;
 }
 
 .camera-modal__error {
@@ -8211,6 +8229,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .qr-scanner-modal__frame {
   position: absolute;
+  z-index: 3;
   inset: 50% auto auto 50%;
   width: min(58vw, 220px);
   aspect-ratio: 1;

@@ -170,8 +170,9 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
   };
 }
 
-function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT) {
-  const useSpeechPreset = mode === NOISE_SUPPRESSION_MODE_HARD_GATE;
+function getMicrophonePublishOptions(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT, { echoCancellation = true } = {}) {
+  const useSpeechPreset =
+    echoCancellation || mode === NOISE_SUPPRESSION_MODE_AI || mode === NOISE_SUPPRESSION_MODE_HARD_GATE;
 
   return {
     audioPreset: useSpeechPreset ? VOICE_ISOLATION_MIC_AUDIO_PRESET : HIGH_QUALITY_MIC_AUDIO_PRESET,
@@ -734,18 +735,48 @@ const handleDeviceChange = () => {
     emitAudioDevices().catch(() => {});
   };
 
-  const buildPreferredSampleSizeConstraints = (relaxed = false) => (
-    relaxed
-      ? {}
-      : {
-          sampleSize: { ideal: PREFERRED_AUDIO_SAMPLE_SIZE },
-          advanced: [
-            { sampleSize: MAX_PREFERRED_AUDIO_SAMPLE_SIZE },
-            { sampleSize: PREFERRED_AUDIO_SAMPLE_SIZE },
-            { sampleSize: 16 },
-          ],
+  const getSupportedMediaConstraints = () => {
+    try {
+      return navigator.mediaDevices?.getSupportedConstraints?.() || {};
+    } catch {
+      return {};
+    }
+  };
+
+  const buildPreferredSampleSizeConstraints = (relaxed = false) => {
+    if (relaxed) {
+      return {};
+    }
+
+    const advanced = [
+      { sampleSize: MAX_PREFERRED_AUDIO_SAMPLE_SIZE },
+      { sampleSize: PREFERRED_AUDIO_SAMPLE_SIZE },
+      { sampleSize: 16 },
+    ];
+
+    if (echoCancellationEnabled) {
+      advanced.unshift(
+        {
+          echoCancellation: true,
+          googEchoCancellation: true,
+          googEchoCancellation2: true,
+          googDAEchoCancellation: true,
+          googExperimentalEchoCancellation: true,
+          googEchoCancellation3: true,
+        },
+        {
+          autoGainControl: true,
+          googAutoGainControl: true,
+          googExperimentalAutoGainControl: true,
         }
-  );
+      );
+    }
+
+    return {
+      sampleSize: { ideal: PREFERRED_AUDIO_SAMPLE_SIZE },
+      advanced,
+    };
+  };
 
   const usesModelNoiseSuppression = (mode = noiseSuppressionMode) => (
     mode === NOISE_SUPPRESSION_MODE_AI || mode === NOISE_SUPPRESSION_MODE_HARD_GATE
@@ -756,15 +787,20 @@ const handleDeviceChange = () => {
       deviceId && deviceId !== "default"
         ? { exact: deviceId }
         : undefined,
-    echoCancellation: echoCancellationEnabled,
+    echoCancellation: echoCancellationEnabled ? { ideal: true } : false,
+    ...(echoCancellationEnabled && getSupportedMediaConstraints().echoCancellationType
+      ? { echoCancellationType: { ideal: "system" } }
+      : {}),
     noiseSuppression: usesModelNoiseSuppression(mode) ? false : true,
-    autoGainControl: usesModelNoiseSuppression(mode) ? false : mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
+    autoGainControl: echoCancellationEnabled ? true : usesModelNoiseSuppression(mode) ? false : mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
     voiceIsolation: undefined,
     googEchoCancellation: echoCancellationEnabled,
     googEchoCancellation2: echoCancellationEnabled,
     googDAEchoCancellation: echoCancellationEnabled,
     googExperimentalEchoCancellation: echoCancellationEnabled,
-    googAutoGainControl: usesModelNoiseSuppression(mode) ? false : mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
+    googEchoCancellation3: echoCancellationEnabled,
+    googAutoGainControl: echoCancellationEnabled ? true : usesModelNoiseSuppression(mode) ? false : mode !== NOISE_SUPPRESSION_MODE_TRANSPARENT,
+    googExperimentalAutoGainControl: echoCancellationEnabled,
     googNoiseSuppression: usesModelNoiseSuppression(mode) ? false : true,
     googNoiseSuppression2: usesModelNoiseSuppression(mode) ? false : true,
     googHighpassFilter: usesModelNoiseSuppression(mode) ? false : true,
@@ -962,44 +998,56 @@ const handleDeviceChange = () => {
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_AI) {
       return {
-        openThreshold: 0.024,
-        closeThreshold: 0.013,
-        floorGain: 0.072,
+        openThreshold: 0.032,
+        closeThreshold: 0.018,
+        floorGain: 0.008,
         attackTime: 0.003,
-        releaseTime: 0.055,
-        holdMs: 110,
+        releaseTime: 0.075,
+        holdMs: 145,
+        adaptiveOpenRatio: 2.7,
+        adaptiveCloseRatio: 1.55,
+        maxAdaptiveOpenThreshold: 0.086,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        openThreshold: 0.043,
-        closeThreshold: 0.027,
-        floorGain: 0.00004,
+        openThreshold: 0.052,
+        closeThreshold: 0.033,
+        floorGain: 0.00002,
         attackTime: 0.0025,
-        releaseTime: 0.045,
-        holdMs: 280,
+        releaseTime: 0.052,
+        holdMs: 245,
+        adaptiveOpenRatio: 3.1,
+        adaptiveCloseRatio: 1.8,
+        maxAdaptiveOpenThreshold: 0.12,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        openThreshold: 0.015,
-        closeThreshold: 0.008,
-        floorGain: 0.11,
-        attackTime: 0.014,
-        releaseTime: 0.14,
-        holdMs: 160,
+        openThreshold: 0.02,
+        closeThreshold: 0.011,
+        floorGain: 0.055,
+        attackTime: 0.01,
+        releaseTime: 0.12,
+        holdMs: 150,
+        adaptiveOpenRatio: 2.15,
+        adaptiveCloseRatio: 1.35,
+        maxAdaptiveOpenThreshold: 0.064,
       };
     }
 
     return {
-      openThreshold: 0.012,
-      closeThreshold: 0.006,
-      floorGain: 0.15,
+      openThreshold: 0.014,
+      closeThreshold: 0.007,
+      floorGain: 0.1,
       attackTime: 0.016,
       releaseTime: 0.16,
       holdMs: 140,
+      adaptiveOpenRatio: 1.9,
+      adaptiveCloseRatio: 1.25,
+      maxAdaptiveOpenThreshold: 0.046,
     };
   };
 
@@ -1012,6 +1060,7 @@ const handleDeviceChange = () => {
     localNoiseGateState = {
       isOpen: false,
       holdUntil: 0,
+      noiseFloor: profile.closeThreshold * 0.65,
     };
 
     gateNode.gain.value = profile.floorGain;
@@ -1029,14 +1078,31 @@ const handleDeviceChange = () => {
       const nextState = localNoiseGateState || {
         isOpen: false,
         holdUntil: 0,
+        noiseFloor: profile.closeThreshold * 0.65,
       };
+      const previousNoiseFloor = Number.isFinite(nextState.noiseFloor)
+        ? nextState.noiseFloor
+        : profile.closeThreshold * 0.65;
 
-      if (rms >= profile.openThreshold) {
+      if (!nextState.isOpen || rms < profile.closeThreshold) {
+        nextState.noiseFloor = previousNoiseFloor * 0.94 + rms * 0.06;
+      }
+
+      const adaptiveOpenThreshold = Math.min(
+        profile.maxAdaptiveOpenThreshold || profile.openThreshold,
+        Math.max(profile.openThreshold, nextState.noiseFloor * (profile.adaptiveOpenRatio || 1))
+      );
+      const adaptiveCloseThreshold = Math.max(
+        profile.closeThreshold,
+        Math.min(adaptiveOpenThreshold * 0.82, nextState.noiseFloor * (profile.adaptiveCloseRatio || 1))
+      );
+
+      if (rms >= adaptiveOpenThreshold) {
         nextState.isOpen = true;
         nextState.holdUntil = now + profile.holdMs;
-      } else if (nextState.isOpen && rms >= profile.closeThreshold) {
+      } else if (nextState.isOpen && rms >= adaptiveCloseThreshold) {
         nextState.holdUntil = now + profile.holdMs;
-      } else if (nextState.isOpen && now >= nextState.holdUntil && rms < profile.closeThreshold) {
+      } else if (nextState.isOpen && now >= nextState.holdUntil && rms < adaptiveCloseThreshold) {
         nextState.isOpen = false;
       }
 
@@ -1065,11 +1131,6 @@ const handleDeviceChange = () => {
       airGain = 1.3,
       lowPassFrequency = 9000,
       lowPassQ = 0.7,
-      threshold = -25,
-      knee = 18,
-      ratio = 4.8,
-      attack = 0.004,
-      release = 0.19,
       noiseGateProfile = getNoiseGateProfile(),
     } = {}
   ) => {
@@ -1106,13 +1167,6 @@ const handleDeviceChange = () => {
     lowPassFilter.frequency.value = lowPassFrequency;
     lowPassFilter.Q.value = lowPassQ;
 
-    const compressor = audioContext.createDynamicsCompressor();
-    compressor.threshold.value = threshold;
-    compressor.knee.value = knee;
-    compressor.ratio.value = ratio;
-    compressor.attack.value = attack;
-    compressor.release.value = release;
-
     const noiseGateNode = audioContext.createGain();
     const noiseGateAnalyser = audioContext.createAnalyser();
     noiseGateAnalyser.fftSize = 256;
@@ -1124,9 +1178,8 @@ const handleDeviceChange = () => {
     boxCutFilter.connect(presenceFilter);
     presenceFilter.connect(airFilter);
     airFilter.connect(lowPassFilter);
-    lowPassFilter.connect(compressor);
-    compressor.connect(noiseGateNode);
-    compressor.connect(noiseGateAnalyser);
+    lowPassFilter.connect(noiseGateNode);
+    lowPassFilter.connect(noiseGateAnalyser);
 
     localNoiseGateNode = noiseGateNode;
     localNoiseGateAnalyser = noiseGateAnalyser;
@@ -1143,15 +1196,10 @@ const handleDeviceChange = () => {
       boxCutFrequency: 520,
       boxCutGain: -1.4,
       presenceFrequency: 2650,
-      presenceGain: 3.0,
-      airFrequency: 5850,
-      airGain: 1.9,
-      lowPassFrequency: 9200,
-      threshold: -24,
-      knee: 19,
-      ratio: 4.3,
-      attack: 0.003,
-      release: 0.16,
+      presenceGain: 2.0,
+      airFrequency: 5400,
+      airGain: 0.35,
+      lowPassFrequency: 8000,
       noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
     });
   };
@@ -1163,15 +1211,10 @@ const handleDeviceChange = () => {
     boxCutFrequency: 520,
     boxCutGain: -0.9,
     presenceFrequency: 2650,
-    presenceGain: 2.1,
-    airFrequency: 6100,
-    airGain: 1.1,
-    lowPassFrequency: 9800,
-    threshold: -22,
-    knee: 18,
-    ratio: 2.8,
-    attack: 0.005,
-    release: 0.18,
+    presenceGain: 1.6,
+    airFrequency: 5800,
+    airGain: 0.25,
+    lowPassFrequency: 9000,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT),
   });
 
@@ -1186,40 +1229,30 @@ const handleDeviceChange = () => {
     boxCutGain: -4.2,
     presenceFrequency: 2240,
     presenceQ: 1.34,
-    presenceGain: 4.6,
-    airFrequency: 4400,
-    airGain: 0.3,
-    lowPassFrequency: 5600,
+    presenceGain: 3.2,
+    airFrequency: 4100,
+    airGain: -5.2,
+    lowPassFrequency: 4800,
     lowPassQ: 1.05,
-    threshold: -34,
-    knee: 6,
-    ratio: 12,
-    attack: 0.001,
-    release: 0.08,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
   });
 
   const buildAiNoiseSuppressionVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 96,
-    highPassQ: 0.82,
-    mudCutFrequency: 250,
-    mudCutQ: 1.05,
-    mudCutGain: -2.0,
-    boxCutFrequency: 640,
-    boxCutQ: 1.08,
-    boxCutGain: -1.2,
-    presenceFrequency: 2700,
+    highPassFrequency: 125,
+    highPassQ: 0.92,
+    mudCutFrequency: 285,
+    mudCutQ: 1.16,
+    mudCutGain: -3.4,
+    boxCutFrequency: 720,
+    boxCutQ: 1.16,
+    boxCutGain: -2.1,
+    presenceFrequency: 2500,
     presenceQ: 1.0,
-    presenceGain: 2.0,
-    airFrequency: 6100,
-    airGain: 1.2,
-    lowPassFrequency: 9800,
-    lowPassQ: 0.7,
-    threshold: -22,
-    knee: 16,
-    ratio: 3.2,
-    attack: 0.003,
-    release: 0.1,
+    presenceGain: 1.45,
+    airFrequency: 5200,
+    airGain: -3.8,
+    lowPassFrequency: 6800,
+    lowPassQ: 0.9,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_AI),
   });
 
@@ -1943,7 +1976,7 @@ const handleDeviceChange = () => {
     micPublication = await room.localParticipant.publishTrack(nextTrack, {
       source: Track.Source.Microphone,
       name: MICROPHONE_TRACK_NAME,
-      ...getMicrophonePublishOptions(noiseSuppressionMode),
+      ...getMicrophonePublishOptions(noiseSuppressionMode, { echoCancellation: echoCancellationEnabled }),
     });
     await applyPublishedAudioState();
     logVoiceDebug("local-audio:published", {
@@ -1976,7 +2009,7 @@ const handleDeviceChange = () => {
       micPublication = await room.localParticipant.publishTrack(nextTrack, {
         source: Track.Source.Microphone,
         name: MICROPHONE_TRACK_NAME,
-        ...getMicrophonePublishOptions(noiseSuppressionMode),
+        ...getMicrophonePublishOptions(noiseSuppressionMode, { echoCancellation: echoCancellationEnabled }),
       });
       logVoiceDebug("local-audio:rebuild-published-track", {
         publicationSid: micPublication?.trackSid || "",

@@ -5773,28 +5773,43 @@ export default function MenuMain({
     setQrScannerStatus("Наведите камеру на QR-код входа.");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: deviceId && !String(deviceId).startsWith("qr-camera-")
-          ? {
-              deviceId: { exact: deviceId },
-              facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            }
-          : {
-              facingMode: "environment",
+      const preferredVideoConstraints = deviceId && !String(deviceId).startsWith("qr-camera-")
+        ? {
+            deviceId: { exact: deviceId },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          }
+        : {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          };
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: preferredVideoConstraints,
+          audio: false,
+        });
+      } catch (captureError) {
+        if (deviceId && !String(deviceId).startsWith("qr-camera-")) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
               width: { ideal: 1280 },
               height: { ideal: 720 },
             },
-        audio: false,
-      });
+            audio: false,
+          });
+        } else {
+          throw captureError;
+        }
+      }
 
       qrScannerStreamRef.current = stream;
 
       if (qrScannerPreviewRef.current) {
         qrScannerPreviewRef.current.srcObject = stream;
         qrScannerPreviewRef.current.muted = true;
-        qrScannerPreviewRef.current.play().catch(() => {});
+        await qrScannerPreviewRef.current.play().catch(() => {});
       }
 
       setHasQrScannerPreview(true);
