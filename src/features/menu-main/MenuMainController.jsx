@@ -44,7 +44,7 @@ import {
   connectIntegration,
   disconnectIntegration,
   fetchIntegrations,
-  refreshSpotifyActivity,
+  refreshIntegrationActivity,
   updateIntegrationSettings,
 } from "../../utils/integrations";
 import { isUserMentioned } from "../../utils/messageMentions";
@@ -217,6 +217,7 @@ export default function MenuMain({
   );
   const [currentTextChannelId, setCurrentTextChannelId] = useState(() => readWorkspaceState(user).currentTextChannelId || getInitialTextChannelId(user));
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
+  const [selectedVoiceChannelId, setSelectedVoiceChannelId] = useState("");
   const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
   const [directCallState, setDirectCallState] = useState(() => createDirectCallState());
   const [directCallHistory, setDirectCallHistory] = useState([]);
@@ -337,7 +338,7 @@ export default function MenuMain({
     apiBaseUrl: API_BASE_URL,
     activeDirectFriendId,
     friendsPageSection,
-  });  const [settingsTab, setSettingsTab] = useState("voice_video");
+  });  const [settingsTab, setSettingsTab] = useState("account");
   const [channelSettingsState, setChannelSettingsState] = useState(null);
   const [autoInputSensitivity, setAutoInputSensitivity] = useState(true);
   const [showMicMenu, setShowMicMenu] = useState(false);
@@ -376,6 +377,15 @@ export default function MenuMain({
     profileBackgroundFrame: getUserProfileBackgroundFrame(user),
   });
   const [profileStatus, setProfileStatus] = useState("");
+  const [emailChangeState, setEmailChangeState] = useState({
+    email: user?.email || "",
+    verificationToken: "",
+    code: "",
+    totpCode: "",
+    status: "",
+    isBusy: false,
+    awaitingCode: false,
+  });
   const [mediaFrameEditorState, setMediaFrameEditorState] = useState(null);
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -506,11 +516,16 @@ export default function MenuMain({
       ownerId: activeServer.ownerId,
       roles: activeServer.roles || [],
       members: activeServer.members || [],
+      channelCategories: activeServer.channelCategories || [],
       textChannels: activeServer.textChannels || [],
       voiceChannels: activeServer.voiceChannels || [],
     });
   }, [activeServer]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
+  const selectedVoiceChannel = useMemo(
+    () => activeServer?.voiceChannels.find((channel) => String(channel.id) === String(selectedVoiceChannelId)) || null,
+    [activeServer, selectedVoiceChannelId]
+  );
   const ensureVoiceClientReady = useCallback(async () => {
     if (voiceClientRef.current) {
       return voiceClientRef.current;
@@ -1700,6 +1715,7 @@ export default function MenuMain({
       setWorkspaceMode("servers");
       setCurrentTextChannelId(channelId);
       setDesktopServerPane("text");
+      setSelectedVoiceChannelId("");
       setActiveDirectFriendId("");
       if (isMobileViewport) {
         setMobileSection("servers");
@@ -3671,6 +3687,11 @@ export default function MenuMain({
       profileBackgroundUrl: getUserProfileBackground(user),
       profileBackgroundFrame: getUserProfileBackgroundFrame(user),
     });
+    setEmailChangeState((previous) => ({
+      ...previous,
+      email: previous.awaitingCode ? previous.email : user?.email || "",
+      status: "",
+    }));
   }, [
     user?.email,
     user?.first_name,
@@ -5417,6 +5438,7 @@ export default function MenuMain({
   const joinVoiceChannel = async (channel) => {
     if (!user?.id || !channel?.id || !activeServer?.id) return;
     const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
+    setSelectedVoiceChannelId(channel.id);
     const userLimit = Math.min(99, Math.max(0, Number(channel.userLimit || 0)));
     const channelParticipants = activeVoiceParticipantsMap?.[channel.id] || activeVoiceParticipantsMap?.[scopedChannelId] || [];
     const isAlreadyInTargetChannel = String(currentVoiceChannelRef.current || "") === String(scopedChannelId);
@@ -6073,20 +6095,21 @@ export default function MenuMain({
     setIntegrationsStatus("");
 
     try {
-      if (providerId === "spotify") {
+      const integrationMeta = integrations.find((provider) => provider.id === providerId);
+      if (integrationMeta?.oauthEnabled) {
         const url = await connectIntegration(providerId);
         if (!url) {
-          throw new Error("Spotify не вернул ссылку авторизации.");
+          throw new Error("Сервис не вернул ссылку авторизации.");
         }
 
-        const popup = window.open(url, "tend_spotify_oauth", "width=520,height=760");
+        const popup = window.open(url, `tend_${providerId}_oauth`, "width=560,height=760");
         if (!popup) {
           window.location.href = url;
           return;
         }
 
         startIntegrationOAuthPolling();
-        setIntegrationsStatus("Подтвердите доступ в окне Spotify, затем вернитесь сюда.");
+        setIntegrationsStatus("Подтвердите доступ в открывшемся окне, затем вернитесь сюда.");
         return;
       }
 
@@ -6096,7 +6119,7 @@ export default function MenuMain({
     } finally {
       setIntegrationActionBusy("");
     }
-  }, [startIntegrationOAuthPolling]);
+  }, [integrations, startIntegrationOAuthPolling]);
 
   const handleDisconnectIntegration = useCallback(async (providerId) => {
     setIntegrationActionBusy(providerId);
@@ -6134,12 +6157,12 @@ export default function MenuMain({
     }
   }, [refreshIntegrations, replaceIntegrationProvider]);
 
-  const spotifyStatusPollingEnabled = integrations.some((provider) =>
-    provider.id === "spotify" && provider.connected && provider.displayInProfile && provider.useAsStatus
+  const integrationStatusPollingEnabled = integrations.some((provider) =>
+    provider.connected && provider.displayInProfile && provider.useAsStatus && ["spotify", "steam"].includes(provider.id)
   );
 
   useEffect(() => {
-    if (!spotifyStatusPollingEnabled) {
+    if (!integrationStatusPollingEnabled) {
       return undefined;
     }
 
@@ -6153,13 +6176,13 @@ export default function MenuMain({
 
       isRefreshing = true;
       try {
-        const data = await refreshSpotifyActivity();
+        const data = await refreshIntegrationActivity();
         if (isCanceled) {
           return;
         }
 
-        if (data.provider) {
-          replaceIntegrationProvider(data.provider);
+        if (Array.isArray(data.providers)) {
+          setIntegrations(data.providers);
         }
         applyCurrentUserActivity(data.activity);
       } catch (error) {
@@ -6178,7 +6201,7 @@ export default function MenuMain({
       isCanceled = true;
       window.clearInterval(intervalId);
     };
-  }, [applyCurrentUserActivity, replaceIntegrationProvider, spotifyStatusPollingEnabled]);
+  }, [applyCurrentUserActivity, integrationStatusPollingEnabled]);
 
   useEffect(() => {
     if (!user) {
@@ -6656,6 +6679,121 @@ export default function MenuMain({
       setProfileStatus("");
     }
   };
+  const updateEmailChangeDraft = (field, value) => {
+    setEmailChangeState((previous) => ({
+      ...previous,
+      [field]: field === "code" || field === "totpCode"
+        ? String(value || "").replace(/\D/g, "").slice(0, 6)
+        : String(value || ""),
+      status: "",
+    }));
+  };
+  const startEmailChange = async () => {
+    const nextEmail = String(emailChangeState.email || "").trim();
+    if (!nextEmail) {
+      setEmailChangeState((previous) => ({ ...previous, status: "Введите новую почту." }));
+      return;
+    }
+
+    if (nextEmail === String(user?.email || "").trim()) {
+      setEmailChangeState((previous) => ({ ...previous, status: "Это уже текущая почта." }));
+      return;
+    }
+
+    setEmailChangeState((previous) => ({ ...previous, isBusy: true, status: "" }));
+
+    try {
+      const response = await authFetch(`${API_URL}/api/user/email-change/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: nextEmail }),
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось отправить код подтверждения."));
+      }
+
+      setEmailChangeState((previous) => ({
+        ...previous,
+        email: data?.email || nextEmail,
+        verificationToken: data?.verificationToken || "",
+        code: "",
+        totpCode: "",
+        isBusy: false,
+        awaitingCode: true,
+        status: "Код отправлен на текущую почту. Введите его для смены email.",
+      }));
+    } catch (error) {
+      setEmailChangeState((previous) => ({
+        ...previous,
+        isBusy: false,
+        status: error?.message || "Не удалось отправить код подтверждения.",
+      }));
+    }
+  };
+  const confirmEmailChange = async () => {
+    const nextEmail = String(emailChangeState.email || "").trim();
+    const code = String(emailChangeState.code || "").trim();
+    const totpCode = String(emailChangeState.totpCode || "").trim();
+
+    if (!emailChangeState.verificationToken || code.length !== 6) {
+      setEmailChangeState((previous) => ({ ...previous, status: "Введите шестизначный код из письма." }));
+      return;
+    }
+
+    if (isTotpEnabled && totpCode.length !== 6) {
+      setEmailChangeState((previous) => ({ ...previous, status: "Введите код из Google Authenticator." }));
+      return;
+    }
+
+    setEmailChangeState((previous) => ({ ...previous, isBusy: true, status: "" }));
+
+    try {
+      const response = await authFetch(`${API_URL}/api/user/email-change/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: nextEmail,
+          verificationToken: emailChangeState.verificationToken,
+          code,
+          totpCode,
+        }),
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось подтвердить смену почты."));
+      }
+
+      const nextUser = {
+        ...user,
+        email: data?.email || nextEmail,
+        is_email_verified: Boolean(data?.is_email_verified ?? true),
+        isEmailVerified: Boolean(data?.is_email_verified ?? true),
+      };
+      setUser?.(nextUser);
+      setProfileDraft((previous) => ({ ...previous, email: nextUser.email }));
+      await storeSession(nextUser, {
+        accessToken: getStoredToken(),
+        refreshToken: getStoredRefreshToken(),
+        accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+      });
+      setEmailChangeState({
+        email: nextUser.email,
+        verificationToken: "",
+        code: "",
+        totpCode: "",
+        status: "Почта обновлена.",
+        isBusy: false,
+        awaitingCode: false,
+      });
+    } catch (error) {
+      setEmailChangeState((previous) => ({
+        ...previous,
+        isBusy: false,
+        status: error?.message || "Не удалось подтвердить смену почты.",
+      }));
+    }
+  };
   const handleProfileSave = async (event) => {
     event?.preventDefault?.();
 
@@ -6842,6 +6980,7 @@ export default function MenuMain({
 
   const settingsContentProps = {
     settingsTab,
+    setSettingsTab,
     profileBackgroundSrc,
     profileDraft,
     profileDisplayName: getDisplayName({
@@ -6853,6 +6992,7 @@ export default function MenuMain({
       last_name: profileDraft.lastName,
     }),
     profileStatus,
+    emailChangeState,
     isTotpEnabled,
     totpSetup,
     maxProfileNicknameLength: MAX_PROFILE_NICKNAME_LENGTH,
@@ -6862,6 +7002,9 @@ export default function MenuMain({
     serverIconInputRef,
     handleProfileSave,
     updateProfileDraft,
+    updateEmailChangeDraft,
+    startEmailChange,
+    confirmEmailChange,
     updateTotpCode,
     startTotpSetup,
     verifyTotpSetup,
@@ -7337,6 +7480,7 @@ export default function MenuMain({
       serverUnreadCounts={serverUnreadCounts}
       chatDraftPresence={chatDraftPresence}
       currentTextChannel={currentTextChannel}
+      selectedVoiceChannel={selectedVoiceChannel}
       currentVoiceChannel={currentVoiceChannel}
       activeVoiceParticipantsMap={activeVoiceParticipantsMap}
       liveUserIds={liveUserIds}
@@ -7475,9 +7619,11 @@ export default function MenuMain({
     <ServerMain
       activeServer={activeServer}
       currentTextChannel={currentTextChannel}
+      selectedVoiceChannel={selectedVoiceChannel}
       currentVoiceChannelName={currentVoiceChannelName}
       desktopServerPane={desktopServerPane}
       currentVoiceParticipants={currentVoiceParticipants}
+      activeVoiceParticipantsMap={activeVoiceParticipantsMap}
       joiningVoiceChannelId={joiningVoiceChannelId}
       remoteScreenShares={remoteScreenShares}
       activeServerUnreadCount={activeServerUnreadCount}
@@ -7520,6 +7666,7 @@ export default function MenuMain({
       onScreenShareAction={handleScreenShareAction}
       onOpenCamera={openCameraModal}
       onLeave={leaveVoiceChannel}
+      onJoinVoiceChannel={joinVoiceChannel}
       onCreateForumPost={createForumPost}
       onAddForumReply={addForumReply}
       getChannelDisplayName={getChannelDisplayName}

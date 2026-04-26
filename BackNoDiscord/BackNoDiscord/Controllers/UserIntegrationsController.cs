@@ -39,18 +39,28 @@ public class UpdateUserIntegrationActivityRequest
 public class UserIntegrationsController : ControllerBase
 {
     private const string SpotifyProviderId = "spotify";
+    private const string SteamProviderId = "steam";
+    private const string BattlenetProviderId = "battlenet";
+    private const string GithubProviderId = "github";
+    private const string YandexMusicProviderId = "yandex_music";
     private const string SpotifyScope = "user-read-currently-playing user-read-playback-state";
+    private const string GithubScope = "read:user";
+    private const string BattlenetScope = "openid";
     private static readonly Uri SpotifyAccountsApi = new("https://accounts.spotify.com/");
     private static readonly Uri SpotifyWebApi = new("https://api.spotify.com/");
+    private static readonly Uri GithubLoginApi = new("https://github.com/");
+    private static readonly Uri GithubWebApi = new("https://api.github.com/");
+    private static readonly Uri SteamCommunityApi = new("https://steamcommunity.com/");
+    private static readonly Uri SteamWebApi = new("https://api.steampowered.com/");
     private static readonly TimeSpan OAuthStateLifetime = TimeSpan.FromMinutes(10);
     private static readonly ConcurrentDictionary<string, OAuthStateRecord> OAuthStates = new(StringComparer.Ordinal);
 
     private static readonly IntegrationProviderInfo[] Providers =
     [
         new("spotify", "Spotify", "music", true),
-        new("steam", "Steam", "game", false),
-        new("battlenet", "Battle.net", "game", false),
-        new("github", "GitHub", "profile", false),
+        new("steam", "Steam", "game", true),
+        new("battlenet", "Battle.net", "profile", true),
+        new("github", "GitHub", "profile", true),
         new("yandex_music", "Яндекс Музыка", "music", false)
     ];
 
@@ -107,13 +117,13 @@ public class UserIntegrationsController : ControllerBase
         var spotifyOptions = GetSpotifyOptions();
         if (!spotifyOptions.IsConfigured)
         {
-            return BadRequest(new { message = "Spotify OAuth не настроен: добавьте Spotify__ClientId и Spotify__ClientSecret на бэке." });
+            return BadRequest(new { message = "Spotify пока не настроен на сервере. Добавьте Spotify__ClientId и Spotify__ClientSecret в .env, затем перезапустите backend." });
         }
 
         PurgeExpiredOAuthStates();
 
         var state = CreateSecureState();
-        OAuthStates[state] = new OAuthStateRecord(currentUserId, DateTimeOffset.UtcNow.Add(OAuthStateLifetime));
+        OAuthStates[state] = new OAuthStateRecord(currentUserId, SpotifyProviderId, DateTimeOffset.UtcNow.Add(OAuthStateLifetime));
 
         var query = BuildQueryString(new Dictionary<string, string>
         {
@@ -126,6 +136,150 @@ public class UserIntegrationsController : ControllerBase
         });
 
         return Ok(new { url = $"https://accounts.spotify.com/authorize?{query}" });
+    }
+
+    [HttpGet("{provider}/connect-url")]
+    public IActionResult GetIntegrationConnectUrl([FromRoute] string provider)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        if (!TryNormalizeProvider(provider, out var providerId))
+        {
+            return NotFound(new { message = "Интеграция не найдена." });
+        }
+
+        if (providerId == SpotifyProviderId)
+        {
+            return GetSpotifyConnectUrl();
+        }
+
+        if (providerId == YandexMusicProviderId)
+        {
+            return BadRequest(new { message = "У Яндекс Музыки нет публичного официального API для текущего трека. Без серых схем подключение не добавлено." });
+        }
+
+        PurgeExpiredOAuthStates();
+
+        return providerId switch
+        {
+            GithubProviderId => BuildGithubConnectUrl(currentUserId),
+            BattlenetProviderId => BuildBattlenetConnectUrl(currentUserId),
+            SteamProviderId => BuildSteamConnectUrl(currentUserId),
+            _ => BadRequest(new { message = "Для этой интеграции пока нет backend-подключения." })
+        };
+    }
+
+    [AllowAnonymous]
+    [HttpGet("github/callback")]
+    public async Task<IActionResult> GithubCallback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, CancellationToken cancellationToken)
+    {
+        if (!TryConsumeOAuthState(GithubProviderId, code, state, error, out var stateRecord, out var errorResult))
+        {
+            return errorResult!;
+        }
+
+        var options = GetGithubOptions();
+        if (!options.IsConfigured)
+        {
+            return IntegrationCallbackError("GitHub", "На сервере не настроены ключи GitHub OAuth.");
+        }
+
+        try
+        {
+            var token = await ExchangeGithubCodeAsync(code!, options, cancellationToken);
+            if (string.IsNullOrWhiteSpace(token.AccessToken))
+            {
+                return IntegrationCallbackError("GitHub", "GitHub не вернул токен доступа.");
+            }
+
+            var profile = await FetchGithubProfileAsync(token.AccessToken, cancellationToken);
+            await UpsertProfileIntegrationAsync(stateRecord.UserId, GithubProviderId, profile.DisplayName, profile.Id, token.AccessToken, string.Empty, "profile", profile.DisplayName, "GitHub", cancellationToken);
+            await BroadcastActivityUpdatedAsync(stateRecord.UserId, cancellationToken);
+
+            return IntegrationCallbackSuccess("GitHub");
+        }
+        catch
+        {
+            return IntegrationCallbackError("GitHub", "Не удалось завершить OAuth-подключение GitHub.");
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpGet("battlenet/callback")]
+    public async Task<IActionResult> BattlenetCallback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, CancellationToken cancellationToken)
+    {
+        if (!TryConsumeOAuthState(BattlenetProviderId, code, state, error, out var stateRecord, out var errorResult))
+        {
+            return errorResult!;
+        }
+
+        var options = GetBattlenetOptions();
+        if (!options.IsConfigured)
+        {
+            return IntegrationCallbackError("Battle.net", "На сервере не настроены ключи Battle.net OAuth.");
+        }
+
+        try
+        {
+            var token = await ExchangeBattlenetCodeAsync(code!, options, cancellationToken);
+            if (string.IsNullOrWhiteSpace(token.AccessToken))
+            {
+                return IntegrationCallbackError("Battle.net", "Battle.net не вернул токен доступа.");
+            }
+
+            var profile = await FetchBattlenetProfileAsync(token.AccessToken, options.Region, cancellationToken);
+            await UpsertProfileIntegrationAsync(stateRecord.UserId, BattlenetProviderId, profile.DisplayName, profile.Id, token.AccessToken, token.RefreshToken, "profile", profile.DisplayName, "Battle.net", cancellationToken);
+            await BroadcastActivityUpdatedAsync(stateRecord.UserId, cancellationToken);
+
+            return IntegrationCallbackSuccess("Battle.net");
+        }
+        catch
+        {
+            return IntegrationCallbackError("Battle.net", "Не удалось завершить OAuth-подключение Battle.net.");
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpGet("steam/callback")]
+    public async Task<IActionResult> SteamCallback(CancellationToken cancellationToken)
+    {
+        var query = Request.Query.ToDictionary(item => item.Key, item => item.Value.ToString(), StringComparer.Ordinal);
+        var state = query.TryGetValue("state", out var rawState) ? rawState : string.Empty;
+        if (string.IsNullOrWhiteSpace(state) ||
+            !OAuthStates.TryRemove(state, out var stateRecord) ||
+            stateRecord.ExpiresAt <= DateTimeOffset.UtcNow ||
+            !string.Equals(stateRecord.Provider, SteamProviderId, StringComparison.Ordinal))
+        {
+            return IntegrationCallbackError("Steam", "Сессия подключения устарела. Закройте окно и попробуйте ещё раз.");
+        }
+
+        var steamOptions = GetSteamOptions();
+        if (!steamOptions.IsConfigured)
+        {
+            return IntegrationCallbackError("Steam", "На сервере не настроен Steam__ApiKey. Он нужен для профиля и статуса игры.");
+        }
+
+        try
+        {
+            var steamId = await VerifySteamOpenIdAsync(query, cancellationToken);
+            if (string.IsNullOrWhiteSpace(steamId))
+            {
+                return IntegrationCallbackError("Steam", "Steam не подтвердил вход.");
+            }
+
+            var profile = await FetchSteamProfileAsync(steamId, cancellationToken);
+            await UpsertSteamIntegrationAsync(stateRecord.UserId, profile, cancellationToken);
+            await BroadcastActivityUpdatedAsync(stateRecord.UserId, cancellationToken);
+
+            return IntegrationCallbackSuccess("Steam");
+        }
+        catch
+        {
+            return IntegrationCallbackError("Steam", "Не удалось завершить подключение Steam.");
+        }
     }
 
     [AllowAnonymous]
@@ -236,6 +390,68 @@ public class UserIntegrationsController : ControllerBase
             provider = BuildProviderPayload(ProviderById[SpotifyProviderId], records.FirstOrDefault(item => item.Provider == SpotifyProviderId)),
             activity = BuildActivityPayload(ResolveActiveActivity(records))
         });
+    }
+
+    [HttpPost("activity/refresh")]
+    public async Task<IActionResult> RefreshAllActivity(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var records = await _context.UserIntegrations
+            .Where(item => item.UserId == currentUserId)
+            .ToListAsync(cancellationToken);
+
+        var changed = false;
+        foreach (var record in records)
+        {
+            changed = await RefreshRecordActivityAsync(record, cancellationToken) || changed;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        if (changed)
+        {
+            await BroadcastActivityUpdatedAsync(currentUserId, cancellationToken);
+        }
+
+        return Ok(BuildIntegrationsPayload(records));
+    }
+
+    [HttpPost("{provider}/activity/refresh")]
+    public async Task<IActionResult> RefreshProviderActivity([FromRoute] string provider, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        if (!TryNormalizeProvider(provider, out var providerId))
+        {
+            return NotFound(new { message = "Интеграция не найдена." });
+        }
+
+        var record = await _context.UserIntegrations
+            .FirstOrDefaultAsync(item => item.UserId == currentUserId && item.Provider == providerId, cancellationToken);
+        if (record is null)
+        {
+            return NotFound(new { message = "Сначала подключите интеграцию." });
+        }
+
+        var changed = await RefreshRecordActivityAsync(record, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        if (changed)
+        {
+            await BroadcastActivityUpdatedAsync(currentUserId, cancellationToken);
+        }
+
+        var records = await _context.UserIntegrations
+            .AsNoTracking()
+            .Where(item => item.UserId == currentUserId)
+            .ToListAsync(cancellationToken);
+
+        return Ok(BuildIntegrationsPayload(records));
     }
 
     [HttpPost("{provider}/connect")]
@@ -349,6 +565,171 @@ public class UserIntegrationsController : ControllerBase
         await BroadcastActivityUpdatedAsync(currentUserId, cancellationToken);
 
         return Ok(BuildProviderPayload(providerInfo, record));
+    }
+
+    private IActionResult BuildGithubConnectUrl(int userId)
+    {
+        var options = GetGithubOptions();
+        if (!options.IsConfigured)
+        {
+            return BadRequest(new { message = "GitHub OAuth не настроен: добавьте GitHub__ClientId и GitHub__ClientSecret на backend." });
+        }
+
+        var state = CreateOAuthState(userId, GithubProviderId);
+        var query = BuildQueryString(new Dictionary<string, string>
+        {
+            ["client_id"] = options.ClientId,
+            ["redirect_uri"] = options.RedirectUri,
+            ["scope"] = GithubScope,
+            ["state"] = state,
+            ["allow_signup"] = "true"
+        });
+
+        return Ok(new { url = $"https://github.com/login/oauth/authorize?{query}" });
+    }
+
+    private IActionResult BuildBattlenetConnectUrl(int userId)
+    {
+        var options = GetBattlenetOptions();
+        if (!options.IsConfigured)
+        {
+            return BadRequest(new { message = "Battle.net OAuth не настроен: добавьте BattleNet__ClientId и BattleNet__ClientSecret на backend." });
+        }
+
+        var state = CreateOAuthState(userId, BattlenetProviderId);
+        var query = BuildQueryString(new Dictionary<string, string>
+        {
+            ["client_id"] = options.ClientId,
+            ["redirect_uri"] = options.RedirectUri,
+            ["response_type"] = "code",
+            ["scope"] = BattlenetScope,
+            ["state"] = state
+        });
+
+        return Ok(new { url = $"https://{options.Region}.battle.net/oauth/authorize?{query}" });
+    }
+
+    private IActionResult BuildSteamConnectUrl(int userId)
+    {
+        var options = GetSteamOptions();
+        if (!options.IsConfigured)
+        {
+            return BadRequest(new { message = "Steam API не настроен: добавьте Steam__ApiKey на backend." });
+        }
+
+        var state = CreateOAuthState(userId, SteamProviderId);
+        var returnTo = $"{GetIntegrationBaseUrl()}/steam/callback?state={Uri.EscapeDataString(state)}";
+        var realm = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+        var query = BuildQueryString(new Dictionary<string, string>
+        {
+            ["openid.ns"] = "http://specs.openid.net/auth/2.0",
+            ["openid.mode"] = "checkid_setup",
+            ["openid.return_to"] = returnTo,
+            ["openid.realm"] = realm,
+            ["openid.identity"] = "http://specs.openid.net/auth/2.0/identifier_select",
+            ["openid.claimed_id"] = "http://specs.openid.net/auth/2.0/identifier_select"
+        });
+
+        return Ok(new { url = $"https://steamcommunity.com/openid/login?{query}" });
+    }
+
+    private bool TryConsumeOAuthState(string providerId, string? code, string? state, string? error, out OAuthStateRecord stateRecord, out IActionResult? errorResult)
+    {
+        stateRecord = default!;
+        errorResult = null;
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            errorResult = IntegrationCallbackError(ProviderById[providerId].Name, "Авторизация была отменена или сервис вернул ошибку.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state) ||
+            !OAuthStates.TryRemove(state, out stateRecord!) ||
+            stateRecord.ExpiresAt <= DateTimeOffset.UtcNow ||
+            !string.Equals(stateRecord.Provider, providerId, StringComparison.Ordinal))
+        {
+            errorResult = IntegrationCallbackError(ProviderById[providerId].Name, "Сессия подключения устарела. Закройте окно и попробуйте ещё раз.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private ContentResult IntegrationCallbackSuccess(string providerName) =>
+        Content(BuildCallbackHtml($"{providerName} подключён", "Можно закрыть это окно и вернуться в Tend."), "text/html; charset=utf-8");
+
+    private ContentResult IntegrationCallbackError(string providerName, string message) =>
+        Content(BuildCallbackHtml($"{providerName} не подключён", message), "text/html; charset=utf-8");
+
+    private async Task UpsertProfileIntegrationAsync(
+        int userId,
+        string providerId,
+        string displayName,
+        string externalUserId,
+        string accessToken,
+        string refreshToken,
+        string activityKind,
+        string activityTitle,
+        string activitySubtitle,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.UserIntegrations
+            .FirstOrDefaultAsync(item => item.UserId == userId && item.Provider == providerId, cancellationToken);
+
+        if (record is null)
+        {
+            record = new UserIntegrationRecord
+            {
+                UserId = userId,
+                Provider = providerId,
+                ConnectedAt = now,
+                DisplayInProfile = true,
+                UseAsStatus = true
+            };
+            _context.UserIntegrations.Add(record);
+        }
+
+        record.DisplayName = ClampText(displayName, 120);
+        record.ExternalUserId = ClampText(externalUserId, 512);
+        record.AccessTokenEncrypted = string.IsNullOrWhiteSpace(accessToken) ? string.Empty : _cryptoService.Encrypt(accessToken);
+        record.RefreshTokenEncrypted = string.IsNullOrWhiteSpace(refreshToken) ? string.Empty : _cryptoService.Encrypt(refreshToken);
+        record.TokenExpiresAt = null;
+        SetIntegrationActivity(record, activityKind, activityTitle, activitySubtitle, string.Empty);
+        record.UpdatedAt = now;
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task UpsertSteamIntegrationAsync(int userId, SteamProfile profile, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.UserIntegrations
+            .FirstOrDefaultAsync(item => item.UserId == userId && item.Provider == SteamProviderId, cancellationToken);
+
+        if (record is null)
+        {
+            record = new UserIntegrationRecord
+            {
+                UserId = userId,
+                Provider = SteamProviderId,
+                ConnectedAt = now,
+                DisplayInProfile = true,
+                UseAsStatus = true
+            };
+            _context.UserIntegrations.Add(record);
+        }
+
+        record.DisplayName = ClampText(profile.DisplayName, 120);
+        record.ExternalUserId = ClampText(profile.SteamId, 512);
+        record.AccessTokenEncrypted = string.Empty;
+        record.RefreshTokenEncrypted = string.Empty;
+        record.TokenExpiresAt = null;
+        SetIntegrationActivity(record, "game", profile.CurrentGame, string.Empty, string.Empty);
+        record.UpdatedAt = now;
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private async Task UpsertSpotifyIntegrationAsync(int userId, SpotifyTokenResponse token, SpotifyProfile profile, CancellationToken cancellationToken)
@@ -473,6 +854,166 @@ public class UserIntegrationsController : ControllerBase
         return new SpotifyProfile(string.IsNullOrWhiteSpace(displayName) ? "Spotify" : displayName, id);
     }
 
+    private async Task<OAuthTokenResponse> ExchangeGithubCodeAsync(string code, OAuthClientOptions options, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = GithubLoginApi;
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "login/oauth/access_token");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = options.ClientId,
+            ["client_secret"] = options.ClientSecret,
+            ["code"] = code,
+            ["redirect_uri"] = options.RedirectUri
+        });
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return ParseOAuthTokenResponse(document.RootElement);
+    }
+
+    private async Task<ExternalProfile> FetchGithubProfileAsync(string accessToken, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = GithubWebApi;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "user");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.UserAgent.ParseAdd("TendMessenger/1.0");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var root = document.RootElement;
+        var login = GetString(root, "login");
+        var name = GetString(root, "name");
+        var id = GetString(root, "id");
+        var displayName = string.IsNullOrWhiteSpace(name) ? login : name;
+        return new ExternalProfile(string.IsNullOrWhiteSpace(displayName) ? "GitHub" : displayName, id);
+    }
+
+    private async Task<OAuthTokenResponse> ExchangeBattlenetCodeAsync(string code, BattlenetOptions options, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = new Uri($"https://{options.Region}.battle.net/");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "oauth/token");
+        request.Headers.Authorization = BuildBasicAuthHeader(options.ClientId, options.ClientSecret);
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["redirect_uri"] = options.RedirectUri
+        });
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return ParseOAuthTokenResponse(document.RootElement);
+    }
+
+    private async Task<ExternalProfile> FetchBattlenetProfileAsync(string accessToken, string region, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = new Uri($"https://{region}.battle.net/");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "oauth/userinfo");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var root = document.RootElement;
+        var battleTag = GetString(root, "battle_tag");
+        if (string.IsNullOrWhiteSpace(battleTag))
+        {
+            battleTag = GetString(root, "battletag");
+        }
+
+        var id = GetString(root, "id");
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            id = GetString(root, "sub");
+        }
+
+        return new ExternalProfile(string.IsNullOrWhiteSpace(battleTag) ? "Battle.net" : battleTag, id);
+    }
+
+    private async Task<string> VerifySteamOpenIdAsync(IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken)
+    {
+        if (!query.TryGetValue("openid.claimed_id", out var claimedId) || string.IsNullOrWhiteSpace(claimedId))
+        {
+            return string.Empty;
+        }
+
+        var values = query
+            .Where(item => item.Key.StartsWith("openid.", StringComparison.Ordinal))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+        values["openid.mode"] = "check_authentication";
+
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = SteamCommunityApi;
+        using var response = await client.PostAsync("openid/login", new FormUrlEncodedContent(values), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return string.Empty;
+        }
+
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!content.Contains("is_valid:true", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        var marker = "/id/";
+        var markerIndex = claimedId.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        var steamId = markerIndex >= 0 ? claimedId[(markerIndex + marker.Length)..] : string.Empty;
+        return steamId.All(char.IsDigit) ? steamId : string.Empty;
+    }
+
+    private async Task<SteamProfile> FetchSteamProfileAsync(string steamId, CancellationToken cancellationToken)
+    {
+        var options = GetSteamOptions();
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = SteamWebApi;
+
+        var query = BuildQueryString(new Dictionary<string, string>
+        {
+            ["key"] = options.ApiKey,
+            ["steamids"] = steamId,
+            ["format"] = "json"
+        });
+        using var response = await client.GetAsync($"ISteamUser/GetPlayerSummaries/v0002/?{query}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (!document.RootElement.TryGetProperty("response", out var responseRoot) ||
+            !responseRoot.TryGetProperty("players", out var players) ||
+            players.ValueKind != JsonValueKind.Array)
+        {
+            return new SteamProfile(steamId, "Steam", string.Empty);
+        }
+
+        var player = players.EnumerateArray().FirstOrDefault();
+        if (player.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return new SteamProfile(steamId, "Steam", string.Empty);
+        }
+
+        var displayName = GetString(player, "personaname");
+        var game = GetString(player, "gameextrainfo");
+        return new SteamProfile(steamId, string.IsNullOrWhiteSpace(displayName) ? "Steam" : displayName, game);
+    }
+
     private bool ApplySpotifyCurrentlyPlaying(UserIntegrationRecord record, JsonElement root)
     {
         if (root.TryGetProperty("is_playing", out var isPlayingElement) &&
@@ -510,6 +1051,59 @@ public class UserIntegrationsController : ControllerBase
             : string.Empty;
 
         return SetIntegrationActivity(record, "music", string.IsNullOrWhiteSpace(artists) ? "Spotify" : artists, itemName, details);
+    }
+
+    private async Task<bool> RefreshRecordActivityAsync(UserIntegrationRecord record, CancellationToken cancellationToken)
+    {
+        if (!ProviderById.TryGetValue(record.Provider, out var provider) || !IsProviderConnected(provider, record))
+        {
+            return false;
+        }
+
+        if (record.Provider == SpotifyProviderId)
+        {
+            var accessToken = await GetUsableSpotifyAccessTokenAsync(record, cancellationToken);
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                return false;
+            }
+
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = SpotifyWebApi;
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, "v1/me/player/currently-playing?additional_types=track,episode");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            using var response = await client.SendAsync(request, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NoContent)
+            {
+                return SetIntegrationActivity(record, "music", string.Empty, string.Empty, string.Empty);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            return ApplySpotifyCurrentlyPlaying(record, document.RootElement);
+        }
+
+        if (record.Provider == SteamProviderId)
+        {
+            if (string.IsNullOrWhiteSpace(record.ExternalUserId) || !GetSteamOptions().IsConfigured)
+            {
+                return false;
+            }
+
+            var profile = await FetchSteamProfileAsync(record.ExternalUserId, cancellationToken);
+            record.DisplayName = ClampText(profile.DisplayName, 120);
+            record.UpdatedAt = DateTimeOffset.UtcNow;
+            return SetIntegrationActivity(record, "game", profile.CurrentGame, string.Empty, string.Empty);
+        }
+
+        return false;
     }
 
     private static bool SetIntegrationActivity(UserIntegrationRecord record, string? kind, string? title, string? subtitle, string? details)
@@ -613,8 +1207,14 @@ public class UserIntegrationsController : ControllerBase
     private static bool IsProviderConnected(IntegrationProviderInfo provider, UserIntegrationRecord? record) =>
         record is not null &&
         provider.OAuthEnabled &&
-        provider.Id == SpotifyProviderId &&
-        !string.IsNullOrWhiteSpace(record.RefreshTokenEncrypted);
+        provider.Id switch
+        {
+            SpotifyProviderId => !string.IsNullOrWhiteSpace(record.RefreshTokenEncrypted),
+            SteamProviderId => !string.IsNullOrWhiteSpace(record.ExternalUserId),
+            GithubProviderId => !string.IsNullOrWhiteSpace(record.AccessTokenEncrypted),
+            BattlenetProviderId => !string.IsNullOrWhiteSpace(record.AccessTokenEncrypted),
+            _ => false
+        };
 
     private SpotifyOptions GetSpotifyOptions()
     {
@@ -629,9 +1229,56 @@ public class UserIntegrationsController : ControllerBase
         return new SpotifyOptions(clientId, clientSecret, redirectUri);
     }
 
+    private OAuthClientOptions GetGithubOptions()
+    {
+        var clientId = (_configuration["GitHub:ClientId"] ?? _configuration["GITHUB_CLIENT_ID"] ?? string.Empty).Trim();
+        var clientSecret = (_configuration["GitHub:ClientSecret"] ?? _configuration["GITHUB_CLIENT_SECRET"] ?? string.Empty).Trim();
+        var redirectUri = (_configuration["GitHub:RedirectUri"] ?? _configuration["GITHUB_REDIRECT_URI"] ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(redirectUri))
+        {
+            redirectUri = $"{GetIntegrationBaseUrl()}/github/callback";
+        }
+
+        return new OAuthClientOptions(clientId, clientSecret, redirectUri);
+    }
+
+    private BattlenetOptions GetBattlenetOptions()
+    {
+        var clientId = (_configuration["BattleNet:ClientId"] ?? _configuration["BATTLENET_CLIENT_ID"] ?? string.Empty).Trim();
+        var clientSecret = (_configuration["BattleNet:ClientSecret"] ?? _configuration["BATTLENET_CLIENT_SECRET"] ?? string.Empty).Trim();
+        var redirectUri = (_configuration["BattleNet:RedirectUri"] ?? _configuration["BATTLENET_REDIRECT_URI"] ?? string.Empty).Trim();
+        var region = (_configuration["BattleNet:Region"] ?? _configuration["BATTLENET_REGION"] ?? "eu").Trim().ToLowerInvariant();
+        if (region is not ("us" or "eu" or "kr" or "tw" or "cn"))
+        {
+            region = "eu";
+        }
+
+        if (string.IsNullOrWhiteSpace(redirectUri))
+        {
+            redirectUri = $"{GetIntegrationBaseUrl()}/battlenet/callback";
+        }
+
+        return new BattlenetOptions(clientId, clientSecret, redirectUri, region);
+    }
+
+    private SteamOptions GetSteamOptions()
+    {
+        var apiKey = (_configuration["Steam:ApiKey"] ?? _configuration["STEAM_API_KEY"] ?? string.Empty).Trim();
+        return new SteamOptions(apiKey);
+    }
+
+    private string GetIntegrationBaseUrl() =>
+        $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/integrations";
+
     private static AuthenticationHeaderValue BuildSpotifyBasicAuthHeader(SpotifyOptions options)
     {
         var raw = $"{options.ClientId}:{options.ClientSecret}";
+        return new AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(raw)));
+    }
+
+    private static AuthenticationHeaderValue BuildBasicAuthHeader(string clientId, string clientSecret)
+    {
+        var raw = $"{clientId}:{clientSecret}";
         return new AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(raw)));
     }
 
@@ -671,6 +1318,17 @@ public class UserIntegrationsController : ControllerBase
         return new SpotifyTokenResponse(accessToken, string.IsNullOrWhiteSpace(refreshToken) ? fallbackRefreshToken : refreshToken, expiresIn);
     }
 
+    private static OAuthTokenResponse ParseOAuthTokenResponse(JsonElement root, string fallbackRefreshToken = "")
+    {
+        var accessToken = GetString(root, "access_token");
+        var refreshToken = GetString(root, "refresh_token");
+        var expiresIn = root.TryGetProperty("expires_in", out var expiresInElement) && expiresInElement.TryGetInt32(out var value)
+            ? value
+            : 3600;
+
+        return new OAuthTokenResponse(accessToken, string.IsNullOrWhiteSpace(refreshToken) ? fallbackRefreshToken : refreshToken, expiresIn);
+    }
+
     private static string GetString(JsonElement element, string propertyName)
     {
         if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -691,6 +1349,13 @@ public class UserIntegrationsController : ControllerBase
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToBase64String(bytes).Replace("+", "-", StringComparison.Ordinal).Replace("/", "_", StringComparison.Ordinal).TrimEnd('=');
+    }
+
+    private static string CreateOAuthState(int userId, string providerId)
+    {
+        var state = CreateSecureState();
+        OAuthStates[state] = new OAuthStateRecord(userId, providerId, DateTimeOffset.UtcNow.Add(OAuthStateLifetime));
+        return state;
     }
 
     private static void PurgeExpiredOAuthStates()
@@ -732,11 +1397,26 @@ public class UserIntegrationsController : ControllerBase
     }
 
     private sealed record IntegrationProviderInfo(string Id, string Name, string DefaultActivityKind, bool OAuthEnabled);
-    private sealed record OAuthStateRecord(int UserId, DateTimeOffset ExpiresAt);
+    private sealed record OAuthStateRecord(int UserId, string Provider, DateTimeOffset ExpiresAt);
     private sealed record SpotifyOptions(string ClientId, string ClientSecret, string RedirectUri)
     {
         public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
     }
+    private sealed record OAuthClientOptions(string ClientId, string ClientSecret, string RedirectUri)
+    {
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
+    }
+    private sealed record BattlenetOptions(string ClientId, string ClientSecret, string RedirectUri, string Region)
+    {
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
+    }
+    private sealed record SteamOptions(string ApiKey)
+    {
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
+    }
     private sealed record SpotifyTokenResponse(string AccessToken, string RefreshToken, int ExpiresIn);
     private sealed record SpotifyProfile(string DisplayName, string Id);
+    private sealed record OAuthTokenResponse(string AccessToken, string RefreshToken, int ExpiresIn);
+    private sealed record ExternalProfile(string DisplayName, string Id);
+    private sealed record SteamProfile(string SteamId, string DisplayName, string CurrentGame);
 }

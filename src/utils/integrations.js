@@ -3,9 +3,9 @@ import { authFetch, getApiErrorMessage, parseApiResponse } from "./auth";
 
 export const INTEGRATION_PROVIDER_META = {
   spotify: { label: "Spotify", shortLabel: "Spotify", tone: "#1ed760", kind: "music", oauthEnabled: true },
-  steam: { label: "Steam", shortLabel: "Steam", tone: "#66c0f4", kind: "game", oauthEnabled: false },
-  battlenet: { label: "Battle.net", shortLabel: "B.net", tone: "#00aeff", kind: "game", oauthEnabled: false },
-  github: { label: "GitHub", shortLabel: "GitHub", tone: "#f0f6fc", kind: "profile", oauthEnabled: false },
+  steam: { label: "Steam", shortLabel: "Steam", tone: "#66c0f4", kind: "game", oauthEnabled: true },
+  battlenet: { label: "Battle.net", shortLabel: "B.net", tone: "#00aeff", kind: "profile", oauthEnabled: true },
+  github: { label: "GitHub", shortLabel: "GitHub", tone: "#f0f6fc", kind: "profile", oauthEnabled: true },
   yandex_music: { label: "Яндекс Музыка", shortLabel: "Музыка", tone: "#ffcc00", kind: "music", oauthEnabled: false },
 };
 
@@ -62,19 +62,20 @@ export async function fetchIntegrations() {
   };
 }
 
-export async function requestSpotifyConnectUrl() {
-  const response = await authFetch(`${API_URL}/api/integrations/spotify/connect-url`);
+export async function requestIntegrationConnectUrl(providerId) {
+  const response = await authFetch(`${API_URL}/api/integrations/${providerId}/connect-url`);
   const data = await parseApiResponse(response);
   if (!response.ok) {
-    throw new Error(getApiErrorMessage(response, data, "Не удалось начать подключение Spotify."));
+    throw new Error(getApiErrorMessage(response, data, "Не удалось начать подключение интеграции."));
   }
 
   return String(data?.url || "");
 }
 
 export async function connectIntegration(providerId) {
-  if (providerId === "spotify") {
-    return requestSpotifyConnectUrl();
+  const provider = INTEGRATION_PROVIDER_META[providerId];
+  if (provider?.oauthEnabled) {
+    return requestIntegrationConnectUrl(providerId);
   }
 
   const response = await authFetch(`${API_URL}/api/integrations/${providerId}/connect`, {
@@ -125,6 +126,21 @@ export async function refreshSpotifyActivity() {
 
   return {
     provider: data?.provider ? normalizeIntegrationProvider(data.provider) : null,
+    activity: data?.activity || null,
+  };
+}
+
+export async function refreshIntegrationActivity() {
+  const response = await authFetch(`${API_URL}/api/integrations/activity/refresh`, {
+    method: "POST",
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(response, data, "Не удалось обновить статусы интеграций."));
+  }
+
+  return {
+    providers: Array.isArray(data?.providers) ? data.providers.map(normalizeIntegrationProvider) : [],
     activity: data?.activity || null,
   };
 }

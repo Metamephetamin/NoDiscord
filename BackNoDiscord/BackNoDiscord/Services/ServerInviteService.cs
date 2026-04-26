@@ -229,6 +229,7 @@ public class ServerInviteService
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();
         normalized.Roles ??= new List<ServerRoleSnapshot>();
         normalized.Members ??= new List<ServerMemberSnapshot>();
+        normalized.ChannelCategories ??= new List<ChannelCategorySnapshot>();
         normalized.TextChannels ??= new List<ChannelSnapshot>();
         normalized.VoiceChannels ??= new List<ChannelSnapshot>();
 
@@ -252,16 +253,28 @@ public class ServerInviteService
             member.RoleId = string.IsNullOrWhiteSpace(member.RoleId) ? "member" : member.RoleId.Trim();
         }
 
+        for (var index = 0; index < normalized.ChannelCategories.Count; index++)
+        {
+            var category = normalized.ChannelCategories[index];
+            category.Id = category.Id?.Trim() ?? string.Empty;
+            category.Name = string.IsNullOrWhiteSpace(category.Name) ? $"Category {index + 1}" : category.Name.Trim();
+            category.Order = category.Order < 0 ? index : category.Order;
+        }
+
         foreach (var channel in normalized.TextChannels)
         {
             channel.Id = channel.Id?.Trim() ?? string.Empty;
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "general" : channel.Name.Trim();
+            channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
+            channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "text" : channel.Kind.Trim();
         }
 
         foreach (var channel in normalized.VoiceChannels)
         {
             channel.Id = channel.Id?.Trim() ?? string.Empty;
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
+            channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
+            channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
         }
 
         if (!normalized.Members.Any(member => string.Equals(member.UserId, normalized.OwnerId, StringComparison.Ordinal)))
@@ -353,8 +366,18 @@ public class ServerSnapshot
     public string OwnerId { get; set; } = string.Empty;
     public List<ServerRoleSnapshot> Roles { get; set; } = new();
     public List<ServerMemberSnapshot> Members { get; set; } = new();
+    public List<ChannelCategorySnapshot> ChannelCategories { get; set; } = new();
     public List<ChannelSnapshot> TextChannels { get; set; } = new();
     public List<ChannelSnapshot> VoiceChannels { get; set; } = new();
+}
+
+public class ChannelCategorySnapshot
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public bool Collapsed { get; set; }
+    public bool PrivateCategory { get; set; }
+    public int Order { get; set; }
 }
 
 public class ServerRoleSnapshot
@@ -378,6 +401,8 @@ public class ChannelSnapshot
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string CategoryId { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
     public string SlowMode { get; set; } = string.Empty;
     public string Topic { get; set; } = string.Empty;
     public bool TopicPreview { get; set; }

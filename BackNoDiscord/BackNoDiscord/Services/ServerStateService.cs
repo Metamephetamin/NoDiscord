@@ -173,8 +173,33 @@ public class ServerStateService
         normalized.OwnerId = string.IsNullOrWhiteSpace(normalized.OwnerId) ? ownerUserId : normalized.OwnerId.Trim();
         normalized.Roles ??= new List<ServerRoleSnapshot>();
         normalized.Members ??= new List<ServerMemberSnapshot>();
+        normalized.ChannelCategories ??= new List<ChannelCategorySnapshot>();
         normalized.TextChannels ??= new List<ChannelSnapshot>();
         normalized.VoiceChannels ??= new List<ChannelSnapshot>();
+
+        for (var index = 0; index < normalized.ChannelCategories.Count; index++)
+        {
+            var category = normalized.ChannelCategories[index];
+            category.Id = category.Id?.Trim() ?? string.Empty;
+            category.Name = string.IsNullOrWhiteSpace(category.Name) ? $"Category {index + 1}" : category.Name.Trim();
+            category.Order = category.Order < 0 ? index : category.Order;
+        }
+
+        foreach (var channel in normalized.TextChannels)
+        {
+            channel.Id = channel.Id?.Trim() ?? string.Empty;
+            channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "general" : channel.Name.Trim();
+            channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
+            channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "text" : channel.Kind.Trim();
+        }
+
+        foreach (var channel in normalized.VoiceChannels)
+        {
+            channel.Id = channel.Id?.Trim() ?? string.Empty;
+            channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
+            channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
+            channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
+        }
 
         if (!normalized.Members.Any(member => string.Equals(member.UserId, normalized.OwnerId, StringComparison.Ordinal)))
         {
@@ -201,6 +226,7 @@ public class ServerStateService
 
         merged.Roles = MergeRoles(normalizedExisting.Roles, merged.Roles);
         merged.Members = MergeMembers(normalizedExisting.Members, merged.Members, merged.OwnerId);
+        merged.ChannelCategories = MergeCategories(normalizedExisting.ChannelCategories, merged.ChannelCategories);
         merged.TextChannels = MergeChannels(normalizedExisting.TextChannels, merged.TextChannels);
         merged.VoiceChannels = MergeChannels(normalizedExisting.VoiceChannels, merged.VoiceChannels);
 
@@ -313,6 +339,34 @@ public class ServerStateService
         return result.Values.ToList();
     }
 
+    private static List<ChannelCategorySnapshot> MergeCategories(
+        List<ChannelCategorySnapshot>? existing,
+        List<ChannelCategorySnapshot>? incoming)
+    {
+        var result = new Dictionary<string, ChannelCategorySnapshot>(StringComparer.Ordinal);
+
+        foreach (var category in existing ?? Enumerable.Empty<ChannelCategorySnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(category.Id))
+            {
+                result[category.Id] = CloneCategory(category);
+            }
+        }
+
+        foreach (var category in incoming ?? Enumerable.Empty<ChannelCategorySnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(category.Id))
+            {
+                result[category.Id] = CloneCategory(category);
+            }
+        }
+
+        return result.Values
+            .OrderBy(category => category.Order)
+            .ThenBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private static ServerRoleSnapshot CloneRole(ServerRoleSnapshot role)
     {
         return new ServerRoleSnapshot
@@ -336,12 +390,26 @@ public class ServerStateService
         };
     }
 
+    private static ChannelCategorySnapshot CloneCategory(ChannelCategorySnapshot category)
+    {
+        return new ChannelCategorySnapshot
+        {
+            Id = category.Id,
+            Name = category.Name,
+            Collapsed = category.Collapsed,
+            PrivateCategory = category.PrivateCategory,
+            Order = category.Order
+        };
+    }
+
     private static ChannelSnapshot CloneChannel(ChannelSnapshot channel)
     {
         return new ChannelSnapshot
         {
             Id = channel.Id,
             Name = channel.Name,
+            CategoryId = channel.CategoryId,
+            Kind = channel.Kind,
             SlowMode = channel.SlowMode,
             Topic = channel.Topic,
             TopicPreview = channel.TopicPreview,

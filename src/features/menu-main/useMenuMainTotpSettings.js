@@ -18,6 +18,16 @@ const initialTotpSetup = {
   isBusy: false,
 };
 
+const TOTP_MESSAGES = {
+  startFailed: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043d\u0430\u0447\u0430\u0442\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 Google Authenticator.",
+  setupStarted: "\u041e\u0442\u0441\u043a\u0430\u043d\u0438\u0440\u0443\u0439\u0442\u0435 QR-\u043a\u043e\u0434 \u0432 Google Authenticator \u0438 \u0432\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u0434.",
+  codeRequired: "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0448\u0435\u0441\u0442\u0438\u0437\u043d\u0430\u0447\u043d\u044b\u0439 \u043a\u043e\u0434 \u0438\u0437 Google Authenticator.",
+  verifyFailed: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043a\u043e\u0434 Google Authenticator.",
+  enabled: "Google Authenticator \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d.",
+  disableFailed: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043a\u043b\u044e\u0447\u0438\u0442\u044c Google Authenticator.",
+  disabled: "Google Authenticator \u043e\u0442\u043a\u043b\u044e\u0447\u0451\u043d.",
+};
+
 export default function useMenuMainTotpSettings({ user, setUser }) {
   const [totpSetup, setTotpSetup] = useState(initialTotpSetup);
 

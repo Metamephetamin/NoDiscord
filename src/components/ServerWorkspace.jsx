@@ -9,9 +9,64 @@ import { createId, formatUserPresenceStatus, isUserCurrentlyOnline } from "../ut
 const loadVoiceRoomStage = () => import("./VoiceRoomStage");
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
 
+function VoiceChannelPreview({ channel, participants = [], isJoining = false, onJoin }) {
+  const participantCount = Array.isArray(participants) ? participants.length : 0;
+  const resolvedChannelName = channel?.name || "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0439 \u043a\u0430\u043d\u0430\u043b";
+  const resolvedParticipantText = participantCount > 0
+    ? `\u0421\u0435\u0439\u0447\u0430\u0441 \u0432 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c \u043a\u0430\u043d\u0430\u043b\u0435: ${participantCount}`
+    : "\u0421\u0435\u0439\u0447\u0430\u0441 \u0432 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c \u0447\u0430\u0442\u0435 \u043d\u0438\u043a\u043e\u0433\u043e \u043d\u0435\u0442";
+  const resolvedJoinButtonText = isJoining
+    ? "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u043c\u0441\u044f..."
+    : "\u041f\u0440\u0438\u0441\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u044c\u0441\u044f \u043a \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c\u0443 \u043a\u0430\u043d\u0430\u043b\u0443";
+  const safeChannelName = channel?.name || "Голосовой канал";
+  const participantText = participantCount > 0 ? `Сейчас в голосовом канале: ${participantCount}` : "Сейчас в голосовом чате никого нет";
+  const joinButtonText = isJoining ? "Подключаемся..." : "Присоединиться к голосовому каналу";
+  const channelName = channel?.name || "Голосовой канал";
+
+  const legacyPreviewText = [safeChannelName, participantText, joinButtonText, channelName];
+  void legacyPreviewText;
+
+  return (
+    <section className="voice-channel-preview">
+      <div className="voice-channel-preview__aurora" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="voice-channel-preview__noise" aria-hidden="true" />
+      <div className="voice-channel-preview__content">
+        <div className="voice-channel-preview__pulse" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </div>
+        <h1>{resolvedChannelName}</h1>
+        <p className="voice-channel-preview__status">{resolvedParticipantText}</p>
+        <p>{participantCount > 0 ? `Сейчас в голосовом канале: ${participantCount}` : "Сейчас в голосовом чате никого нет"}</p>
+        <button type="button" onClick={() => onJoin?.(channel)} disabled={isJoining || !channel?.id}>
+          <span className="voice-channel-preview__join-text">{resolvedJoinButtonText}</span>
+          {isJoining ? "Подключаемся..." : "Присоединиться к голосовому каналу"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function VoiceStageModuleFallback({ channelName = "" }) {
+  const resolvedFallbackTitle = channelName
+    ? `\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u043c ${channelName}`
+    : "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u043c \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0439 \u043a\u0430\u043d\u0430\u043b";
+  const resolvedFallbackText = "\u0413\u043e\u0442\u043e\u0432\u0438\u043c \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u0443\u044e \u0441\u0446\u0435\u043d\u0443 \u0431\u0435\u0437 \u043f\u043e\u043b\u043d\u043e\u0439 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430.";
+  const fallbackTitle = channelName ? `Подключаем ${channelName}` : "Подключаем голосовой канал";
+  const fallbackText = "Готовим голосовую сцену без полной перезагрузки интерфейса.";
+
+  const legacyFallbackText = [fallbackTitle, fallbackText];
+  void legacyFallbackText;
+
   return (
     <div className="voice-room-stage__empty voice-room-stage__empty--pending">
+      <strong className="voice-room-stage__safe-title">{resolvedFallbackTitle}</strong>
+      <span className="voice-room-stage__safe-copy">{resolvedFallbackText}</span>
       <strong>{channelName ? `Подключаем ${channelName}` : "Подключаем голосовой канал"}</strong>
       <span>Готовим голосовую сцену без полной перезагрузки интерфейса.</span>
     </div>
@@ -1244,6 +1299,7 @@ export const ServersSidebar = memo(({
   serverUnreadCounts,
   chatDraftPresence,
   currentTextChannel,
+  selectedVoiceChannel,
   currentVoiceChannel,
   activeVoiceParticipantsMap,
   liveUserIds,
@@ -1453,7 +1509,7 @@ export const ServersSidebar = memo(({
   const renderVoiceChannels = (channels) => (
     <VoiceChannelList
       channels={channels}
-      activeChannelId={currentVoiceChannel}
+      activeChannelId={currentVoiceChannel || (selectedVoiceChannel ? `${activeServer?.id || ""}::${selectedVoiceChannel.id}` : "")}
       participantsMap={activeVoiceParticipantsMap}
       serverId={activeServer?.id || ""}
       serverMembers={activeServer?.members || []}
@@ -1737,7 +1793,7 @@ export const ServersSidebar = memo(({
                     onClick={() => onToggleCategory?.(category.id)}
                     aria-expanded={!isCollapsed}
                   >
-                    <span className={`server-panel__category-caret ${isCollapsed ? "" : "is-open"}`} aria-hidden="true">›</span>
+                    <span className={`server-panel__category-caret ${isCollapsed ? "" : "is-open"}`} aria-hidden="true" />
                     <span>{category.name}</span>
                   </button>
                   <button type="button" onClick={() => openCreateChannelModal(category.id, "text")} disabled={!canManageChannels}>+</button>
@@ -1815,9 +1871,11 @@ export const ServersSidebar = memo(({
 function ServerMainComponent({
   activeServer,
   currentTextChannel,
+  selectedVoiceChannel,
   currentVoiceChannelName,
   desktopServerPane = "text",
   currentVoiceParticipants,
+  activeVoiceParticipantsMap,
   joiningVoiceChannelId,
   remoteScreenShares,
   activeServerUnreadCount,
@@ -1860,22 +1918,28 @@ function ServerMainComponent({
   onScreenShareAction,
   onOpenCamera,
   onLeave,
+  onJoinVoiceChannel,
   onCreateForumPost,
   onAddForumReply,
   getChannelDisplayName,
 }) {
   const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName && desktopServerPane === "voice");
+  const isVoicePreviewVisible = Boolean(activeServer && selectedVoiceChannel && desktopServerPane === "voice" && !isVoiceStageVisible);
   const isJoiningVoiceChannel = Boolean(joiningVoiceChannelId && desktopServerPane === "voice");
+  const selectedVoiceRuntimeId = selectedVoiceChannel && activeServer ? `${activeServer.id}::${selectedVoiceChannel.id}` : "";
+  const selectedVoiceParticipants = selectedVoiceChannel
+    ? (activeVoiceParticipantsMap?.[selectedVoiceChannel.id] || activeVoiceParticipantsMap?.[selectedVoiceRuntimeId] || [])
+    : [];
 
   return (
     <main className="chat__wrapper chat__wrapper--servers">
       <div className={`chat__box chat__box--servers ${isVoiceStageVisible ? "chat__box--voice-stage" : ""}`}>
-        {activeServer && !isVoiceStageVisible ? (
-          <div className="chat__topbar">
+        {activeServer && !isVoiceStageVisible && !isVoicePreviewVisible ? (
+          <div className={`chat__topbar ${isVoicePreviewVisible ? "chat__topbar--voice-preview" : ""}`}>
             <div className="chat__topbar-title">
               <div className="chat__topbar-copy">
                 <strong>
-                  <span>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
+                  <span>{isVoicePreviewVisible ? selectedVoiceChannel.name : getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
                   {activeServerUnreadCount > 0 ? <span className="chat__topbar-badge">{Math.min(activeServerUnreadCount, 99)}</span> : null}
                 </strong>
                 <span>{getTextChannelKind(currentTextChannel) === "forum" ? "Форум сервера" : "Текстовый канал сервера"}</span>
@@ -1965,6 +2029,13 @@ function ServerMainComponent({
             onClose={onCloseLocalSharePreview}
             debugInfo={localSharePreviewDebugInfo}
           />
+        ) : isVoicePreviewVisible ? (
+          <VoiceChannelPreview
+            channel={selectedVoiceChannel}
+            participants={selectedVoiceParticipants}
+            isJoining={isJoiningVoiceChannel}
+            onJoin={onJoinVoiceChannel}
+          />
         ) : getTextChannelKind(currentTextChannel) === "forum" ? (
           <ForumChannelView
             channel={currentTextChannel}
@@ -1998,9 +2069,11 @@ function ServerMainComponent({
 function areServerMainPropsEqual(previousProps, nextProps) {
   return previousProps.activeServer === nextProps.activeServer
     && previousProps.currentTextChannel === nextProps.currentTextChannel
+    && previousProps.selectedVoiceChannel === nextProps.selectedVoiceChannel
     && previousProps.currentVoiceChannelName === nextProps.currentVoiceChannelName
     && previousProps.desktopServerPane === nextProps.desktopServerPane
     && areUserLikeEntriesEqual(previousProps.currentVoiceParticipants, nextProps.currentVoiceParticipants)
+    && previousProps.activeVoiceParticipantsMap === nextProps.activeVoiceParticipantsMap
     && previousProps.joiningVoiceChannelId === nextProps.joiningVoiceChannelId
     && areRemoteSharesEqual(previousProps.remoteScreenShares, nextProps.remoteScreenShares)
     && previousProps.activeServerUnreadCount === nextProps.activeServerUnreadCount
@@ -2042,6 +2115,7 @@ function areServerMainPropsEqual(previousProps, nextProps) {
     && previousProps.onScreenShareAction === nextProps.onScreenShareAction
     && previousProps.onOpenCamera === nextProps.onOpenCamera
     && previousProps.onLeave === nextProps.onLeave
+    && previousProps.onJoinVoiceChannel === nextProps.onJoinVoiceChannel
     && previousProps.onCreateForumPost === nextProps.onCreateForumPost
     && previousProps.onAddForumReply === nextProps.onAddForumReply
     && previousProps.getChannelDisplayName === nextProps.getChannelDisplayName;

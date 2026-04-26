@@ -1,4 +1,5 @@
 import {
+  AccountSettings,
   AppearanceAccessibilitySettings,
   DevicesSettings,
   IntegrationsSettings,
@@ -26,10 +27,12 @@ import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
 
 export function MenuMainSettingsContent({
   settingsTab,
+  setSettingsTab,
   profileBackgroundSrc,
   profileDraft,
   profileDisplayName,
   profileStatus,
+  emailChangeState,
   isTotpEnabled,
   totpSetup,
   maxProfileNicknameLength,
@@ -39,6 +42,9 @@ export function MenuMainSettingsContent({
   serverIconInputRef,
   handleProfileSave,
   updateProfileDraft,
+  updateEmailChangeDraft,
+  startEmailChange,
+  confirmEmailChange,
   updateTotpCode,
   startTotpSetup,
   verifyTotpSetup,
@@ -131,6 +137,34 @@ export function MenuMainSettingsContent({
   currentServerRole,
 }) {
   switch (settingsTab) {
+    case "account":
+      return (
+        <AccountSettings
+          profileBackgroundSrc={profileBackgroundSrc}
+          profileBackgroundFrame={profileDraft.profileBackgroundFrame}
+          avatarSrc={user?.avatarUrl || user?.avatar}
+          avatarFrame={getUserAvatarFrame(user)}
+          displayName={profileDisplayName || getDisplayName(user)}
+          nickname={profileDraft.nickname}
+          email={profileDraft.email}
+          profileDraft={profileDraft}
+          profileStatus={profileStatus}
+          emailChangeState={emailChangeState}
+          isTotpEnabled={isTotpEnabled}
+          totpSetup={totpSetup}
+          onTotpCodeChange={updateTotpCode}
+          onOpenProfileSettings={() => setSettingsTab?.("personal_profile")}
+          onSaveProfile={handleProfileSave}
+          onUpdateProfileDraft={updateProfileDraft}
+          onUpdateEmailChangeDraft={updateEmailChangeDraft}
+          onStartEmailChange={startEmailChange}
+          onConfirmEmailChange={confirmEmailChange}
+          onStartTotpSetup={startTotpSetup}
+          onVerifyTotpSetup={verifyTotpSetup}
+          onDisableTotp={disableTotp}
+          onLogout={handleLogout}
+        />
+      );
     case "personal_profile":
       return (
         <PersonalProfileSettings

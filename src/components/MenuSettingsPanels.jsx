@@ -1,4 +1,6 @@
 ﻿import AnimatedAvatar from "./AnimatedAvatar";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
@@ -78,6 +80,339 @@ const IntegrationBrandIcon = ({ provider, className = "" }) => {
   );
 };
 
+const maskEmail = (value) => {
+  const normalized = String(value || "").trim();
+  const [name, domain] = normalized.split("@");
+  if (!name || !domain) {
+    return normalized || "Почта не указана";
+  }
+
+  return `${"*".repeat(Math.max(6, Math.min(12, name.length)))}@${domain}`;
+};
+
+const TotpAuthenticatorCard = ({
+  isTotpEnabled,
+  totpSetup,
+  onTotpCodeChange,
+  onStartTotpSetup,
+  onVerifyTotpSetup,
+  onDisableTotp,
+}) => {
+  const [qrState, setQrState] = useState({ uri: "", svg: "" });
+  const isSetupOpen = Boolean(totpSetup?.secret || totpSetup?.otpauthUri);
+  const statusLabel = isTotpEnabled ? "Подключён" : "Не подключён";
+  const qrUri = String(totpSetup?.otpauthUri || "");
+  const qrSvg = qrState.uri === qrUri ? qrState.svg : "";
+
+  useEffect(() => {
+    let isMounted = true;
+    const uri = String(totpSetup?.otpauthUri || "");
+
+    if (!uri) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    QRCode.toString(uri, {
+      type: "svg",
+      margin: 1,
+      width: 156,
+      color: {
+        dark: "#111827",
+        light: "#ffffff",
+      },
+    })
+      .then((svg) => {
+        if (isMounted) {
+          setQrState({ uri, svg });
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setQrState({ uri, svg: "" });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [qrUri]);
+
+  return (
+    <section className={`totp-settings-card ${isSetupOpen ? "totp-settings-card--setup" : ""}`}>
+      <div className="totp-settings-card__summary">
+        <div className="totp-settings-card__title">
+          <h3>Google Authenticator</h3>
+          <span>{statusLabel}</span>
+        </div>
+        <p>Код из приложения будет запрашиваться при входе.</p>
+        {!isSetupOpen && !isTotpEnabled ? (
+          <button type="button" className="settings-inline-button" onClick={onStartTotpSetup} disabled={totpSetup?.isBusy}>
+            {totpSetup?.isBusy ? "Готовим..." : "Подключить"}
+          </button>
+        ) : null}
+        {!isSetupOpen && isTotpEnabled ? (
+          <div className="totp-settings-card__inline-code">
+            <input
+              className="settings-input"
+              inputMode="numeric"
+              value={totpSetup?.code || ""}
+              onChange={(event) => onTotpCodeChange?.(event.target.value)}
+              maxLength={6}
+              placeholder="123456"
+            />
+            <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
+              {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {isSetupOpen ? (
+        <div className="totp-settings-card__setup">
+          <div className="totp-settings-card__qr" aria-label="QR-код для Google Authenticator">
+            {qrSvg ? <div dangerouslySetInnerHTML={{ __html: qrSvg }} /> : <span>QR</span>}
+          </div>
+          <div className="totp-settings-card__setup-body">
+            <span>Отсканируйте QR-код в Google Authenticator или добавьте ключ вручную.</span>
+            <input className="settings-input totp-settings-card__secret" value={totpSetup?.secret || ""} readOnly />
+            <div className="totp-settings-card__confirm">
+              <input
+                className="settings-input"
+                inputMode="numeric"
+                value={totpSetup?.code || ""}
+                onChange={(event) => onTotpCodeChange?.(event.target.value)}
+                maxLength={6}
+                placeholder="123456"
+              />
+              <button type="button" className="settings-inline-button" onClick={onVerifyTotpSetup} disabled={totpSetup?.isBusy}>
+                {totpSetup?.isBusy ? "Проверяем..." : "Подтвердить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {totpSetup?.status ? <div className="profile-settings-form__status">{totpSetup.status}</div> : null}
+    </section>
+  );
+};
+
+export const AccountSettings = ({
+  profileBackgroundSrc,
+  profileBackgroundFrame,
+  avatarSrc,
+  avatarFrame,
+  displayName,
+  nickname,
+  email,
+  profileDraft,
+  profileStatus,
+  emailChangeState,
+  isTotpEnabled,
+  totpSetup,
+  onTotpCodeChange,
+  onOpenProfileSettings,
+  onSaveProfile,
+  onUpdateProfileDraft,
+  onUpdateEmailChangeDraft,
+  onStartEmailChange,
+  onConfirmEmailChange,
+  onStartTotpSetup,
+  onVerifyTotpSetup,
+  onDisableTotp,
+  onLogout,
+}) => {
+  const [editingAccountField, setEditingAccountField] = useState("");
+  const isEditingDisplayName = editingAccountField === "displayName";
+  const isEditingNickname = editingAccountField === "nickname";
+  const isEditingEmail = editingAccountField === "email" || emailChangeState?.awaitingCode;
+
+  return (
+    <div className="settings-shell__content settings-shell__content--account">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Моя учётная запись</h2>
+        </div>
+      </div>
+
+      <section className="account-settings-panel">
+        <div className="account-settings-panel__cover" aria-hidden="true">
+          {profileBackgroundSrc ? (
+            <AnimatedMedia
+              className="account-settings-panel__cover-media"
+              src={profileBackgroundSrc}
+              alt=""
+              frame={profileBackgroundFrame}
+            />
+          ) : (
+            <div className="account-settings-panel__cover-fallback" />
+          )}
+        </div>
+        <div className="account-settings-panel__identity">
+          <AnimatedAvatar className="account-settings-panel__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+          <div className="account-settings-panel__name">
+            <strong>{displayName}</strong>
+            <span>{nickname || "Имя пользователя не указано"}</span>
+          </div>
+          <button type="button" className="settings-inline-button" onClick={onOpenProfileSettings}>
+            Визуал профиля
+          </button>
+        </div>
+
+        <section className="account-settings-card account-settings-card--rows">
+          <div className="account-settings-row">
+            <div className="account-settings-row__copy">
+              <strong>Отображаемое имя</strong>
+              <span>{displayName}</span>
+            </div>
+            <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(isEditingDisplayName ? "" : "displayName")}>
+              {isEditingDisplayName ? "Скрыть" : "Изменить"}
+            </button>
+          </div>
+          {isEditingDisplayName ? (
+            <form className="account-settings-row-editor" onSubmit={onSaveProfile}>
+              <div className="account-settings-card__grid">
+                <label className="account-settings-field">
+                  <span>Имя</span>
+                  <input
+                    className="settings-input"
+                    type="text"
+                    value={profileDraft?.firstName || ""}
+                    onChange={(event) => onUpdateProfileDraft?.("firstName", event.target.value)}
+                  />
+                </label>
+                <label className="account-settings-field">
+                  <span>Фамилия</span>
+                  <input
+                    className="settings-input"
+                    type="text"
+                    value={profileDraft?.lastName || ""}
+                    onChange={(event) => onUpdateProfileDraft?.("lastName", event.target.value)}
+                  />
+                </label>
+              </div>
+              <button type="submit" className="settings-inline-button">Сохранить имя</button>
+            </form>
+          ) : null}
+
+          <div className="account-settings-row">
+            <div className="account-settings-row__copy">
+              <strong>Имя пользователя</strong>
+              <span>{nickname || "Не указано"}</span>
+            </div>
+            <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(isEditingNickname ? "" : "nickname")}>
+              {isEditingNickname ? "Скрыть" : "Изменить"}
+            </button>
+          </div>
+          {isEditingNickname ? (
+            <form className="account-settings-row-editor account-settings-row-editor--single" onSubmit={onSaveProfile}>
+              <label className="account-settings-field">
+                <span>Никнейм</span>
+                <input
+                  className="settings-input"
+                  type="text"
+                  value={profileDraft?.nickname || ""}
+                  onChange={(event) => onUpdateProfileDraft?.("nickname", event.target.value)}
+                />
+              </label>
+              <button type="submit" className="settings-inline-button">Сохранить ник</button>
+            </form>
+          ) : null}
+
+          <div className="account-settings-row">
+            <div className="account-settings-row__copy">
+              <strong>Электронная почта</strong>
+              <span>{maskEmail(email)}</span>
+            </div>
+            <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(isEditingEmail ? "" : "email")}>
+              {isEditingEmail ? "Скрыть" : "Изменить"}
+            </button>
+          </div>
+          {isEditingEmail ? (
+            <div className="account-settings-row-editor account-settings-row-editor--email">
+              <label className="account-settings-field">
+                <span>Новая почта</span>
+                <input
+                  className="settings-input"
+                  type="email"
+                  value={emailChangeState?.email || ""}
+                  onChange={(event) => onUpdateEmailChangeDraft?.("email", event.target.value)}
+                />
+              </label>
+              {emailChangeState?.awaitingCode ? (
+                <div className="account-settings-card__grid">
+                  <label className="account-settings-field">
+                    <span>Код из письма</span>
+                    <input
+                      className="settings-input"
+                      inputMode="numeric"
+                      value={emailChangeState?.code || ""}
+                      onChange={(event) => onUpdateEmailChangeDraft?.("code", event.target.value)}
+                      maxLength={6}
+                      placeholder="123456"
+                    />
+                  </label>
+                  {isTotpEnabled ? (
+                    <label className="account-settings-field">
+                      <span>Код Google Authenticator</span>
+                      <input
+                        className="settings-input"
+                        inputMode="numeric"
+                        value={emailChangeState?.totpCode || ""}
+                        onChange={(event) => onUpdateEmailChangeDraft?.("totpCode", event.target.value)}
+                        maxLength={6}
+                        placeholder="123456"
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="account-settings-row-editor__actions">
+                <span>Для смены почты нужен код из письма{isTotpEnabled ? " и Google Authenticator" : ""}.</span>
+                <button
+                  type="button"
+                  className="settings-inline-button"
+                  onClick={emailChangeState?.awaitingCode ? onConfirmEmailChange : onStartEmailChange}
+                  disabled={emailChangeState?.isBusy}
+                >
+                  {emailChangeState?.isBusy ? "Проверяем..." : emailChangeState?.awaitingCode ? "Подтвердить почту" : "Отправить код"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {profileStatus ? <div className="profile-settings-form__status">{profileStatus}</div> : null}
+          {emailChangeState?.status ? <div className="profile-settings-form__status">{emailChangeState.status}</div> : null}
+        </section>
+      </section>
+
+      <section className="account-settings-section">
+        <h3>Пароль и аутентификация</h3>
+        <button type="button" className="settings-inline-button" disabled>
+          Изменить пароль
+        </button>
+        <TotpAuthenticatorCard
+          isTotpEnabled={isTotpEnabled}
+          totpSetup={totpSetup}
+          onTotpCodeChange={onTotpCodeChange}
+          onStartTotpSetup={onStartTotpSetup}
+          onVerifyTotpSetup={onVerifyTotpSetup}
+          onDisableTotp={onDisableTotp}
+        />
+      </section>
+
+      <section className="account-settings-section account-settings-section--danger">
+        <h3>Управление сессией</h3>
+        <p>Выход завершит текущую сессию на этом устройстве.</p>
+        <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onLogout}>
+          Выйти из аккаунта
+        </button>
+      </section>
+    </div>
+  );
+};
+
 export const PersonalProfileSettings = ({
   profileBackgroundSrc,
   profileBackgroundFrame,
@@ -85,32 +420,19 @@ export const PersonalProfileSettings = ({
   avatarFrame,
   displayName,
   email,
-  profileDraft,
-  profileStatus,
-  isTotpEnabled,
-  totpSetup,
-  maxProfileNameLength,
-  maxNicknameLength,
-  onSubmit,
   onChangeAvatar,
   onChangeBackground,
-  onUpdateDraft,
-  onTotpCodeChange,
-  onStartTotpSetup,
-  onVerifyTotpSetup,
-  onDisableTotp,
-  onLogout,
 }) => (
   <div className="settings-shell__content">
     <div className="settings-shell__content-header">
       <div>
         <h2>Личный профиль</h2>
-        <p>Управляйте своим именем, фамилией, email, аватаром и фоном профиля в одном месте.</p>
+        <p>Настройте только внешний вид профиля. Имя, никнейм и почта теперь находятся в учётной записи.</p>
       </div>
     </div>
 
     <section className="voice-settings-card voice-settings-card--profile">
-      <form className="profile-settings-form" onSubmit={onSubmit}>
+      <div className="profile-settings-form">
         <div className="profile-settings-form__preview-card">
           <div className="profile-settings-form__cover">
             {profileBackgroundSrc ? (
@@ -138,95 +460,7 @@ export const PersonalProfileSettings = ({
             </div>
           </div>
         </div>
-
-        <div className="profile-settings-form__fields">
-          <div className="profile-settings-form__grid">
-            <label className="voice-settings-field voice-settings-field--stacked profile-settings-form__field--full">
-              <span>Никнейм</span>
-              <input
-                className="settings-input"
-                type="text"
-                value={profileDraft.nickname}
-                onChange={(event) => onUpdateDraft("nickname", event.target.value)}
-                maxLength={maxNicknameLength}
-              />
-            </label>
-            <label className="voice-settings-field voice-settings-field--stacked">
-              <span>Имя</span>
-              <input className="settings-input" type="text" value={profileDraft.firstName} onChange={(event) => onUpdateDraft("firstName", event.target.value)} maxLength={maxProfileNameLength} />
-            </label>
-            <label className="voice-settings-field voice-settings-field--stacked">
-              <span>Фамилия</span>
-              <input className="settings-input" type="text" value={profileDraft.lastName} onChange={(event) => onUpdateDraft("lastName", event.target.value)} maxLength={maxProfileNameLength} />
-            </label>
-            <label className="voice-settings-field voice-settings-field--stacked profile-settings-form__field--full">
-              <span>Email</span>
-              <input className="settings-input" type="email" value={email} readOnly />
-            </label>
-          </div>
-        </div>
-
-        {profileStatus ? <div className="profile-settings-form__status">{profileStatus}</div> : null}
-
-        <div className="voice-settings-card">
-          <div className="voice-settings-card__title">Google Authenticator</div>
-          <div className="voice-settings-grid">
-            <div className="voice-settings-field voice-settings-field--stacked profile-settings-form__field--full">
-              <span>{isTotpEnabled ? "Подключён" : "Не подключён"}</span>
-              <span className="voice-settings-caption">
-                Код из приложения будет запрашиваться при входе по паролю и при входе по коду из письма.
-              </span>
-              {totpSetup?.secret ? (
-                <>
-                  <input className="settings-input" value={totpSetup.secret} readOnly />
-                  <span className="voice-settings-caption">В Google Authenticator выберите ввод ключа вручную и добавьте аккаунт MAX.</span>
-                </>
-              ) : null}
-            </div>
-
-            {(totpSetup?.secret || isTotpEnabled) ? (
-              <label className="voice-settings-field voice-settings-field--stacked">
-                <span>Код из приложения</span>
-                <input
-                  className="settings-input"
-                  inputMode="numeric"
-                  value={totpSetup?.code || ""}
-                  onChange={(event) => onTotpCodeChange(event.target.value)}
-                  maxLength={6}
-                  placeholder="123456"
-                />
-              </label>
-            ) : null}
-          </div>
-
-          {totpSetup?.status ? <div className="profile-settings-form__status">{totpSetup.status}</div> : null}
-
-          <div className="settings-shell__actions">
-            {!isTotpEnabled && !totpSetup?.secret ? (
-              <button type="button" className="settings-inline-button" onClick={onStartTotpSetup} disabled={totpSetup?.isBusy}>
-                {totpSetup?.isBusy ? "Готовим..." : "Подключить"}
-              </button>
-            ) : null}
-            {!isTotpEnabled && totpSetup?.secret ? (
-              <button type="button" className="settings-inline-button" onClick={onVerifyTotpSetup} disabled={totpSetup?.isBusy}>
-                {totpSetup?.isBusy ? "Проверяем..." : "Подтвердить"}
-              </button>
-            ) : null}
-            {isTotpEnabled ? (
-              <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
-                {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="settings-shell__actions">
-          <button type="submit" className="settings-inline-button">Сохранить профиль</button>
-          <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onLogout}>
-            Выйти из аккаунта
-          </button>
-        </div>
-      </form>
+      </div>
     </section>
   </div>
 );

@@ -847,7 +847,8 @@ export const FRIENDS_SIDEBAR_ITEMS = [
   { id: "friends", label: "Друзья", icon: "??" },
 ];
 export const SETTINGS_NAV_ITEMS = [
-  { id: "personal_profile", label: "Личный профиль", section: "Пользователь" },
+  { id: "account", label: "Моя учётная запись", section: "Пользователь" },
+  { id: "personal_profile", label: "Профили", section: "Пользователь" },
   { id: "devices", label: "Устройства", section: "Пользователь" },
   { id: "integrations", label: "Интеграции", section: "Пользователь" },
   { id: "notifications", label: "Уведомления", section: "Пользователь" },

@@ -29,6 +29,7 @@ const VoiceChannelList = ({
   serverMembers = [],
   serverRoles = [],
   onJoinChannel,
+  onSelectChannel,
   onLeaveChannel,
   onPrewarmChannel,
   onRenameChannel,
@@ -102,7 +103,11 @@ const VoiceChannelList = ({
 
           event.preventDefault();
           event.stopPropagation();
-          onJoinChannel?.(channel);
+          if (onSelectChannel) {
+            onSelectChannel(channel);
+          } else {
+            onJoinChannel?.(channel);
+          }
         };
 
         return (

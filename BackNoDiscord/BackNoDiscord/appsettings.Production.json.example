@@ -25,6 +25,25 @@
   "Auth": {
     "RequireEmailVerification": true
   },
+  "Spotify": {
+    "ClientId": "REPLACE_WITH_SPOTIFY_CLIENT_ID",
+    "ClientSecret": "REPLACE_WITH_SPOTIFY_CLIENT_SECRET",
+    "RedirectUri": "https://tendsec.ru/api/integrations/spotify/callback"
+  },
+  "GitHub": {
+    "ClientId": "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID",
+    "ClientSecret": "REPLACE_WITH_GITHUB_OAUTH_CLIENT_SECRET",
+    "RedirectUri": "https://tendsec.ru/api/integrations/github/callback"
+  },
+  "Steam": {
+    "ApiKey": "REPLACE_WITH_STEAM_WEB_API_KEY"
+  },
+  "BattleNet": {
+    "ClientId": "REPLACE_WITH_BATTLENET_CLIENT_ID",
+    "ClientSecret": "REPLACE_WITH_BATTLENET_CLIENT_SECRET",
+    "RedirectUri": "https://tendsec.ru/api/integrations/battlenet/callback",
+    "Region": "eu"
+  },
   "Cors": {
     "AllowedOrigins": [
       "https://app.your-domain.example",

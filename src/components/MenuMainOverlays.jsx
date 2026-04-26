@@ -48,10 +48,20 @@ function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }
 }
 
 const SETTINGS_NAV_ICON_PATHS = {
-  personal_profile: (
+  account: (
     <>
       <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
       <path d="M4.75 20a7.25 7.25 0 0 1 14.5 0" />
+      <path d="M17.7 7.2h2.8" />
+      <path d="M19.1 5.8v2.8" />
+    </>
+  ),
+  personal_profile: (
+    <>
+      <rect x="4" y="5" width="16" height="14" rx="3" />
+      <path d="M8 10h8" />
+      <path d="M8 14h5" />
+      <path d="M16.5 15.5 19 18" />
     </>
   ),
   devices: (
@@ -183,7 +193,18 @@ export const SettingsOverlay = ({
         ) : (
           <>
             <aside className="settings-shell__sidebar">
-              <div className="settings-shell__profile">
+              <div
+                className="settings-shell__profile"
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectSettingsTab("personal_profile")}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectSettingsTab("personal_profile");
+                  }
+                }}
+              >
                 <AnimatedAvatar className="settings-shell__profile-avatar" src={userAvatarSrc} alt={displayName} frame={userAvatarFrame} loading="eager" decoding="sync" />
                 <div>
                   <strong>{displayName}</strong>

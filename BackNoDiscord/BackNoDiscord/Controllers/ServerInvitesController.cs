@@ -219,6 +219,7 @@ public class ServerInvitesController : ControllerBase
         if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
         {
             snapshotToSave = existingSnapshot;
+            snapshotToSave.ChannelCategories = request.ServerSnapshot.ChannelCategories ?? new List<ChannelCategorySnapshot>();
             snapshotToSave.TextChannels = request.ServerSnapshot.TextChannels ?? new List<ChannelSnapshot>();
             snapshotToSave.VoiceChannels = request.ServerSnapshot.VoiceChannels ?? new List<ChannelSnapshot>();
         }

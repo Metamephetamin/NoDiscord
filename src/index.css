@@ -144,6 +144,18 @@ body {
   touch-action: manipulation;
 }
 
+body button,
+body button::before,
+body button::after,
+body input[type="button"],
+body input[type="submit"],
+body input[type="reset"],
+body [role="button"],
+body [role="button"]::before,
+body [role="button"]::after {
+  box-shadow: none !important;
+}
+
 html[data-ui-font-scale="sm"] {
   --ui-font-size-base: 15px;
 }
