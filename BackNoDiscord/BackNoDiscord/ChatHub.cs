@@ -35,6 +35,7 @@ public class ChatHub : Hub
     private static readonly TimeSpan ForwardCooldown = TimeSpan.FromMilliseconds(900);
     private static readonly TimeSpan MessageMutationCooldown = TimeSpan.FromMilliseconds(350);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
+    private static readonly ConcurrentDictionary<string, DateTime> LastSlowModeMessageSentAtByUserAndChannel = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
 
     private readonly AppDbContext _context;
@@ -160,6 +161,8 @@ public class ChatHub : Hub
                 throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
             }
 
+            EnsureServerChannelSlowMode(normalizedChannelId, currentUser.UserId);
+
             var normalizedAttachments = NormalizeAttachments(
                 attachments,
                 attachmentUrl,
@@ -215,6 +218,7 @@ public class ChatHub : Hub
 
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
             LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+            MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
             await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, payload);
         }
         catch (DbUpdateException ex)
@@ -263,6 +267,8 @@ public class ChatHub : Hub
         {
             throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
         }
+
+        EnsureServerChannelSlowMode(normalizedChannelId, currentUser.UserId);
 
         EnsureActionCooldown(currentUser.UserId, "forward", ForwardCooldown, "Подождите немного перед следующей пересылкой.");
 
@@ -342,6 +348,7 @@ public class ChatHub : Hub
 
         _logger.LogInformation("User {UserId} forwarded {Count} messages to channel {ChannelId}", currentUser.UserId, forwardedMessages.Count, normalizedChannelId);
         LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+        MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
 
         if (forwardedMessages.Count > 0)
         {
@@ -952,6 +959,72 @@ public class ChatHub : Hub
 
         LastActionAtByUserAndName[actionKey] = DateTime.UtcNow;
     }
+
+    private void EnsureServerChannelSlowMode(string channelId, string userId)
+    {
+        var cooldown = GetServerChannelSlowModeCooldown(channelId);
+        if (cooldown <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var slowModeKey = GetSlowModeKey(userId, channelId);
+        if (!LastSlowModeMessageSentAtByUserAndChannel.TryGetValue(slowModeKey, out var lastSentAtUtc))
+        {
+            return;
+        }
+
+        var remaining = cooldown - (DateTime.UtcNow - lastSentAtUtc);
+        if (remaining > TimeSpan.Zero)
+        {
+            throw new HubException($"Включен медленный режим. Подождите {FormatSlowModeRemaining(remaining)}.");
+        }
+    }
+
+    private void MarkServerChannelSlowModeSent(string channelId, string userId)
+    {
+        if (GetServerChannelSlowModeCooldown(channelId) <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        LastSlowModeMessageSentAtByUserAndChannel[GetSlowModeKey(userId, channelId)] = DateTime.UtcNow;
+    }
+
+    private TimeSpan GetServerChannelSlowModeCooldown(string channelId)
+    {
+        if (!TryParseServerChatChannelId(channelId, out var serverId, out var channelPart))
+        {
+            return TimeSpan.Zero;
+        }
+
+        var channel = _serverState.GetSnapshot(serverId)?.TextChannels
+            .FirstOrDefault(item => string.Equals(item.Id, channelPart, StringComparison.Ordinal));
+
+        return ParseSlowModeCooldown(channel?.SlowMode);
+    }
+
+    private static TimeSpan ParseSlowModeCooldown(string? value) => (value ?? string.Empty).Trim() switch
+    {
+        "5s" => TimeSpan.FromSeconds(5),
+        "10s" => TimeSpan.FromSeconds(10),
+        "30s" => TimeSpan.FromSeconds(30),
+        "1m" => TimeSpan.FromMinutes(1),
+        "5m" => TimeSpan.FromMinutes(5),
+        "15m" => TimeSpan.FromMinutes(15),
+        "1h" => TimeSpan.FromHours(1),
+        _ => TimeSpan.Zero
+    };
+
+    private static string FormatSlowModeRemaining(TimeSpan remaining)
+    {
+        var seconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
+        return seconds < 60
+            ? $"{seconds} сек."
+            : $"{Math.Max(1, (int)Math.Ceiling(seconds / 60d))} мин.";
+    }
+
+    private static string GetSlowModeKey(string userId, string channelId) => $"{userId}:{channelId}";
 
     private async Task<ReplyReferenceDto?> ResolveReplyReferenceAsync(string channelId, string? replyToMessageId, AuthenticatedUser currentUser, bool allowMissing)
     {

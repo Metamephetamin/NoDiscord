@@ -341,7 +341,27 @@ public class ServerStateService
         return new ChannelSnapshot
         {
             Id = channel.Id,
-            Name = channel.Name
+            Name = channel.Name,
+            SlowMode = channel.SlowMode,
+            Topic = channel.Topic,
+            TopicPreview = channel.TopicPreview,
+            AgeRestricted = channel.AgeRestricted,
+            AutoArchiveDuration = channel.AutoArchiveDuration,
+            PermissionsSynced = channel.PermissionsSynced,
+            PrivateChannel = channel.PrivateChannel,
+            AdvancedPermissionsOpen = channel.AdvancedPermissionsOpen,
+            PermissionOverrides = channel.PermissionOverrides is null
+                ? null
+                : new Dictionary<string, bool>(channel.PermissionOverrides, StringComparer.Ordinal),
+            BitrateKbps = channel.BitrateKbps,
+            UserLimit = channel.UserLimit,
+            VideoQuality = channel.VideoQuality,
+            Region = channel.Region,
+            InvitesPaused = channel.InvitesPaused,
+            Invites = channel.Invites,
+            Webhooks = channel.Webhooks,
+            FollowedChannels = channel.FollowedChannels,
+            IntegrationInfoOpen = channel.IntegrationInfoOpen
         };
     }
 

@@ -162,7 +162,7 @@ const VoiceChannelList = ({
                   onRenameChannel?.("voice", channel);
                 }}
                 disabled={!canManageChannels}
-                aria-label="Переименовать канал"
+                aria-label="Настройки канала"
               >
                 <img src={SETTINGS_ICON_URL} alt="" />
               </button>

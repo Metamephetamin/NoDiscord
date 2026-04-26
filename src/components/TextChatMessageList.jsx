@@ -1482,6 +1482,7 @@ MessageAttachmentCollection.displayName = "MessageAttachmentCollection";
 
 function TextChatMessageList({
   messages,
+  errorMessage = "",
   visibleMessages = messages,
   visibleStartIndex = 0,
   messagesListRef,
@@ -2069,6 +2070,11 @@ function TextChatMessageList({
           );
         })}
         {virtualizationEnabled && bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}
+        {errorMessage ? (
+          <div className="message-item message-item--chat-error" role="status" aria-live="polite">
+            <div className="chat-error">{errorMessage}</div>
+          </div>
+        ) : null}
         <div ref={messagesEndRef} />
       </div>
     </div>
@@ -2078,6 +2084,7 @@ function TextChatMessageList({
 function areTextChatMessageListPropsEqual(previousProps, nextProps) {
   return (
     previousProps.messages === nextProps.messages
+    && previousProps.errorMessage === nextProps.errorMessage
     && previousProps.visibleMessages === nextProps.visibleMessages
     && previousProps.visibleStartIndex === nextProps.visibleStartIndex
     && previousProps.messagesListRef === nextProps.messagesListRef

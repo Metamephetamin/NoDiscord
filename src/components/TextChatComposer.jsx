@@ -32,7 +32,6 @@ function TextChatComposer({
   selectedFiles,
   uploadingFile,
   composerDropActive,
-  errorMessage = "",
   replyState,
   messageEditState,
   voiceRecordingState,
@@ -396,8 +395,6 @@ function TextChatComposer({
             </div>
           </div>
         ) : null}
-
-        {errorMessage ? <div className="chat-error chat-error--composer">{errorMessage}</div> : null}
 
         {replyState || messageEditState ? (
           <div className="composer-status-strip">
@@ -974,7 +971,6 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
   return previousProps.selectedFiles === nextProps.selectedFiles
     && previousProps.uploadingFile === nextProps.uploadingFile
     && previousProps.composerDropActive === nextProps.composerDropActive
-    && previousProps.errorMessage === nextProps.errorMessage
     && areReplyStatesEqual(previousProps.replyState, nextProps.replyState)
     && areMessageEditStatesEqual(previousProps.messageEditState, nextProps.messageEditState)
     && previousProps.voiceRecordingState === nextProps.voiceRecordingState

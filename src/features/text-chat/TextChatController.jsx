@@ -74,9 +74,31 @@ const LOCAL_ECHO_ID_PREFIX = "local-echo:";
 const TEXT_CHAT_HISTORY_PAGE_SIZE = 50;
 const MAX_ACTIVE_CHANNEL_MESSAGES = 1600;
 const MAX_BACKGROUND_CHANNEL_MESSAGES = 160;
+const SLOW_MODE_DURATIONS_MS = Object.freeze({
+  "5s": 5_000,
+  "10s": 10_000,
+  "30s": 30_000,
+  "1m": 60_000,
+  "5m": 5 * 60_000,
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+});
 
 function shouldUseRestTextChatHistoryEndpoint() {
   return Boolean(String(API_BASE_URL || "").trim());
+}
+
+function getSlowModeDurationMs(value) {
+  return SLOW_MODE_DURATIONS_MS[String(value || "").trim()] || 0;
+}
+
+function formatSlowModeRemainingMessage(remainingMs) {
+  const remainingSeconds = Math.max(1, Math.ceil(Number(remainingMs || 0) / 1000));
+  if (remainingSeconds < 60) {
+    return `Включен медленный режим. Подождите ${remainingSeconds} сек.`;
+  }
+
+  return `Включен медленный режим. Подождите ${Math.ceil(remainingSeconds / 60)} мин.`;
 }
 
 function isUnrecoverableLegacyEncryptedMessage(messageItem) {
@@ -444,6 +466,7 @@ function areNormalizedReactionsEqual(leftReactions, rightReactions) {
 export default function TextChat({
   serverId,
   channelId,
+  channelSlowMode = "off",
   user,
   resolvedChannelId = "",
   localMessageStateVersion = 0,
@@ -510,6 +533,7 @@ export default function TextChat({
   const activeChannelRef = useRef("");
   const messageRefs = useRef(new Map());
   const lastSendAtRef = useRef(0);
+  const slowModeLastSendAtByChannelRef = useRef(new Map());
   const editDraftBackupRef = useRef("");
   const hasInitializedVisibleChannelRef = useRef(false);
   const composerDropDepthRef = useRef(0);
@@ -526,6 +550,24 @@ export default function TextChat({
   }, [channelId, resolvedChannelId, serverId]);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
+  const channelSlowModeMs = getSlowModeDurationMs(channelSlowMode);
+  const getSlowModeRemainingMs = useCallback((targetChannelId = scopedChannelId) => {
+    if (isDirectChat || channelSlowModeMs <= 0 || String(targetChannelId || "") !== scopedChannelId) {
+      return 0;
+    }
+
+    const lastSentAt = Number(slowModeLastSendAtByChannelRef.current.get(scopedChannelId) || 0);
+    if (!lastSentAt) {
+      return 0;
+    }
+
+    return Math.max(0, channelSlowModeMs - (Date.now() - lastSentAt));
+  }, [channelSlowModeMs, isDirectChat, scopedChannelId]);
+  const markSlowModeMessageSent = useCallback((targetChannelId = scopedChannelId) => {
+    if (!isDirectChat && channelSlowModeMs > 0 && String(targetChannelId || "") === scopedChannelId) {
+      slowModeLastSendAtByChannelRef.current.set(scopedChannelId, Date.now());
+    }
+  }, [channelSlowModeMs, isDirectChat, scopedChannelId]);
   const rawChannelMessages = messagesByChannel[scopedChannelId] || [];
   const hiddenMessageIdSet = useMemo(
     () => new Set((hiddenMessageIds || []).map((messageId) => String(messageId || ""))),
@@ -2161,13 +2203,21 @@ export default function TextChat({
   }, []);
 
   const uploadAttachment = uploadChatAttachment;
-  const sendMessagesCompat = (targetChannelId, avatar, payload, { allowBatch = true } = {}) => sendMessagesCompatCore({
-    targetChannelId,
-    avatar,
-    payload,
-    user,
-    allowBatch,
-  });
+  const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
+    const slowModeRemainingMs = getSlowModeRemainingMs(targetChannelId);
+    if (slowModeRemainingMs > 0) {
+      throw new Error(formatSlowModeRemainingMessage(slowModeRemainingMs));
+    }
+
+    await sendMessagesCompatCore({
+      targetChannelId,
+      avatar,
+      payload,
+      user,
+      allowBatch,
+    });
+    markSlowModeMessageSent(targetChannelId);
+  };
 
   const {
     voiceRecordingState,
@@ -2477,6 +2527,7 @@ export default function TextChat({
     serverMembers,
     serverRoles,
     isDirectChat,
+    getSlowModeRemainingMs,
     uploadingFile,
     setUploadingFile,
     setErrorMessage,

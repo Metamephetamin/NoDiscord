@@ -28,6 +28,7 @@ const MicMenuPanel = ({
   deviceInputLabel,
   noiseProfileOptions,
   noiseSuppressionMode,
+  noiseSuppressionStrength,
   activeNoiseProfile,
   echoCancellationEnabled,
   micVolume,
@@ -35,6 +36,7 @@ const MicMenuPanel = ({
   settingsIcon,
   onInputDeviceChange,
   onNoiseProfileChange,
+  onNoiseStrengthChange,
   onToggleEchoCancellation,
   onMicVolumeChange,
   onOpenVoiceSettings,
@@ -65,6 +67,17 @@ const MicMenuPanel = ({
         active={echoCancellationEnabled}
         title="Эхоподавление"
         onClick={onToggleEchoCancellation}
+      />
+    </div>
+
+    <div className="device-menu__slider">
+      <span>Сила шумоподавления</span>
+      <PercentageSlider
+        min={0}
+        max={100}
+        value={noiseSuppressionStrength}
+        onChange={(event) => onNoiseStrengthChange(Number(event.target.value))}
+        ariaLabel="Сила шумоподавления"
       />
     </div>
 
@@ -157,6 +170,7 @@ export default function MenuProfilePanel({
   deviceOutputLabel,
   noiseProfileOptions,
   noiseSuppressionMode,
+  noiseSuppressionStrength,
   activeNoiseProfile,
   echoCancellationEnabled,
   micVolume,
@@ -177,6 +191,7 @@ export default function MenuProfilePanel({
   onInputDeviceChange,
   onOutputDeviceChange,
   onNoiseProfileChange,
+  onNoiseStrengthChange,
   onToggleEchoCancellation,
   onMicVolumeChange,
   onAudioVolumeChange,
@@ -291,6 +306,7 @@ export default function MenuProfilePanel({
                   deviceInputLabel={deviceInputLabel}
                   noiseProfileOptions={noiseProfileOptions}
                   noiseSuppressionMode={noiseSuppressionMode}
+                  noiseSuppressionStrength={noiseSuppressionStrength}
                   activeNoiseProfile={activeNoiseProfile}
                   echoCancellationEnabled={echoCancellationEnabled}
                   micVolume={micVolume}
@@ -298,6 +314,7 @@ export default function MenuProfilePanel({
                   settingsIcon={icons.settings}
                   onInputDeviceChange={onInputDeviceChange}
                   onNoiseProfileChange={onNoiseProfileChange}
+                  onNoiseStrengthChange={onNoiseStrengthChange}
                   onToggleEchoCancellation={onToggleEchoCancellation}
                   onMicVolumeChange={onMicVolumeChange}
                   onOpenVoiceSettings={onOpenVoiceSettings}

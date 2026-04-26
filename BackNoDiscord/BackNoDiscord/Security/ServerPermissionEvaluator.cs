@@ -46,6 +46,23 @@ public static class ServerPermissionEvaluator
                permissions.Contains("manage_server", StringComparer.Ordinal);
     }
 
+    public static bool CanManageChannels(ServerSnapshot? snapshot, string userId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        if (IsOwner(snapshot, userId))
+        {
+            return true;
+        }
+
+        var permissions = GetPermissions(snapshot, userId);
+        return permissions.Contains("manage_channels", StringComparer.Ordinal) ||
+               permissions.Contains("manage_server", StringComparer.Ordinal);
+    }
+
     public static bool CanCreateInvite(ServerSnapshot? existingSnapshot, ServerSnapshot? requestedSnapshot, string userId)
     {
         if (requestedSnapshot is null || string.IsNullOrWhiteSpace(userId))

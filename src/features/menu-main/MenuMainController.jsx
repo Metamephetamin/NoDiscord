@@ -41,6 +41,7 @@ import { getDirectCallChannelId, isDirectCallChannelId } from "../../utils/direc
 import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
 import { startDirectCallTone } from "../../utils/directCallSounds";
 import { isUserMentioned } from "../../utils/messageMentions";
+import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
 import {
   areNamesUsingSameScript,
   detectNameScript,
@@ -225,6 +226,7 @@ export default function MenuMain({
   const [outputSelectionSupported, setOutputSelectionSupported] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [noiseSuppressionMode, setNoiseSuppressionMode] = useState("transparent");
+  const [noiseSuppressionStrength, setNoiseSuppressionStrength] = useState(100);
   const [echoCancellationEnabled, setEchoCancellationEnabled] = useState(true);
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -329,6 +331,7 @@ export default function MenuMain({
     activeDirectFriendId,
     friendsPageSection,
   });  const [settingsTab, setSettingsTab] = useState("voice_video");
+  const [channelSettingsState, setChannelSettingsState] = useState(null);
   const [autoInputSensitivity, setAutoInputSensitivity] = useState(true);
   const [showMicMenu, setShowMicMenu] = useState(false);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
@@ -346,6 +349,7 @@ export default function MenuMain({
   const [qrScannerStatus, setQrScannerStatus] = useState("");
   const [hasQrScannerPreview, setHasQrScannerPreview] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
+  const [serverInviteModalOpen, setServerInviteModalOpen] = useState(false);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState("");
   const [quickSwitcherSelectedIndex, setQuickSwitcherSelectedIndex] = useState(0);
@@ -464,6 +468,7 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
   } = useMenuMainStorageKeys(user);
+  const noiseSuppressionStrengthStorageKey = `${noiseSuppressionStorageKey}:strength`;
   const {
     isTotpEnabled,
     totpSetup,
@@ -2797,6 +2802,30 @@ export default function MenuMain({
 
   useEffect(() => {
     if (!user) {
+      setNoiseSuppressionStrength(100);
+      return;
+    }
+
+    try {
+      const storedStrength = Number(localStorage.getItem(noiseSuppressionStrengthStorageKey));
+      setNoiseSuppressionStrength(Number.isFinite(storedStrength) ? Math.max(0, Math.min(100, Math.round(storedStrength))) : 100);
+    } catch {
+      setNoiseSuppressionStrength(100);
+    }
+  }, [noiseSuppressionStrengthStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    try {
+      localStorage.setItem(noiseSuppressionStrengthStorageKey, String(noiseSuppressionStrength));
+    } catch {
+      // ignore storage failures
+    }
+  }, [noiseSuppressionStrength, noiseSuppressionStrengthStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
       setEchoCancellationEnabled(true);
       return;
     }
@@ -3610,17 +3639,17 @@ export default function MenuMain({
   ]);
 
   useEffect(() => {
-    if (!activeServer?.id || isDefaultServer || !currentUserId || !canManageServer || !activeServerSyncFingerprint) return;
+    if (!activeServer?.id || isDefaultServer || !currentUserId || (!canManageServer && !canManageChannels) || !activeServerSyncFingerprint) return;
     if (lastServerSyncFingerprintRef.current === activeServerSyncFingerprint) return;
 
     lastServerSyncFingerprintRef.current = activeServerSyncFingerprint;
 
     const timeoutId = window.setTimeout(() => {
-      syncServerSnapshot(activeServer);
+      syncServerSnapshot(activeServer, { applyResponse: false });
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeServer, activeServerSyncFingerprint, canManageServer, currentUserId, isDefaultServer]);
+  }, [activeServer, activeServerSyncFingerprint, canManageChannels, canManageServer, currentUserId, isDefaultServer]);
   useEffect(() => {
     setProfileDraft({
       firstName: user?.first_name || user?.firstName || "",
@@ -3645,6 +3674,7 @@ export default function MenuMain({
   ]);
   useEffect(() => {
     if (!activeServer?.id || !activeServer?.isShared || isDefaultServer || workspaceMode !== "servers") return;
+    if (channelSettingsState) return;
 
     if (document.visibilityState !== "hidden") {
       refreshServerSnapshot(activeServer.id);
@@ -3658,7 +3688,7 @@ export default function MenuMain({
     }, 10000);
 
     return () => window.clearInterval(intervalId);
-  }, [activeServer?.id, activeServer?.isShared, isDefaultServer, workspaceMode]);
+  }, [activeServer?.id, activeServer?.isShared, channelSettingsState, isDefaultServer, workspaceMode]);
   useEffect(() => {
     if (!showServerMembersPanel || !activeServer?.id || !activeServer?.isShared || isDefaultServer) return;
 
@@ -4229,6 +4259,9 @@ export default function MenuMain({
     client.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
       console.error("Ошибка применения стартового режима шумоподавления:", error);
     });
+    client.setNoiseSuppressionStrength?.(noiseSuppressionStrength).catch((error) => {
+      console.error("Ошибка применения силы шумоподавления:", error);
+    });
     client.setEchoCancellationEnabled(echoCancellationEnabled).catch((error) => {
       console.error("Ошибка применения стартового эхоподавления:", error);
     });
@@ -4309,6 +4342,13 @@ export default function MenuMain({
       console.error("Ошибка переключения режима шумоподавления:", error);
     });
   }, [noiseSuppressionMode]);
+  useEffect(() => {
+    if (!voiceClientRef.current) return;
+
+    voiceClientRef.current.setNoiseSuppressionStrength?.(noiseSuppressionStrength).catch((error) => {
+      console.error("Ошибка переключения силы шумоподавления:", error);
+    });
+  }, [noiseSuppressionStrength]);
   useEffect(() => {
     if (!voiceClientRef.current) return;
 
@@ -4637,8 +4677,15 @@ export default function MenuMain({
     }
   };
   const updateServer = (updater) => setServers((previous) => previous.map((server) => (server.id === activeServerId ? updater(server) : server)));
-  const syncServerSnapshot = async (serverSnapshot) => {
-    if (!serverSnapshot || !currentUserId || !hasServerPermission(serverSnapshot, currentUserId, "manage_server")) {
+  const syncServerSnapshot = async (serverSnapshot, { applyResponse = true } = {}) => {
+    if (
+      !serverSnapshot ||
+      !currentUserId ||
+      (
+        !hasServerPermission(serverSnapshot, currentUserId, "manage_server") &&
+        !hasServerPermission(serverSnapshot, currentUserId, "manage_channels")
+      )
+    ) {
       return null;
     }
 
@@ -4658,7 +4705,9 @@ export default function MenuMain({
 
       const data = await parseApiResponse(response);
       if (response.ok && data) {
-        replaceServerSnapshot(data);
+        if (applyResponse) {
+          replaceServerSnapshot(data);
+        }
         return data;
       }
     } catch (error) {
@@ -4714,14 +4763,41 @@ export default function MenuMain({
     setCreateServerIconFrame(getDefaultMediaFrame());
     setCreateServerError("");
   };
-  const startChannelRename = (type, channel) => {
+  const openChannelSettings = (type, channel) => {
     if (!canManageChannels || !channel?.id) return;
 
-    setChannelRenameState({
+    setChannelSettingsState({
       type,
       channelId: channel.id,
-      value: channel.name || "",
     });
+    setChannelRenameState(null);
+  };
+  const closeChannelSettings = () => {
+    setChannelSettingsState(null);
+  };
+  const updateChannelSettings = (type, channelId, patch) => {
+    if (!canManageChannels || !channelId || !patch) return;
+
+    if (type === "voice") {
+      updateServer((server) => ({
+        ...server,
+        voiceChannels: server.voiceChannels.map((channel) =>
+          channel.id === channelId
+            ? { ...channel, ...patch, name: patch.name !== undefined ? String(patch.name ?? "") : channel.name }
+            : channel
+        ),
+      }));
+      return;
+    }
+
+    updateServer((server) => ({
+      ...server,
+      textChannels: server.textChannels.map((channel) =>
+        channel.id === channelId
+          ? { ...channel, ...patch, name: patch.name !== undefined ? String(patch.name ?? "") : channel.name }
+          : channel
+      ),
+    }));
   };
   const cancelChannelRename = () => setChannelRenameState(null);
   const updateChannelRenameValue = (value) => {
@@ -4833,12 +4909,14 @@ export default function MenuMain({
     const nextChannels = activeServer.textChannels.filter((channel) => channel.id !== channelId);
     updateServer((server) => ({ ...server, textChannels: nextChannels }));
     if (currentTextChannelId === channelId) setCurrentTextChannelId(nextChannels[0]?.id || "");
+    setChannelSettingsState((previous) => (previous?.type === "text" && previous.channelId === channelId ? null : previous));
   };
   const handleDeleteVoiceChannel = async (channelId) => {
     if (!canManageChannels) return;
     if (!activeServer) return;
     if (currentVoiceChannel === getScopedVoiceChannelId(activeServer.id, channelId)) await leaveVoiceChannel();
     updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.filter((channel) => channel.id !== channelId) }));
+    setChannelSettingsState((previous) => (previous?.type === "voice" && previous.channelId === channelId ? null : previous));
   };
   const addTextChannel = () => {
     if (!canManageChannels || !activeServer) return;
@@ -5051,6 +5129,10 @@ export default function MenuMain({
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : "transparent");
     setShowNoiseMenu(false);
   };
+  const handleNoiseSuppressionStrengthChange = (value) => {
+    const numericValue = Number(value);
+    setNoiseSuppressionStrength(Number.isFinite(numericValue) ? Math.max(0, Math.min(100, Math.round(numericValue))) : 100);
+  };
   const toggleEchoCancellation = () => {
     setEchoCancellationEnabled((previous) => !previous);
   };
@@ -5157,13 +5239,56 @@ export default function MenuMain({
     syncServerSnapshot,
     markServerAsShared,
   });
+  const openServerInviteModal = useCallback(() => {
+    if (!activeServer) {
+      showServerInviteFeedback("Сервер не найден.");
+      return;
+    }
+
+    if (!canInviteToServer(activeServer)) {
+      showServerInviteFeedback("Недостаточно прав для приглашения.");
+      return;
+    }
+
+    setServerInviteModalOpen(true);
+  }, [activeServer, canInviteToServer, showServerInviteFeedback]);
+  const createServerInviteLinkForModal = useCallback(
+    () => requestServerInviteLink(activeServer, { copyToClipboard: false }),
+    [activeServer, requestServerInviteLink]
+  );
+  const sendServerInviteToFriend = useCallback(
+    async (friend, inviteLink) => {
+      const friendId = String(friend?.id || friend?.userId || "").trim();
+      const channelId = String(friend?.directChannelId || buildDirectMessageChannelId(currentUserId, friendId)).trim();
+
+      if (!friendId || !channelId || !inviteLink) {
+        throw new Error("Не удалось подготовить личный чат.");
+      }
+
+      await sendMessagesCompatCore(channelId, getUserAvatar(user), [
+        {
+          clientTempId: createId("server-invite"),
+          message: inviteLink,
+        },
+      ], { allowBatch: false, user });
+    },
+    [currentUserId, user]
+  );
   const joinVoiceChannel = async (channel) => {
     if (!user?.id || !channel?.id || !activeServer?.id) return;
+    const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
+    const userLimit = Math.min(99, Math.max(0, Number(channel.userLimit || 0)));
+    const channelParticipants = activeVoiceParticipantsMap?.[channel.id] || activeVoiceParticipantsMap?.[scopedChannelId] || [];
+    const isAlreadyInTargetChannel = String(currentVoiceChannelRef.current || "") === String(scopedChannelId);
+    if (userLimit > 0 && !isAlreadyInTargetChannel && channelParticipants.length >= userLimit) {
+      showServerInviteFeedback(`Голосовой канал заполнен: ${userLimit}/${userLimit}.`);
+      return;
+    }
+
     if (!voiceClientRef.current) {
       await ensureVoiceClientReady();
     }
     if (!voiceClientRef.current) return;
-    const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
     if (voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current === scopedChannelId) {
       return;
     }
@@ -5207,7 +5332,12 @@ export default function MenuMain({
     }
     setJoiningVoiceChannelId(scopedChannelId);
     try {
-      await voiceClientRef.current.joinChannel(scopedChannelId, user);
+      await voiceClientRef.current.joinChannel(scopedChannelId, user, {
+        audioBitrateKbps: Number(channel.bitrateKbps || 64),
+        userLimit,
+        videoQuality: channel.videoQuality || "auto",
+        region: channel.region || "auto",
+      });
       if (voiceJoinAttemptRef.current !== joinAttemptId) {
         try {
           await voiceClientRef.current.leaveChannel();
@@ -5252,7 +5382,12 @@ export default function MenuMain({
         }
 
         try {
-          await voiceClientRef.current.joinChannel(scopedChannelId, user);
+          await voiceClientRef.current.joinChannel(scopedChannelId, user, {
+            audioBitrateKbps: Number(channel.bitrateKbps || 64),
+            userLimit,
+            videoQuality: channel.videoQuality || "auto",
+            region: channel.region || "auto",
+          });
           activateJoinedVoiceUi();
           joinSucceeded = true;
           finishJoinTrace({
@@ -5463,9 +5598,19 @@ export default function MenuMain({
     stopCameraPreview();
 
     try {
+      const currentChannelConfig = servers
+        .flatMap((server) => (server.voiceChannels || []).map((channel) => ({
+          ...channel,
+          runtimeId: getScopedVoiceChannelId(server.id, channel.id),
+        })))
+        .find((channel) => String(channel.runtimeId || "") === String(currentVoiceChannelRef.current || ""));
+      const channelVideoQuality = String(currentChannelConfig?.videoQuality || "auto");
+      const effectiveResolution =
+        channelVideoQuality && channelVideoQuality !== "auto" ? channelVideoQuality : resolution;
+
       await voiceClientRef.current.startCameraShare({
         deviceId: selectedVideoDeviceId,
-        resolution,
+        resolution: effectiveResolution,
         fps,
       });
       setShowCameraModal(false);
@@ -6358,6 +6503,7 @@ export default function MenuMain({
     isMicTestActive,
     noiseProfileOptions,
     noiseSuppressionMode,
+    noiseSuppressionStrength,
     activeNoiseProfile,
     echoCancellationEnabled,
     autoInputSensitivity,
@@ -6367,6 +6513,7 @@ export default function MenuMain({
     updateAudioVolume,
     toggleMicrophoneTestPreview,
     handleNoiseSuppressionModeChange,
+    handleNoiseSuppressionStrengthChange,
     toggleEchoCancellation,
     setAutoInputSensitivity,
     directNotificationsEnabled,
@@ -6495,6 +6642,7 @@ export default function MenuMain({
     deviceOutputLabel,
     noiseProfileOptions,
     noiseSuppressionMode,
+    noiseSuppressionStrength,
     activeNoiseProfile,
     echoCancellationEnabled,
     micVolume,
@@ -6514,6 +6662,7 @@ export default function MenuMain({
     handleInputDeviceChange,
     handleOutputDeviceChange,
     handleNoiseSuppressionModeChange,
+    handleNoiseSuppressionStrengthChange,
     toggleEchoCancellation,
     updateMicVolume,
     updateAudioVolume,
@@ -6542,6 +6691,7 @@ export default function MenuMain({
     micVolume,
     noiseProfileOptions,
     noiseSuppressionMode,
+    noiseSuppressionStrength,
     outputSelectionAvailable,
     pingTone,
     pingTooltip,
@@ -6795,6 +6945,7 @@ export default function MenuMain({
       voiceParticipantByUserId={voiceParticipantByUserId}
       currentUserId={currentUserId}
       canManageChannels={canManageChannels}
+      channelSettingsState={channelSettingsState}
       channelRenameState={channelRenameState}
       serverUnreadCounts={serverUnreadCounts}
       chatDraftPresence={chatDraftPresence}
@@ -6807,6 +6958,15 @@ export default function MenuMain({
       joiningVoiceChannelId={joiningVoiceChannelId}
       icons={serverSidebarIcons}
       onOpenServerSettings={openServerSettingsPanel}
+      onOpenNotificationSettings={() => openSettingsPanel("notifications")}
+      onOpenPersonalProfileSettings={() => openSettingsPanel("personal_profile")}
+      onShowServerFeedback={showServerInviteFeedback}
+      inviteFriends={directConversationTargets}
+      isServerInviteModalOpen={serverInviteModalOpen}
+      onOpenServerInviteModal={openServerInviteModal}
+      onCloseServerInviteModal={() => setServerInviteModalOpen(false)}
+      onCreateServerInviteLink={createServerInviteLinkForModal}
+      onSendServerInviteToFriend={sendServerInviteToFriend}
       onUpdateMemberNickname={updateMemberNickname}
       onUpdateMemberVoiceState={updateMemberVoiceState}
       onUpdateMemberRole={updateMemberRole}
@@ -6814,8 +6974,12 @@ export default function MenuMain({
       onAddServer={handleAddServer}
       onAddTextChannel={addTextChannel}
       onAddVoiceChannel={addVoiceChannel}
+      onOpenChannelSettings={openChannelSettings}
+      onCloseChannelSettings={closeChannelSettings}
+      onUpdateChannelSettings={updateChannelSettings}
+      onDeleteTextChannel={handleDeleteTextChannel}
+      onDeleteVoiceChannel={handleDeleteVoiceChannel}
       onSelectTextChannel={selectServerTextChannel}
-      onStartChannelRename={startChannelRename}
       onUpdateChannelRenameValue={updateChannelRenameValue}
       onSubmitChannelRename={submitChannelRename}
       onCancelChannelRename={cancelChannelRename}

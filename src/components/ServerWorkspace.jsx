@@ -1,9 +1,10 @@
-import { Suspense, lazy, memo } from "react";
+import { Suspense, lazy, memo, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
-import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { copyTextToClipboard } from "../utils/clipboard";
+import { createId, formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 const loadVoiceRoomStage = () => import("./VoiceRoomStage");
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
@@ -139,6 +140,765 @@ function areNavigationRequestsEqual(previousRequest, nextRequest) {
     && String(previousRequest?.nonce || "") === String(nextRequest?.nonce || "");
 }
 
+const getInviteFriendName = (friend) =>
+  friend?.nickname || friend?.firstName || friend?.first_name || friend?.name || friend?.email || "User";
+
+function ServerInviteFriendsModal({
+  activeServer,
+  channelName,
+  friends = [],
+  currentUserId,
+  canInvite,
+  onClose,
+  onCreateInviteLink,
+  onSendInviteToFriend,
+}) {
+  const [query, setQuery] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+  const [status, setStatus] = useState("");
+  const [loadingLink, setLoadingLink] = useState(false);
+  const [sendingIds, setSendingIds] = useState(() => new Set());
+  const [sentIds, setSentIds] = useState(() => new Set());
+
+  useEffect(() => {
+    let isAlive = true;
+
+    setQuery("");
+    setInviteLink("");
+    setStatus("");
+    setSendingIds(new Set());
+    setSentIds(new Set());
+
+    if (!canInvite || !activeServer) {
+      setStatus("Недостаточно прав для приглашения.");
+      return () => {
+        isAlive = false;
+      };
+    }
+
+    setLoadingLink(true);
+    onCreateInviteLink()
+      .then((link) => {
+        if (isAlive) {
+          setInviteLink(link || "");
+        }
+      })
+      .catch((error) => {
+        if (isAlive) {
+          setStatus(error?.message || "Не удалось создать ссылку-приглашение.");
+        }
+      })
+      .finally(() => {
+        if (isAlive) {
+          setLoadingLink(false);
+        }
+      });
+
+    return () => {
+      isAlive = false;
+    };
+  }, [activeServer?.id, canInvite]);
+
+  const visibleFriends = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const memberIds = new Set(
+      (activeServer?.members || []).map((member) => String(member?.userId || member?.id || ""))
+    );
+
+    return friends
+      .filter((friend) => {
+        const friendId = String(friend?.id || friend?.userId || "");
+        if (!friendId || friendId === String(currentUserId || "") || memberIds.has(friendId)) {
+          return false;
+        }
+
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        return `${getInviteFriendName(friend)} ${friend?.email || ""}`.toLowerCase().includes(normalizedQuery);
+      })
+      .slice(0, 40);
+  }, [activeServer?.members, currentUserId, friends, query]);
+
+  const copyInvite = async () => {
+    if (!inviteLink) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(inviteLink);
+      setStatus("Ссылка-приглашение скопирована.");
+    } catch {
+      setStatus("Не удалось скопировать ссылку.");
+    }
+  };
+
+  const sendInvite = async (friend) => {
+    const friendId = String(friend?.id || friend?.userId || "");
+    if (!friendId || !inviteLink || sendingIds.has(friendId)) {
+      return;
+    }
+
+    setSendingIds((previous) => new Set(previous).add(friendId));
+    setStatus("");
+
+    try {
+      await onSendInviteToFriend(friend, inviteLink);
+      setSentIds((previous) => new Set(previous).add(friendId));
+      setStatus(`Приглашение отправлено: ${getInviteFriendName(friend)}.`);
+    } catch (error) {
+      setStatus(error?.message || "Не удалось отправить приглашение.");
+    } finally {
+      setSendingIds((previous) => {
+        const nextIds = new Set(previous);
+        nextIds.delete(friendId);
+        return nextIds;
+      });
+    }
+  };
+
+  const title = `Пригласить друзей в ${activeServer?.name || "сервер"}`;
+  const subtitle = `Участники окажутся в # ${channelName || "основной"}`;
+
+  return (
+    <div className="server-invite-modal-layer" role="presentation" onMouseDown={onClose}>
+      <section className="server-invite-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="server-invite-modal__header">
+          <div>
+            <h3>{title}</h3>
+            <p>{subtitle}</p>
+          </div>
+          <button type="button" className="server-invite-modal__close" onClick={onClose} aria-label="Закрыть">
+            <span aria-hidden="true" />
+          </button>
+        </header>
+
+        <label className="server-invite-modal__search">
+          <span aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти друзей" autoFocus />
+        </label>
+
+        <div className="server-invite-modal__friends">
+          {visibleFriends.length > 0 ? (
+            visibleFriends.map((friend) => {
+              const friendId = String(friend?.id || friend?.userId || "");
+              const isSending = sendingIds.has(friendId);
+              const isSent = sentIds.has(friendId);
+
+              return (
+                <div key={friendId} className="server-invite-modal__friend">
+                  <AnimatedAvatar
+                    className="server-invite-modal__avatar"
+                    src={friend?.avatar || friend?.avatarUrl || ""}
+                    alt={getInviteFriendName(friend)}
+                  />
+                  <div className="server-invite-modal__friend-copy">
+                    <strong>{getInviteFriendName(friend)}</strong>
+                    <span>{friend?.nickname || friend?.username || friend?.email || getInviteFriendName(friend)}</span>
+                  </div>
+                  <button type="button" onClick={() => sendInvite(friend)} disabled={!inviteLink || loadingLink || isSending || isSent}>
+                    {isSending ? "Отправка..." : isSent ? "Отправлено" : "Пригласить"}
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <div className="server-invite-modal__empty">Подходящих друзей не найдено.</div>
+          )}
+        </div>
+
+        <footer className="server-invite-modal__footer">
+          <strong>Или отправьте другу ссылку-приглашение на сервер</strong>
+          <div className="server-invite-modal__link-row">
+            <input value={loadingLink ? "Создаём ссылку..." : inviteLink} readOnly />
+            <button type="button" onClick={copyInvite} disabled={!inviteLink || loadingLink}>Копировать</button>
+          </div>
+          <p>Ваша ссылка-приглашение перестанет действовать через 30 дней. <button type="button">Изменить ссылку-приглашение.</button></p>
+          {status ? <div className="server-invite-modal__status" role="status">{status}</div> : null}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+const CHANNEL_SETTINGS_TABS = [
+  { id: "overview", label: "Обзор" },
+  { id: "permissions", label: "Права доступа" },
+  { id: "invites", label: "Приглашения" },
+  { id: "integrations", label: "Интеграция" },
+];
+
+const CHANNEL_TOPIC_LIMIT = 1024;
+const CHANNEL_SLOW_MODE_OPTIONS = [
+  ["off", "Выкл"],
+  ["5s", "5 секунд"],
+  ["10s", "10 секунд"],
+  ["30s", "30 секунд"],
+  ["1m", "1 минута"],
+  ["5m", "5 минут"],
+  ["15m", "15 минут"],
+  ["1h", "1 час"],
+];
+const CHANNEL_ARCHIVE_OPTIONS = [
+  ["1h", "1 час"],
+  ["24h", "24 часа"],
+  ["3d", "3 дня"],
+  ["7d", "7 дней"],
+];
+const CHANNEL_BITRATE_STOPS = [8, 64, 96];
+const CHANNEL_VIDEO_QUALITY_OPTIONS = [
+  ["auto", "Автоматически"],
+  ["720p", "720p"],
+  ["1080p", "1080p"],
+  ["1440p", "1440p"],
+];
+const CHANNEL_NAME_EMOJIS = ["😀", "😎", "🔥", "🎮", "🎧", "🎤", "⭐", "💬", "📢", "✅", "❤️", "🚀"];
+
+const getInviteCodeFromLink = (link) => String(link || "").split("/").filter(Boolean).pop() || "aWxNK8ukw";
+const getRangePercent = (value, min, max) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || max <= min) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, ((numericValue - min) / (max - min)) * 100));
+};
+const getClosestBitrateStop = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 64;
+  }
+
+  return CHANNEL_BITRATE_STOPS.reduce((closest, option) => (
+    Math.abs(option - numericValue) < Math.abs(closest - numericValue) ? option : closest
+  ), CHANNEL_BITRATE_STOPS[0]);
+};
+
+function ChannelSettingsModal({
+  activeServer,
+  state,
+  canManageChannels,
+  onClose,
+  onCreateServerInviteLink,
+  onUpdateChannelSettings,
+  onDeleteTextChannel,
+  onDeleteVoiceChannel,
+}) {
+  const [activeTabState, setActiveTabState] = useState({ channelKey: "", tab: "overview" });
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [isNameEmojiPickerOpen, setIsNameEmojiPickerOpen] = useState(false);
+  const channelNameInputRef = useRef(null);
+  const channelKey = `${state?.type || ""}:${state?.channelId || ""}`;
+  const activeTab = activeTabState.channelKey === channelKey ? activeTabState.tab : "overview";
+  const source = state?.type === "voice" ? activeServer?.voiceChannels : activeServer?.textChannels;
+  const channel = state?.channelId
+    ? (source || []).find((item) => String(item.id) === String(state.channelId)) || null
+    : null;
+  const isVoice = state?.type === "voice";
+  const channelName = channel?.name || "";
+  const slowMode = String(channel?.slowMode || "off");
+  const bitrate = getClosestBitrateStop(channel?.bitrateKbps || 64);
+  const bitrateIndex = CHANNEL_BITRATE_STOPS.indexOf(bitrate);
+  const userLimit = Math.min(99, Math.max(0, Number(channel?.userLimit ?? 0)));
+  const bitrateProgress = getRangePercent(bitrateIndex, 0, CHANNEL_BITRATE_STOPS.length - 1);
+  const userLimitProgress = getRangePercent(userLimit, 0, 99);
+  const videoQuality = String(channel?.videoQuality || "auto");
+  const region = String(channel?.region || "auto");
+  const ageRestricted = Boolean(channel?.ageRestricted);
+  const topic = String(channel?.topic || "");
+  const autoArchiveDuration = String(channel?.autoArchiveDuration || "3d");
+  const permissionsSynced = channel?.permissionsSynced !== false;
+  const privateChannel = Boolean(channel?.privateChannel);
+  const advancedPermissionsOpen = Boolean(channel?.advancedPermissionsOpen);
+  const permissionOverrides = channel?.permissionOverrides || {};
+  const invitesPaused = Boolean(channel?.invitesPaused);
+  const channelInvites = Array.isArray(channel?.invites) ? channel.invites : [];
+  const webhooks = Array.isArray(channel?.webhooks) ? channel.webhooks : [];
+  const followedChannels = Array.isArray(channel?.followedChannels) ? channel.followedChannels : [];
+  const integrationInfoOpen = Boolean(channel?.integrationInfoOpen);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  if (!state || !channel) {
+    return null;
+  }
+
+  const updateSettings = (patch) => {
+    onUpdateChannelSettings?.(state.type, channel.id, patch);
+  };
+
+  const formatTopic = (mark) => {
+    if (!topic.trim()) {
+      return;
+    }
+
+    const wrapper = mark === "bold" ? "**" : mark === "italic" ? "_" : "~~";
+    updateSettings({ topic: `${wrapper}${topic}${wrapper}`.slice(0, CHANNEL_TOPIC_LIMIT) });
+  };
+
+  const updatePermission = (key, value) => {
+    updateSettings({ permissionOverrides: { ...permissionOverrides, [key]: value } });
+  };
+
+  const insertChannelNameEmoji = (emoji) => {
+    const input = channelNameInputRef.current;
+    const selectionStart = Number.isInteger(input?.selectionStart) ? input.selectionStart : channelName.length;
+    const selectionEnd = Number.isInteger(input?.selectionEnd) ? input.selectionEnd : selectionStart;
+    const nextName = `${channelName.slice(0, selectionStart)}${emoji}${channelName.slice(selectionEnd)}`;
+
+    updateSettings({ name: nextName });
+    setIsNameEmojiPickerOpen(false);
+
+    window.requestAnimationFrame(() => {
+      input?.focus?.();
+      input?.setSelectionRange?.(selectionStart + emoji.length, selectionStart + emoji.length);
+    });
+  };
+
+  const createInvite = async () => {
+    if (isCreatingInvite || invitesPaused) {
+      return;
+    }
+
+    setIsCreatingInvite(true);
+    setInviteStatus("");
+
+    try {
+      const link = await onCreateServerInviteLink?.();
+      const inviteLink = link || `https://tendsec.ru/invite/${getInviteCodeFromLink(link)}`;
+      const invite = {
+        id: createId("channel-invite"),
+        inviter: "Вы",
+        code: getInviteCodeFromLink(inviteLink),
+        uses: 0,
+        expiresAtLabel: "29:23:59:59",
+        roles: "—",
+        link: inviteLink,
+      };
+      updateSettings({ invites: [invite, ...channelInvites] });
+      setInviteStatus("Ссылка-приглашение создана.");
+    } catch (error) {
+      setInviteStatus(error?.message || "Не удалось создать ссылку-приглашение.");
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const copyInvite = async (invite) => {
+    const value = invite?.link || invite?.code || "";
+    if (!value) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(value);
+      setInviteStatus("Ссылка-приглашение скопирована.");
+    } catch {
+      setInviteStatus("Не удалось скопировать ссылку.");
+    }
+  };
+
+  const revokeInvite = (inviteId) => {
+    updateSettings({ invites: channelInvites.filter((invite) => String(invite.id) !== String(inviteId)) });
+  };
+
+  const createWebhook = () => {
+    updateSettings({
+      webhooks: [
+        ...webhooks,
+        {
+          id: createId("webhook"),
+          name: `Вебхук ${webhooks.length + 1}`,
+          url: `https://tendsec.ru/webhooks/${createId("hook")}`,
+        },
+      ],
+    });
+  };
+
+  const removeWebhook = (webhookId) => {
+    updateSettings({ webhooks: webhooks.filter((webhook) => String(webhook.id) !== String(webhookId)) });
+  };
+
+  const deleteChannel = () => {
+    if (!canManageChannels) {
+      return;
+    }
+
+    if (isVoice) {
+      void onDeleteVoiceChannel?.(channel.id);
+    } else {
+      onDeleteTextChannel?.(channel.id);
+    }
+  };
+
+  return (
+    <div className="channel-settings-shell" role="dialog" aria-modal="true" aria-label="Настройки канала">
+      <aside className="channel-settings-shell__sidebar">
+        <div className="channel-settings-shell__channel">
+          <span className={`channel-settings-shell__channel-icon ${isVoice ? "channel-settings-shell__channel-icon--voice" : "channel-settings-shell__channel-icon--text"}`} aria-hidden="true" />
+          <strong>{channelName || "канал"}</strong>
+        </div>
+        <nav className="channel-settings-shell__nav" aria-label="Разделы настроек канала">
+          {CHANNEL_SETTINGS_TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={activeTab === item.id ? "is-active" : ""}
+              onClick={() => setActiveTabState({ channelKey, tab: item.id })}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <button type="button" className="channel-settings-shell__delete" onClick={deleteChannel} disabled={!canManageChannels}>
+          <span>Удалить канал</span>
+          <span className="channel-settings-shell__delete-icon" aria-hidden="true" />
+        </button>
+      </aside>
+
+      <main className="channel-settings-shell__content">
+        <button type="button" className="channel-settings-shell__close" onClick={onClose} aria-label="Закрыть настройки">
+          <span aria-hidden="true" />
+          <small>ESC</small>
+        </button>
+
+        {activeTab === "overview" ? (
+          <section className="channel-settings-overview">
+            <h2>Обзор</h2>
+
+            <label className="channel-settings-field">
+              <span>Название канала</span>
+              <div className="channel-settings-input-wrap">
+                <input
+                  ref={channelNameInputRef}
+                  value={channelName}
+                  onChange={(event) => updateSettings({ name: event.target.value })}
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                />
+                <button
+                  type="button"
+                  className="channel-settings-emoji-button"
+                  onClick={() => setIsNameEmojiPickerOpen((value) => !value)}
+                  aria-label="Добавить смайлик"
+                >
+                  ☺
+                </button>
+                {isNameEmojiPickerOpen ? (
+                  <div className="channel-settings-emoji-picker" role="menu" aria-label="Смайлики для названия канала">
+                    {CHANNEL_NAME_EMOJIS.map((emoji) => (
+                      <button key={emoji} type="button" onClick={() => insertChannelNameEmoji(emoji)}>
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </label>
+
+            {!isVoice ? (
+              <label className="channel-settings-topic">
+                <span>Тема канала</span>
+                <div className="channel-settings-topic__box">
+                  <div className="channel-settings-topic__toolbar" aria-label="Форматирование темы">
+                    <button type="button" onClick={() => formatTopic("bold")} aria-label="Жирный текст">B</button>
+                    <button type="button" onClick={() => formatTopic("italic")} aria-label="Курсив">I</button>
+                    <button type="button" onClick={() => formatTopic("strike")} aria-label="Зачеркнутый текст">S</button>
+                    <button type="button" onClick={() => updateSettings({ topicPreview: !channel?.topicPreview })} aria-label="Предпросмотр">◉</button>
+                    <button type="button" onClick={() => updateSettings({ topic: `${topic}☺`.slice(0, CHANNEL_TOPIC_LIMIT) })} aria-label="Добавить смайлик">☺</button>
+                  </div>
+                  <textarea
+                    value={topic}
+                    maxLength={CHANNEL_TOPIC_LIMIT}
+                    onChange={(event) => updateSettings({ topic: event.target.value.slice(0, CHANNEL_TOPIC_LIMIT) })}
+                    placeholder="Расскажите участникам, как пользоваться этим каналом!"
+                  />
+                  <small>{CHANNEL_TOPIC_LIMIT - topic.length}</small>
+                </div>
+              </label>
+            ) : null}
+
+            {!isVoice ? (
+              <label className="channel-settings-field">
+                <span>Медленный режим</span>
+                <select value={slowMode} onChange={(event) => updateSettings({ slowMode: event.target.value })}>
+                  {CHANNEL_SLOW_MODE_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <small>Участники не смогут отправлять больше одного сообщения и создавать больше одной ветки в течение этого периода времени.</small>
+              </label>
+            ) : null}
+
+            <div className="channel-settings-row">
+              <div>
+                <strong>Канал с возрастным ограничением</strong>
+                <p>Для просмотра содержимого этого канала пользователям необходимо подтвердить, что они достигли совершеннолетия.</p>
+              </div>
+              <button
+                type="button"
+                className={`channel-settings-switch ${ageRestricted ? "is-active" : ""}`}
+                onClick={() => updateSettings({ ageRestricted: !ageRestricted })}
+                aria-label="Канал с возрастным ограничением"
+              >
+                <span aria-hidden="true" />
+              </button>
+            </div>
+
+            {isVoice ? (
+              <>
+                <div className="channel-settings-divider" />
+
+                <label className="channel-settings-range channel-settings-range--stops">
+                  <span className="channel-settings-range__heading">
+                    <span>Битрейт</span>
+                  </span>
+                  <div className="channel-settings-range__labels">
+                    <small>8kbps</small>
+                    <small>64kbps</small>
+                    <small>96kbps</small>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={CHANNEL_BITRATE_STOPS.length - 1}
+                    step="1"
+                    value={bitrateIndex}
+                    style={{ "--channel-range-progress": `${bitrateProgress}%` }}
+                    onInput={(event) => updateSettings({ bitrateKbps: CHANNEL_BITRATE_STOPS[Number(event.currentTarget.value)] || 64 })}
+                    onChange={(event) => updateSettings({ bitrateKbps: CHANNEL_BITRATE_STOPS[Number(event.target.value)] || 64 })}
+                  />
+                  <p>ВНИМАНИЕ! Не поднимайте битрейт выше 64 кбит/с, чтобы не создать проблемы людям с низкой скоростью соединения.</p>
+                </label>
+
+                <div className="channel-settings-radio-group">
+                  <strong>Качество видео</strong>
+                  {CHANNEL_VIDEO_QUALITY_OPTIONS.map(([value, label]) => (
+                    <label key={value}>
+                      <input
+                        type="radio"
+                        name="channelVideoQuality"
+                        checked={videoQuality === value}
+                        onChange={() => updateSettings({ videoQuality: value })}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                  <p>Устанавливает качество изображения для всех участников канала. Выберите автоматический режим для оптимальной производительности.</p>
+                </div>
+
+                <label className="channel-settings-range">
+                  <span className="channel-settings-range__heading">
+                    <span>Лимит пользователей</span>
+                    <output>{userLimit === 0 ? "∞" : `${userLimit}/99`}</output>
+                  </span>
+                  <div className="channel-settings-range__labels">
+                    <small>∞</small>
+                    <small>99</small>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="99"
+                    value={userLimit}
+                    style={{ "--channel-range-progress": `${userLimitProgress}%` }}
+                    onInput={(event) => updateSettings({ userLimit: Number(event.currentTarget.value) })}
+                    onChange={(event) => updateSettings({ userLimit: Number(event.target.value) })}
+                  />
+                  <p>Ограничивает количество пользователей, которые могут подключаться к этому голосовому каналу.</p>
+                </label>
+
+                <label className="channel-settings-field channel-settings-field--region">
+                  <span>Назначение региона</span>
+                  <small>Для всех пользователей канала будет предпринята попытка подключения к указанному региону.</small>
+                  <select value={region} onChange={(event) => updateSettings({ region: event.target.value })}>
+                    <option value="auto">Автоматический выбор</option>
+                    <option value="eu-central">Европа</option>
+                    <option value="ru-west">Россия</option>
+                    <option value="us-east">США Восток</option>
+                  </select>
+                </label>
+              </>
+            ) : (
+              <label className="channel-settings-field">
+                <span>Скрыть после неактивности</span>
+                <select value={autoArchiveDuration} onChange={(event) => updateSettings({ autoArchiveDuration: event.target.value })}>
+                  {CHANNEL_ARCHIVE_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <small>Новые ветки перестанут отображаться в списке каналов после заданного периода неактивности.</small>
+              </label>
+            )}
+          </section>
+        ) : activeTab === "permissions" ? (
+          <section className="channel-settings-panel">
+            <h2>Права канала</h2>
+            <p className="channel-settings-panel__lead">Используйте права, чтобы настроить возможности пользователей на этом канале.</p>
+
+            <div className="channel-settings-card channel-settings-card--notice">
+              <span aria-hidden="true">↔</span>
+              <strong>Права {permissionsSynced ? "синхронизированы" : "отвязаны"} с категорией «{isVoice ? "Голосовые каналы" : "Текстовые каналы"}»</strong>
+              <button type="button" onClick={() => updateSettings({ permissionsSynced: !permissionsSynced })}>
+                {permissionsSynced ? "Отвязать" : "Синхронизировать"}
+              </button>
+            </div>
+
+            <div className="channel-settings-card channel-settings-card--switch">
+              <div>
+                <strong>Приватный канал</strong>
+                <p>Если сделать канал приватным, только выбранные вами участники и роли смогут просматривать его.</p>
+              </div>
+              <button
+                type="button"
+                className={`channel-settings-switch ${privateChannel ? "is-active" : ""}`}
+                onClick={() => updateSettings({ privateChannel: !privateChannel })}
+                aria-label="Приватный канал"
+              >
+                <span aria-hidden="true" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className={`channel-settings-advanced ${advancedPermissionsOpen ? "is-open" : ""}`}
+              onClick={() => updateSettings({ advancedPermissionsOpen: !advancedPermissionsOpen })}
+            >
+              <span>Расширенные права</span>
+              <span aria-hidden="true">›</span>
+            </button>
+
+            {advancedPermissionsOpen ? (
+              <div className="channel-settings-permissions">
+                <label>
+                  <span>Просматривать канал</span>
+                  <input type="checkbox" checked={permissionOverrides.viewChannel !== false} onChange={(event) => updatePermission("viewChannel", event.target.checked)} />
+                </label>
+                <label>
+                  <span>{isVoice ? "Подключаться" : "Отправлять сообщения"}</span>
+                  <input
+                    type="checkbox"
+                    checked={isVoice ? permissionOverrides.connect !== false : permissionOverrides.sendMessages !== false}
+                    onChange={(event) => updatePermission(isVoice ? "connect" : "sendMessages", event.target.checked)}
+                  />
+                </label>
+                <label>
+                  <span>{isVoice ? "Говорить" : "Прикреплять файлы"}</span>
+                  <input
+                    type="checkbox"
+                    checked={isVoice ? permissionOverrides.speak !== false : permissionOverrides.attachFiles !== false}
+                    onChange={(event) => updatePermission(isVoice ? "speak" : "attachFiles", event.target.checked)}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </section>
+        ) : activeTab === "invites" ? (
+          <section className="channel-settings-panel">
+            <h2>Приглашения</h2>
+            <p className="channel-settings-panel__lead">
+              Вот список всех активных ссылок-приглашений. Вы можете отозвать любое или{" "}
+              <button type="button" onClick={createInvite} disabled={!canManageChannels || invitesPaused || isCreatingInvite}>создать ещё</button>.
+            </p>
+
+            <button
+              type="button"
+              className={`channel-settings-danger ${invitesPaused ? "is-muted" : ""}`}
+              onClick={() => updateSettings({ invitesPaused: !invitesPaused })}
+              disabled={!canManageChannels}
+            >
+              {invitesPaused ? "Возобновить приглашения" : "Приостановить приглашения"}
+            </button>
+
+            <div className="channel-settings-table" role="table" aria-label="Активные приглашения">
+              <div className="channel-settings-table__head" role="row">
+                <span>Приглашающий</span>
+                <span>Код приглашения</span>
+                <span>Использований</span>
+                <span>Истекает</span>
+                <span>Роли</span>
+                <span />
+              </div>
+              {channelInvites.length ? (
+                channelInvites.map((invite) => (
+                  <div className="channel-settings-table__row" role="row" key={invite.id || invite.code}>
+                    <span>{invite.inviter || "Вы"}</span>
+                    <code>{invite.code || getInviteCodeFromLink(invite.link)}</code>
+                    <span>{Number(invite.uses || 0)}</span>
+                    <span>{invite.expiresAtLabel || "29:23:59:59"}</span>
+                    <span>{invite.roles || "—"}</span>
+                    <span className="channel-settings-table__actions">
+                      <button type="button" onClick={() => copyInvite(invite)}>Копировать</button>
+                      <button type="button" onClick={() => revokeInvite(invite.id)}>Отозвать</button>
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="channel-settings-empty">Активных приглашений пока нет.</div>
+              )}
+            </div>
+            {inviteStatus ? <div className="channel-settings-status" role="status">{inviteStatus}</div> : null}
+          </section>
+        ) : (
+          <section className="channel-settings-panel">
+            <h2>Интеграция</h2>
+            <p className="channel-settings-panel__lead">
+              Персонализируйте свой сервер с помощью интеграций. Управляйте вебхуками и отслеживаемыми каналами, публикации с которых появляются на этом канале.
+            </p>
+
+            <div className="channel-settings-integration-list">
+              <div className="channel-settings-integration">
+                <span aria-hidden="true">⌁</span>
+                <div>
+                  <strong>Вебхуки</strong>
+                  <small>{webhooks.length} вебхуков</small>
+                </div>
+                <button type="button" onClick={createWebhook} disabled={!canManageChannels}>Создать вебхук</button>
+              </div>
+              {webhooks.map((webhook) => (
+                <div className="channel-settings-integration channel-settings-integration--sub" key={webhook.id}>
+                  <span aria-hidden="true">↳</span>
+                  <div>
+                    <strong>{webhook.name}</strong>
+                    <small>{webhook.url}</small>
+                  </div>
+                  <button type="button" onClick={() => removeWebhook(webhook.id)}>Удалить</button>
+                </div>
+              ))}
+
+              <div className="channel-settings-integration">
+                <span aria-hidden="true">▣</span>
+                <div>
+                  <strong>Отслеживаемые каналы</strong>
+                  <small>{followedChannels.length} каналов</small>
+                </div>
+                <button type="button" onClick={() => updateSettings({ integrationInfoOpen: !integrationInfoOpen })}>Подробнее</button>
+              </div>
+              {integrationInfoOpen ? (
+                <div className="channel-settings-integration-note">
+                  Публикации из отслеживаемых каналов будут появляться здесь автоматически. Добавление внешних источников можно подключить позже без изменения этих настроек.
+                </div>
+              ) : null}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
 export const ServersSidebar = memo(({
   includeProfilePanel = true,
   profilePanel,
@@ -153,6 +913,7 @@ export const ServersSidebar = memo(({
   voiceParticipantByUserId,
   currentUserId,
   canManageChannels,
+  channelSettingsState,
   channelRenameState,
   serverUnreadCounts,
   chatDraftPresence,
@@ -165,6 +926,15 @@ export const ServersSidebar = memo(({
   joiningVoiceChannelId,
   icons,
   onOpenServerSettings,
+  onOpenNotificationSettings,
+  onOpenPersonalProfileSettings,
+  onShowServerFeedback,
+  inviteFriends = [],
+  isServerInviteModalOpen = false,
+  onOpenServerInviteModal,
+  onCloseServerInviteModal,
+  onCreateServerInviteLink,
+  onSendServerInviteToFriend,
   onOpenMemberActions,
   onUpdateMemberNickname,
   onUpdateMemberVoiceState,
@@ -173,8 +943,12 @@ export const ServersSidebar = memo(({
   onAddServer,
   onAddTextChannel,
   onAddVoiceChannel,
+  onOpenChannelSettings,
+  onCloseChannelSettings,
+  onUpdateChannelSettings,
+  onDeleteTextChannel,
+  onDeleteVoiceChannel,
   onSelectTextChannel,
-  onStartChannelRename,
   onUpdateChannelRenameValue,
   onSubmitChannelRename,
   onCancelChannelRename,
@@ -187,18 +961,169 @@ export const ServersSidebar = memo(({
   canInviteToServer,
   getChannelDisplayName,
   getScopedChatChannelId,
-}) => (
+}) => {
+  const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
+  const [serverMenuPosition, setServerMenuPosition] = useState({ left: 0, top: 0, maxHeight: 420 });
+  const [hideMutedChannels, setHideMutedChannels] = useState(false);
+
+  const updateServerMenuPosition = () => {
+    const anchor = serverMembersRef?.current;
+    if (!anchor) {
+      return;
+    }
+
+    const rect = anchor.getBoundingClientRect();
+    const top = Math.max(8, rect.bottom + 8);
+    setServerMenuPosition({
+      left: Math.max(8, rect.left + 36),
+      top,
+      maxHeight: Math.max(180, window.innerHeight - top - 16),
+    });
+  };
+
+  useEffect(() => {
+    if (!isServerMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (event.target instanceof Element && event.target.closest(".server-summary-wrap, .server-summary-menu")) {
+        return;
+      }
+
+      setIsServerMenuOpen(false);
+    };
+    const handleReposition = () => updateServerMenuPosition();
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [isServerMenuOpen]);
+
+  const runServerMenuAction = (action) => {
+    setIsServerMenuOpen(false);
+    action?.();
+  };
+  const showUnavailableServerMenuAction = () => {
+    onShowServerFeedback?.("Этот раздел пока не подключён.");
+  };
+
+  return (
+    <>
   <aside className="sidebar__channels sidebar__channels--servers">
     <div className="channels__top">
       {activeServer ? (
         <div className="server-summary-wrap" ref={serverMembersRef}>
-          <button type="button" className="server-summary server-summary--discordish" onClick={onOpenServerSettings}>
-            <div className="server-summary__content">
-              <div className="server-summary__name">{activeServer.name || "Server"}</div>
-              <div className="server-summary__subtitle">Сервер</div>
+          <div className="server-summary server-summary--discordish">
+            <button
+              type="button"
+              className="server-summary__main"
+              onClick={() => {
+                if (!isServerMenuOpen) {
+                  updateServerMenuPosition();
+                }
+                setIsServerMenuOpen((value) => !value);
+              }}
+            >
+              <span className="server-summary__name">{activeServer.name || "Server"}</span>
+              <svg className={`server-summary__caret ${isServerMenuOpen ? "is-open" : ""}`} viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4.2 6.2 8 10l3.8-3.8" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="server-summary__invite"
+              onClick={onOpenServerInviteModal}
+              disabled={!canInviteToServer(activeServer)}
+              aria-label="Пригласить друзей"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 19.2c0-2.1-2.7-3.8-6-3.8s-6 1.7-6 3.8" />
+                <circle cx="9" cy="8" r="3.2" />
+                <path d="M18 8v6" />
+                <path d="M15 11h6" />
+              </svg>
+            </button>
+          </div>
+
+          {isServerMenuOpen ? (
+            <div
+              className="server-summary-menu"
+              style={{
+                left: serverMenuPosition.left,
+                top: serverMenuPosition.top,
+                maxHeight: serverMenuPosition.maxHeight,
+              }}
+            >
+              <button type="button" onClick={() => runServerMenuAction(onOpenServerInviteModal)}>
+                <span>Пригласить на сервер</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">♣</span>
+              </button>
+              <button type="button" onClick={() => runServerMenuAction(onOpenServerSettings)}>
+                <span>Настройки сервера</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">⚙</span>
+              </button>
+              <button type="button" onClick={() => runServerMenuAction(onAddTextChannel)} disabled={!canManageChannels}>
+                <span>Создать канал</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">＋</span>
+              </button>
+              <button type="button" onClick={() => runServerMenuAction(showUnavailableServerMenuAction)}>
+                <span>Создать категорию</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">▣</span>
+              </button>
+              <button type="button" onClick={() => runServerMenuAction(showUnavailableServerMenuAction)}>
+                <span>Создать событие</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">▦</span>
+              </button>
+              <button type="button" onClick={() => runServerMenuAction(showUnavailableServerMenuAction)}>
+                <span>Каталог приложений</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">◆</span>
+              </button>
+              <span className="server-summary-menu__separator" aria-hidden="true" />
+              <button type="button" onClick={() => runServerMenuAction(onOpenNotificationSettings)}>
+                <span>Параметры уведомлений</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">●</span>
+              </button>
+              <span className="server-summary-menu__separator" aria-hidden="true" />
+              <button type="button" onClick={() => runServerMenuAction(onOpenPersonalProfileSettings)}>
+                <span>Редактировать личный профиль</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">✎</span>
+              </button>
+              <button type="button" onClick={() => setHideMutedChannels((value) => !value)}>
+                <span>Скрыть заглушённые каналы</span>
+                <span className={`server-summary-menu__checkbox ${hideMutedChannels ? "is-checked" : ""}`} aria-hidden="true" />
+              </button>
+              <span className="server-summary-menu__separator" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => runServerMenuAction(() => {
+                  void copyTextToClipboard(String(activeServer.id || ""));
+                  onShowServerFeedback?.("ID сервера скопирован.");
+                })}
+              >
+                <span>Копировать ID сервера</span>
+                <span className="server-summary-menu__id" aria-hidden="true">ID</span>
+              </button>
             </div>
-            <span className="server-summary__caret">?</span>
-          </button>
+          ) : null}
+
+          {isServerInviteModalOpen ? (
+            <ServerInviteFriendsModal
+              activeServer={activeServer}
+              channelName={getChannelDisplayName(currentTextChannel?.name || "основной", "text")}
+              friends={inviteFriends}
+              currentUserId={currentUserId}
+              canInvite={canInviteToServer(activeServer)}
+              onClose={onCloseServerInviteModal}
+              onCreateInviteLink={onCreateServerInviteLink}
+              onSendInviteToFriend={onSendServerInviteToFriend}
+            />
+          ) : null}
 
           {memberRoleMenu ? (
             <div ref={memberRoleMenuRef} className="member-role-menu" style={{ left: memberRoleMenu.x, top: memberRoleMenu.y }}>
@@ -357,7 +1282,7 @@ export const ServersSidebar = memo(({
                         {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
                       </button>
                     )}
-                    <button type="button" className="channel-edit-button" onClick={() => onStartChannelRename("text", channel)} aria-label="Переименовать канал" disabled={!canManageChannels}>
+                    <button type="button" className="channel-edit-button" onClick={() => onOpenChannelSettings?.("text", channel)} aria-label="Настройки канала" disabled={!canManageChannels}>
                       <img src={icons.settings} alt="" />
                     </button>
                   </li>
@@ -384,7 +1309,7 @@ export const ServersSidebar = memo(({
                 void loadVoiceRoomStage();
                 onPrewarmVoiceChannel?.(channelId);
               }}
-              onRenameChannel={onStartChannelRename}
+              onRenameChannel={onOpenChannelSettings}
               liveUserIds={liveUserIds}
               speakingUserIds={speakingUserIds}
               watchedStreamUserId={watchedStreamUserId}
@@ -404,7 +1329,19 @@ export const ServersSidebar = memo(({
 
     {includeProfilePanel ? profilePanel : null}
   </aside>
-));
+  <ChannelSettingsModal
+    activeServer={activeServer}
+    state={channelSettingsState}
+    canManageChannels={canManageChannels}
+    onClose={onCloseChannelSettings}
+    onCreateServerInviteLink={onCreateServerInviteLink}
+    onUpdateChannelSettings={onUpdateChannelSettings}
+    onDeleteTextChannel={onDeleteTextChannel}
+    onDeleteVoiceChannel={onDeleteVoiceChannel}
+  />
+    </>
+  );
+});
 
 function ServerMainComponent({
   activeServer,
@@ -562,6 +1499,7 @@ function ServerMainComponent({
             <TextChat
               serverId={activeServer?.id}
               channelId={currentTextChannel.id}
+              channelSlowMode={currentTextChannel?.slowMode || "off"}
               user={user}
               searchQuery={channelSearchQuery}
               onClearSearchQuery={onClearChannelSearch}

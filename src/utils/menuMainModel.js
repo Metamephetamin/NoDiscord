@@ -516,13 +516,43 @@ export const createServer = (name, user, options = {}) => {
 export const normalizeChannels = (channels, type) => {
   const fallback = type === "text" ? DEFAULT_TEXT_CHANNELS : DEFAULT_VOICE_CHANNELS;
   if (!Array.isArray(channels) || channels.length === 0) return fallback.map((channel) => ({ ...channel }));
-  return channels.map((channel, index) => ({
-    id: String(channel?.id || fallback[index]?.id || createId(type)),
-    name:
-      type === "text"
-        ? normalizeTextChannelName(channel?.name || fallback[index]?.name || "new-channel")
-        : String(channel?.name || fallback[index]?.name || "voice-channel").trim() || "voice-channel",
-  }));
+  return channels.map((channel, index) => {
+    const normalizedChannel = {
+      ...channel,
+      id: String(channel?.id || fallback[index]?.id || createId(type)),
+      name:
+        type === "text"
+          ? normalizeTextChannelName(channel?.name || fallback[index]?.name || "new-channel")
+          : String(channel?.name || fallback[index]?.name || "voice-channel").trim() || "voice-channel",
+    };
+
+    if (type === "text") {
+      normalizedChannel.slowMode = String(channel?.slowMode || "off");
+      normalizedChannel.topic = String(channel?.topic || "").slice(0, 1024);
+      normalizedChannel.topicPreview = Boolean(channel?.topicPreview);
+      normalizedChannel.autoArchiveDuration = String(channel?.autoArchiveDuration || "3d");
+    } else {
+      normalizedChannel.bitrateKbps = Math.min(96, Math.max(8, Number(channel?.bitrateKbps || 64)));
+      normalizedChannel.userLimit = Math.min(99, Math.max(0, Number(channel?.userLimit || 0)));
+      normalizedChannel.videoQuality = String(channel?.videoQuality || "auto");
+      normalizedChannel.region = String(channel?.region || "auto");
+    }
+
+    normalizedChannel.ageRestricted = Boolean(channel?.ageRestricted);
+    normalizedChannel.permissionsSynced = channel?.permissionsSynced !== false;
+    normalizedChannel.privateChannel = Boolean(channel?.privateChannel);
+    normalizedChannel.advancedPermissionsOpen = Boolean(channel?.advancedPermissionsOpen);
+    normalizedChannel.permissionOverrides = channel?.permissionOverrides && typeof channel.permissionOverrides === "object"
+      ? { ...channel.permissionOverrides }
+      : {};
+    normalizedChannel.invitesPaused = Boolean(channel?.invitesPaused);
+    normalizedChannel.invites = Array.isArray(channel?.invites) ? channel.invites : [];
+    normalizedChannel.webhooks = Array.isArray(channel?.webhooks) ? channel.webhooks : [];
+    normalizedChannel.followedChannels = Array.isArray(channel?.followedChannels) ? channel.followedChannels : [];
+    normalizedChannel.integrationInfoOpen = Boolean(channel?.integrationInfoOpen);
+
+    return normalizedChannel;
+  });
 };
 export const normalizeServers = (value, currentUser) => {
   if (!Array.isArray(value) || value.length === 0) return [];

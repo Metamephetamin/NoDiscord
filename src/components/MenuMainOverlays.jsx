@@ -223,7 +223,7 @@ export const SettingsOverlay = ({
 
             <div className="settings-shell__main">
               <div className="settings-shell__closebar">
-                <button type="button" className="settings-popup__close" onClick={onClose}>x</button>
+                <button type="button" className="settings-popup__close" onClick={onClose} aria-label="Закрыть настройки" />
               </div>
               {renderSettingsContent()}
             </div>
@@ -405,7 +405,7 @@ export const CameraModal = ({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop modal-backdrop--camera" onClick={onClose}>
       <div className="camera-modal" onClick={(event) => event.stopPropagation()}>
         <div className="camera-modal__header">
           <div>

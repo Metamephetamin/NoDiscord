@@ -208,12 +208,22 @@ public class ServerInvitesController : ControllerBase
         }
 
         var existingSnapshot = _serverState.GetSnapshot(request.ServerSnapshot.Id);
-        if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
+        if (existingSnapshot is not null &&
+            !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId) &&
+            !ServerPermissionEvaluator.CanManageChannels(existingSnapshot, currentUser.UserId))
         {
             return Forbid();
         }
 
-        var snapshot = _serverState.UpsertSnapshot(request.ServerSnapshot, currentUser.UserId);
+        var snapshotToSave = request.ServerSnapshot;
+        if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
+        {
+            snapshotToSave = existingSnapshot;
+            snapshotToSave.TextChannels = request.ServerSnapshot.TextChannels ?? new List<ChannelSnapshot>();
+            snapshotToSave.VoiceChannels = request.ServerSnapshot.VoiceChannels ?? new List<ChannelSnapshot>();
+        }
+
+        var snapshot = _serverState.UpsertSnapshot(snapshotToSave, currentUser.UserId);
         return Ok(snapshot);
     }
 

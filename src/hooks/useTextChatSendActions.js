@@ -33,6 +33,7 @@ export default function useTextChatSendActions({
   serverMembers,
   serverRoles,
   isDirectChat,
+  getSlowModeRemainingMs,
   uploadingFile,
   setUploadingFile,
   setErrorMessage,
@@ -332,6 +333,20 @@ export default function useTextChatSendActions({
     return new File([blob], rawFileName, { type: fileType });
   };
 
+  const blockBySlowModeIfNeeded = () => {
+    const remainingMs = typeof getSlowModeRemainingMs === "function" ? getSlowModeRemainingMs(scopedChannelId) : 0;
+    if (remainingMs <= 0) {
+      return false;
+    }
+
+    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const remainingLabel = remainingSeconds < 60
+      ? `${remainingSeconds} сек.`
+      : `${Math.ceil(remainingSeconds / 60)} мин.`;
+    setErrorMessage(`Включен медленный режим. Подождите ${remainingLabel}`);
+    return true;
+  };
+
   const send = async () => {
     const rawMessageText = message.trim();
     const messageText = await punctuateTypedMessageText(rawMessageText);
@@ -350,6 +365,10 @@ export default function useTextChatSendActions({
     const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
     if (!messageEditState && cooldownLeft > 0) {
       setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
+      return;
+    }
+
+    if (!messageEditState && blockBySlowModeIfNeeded()) {
       return;
     }
 
@@ -553,6 +572,10 @@ export default function useTextChatSendActions({
       return false;
     }
 
+    if (!message.trim() && !selectedFiles.length && blockBySlowModeIfNeeded()) {
+      return false;
+    }
+
     try {
       setErrorMessage("");
       const emojiFile = await fetchAnimatedEmojiFile(emojiOption);
@@ -634,6 +657,10 @@ export default function useTextChatSendActions({
     const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
     if (cooldownLeft > 0) {
       setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
+      return false;
+    }
+
+    if (blockBySlowModeIfNeeded()) {
       return false;
     }
 
@@ -719,6 +746,10 @@ export default function useTextChatSendActions({
     const cooldownLeft = MESSAGE_SEND_COOLDOWN_MS - (now - lastSendAtRef.current);
     if (cooldownLeft > 0) {
       setErrorMessage("Подождите 1.5 секунды перед повторной отправкой.");
+      return false;
+    }
+
+    if (blockBySlowModeIfNeeded()) {
       return false;
     }
 

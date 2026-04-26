@@ -105,6 +105,7 @@ function areNavigationRequestsEqual(previousRequest, nextRequest) {
 function areTextChatPropsEqual(previousProps, nextProps) {
   return previousProps.serverId === nextProps.serverId
     && previousProps.channelId === nextProps.channelId
+    && previousProps.channelSlowMode === nextProps.channelSlowMode
     && previousProps.resolvedChannelId === nextProps.resolvedChannelId
     && previousProps.localMessageStateVersion === nextProps.localMessageStateVersion
     && previousProps.user === nextProps.user

@@ -411,7 +411,6 @@ export default function TextChatView(props) {
         />
       ) : null}
       <ChatActionStatus feedback={actionFeedback} />
-      {errorMessage ? <div className="chat-error">{errorMessage}</div> : null}
       <ChatNavigationBar
         firstUnreadMessageId={firstUnreadMessageId}
         mentionMessages={mentionMessages}
@@ -433,6 +432,7 @@ export default function TextChatView(props) {
         <Profiler id="TextChatMessageList" onRender={handleMessageListRender}>
           <TextChatMessageList
             messages={messages}
+            errorMessage={errorMessage}
             visibleMessages={visibleMessages}
             visibleStartIndex={visibleStartIndex}
             messagesListRef={messagesListRef}
@@ -467,6 +467,7 @@ export default function TextChatView(props) {
       ) : (
         <TextChatMessageList
           messages={messages}
+          errorMessage={errorMessage}
           visibleMessages={visibleMessages}
           visibleStartIndex={visibleStartIndex}
           messagesListRef={messagesListRef}
@@ -504,7 +505,6 @@ export default function TextChatView(props) {
             selectedFiles={selectedFiles}
             uploadingFile={uploadingFile}
             composerDropActive={composerDropActive}
-            errorMessage={errorMessage}
             replyState={replyState}
             messageEditState={messageEditState}
             voiceRecordingState={voiceRecordingState}
@@ -571,7 +571,6 @@ export default function TextChatView(props) {
           selectedFiles={selectedFiles}
           uploadingFile={uploadingFile}
           composerDropActive={composerDropActive}
-          errorMessage={errorMessage}
           replyState={replyState}
           messageEditState={messageEditState}
           voiceRecordingState={voiceRecordingState}

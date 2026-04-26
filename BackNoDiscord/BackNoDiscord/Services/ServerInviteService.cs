@@ -378,4 +378,22 @@ public class ChannelSnapshot
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string SlowMode { get; set; } = string.Empty;
+    public string Topic { get; set; } = string.Empty;
+    public bool TopicPreview { get; set; }
+    public bool AgeRestricted { get; set; }
+    public string AutoArchiveDuration { get; set; } = string.Empty;
+    public bool? PermissionsSynced { get; set; }
+    public bool PrivateChannel { get; set; }
+    public bool AdvancedPermissionsOpen { get; set; }
+    public Dictionary<string, bool>? PermissionOverrides { get; set; }
+    public int BitrateKbps { get; set; }
+    public int UserLimit { get; set; }
+    public string VideoQuality { get; set; } = string.Empty;
+    public string Region { get; set; } = string.Empty;
+    public bool InvitesPaused { get; set; }
+    public JsonElement? Invites { get; set; }
+    public JsonElement? Webhooks { get; set; }
+    public JsonElement? FollowedChannels { get; set; }
+    public bool IntegrationInfoOpen { get; set; }
 }

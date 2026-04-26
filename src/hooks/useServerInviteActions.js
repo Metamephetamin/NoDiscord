@@ -38,7 +38,7 @@ export default function useServerInviteActions({
     }, 2600);
   };
 
-  const requestServerInviteLink = async (targetServer) => {
+  const requestServerInviteLink = async (targetServer, options = {}) => {
     if (!targetServer) {
       throw new Error("Сервер не найден.");
     }
@@ -68,7 +68,10 @@ export default function useServerInviteActions({
       throw new Error("Не удалось подготовить ссылку-приглашение.");
     }
 
-    await copyTextToClipboard(inviteLink);
+    if (options.copyToClipboard !== false) {
+      await copyTextToClipboard(inviteLink);
+    }
+
     markServerAsShared(data?.serverId || inviteSource.id || targetServer.id);
     return inviteLink;
   };
