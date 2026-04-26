@@ -877,11 +877,16 @@
 }
 
 .message-time {
+  display: inline-flex;
+  align-items: center;
   color: #8d97ac;
   font-size: 12px;
   font-weight: 500;
-  font-family: var(--font-body);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
   font-style: normal;
+  line-height: 1;
 }
 
 .message-time--pending {
@@ -1018,6 +1023,7 @@
   align-items: center;
   gap: 0;
   color: #7f8799;
+  line-height: 1;
 }
 
 .message-read-status--read {

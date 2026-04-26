@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -33,17 +33,19 @@ export default function PercentageSlider({
     : 0;
   const thumbCenterOffsetPx = SLIDER_THUMB_RADIUS_PX - (positionPercent / 100) * SLIDER_THUMB_SIZE_PX;
   const tooltipPosition = `calc(${positionPercent}% + ${thumbCenterOffsetPx}px)`;
+  const progressPosition = `${positionPercent}%`;
 
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  const stopDragging = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
   useEffect(() => {
     if (!isDragging || typeof window === "undefined") {
       return undefined;
     }
 
-    const stopDragging = () => setIsDragging(false);
     window.addEventListener("pointerup", stopDragging);
     window.addEventListener("pointercancel", stopDragging);
 
@@ -51,7 +53,7 @@ export default function PercentageSlider({
       window.removeEventListener("pointerup", stopDragging);
       window.removeEventListener("pointercancel", stopDragging);
     };
-  }, [isDragging]);
+  }, [isDragging, stopDragging]);
 
   const valueLabel = useMemo(() => {
     if (typeof formatValue === "function") {
@@ -61,7 +63,7 @@ export default function PercentageSlider({
     return `${Math.round(normalizedValue)}%`;
   }, [formatValue, normalizedValue]);
 
-  const isTooltipVisible = !disabled && (isHovered || isFocused || isDragging);
+  const isTooltipVisible = !disabled && isDragging;
   const wrapperClassName = [
     "slider-with-tooltip",
     isTooltipVisible ? "slider-with-tooltip--active" : "",
@@ -72,7 +74,10 @@ export default function PercentageSlider({
   return (
     <div
       className={wrapperClassName}
-      style={{ "--slider-tooltip-position": tooltipPosition }}
+      style={{
+        "--slider-tooltip-position": tooltipPosition,
+        "--slider-progress-position": progressPosition,
+      }}
     >
       <span className="slider-with-tooltip__bubble" aria-hidden="true">{valueLabel}</span>
       <input
@@ -86,14 +91,18 @@ export default function PercentageSlider({
         className={resolvedInputClassName}
         aria-label={ariaLabel || valueLabel}
         aria-valuetext={valueLabel}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => {
-          setIsFocused(false);
-          setIsDragging(false);
+        onBlur={stopDragging}
+        onPointerDown={(event) => {
+          if (disabled) {
+            return;
+          }
+          if (event.button !== undefined && event.button !== 0) {
+            return;
+          }
+          setIsDragging(true);
         }}
-        onPointerDown={() => setIsDragging(true)}
+        onPointerUp={stopDragging}
+        onPointerCancel={stopDragging}
       />
     </div>
   );

@@ -282,7 +282,7 @@ export const VoiceSettingsPanel = ({
   onToggleEchoCancellation,
   onToggleAutoSensitivity,
 }) => (
-  <div className="settings-shell__content">
+  <div className="settings-shell__content settings-shell__content--voice">
     <div className="settings-shell__content-header">
       <div>
         <h2>Голос и видео</h2>
@@ -290,7 +290,7 @@ export const VoiceSettingsPanel = ({
       </div>
     </div>
 
-    <section className="voice-settings-card">
+    <section className="voice-settings-card voice-settings-card--voice">
       <div className="voice-settings-card__title">Голос</div>
       <div className="voice-settings-grid">
         <label className="voice-settings-field">
@@ -315,7 +315,7 @@ export const VoiceSettingsPanel = ({
           </span>
         </label>
 
-        <label className="voice-settings-field">
+        <label className="voice-settings-field voice-settings-field--volume">
           <span>Громкость микрофона</span>
           <PercentageSlider
             min={0}
@@ -325,7 +325,7 @@ export const VoiceSettingsPanel = ({
             ariaLabel="Громкость микрофона"
           />
         </label>
-        <label className="voice-settings-field">
+        <label className="voice-settings-field voice-settings-field--volume">
           <span>Громкость динамика</span>
           <PercentageSlider
             min={0}
