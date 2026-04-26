@@ -228,6 +228,9 @@ export const AccountSettings = ({
   const isEditingDisplayName = editingAccountField === "displayName";
   const isEditingNickname = editingAccountField === "nickname";
   const isEditingEmail = editingAccountField === "email" || emailChangeState?.awaitingCode;
+  const normalizedDisplayName = String(displayName || "").trim();
+  const normalizedNickname = String(nickname || "").trim();
+  const shouldShowHeaderNickname = normalizedNickname && normalizedNickname !== normalizedDisplayName;
 
   return (
     <div className="settings-shell__content settings-shell__content--account">
@@ -254,7 +257,7 @@ export const AccountSettings = ({
           <AnimatedAvatar className="account-settings-panel__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
           <div className="account-settings-panel__name">
             <strong>{displayName}</strong>
-            <span>{nickname || "Имя пользователя не указано"}</span>
+            {shouldShowHeaderNickname ? <span>{nickname}</span> : null}
           </div>
           <button type="button" className="settings-inline-button" onClick={onOpenProfileSettings}>
             Визуал профиля

@@ -8479,9 +8479,11 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   min-height: 104px;
   padding: 0 20px 18px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 18px;
-  margin-top: -34px;
+  margin-top: -42px;
+  position: relative;
+  z-index: 1;
 }
 
 .account-settings-panel__avatar {
@@ -8499,17 +8501,25 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-top: 48px;
 }
 
 .account-settings-panel__name strong {
   color: #ffffff;
   font-size: 22px;
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .account-settings-panel__name span {
   color: #c3cada;
   font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.account-settings-panel__identity > .settings-inline-button {
+  margin-top: 48px;
+  flex: 0 0 auto;
 }
 
 .account-settings-card {
