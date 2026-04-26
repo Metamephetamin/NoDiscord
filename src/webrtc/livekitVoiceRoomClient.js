@@ -303,6 +303,10 @@ export function createVoiceRoomClient({
   let gainNode = null;
   let destinationNode = null;
   let localOutputAnalyser = null;
+  let microphoneMonitorGainNode = null;
+  let microphoneMonitorDestinationNode = null;
+  let microphoneMonitorAudioElement = null;
+  let microphoneMonitorActive = false;
   let localNoiseGateAnalyser = null;
   let localNoiseGateNode = null;
   let localNoiseGateMeter = null;
@@ -1276,6 +1280,68 @@ const handleDeviceChange = () => {
     gainNode.connect(localOutputAnalyser);
   };
 
+  const disconnectMicrophoneMonitor = () => {
+    if (microphoneMonitorAudioElement) {
+      try {
+        microphoneMonitorAudioElement.pause();
+      } catch {
+        // Ignore pause failures for disposed local monitor elements.
+      }
+      microphoneMonitorAudioElement.srcObject = null;
+      microphoneMonitorAudioElement = null;
+    }
+
+    if (!microphoneMonitorGainNode) {
+      microphoneMonitorDestinationNode = null;
+      return;
+    }
+
+    try {
+      microphoneMonitorGainNode.disconnect();
+    } catch {
+      // Ignore disconnect failures for already detached local monitor nodes.
+    }
+    microphoneMonitorGainNode = null;
+    microphoneMonitorDestinationNode = null;
+  };
+
+  const connectMicrophoneMonitor = async () => {
+    if (!microphoneMonitorActive || !audioContext || !gainNode) {
+      return;
+    }
+
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+
+    if (microphoneMonitorGainNode) {
+      return;
+    }
+
+    microphoneMonitorGainNode = audioContext.createGain();
+    microphoneMonitorDestinationNode = audioContext.createMediaStreamDestination();
+    microphoneMonitorGainNode.gain.value = 1;
+    gainNode.connect(microphoneMonitorGainNode);
+    microphoneMonitorGainNode.connect(microphoneMonitorDestinationNode);
+
+    microphoneMonitorAudioElement = document.createElement("audio");
+    microphoneMonitorAudioElement.autoplay = true;
+    microphoneMonitorAudioElement.muted = false;
+    microphoneMonitorAudioElement.volume = 1;
+    microphoneMonitorAudioElement.srcObject = microphoneMonitorDestinationNode.stream;
+    await applyOutputDeviceToElement(microphoneMonitorAudioElement).catch(() => {});
+    await microphoneMonitorAudioElement.play().catch((error) => {
+      disconnectMicrophoneMonitor();
+      throw error;
+    });
+    logVoiceDebug("local-audio:monitor-started", {
+      noiseSuppressionMode,
+      echoCancellationEnabled,
+      micVolume,
+      selectedOutputDeviceId,
+    });
+  };
+
   const stopLocalMic = () => {
     void stopRnnoiseNoiseSuppression().catch(() => {});
     logVoiceDebug("local-mic:stop", {
@@ -1296,6 +1362,7 @@ const handleDeviceChange = () => {
     }
 
     localMicSourceStream?.getTracks().forEach((track) => track.stop());
+    disconnectMicrophoneMonitor();
     localMicSourceStream = null;
     localAudioProcessingStream = null;
     localAudioStream = null;
@@ -1349,6 +1416,7 @@ const handleDeviceChange = () => {
       localAudioStream = destinationNode.stream;
 
       startLocalMetering(localOutputAnalyser);
+      await connectMicrophoneMonitor();
 
       logVoiceDebug("local-audio:pipeline-create:success", {
         sourceTracks: localMicSourceStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
@@ -2929,6 +2997,9 @@ const handleDeviceChange = () => {
       await emitAudioDevices().catch(() => {});
 
       await Promise.all(Array.from(remoteAudioElements.values()).map((element) => applyOutputDeviceToElement(element)));
+      if (microphoneMonitorAudioElement) {
+        await applyOutputDeviceToElement(microphoneMonitorAudioElement);
+      }
     },
 
     async ensureMicrophonePreview() {
@@ -2940,6 +3011,18 @@ const handleDeviceChange = () => {
       if (!currentChannel) {
         stopLocalMic();
       }
+    },
+
+    async startMicrophoneTestPlayback() {
+      microphoneMonitorActive = true;
+      await ensureAudioPipeline();
+      await connectMicrophoneMonitor();
+    },
+
+    async stopMicrophoneTestPlayback() {
+      microphoneMonitorActive = false;
+      disconnectMicrophoneMonitor();
+      logVoiceDebug("local-audio:monitor-stopped");
     },
 
     async setNoiseSuppressionMode(mode) {

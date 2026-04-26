@@ -281,7 +281,7 @@ export default function MenuProfilePanel({
                   {isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
                 </span>
               </button>
-              <button type="button" className="profile__mini-arrow ui-tooltip-anchor" onClick={onToggleMicMenu} aria-label="Настройки микрофона" data-tooltip="Настройки микрофона">
+              <button type="button" className="profile__mini-arrow ui-tooltip-anchor" onClick={(event) => { onSuppressTooltip(event); onToggleMicMenu(); }} onMouseLeave={onRestoreTooltip} aria-label="Настройки микрофона" data-tooltip="Настройки микрофона">
                 <span className="profile__mini-chevron" aria-hidden="true" />
               </button>
               {showMicMenu ? (
@@ -321,7 +321,7 @@ export default function MenuProfilePanel({
                   {isSoundMuted ? "Включить звук" : "Выключить звук"}
                 </span>
               </button>
-              <button type="button" className="profile__mini-arrow ui-tooltip-anchor" onClick={onToggleSoundMenu} aria-label="Настройки звука" data-tooltip="Настройки звука">
+              <button type="button" className="profile__mini-arrow ui-tooltip-anchor" onClick={(event) => { onSuppressTooltip(event); onToggleSoundMenu(); }} onMouseLeave={onRestoreTooltip} aria-label="Настройки звука" data-tooltip="Настройки звука">
                 <span className="profile__mini-chevron" aria-hidden="true" />
               </button>
               {showSoundMenu ? (
@@ -339,7 +339,7 @@ export default function MenuProfilePanel({
               ) : null}
             </div>
 
-            <button type="button" className="profile__mini-icon ui-tooltip-anchor" onClick={onOpenVoiceSettings} aria-label="Голос и видео" data-tooltip="Голос и видео">
+            <button type="button" className="profile__mini-icon ui-tooltip-anchor" onClick={(event) => { onSuppressTooltip(event); onOpenVoiceSettings(); }} onMouseLeave={onRestoreTooltip} aria-label="Голос и видео" data-tooltip="Голос и видео">
               <span className="profile__mini-glyph profile__mini-glyph--settings" aria-hidden="true" />
             </button>
           </div>

@@ -5205,8 +5205,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .profile__identity-controls .profile__mini-icon:hover {
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 20px rgba(0, 0, 0, 0.18);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
 }
 
 .profile__mini-icon--with-tooltip {
@@ -5315,8 +5315,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .profile__mini-icon--slashed:hover {
-  background: rgba(217, 45, 32, 0.24) !important;
-  color: #ff7b7b;
+  background: rgba(217, 45, 32, 0.2) !important;
+  color: #ff6b6b;
   /* box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.42) !important, 0 10px 20px rgba(0, 0, 0, 0.18); */
 }
 
@@ -5332,8 +5332,15 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .profile__mini-arrow:hover {
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 20px rgba(0, 0, 0, 0.18);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.profile__identity-controls .profile__mini-icon:focus-visible,
+.profile__identity-controls .profile__mini-arrow:focus-visible {
+  outline: none;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
 }
 
 .device-menu .profile__mini-icon {
@@ -5656,6 +5663,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .slider-with-tooltip {
   --slider-tooltip-position: 50%;
   --slider-progress-position: 50%;
+  --slider-tooltip-top: -12px;
   position: relative;
   width: 100%;
   padding-top: 38px;
@@ -5664,7 +5672,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .slider-with-tooltip__bubble {
   position: absolute;
   left: var(--slider-tooltip-position);
-  top: -12px;
+  top: var(--slider-tooltip-top);
   min-width: 52px;
   min-height: 34px;
   padding: 8px 10px;
@@ -5814,7 +5822,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .settings-popup--shell {
   display: flex;
   align-items: stretch;
-  width: min(1940px, calc(100vw - 40px));
+  width: min(1320px, calc(100vw - 72px));
   height: min(900px, calc(100vh - 40px));
   max-width: none;
   max-height: none;
@@ -5834,11 +5842,11 @@ html[data-ui-density="compact"] .settings-popup--shell {
 }
 
 .settings-shell__sidebar {
-  width: 320px;
-  flex: 0 0 320px;
-  padding: 28px 20px 20px;
+  width: 292px;
+  flex: 0 0 292px;
+  padding: 24px 16px 20px;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, rgba(19, 21, 28, 0.72), rgba(16, 18, 24, 0.28));
+  background: linear-gradient(180deg, rgba(24, 25, 31, 0.88), rgba(18, 19, 24, 0.9));
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
   overflow-y: auto;
   scroll-behavior: smooth;
@@ -5850,15 +5858,15 @@ html[data-ui-density="compact"] .settings-popup--shell {
 .settings-shell__profile {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin: 0 4px 18px;
 }
 
 .settings-shell__profile-avatar {
-  width: 60px;
-  height: 60px;
+  width: 52px;
+  height: 52px;
   display: block;
-  flex: 0 0 60px;
+  flex: 0 0 52px;
   border-radius: 50%;
   clip-path: inset(0 round 50%);
   object-fit: cover;
@@ -5871,7 +5879,8 @@ html[data-ui-density="compact"] .settings-popup--shell {
 .settings-shell__profile strong {
   display: block;
   color: #ffffff;
-  font-size: 18px;
+  font-size: 15px;
+  line-height: 1.2;
 }
 
 .settings-shell__profile span {
@@ -5887,16 +5896,46 @@ html[data-ui-density="compact"] .settings-popup--shell {
   border: 0;
   background: transparent;
   color: #99a2b8;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
+  max-width: 176px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-shell__profile-link:hover {
   color: #ffffff;
 }
 
-.settings-shell__search {
-  margin-bottom: 18px;
+.settings-shell__search-wrap {
+  position: relative;
+  display: block;
+  margin: 0 4px 18px;
+}
+
+.settings-shell__search-wrap .settings-shell__search {
+  min-height: 40px;
+  margin: 0;
+  padding: 0 12px 0 40px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #d7dbea;
+  font-size: 14px;
+}
+
+.settings-shell__search-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  background: #b7bbc7;
+  transform: translateY(-50%);
+  opacity: 0.95;
+  -webkit-mask: url("/icons/search.svg") center / contain no-repeat;
+  mask: url("/icons/search.svg") center / contain no-repeat;
 }
 
 .settings-shell__search-empty {
@@ -5907,23 +5946,30 @@ html[data-ui-density="compact"] .settings-popup--shell {
 }
 
 .settings-shell__nav-group {
-  margin-bottom: 18px;
+  margin: 0 4px;
+  padding: 15px 0 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.settings-shell__nav-group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .settings-shell__nav-label {
   display: block;
-  margin-bottom: 8px;
-  color: #8d97ad;
+  margin: 0 0 8px;
+  color: #969ba8;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .settings-shell__nav-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .settings-shell__nav-item {
@@ -5931,19 +5977,54 @@ html[data-ui-density="compact"] .settings-popup--shell {
   min-height: 40px;
   padding: 0 12px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: transparent;
-  color: #cfd6e8;
+  color: #a9adba;
   font-size: 15px;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background-color 0.14s ease, color 0.14s ease;
 }
 
 .settings-shell__nav-item:hover,
 .settings-shell__nav-item--active {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  background: rgba(255, 255, 255, 0.075);
   color: #ffffff;
+}
+
+.settings-shell__nav-item--active {
+  font-weight: 800;
+}
+
+.settings-shell__nav-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: currentColor;
+  opacity: 0.86;
+}
+
+.settings-shell__nav-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.settings-shell__nav-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  line-height: 1.15;
 }
 
 .settings-shell__main {
@@ -6205,6 +6286,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .voice-settings-field--volume .slider-with-tooltip {
   padding-top: 14px;
+  --slider-tooltip-top: -28px;
 }
 
 .voice-settings-card--voice .voice-settings-meter {
@@ -6253,19 +6335,57 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .voice-profile-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .voice-profile-option {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 13px;
+  min-height: 34px;
+  cursor: pointer;
   color: #9ea7bb;
 }
 
 .voice-profile-option input {
-  margin-top: 4px;
-  accent-color: #6c63ff;
+  position: relative;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  border: 2px solid #80848f;
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+.voice-profile-option input::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #ffffff;
+  opacity: 0;
+  transform: scale(0.45);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.voice-profile-option input:checked {
+  border-color: #6c63ff;
+  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.16);
+}
+
+.voice-profile-option input:checked::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.voice-profile-option input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.28);
 }
 
 .voice-profile-option__copy {

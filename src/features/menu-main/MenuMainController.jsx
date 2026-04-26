@@ -4287,16 +4287,18 @@ export default function MenuMain({
   useEffect(() => {
     const shouldMutePublishedMic =
       isMicMuted || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
-    const effectiveMicVolume = currentVoiceChannel ? (shouldMutePublishedMic ? 0 : micVolume) : micVolume;
+    const effectiveMicVolume = isMicTestActive ? micVolume : currentVoiceChannel ? (shouldMutePublishedMic ? 0 : micVolume) : micVolume;
     voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
-  }, [currentVoiceChannel, micVolume, isMicMuted, isSoundMuted]);
+  }, [currentVoiceChannel, micVolume, isMicMuted, isMicTestActive, isSoundMuted]);
   useEffect(() => {
     const shouldMutePublishedMic =
-      isMicMuted || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
+      isMicMuted
+      || (Boolean(currentVoiceChannel) && isMicTestActive)
+      || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
     voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: shouldMutePublishedMic, isDeafened: isSoundMuted }).catch((error) => {
       console.error("Ошибка обновления состояния микрофона:", error);
     });
-  }, [currentVoiceChannel, isMicMuted, isSoundMuted]);
+  }, [currentVoiceChannel, isMicMuted, isMicTestActive, isSoundMuted]);
   useEffect(() => {
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume);
   }, [audioVolume, isSoundMuted]);
@@ -4371,6 +4373,30 @@ export default function MenuMain({
       console.error("Ошибка обновления списка аудио-устройств:", error);
     });
   }, [isMicTestActive, openSettings, settingsTab, showMicMenu, showSoundMenu, user?.id]);
+  useEffect(() => {
+    const voiceClient = voiceClientRef.current;
+    if (!voiceClient) {
+      return undefined;
+    }
+
+    if (!isMicTestActive) {
+      voiceClient.stopMicrophoneTestPlayback?.().catch((error) => {
+        console.error("Ошибка остановки проверки микрофона:", error);
+      });
+      return undefined;
+    }
+
+    voiceClient.startMicrophoneTestPlayback?.().catch((error) => {
+      console.error("Ошибка запуска проверки микрофона:", error);
+      setIsMicTestActive(false);
+    });
+
+    return () => {
+      voiceClient.stopMicrophoneTestPlayback?.().catch((error) => {
+        console.error("Ошибка остановки проверки микрофона:", error);
+      });
+    };
+  }, [isMicTestActive]);
   useEffect(() => {
     if (!showCameraModal) {
       stopCameraPreview();
@@ -6263,8 +6289,18 @@ export default function MenuMain({
   const pingTooltip =
     displayedPingMs ? `Пинг: ${displayedPingMs} мс` : "Пинг недоступен";
 
-  const toggleMicrophoneTestPreview = () => {
-    setIsMicTestActive((previous) => !previous);
+  const toggleMicrophoneTestPreview = async () => {
+    if (isMicTestActive) {
+      setIsMicTestActive(false);
+      return;
+    }
+
+    const voiceClient = await ensureVoiceClientReady();
+    if (!voiceClient) {
+      return;
+    }
+
+    setIsMicTestActive(true);
   };
 
   const handleCameraPreviewDeviceChange = (deviceId) => {

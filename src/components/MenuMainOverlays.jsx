@@ -47,6 +47,72 @@ function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }
   );
 }
 
+const SETTINGS_NAV_ICON_PATHS = {
+  personal_profile: (
+    <>
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+      <path d="M4.75 20a7.25 7.25 0 0 1 14.5 0" />
+    </>
+  ),
+  devices: (
+    <>
+      <rect x="3.5" y="5" width="12" height="9.5" rx="1.8" />
+      <path d="M8 18.5h5" />
+      <path d="M10.5 14.5v4" />
+      <rect x="16" y="9" width="4.5" height="8.5" rx="1.4" />
+    </>
+  ),
+  notifications: (
+    <>
+      <path d="M18 16H6c1.2-1.35 1.6-3.05 1.6-5.1A4.4 4.4 0 0 1 12 6.5a4.4 4.4 0 0 1 4.4 4.4c0 2.05.4 3.75 1.6 5.1Z" />
+      <path d="M10 18a2 2 0 0 0 4 0" />
+      <path d="M12 4v1.6" />
+    </>
+  ),
+  voice_video: (
+    <>
+      <path d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5a3.5 3.5 0 0 0 3.5 3.5Z" />
+      <path d="M5.5 10.5a6.5 6.5 0 0 0 13 0" />
+      <path d="M12 17v3" />
+      <path d="M8.5 20h7" />
+    </>
+  ),
+  appearance_accessibility: (
+    <>
+      <path d="M12 4.5 13.8 9l4.7.35-3.6 3.05 1.1 4.6-4-2.45L8 17l1.1-4.6-3.6-3.05L10.2 9 12 4.5Z" />
+      <path d="M4.5 19.5h15" />
+    </>
+  ),
+  server: (
+    <>
+      <rect x="5" y="4.5" width="14" height="5" rx="1.5" />
+      <rect x="5" y="14.5" width="14" height="5" rx="1.5" />
+      <path d="M8 7h.01" />
+      <path d="M8 17h.01" />
+      <path d="M11 7h5" />
+      <path d="M11 17h5" />
+    </>
+  ),
+  roles: (
+    <>
+      <path d="M8.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+      <path d="M4 19a4.5 4.5 0 0 1 9 0" />
+      <path d="M16.5 10.5a2.4 2.4 0 1 0 0-4.8" />
+      <path d="M15.2 14.3A4 4 0 0 1 20 18.2" />
+    </>
+  ),
+};
+
+function SettingsNavIcon({ id }) {
+  return (
+    <span className="settings-shell__nav-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        {SETTINGS_NAV_ICON_PATHS[id] || SETTINGS_NAV_ICON_PATHS.personal_profile}
+      </svg>
+    </span>
+  );
+}
+
 export const SettingsOverlay = ({
   open,
   isMobileViewport,
@@ -119,13 +185,16 @@ export const SettingsOverlay = ({
                   </button>
                 </div>
               </div>
-              <input
-                className="settings-shell__search"
-                type="text"
-                placeholder="Поиск"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
+              <label className="settings-shell__search-wrap">
+                <span className="settings-shell__search-icon" aria-hidden="true" />
+                <input
+                  className="settings-shell__search"
+                  type="text"
+                  placeholder="Поиск"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </label>
 
               {filteredSections.map(([section, items]) => (
                 <div key={section} className="settings-shell__nav-group">
@@ -138,7 +207,10 @@ export const SettingsOverlay = ({
                         className={`settings-shell__nav-item ${settingsTab === item.id ? "settings-shell__nav-item--active" : ""}`}
                         onClick={() => onSelectSettingsTab(item.id)}
                       >
-                        {item.label}
+                        <SettingsNavIcon id={item.id} />
+                        <span className="settings-shell__nav-text">
+                          {item.label}
+                        </span>
                       </button>
                     ))}
                   </div>

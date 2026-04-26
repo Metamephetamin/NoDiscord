@@ -270,7 +270,6 @@ export const VoiceSettingsPanel = ({
   isMicTestActive,
   noiseProfileOptions,
   noiseSuppressionMode,
-  activeNoiseProfile,
   echoCancellationEnabled,
   autoInputSensitivity,
   onInputDeviceChange,
@@ -380,16 +379,6 @@ export const VoiceSettingsPanel = ({
           <span>Система сама подстраивает порог срабатывания микрофона под текущий шум.</span>
         </div>
         <VoiceSwitch active={autoInputSensitivity} onClick={onToggleAutoSensitivity} label="Автоматическая чувствительность" />
-      </div>
-
-      <div className="voice-settings-field voice-settings-field--stacked">
-        <span>Шумоподавление</span>
-        <select className="voice-settings-select voice-settings-select--native voice-settings-select--compact" value={noiseSuppressionMode} onChange={(event) => onNoiseProfileChange(event.target.value)}>
-          {noiseProfileOptions.map((option) => (
-            <option key={option.id} value={option.id}>{option.title}</option>
-          ))}
-        </select>
-        <span className="voice-settings-caption">{activeNoiseProfile.description}</span>
       </div>
     </section>
   </div>
