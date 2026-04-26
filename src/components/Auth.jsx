@@ -105,6 +105,35 @@ function formatCooldown(seconds) {
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
+function getAuthMessageTone(value) {
+  const normalizedValue = String(value || "").toLowerCase();
+  if (!normalizedValue) {
+    return "info";
+  }
+
+  if (
+    normalizedValue.includes("отправлен")
+    || normalizedValue.includes("отправили")
+    || normalizedValue.includes("создан")
+    || normalizedValue.includes("тестовый")
+  ) {
+    return "success";
+  }
+
+  if (normalizedValue.includes("через")) {
+    return "info";
+  }
+
+  return "error";
+}
+
+function resolveResendAvailableAt(attemptNumber, serverAvailableAt = "") {
+  const localCooldownMs = Date.now() + Math.max(1, Math.round(Number(attemptNumber) || 1)) * EMAIL_RESEND_COOLDOWN_SECONDS * 1000;
+  const serverCooldownMs = new Date(serverAvailableAt || "").getTime();
+  const nextAvailableAt = Math.max(localCooldownMs, Number.isFinite(serverCooldownMs) ? serverCooldownMs : 0);
+  return new Date(nextAvailableAt).toISOString();
+}
+
 function normalizeIdentifierInput(value) {
   return String(value || "")
     .replace(/\s+/g, "")
@@ -243,6 +272,7 @@ export default function Auth({ onAuthSuccess }) {
   const [emailVerificationTotpCode, setEmailVerificationTotpCode] = useState("");
   const [emailVerificationModal, setEmailVerificationModal] = useState(initialEmailVerificationModal);
   const [emailResendSecondsLeft, setEmailResendSecondsLeft] = useState(0);
+  const [emailResendAttemptCount, setEmailResendAttemptCount] = useState(0);
   const [isRequestingLoginCode, setIsRequestingLoginCode] = useState(false);
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
@@ -257,6 +287,7 @@ export default function Auth({ onAuthSuccess }) {
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const authVideoRef = useRef(null);
   const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
+  const authMessageTone = useMemo(() => getAuthMessageTone(message), [message]);
 
   const cardHolderName = useMemo(() => {
     const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
@@ -302,6 +333,7 @@ export default function Auth({ onAuthSuccess }) {
     setEmailVerificationCode("");
     setEmailVerificationTotpCode("");
     setEmailResendSecondsLeft(0);
+    setEmailResendAttemptCount(0);
     setEmailVerificationModal(initialEmailVerificationModal);
   };
 
@@ -630,6 +662,7 @@ export default function Auth({ onAuthSuccess }) {
       if (pendingEmailVerification && verification) {
         setEmailVerificationCode("");
         setEmailVerificationTotpCode("");
+        setEmailResendAttemptCount(1);
         setEmailVerificationModal({
           open: true,
           purpose: "login",
@@ -637,7 +670,7 @@ export default function Auth({ onAuthSuccess }) {
           verificationToken: verification.verificationToken || "",
           deliveryMode: verification.deliveryMode || "mock",
           debugCode: verification.debugCode || "",
-          resendAvailableAt: verification.resendAvailableAt || "",
+          resendAvailableAt: resolveResendAvailableAt(1, verification.resendAvailableAt),
           requiresTotp: false,
         });
         setMessage(
@@ -699,6 +732,7 @@ export default function Auth({ onAuthSuccess }) {
 
       setEmailVerificationCode("");
       setEmailVerificationTotpCode("");
+      setEmailResendAttemptCount(1);
       setEmailVerificationModal({
         open: true,
         purpose: "login",
@@ -706,11 +740,11 @@ export default function Auth({ onAuthSuccess }) {
         verificationToken: data?.verificationToken || "",
         deliveryMode: data?.deliveryMode || "mock",
         debugCode: data?.debugCode || "",
-        resendAvailableAt: data?.resendAvailableAt || "",
+        resendAvailableAt: resolveResendAvailableAt(1, data?.resendAvailableAt),
         requiresTotp: false,
       });
 
-      setMessage("Код входа отправлен на почту.");
+      setMessage("");
     } catch (error) {
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
@@ -780,6 +814,7 @@ export default function Auth({ onAuthSuccess }) {
       const verification = data?.verification || {};
 
       setEmailVerificationCode("");
+      setEmailResendAttemptCount(1);
       setEmailVerificationModal({
         open: true,
         purpose: "registration",
@@ -787,7 +822,7 @@ export default function Auth({ onAuthSuccess }) {
         verificationToken: verification?.verificationToken || "",
         deliveryMode: verification?.deliveryMode || "mock",
         debugCode: verification?.debugCode || "",
-        resendAvailableAt: verification?.resendAvailableAt || "",
+        resendAvailableAt: resolveResendAvailableAt(1, verification?.resendAvailableAt),
       });
 
       setMessage(
@@ -809,7 +844,6 @@ export default function Auth({ onAuthSuccess }) {
     }
 
     if (emailResendSecondsLeft > 0) {
-      setMessage(`Повторно отправить код можно через ${formatCooldown(emailResendSecondsLeft)}.`);
       return;
     }
 
@@ -829,7 +863,9 @@ export default function Auth({ onAuthSuccess }) {
             "Не удалось повторно отправить код на почту."
           );
 
-      const nextResendAvailableAt = data?.resendAvailableAt || "";
+      const nextAttemptCount = Math.max(1, emailResendAttemptCount + 1);
+      const nextResendAvailableAt = resolveResendAvailableAt(nextAttemptCount, data?.resendAvailableAt);
+      setEmailResendAttemptCount(nextAttemptCount);
 
       setEmailVerificationModal((previous) => ({
         ...previous,
@@ -841,13 +877,7 @@ export default function Auth({ onAuthSuccess }) {
         resendAvailableAt: nextResendAvailableAt,
       }));
 
-      setMessage(
-        data?.debugCode
-          ? `Новый тестовый email-код: ${data.debugCode}`
-          : isLoginEmailVerification
-            ? "Код входа повторно отправлен на почту."
-            : "Код подтверждения повторно отправлен на почту."
-      );
+      setMessage(data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "");
     } catch (error) {
       setMessage(error.message || "Не удалось повторно отправить код на почту.");
     } finally {
@@ -1052,7 +1082,10 @@ export default function Auth({ onAuthSuccess }) {
                     onClick={handleResendEmailCode}
                     disabled={!canResendEmailCode}
                   >
-                    {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? `Повторить через ${formatCooldown(emailResendSecondsLeft)}` : "Отправить код снова"}
+                    <span>Отправить код снова</span>
+                    <span className="auth-inline-code__timer">
+                      {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? formatCooldown(emailResendSecondsLeft) : "доступно"}
+                    </span>
                   </button>
                 </div>
               ) : null}
@@ -1182,7 +1215,7 @@ export default function Auth({ onAuthSuccess }) {
 
           {mode === "register" ? <div className="auth-beta-note">Beta 0.1</div> : null}
 
-          {message ? <p className="auth-message">{message}</p> : null}
+          {message ? <p className={`auth-message auth-message--${authMessageTone}`}>{message}</p> : null}
         </div>
 
         <aside className={`auth-card__side ${mode === "login" ? "auth-card__side--qr" : ""}`}>
@@ -1308,12 +1341,12 @@ export default function Auth({ onAuthSuccess }) {
                 maxLength={6}
               />
             ) : null}
-            {emailResendSecondsLeft > 0 ? (
-              <div className="auth-hint">Повторная отправка будет доступна через {formatCooldown(emailResendSecondsLeft)}.</div>
-            ) : null}
             <div className="auth-verify-modal__actions">
               <button className="auth-submit auth-submit--secondary" type="button" onClick={handleResendEmailCode} disabled={!canResendEmailCode}>
-                {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? `Повторить через ${formatCooldown(emailResendSecondsLeft)}` : "Отправить код снова"}
+                <span>Отправить код снова</span>
+                <span className="auth-inline-code__timer">
+                  {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? formatCooldown(emailResendSecondsLeft) : "доступно"}
+                </span>
               </button>
               <button className="auth-submit" type="submit" disabled={isVerifyingEmailCode}>
                 {isVerifyingEmailCode ? "Проверяем..." : "Подтвердить"}

@@ -471,6 +471,63 @@ public class PushSubscriptionRecord
     public bool IsActive { get; set; }
 }
 
+[Table("user_integrations")]
+public class UserIntegrationRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("user_id")]
+    public int UserId { get; set; }
+
+    [Column("provider")]
+    public string Provider { get; set; } = string.Empty;
+
+    [Column("display_name")]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [Column("external_user_id")]
+    public string ExternalUserId { get; set; } = string.Empty;
+
+    [Column("display_in_profile")]
+    public bool DisplayInProfile { get; set; } = true;
+
+    [Column("use_as_status")]
+    public bool UseAsStatus { get; set; } = true;
+
+    [Column("activity_kind")]
+    public string ActivityKind { get; set; } = string.Empty;
+
+    [Column("activity_title")]
+    public string ActivityTitle { get; set; } = string.Empty;
+
+    [Column("activity_subtitle")]
+    public string ActivitySubtitle { get; set; } = string.Empty;
+
+    [Column("activity_details")]
+    public string ActivityDetails { get; set; } = string.Empty;
+
+    [Column("activity_updated_at")]
+    public DateTimeOffset? ActivityUpdatedAt { get; set; }
+
+    [Column("access_token_encrypted")]
+    public string AccessTokenEncrypted { get; set; } = string.Empty;
+
+    [Column("refresh_token_encrypted")]
+    public string RefreshTokenEncrypted { get; set; } = string.Empty;
+
+    [Column("token_expires_at")]
+    public DateTimeOffset? TokenExpiresAt { get; set; }
+
+    [Column("connected_at")]
+    public DateTimeOffset ConnectedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public User? User { get; set; }
+}
+
 
 public class AppDbContext : DbContext
 {
@@ -492,6 +549,7 @@ public class AppDbContext : DbContext
     public DbSet<QrLoginSessionRecord> QrLoginSessions => Set<QrLoginSessionRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
+    public DbSet<UserIntegrationRecord> UserIntegrations => Set<UserIntegrationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -551,6 +609,25 @@ public class AppDbContext : DbContext
             entity.Property(x => x.UserAgent).IsRequired();
             entity.Property(x => x.DeviceLabel).IsRequired();
             entity.Property(x => x.IsActive).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<UserIntegrationRecord>(entity =>
+        {
+            entity.ToTable("user_integrations");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.Provider }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.UseAsStatus, x.ActivityUpdatedAt });
+            entity.Property(x => x.Provider).IsRequired();
+            entity.Property(x => x.DisplayName).IsRequired();
+            entity.Property(x => x.ExternalUserId).IsRequired();
+            entity.Property(x => x.DisplayInProfile).HasDefaultValue(true);
+            entity.Property(x => x.UseAsStatus).HasDefaultValue(true);
+            entity.Property(x => x.ActivityKind).IsRequired();
+            entity.Property(x => x.ActivityTitle).IsRequired();
+            entity.Property(x => x.ActivitySubtitle).IsRequired();
+            entity.Property(x => x.ActivityDetails).IsRequired();
+            entity.Property(x => x.AccessTokenEncrypted).IsRequired();
+            entity.Property(x => x.RefreshTokenEncrypted).IsRequired();
         });
 
 

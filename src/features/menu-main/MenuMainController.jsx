@@ -40,6 +40,13 @@ import { buildDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { getDirectCallChannelId, isDirectCallChannelId } from "../../utils/directCallModel";
 import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
 import { startDirectCallTone } from "../../utils/directCallSounds";
+import {
+  connectIntegration,
+  disconnectIntegration,
+  fetchIntegrations,
+  refreshSpotifyActivity,
+  updateIntegrationSettings,
+} from "../../utils/integrations";
 import { isUserMentioned } from "../../utils/messageMentions";
 import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
 import {
@@ -343,6 +350,10 @@ export default function MenuMain({
   const [deviceSessions, setDeviceSessions] = useState([]);
   const [deviceSessionsLoading, setDeviceSessionsLoading] = useState(false);
   const [deviceSessionsError, setDeviceSessionsError] = useState("");
+  const [integrations, setIntegrations] = useState([]);
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  const [integrationsStatus, setIntegrationsStatus] = useState("");
+  const [integrationActionBusy, setIntegrationActionBusy] = useState("");
   const [qrScannerDevices, setQrScannerDevices] = useState([]);
   const [selectedQrScannerDeviceId, setSelectedQrScannerDeviceId] = useState("");
   const [qrScannerError, setQrScannerError] = useState("");
@@ -393,6 +404,7 @@ export default function MenuMain({
   const qrScannerFrameRef = useRef(0);
   const qrScannerBusyRef = useRef(false);
   const qrScannerCooldownUntilRef = useRef(0);
+  const integrationOAuthPollRef = useRef(null);
   const avatarInputRef = useRef(null);
   const profileBackgroundInputRef = useRef(null);
   const serverIconInputRef = useRef(null);
@@ -4940,6 +4952,134 @@ export default function MenuMain({
       value: channel.name,
     });
   };
+  const createChannelCategory = ({ name, privateCategory = false } = {}) => {
+    if (!canManageChannels || !activeServer) return;
+    const category = {
+      id: createId("category"),
+      name: String(name || "Новая категория").trim() || "Новая категория",
+      privateCategory: Boolean(privateCategory),
+      collapsed: false,
+      order: activeServer.channelCategories?.length || 0,
+    };
+
+    updateServer((server) => ({
+      ...server,
+      channelCategories: [...(server.channelCategories || []), category],
+    }));
+  };
+  const toggleChannelCategory = (categoryId) => {
+    if (!activeServer || !categoryId) return;
+
+    updateServer((server) => ({
+      ...server,
+      channelCategories: (server.channelCategories || []).map((category) =>
+        category.id === categoryId
+          ? { ...category, collapsed: !category.collapsed }
+          : category
+      ),
+    }));
+  };
+  const createServerChannel = ({ type = "text", name = "", categoryId = "" } = {}) => {
+    if (!canManageChannels || !activeServer) return null;
+
+    const normalizedType = String(type || "text");
+    const normalizedCategoryId = String(categoryId || "");
+    const category = (activeServer.channelCategories || []).find((item) => item.id === normalizedCategoryId);
+    const inheritedPrivateChannel = Boolean(category?.privateCategory);
+    const fallbackName =
+      normalizedType === "voice"
+        ? "голосовой-канал"
+        : normalizedType === "forum"
+          ? "форум"
+          : "новый-канал";
+    const channelName = String(name || fallbackName).trim() || fallbackName;
+
+    if (normalizedType === "voice") {
+      const channel = {
+        id: createId("voice"),
+        name: channelName,
+        categoryId: normalizedCategoryId,
+        privateChannel: inheritedPrivateChannel,
+      };
+      updateServer((server) => ({ ...server, voiceChannels: [...server.voiceChannels, channel] }));
+      setChannelRenameState({
+        type: "voice",
+        channelId: channel.id,
+        value: channel.name,
+      });
+      return channel;
+    }
+
+    const channel = {
+      id: createId(normalizedType === "forum" ? "forum" : "text"),
+      name: normalizeTextChannelName(channelName, fallbackName),
+      categoryId: normalizedCategoryId,
+      kind: normalizedType === "forum" ? "forum" : "text",
+      privateChannel: inheritedPrivateChannel,
+      forumPosts: normalizedType === "forum" ? [] : undefined,
+    };
+    updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
+    setCurrentTextChannelId(channel.id);
+    setDesktopServerPane("text");
+    setChannelRenameState({
+      type: "text",
+      channelId: channel.id,
+      value: channel.name,
+    });
+    return channel;
+  };
+  const createForumPost = (channelId, post) => {
+    if (!activeServer || !channelId || !post?.title) return null;
+
+    const createdPost = {
+      id: createId("forum-post"),
+      title: String(post.title || "").trim(),
+      content: String(post.content || "").trim(),
+      authorName: getDisplayName(user),
+      authorAvatar: getUserAvatar(user),
+      createdAt: new Date().toISOString(),
+      reactions: 0,
+      replies: [],
+    };
+
+    updateServer((server) => ({
+      ...server,
+      textChannels: server.textChannels.map((channel) =>
+        channel.id === channelId
+          ? { ...channel, forumPosts: [...(channel.forumPosts || []), createdPost] }
+          : channel
+      ),
+    }));
+
+    return createdPost;
+  };
+  const addForumReply = (channelId, postId, text) => {
+    if (!activeServer || !channelId || !postId || !String(text || "").trim()) return;
+
+    const reply = {
+      id: createId("forum-reply"),
+      text: String(text || "").trim(),
+      authorName: getDisplayName(user),
+      authorAvatar: getUserAvatar(user),
+      createdAt: new Date().toISOString(),
+    };
+
+    updateServer((server) => ({
+      ...server,
+      textChannels: server.textChannels.map((channel) =>
+        channel.id === channelId
+          ? {
+              ...channel,
+              forumPosts: (channel.forumPosts || []).map((post) =>
+                post.id === postId
+                  ? { ...post, replies: [...(post.replies || []), reply] }
+                  : post
+              ),
+            }
+          : channel
+      ),
+    }));
+  };
   const updateActiveServerName = (value) => {
     if (!canManageServer) return;
     updateServer((server) => ({ ...server, name: value }));
@@ -5830,6 +5970,246 @@ export default function MenuMain({
       console.error("Ошибка загрузки устройств:", error);
     });
   }, [openSettings, refreshDeviceSessions, settingsTab]);
+
+  const applyCurrentUserActivity = useCallback((activity) => {
+    if (!user) {
+      return;
+    }
+
+    if (JSON.stringify(user.activity || user.externalActivity || null) === JSON.stringify(activity || null)) {
+      return;
+    }
+
+    const nextUser = {
+      ...user,
+      activity: activity || null,
+      externalActivity: activity || null,
+    };
+
+    setUser?.(nextUser);
+    void storeSession(nextUser, {
+      accessToken: getStoredToken(),
+      refreshToken: getStoredRefreshToken(),
+      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+    });
+  }, [setUser, user]);
+
+  const replaceIntegrationProvider = useCallback((nextProvider) => {
+    setIntegrations((previous) =>
+      previous.map((provider) => (provider.id === nextProvider.id ? nextProvider : provider))
+    );
+  }, []);
+
+  const refreshIntegrations = useCallback(async () => {
+    if (!user?.id) {
+      setIntegrations([]);
+      setIntegrationsStatus("");
+      return;
+    }
+
+    setIntegrationsLoading(true);
+    setIntegrationsStatus("");
+
+    try {
+      const data = await fetchIntegrations();
+      setIntegrations(data.providers);
+      applyCurrentUserActivity(data.activity);
+    } catch (error) {
+      setIntegrationsStatus(error?.message || "Не удалось загрузить интеграции.");
+    } finally {
+      setIntegrationsLoading(false);
+    }
+  }, [applyCurrentUserActivity, user?.id]);
+
+  useEffect(() => {
+    if (!openSettings || settingsTab !== "integrations") {
+      return;
+    }
+
+    refreshIntegrations().catch((error) => {
+      console.error("Ошибка загрузки интеграций:", error);
+    });
+  }, [openSettings, refreshIntegrations, settingsTab]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    refreshIntegrations().catch((error) => {
+      console.error("Ошибка загрузки интеграций:", error);
+    });
+  }, [refreshIntegrations, user?.id]);
+
+  const startIntegrationOAuthPolling = useCallback(() => {
+    if (integrationOAuthPollRef.current) {
+      window.clearInterval(integrationOAuthPollRef.current);
+      integrationOAuthPollRef.current = null;
+    }
+
+    let attempt = 0;
+    integrationOAuthPollRef.current = window.setInterval(() => {
+      attempt += 1;
+      refreshIntegrations().catch((error) => {
+        console.error("Ошибка обновления интеграций:", error);
+      });
+
+      if (attempt >= 30 && integrationOAuthPollRef.current) {
+        window.clearInterval(integrationOAuthPollRef.current);
+        integrationOAuthPollRef.current = null;
+      }
+    }, 2000);
+  }, [refreshIntegrations]);
+
+  useEffect(() => () => {
+    if (integrationOAuthPollRef.current) {
+      window.clearInterval(integrationOAuthPollRef.current);
+      integrationOAuthPollRef.current = null;
+    }
+  }, []);
+
+  const handleConnectIntegration = useCallback(async (providerId) => {
+    setIntegrationActionBusy(providerId);
+    setIntegrationsStatus("");
+
+    try {
+      if (providerId === "spotify") {
+        const url = await connectIntegration(providerId);
+        if (!url) {
+          throw new Error("Spotify не вернул ссылку авторизации.");
+        }
+
+        const popup = window.open(url, "tend_spotify_oauth", "width=520,height=760");
+        if (!popup) {
+          window.location.href = url;
+          return;
+        }
+
+        startIntegrationOAuthPolling();
+        setIntegrationsStatus("Подтвердите доступ в окне Spotify, затем вернитесь сюда.");
+        return;
+      }
+
+      await connectIntegration(providerId);
+    } catch (error) {
+      setIntegrationsStatus(error?.message || "Не удалось подключить интеграцию.");
+    } finally {
+      setIntegrationActionBusy("");
+    }
+  }, [startIntegrationOAuthPolling]);
+
+  const handleDisconnectIntegration = useCallback(async (providerId) => {
+    setIntegrationActionBusy(providerId);
+    setIntegrationsStatus("");
+
+    try {
+      await disconnectIntegration(providerId);
+      setIntegrations((previous) =>
+        previous.map((provider) =>
+          provider.id === providerId
+            ? { ...provider, connected: false, activity: null }
+            : provider
+        )
+      );
+      await refreshIntegrations();
+    } catch (error) {
+      setIntegrationsStatus(error?.message || "Не удалось отключить интеграцию.");
+    } finally {
+      setIntegrationActionBusy("");
+    }
+  }, [refreshIntegrations]);
+
+  const handleToggleIntegrationSetting = useCallback(async (providerId, field, value) => {
+    setIntegrationActionBusy(providerId);
+    setIntegrationsStatus("");
+
+    try {
+      const nextProvider = await updateIntegrationSettings(providerId, { [field]: value });
+      replaceIntegrationProvider(nextProvider);
+      await refreshIntegrations();
+    } catch (error) {
+      setIntegrationsStatus(error?.message || "Не удалось сохранить настройки интеграции.");
+    } finally {
+      setIntegrationActionBusy("");
+    }
+  }, [refreshIntegrations, replaceIntegrationProvider]);
+
+  const spotifyStatusPollingEnabled = integrations.some((provider) =>
+    provider.id === "spotify" && provider.connected && provider.displayInProfile && provider.useAsStatus
+  );
+
+  useEffect(() => {
+    if (!spotifyStatusPollingEnabled) {
+      return undefined;
+    }
+
+    let isCanceled = false;
+    let isRefreshing = false;
+
+    const refreshCurrentTrack = async () => {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      try {
+        const data = await refreshSpotifyActivity();
+        if (isCanceled) {
+          return;
+        }
+
+        if (data.provider) {
+          replaceIntegrationProvider(data.provider);
+        }
+        applyCurrentUserActivity(data.activity);
+      } catch (error) {
+        if (!isCanceled) {
+          console.error("Ошибка обновления статуса Spotify:", error);
+        }
+      } finally {
+        isRefreshing = false;
+      }
+    };
+
+    refreshCurrentTrack();
+    const intervalId = window.setInterval(refreshCurrentTrack, 20000);
+
+    return () => {
+      isCanceled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [applyCurrentUserActivity, replaceIntegrationProvider, spotifyStatusPollingEnabled]);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const handleUserActivityUpdated = (payload) => {
+      const updatedUserId = String(payload?.userId || "");
+      if (!updatedUserId) {
+        return;
+      }
+
+      const nextActivity = payload?.activity || null;
+
+      updateFriendProfile(updatedUserId, (friend) => ({
+        ...friend,
+        activity: nextActivity,
+        externalActivity: nextActivity,
+      }));
+
+      if (updatedUserId === currentUserId) {
+        applyCurrentUserActivity(nextActivity);
+      }
+    };
+
+    chatConnection.on("UserActivityUpdated", handleUserActivityUpdated);
+
+    return () => {
+      chatConnection.off("UserActivityUpdated", handleUserActivityUpdated);
+    };
+  }, [applyCurrentUserActivity, currentUserId, updateFriendProfile, user]);
   const closeQrScannerModal = () => {
     setShowQrScannerModal(false);
     setQrScannerError("");
@@ -6492,6 +6872,13 @@ export default function MenuMain({
     deviceSessionsError,
     refreshDeviceSessions,
     openQrDeviceScanner,
+    integrations,
+    integrationsLoading,
+    integrationsStatus,
+    integrationActionBusy,
+    handleConnectIntegration,
+    handleDisconnectIntegration,
+    handleToggleIntegrationSetting,
     audioInputDevices,
     audioOutputDevices,
     selectedInputDeviceId,
@@ -6974,6 +7361,9 @@ export default function MenuMain({
       onAddServer={handleAddServer}
       onAddTextChannel={addTextChannel}
       onAddVoiceChannel={addVoiceChannel}
+      onCreateCategory={createChannelCategory}
+      onToggleCategory={toggleChannelCategory}
+      onCreateChannel={createServerChannel}
       onOpenChannelSettings={openChannelSettings}
       onCloseChannelSettings={closeChannelSettings}
       onUpdateChannelSettings={updateChannelSettings}
@@ -7130,6 +7520,8 @@ export default function MenuMain({
       onScreenShareAction={handleScreenShareAction}
       onOpenCamera={openCameraModal}
       onLeave={leaveVoiceChannel}
+      onCreateForumPost={createForumPost}
+      onAddForumReply={addForumReply}
       getChannelDisplayName={getChannelDisplayName}
     />
   );
@@ -7277,14 +7669,6 @@ export default function MenuMain({
           iconSrc: currentConversationTarget?.avatar || "",
           iconAlt: currentConversationTarget.title || "Беседа",
           iconGlyph: "#",
-        };
-      }
-
-      if (friendsPageSection === "add") {
-        return {
-          title: "Добавить друзей",
-          iconType: "glyph",
-          iconGlyph: "+",
         };
       }
 

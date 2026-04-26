@@ -168,6 +168,7 @@ builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddScoped<FriendRequestService>();
 builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationService>();
+builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {

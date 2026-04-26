@@ -4,6 +4,7 @@ import {
   getUserAvatarFrame,
   SETTINGS_ICON_URL,
 } from "../../utils/menuMainModel";
+import { formatIntegrationActivityStatus } from "../../utils/integrations";
 
 export default function MenuMainProfilePanelSlot({
   currentVoiceChannel,
@@ -80,6 +81,7 @@ export default function MenuMainProfilePanelSlot({
       userAvatarSrc={user?.avatarUrl || user?.avatar}
       userAvatarFrame={getUserAvatarFrame(user)}
       displayName={getDisplayName(user)}
+      activityStatus={formatIntegrationActivityStatus(user?.activity || user?.externalActivity)}
       audioInputDevices={audioInputDevices}
       audioOutputDevices={audioOutputDevices}
       selectedInputDeviceId={selectedInputDeviceId}

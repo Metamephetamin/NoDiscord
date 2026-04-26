@@ -1,6 +1,7 @@
 import {
   AppearanceAccessibilitySettings,
   DevicesSettings,
+  IntegrationsSettings,
   MobileSettingsShell,
   NotificationsSettings,
   PersonalProfileSettings,
@@ -48,6 +49,13 @@ export function MenuMainSettingsContent({
   deviceSessionsError,
   refreshDeviceSessions,
   openQrDeviceScanner,
+  integrations,
+  integrationsLoading,
+  integrationsStatus,
+  integrationActionBusy,
+  handleConnectIntegration,
+  handleDisconnectIntegration,
+  handleToggleIntegrationSetting,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -157,6 +165,18 @@ export function MenuMainSettingsContent({
           deviceSessionsError={deviceSessionsError}
           onRefreshSessions={refreshDeviceSessions}
           onOpenQrScanner={openQrDeviceScanner}
+        />
+      );
+    case "integrations":
+      return (
+        <IntegrationsSettings
+          integrations={integrations}
+          integrationsLoading={integrationsLoading}
+          integrationsStatus={integrationsStatus}
+          integrationActionBusy={integrationActionBusy}
+          onConnectIntegration={handleConnectIntegration}
+          onDisconnectIntegration={handleDisconnectIntegration}
+          onToggleIntegrationSetting={handleToggleIntegrationSetting}
         />
       );
     case "notifications":

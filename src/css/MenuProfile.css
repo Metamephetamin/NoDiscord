@@ -372,6 +372,18 @@
   text-overflow: ellipsis;
 }
 
+.profile__activity-status {
+  display: block;
+  max-width: 148px;
+  color: #65e48f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .status__profile {
   display: flex;
   align-items: center;

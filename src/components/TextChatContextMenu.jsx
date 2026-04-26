@@ -43,14 +43,14 @@ export default function TextChatContextMenu({
               className={`message-reaction-picker__stickers-toggle ${isStickerPanelOpen ? "message-reaction-picker__stickers-toggle--active" : ""}`}
               onClick={onToggleStickerPanel}
               aria-expanded={isStickerPanelOpen}
-              aria-label="Открыть список стикеров"
+              aria-label="Открыть список смайликов"
             >
-              <span className="message-reaction-picker__stickers-label">Стикеры</span>
+              <span className="message-reaction-picker__stickers-label">Смайлики</span>
               <span className="message-reaction-picker__stickers-arrow" aria-hidden="true">›</span>
             </button>
           </div>
           {isStickerPanelOpen ? (
-            <div className="message-reaction-picker__stickers" role="menu" aria-label="Стикеры">
+            <div className="message-reaction-picker__stickers" role="menu" aria-label="Смайлики">
               {stickerReactions.map((reactionOption) => (
                 <button
                   key={reactionOption.key}

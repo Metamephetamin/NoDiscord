@@ -17,6 +17,10 @@ import {
   VOICE_HIGH_SHELF_GAIN_DB,
   VOICE_LEVEL_SAMPLE_INTERVAL_MS,
   VOICE_LOCK_DRAG_THRESHOLD_PX,
+  VOICE_LOW_PASS_FREQUENCY_HZ,
+  VOICE_LOW_SHELF_FREQUENCY_HZ,
+  VOICE_LOW_SHELF_GAIN_DB,
+  VOICE_OUTPUT_GAIN,
   VOICE_PRESENCE_FREQUENCY_HZ,
   VOICE_PRESENCE_GAIN_DB,
   VOICE_RECORDING_AUDIO_BITS_PER_SECOND,
@@ -78,6 +82,11 @@ export default function useTextChatVoiceSpeech({
   const SPEECH_RECOGNITION_NETWORK_WARNING_DELAY_MS = 7000;
   const PREFERRED_VOICE_SAMPLE_SIZE = 24;
   const MAX_VOICE_SAMPLE_SIZE = 32;
+
+  const getVoiceLowPassFrequency = (audioContext) => {
+    const nyquistLimit = Math.max(4000, Number(audioContext?.sampleRate || VOICE_RECORDING_SAMPLE_RATE) * 0.45);
+    return Math.min(VOICE_LOW_PASS_FREQUENCY_HZ, nyquistLimit);
+  };
 
   const getMicrophoneAccessErrorMessage = (error, fallbackMessage) => {
     const errorName = String(error?.name || error?.error || "").trim();
@@ -291,6 +300,11 @@ export default function useTextChatVoiceSpeech({
     highPassFilter.frequency.value = VOICE_HIGH_PASS_FREQUENCY_HZ;
     highPassFilter.Q.value = 0.82;
 
+    const lowShelfFilter = audioContext.createBiquadFilter();
+    lowShelfFilter.type = "lowshelf";
+    lowShelfFilter.frequency.value = VOICE_LOW_SHELF_FREQUENCY_HZ;
+    lowShelfFilter.gain.value = VOICE_LOW_SHELF_GAIN_DB;
+
     const presenceFilter = audioContext.createBiquadFilter();
     presenceFilter.type = "peaking";
     presenceFilter.frequency.value = VOICE_PRESENCE_FREQUENCY_HZ;
@@ -302,20 +316,39 @@ export default function useTextChatVoiceSpeech({
     highShelfFilter.frequency.value = VOICE_HIGH_SHELF_FREQUENCY_HZ;
     highShelfFilter.gain.value = VOICE_HIGH_SHELF_GAIN_DB;
 
+    const lowPassFilter = audioContext.createBiquadFilter();
+    lowPassFilter.type = "lowpass";
+    lowPassFilter.frequency.value = getVoiceLowPassFrequency(audioContext);
+    lowPassFilter.Q.value = 0.7;
+
     const compressor = audioContext.createDynamicsCompressor();
-    compressor.threshold.value = -20;
-    compressor.knee.value = 12;
-    compressor.ratio.value = 2.4;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.18;
+    compressor.threshold.value = -24;
+    compressor.knee.value = 16;
+    compressor.ratio.value = 3.2;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.16;
+
+    const limiter = audioContext.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.08;
+
+    const outputGain = audioContext.createGain();
+    outputGain.gain.value = VOICE_OUTPUT_GAIN;
 
     const destination = audioContext.createMediaStreamDestination();
     source.connect(highPassFilter);
-    highPassFilter.connect(presenceFilter);
+    highPassFilter.connect(lowShelfFilter);
+    lowShelfFilter.connect(presenceFilter);
     presenceFilter.connect(highShelfFilter);
-    highShelfFilter.connect(compressor);
-    compressor.connect(analyser);
-    compressor.connect(destination);
+    highShelfFilter.connect(lowPassFilter);
+    lowPassFilter.connect(compressor);
+    compressor.connect(limiter);
+    limiter.connect(outputGain);
+    outputGain.connect(analyser);
+    outputGain.connect(destination);
 
     voiceAudioContextRef.current = audioContext;
     voiceAnalyserRef.current = analyser;
@@ -373,6 +406,11 @@ export default function useTextChatVoiceSpeech({
       highPassFilter.frequency.value = VOICE_HIGH_PASS_FREQUENCY_HZ;
       highPassFilter.Q.value = 0.82;
 
+      const lowShelfFilter = audioContext.createBiquadFilter();
+      lowShelfFilter.type = "lowshelf";
+      lowShelfFilter.frequency.value = VOICE_LOW_SHELF_FREQUENCY_HZ;
+      lowShelfFilter.gain.value = VOICE_LOW_SHELF_GAIN_DB;
+
       const presenceFilter = audioContext.createBiquadFilter();
       presenceFilter.type = "peaking";
       presenceFilter.frequency.value = VOICE_PRESENCE_FREQUENCY_HZ;
@@ -384,10 +422,17 @@ export default function useTextChatVoiceSpeech({
       highShelfFilter.frequency.value = VOICE_HIGH_SHELF_FREQUENCY_HZ;
       highShelfFilter.gain.value = VOICE_HIGH_SHELF_GAIN_DB;
 
+      const lowPassFilter = audioContext.createBiquadFilter();
+      lowPassFilter.type = "lowpass";
+      lowPassFilter.frequency.value = getVoiceLowPassFrequency(audioContext);
+      lowPassFilter.Q.value = 0.7;
+
       source.connect(highPassFilter);
-      highPassFilter.connect(presenceFilter);
+      highPassFilter.connect(lowShelfFilter);
+      lowShelfFilter.connect(presenceFilter);
       presenceFilter.connect(highShelfFilter);
-      highShelfFilter.connect(analyser);
+      highShelfFilter.connect(lowPassFilter);
+      lowPassFilter.connect(analyser);
 
       speechAudioContextRef.current = audioContext;
       speechAnalyserRef.current = analyser;

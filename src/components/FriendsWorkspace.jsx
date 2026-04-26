@@ -2,10 +2,10 @@
 import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
 import ScreenShareViewer from "./ScreenShareViewer";
-import ServerInvitesPanel from "./ServerInvitesPanel";
 import TextChat from "./TextChat";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
+import { formatIntegrationActivityStatus } from "../utils/integrations";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 function FriendsNavIcon({ kind }) {
@@ -91,7 +91,6 @@ export const FriendsSidebar = ({
   query,
   navItems,
   friendsPageSection,
-  incomingFriendRequestCount,
   filteredFriends,
   filteredConversations,
   activeDirectFriendId,
@@ -149,19 +148,6 @@ export const FriendsSidebar = ({
 
           <button
             type="button"
-            className={`friends-nav__item ${friendsPageSection === "add" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active friends-nav__item--accent" : ""}`}
-            onClick={() => {
-              onOpenFriendsWorkspace();
-              onResetDirect();
-              onSetFriendsSection("add");
-            }}
-          >
-            <span className="friends-nav__icon"><FriendsNavIcon kind="add" /></span>
-            <span>Добавить в друзья</span>
-            {incomingFriendRequestCount > 0 ? <span className="friends-nav__badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
-          </button>
-          <button
-            type="button"
             className={`friends-nav__item ${friendsPageSection === "conversations" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
             onClick={() => {
               onOpenFriendsWorkspace();
@@ -185,6 +171,7 @@ export const FriendsSidebar = ({
                 const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
                 const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
                 const hasDraft = Boolean(chatDraftPresence[directChannelId]);
+                const activityStatus = formatIntegrationActivityStatus(friend.activity || friend.externalActivity);
 
                 return (
                   <button
@@ -213,6 +200,7 @@ export const FriendsSidebar = ({
                     <span className="friends-directs__meta">
                       <span className={`friends-directs__name ${isUserCurrentlyOnline(friend) ? "friends-directs__name--online" : ""}`}>{getDisplayName(friend)}</span>
                       {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
+                      {!hasDraft && activityStatus ? <span className="friends-directs__status">{activityStatus}</span> : null}
                     </span>
                     {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
                   </button>
@@ -332,9 +320,6 @@ export const FriendsMain = ({
   onDirectSearchQueryChange,
   onClearDirectSearchQuery,
   onAddFriend,
-  onOpenServersWorkspace,
-  onImportServer,
-  onServerShared,
   phoneIcon,
   searchIcon,
   getDisplayName,
@@ -829,17 +814,6 @@ export const FriendsMain = ({
             </button>
             <button
               type="button"
-              className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend && !activeConversationId ? "friends-main__tab--accent" : ""}`}
-              onClick={() => {
-                onResetDirect();
-                onSetFriendsSection("add");
-              }}
-            >
-              <span>Добавить в друзья</span>
-              {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
-            </button>
-            <button
-              type="button"
               className={`friends-main__tab ${friendsPageSection === "conversations" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
               onClick={() => {
                 onResetDirect();
@@ -965,8 +939,86 @@ export const FriendsMain = ({
               />
             )}
           </div>
-        ) : friendsPageSection === "friends" ? (
+        ) : friendsPageSection !== "conversations" ? (
           <div className="friends-main__content">
+            <div className="friends-hero friends-add-inline">
+                <h2>Добавить в друзья</h2>
+                <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
+                {friendRequestsLoading || friendRequestsError || incomingFriendRequests.length ? (
+                  <div className="friends-requests">
+                    <div className="friends-requests__header">
+                      <h2>Входящие заявки</h2>
+                      {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
+                    </div>
+                    {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
+                    {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
+                    {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
+                      <div className="friends-results friends-results--requests">
+                        {incomingFriendRequests.map((request) => (
+                          <div key={request.id} className="friends-results__item friends-results__item--request">
+                            <div className="friends-results__identity">
+                              <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
+                              <div className="friends-results__meta">
+                                <strong>{getDisplayName(request.sender)}</strong>
+                                <span>{request.sender.email || "Без email"}</span>
+                              </div>
+                            </div>
+                            <div className="friends-results__actions">
+                              <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
+                                {friendRequestActionId === request.id ? "..." : "✓"}
+                              </button>
+                              <button type="button" className="friends-results__action friends-results__action--decline" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
+                                {friendRequestActionId === request.id ? "..." : (
+                                  <svg className="friends-results__action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                    <path d="M4 4l8 8M12 4l-8 8" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
+                  <input
+                    type="text"
+                    placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
+                    value={friendEmail}
+                    onChange={(event) => onFriendSearchChange(event.target.value)}
+                  />
+                  <button type="submit" disabled={friendLookupLoading}>
+                    {friendLookupLoading ? "Ищем..." : "Найти"}
+                  </button>
+                </form>
+                {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
+                <div className="friends-results">
+                  {friendLookupResults.map((friend) => (
+                    <div key={friend.id} className="friends-results__item">
+                      <div className="friends-results__identity">
+                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                        <div className="friends-results__meta">
+                          <strong>{getDisplayName(friend)}</strong>
+                          <span>{friend.email || "Без email"}</span>
+                        </div>
+                      </div>
+                      <button type="button" className="friends-results__action" disabled={isAddingFriend} onClick={() => onAddFriend(friend)}>
+                        {isAddingFriend ? "Отправляем..." : "Добавить"}
+                      </button>
+                    </div>
+                  ))}
+                  {friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
+                    <div className="friends-panel__empty">
+                      {friendQueryMode === "email"
+                        ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
+                        : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
+                    </div>
+                  ) : null}
+                </div>
+            </div>
+
             <div className="friends-hero">
               <h1>Все друзья</h1>
               <p>Здесь находятся все уже добавленные друзья. Отсюда можно сразу открыть личный чат.</p>
@@ -988,7 +1040,7 @@ export const FriendsMain = ({
                   ))}
                 </div>
               ) : (
-                <div className="friends-panel__empty">У вас пока нет друзей. Перейдите во вкладку добавления и найдите пользователя.</div>
+                <div className="friends-panel__empty">У вас пока нет друзей. Найдите пользователя по имени или email.</div>
               )}
             </div>
           </div>
@@ -1043,113 +1095,7 @@ export const FriendsMain = ({
               ) : null}
             </div>
           </div>
-        ) : (
-          <div className="friends-main__content">
-            <div className="friends-hero">
-              <h1>Добавить в друзья</h1>
-              <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
-              {friendRequestsLoading || friendRequestsError || incomingFriendRequests.length ? (
-                <div className="friends-requests">
-                  <div className="friends-requests__header">
-                    <h2>Входящие заявки</h2>
-                    {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
-                  </div>
-                  {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
-                  {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
-                  {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
-                    <div className="friends-results friends-results--requests">
-                      {incomingFriendRequests.map((request) => (
-                        <div key={request.id} className="friends-results__item friends-results__item--request">
-                          <div className="friends-results__identity">
-                            <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
-                            <div className="friends-results__meta">
-                              <strong>{getDisplayName(request.sender)}</strong>
-                              <span>{request.sender.email || "Без email"}</span>
-                            </div>
-                          </div>
-                          <div className="friends-results__actions">
-                            <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
-                              {friendRequestActionId === request.id ? "..." : "✓"}
-                            </button>
-                            <button type="button" className="friends-results__action friends-results__action--decline" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                              {friendRequestActionId === request.id ? "..." : (
-                                <svg className="friends-results__action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                  <path d="M4 4l8 8M12 4l-8 8" />
-                                </svg>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
-                <input
-                  type="text"
-                  placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
-                  value={friendEmail}
-                  onChange={(event) => onFriendSearchChange(event.target.value)}
-                />
-                <button type="submit" disabled={friendLookupLoading}>
-                  {friendLookupLoading ? "Ищем..." : "Найти"}
-                </button>
-              </form>
-              {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
-              <div className="friends-results">
-                {friendLookupResults.map((friend) => (
-                  <div key={friend.id} className="friends-results__item">
-                    <div className="friends-results__identity">
-                      <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                      <div className="friends-results__meta">
-                        <strong>{getDisplayName(friend)}</strong>
-                        <span>{friend.email || "Без email"}</span>
-                      </div>
-                    </div>
-                    <button type="button" className="friends-results__action" disabled={isAddingFriend} onClick={() => onAddFriend(friend)}>
-                      {isAddingFriend ? "Отправляем..." : "Добавить"}
-                    </button>
-                  </div>
-                ))}
-                {friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
-                  <div className="friends-panel__empty">
-                    {friendQueryMode === "email"
-                      ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
-                      : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="friends-discovery friends-discovery--server-code">
-              <h2>Вступить по коду сервера</h2>
-              <p>Если друг прислал код сервера, вставьте его сюда. Новые коды длинные и криптостойкие, их нельзя просто подобрать.</p>
-              <ServerInvitesPanel
-                activeServer={null}
-                user={user}
-                canInvite={false}
-                showCreate={false}
-                showJoin
-                title="Код сервера"
-                helperText="Введите код сервера целиком, и сервер появится у вас в списке сразу после подтверждения."
-                onImportServer={onImportServer}
-                onServerShared={onServerShared}
-              />
-            </div>
-
-            <div className="friends-discovery">
-              <h2>Где ещё можно завести друзей</h2>
-              <p>Если пока не с кем переписываться, можно открыть свои серверы или пригласить туда новых людей.</p>
-              <button type="button" className="friends-discovery__card" onClick={onOpenServersWorkspace}>
-                <span className="friends-discovery__icon">✦</span>
-                <span>Исследуйте доступные серверы</span>
-                <span className="friends-discovery__arrow">›</span>
-              </button>
-            </div>
-          </div>
-        )}
+        ) : null}
       </section>
 
       {createConversationStep ? (

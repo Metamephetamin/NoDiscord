@@ -520,6 +520,10 @@
   margin-top: 2px;
   width: 100%;
   min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   border: none;
   outline: none;
   border-radius: 16px;
@@ -615,6 +619,29 @@
 
 .auth-inline-code__resend {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+  white-space: nowrap;
+}
+
+.auth-inline-code__timer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(77, 56, 143, 0.13);
+  color: rgba(49, 33, 93, 0.84);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.auth-submit .auth-inline-code__timer {
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
 }
 
 .auth-verify-modal__backdrop {
@@ -745,9 +772,21 @@
 
 .auth-message {
   margin: 0;
-  color: #b83232;
   font-size: 14px;
+  font-weight: 700;
   text-align: center;
+}
+
+.auth-message--error {
+  color: #b83232;
+}
+
+.auth-message--success {
+  color: rgba(49, 33, 93, 0.78);
+}
+
+.auth-message--info {
+  color: rgba(49, 33, 93, 0.66);
 }
 
 .auth-card__side {

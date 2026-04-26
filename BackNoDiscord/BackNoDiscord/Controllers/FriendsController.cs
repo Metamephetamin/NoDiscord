@@ -53,12 +53,13 @@ public class FriendsController : ControllerBase
             .AsNoTracking()
             .Where(item => friendIds.Contains(item.id))
             .ToDictionaryAsync(item => item.id);
+        var activityByUserId = await LoadActiveActivitiesAsync(friendIds);
 
         var result = friendships
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .Distinct()
             .Where(friendId => users.ContainsKey(friendId))
-            .Select(friendId => BuildFriendPayload(users[friendId], currentUserId));
+            .Select(friendId => BuildFriendPayload(users[friendId], currentUserId, activityByUserId));
 
         return Ok(result);
     }
@@ -303,9 +304,40 @@ public class FriendsController : ControllerBase
         return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
     }
 
-    private object BuildFriendPayload(User friend, int currentUserId)
+    private async Task<Dictionary<int, UserIntegrationRecord>> LoadActiveActivitiesAsync(IEnumerable<int> userIds)
+    {
+        var normalizedUserIds = userIds.Distinct().ToList();
+        if (normalizedUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var records = await _context.UserIntegrations
+            .AsNoTracking()
+            .Where(item =>
+                normalizedUserIds.Contains(item.UserId) &&
+                item.DisplayInProfile &&
+                item.UseAsStatus &&
+                item.ActivityTitle != string.Empty)
+            .ToListAsync();
+
+        return records
+            .GroupBy(item => item.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(item => item.ActivityUpdatedAt ?? item.UpdatedAt)
+                    .First());
+    }
+
+    private object BuildFriendPayload(
+        User friend,
+        int currentUserId,
+        IReadOnlyDictionary<int, UserIntegrationRecord>? activityByUserId = null)
     {
         var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
+        UserIntegrationRecord? activity = null;
+        activityByUserId?.TryGetValue(friend.id, out activity);
         return new
         {
             id = friend.id,
@@ -317,7 +349,26 @@ public class FriendsController : ControllerBase
             is_online = isOnline,
             presence = isOnline ? "online" : "offline",
             last_seen_at = friend.last_seen_at,
+            activity = BuildActivityPayload(activity),
             directChannelId = BuildDirectChannelId(currentUserId, friend.id)
+        };
+    }
+
+    private static object? BuildActivityPayload(UserIntegrationRecord? record)
+    {
+        if (record is null || string.IsNullOrWhiteSpace(record.ActivityTitle))
+        {
+            return null;
+        }
+
+        return new
+        {
+            provider = record.Provider,
+            kind = record.ActivityKind,
+            title = record.ActivityTitle,
+            subtitle = record.ActivitySubtitle,
+            details = record.ActivityDetails,
+            updatedAt = record.ActivityUpdatedAt
         };
     }
 

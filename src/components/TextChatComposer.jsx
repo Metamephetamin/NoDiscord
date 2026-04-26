@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useMemo, useRef, useState } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import PendingUploadPreview from "./PendingUploadPreview";
@@ -90,6 +90,7 @@ function TextChatComposer({
   onSend,
 }) {
   const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
+  const [emojiSearchQuery, setEmojiSearchQuery] = useState("");
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerLocating, setLocationPickerLocating] = useState(false);
@@ -100,6 +101,7 @@ function TextChatComposer({
   const attachMenuCloseTimeoutRef = useRef(0);
   const suppressSpeechClickRef = useRef(false);
   const deferredMessage = useDeferredValue(message);
+  const deferredEmojiSearchQuery = useDeferredValue(emojiSearchQuery);
   const composerMentionSegments = useMemo(
     () => {
       const normalizedMessage = String(deferredMessage || "");
@@ -134,6 +136,27 @@ function TextChatComposer({
     onQueueFiles,
     onToggleBatchUploadSendAsDocuments,
   });
+
+  const filteredComposerEmojiOptions = useMemo(() => {
+    const normalizedQuery = String(deferredEmojiSearchQuery || "").trim().toLowerCase();
+    if (!normalizedQuery) {
+      return COMPOSER_EMOJI_OPTIONS;
+    }
+
+    return COMPOSER_EMOJI_OPTIONS.filter((emojiOption) => {
+      const glyph = String(emojiOption?.glyph || "").trim();
+      const label = String(emojiOption?.label || "").toLowerCase();
+      const key = String(emojiOption?.key || "").toLowerCase().replace(/^symbl_/, "").replace(/_/g, " ");
+      return glyph.includes(normalizedQuery) || label.includes(normalizedQuery) || key.includes(normalizedQuery);
+    });
+  }, [deferredEmojiSearchQuery]);
+
+  useEffect(() => {
+    if (!composerEmojiPickerOpen) {
+      setEmojiSearchQuery("");
+      setEmojiPreviewCount(8);
+    }
+  }, [composerEmojiPickerOpen]);
 
   const clearAttachMenuCloseTimeout = () => {
     if (!attachMenuCloseTimeoutRef.current || typeof window === "undefined") {
@@ -187,7 +210,7 @@ function TextChatComposer({
 
 
   const loadMoreEmojiPreviews = () => {
-    setEmojiPreviewCount((previous) => Math.min(previous + 8, COMPOSER_EMOJI_OPTIONS.length));
+    setEmojiPreviewCount((previous) => Math.min(previous + 8, filteredComposerEmojiOptions.length));
   };
 
   const handleEmojiPickerScroll = (event) => {
@@ -542,11 +565,25 @@ function TextChatComposer({
                 ref={composerEmojiPickerRef}
                 className="composer-emoji-picker"
                 role="dialog"
-                aria-label="Выбор анимированного смайлика"
+                aria-label="Выбор смайлика"
                 onScroll={handleEmojiPickerScroll}
               >
+                <label className="composer-emoji-picker__search">
+                  <span className="composer-emoji-picker__search-icon" aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={emojiSearchQuery}
+                    onChange={(event) => {
+                      setEmojiSearchQuery(event.target.value);
+                      setEmojiPreviewCount(8);
+                    }}
+                    placeholder="Поиск"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
                 <div className="composer-emoji-picker__grid">
-                  {COMPOSER_EMOJI_OPTIONS.map((emojiOption, index) => (
+                  {filteredComposerEmojiOptions.map((emojiOption, index) => (
                     <button
                       key={emojiOption.key}
                       type="button"
@@ -570,6 +607,7 @@ function TextChatComposer({
                         }
 
                         onInsertEmoji(emojiGlyph);
+                        setEmojiSearchQuery("");
                         onToggleEmojiPicker(false);
                       }}
                       title={String(emojiOption.label || resolveAnimatedEmojiFallbackGlyph(emojiOption) || "Эмодзи")}
@@ -583,6 +621,9 @@ function TextChatComposer({
                     </button>
                   ))}
                 </div>
+                {!filteredComposerEmojiOptions.length ? (
+                  <div className="composer-emoji-picker__empty">Ничего не найдено</div>
+                ) : null}
               </div>
             ) : null}
 

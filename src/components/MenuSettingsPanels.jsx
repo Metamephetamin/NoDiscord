@@ -3,6 +3,7 @@ import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import PercentageSlider from "./PercentageSlider";
+import { formatIntegrationActivityStatus } from "../utils/integrations";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -15,6 +16,67 @@ const VoiceSwitch = ({ active, onClick, label }) => (
     <span />
   </button>
 );
+
+const IntegrationBrandIcon = ({ provider, className = "" }) => {
+  const providerId = provider?.id || "";
+  const tone = provider?.meta?.tone || "#8b95ad";
+  const label = provider?.name || provider?.meta?.label || providerId;
+
+  const commonProps = {
+    viewBox: "0 0 32 32",
+    width: "24",
+    height: "24",
+    focusable: "false",
+    "aria-hidden": "true",
+  };
+
+  return (
+    <span className={`integration-brand-icon integration-brand-icon--${providerId} ${className}`} style={{ "--integration-color": tone }} title={label}>
+      {providerId === "spotify" ? (
+        <svg {...commonProps}>
+          <circle cx="16" cy="16" r="15" fill="#1ed760" />
+          <path d="M9 12.3c4.9-1.4 10.1-.9 14.2 1.5" fill="none" stroke="#101318" strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M10.1 16.4c3.8-1 7.9-.6 11.1 1.2" fill="none" stroke="#101318" strokeWidth="2.1" strokeLinecap="round" />
+          <path d="M11.2 20.1c2.9-.7 5.8-.4 8.1.9" fill="none" stroke="#101318" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      ) : null}
+      {providerId === "steam" ? (
+        <svg {...commonProps}>
+          <circle cx="16" cy="16" r="15" fill="#171a21" />
+          <circle cx="21.7" cy="11.1" r="4.1" fill="none" stroke="#ffffff" strokeWidth="2" />
+          <circle cx="21.7" cy="11.1" r="1.5" fill="#ffffff" />
+          <path d="M6.9 18.4l6.7 2.8 5-6.2" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="11.9" cy="21.4" r="3.7" fill="none" stroke="#ffffff" strokeWidth="2" />
+        </svg>
+      ) : null}
+      {providerId === "battlenet" ? (
+        <svg {...commonProps}>
+          <rect width="32" height="32" rx="16" fill="#00aeff" />
+          <path d="M9.5 20.9c3.4-9.4 9.8-13.9 13.7-10.9 3 2.3.5 8.6-5.7 12.4-5.4 3.3-9.6 1.8-8-1.5Z" fill="none" stroke="#07131f" strokeWidth="2" />
+          <path d="M8.7 12c9.2 2.2 14.8 7.7 12.7 11.6-1.8 3.3-8.4 2.5-12.9-2.7-3.9-4.6-3.3-8.9.2-8.9Z" fill="none" stroke="#07131f" strokeWidth="2" />
+          <path d="M22.3 8.7c-5.8 7.2-13.2 9.6-15.4 5.7-1.8-3.2 2.6-8.2 9.4-8.9 6-.6 8.9 2.6 6 3.2Z" fill="none" stroke="#07131f" strokeWidth="2" />
+        </svg>
+      ) : null}
+      {providerId === "github" ? (
+        <svg {...commonProps}>
+          <rect width="32" height="32" rx="16" fill="#f0f6fc" />
+          <path d="M16 6.5a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-2c-2.9.6-3.5-1.2-3.5-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.7-1.3-2.3-.3-4.7-1.2-4.7-5.1 0-1.1.4-2 1-2.8-.1-.3-.5-1.4.1-2.8 0 0 .9-.3 2.9 1.1.8-.2 1.6-.3 2.4-.3s1.6.1 2.4.3c2-1.4 2.9-1.1 2.9-1.1.6 1.4.2 2.5.1 2.8.6.7 1 1.7 1 2.8 0 4-2.4 4.8-4.7 5.1.4.3.7 1 .7 2v2.8c0 .3.2.6.7.5A9.5 9.5 0 0 0 16 6.5Z" fill="#0d1117" />
+        </svg>
+      ) : null}
+      {providerId === "yandex_music" ? (
+        <svg {...commonProps}>
+          <rect width="32" height="32" rx="9" fill="#ffcc00" />
+          <circle cx="16" cy="16" r="8.5" fill="#ef2e24" />
+          <circle cx="16" cy="16" r="4.4" fill="#11131a" />
+          <path d="M19.6 8.8v10.7a2.8 2.8 0 1 1-2-2.7v-8h2Z" fill="#11131a" />
+        </svg>
+      ) : null}
+      {!["spotify", "steam", "battlenet", "github", "yandex_music"].includes(providerId) ? (
+        <span className="integration-brand-icon__fallback">{String(label || "?").charAt(0).toUpperCase()}</span>
+      ) : null}
+    </span>
+  );
+};
 
 export const PersonalProfileSettings = ({
   profileBackgroundSrc,
@@ -257,6 +319,111 @@ export const DevicesSettings = ({
     </section>
   </div>
 );
+
+export const IntegrationsSettings = ({
+  integrations,
+  integrationsLoading,
+  integrationsStatus,
+  integrationActionBusy,
+  onConnectIntegration,
+  onDisconnectIntegration,
+  onToggleIntegrationSetting,
+}) => {
+  const connectedProviders = integrations.filter((provider) => provider.connected);
+  const disconnectedProviders = integrations.filter((provider) => !provider.connected);
+
+  return (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Интеграции</h2>
+          <p>Добавьте учётные записи в профиль и показывайте музыку или игру в статусе.</p>
+        </div>
+      </div>
+
+      <section className="integrations-connect-panel">
+        <div>
+          <strong>Добавьте учётные записи в свой профиль</strong>
+          <span>Статус обновляется только после настоящего OAuth-подключения сервиса.</span>
+        </div>
+        <div className="integrations-connect-row" aria-label="Доступные интеграции">
+          {disconnectedProviders.map((provider) => {
+            const isBusy = integrationActionBusy === provider.id;
+            return (
+              <button
+                key={provider.id}
+                type="button"
+                className="integrations-connect-button"
+                onClick={() => onConnectIntegration(provider.id)}
+                disabled={isBusy || integrationsLoading}
+                aria-label={`Подключить ${provider.name}`}
+                title={provider.oauthEnabled ? `Подключить ${provider.name}` : `${provider.name}: настоящее подключение ещё не добавлено`}
+              >
+                <IntegrationBrandIcon provider={provider} />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {integrationsStatus ? <div className="profile-settings-form__status">{integrationsStatus}</div> : null}
+
+      <div className="integrations-list">
+        {connectedProviders.map((provider) => {
+          const isBusy = integrationActionBusy === provider.id;
+          const activityLabel = formatIntegrationActivityStatus(provider.activity);
+          return (
+            <section key={provider.id} className="integration-card integration-card--connected">
+              <div className="integration-card__top">
+                <div className="integration-card__main">
+                  <IntegrationBrandIcon provider={provider} className="integration-brand-icon--large" />
+                  <div className="integration-card__copy">
+                    <strong>{provider.displayName || provider.name}</strong>
+                    <span>{provider.name}</span>
+                    {activityLabel ? <small>{activityLabel}</small> : null}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="integration-card__remove"
+                  onClick={() => onDisconnectIntegration(provider.id)}
+                  disabled={isBusy}
+                  aria-label={`Отключить ${provider.name}`}
+                  title="Отключить"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="integration-card__toggles">
+                <div className="voice-toggle-row voice-toggle-row--compact">
+                  <div>
+                    <strong>Отображать в профиле</strong>
+                  </div>
+                  <VoiceSwitch
+                    active={provider.displayInProfile}
+                    onClick={() => onToggleIntegrationSetting(provider.id, "displayInProfile", !provider.displayInProfile)}
+                    label="Отображать интеграцию в профиле"
+                  />
+                </div>
+                <div className="voice-toggle-row voice-toggle-row--compact">
+                  <div>
+                    <strong>Отображать {provider.name} как свой статус</strong>
+                  </div>
+                  <VoiceSwitch
+                    active={provider.useAsStatus}
+                    onClick={() => onToggleIntegrationSetting(provider.id, "useAsStatus", !provider.useAsStatus)}
+                    label="Показывать активность как статус"
+                  />
+                </div>
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 export const VoiceSettingsPanel = ({
   audioInputDevices,

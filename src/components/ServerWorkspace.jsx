@@ -143,6 +143,332 @@ function areNavigationRequestsEqual(previousRequest, nextRequest) {
 const getInviteFriendName = (friend) =>
   friend?.nickname || friend?.firstName || friend?.first_name || friend?.name || friend?.email || "User";
 
+const CHANNEL_CREATE_OPTIONS = [
+  { id: "text", label: "Текстовый", description: "Обычный чат для сообщений.", icon: "#" },
+  { id: "voice", label: "Голосовой", description: "Комната для звонков и стримов.", icon: "♪" },
+  { id: "forum", label: "Форум", description: "Публикации с отдельными обсуждениями.", icon: "◔" },
+];
+
+const getTextChannelKind = (channel) => String(channel?.kind || channel?.type || "text") === "forum" ? "forum" : "text";
+
+const getChannelListIcon = (type) => {
+  if (type === "voice") {
+    return "◖";
+  }
+
+  if (type === "forum") {
+    return "◔";
+  }
+
+  return "#";
+};
+
+function CreateCategoryModal({
+  open,
+  name,
+  isPrivate,
+  error,
+  onClose,
+  onNameChange,
+  onPrivateChange,
+  onSubmit,
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="channel-create-modal" onSubmit={onSubmit} onClick={(event) => event.stopPropagation()}>
+        <div className="channel-create-modal__header">
+          <h3>Создать категорию</h3>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть">x</button>
+        </div>
+
+        <label className="stream-modal__field">
+          <span>Название категории</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+            placeholder="Новая категория"
+            maxLength={64}
+            autoFocus
+          />
+        </label>
+
+        <button
+          type="button"
+          className={`channel-create-modal__toggle ${isPrivate ? "is-active" : ""}`}
+          onClick={() => onPrivateChange(!isPrivate)}
+          aria-pressed={isPrivate}
+        >
+          <span>
+            <strong>Приватная категория</strong>
+            <small>Каналы внутри категории унаследуют этот флаг.</small>
+          </span>
+          <i aria-hidden="true" />
+        </button>
+
+        {error ? <div className="create-server-modal__error">{error}</div> : null}
+
+        <div className="create-server-modal__actions">
+          <button type="button" className="create-server-modal__secondary" onClick={onClose}>Отмена</button>
+          <button type="submit" className="stream-modal__action">Создать категорию</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CreateChannelModal({
+  open,
+  draft,
+  categories = [],
+  error,
+  onClose,
+  onDraftChange,
+  onSubmit,
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="channel-create-modal" onSubmit={onSubmit} onClick={(event) => event.stopPropagation()}>
+        <div className="channel-create-modal__header">
+          <div>
+            <h3>Создать канал</h3>
+            <p>Выберите тип канала и категорию, куда его положить.</p>
+          </div>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть">x</button>
+        </div>
+
+        <div className="channel-create-modal__types" role="radiogroup" aria-label="Тип канала">
+          {CHANNEL_CREATE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`channel-create-modal__type ${draft.type === option.id ? "is-active" : ""}`}
+              onClick={() => onDraftChange({ ...draft, type: option.id })}
+              aria-pressed={draft.type === option.id}
+            >
+              <span className="channel-create-modal__type-icon" aria-hidden="true">{option.icon}</span>
+              <span>
+                <strong>{option.label}</strong>
+                <small>{option.description}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <label className="stream-modal__field">
+          <span>Название канала</span>
+          <input
+            type="text"
+            value={draft.name}
+            onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
+            placeholder={draft.type === "voice" ? "голосовой-канал" : draft.type === "forum" ? "форум" : "новый-канал"}
+            maxLength={80}
+            autoFocus
+          />
+        </label>
+
+        {categories.length > 0 ? (
+          <label className="stream-modal__field">
+            <span>Категория</span>
+            <select
+              value={draft.categoryId}
+              onChange={(event) => onDraftChange({ ...draft, categoryId: event.target.value })}
+            >
+              <option value="">Без категории</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {error ? <div className="create-server-modal__error">{error}</div> : null}
+
+        <div className="create-server-modal__actions">
+          <button type="button" className="create-server-modal__secondary" onClick={onClose}>Отмена</button>
+          <button type="submit" className="stream-modal__action">Создать канал</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ForumChannelView({
+  channel,
+  onCreatePost,
+  onAddReply,
+}) {
+  const [query, setQuery] = useState("");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [postTitle, setPostTitle] = useState("");
+  const [postContent, setPostContent] = useState("");
+  const [selectedPostId, setSelectedPostId] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [panelWidth, setPanelWidth] = useState(42);
+  const posts = Array.isArray(channel?.forumPosts) ? channel.forumPosts : [];
+  const selectedPost = posts.find((post) => post.id === selectedPostId) || null;
+  const filteredPosts = posts.filter((post) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    return `${post.title} ${post.content} ${post.authorName}`.toLowerCase().includes(normalizedQuery);
+  });
+  const submitPost = (event) => {
+    event?.preventDefault?.();
+    const title = postTitle.trim();
+    const content = postContent.trim();
+    if (!title || !content) {
+      return;
+    }
+
+    const post = onCreatePost?.(channel.id, { title, content });
+    setPostTitle("");
+    setPostContent("");
+    setComposerOpen(false);
+    if (post?.id) {
+      setSelectedPostId(post.id);
+    }
+  };
+  const submitReply = (event) => {
+    event?.preventDefault?.();
+    const text = replyText.trim();
+    if (!selectedPost || !text) {
+      return;
+    }
+
+    onAddReply?.(channel.id, selectedPost.id, text);
+    setReplyText("");
+  };
+  const startResize = (event) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = panelWidth;
+    const handleMove = (moveEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const nextWidth = startWidth + (delta / window.innerWidth) * 100;
+      setPanelWidth(Math.max(30, Math.min(58, nextWidth)));
+    };
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  };
+
+  return (
+    <div className={`forum-channel ${selectedPost ? "forum-channel--split" : ""}`}>
+      <section className="forum-channel__list">
+        <div className="forum-channel__toolbar">
+          <label className="forum-channel__search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Найти или создать публикацию..."
+            />
+          </label>
+          <button type="button" className="forum-channel__new" onClick={() => setComposerOpen(true)}>
+            Новая публикация
+          </button>
+        </div>
+
+        {composerOpen ? (
+          <form className="forum-composer" onSubmit={submitPost}>
+            <input
+              value={postTitle}
+              onChange={(event) => setPostTitle(event.target.value)}
+              placeholder="Заголовок"
+              maxLength={120}
+              autoFocus
+            />
+            <textarea
+              value={postContent}
+              onChange={(event) => setPostContent(event.target.value)}
+              placeholder="О чём публикация?"
+              rows={4}
+            />
+            <div className="forum-composer__actions">
+              <button type="button" onClick={() => setComposerOpen(false)}>Отмена</button>
+              <button type="submit" disabled={!postTitle.trim() || !postContent.trim()}>Опубликовать</button>
+            </div>
+          </form>
+        ) : null}
+
+        <div className="forum-post-list">
+          {filteredPosts.length > 0 ? filteredPosts.map((post) => (
+            <button
+              key={post.id}
+              type="button"
+              className={`forum-post-card ${selectedPost?.id === post.id ? "is-active" : ""}`}
+              onClick={() => setSelectedPostId(post.id)}
+            >
+              <strong>{post.title}</strong>
+              <span>{post.authorName || "Участник"}: {post.content}</span>
+              <small>{Number(post.replies?.length || 0)} ответов</small>
+            </button>
+          )) : (
+            <div className="forum-channel__empty">
+              <strong>Публикаций пока нет</strong>
+              <span>Создайте первый пост, и обсуждение откроется в отдельной панели.</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {selectedPost ? (
+        <aside className="forum-thread-panel" style={{ width: `${panelWidth}%` }}>
+          <button type="button" className="forum-thread-panel__resizer" onPointerDown={startResize} aria-label="Изменить ширину" />
+          <header className="forum-thread-panel__header">
+            <div>
+              <span aria-hidden="true">◔</span>
+              <strong>{selectedPost.title}</strong>
+            </div>
+            <button type="button" onClick={() => setSelectedPostId("")} aria-label="Закрыть">×</button>
+          </header>
+          <div className="forum-thread-panel__body">
+            <article className="forum-thread-message">
+              <AnimatedAvatar className="forum-thread-message__avatar" src={selectedPost.authorAvatar} alt={selectedPost.authorName || "Автор"} />
+              <div>
+                <strong>{selectedPost.authorName || "Участник"}</strong>
+                <p>{selectedPost.content}</p>
+              </div>
+            </article>
+            {(selectedPost.replies || []).map((reply) => (
+              <article key={reply.id} className="forum-thread-message">
+                <AnimatedAvatar className="forum-thread-message__avatar" src={reply.authorAvatar} alt={reply.authorName || "Участник"} />
+                <div>
+                  <strong>{reply.authorName || "Участник"}</strong>
+                  <p>{reply.text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <form className="forum-thread-panel__composer" onSubmit={submitReply}>
+            <input
+              value={replyText}
+              onChange={(event) => setReplyText(event.target.value)}
+              placeholder={`Ответить в "${selectedPost.title}"`}
+            />
+            <button type="submit" disabled={!replyText.trim()}>Отправить</button>
+          </form>
+        </aside>
+      ) : null}
+    </div>
+  );
+}
+
 function ServerInviteFriendsModal({
   activeServer,
   channelName,
@@ -353,7 +679,7 @@ const CHANNEL_VIDEO_QUALITY_OPTIONS = [
   ["1080p", "1080p"],
   ["1440p", "1440p"],
 ];
-const CHANNEL_NAME_EMOJIS = ["😀", "😎", "🔥", "🎮", "🎧", "🎤", "⭐", "💬", "📢", "✅", "❤️", "🚀"];
+const CHANNEL_NAME_EMOJIS = ["😀", "😉", "😄", "😆", "😅", "😂", "😊", "🙂", "🙃", "😇", "🤣", "🫠", "😍", "😘", "🥰", "🤩", "😋", "😜", "🤪", "🤔", "🤗", "🤫", "😎", "🥳", "💯", "💬", "💤", "❤️", "💙", "💜", "💛", "💚"];
 
 const getInviteCodeFromLink = (link) => String(link || "").split("/").filter(Boolean).pop() || "aWxNK8ukw";
 const getRangePercent = (value, min, max) => {
@@ -943,6 +1269,9 @@ export const ServersSidebar = memo(({
   onAddServer,
   onAddTextChannel,
   onAddVoiceChannel,
+  onCreateCategory,
+  onToggleCategory,
+  onCreateChannel,
   onOpenChannelSettings,
   onCloseChannelSettings,
   onUpdateChannelSettings,
@@ -965,6 +1294,12 @@ export const ServersSidebar = memo(({
   const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
   const [serverMenuPosition, setServerMenuPosition] = useState({ left: 0, top: 0, maxHeight: 420 });
   const [hideMutedChannels, setHideMutedChannels] = useState(false);
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [createCategoryName, setCreateCategoryName] = useState("");
+  const [createCategoryPrivate, setCreateCategoryPrivate] = useState(false);
+  const [createCategoryError, setCreateCategoryError] = useState("");
+  const [createChannelDraft, setCreateChannelDraft] = useState(null);
+  const [createChannelError, setCreateChannelError] = useState("");
 
   const updateServerMenuPosition = () => {
     const anchor = serverMembersRef?.current;
@@ -1012,6 +1347,137 @@ export const ServersSidebar = memo(({
   const showUnavailableServerMenuAction = () => {
     onShowServerFeedback?.("Этот раздел пока не подключён.");
   };
+  const channelCategories = Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : [];
+  const uncategorizedTextChannels = (activeServer?.textChannels || []).filter((channel) => !channel.categoryId);
+  const uncategorizedVoiceChannels = (activeServer?.voiceChannels || []).filter((channel) => !channel.categoryId);
+  const openCreateCategoryModal = () => {
+    setCreateCategoryName("");
+    setCreateCategoryPrivate(false);
+    setCreateCategoryError("");
+    setCreateCategoryOpen(true);
+  };
+  const closeCreateCategoryModal = () => {
+    setCreateCategoryOpen(false);
+    setCreateCategoryError("");
+  };
+  const submitCreateCategory = (event) => {
+    event?.preventDefault?.();
+    const nextName = createCategoryName.trim();
+    if (!nextName) {
+      setCreateCategoryError("Введите название категории.");
+      return;
+    }
+
+    onCreateCategory?.({
+      name: nextName,
+      privateCategory: createCategoryPrivate,
+    });
+    closeCreateCategoryModal();
+  };
+  const openCreateChannelModal = (categoryId = "", type = "text") => {
+    setCreateChannelDraft({
+      type,
+      categoryId: String(categoryId || ""),
+      name: "",
+    });
+    setCreateChannelError("");
+  };
+  const closeCreateChannelModal = () => {
+    setCreateChannelDraft(null);
+    setCreateChannelError("");
+  };
+  const submitCreateChannel = (event) => {
+    event?.preventDefault?.();
+    if (!createChannelDraft) {
+      return;
+    }
+
+    const nextName = createChannelDraft.name.trim();
+    if (!nextName) {
+      setCreateChannelError("Введите название канала.");
+      return;
+    }
+
+    onCreateChannel?.({
+      ...createChannelDraft,
+      name: nextName,
+    });
+    closeCreateChannelModal();
+  };
+  const renderTextChannelItem = (channel) => {
+    const kind = getTextChannelKind(channel);
+    const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
+    const scopedChannelId = getScopedChatChannelId(activeServer?.id || "", channel.id);
+    const unreadCount = Number(serverUnreadCounts[scopedChannelId] || 0);
+    const hasDraft = Boolean(chatDraftPresence[scopedChannelId]);
+    const isTextChannelActive = desktopServerPane !== "voice" && currentTextChannel?.id === channel.id;
+
+    return (
+      <li key={channel.id} className={`channel-item ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""}`}>
+        {isEditing ? (
+          <input
+            className="channel-inline-input"
+            type="text"
+            value={channelRenameState.value}
+            autoFocus
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            onChange={(event) => onUpdateChannelRenameValue(event.target.value)}
+            onBlur={onSubmitChannelRename}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onSubmitChannelRename();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onCancelChannelRename();
+              }
+            }}
+          />
+        ) : (
+          <button type="button" className="channel-item__button" onClick={() => onSelectTextChannel(channel.id)}>
+            <span className="channel-item__icon" aria-hidden="true">{getChannelListIcon(kind)}</span>
+            <span className="channel-item__label">{getChannelDisplayName(channel.name, "text")}</span>
+            {hasDraft ? <span className="channel-item__draft">Черновик</span> : null}
+            {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
+          </button>
+        )}
+        <button type="button" className="channel-edit-button" onClick={() => onOpenChannelSettings?.("text", channel)} aria-label="Настройки канала" disabled={!canManageChannels}>
+          <img src={icons.settings} alt="" />
+        </button>
+      </li>
+    );
+  };
+  const renderVoiceChannels = (channels) => (
+    <VoiceChannelList
+      channels={channels}
+      activeChannelId={currentVoiceChannel}
+      participantsMap={activeVoiceParticipantsMap}
+      serverId={activeServer?.id || ""}
+      serverMembers={activeServer?.members || []}
+      serverRoles={activeServer?.roles || []}
+      onJoinChannel={onJoinVoiceChannel}
+      onLeaveChannel={onLeaveVoiceChannel}
+      onPrewarmChannel={(channelId) => {
+        void loadVoiceRoomStage();
+        onPrewarmVoiceChannel?.(channelId);
+      }}
+      onRenameChannel={onOpenChannelSettings}
+      liveUserIds={liveUserIds}
+      speakingUserIds={speakingUserIds}
+      watchedStreamUserId={watchedStreamUserId}
+      joiningChannelId={joiningVoiceChannelId}
+      onWatchStream={onWatchStream}
+      canManageChannels={canManageChannels}
+      editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
+      editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}
+      onRenameValueChange={onUpdateChannelRenameValue}
+      onRenameSubmit={onSubmitChannelRename}
+      onRenameCancel={onCancelChannelRename}
+    />
+  );
 
   return (
     <>
@@ -1068,11 +1534,11 @@ export const ServersSidebar = memo(({
                 <span>Настройки сервера</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">⚙</span>
               </button>
-              <button type="button" onClick={() => runServerMenuAction(onAddTextChannel)} disabled={!canManageChannels}>
+              <button type="button" onClick={() => runServerMenuAction(() => openCreateChannelModal("", "text"))} disabled={!canManageChannels}>
                 <span>Создать канал</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">＋</span>
               </button>
-              <button type="button" onClick={() => runServerMenuAction(showUnavailableServerMenuAction)}>
+              <button type="button" onClick={() => runServerMenuAction(openCreateCategoryModal)} disabled={!canManageChannels}>
                 <span>Создать категорию</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">▣</span>
               </button>
@@ -1244,50 +1710,7 @@ export const ServersSidebar = memo(({
               <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
             </div>
             <ul className="channel-list">
-              {(activeServer?.textChannels || []).map((channel) => {
-                const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
-                const scopedChannelId = getScopedChatChannelId(activeServer?.id || "", channel.id);
-                const unreadCount = Number(serverUnreadCounts[scopedChannelId] || 0);
-                const hasDraft = Boolean(chatDraftPresence[scopedChannelId]);
-                const isTextChannelActive = desktopServerPane !== "voice" && currentTextChannel?.id === channel.id;
-
-                return (
-                  <li key={channel.id} className={`channel-item ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""}`}>
-                    {isEditing ? (
-                      <input
-                        className="channel-inline-input"
-                        type="text"
-                        value={channelRenameState.value}
-                        autoFocus
-                        spellCheck={false}
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        onChange={(event) => onUpdateChannelRenameValue(event.target.value)}
-                        onBlur={onSubmitChannelRename}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            onSubmitChannelRename();
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            onCancelChannelRename();
-                          }
-                        }}
-                      />
-                    ) : (
-                      <button type="button" className="channel-item__button" onClick={() => onSelectTextChannel(channel.id)}>
-                        <span className="channel-item__label">{getChannelDisplayName(channel.name, "text")}</span>
-                        {hasDraft ? <span className="channel-item__draft">Черновик</span> : null}
-                        {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
-                      </button>
-                    )}
-                    <button type="button" className="channel-edit-button" onClick={() => onOpenChannelSettings?.("text", channel)} aria-label="Настройки канала" disabled={!canManageChannels}>
-                      <img src={icons.settings} alt="" />
-                    </button>
-                  </li>
-                );
-              })}
+              {uncategorizedTextChannels.map(renderTextChannelItem)}
             </ul>
           </div>
 
@@ -1296,33 +1719,50 @@ export const ServersSidebar = memo(({
               <span>Голосовые каналы</span>
               <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
             </div>
-            <VoiceChannelList
-              channels={activeServer?.voiceChannels || []}
-              activeChannelId={currentVoiceChannel}
-              participantsMap={activeVoiceParticipantsMap}
-              serverId={activeServer?.id || ""}
-              serverMembers={activeServer?.members || []}
-              serverRoles={activeServer?.roles || []}
-              onJoinChannel={onJoinVoiceChannel}
-              onLeaveChannel={onLeaveVoiceChannel}
-              onPrewarmChannel={(channelId) => {
-                void loadVoiceRoomStage();
-                onPrewarmVoiceChannel?.(channelId);
-              }}
-              onRenameChannel={onOpenChannelSettings}
-              liveUserIds={liveUserIds}
-              speakingUserIds={speakingUserIds}
-              watchedStreamUserId={watchedStreamUserId}
-              joiningChannelId={joiningVoiceChannelId}
-              onWatchStream={onWatchStream}
-              canManageChannels={canManageChannels}
-              editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
-              editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}
-              onRenameValueChange={onUpdateChannelRenameValue}
-              onRenameSubmit={onSubmitChannelRename}
-              onRenameCancel={onCancelChannelRename}
-            />
+            {renderVoiceChannels(uncategorizedVoiceChannels)}
           </div>
+
+          {channelCategories.map((category) => {
+            const textChannels = (activeServer?.textChannels || []).filter((channel) => channel.categoryId === category.id);
+            const voiceChannels = (activeServer?.voiceChannels || []).filter((channel) => channel.categoryId === category.id);
+            const isCollapsed = Boolean(category.collapsed);
+            const hasChannels = textChannels.length > 0 || voiceChannels.length > 0;
+
+            return (
+              <div key={category.id} className="server-panel__section server-panel__section--category">
+                <div className="server-panel__header server-panel__header--category">
+                  <button
+                    type="button"
+                    className="server-panel__category-toggle"
+                    onClick={() => onToggleCategory?.(category.id)}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <span className={`server-panel__category-caret ${isCollapsed ? "" : "is-open"}`} aria-hidden="true">›</span>
+                    <span>{category.name}</span>
+                  </button>
+                  <button type="button" onClick={() => openCreateChannelModal(category.id, "text")} disabled={!canManageChannels}>+</button>
+                </div>
+
+                {!isCollapsed ? (
+                  hasChannels ? (
+                    <>
+                      {textChannels.length > 0 ? <ul className="channel-list">{textChannels.map(renderTextChannelItem)}</ul> : null}
+                      {voiceChannels.length > 0 ? renderVoiceChannels(voiceChannels) : null}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="server-panel__empty-category"
+                      onClick={() => openCreateChannelModal(category.id, "text")}
+                      disabled={!canManageChannels}
+                    >
+                      Создать первый канал
+                    </button>
+                  )
+                ) : null}
+              </div>
+            );
+          })}
         </>
       ) : null}
     </div>
@@ -1338,6 +1778,35 @@ export const ServersSidebar = memo(({
     onUpdateChannelSettings={onUpdateChannelSettings}
     onDeleteTextChannel={onDeleteTextChannel}
     onDeleteVoiceChannel={onDeleteVoiceChannel}
+  />
+  <CreateCategoryModal
+    open={createCategoryOpen}
+    name={createCategoryName}
+    isPrivate={createCategoryPrivate}
+    error={createCategoryError}
+    onClose={closeCreateCategoryModal}
+    onNameChange={(value) => {
+      setCreateCategoryName(value);
+      if (createCategoryError) {
+        setCreateCategoryError("");
+      }
+    }}
+    onPrivateChange={setCreateCategoryPrivate}
+    onSubmit={submitCreateCategory}
+  />
+  <CreateChannelModal
+    open={Boolean(createChannelDraft)}
+    draft={createChannelDraft || { type: "text", categoryId: "", name: "" }}
+    categories={channelCategories}
+    error={createChannelError}
+    onClose={closeCreateChannelModal}
+    onDraftChange={(draft) => {
+      setCreateChannelDraft(draft);
+      if (createChannelError) {
+        setCreateChannelError("");
+      }
+    }}
+    onSubmit={submitCreateChannel}
   />
     </>
   );
@@ -1391,6 +1860,8 @@ function ServerMainComponent({
   onScreenShareAction,
   onOpenCamera,
   onLeave,
+  onCreateForumPost,
+  onAddForumReply,
   getChannelDisplayName,
 }) {
   const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName && desktopServerPane === "voice");
@@ -1407,7 +1878,7 @@ function ServerMainComponent({
                   <span>{getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
                   {activeServerUnreadCount > 0 ? <span className="chat__topbar-badge">{Math.min(activeServerUnreadCount, 99)}</span> : null}
                 </strong>
-                <span>Текстовый канал сервера</span>
+                <span>{getTextChannelKind(currentTextChannel) === "forum" ? "Форум сервера" : "Текстовый канал сервера"}</span>
               </div>
             </div>
             <div className="chat__topbar-actions">
@@ -1494,6 +1965,12 @@ function ServerMainComponent({
             onClose={onCloseLocalSharePreview}
             debugInfo={localSharePreviewDebugInfo}
           />
+        ) : getTextChannelKind(currentTextChannel) === "forum" ? (
+          <ForumChannelView
+            channel={currentTextChannel}
+            onCreatePost={onCreateForumPost}
+            onAddReply={onAddForumReply}
+          />
         ) : (
           currentTextChannel ? (
             <TextChat
@@ -1565,6 +2042,8 @@ function areServerMainPropsEqual(previousProps, nextProps) {
     && previousProps.onScreenShareAction === nextProps.onScreenShareAction
     && previousProps.onOpenCamera === nextProps.onOpenCamera
     && previousProps.onLeave === nextProps.onLeave
+    && previousProps.onCreateForumPost === nextProps.onCreateForumPost
+    && previousProps.onAddForumReply === nextProps.onAddForumReply
     && previousProps.getChannelDisplayName === nextProps.getChannelDisplayName;
 }
 

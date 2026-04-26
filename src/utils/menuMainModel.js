@@ -509,9 +509,26 @@ export const createServer = (name, user, options = {}) => {
   ownerId,
   roles: createDefaultRoles(),
   members: [ownerMember],
+  channelCategories: [],
   textChannels: [{ id: createId("text"), name: "general" }],
   voiceChannels: [{ id: createId("voice"), name: "general_voice" }],
   };
+};
+export const normalizeChannelCategories = (categories) => {
+  if (!Array.isArray(categories)) {
+    return [];
+  }
+
+  return categories
+    .filter(Boolean)
+    .map((category, index) => ({
+      id: String(category?.id || createId("category")),
+      name: String(category?.name || `Категория ${index + 1}`).trim() || `Категория ${index + 1}`,
+      collapsed: Boolean(category?.collapsed),
+      privateCategory: Boolean(category?.privateCategory),
+      order: Number.isFinite(Number(category?.order)) ? Number(category.order) : index,
+    }))
+    .sort((first, second) => first.order - second.order);
 };
 export const normalizeChannels = (channels, type) => {
   const fallback = type === "text" ? DEFAULT_TEXT_CHANNELS : DEFAULT_VOICE_CHANNELS;
@@ -520,6 +537,7 @@ export const normalizeChannels = (channels, type) => {
     const normalizedChannel = {
       ...channel,
       id: String(channel?.id || fallback[index]?.id || createId(type)),
+      categoryId: String(channel?.categoryId || channel?.category_id || ""),
       name:
         type === "text"
           ? normalizeTextChannelName(channel?.name || fallback[index]?.name || "new-channel")
@@ -527,10 +545,31 @@ export const normalizeChannels = (channels, type) => {
     };
 
     if (type === "text") {
+      normalizedChannel.kind = String(channel?.kind || channel?.type || "text") === "forum" ? "forum" : "text";
       normalizedChannel.slowMode = String(channel?.slowMode || "off");
       normalizedChannel.topic = String(channel?.topic || "").slice(0, 1024);
       normalizedChannel.topicPreview = Boolean(channel?.topicPreview);
       normalizedChannel.autoArchiveDuration = String(channel?.autoArchiveDuration || "3d");
+      normalizedChannel.forumPosts = Array.isArray(channel?.forumPosts)
+        ? channel.forumPosts.map((post) => ({
+            id: String(post?.id || createId("forum-post")),
+            title: String(post?.title || "Новая публикация").trim() || "Новая публикация",
+            content: String(post?.content || ""),
+            authorName: String(post?.authorName || ""),
+            authorAvatar: String(post?.authorAvatar || ""),
+            createdAt: String(post?.createdAt || new Date().toISOString()),
+            reactions: Number(post?.reactions || 0),
+            replies: Array.isArray(post?.replies)
+              ? post.replies.map((reply) => ({
+                  id: String(reply?.id || createId("forum-reply")),
+                  text: String(reply?.text || ""),
+                  authorName: String(reply?.authorName || ""),
+                  authorAvatar: String(reply?.authorAvatar || ""),
+                  createdAt: String(reply?.createdAt || new Date().toISOString()),
+                }))
+              : [],
+          }))
+        : [];
     } else {
       normalizedChannel.bitrateKbps = Math.min(96, Math.max(8, Number(channel?.bitrateKbps || 64)));
       normalizedChannel.userLimit = Math.min(99, Math.max(0, Number(channel?.userLimit || 0)));
@@ -598,6 +637,7 @@ export const normalizeServers = (value, currentUser) => {
               ? createServerMember(currentUser, "owner")
               : { userId: nextOwnerId, name: "Owner", avatar: "", roleId: "owner" },
           ],
+      channelCategories: normalizeChannelCategories(server?.channelCategories || server?.categories),
       textChannels: normalizeChannels(server?.textChannels, "text"),
       voiceChannels: normalizeChannels(server?.voiceChannels, "voice"),
     });
@@ -733,6 +773,7 @@ export const normalizeFriend = (friend) => ({
   ),
   status: String(friend?.status || friend?.presence || friend?.presenceStatus || friend?.onlineStatus || ""),
   presence: String(friend?.presence || friend?.presenceStatus || friend?.onlineStatus || friend?.status || ""),
+  activity: friend?.activity || friend?.externalActivity || null,
   lastSeenAt: getUserLastSeenAt(friend),
   directChannelId: String(friend?.directChannelId || ""),
   isOnline: isUserCurrentlyOnline(friend),
@@ -808,6 +849,7 @@ export const FRIENDS_SIDEBAR_ITEMS = [
 export const SETTINGS_NAV_ITEMS = [
   { id: "personal_profile", label: "Личный профиль", section: "Пользователь" },
   { id: "devices", label: "Устройства", section: "Пользователь" },
+  { id: "integrations", label: "Интеграции", section: "Пользователь" },
   { id: "notifications", label: "Уведомления", section: "Пользователь" },
   { id: "voice_video", label: "Голос и видео", section: "Приложение" },
   { id: "appearance_accessibility", label: "Внешний вид и доступность", section: "Приложение" },

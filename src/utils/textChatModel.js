@@ -1,5 +1,3 @@
-import lottiefilesEmojiCatalog from "./lottiefilesEmojiCatalog.json";
-import { resolveStaticAssetUrl } from "./media";
 import { getPollPreview, parsePollMessage } from "./pollMessages";
 import { formatVoiceMessageDuration, normalizeVoiceMessageMetadata, restoreRussianSpeechPunctuation } from "./voiceMessages";
 import { autocorrectUserText } from "./textAutocorrect";
@@ -10,124 +8,218 @@ export const VOICE_LOCK_DRAG_THRESHOLD_PX = 34;
 export const VOICE_LEVEL_SAMPLE_INTERVAL_MS = 72;
 export const VOICE_RECORDING_AUDIO_BITS_PER_SECOND = 192000;
 export const VOICE_RECORDING_SAMPLE_RATE = 48000;
-export const VOICE_HIGH_PASS_FREQUENCY_HZ = 95;
-export const VOICE_PRESENCE_FREQUENCY_HZ = 2800;
-export const VOICE_PRESENCE_GAIN_DB = 1.8;
-export const VOICE_HIGH_SHELF_FREQUENCY_HZ = 5600;
-export const VOICE_HIGH_SHELF_GAIN_DB = 2.4;
+export const VOICE_HIGH_PASS_FREQUENCY_HZ = 105;
+export const VOICE_LOW_SHELF_FREQUENCY_HZ = 180;
+export const VOICE_LOW_SHELF_GAIN_DB = -2.2;
+export const VOICE_PRESENCE_FREQUENCY_HZ = 3150;
+export const VOICE_PRESENCE_GAIN_DB = 2.8;
+export const VOICE_HIGH_SHELF_FREQUENCY_HZ = 6200;
+export const VOICE_HIGH_SHELF_GAIN_DB = 1.2;
+export const VOICE_LOW_PASS_FREQUENCY_HZ = 9800;
+export const VOICE_OUTPUT_GAIN = 1.08;
 export const SPEECH_RECOGNITION_RESTART_DELAY_MS = 240;
 export const AUTO_PUNCTUATE_TYPED_MESSAGES = true;
 export const ENABLE_VOICE_MESSAGE_BUTTON = false; // voice messages are disabled; keep only speech-to-text input
 export const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
-const NORMALIZED_EMOJI_META = {
-  grinning: { glyph: "😀", label: "Улыбка" },
-  smile: { glyph: "😄", label: "Радость" },
-  beaming: { glyph: "😃", label: "Счастье" },
-  laugh: { glyph: "😂", label: "Смех" },
-  rofl: { glyph: "🤣", label: "Ржу" },
-  wink: { glyph: "😉", label: "Подмигивание" },
-  heart_eyes: { glyph: "😍", label: "Влюблён" },
-  cool: { glyph: "😎", label: "Круто" },
-  thinking: { glyph: "🤔", label: "Думаю" },
-  wow: { glyph: "😮", label: "Удивление" },
-  pleading: { glyph: "🥺", label: "Пожалуйста" },
-  cry: { glyph: "😭", label: "Плачу" },
-  angry: { glyph: "😡", label: "Злюсь" },
-  mind_blown: { glyph: "🤯", label: "Разрыв" },
-  party: { glyph: "🥳", label: "Праздник" },
-  fire: { glyph: "🔥", label: "Огонь" },
-  heart: { glyph: "❤️", label: "Любовь" },
-  thumbs_up: { glyph: "👍", label: "Нравится" },
-  lf_020_money: { glyph: "🤑", label: "Money" },
-  lf_028_emoji: { glyph: "🙂", label: "Emoji" },
-  lf_030_frustration_sticker: { glyph: "😡", label: "Frustration Sticker" },
-  "lf_030_frustration-sticker": { glyph: "😡", label: "Frustration Sticker" },
-  lf_032_emoji: { glyph: "🙂", label: "Emoji" },
-  lf_037_sad_emoji: { glyph: "😢", label: "Sad Emoji" },
-  "lf_037_sad-emoji": { glyph: "😢", label: "Sad Emoji" },
-  lf_047_emoji_meh: { glyph: "😐", label: "Emoji - Meh" },
-  "lf_047_emoji-meh": { glyph: "😐", label: "Emoji - Meh" },
-  "lf_050_rate-us-face-animation-step-5": { glyph: "🙂", label: "Rate us - Face Animation (Step 5)" },
-  "lf_051_angry-emoji": { glyph: "😡", label: "Angry Emoji" },
-  "lf_056_sad-failed": { glyph: "😢", label: "Sad - Failed" },
-  "lf_102_angry-emoji-lottie-json-animation": { glyph: "😡", label: "Angry emoji Lottie JSON animation" },
-  "lf_114_emoji-wow-happy-halloween-day": { glyph: "😄", label: "Emoji(wow) Happy Halloween Day" },
-  "lf_116_rate-us-face-animation-step-3": { glyph: "🙂", label: "Rate us - Face Animation (Step 3)" },
-  "lf_143_smile-05": { glyph: "😄", label: "smile_05" },
-  "lf_145_waving-hand": { glyph: "👋", label: "Waving hand" },
-  "lf_149_pointing-up-hand": { glyph: "☝️", label: "Pointing up hand" },
-  "lf_167_rate-us-face-animation-step-1": { glyph: "🙂", label: "Rate us - Face Animation (Step 1)" },
-  "lf_171_smiley-emoji": { glyph: "😄", label: "Smiley Emoji" },
-  "lf_172_nap-emoji": { glyph: "😴", label: "Nap Emoji" },
-  "lf_176_laughing-3d-emoji": { glyph: "😂", label: "Laughing 3D Emoji" },
-  "lf_182_happy-emoji": { glyph: "😄", label: "Happy Emoji" },
-  "lf_189_cry-3d-emoji": { glyph: "😭", label: "Cry 3D Emoji" },
-  "lf_208_angel-emoji-lottie-json-animation": { glyph: "😇", label: "Angel emoji Lottie JSON animation" },
-  "lf_214_pointing-down-hand": { glyph: "👇", label: "Pointing down hand" },
-  "lf_216_cry-emoji": { glyph: "😭", label: "Cry Emoji" },
-  "lf_218_heart-love": { glyph: "😍", label: "Heart Love" },
-  "lf_227_pointing-right-hand": { glyph: "👉", label: "Pointing right hand" },
-  "lf_228_smile-03": { glyph: "😄", label: "smile_03" },
-  "lf_232_dizzy-3d-emoji": { glyph: "😮", label: "Dizzy 3D Emoji" },
-  "lf_233_thumbs-up": { glyph: "👍", label: "Thumbs up" },
-  "lf_235_emoji-17": { glyph: "🙂", label: "Emoji 17" },
-  "lf_239_purple-face": { glyph: "🙂", label: "Purple Face" },
-  "lf_244_emoji-3": { glyph: "🙂", label: "Emoji 3" },
+
+const createEmojiOption = ([key, glyph, label]) => ({
+  key: `symbl_${key}`,
+  glyph,
+  label,
+});
+
+const SYMBL_SMILEYS_AND_EMOTION_DATA = [
+  ["grinning_face", "😀", "Ухмыляющееся лицо"],
+  ["winking_face", "😉", "Подмигивающее лицо"],
+  ["grinning_face_smiling_eyes", "😄", "Ухмыляющееся лицо со смеющимися глазами"],
+  ["squinting_laugh", "😆", "Смеющееся лицо с закрытыми глазами"],
+  ["sweat_smile", "😅", "Улыбка в холодном поту"],
+  ["face_tears_joy", "😂", "Лицо со слезами радости"],
+  ["smiling_face_smiling_eyes", "😊", "Улыбающееся лицо со смеющимися глазами"],
+  ["slightly_smiling_face", "🙂", "Слегка улыбающееся лицо"],
+  ["smiling_face_open_mouth_smiling_eyes", "😃", "Улыбающееся лицо с открытым ртом"],
+  ["upside_down_face", "🙃", "Лицо вверх ногами"],
+  ["smiling_face_halo", "😇", "Улыбающееся лицо с нимбом"],
+  ["smiling_face_open_mouth", "😮", "Улыбающееся лицо с открытым ртом"],
+  ["rolling_laugh", "🤣", "Катается по полу от смеха"],
+  ["melting_face", "🫠", "Плавящееся лицо"],
+  ["kissing_face_closed_eyes", "😚", "Целующееся лицо с закрытыми глазами"],
+  ["kissing_face_smiling_eyes", "😙", "Целующееся лицо со смеющимися глазами"],
+  ["heart_eyes", "😍", "Улыбающееся лицо с глазами-сердечками"],
+  ["kissing_face", "😗", "Целующееся лицо"],
+  ["face_blowing_kiss", "😘", "Лицо, посылающее поцелуй"],
+  ["smiling_face_hearts", "🥰", "Улыбающееся лицо с сердечками"],
+  ["smiling_face_tear", "🥲", "Улыбающееся лицо со слезой"],
+  ["star_struck", "🤩", "Ухмыляющееся лицо с глазами-звёздами"],
+  ["outlined_smile", "☺️", "Улыбающееся лицо"],
+  ["face_savoring_food", "😋", "Лицо, смакующее деликатес"],
+  ["face_tongue", "😛", "Лицо с высунутым языком"],
+  ["winking_tongue", "😜", "Лицо с языком и подмигиванием"],
+  ["squinting_tongue", "😝", "Лицо с языком и закрытыми глазами"],
+  ["zany_face", "🤪", "Ухмыляющееся лицо с разными глазами"],
+  ["money_mouth", "🤑", "Лицо со знаком доллара"],
+  ["thinking_face", "🤔", "Задумчивое лицо"],
+  ["hand_over_mouth", "🤭", "Лицо с рукой у рта"],
+  ["hugging_face", "🤗", "Обнимашки"],
+  ["shushing_face", "🤫", "Лицо с указательным пальцем у губ"],
+  ["saluting_face", "🫡", "Приветствующее лицо"],
+  ["open_eyes_hand_mouth", "🫢", "Лицо с рукой у рта"],
+  ["peeking_face", "🫣", "Подглядывающее лицо"],
+  ["neutral_face", "😐", "Нейтральное выражение лица"],
+  ["face_without_mouth", "😶", "Лицо без рта"],
+  ["grimacing_face", "😬", "Гримаса"],
+  ["smirking_face", "😏", "Усмехающееся лицо"],
+  ["expressionless_face", "😑", "Ничего не выражающее лицо"],
+  ["unamused_face", "😒", "Лицо с выражением неодобрения"],
+  ["rolling_eyes", "🙄", "Лицо с вращающимися глазами"],
+  ["raised_eyebrow", "🤨", "Лицо с поднятой бровью"],
+  ["zipper_mouth", "🤐", "Лицо с молнией вместо рта"],
+  ["lying_face", "🤥", "Лгущее лицо"],
+  ["shaking_face", "🫨", "Трясущееся лицо"],
+  ["dotted_line_face", "🫥", "Лицо пунктирной линией"],
+  ["relieved_face", "😌", "Расслабленное лицо"],
+  ["pensive_face", "😔", "Задумчивое лицо"],
+  ["sleepy_face", "😪", "Сонное лицо"],
+  ["sleeping_face", "😴", "Спящее лицо"],
+  ["drooling_face", "🤤", "Слюнки текут"],
+  ["face_bags_under_eyes", "🫩", "Лицо с мешками под глазами"],
+  ["medical_mask", "😷", "Лицо в медицинской маске"],
+  ["dizzy_face", "😵", "Головокружение"],
+  ["cold_face", "🥶", "Замерзающее лицо"],
+  ["sneezing_face", "🤧", "Чихает"],
+  ["exploding_head", "🤯", "Шокированное лицо"],
+  ["woozy_face", "🥴", "Лицо с неровными глазами"],
+  ["thermometer_face", "🤒", "Лицо с градусником"],
+  ["hot_face", "🥵", "Вспотевшее лицо"],
+  ["vomiting_face", "🤮", "Лицо блюющее"],
+  ["head_bandage", "🤕", "Лицо с повязкой на голове"],
+  ["nauseated_face", "🤢", "Тошнота"],
+  ["disguised_face", "🥸", "Замаскированное лицо"],
+  ["cowboy_hat_face", "🤠", "Лицо в ковбойской шляпе"],
+  ["partying_face", "🥳", "Лицо с праздничным рожком"],
+  ["sunglasses_face", "😎", "Улыбающееся лицо в солнечных очках"],
+  ["nerd_face", "🤓", "Лицо ботаника"],
+  ["monocle_face", "🧐", "Лицо с моноклем"],
+  ["confused_face", "😕", "Смущённое лицо"],
+  ["flushed_face", "😳", "Покрасневшее лицо"],
+  ["anguished_face", "😧", "Мучительное выражение лица"],
+  ["tired_face", "😫", "Усталое лицо"],
+  ["screaming_face", "😱", "Лицо, кричащее от страха"],
+  ["disappointed_face", "😞", "Разочарованное лицо"],
+  ["hushed_face", "😯", "Лицо с открытым ртом"],
+  ["loudly_crying_face", "😭", "Лицо громко плачет"],
+  ["anxious_sweat_face", "😰", "Лицо в холодном поту"],
+  ["weary_face", "😩", "Утомлённое лицо"],
+  ["crying_face", "😢", "Плачущее лицо"],
+  ["astonished_face", "😲", "Удивлённое лицо"],
+  ["fearful_face", "😨", "Лицо в страхе"],
+  ["slightly_frowning_face", "🙁", "Слегка нахмурившееся лицо"],
+  ["persevering_face", "😣", "Упорное выражение лица"],
+  ["open_mouth_cold_sweat", "😥", "Лицо с открытым ртом в холодном поту"],
+  ["pleading_face", "🥺", "Лицо с умоляющими глазами"],
+  ["yawning_face", "🥱", "Зевающее лицо"],
+  ["holding_back_tears", "🥹", "Лицо сдерживает слезы"],
+  ["diagonal_mouth", "🫤", "Лицо с диагональным ртом"],
+  ["confounded_face", "😖", "Искажённое лицо"],
+  ["angry_face", "😠", "Злое лицо"],
+  ["pouting_face", "😡", "Лицо, надувшее губы"],
+  ["symbols_mouth", "🤬", "Злое лицо с символами у рта"],
+  ["triumph_face", "😤", "Лицо с выражением триумфа"],
+  ["skull", "💀", "Череп"],
+  ["hundred_points", "💯", "Сто очков"],
+  ["kiss_mark", "💋", "Следы поцелуя"],
+  ["anger_symbol", "💢", "Гнев"],
+  ["collision", "💥", "Столкновение"],
+  ["sweat_droplets", "💦", "Брызги пота"],
+  ["dizzy", "💫", "Головокружение"],
+  ["speech_balloon", "💬", "Выноска для разговора"],
+  ["zzz", "💤", "Спать"],
+  ["decorative_heart", "💟", "Декоративное сердце"],
+  ["revolving_hearts", "💞", "Вращающиеся сердца"],
+  ["love_letter", "💌", "Любовное письмо"],
+  ["beating_heart", "💓", "Бьющееся сердце"],
+  ["two_hearts", "💕", "Два сердца"],
+  ["growing_heart", "💗", "Растущее сердце"],
+  ["broken_heart", "💔", "Разбитое сердце"],
+  ["heart_arrow", "💘", "Сердце, пронзённое стрелой"],
+  ["green_heart", "💚", "Зелёное сердце"],
+  ["blue_heart", "💙", "Голубое сердце"],
+  ["purple_heart", "💜", "Пурпурное сердце"],
+  ["yellow_heart", "💛", "Жёлтое сердце"],
+  ["sparkling_heart", "💖", "Игристое сердце"],
+  ["gift_heart", "💝", "Сердце с бантиком"],
+  ["black_heart", "🖤", "Чёрное сердце"],
+  ["orange_heart", "🧡", "Оранжевое сердце"],
+  ["brown_heart", "🤎", "Коричневое сердце"],
+  ["white_heart", "🤍", "Белое сердце"],
+  ["light_blue_heart", "🩵", "Светло-голубое сердце"],
+  ["pink_heart", "🩷", "Розовое сердце"],
+  ["grey_heart", "🩶", "Серое сердце"],
+  ["red_heart", "❤️", "Красное сердце"],
+  ["heart_exclamation", "❣️", "Восклицательный знак в виде сердца"],
+];
+
+const PRIORITY_SYMBL_EMOJI_KEYS = [
+  "melting_face",
+  "smiling_face_tear",
+  "star_struck",
+  "saluting_face",
+  "open_eyes_hand_mouth",
+  "peeking_face",
+  "shaking_face",
+  "dotted_line_face",
+  "holding_back_tears",
+  "diagonal_mouth",
+  "smiling_face_hearts",
+  "rolling_laugh",
+  "symbols_mouth",
+  "exploding_head",
+  "partying_face",
+  "speech_balloon",
+];
+
+const buildOrderedSymblEmojiOptions = () => {
+  const options = SYMBL_SMILEYS_AND_EMOTION_DATA.map(createEmojiOption);
+  const optionBySourceKey = new Map(options.map((option) => [option.key.replace(/^symbl_/, ""), option]));
+  const priorityOptions = PRIORITY_SYMBL_EMOJI_KEYS.map((key) => optionBySourceKey.get(key)).filter(Boolean);
+  const priorityKeys = new Set(priorityOptions.map((option) => option.key));
+  return [
+    ...priorityOptions,
+    ...options.filter((option) => !priorityKeys.has(option.key)),
+  ];
 };
 
-const normalizeEmojiOption = (emojiOption) => {
-  const normalizedMeta = NORMALIZED_EMOJI_META[String(emojiOption?.key || "").trim()] || {};
-  return {
-    ...emojiOption,
-    glyph: String(normalizedMeta.glyph || emojiOption?.glyph || "").trim(),
-    label: String(normalizedMeta.label || emojiOption?.label || "").trim(),
-  };
-};
 const LEGACY_COMPOSER_EMOJI_OPTIONS = [
-  { key: "grinning", glyph: "😀", label: "Улыбка" },
-  { key: "smile", glyph: "😄", label: "Радость" },
-  { key: "beaming", glyph: "😁", label: "Счастье" },
-  { key: "laugh", glyph: "😂", label: "Смех" },
-  { key: "rofl", glyph: "🤣", label: "Ржу" },
-  { key: "wink", glyph: "😉", label: "Подмигивание" },
-  { key: "heart_eyes", glyph: "😍", label: "Влюблён" },
-  { key: "cool", glyph: "😎", label: "Круто" },
-  { key: "thinking", glyph: "🤔", label: "Думаю" },
-  { key: "pleading", glyph: "🥺", label: "Пожалуйста" },
+  { key: "grinning", glyph: "🫠", label: "Плавящееся лицо" },
+  { key: "smile", glyph: "🥲", label: "Улыбающееся лицо со слезой" },
+  { key: "beaming", glyph: "🤩", label: "Глаза-звёзды" },
+  { key: "laugh", glyph: "🤣", label: "Катается по полу от смеха" },
+  { key: "rofl", glyph: "🤣", label: "Смех до слёз" },
+  { key: "wink", glyph: "🫡", label: "Приветствующее лицо" },
+  { key: "heart_eyes", glyph: "🥰", label: "Улыбающееся лицо с сердечками" },
+  { key: "cool", glyph: "🫢", label: "Лицо с рукой у рта" },
+  { key: "thinking", glyph: "🫣", label: "Подглядывающее лицо" },
+  { key: "wow", glyph: "🫨", label: "Трясущееся лицо" },
+  { key: "pleading", glyph: "🥹", label: "Лицо сдерживает слезы" },
+  { key: "cry", glyph: "🫤", label: "Лицо с диагональным ртом" },
+  { key: "angry", glyph: "🤬", label: "Злое лицо с символами у рта" },
+  { key: "mind_blown", glyph: "🤯", label: "Шок" },
   { key: "party", glyph: "🥳", label: "Праздник" },
-  { key: "fire", glyph: "🔥", label: "Огонь" },
-  { key: "cry", glyph: "😭", label: "Плачу" },
-  { key: "angry", glyph: "😡", label: "Злость" },
+  { key: "fire", glyph: "💥", label: "Столкновение" },
   { key: "heart", glyph: "❤️", label: "Любовь" },
-  { key: "thumbs_up", glyph: "👍", label: "Нравится" },
+  { key: "thumbs_up", glyph: "💯", label: "Сто очков" },
 ];
 const LEGACY_MESSAGE_REACTION_OPTIONS = [
-  { key: "grinning", glyph: "😀", label: "Улыбка" },
-  { key: "smile", glyph: "😄", label: "Радость" },
-  { key: "beaming", glyph: "😁", label: "Сияю" },
-  { key: "laugh", glyph: "😂", label: "Смешно" },
-  { key: "rofl", glyph: "🤣", label: "Очень смешно" },
-  { key: "heart_eyes", glyph: "😍", label: "Влюблён" },
-  { key: "wink", glyph: "😉", label: "Подмигиваю" },
-  { key: "cool", glyph: "😎", label: "Круто" },
-  { key: "thinking", glyph: "🤔", label: "Думаю" },
-  { key: "wow", glyph: "😮", label: "Удивление" },
-  { key: "pleading", glyph: "🥺", label: "Пожалуйста" },
-  { key: "cry", glyph: "😭", label: "Плачу" },
-  { key: "angry", glyph: "😡", label: "Злюсь" },
-  { key: "mind_blown", glyph: "🤯", label: "Разрыв" },
-  { key: "party", glyph: "🥳", label: "Праздник" },
-  { key: "fire", glyph: "🔥", label: "Огонь" },
+  ...LEGACY_COMPOSER_EMOJI_OPTIONS,
 ];
-const LEGACY_EMOJI_OPTIONS = [...LEGACY_COMPOSER_EMOJI_OPTIONS, ...LEGACY_MESSAGE_REACTION_OPTIONS].map(normalizeEmojiOption);
-export const COMPOSER_EMOJI_OPTIONS = lottiefilesEmojiCatalog.map((emojiOption) => ({
-  ...normalizeEmojiOption(emojiOption),
-  assetUrl: resolveStaticAssetUrl(emojiOption.assetPath),
-}));
+const LEGACY_EMOJI_OPTIONS = [...LEGACY_COMPOSER_EMOJI_OPTIONS, ...LEGACY_MESSAGE_REACTION_OPTIONS];
+export const COMPOSER_EMOJI_OPTIONS = buildOrderedSymblEmojiOptions();
 export const MESSAGE_REACTION_OPTIONS = COMPOSER_EMOJI_OPTIONS;
 export const PRIMARY_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(0, 8);
 export const STICKER_MESSAGE_REACTION_OPTIONS = MESSAGE_REACTION_OPTIONS.slice(8);
-const ANIMATED_EMOJI_BY_KEY = new Map(MESSAGE_REACTION_OPTIONS.map((emojiOption) => [emojiOption.key, emojiOption]));
+const ANIMATED_EMOJI_BY_KEY = new Map(
+  [...LEGACY_EMOJI_OPTIONS, ...MESSAGE_REACTION_OPTIONS].map((emojiOption) => [emojiOption.key, emojiOption])
+);
 const ANIMATED_EMOJI_BY_GLYPH = new Map(
   [...LEGACY_EMOJI_OPTIONS, ...MESSAGE_REACTION_OPTIONS].map((emojiOption) => [emojiOption.glyph, emojiOption])
 );

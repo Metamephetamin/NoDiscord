@@ -828,6 +828,10 @@ const handleDeviceChange = () => {
     };
   };
 
+  const usesModelNoiseSuppression = (mode = noiseSuppressionMode) => (
+    mode === NOISE_SUPPRESSION_MODE_AI || mode === NOISE_SUPPRESSION_MODE_HARD_GATE
+  );
+
   const buildMicConstraints = ({ deviceId = selectedInputDeviceId, relaxed = false } = {}) => ({
     deviceId:
       deviceId && deviceId !== "default"
@@ -837,7 +841,7 @@ const handleDeviceChange = () => {
     ...(echoCancellationEnabled && getSupportedMediaConstraints().echoCancellationType
       ? { echoCancellationType: { ideal: "system" } }
       : {}),
-    noiseSuppression: true,
+    noiseSuppression: usesModelNoiseSuppression() ? false : true,
     autoGainControl: false,
     voiceIsolation: undefined,
     googEchoCancellation: echoCancellationEnabled,
@@ -847,9 +851,9 @@ const handleDeviceChange = () => {
     googEchoCancellation3: echoCancellationEnabled,
     googAutoGainControl: false,
     googExperimentalAutoGainControl: false,
-    googNoiseSuppression: true,
-    googNoiseSuppression2: true,
-    googHighpassFilter: true,
+    googNoiseSuppression: usesModelNoiseSuppression() ? false : true,
+    googNoiseSuppression2: usesModelNoiseSuppression() ? false : true,
+    googHighpassFilter: usesModelNoiseSuppression() ? false : true,
     googTypingNoiseDetection: true,
     channelCount: relaxed ? undefined : 1,
     sampleRate: relaxed ? undefined : AUDIO_SAMPLE_RATE,
@@ -1067,79 +1071,81 @@ const handleDeviceChange = () => {
   const resolveVoiceDynamicsProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        highPassFrequency: 160,
-        highPassQ: 0.9,
-        highPassStages: 4,
+        highPassFrequency: 120,
+        highPassQ: 0.82,
+        highPassStages: 2,
         lowBump: {
-          triggerDb: 10,
-          attackTime: 0.001,
-          holdMs: 70,
-          releaseTime: 0.14,
-          reductionDb: -30,
-          minRms: 0.006,
+          triggerDb: 12,
+          attackTime: 0.002,
+          holdMs: 54,
+          releaseTime: 0.12,
+          reductionDb: -20,
+          minRms: 0.008,
         },
         transient: {
-          triggerDb: 9,
+          triggerDb: 12,
           attackTime: 0.001,
-          holdMs: 20,
+          holdMs: 12,
           releaseTime: 0.06,
-          reductionDb: -16,
-          minRms: 0.004,
+          reductionDb: -6,
+          minRms: 0.006,
         },
         deEsser: {
-          triggerDb: 7,
+          triggerDb: 10,
           attackTime: 0.001,
-          holdMs: 34,
-          releaseTime: 0.075,
-          reductionDb: -8,
-          minRms: 0.003,
+          holdMs: 18,
+          releaseTime: 0.09,
+          reductionDb: -2.5,
+          minRms: 0.005,
         },
         compressor: {
-          threshold: -18,
-          knee: 8,
-          ratio: 2.5,
-          attack: 0.015,
-          release: 0.12,
+          threshold: -28,
+          knee: 12,
+          ratio: 2.8,
+          attack: 0.012,
+          release: 0.11,
         },
+        makeupGainDb: 14,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_AI) {
       return {
-        highPassFrequency: 140,
-        highPassQ: 0.85,
-        highPassStages: 3,
+        highPassFrequency: 110,
+        highPassQ: 0.78,
+        highPassStages: 2,
         lowBump: {
-          triggerDb: 11,
+          triggerDb: 12,
           attackTime: 0.002,
-          holdMs: 58,
-          releaseTime: 0.13,
-          reductionDb: -24,
-          minRms: 0.006,
+          holdMs: 48,
+          releaseTime: 0.12,
+          reductionDb: -16,
+          minRms: 0.008,
         },
         transient: {
+          triggerDb: 12,
+          attackTime: 0.001,
+          holdMs: 12,
+          releaseTime: 0.065,
+          reductionDb: -5,
+          minRms: 0.006,
+        },
+        deEsser: {
           triggerDb: 10,
           attackTime: 0.001,
           holdMs: 18,
-          releaseTime: 0.065,
-          reductionDb: -13,
-          minRms: 0.004,
-        },
-        deEsser: {
-          triggerDb: 8,
-          attackTime: 0.001,
-          holdMs: 28,
-          releaseTime: 0.08,
-          reductionDb: -6.5,
-          minRms: 0.003,
+          releaseTime: 0.09,
+          reductionDb: -2,
+          minRms: 0.005,
         },
         compressor: {
-          threshold: -19,
-          knee: 9,
-          ratio: 2.4,
-          attack: 0.016,
-          release: 0.13,
+          threshold: -28,
+          knee: 12,
+          ratio: 2.6,
+          attack: 0.014,
+          release: 0.12,
         },
+        makeupGainDb: 12,
       };
     }
 
@@ -1179,6 +1185,7 @@ const handleDeviceChange = () => {
           attack: 0.018,
           release: 0.14,
         },
+        makeupGainDb: 6,
       };
     }
 
@@ -1217,6 +1224,7 @@ const handleDeviceChange = () => {
         attack: 0.02,
         release: 0.15,
       },
+      makeupGainDb: 3,
     };
   };
 
@@ -1225,29 +1233,29 @@ const handleDeviceChange = () => {
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_AI) {
       return {
-        openThreshold: 0.032,
-        closeThreshold: 0.018,
-        floorGain: 0.008,
-        attackTime: 0.003,
-        releaseTime: 0.075,
-        holdMs: 145,
-        adaptiveOpenRatio: 2.7,
-        adaptiveCloseRatio: 1.55,
-        maxAdaptiveOpenThreshold: 0.086,
+        openThreshold: 0.008,
+        closeThreshold: 0.004,
+        floorGain: 0.12,
+        attackTime: 0.002,
+        releaseTime: 0.16,
+        holdMs: 260,
+        adaptiveOpenRatio: 1.45,
+        adaptiveCloseRatio: 1.12,
+        maxAdaptiveOpenThreshold: 0.026,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        openThreshold: 0.052,
-        closeThreshold: 0.033,
-        floorGain: 0.00002,
-        attackTime: 0.0025,
-        releaseTime: 0.052,
-        holdMs: 245,
-        adaptiveOpenRatio: 3.1,
-        adaptiveCloseRatio: 1.8,
-        maxAdaptiveOpenThreshold: 0.12,
+        openThreshold: 0.01,
+        closeThreshold: 0.005,
+        floorGain: 0.075,
+        attackTime: 0.0015,
+        releaseTime: 0.14,
+        holdMs: 280,
+        adaptiveOpenRatio: 1.55,
+        adaptiveCloseRatio: 1.16,
+        maxAdaptiveOpenThreshold: 0.032,
       };
     }
 
@@ -1507,6 +1515,9 @@ const handleDeviceChange = () => {
     compressorNode.attack.value = dynamicsProfile.compressor?.attack ?? 0.018;
     compressorNode.release.value = dynamicsProfile.compressor?.release ?? 0.14;
 
+    const makeupGainNode = audioContext.createGain();
+    makeupGainNode.gain.value = dbToLinearGain(dynamicsProfile.makeupGainDb ?? 1);
+
     const limiterNode = audioContext.createDynamicsCompressor();
     limiterNode.threshold.value = -1;
     limiterNode.knee.value = 0;
@@ -1542,7 +1553,8 @@ const handleDeviceChange = () => {
     noiseGateNode.connect(deEsserDetectorFilter);
     deEsserDetectorFilter.connect(deEsserAnalyser);
     deEsserGainNode.connect(compressorNode);
-    compressorNode.connect(limiterNode);
+    compressorNode.connect(makeupGainNode);
+    makeupGainNode.connect(limiterNode);
 
     localNoiseGateNode = noiseGateNode;
     localNoiseGateAnalyser = noiseGateAnalyser;
@@ -1597,43 +1609,43 @@ const handleDeviceChange = () => {
   });
 
   const buildHardGateVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 160,
-    highPassQ: 1.12,
-    highPassStages: 4,
-    mudCutFrequency: 320,
-    mudCutQ: 1.34,
-    mudCutGain: -5.4,
-    boxCutFrequency: 900,
-    boxCutQ: 1.55,
-    boxCutGain: -4.2,
-    presenceFrequency: 2240,
-    presenceQ: 1.34,
-    presenceGain: 3.2,
-    airFrequency: 4100,
-    airGain: -5.2,
-    lowPassFrequency: 4800,
-    lowPassQ: 1.05,
+    highPassFrequency: 120,
+    highPassQ: 0.82,
+    highPassStages: 2,
+    mudCutFrequency: 285,
+    mudCutQ: 1.12,
+    mudCutGain: -2.8,
+    boxCutFrequency: 720,
+    boxCutQ: 1.2,
+    boxCutGain: -1.6,
+    presenceFrequency: 2550,
+    presenceQ: 1.05,
+    presenceGain: 2.6,
+    airFrequency: 5200,
+    airGain: 0.4,
+    lowPassFrequency: 8500,
+    lowPassQ: 0.8,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
     dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
   });
 
   const buildAiNoiseSuppressionVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 140,
-    highPassQ: 0.92,
-    highPassStages: 3,
-    mudCutFrequency: 285,
-    mudCutQ: 1.16,
-    mudCutGain: -3.4,
-    boxCutFrequency: 720,
-    boxCutQ: 1.16,
-    boxCutGain: -2.1,
+    highPassFrequency: 110,
+    highPassQ: 0.78,
+    highPassStages: 2,
+    mudCutFrequency: 265,
+    mudCutQ: 1.05,
+    mudCutGain: -2.2,
+    boxCutFrequency: 650,
+    boxCutQ: 1.1,
+    boxCutGain: -1.2,
     presenceFrequency: 2500,
     presenceQ: 1.0,
-    presenceGain: 1.45,
+    presenceGain: 2.2,
     airFrequency: 5200,
-    airGain: -3.8,
-    lowPassFrequency: 6800,
-    lowPassQ: 0.9,
+    airGain: 0.2,
+    lowPassFrequency: 8800,
+    lowPassQ: 0.78,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_AI),
     dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_AI),
   });

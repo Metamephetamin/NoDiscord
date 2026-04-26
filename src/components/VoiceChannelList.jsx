@@ -18,6 +18,9 @@ const getVoiceDisplayName = (name) => {
   return normalized.split(/\s+/)[0] || normalized;
 };
 
+const normalizeVoiceUserLimit = (value) => Math.min(99, Math.max(0, Number(value) || 0));
+const formatVoiceLimitCount = (value) => String(Math.min(99, Math.max(0, Number(value) || 0))).padStart(2, "0");
+
 const VoiceChannelList = ({
   channels,
   activeChannelId,
@@ -80,6 +83,9 @@ const VoiceChannelList = ({
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
+        const userLimit = normalizeVoiceUserLimit(channel.userLimit);
+        const shouldShowLimit = userLimit > 0;
+        const participantCount = participants.length;
         const canJoinFromRow = !isEditing && !isJoining;
         const triggerPrewarm = () => {
           onPrewarmChannel?.(channel.id);
@@ -149,6 +155,13 @@ const VoiceChannelList = ({
                   disabled={isJoining}
                 >
                   <span className="voice-channel__title">{channel.name}</span>
+                  {shouldShowLimit ? (
+                    <span className="voice-channel__count" aria-label={`${participantCount} / ${userLimit}`}>
+                      <span>{formatVoiceLimitCount(participantCount)}</span>
+                      <span aria-hidden="true">/</span>
+                      <span>{formatVoiceLimitCount(userLimit)}</span>
+                    </span>
+                  ) : null}
                   {isJoining ? <span className="voice-channel__status">Подключаемся...</span> : null}
                 </button>
               )}

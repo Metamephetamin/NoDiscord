@@ -20,6 +20,7 @@ public class ChatHub : Hub
     private const int MaxAttachmentsPerMessage = 12;
     private const int MaxReactionKeyLength = 32;
     private const int MaxReactionGlyphLength = 16;
+    private const int MaxReactionsPerMessageByUser = 3;
     private const int MaxMentionHandleLength = 80;
     private const int MaxMentionDisplayNameLength = 160;
     private const int MaxMentionsPerMessage = 24;
@@ -558,6 +559,17 @@ public class ChatHub : Hub
         }
         else
         {
+            var userReactions = await _context.MessageReactions
+                .Where(item => item.MessageId == messageId && item.ReactorUserId == currentUser.UserId)
+                .OrderBy(item => item.CreatedAt)
+                .ThenBy(item => item.Id)
+                .ToListAsync();
+
+            if (userReactions.Count >= MaxReactionsPerMessageByUser)
+            {
+                _context.MessageReactions.Remove(userReactions[0]);
+            }
+
             _context.MessageReactions.Add(new MessageReactionRecord
             {
                 MessageId = messageId,

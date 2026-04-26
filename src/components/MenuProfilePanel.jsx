@@ -161,6 +161,7 @@ export default function MenuProfilePanel({
   userAvatarSrc,
   userAvatarFrame,
   displayName,
+  activityStatus,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -276,6 +277,7 @@ export default function MenuProfilePanel({
             />
             <div className="profile__names">
               <span className="profile__username">{displayName}</span>
+              {activityStatus ? <span className="profile__activity-status">{activityStatus}</span> : null}
             </div>
           </button>
 
