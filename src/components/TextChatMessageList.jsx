@@ -34,6 +34,25 @@ function getMessageRenderId(messageItem) {
   return String(messageItem?.id || messageItem?.clientId || messageItem?.localId || "");
 }
 
+function getMentionSegmentCacheKey(mentions) {
+  if (!Array.isArray(mentions) || !mentions.length) {
+    return "";
+  }
+
+  return mentions
+    .map((mention) => [
+      mention?.type || "",
+      mention?.userId || "",
+      mention?.roleId || "",
+      mention?.displayName || "",
+      mention?.text || "",
+      mention?.color || "",
+      mention?.start ?? "",
+      mention?.end ?? "",
+    ].join(":"))
+    .join("|");
+}
+
 function getChatSystemEventText(systemEvent) {
   const actorName = String(systemEvent?.actorDisplayName || "").trim() || "Кто-то";
   const targetName = String(systemEvent?.targetDisplayName || "").trim() || "участника";
@@ -675,7 +694,13 @@ function MessageMediaOverlayFooter({ messageItem, isOwnMessage }) {
 }
 
 const MessageText = memo(function MessageText({ text, mentions, currentUserId }) {
-  return segmentMessageTextByMentions(text, mentions).map((segment, index) => {
+  const mentionCacheKey = getMentionSegmentCacheKey(mentions);
+  const segments = useMemo(
+    () => segmentMessageTextByMentions(text, mentions),
+    [mentionCacheKey, mentions, text]
+  );
+
+  return segments.map((segment, index) => {
     if (segment.isMention) {
       const isSelfUserMention = String(segment.type || "") !== "role" && String(segment.userId || "") === currentUserId;
       const roleMentionStyle = segment.color
@@ -1617,7 +1642,7 @@ function TextChatMessageList({
   ), [visibleMessages]);
   const duplicateMessageIdSet = useMemo(() => {
     const countById = new Map();
-    messages.forEach((messageItem) => {
+    visibleMessages.forEach((messageItem) => {
       const messageId = getMessageRenderId(messageItem);
       if (!messageId) {
         return;
@@ -1631,7 +1656,7 @@ function TextChatMessageList({
         .filter(([, count]) => count > 1)
         .map(([messageId]) => messageId)
     );
-  }, [messages]);
+  }, [visibleMessages]);
 
   useEffect(() => {
     if (!duplicateMessageIdSet.size) {

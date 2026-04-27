@@ -172,6 +172,37 @@ import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../
 const MAX_PROFILE_NICKNAME_LENGTH = 50;
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
 const DEVICE_SESSION_REFRESH_TOKEN_HEADER = "X-Refresh-Token";
+const EMPTY_ARRAY = Object.freeze([]);
+const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
+  if (!sections[item.section]) {
+    sections[item.section] = [];
+  }
+
+  sections[item.section].push(item);
+  return sections;
+}, {});
+const NOISE_PROFILE_OPTIONS = [
+  {
+    id: "transparent",
+    title: "Студия",
+    description: "Естественный голос с лёгким EQ и мягкой компрессией, почти без заметного шумодава.",
+  },
+  {
+    id: "broadcast",
+    title: "Эфир",
+    description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
+  },
+  {
+    id: "ai_noise_suppression",
+    title: "AI шумодав",
+    description: "Тяжелая RNNoise/WASM-модель перед отправкой голоса: лучше режет клавиатуру, вентилятор и фон.",
+  },
+  {
+    id: "hard_gate",
+    title: "Hard RNNoise",
+    description: "Агрессивно давит фон и посторонние звуки, оставляя в приоритете почти только голос.",
+  },
+];
 let voiceRoomClientFactoryPromise = null;
 
 function loadVoiceRoomClientFactory() {
@@ -231,6 +262,16 @@ const clampDeviceVolumePercent = (value, fallback = 100) => {
 
   return Math.max(0, Math.min(MAX_DEVICE_VOLUME_PERCENT, Math.round(numericValue)));
 };
+
+function useStableEvent(handler) {
+  const handlerRef = useRef(handler);
+
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
+  return useCallback((...args) => handlerRef.current?.(...args), []);
+}
 
 const withListOrder = (items = []) => items.map((item, index) => ({ ...item, order: index }));
 
@@ -640,7 +681,7 @@ export default function MenuMain({
     voiceClientRef,
     user,
     activeServerId: activeServer?.id || "",
-    voiceChannels: activeServer?.voiceChannels || [],
+    voiceChannels: activeServer?.voiceChannels || EMPTY_ARRAY,
     getScopedVoiceChannelId,
     ensureVoiceClientReady,
   });
@@ -727,15 +768,19 @@ export default function MenuMain({
     () => new Map((activeServer?.members || []).map((member) => [String(member.userId), String(member.name || "").trim()])),
     [activeServer?.members]
   );
+  const roleColorById = useMemo(
+    () => new Map((activeServer?.roles || []).map((role) => [String(role.id), role.color || "#7b89a8"])),
+    [activeServer?.roles]
+  );
   const memberRoleColorByUserId = useMemo(
     () =>
       new Map(
-        (activeServer?.members || []).map((member) => {
-          const role = (activeServer?.roles || []).find((item) => item.id === member.roleId);
-          return [String(member.userId), role?.color || "#7b89a8"];
-        })
+        (activeServer?.members || []).map((member) => [
+          String(member.userId),
+          roleColorById.get(String(member.roleId)) || "#7b89a8",
+        ])
       ),
-    [activeServer?.members, activeServer?.roles]
+    [activeServer?.members, roleColorById]
   );
   const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
   const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
@@ -7095,16 +7140,10 @@ export default function MenuMain({
   };
 
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
-  const settingsNavSections = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
-    if (!sections[item.section]) {
-      sections[item.section] = [];
-    }
-
-    sections[item.section].push(item);
-    return sections;
-  }, {});
-  const mobileSettingsNavItems = SETTINGS_NAV_ITEMS.filter(
-    (item) => activeServer || (item.id !== "server" && item.id !== "roles")
+  const settingsNavSections = SETTINGS_NAV_SECTIONS;
+  const mobileSettingsNavItems = useMemo(
+    () => SETTINGS_NAV_ITEMS.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles")),
+    [activeServer]
   );
   const activeSettingsTabMeta =
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
@@ -7121,28 +7160,7 @@ export default function MenuMain({
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
   const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
   const outputSelectionAvailable = outputSelectionSupported && audioOutputDevices.length > 0;
-  const noiseProfileOptions = [
-    {
-      id: "transparent",
-      title: "Студия",
-      description: "Естественный голос с лёгким EQ и мягкой компрессией, почти без заметного шумодава.",
-    },
-    {
-      id: "broadcast",
-      title: "Эфир",
-      description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
-    },
-    {
-      id: "ai_noise_suppression",
-      title: "AI шумодав",
-      description: "Тяжелая RNNoise/WASM-модель перед отправкой голоса: лучше режет клавиатуру, вентилятор и фон.",
-    },
-    {
-      id: "hard_gate",
-      title: "Hard RNNoise",
-      description: "Агрессивно давит фон и посторонние звуки, оставляя в приоритете почти только голос.",
-    },
-  ];
+  const noiseProfileOptions = NOISE_PROFILE_OPTIONS;
   const activeNoiseProfile =
     noiseProfileOptions.find((option) => option.id === noiseSuppressionMode) || noiseProfileOptions[0];
   const displayedPingMs = currentVoiceChannel ? resolvedVoicePingMs : resolvedApiPingMs;
@@ -7316,6 +7334,25 @@ export default function MenuMain({
       {renderSettingsContent()}
     </MenuMainMobileSettingsShell>
   );
+  const closeServerInviteModal = useCallback(() => setServerInviteModalOpen(false), []);
+  const clearChannelSearch = useCallback(() => setChannelSearchQuery(""), []);
+  const stableOpenDirectChat = useStableEvent(openDirectChat);
+  const stableStartDirectCallWithUser = useStableEvent(startDirectCallWithUser);
+  const stableHandleAddServer = useStableEvent(handleAddServer);
+  const stableOpenLocalSharePreview = useStableEvent(openLocalSharePreview);
+  const stableCloseLocalSharePreview = useStableEvent(closeLocalSharePreview);
+  const stableHandlePreviewStream = useStableEvent(handlePreviewStream);
+  const stableHandleWatchStream = useStableEvent(handleWatchStream);
+  const stableStopScreenShare = useStableEvent(stopScreenShare);
+  const stableStopCameraShare = useStableEvent(stopCameraShare);
+  const stableHandleScreenShareAction = useStableEvent(handleScreenShareAction);
+  const stableOpenCameraModal = useStableEvent(openCameraModal);
+  const stableLeaveVoiceChannel = useStableEvent(leaveVoiceChannel);
+  const stableJoinVoiceChannel = useStableEvent(joinVoiceChannel);
+  const stableCreateForumPost = useStableEvent(createForumPost);
+  const stableAddForumReply = useStableEvent(addForumReply);
+  const stableToggleMicMute = useStableEvent(toggleMicMute);
+  const stableToggleSoundMute = useStableEvent(toggleSoundMute);
   const directCallPanelProps = {
     call: directCallState,
     history: directCallHistory,
@@ -7340,17 +7377,17 @@ export default function MenuMain({
     onAccept: acceptDirectCall,
     onDecline: declineDirectCall,
     onEnd: endDirectCall,
-    onToggleMic: toggleMicMute,
-    onToggleSound: toggleSoundMute,
-    onScreenShareAction: handleScreenShareAction,
-    onOpenCamera: openCameraModal,
-    onWatchPeerStream: () => handleWatchStream(directCallState.peerUserId),
+    onToggleMic: stableToggleMicMute,
+    onToggleSound: stableToggleSoundMute,
+    onScreenShareAction: stableHandleScreenShareAction,
+    onOpenCamera: stableOpenCameraModal,
+    onWatchPeerStream: () => stableHandleWatchStream(directCallState.peerUserId),
     onSelectInputDevice: setSelectedInputDeviceId,
     onSelectOutputDevice: setSelectedOutputDeviceId,
     onToggleMiniMode: setDirectCallMiniMode,
     onDismiss: dismissDirectCallOverlay,
     onRetry: retryDirectCall,
-    onRedialHistoryItem: startDirectCallWithUser,
+    onRedialHistoryItem: stableStartDirectCallWithUser,
   };
   const profilePanelProps = {
     currentVoiceChannel,
@@ -7386,14 +7423,14 @@ export default function MenuMain({
     audioVolume,
     activeMicMenuBars,
     openSettingsPanel,
-    handleScreenShareAction,
-    openCameraModal,
-    leaveVoiceChannel,
+    handleScreenShareAction: stableHandleScreenShareAction,
+    openCameraModal: stableOpenCameraModal,
+    leaveVoiceChannel: stableLeaveVoiceChannel,
     leaveCurrentVoiceContext,
     handleAvatarChange,
     handleServerIconChange,
-    toggleMicMute,
-    toggleSoundMute,
+    toggleMicMute: stableToggleMicMute,
+    toggleSoundMute: stableToggleSoundMute,
     setShowMicMenu,
     setShowSoundMenu,
     handleInputDeviceChange,
@@ -7626,7 +7663,7 @@ export default function MenuMain({
             return;
           }
 
-          startDirectCallWithUser(friendListProfileModal.userId);
+          stableStartDirectCallWithUser(friendListProfileModal.userId);
           setFriendListProfileModal(null);
         }}
         onAddFriend={() => {}}
@@ -7638,7 +7675,7 @@ export default function MenuMain({
     friendListProfileModal,
     friendListUserContextMenu,
     friendListUserContextMenuSections,
-    startDirectCallWithUser,
+    stableStartDirectCallWithUser,
   ]);
   const renderFriendsSidebar = () => (
     <FriendsSidebar
@@ -7659,7 +7696,7 @@ export default function MenuMain({
       onOpenServersWorkspace={openServersWorkspace}
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
-      onOpenDirectChat={openDirectChat}
+      onOpenDirectChat={stableOpenDirectChat}
       onOpenConversationChat={openConversationChat}
       onOpenUserContextMenu={openFriendListUserContextMenu}
       overlayContent={friendListOverlayElement}
@@ -7701,14 +7738,14 @@ export default function MenuMain({
       inviteFriends={directConversationTargets}
       isServerInviteModalOpen={serverInviteModalOpen}
       onOpenServerInviteModal={openServerInviteModal}
-      onCloseServerInviteModal={() => setServerInviteModalOpen(false)}
+      onCloseServerInviteModal={closeServerInviteModal}
       onCreateServerInviteLink={createServerInviteLinkForModal}
       onSendServerInviteToFriend={sendServerInviteToFriend}
       onUpdateMemberNickname={updateMemberNickname}
       onUpdateMemberVoiceState={updateMemberVoiceState}
       onUpdateMemberRole={updateMemberRole}
       onCopyServerInvite={copyServerInviteLink}
-      onAddServer={handleAddServer}
+      onAddServer={stableHandleAddServer}
       onAddTextChannel={addTextChannel}
       onAddVoiceChannel={addVoiceChannel}
       onCreateCategory={createChannelCategory}
@@ -7725,10 +7762,10 @@ export default function MenuMain({
       onUpdateChannelRenameValue={updateChannelRenameValue}
       onSubmitChannelRename={submitChannelRename}
       onCancelChannelRename={cancelChannelRename}
-      onJoinVoiceChannel={joinVoiceChannel}
-      onLeaveVoiceChannel={leaveVoiceChannel}
+      onJoinVoiceChannel={stableJoinVoiceChannel}
+      onLeaveVoiceChannel={stableLeaveVoiceChannel}
       onPrewarmVoiceChannel={prewarmVoiceChannel}
-      onWatchStream={handleWatchStream}
+      onWatchStream={stableHandleWatchStream}
       canManageTargetMember={canManageTargetMember}
       canAssignRoleToMember={canAssignRoleToMember}
       canInviteToServer={canInviteToServer}
@@ -7775,7 +7812,7 @@ export default function MenuMain({
       conversationActionLoading={conversationActionLoading}
       onResetDirect={resetActiveFriendWorkspaceSelection}
       onSetFriendsSection={setFriendsPageSection}
-      onOpenDirectChat={openDirectChat}
+      onOpenDirectChat={stableOpenDirectChat}
       onOpenConversationChat={openConversationChat}
       onCreateConversation={handleCreateConversation}
       onUploadConversationAvatar={handleUploadConversationAvatar}
@@ -7800,7 +7837,7 @@ export default function MenuMain({
         return result;
       }}
       onClearConversationStatus={() => setConversationActionStatus("")}
-      onStartDirectCall={startDirectCallWithUser}
+      onStartDirectCall={stableStartDirectCallWithUser}
       onOpenDirectActions={openFriendListUserContextMenu}
       onCloseSelectedStream={closeSelectedStream}
       onFriendRequestAction={handleFriendRequestAction}
@@ -7815,7 +7852,7 @@ export default function MenuMain({
         }
       }}
       onDirectSearchQueryChange={setChannelSearchQuery}
-      onClearDirectSearchQuery={() => setChannelSearchQuery("")}
+      onClearDirectSearchQuery={clearChannelSearch}
       onAddFriend={handleAddFriend}
       onOpenServersWorkspace={openServersWorkspace}
       onImportServer={handleImportServer}
@@ -7850,35 +7887,35 @@ export default function MenuMain({
       searchIcon={SEARCH_ICON_URL}
       user={user}
       directConversationTargets={directConversationTargets}
-      serverMembers={activeServer?.members || []}
-      serverRoles={activeServer?.roles || []}
+      serverMembers={activeServer?.members || EMPTY_ARRAY}
+      serverRoles={activeServer?.roles || EMPTY_ARRAY}
       textChatNavigationRequest={textChatNavigationRequest}
       onTextChatNavigationIndexChange={setTextChatNavigationIndex}
-      onOpenDirectChat={openDirectChat}
-      onStartDirectCall={startDirectCallWithUser}
-      onOpenLocalSharePreview={openLocalSharePreview}
-      onPreviewStream={handlePreviewStream}
-      onWatchStream={handleWatchStream}
+      onOpenDirectChat={stableOpenDirectChat}
+      onStartDirectCall={stableStartDirectCallWithUser}
+      onOpenLocalSharePreview={stableOpenLocalSharePreview}
+      onPreviewStream={stableHandlePreviewStream}
+      onWatchStream={stableHandleWatchStream}
       onChannelSearchChange={setChannelSearchQuery}
-      onClearChannelSearch={() => setChannelSearchQuery("")}
-      onAddServer={handleAddServer}
+      onClearChannelSearch={clearChannelSearch}
+      onAddServer={stableHandleAddServer}
       onCloseSelectedStream={closeSelectedStream}
-      onStopCameraShare={stopCameraShare}
-      onStopScreenShare={stopScreenShare}
-      onCloseLocalSharePreview={closeLocalSharePreview}
+      onStopCameraShare={stableStopCameraShare}
+      onStopScreenShare={stableStopScreenShare}
+      onCloseLocalSharePreview={stableCloseLocalSharePreview}
       isMicMuted={isMicMuted}
       isSoundMuted={isSoundMuted}
       isScreenShareActive={isScreenShareActive}
       isCameraShareActive={isCameraShareActive}
-      onToggleMic={toggleMicMute}
-      onToggleSound={toggleSoundMute}
+      onToggleMic={stableToggleMicMute}
+      onToggleSound={stableToggleSoundMute}
       onOpenTextChat={openDesktopTextChatPane}
-      onScreenShareAction={handleScreenShareAction}
-      onOpenCamera={openCameraModal}
-      onLeave={leaveVoiceChannel}
-      onJoinVoiceChannel={joinVoiceChannel}
-      onCreateForumPost={createForumPost}
-      onAddForumReply={addForumReply}
+      onScreenShareAction={stableHandleScreenShareAction}
+      onOpenCamera={stableOpenCameraModal}
+      onLeave={stableLeaveVoiceChannel}
+      onJoinVoiceChannel={stableJoinVoiceChannel}
+      onCreateForumPost={stableCreateForumPost}
+      onAddForumReply={stableAddForumReply}
       getChannelDisplayName={getChannelDisplayName}
     />
   );
@@ -7903,7 +7940,7 @@ export default function MenuMain({
       onServerPointerDown={handleServerShortcutPointerDown}
       onServerPointerUp={handleServerShortcutPointerUp}
       onServerPointerCancel={handleServerShortcutPointerCancel}
-      onAddServer={handleAddServer}
+      onAddServer={stableHandleAddServer}
       getServerIconFrame={getServerIconFrame}
     />
   );
@@ -7917,7 +7954,7 @@ export default function MenuMain({
       onServerPointerDown={handleServerShortcutPointerDown}
       onServerPointerUp={handleServerShortcutPointerUp}
       onServerPointerCancel={handleServerShortcutPointerCancel}
-      onAddServer={handleAddServer}
+      onAddServer={stableHandleAddServer}
       getServerIconFrame={getServerIconFrame}
     />
   );
@@ -7931,8 +7968,8 @@ export default function MenuMain({
       getDisplayName={getDisplayName}
       textChatNavigationRequest={textChatNavigationRequest}
       onTextChatNavigationIndexChange={setTextChatNavigationIndex}
-      onClearChannelSearch={() => setChannelSearchQuery("")}
-      onStartDirectCall={startDirectCallWithUser}
+      onClearChannelSearch={clearChannelSearch}
+      onStartDirectCall={stableStartDirectCallWithUser}
     />
   );
   const renderMobileVoiceRoom = () => (
@@ -7956,17 +7993,17 @@ export default function MenuMain({
       }}
       onOpenFullscreen={openMobileVoiceStageFullscreen}
       onCloseRemoteStream={closeSelectedStream}
-      onCloseLocalPreview={closeLocalSharePreview}
-      onStopScreenShare={stopScreenShare}
-      onStopCameraShare={stopCameraShare}
-      onWatchStream={handleWatchStream}
+      onCloseLocalPreview={stableCloseLocalSharePreview}
+      onStopScreenShare={stableStopScreenShare}
+      onStopCameraShare={stableStopCameraShare}
+      onWatchStream={stableHandleWatchStream}
       onInvite={handleInvitePeopleToVoice}
-      onToggleMic={toggleMicMute}
-      onToggleSound={toggleSoundMute}
+      onToggleMic={stableToggleMicMute}
+      onToggleSound={stableToggleSoundMute}
       onOpenChat={openMobileServersChatPane}
-      onScreenShareAction={handleScreenShareAction}
-      onOpenCamera={openCameraModal}
-      onLeave={leaveVoiceChannel}
+      onScreenShareAction={stableHandleScreenShareAction}
+      onOpenCamera={stableOpenCameraModal}
+      onLeave={stableLeaveVoiceChannel}
     />
   );
   const renderMobileProfileScreen = () => (

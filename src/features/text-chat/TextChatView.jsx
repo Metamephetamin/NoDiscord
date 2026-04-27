@@ -215,19 +215,6 @@ export default function TextChatView(props) {
   const latestOwnMessageSignatureRef = useRef("");
   const scheduleAggressiveScrollToLatest = useStableCallback(() => {
     forceScrollToLatest("auto");
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      forceScrollToLatest("auto");
-    });
-    window.setTimeout(() => {
-      forceScrollToLatest("auto");
-    }, 60);
-    window.setTimeout(() => {
-      forceScrollToLatest("auto");
-    }, 180);
   });
   const stableRequestScrollToLatest = useStableCallback(() => {
     scheduleAggressiveScrollToLatest();

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
@@ -17,8 +17,16 @@ export default function TextChatMediaPreview({
 }) {
   const dragStateRef = useRef(null);
   const dragDistanceRef = useRef(0);
+  const pendingPanDeltaRef = useRef({ x: 0, y: 0 });
+  const pendingPanFrameRef = useRef(0);
   const lastWheelNavigationAtRef = useRef(0);
   const viewportRef = useRef(null);
+  const latestStateRef = useRef({
+    hasGallery: false,
+    onNavigate,
+    onPan,
+    onZoom,
+  });
   const [isDragging, setIsDragging] = useState(false);
   const zoom = Number(mediaPreview?.zoom) || 1;
   const hasGallery = (mediaPreview?.items?.length || 0) > 1;
@@ -31,8 +39,8 @@ export default function TextChatMediaPreview({
     event.stopPropagation();
   };
 
-  const buildZoomAnchor = (event) => {
-    const rect = event?.currentTarget?.getBoundingClientRect?.();
+  const buildZoomAnchor = useCallback((event) => {
+    const rect = (event?.currentTarget || viewportRef.current)?.getBoundingClientRect?.();
     if (!rect?.width || !rect?.height) {
       return null;
     }
@@ -43,7 +51,29 @@ export default function TextChatMediaPreview({
       offsetXRatio: (event.clientX - rect.left) / rect.width,
       offsetYRatio: (event.clientY - rect.top) / rect.height,
     };
-  };
+  }, []);
+
+  const flushPendingPan = useCallback(() => {
+    pendingPanFrameRef.current = 0;
+    const delta = pendingPanDeltaRef.current;
+    pendingPanDeltaRef.current = { x: 0, y: 0 };
+    if (delta.x || delta.y) {
+      latestStateRef.current.onPan?.(delta.x, delta.y);
+    }
+  }, []);
+
+  const schedulePan = useCallback((deltaX, deltaY) => {
+    pendingPanDeltaRef.current = {
+      x: pendingPanDeltaRef.current.x + deltaX,
+      y: pendingPanDeltaRef.current.y + deltaY,
+    };
+
+    if (pendingPanFrameRef.current || typeof window === "undefined") {
+      return;
+    }
+
+    pendingPanFrameRef.current = window.requestAnimationFrame(flushPendingPan);
+  }, [flushPendingPan]);
 
   const handlePointerDown = (event) => {
     if (!canPan) {
@@ -73,7 +103,7 @@ export default function TextChatMediaPreview({
       x: event.clientX,
       y: event.clientY,
     };
-    onPan?.(deltaX, deltaY);
+    schedulePan(deltaX, deltaY);
   };
 
   const handlePointerEnd = (event) => {
@@ -96,7 +126,7 @@ export default function TextChatMediaPreview({
     onClose?.();
   };
 
-  const handleWheelAction = (event) => {
+  const handleWheelAction = useCallback((event) => {
     const deltaY = Number(event.deltaY || 0);
     if (!deltaY) {
       return;
@@ -108,11 +138,11 @@ export default function TextChatMediaPreview({
         MEDIA_PREVIEW_ZOOM_STEP,
         Math.min(0.9, Math.abs(deltaY) * WHEEL_ZOOM_SENSITIVITY)
       );
-      onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep, buildZoomAnchor(event));
+      latestStateRef.current.onZoom?.(deltaY < 0 ? adaptiveStep : -adaptiveStep, buildZoomAnchor(event));
       return;
     }
 
-    if (!hasGallery) {
+    if (!latestStateRef.current.hasGallery) {
       return;
     }
 
@@ -124,8 +154,17 @@ export default function TextChatMediaPreview({
 
     lastWheelNavigationAtRef.current = now;
     event.preventDefault();
-    onNavigate?.(deltaY > 0 ? 1 : -1);
-  };
+    latestStateRef.current.onNavigate?.(deltaY > 0 ? 1 : -1);
+  }, [buildZoomAnchor]);
+
+  useEffect(() => {
+    latestStateRef.current = {
+      hasGallery,
+      onNavigate,
+      onPan,
+      onZoom,
+    };
+  }, [hasGallery, onNavigate, onPan, onZoom]);
 
   useEffect(() => {
     const viewportNode = viewportRef.current;
@@ -142,6 +181,13 @@ export default function TextChatMediaPreview({
       viewportNode.removeEventListener("wheel", handleNativeWheel);
     };
   }, [handleWheelAction]);
+
+  useEffect(() => () => {
+    if (pendingPanFrameRef.current && typeof window !== "undefined") {
+      window.cancelAnimationFrame(pendingPanFrameRef.current);
+      pendingPanFrameRef.current = 0;
+    }
+  }, []);
 
   useEffect(() => {
     if (!mediaPreview) {
@@ -188,7 +234,7 @@ export default function TextChatMediaPreview({
                 }}
                 aria-label="Предыдущее вложение"
               >
-                ‹
+                {"<"}
               </button>
               <button
                 type="button"
@@ -199,7 +245,7 @@ export default function TextChatMediaPreview({
                 }}
                 aria-label="Следующее вложение"
               >
-                ›
+                {">"}
               </button>
             </>
           ) : null}

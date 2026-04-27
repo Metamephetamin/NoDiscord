@@ -8,6 +8,7 @@ import { createId, formatUserPresenceStatus, isUserCurrentlyOnline } from "../ut
 
 const loadVoiceRoomStage = () => import("./VoiceRoomStage");
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
+const EMPTY_CHANNEL_LIST = Object.freeze([]);
 
 function VoiceChannelPreview({ channel, participants = [], isJoining = false, onJoin }) {
   const participantCount = Array.isArray(participants) ? participants.length : 0;
@@ -225,6 +226,23 @@ const getOrderedItems = (items = []) =>
   });
 
 const getDragCategoryId = (categoryId) => String(categoryId || "");
+
+const groupOrderedChannelsByCategory = (channels = EMPTY_CHANNEL_LIST) => {
+  const groupedChannels = new Map();
+
+  getOrderedItems(channels).forEach((channel) => {
+    const categoryId = getDragCategoryId(channel?.categoryId);
+    const categoryChannels = groupedChannels.get(categoryId);
+    if (categoryChannels) {
+      categoryChannels.push(channel);
+      return;
+    }
+
+    groupedChannels.set(categoryId, [channel]);
+  });
+
+  return groupedChannels;
+};
 
 const encodeChannelDragPayload = (payload) => JSON.stringify(payload);
 
@@ -1437,15 +1455,20 @@ export const ServersSidebar = memo(({
   const showUnavailableServerMenuAction = () => {
     onShowServerFeedback?.("Этот раздел пока не подключён.");
   };
-  const channelCategories = useMemo(() => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : []), [activeServer]);
-  const uncategorizedTextChannels = useMemo(
-    () => getOrderedItems((activeServer?.textChannels || []).filter((channel) => !channel.categoryId)),
-    [activeServer]
+  const channelCategories = useMemo(
+    () => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : EMPTY_CHANNEL_LIST),
+    [activeServer?.channelCategories]
   );
-  const uncategorizedVoiceChannels = useMemo(
-    () => getOrderedItems((activeServer?.voiceChannels || []).filter((channel) => !channel.categoryId)),
-    [activeServer]
+  const textChannelsByCategory = useMemo(
+    () => groupOrderedChannelsByCategory(activeServer?.textChannels || EMPTY_CHANNEL_LIST),
+    [activeServer?.textChannels]
   );
+  const voiceChannelsByCategory = useMemo(
+    () => groupOrderedChannelsByCategory(activeServer?.voiceChannels || EMPTY_CHANNEL_LIST),
+    [activeServer?.voiceChannels]
+  );
+  const uncategorizedTextChannels = textChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
+  const uncategorizedVoiceChannels = voiceChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
   const canDragChannels = Boolean(canManageChannels && activeServer);
   const endDrag = () => {
     dragEndedRef.current = true;
@@ -1951,8 +1974,9 @@ export const ServersSidebar = memo(({
           </div>
 
           {channelCategories.map((category) => {
-            const textChannels = getOrderedItems((activeServer?.textChannels || []).filter((channel) => channel.categoryId === category.id));
-            const voiceChannels = getOrderedItems((activeServer?.voiceChannels || []).filter((channel) => channel.categoryId === category.id));
+            const categoryId = getDragCategoryId(category.id);
+            const textChannels = textChannelsByCategory.get(categoryId) || EMPTY_CHANNEL_LIST;
+            const voiceChannels = voiceChannelsByCategory.get(categoryId) || EMPTY_CHANNEL_LIST;
             const isCollapsed = Boolean(category.collapsed);
             const hasChannels = textChannels.length > 0 || voiceChannels.length > 0;
 
