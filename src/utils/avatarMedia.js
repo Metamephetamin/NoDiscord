@@ -233,7 +233,8 @@ async function readBrowserVideoMetadataDuration(file) {
   if (
     typeof window === "undefined"
     || typeof document === "undefined"
-    || typeof URL?.createObjectURL !== "function"
+    || typeof URL === "undefined"
+    || typeof URL.createObjectURL !== "function"
   ) {
     return 0;
   }
@@ -324,6 +325,79 @@ async function readBrowserVideoMetadataDuration(file) {
     });
 
     return Number.isFinite(duration) && duration > 0 ? duration : 0;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+export async function readMediaFileDimensions(file) {
+  if (
+    !file
+    || typeof window === "undefined"
+    || typeof document === "undefined"
+    || typeof URL === "undefined"
+    || typeof URL.createObjectURL !== "function"
+  ) {
+    return null;
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  const extension = getAvatarFileExtension(file.name);
+  const normalizedType = String(file.type || "").toLowerCase().trim();
+  const isVideoFile = extension === ".mp4" || normalizedType.startsWith("video/");
+
+  try {
+    return await new Promise((resolve) => {
+      let settled = false;
+      let timeoutId = 0;
+      let element = null;
+
+      const finalize = (value) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        window.clearTimeout(timeoutId);
+        if (element) {
+          element.onload = null;
+          element.onerror = null;
+          element.onloadedmetadata = null;
+          if (isVideoFile) {
+            element.removeAttribute("src");
+            element.load?.();
+          }
+        }
+        resolve(value);
+      };
+
+      timeoutId = window.setTimeout(() => finalize(null), 4000);
+
+      if (isVideoFile) {
+        element = document.createElement("video");
+        element.preload = "metadata";
+        element.muted = true;
+        element.playsInline = true;
+        element.onloadedmetadata = () => {
+          const width = Number(element.videoWidth || 0);
+          const height = Number(element.videoHeight || 0);
+          finalize(width > 0 && height > 0 ? { width, height } : null);
+        };
+        element.onerror = () => finalize(null);
+        element.src = objectUrl;
+        element.load();
+        return;
+      }
+
+      element = new Image();
+      element.onload = () => {
+        const width = Number(element.naturalWidth || element.width || 0);
+        const height = Number(element.naturalHeight || element.height || 0);
+        finalize(width > 0 && height > 0 ? { width, height } : null);
+      };
+      element.onerror = () => finalize(null);
+      element.src = objectUrl;
+    });
   } finally {
     URL.revokeObjectURL(objectUrl);
   }

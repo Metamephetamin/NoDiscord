@@ -48,11 +48,14 @@ export default function MediaFrameEditorModal({
   avatarFrame = null,
   avatarAlt = "",
   mediaType = "",
+  autoFrame = null,
   onCancel,
   onConfirm,
 }) {
   const previewFrameRef = useRef(null);
   const dragStateRef = useRef(null);
+  const draftTouchedRef = useRef(false);
+  const sourceRef = useRef("");
   const suppressBackdropCloseRef = useRef(false);
   const [draftFrame, setDraftFrame] = useState(() => normalizeMediaFrame(frame));
   const copy = TARGET_COPY[target] || TARGET_COPY.avatar;
@@ -61,12 +64,21 @@ export default function MediaFrameEditorModal({
 
   useEffect(() => {
     if (!open) {
+      sourceRef.current = "";
+      draftTouchedRef.current = false;
+      return;
+    }
+
+    if (sourceRef.current !== source) {
+      sourceRef.current = source;
+      draftTouchedRef.current = false;
+    } else if (draftTouchedRef.current) {
       return;
     }
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftFrame(normalizeMediaFrame(frame));
-  }, [frame, open]);
+  }, [frame, open, source]);
 
   useEffect(() => {
     if (!open) {
@@ -132,6 +144,7 @@ export default function MediaFrameEditorModal({
     }
 
     event.preventDefault();
+    draftTouchedRef.current = true;
     dragStateRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -141,6 +154,7 @@ export default function MediaFrameEditorModal({
 
   const handleZoomChange = (event) => {
     const nextZoom = clamp(Number(event.target.value) || 1, 1, 5);
+    draftTouchedRef.current = true;
     setDraftFrame((previous) => ({
       ...normalizeMediaFrame(previous),
       zoom: nextZoom,
@@ -148,7 +162,8 @@ export default function MediaFrameEditorModal({
   };
 
   const handleReset = () => {
-    setDraftFrame(getDefaultMediaFrame());
+    draftTouchedRef.current = true;
+    setDraftFrame(normalizeMediaFrame(autoFrame || getDefaultMediaFrame()));
   };
 
   const handleBackdropClick = (event) => {
@@ -177,12 +192,10 @@ export default function MediaFrameEditorModal({
           </div>
           <button
             type="button"
-            className="stream-modal__close"
+            className="settings-popup__close media-frame-editor__close"
             onClick={onCancel}
             aria-label="Закрыть редактор кадра"
-          >
-            x
-          </button>
+          />
         </div>
 
         {isAvatarEditor ? (

@@ -6,6 +6,11 @@ const DEFAULT_FRAME = Object.freeze({
 const MIN_MEDIA_FRAME_ZOOM = 1;
 const MAX_MEDIA_FRAME_ZOOM = 5;
 const MEDIA_FRAME_TRAVEL_MULTIPLIER = 160;
+const TARGET_ASPECT_RATIO = Object.freeze({
+  avatar: 1,
+  serverIcon: 1,
+  profileBackground: 5.6,
+});
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -16,6 +21,39 @@ const normalizeNumericValue = (value, fallback) => {
 
 export function getDefaultMediaFrame() {
   return { ...DEFAULT_FRAME };
+}
+
+export function getAutoMediaFrame({ width, height, target = "avatar" } = {}) {
+  const mediaWidth = normalizeNumericValue(width, 0);
+  const mediaHeight = normalizeNumericValue(height, 0);
+  if (mediaWidth <= 0 || mediaHeight <= 0) {
+    return getDefaultMediaFrame();
+  }
+
+  const mediaAspectRatio = mediaWidth / mediaHeight;
+  const targetAspectRatio = TARGET_ASPECT_RATIO[target] || TARGET_ASPECT_RATIO.avatar;
+
+  if (target === "profileBackground") {
+    if (mediaAspectRatio < 1) {
+      return normalizeMediaFrame({ x: 50, y: 32, zoom: 1 });
+    }
+
+    return normalizeMediaFrame({
+      x: 50,
+      y: mediaAspectRatio < targetAspectRatio ? 38 : 45,
+      zoom: 1,
+    });
+  }
+
+  if (mediaAspectRatio < 0.82) {
+    return normalizeMediaFrame({ x: 50, y: 38, zoom: 1 });
+  }
+
+  if (mediaAspectRatio < 1.12) {
+    return normalizeMediaFrame({ x: 50, y: 44, zoom: 1 });
+  }
+
+  return getDefaultMediaFrame();
 }
 
 export function getMediaFramePositionBounds(zoomValue = DEFAULT_FRAME.zoom) {

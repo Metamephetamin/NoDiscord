@@ -204,6 +204,7 @@ export const AccountSettings = ({
   profileBackgroundFrame,
   avatarSrc,
   avatarFrame,
+  accountName,
   displayName,
   nickname,
   email,
@@ -228,9 +229,9 @@ export const AccountSettings = ({
   const isEditingDisplayName = editingAccountField === "displayName";
   const isEditingNickname = editingAccountField === "nickname";
   const isEditingEmail = editingAccountField === "email" || emailChangeState?.awaitingCode;
-  const normalizedDisplayName = String(displayName || "").trim();
+  const normalizedAccountName = String(accountName || "").trim();
   const normalizedNickname = String(nickname || "").trim();
-  const shouldShowHeaderNickname = normalizedNickname && normalizedNickname !== normalizedDisplayName;
+  const headerDisplayName = normalizedNickname || normalizedAccountName || displayName;
 
   return (
     <div className="settings-shell__content settings-shell__content--account">
@@ -254,10 +255,9 @@ export const AccountSettings = ({
           )}
         </div>
         <div className="account-settings-panel__identity">
-          <AnimatedAvatar className="account-settings-panel__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+          <AnimatedAvatar className="account-settings-panel__avatar" src={avatarSrc} alt={headerDisplayName} frame={avatarFrame} />
           <div className="account-settings-panel__name">
-            <strong>{displayName}</strong>
-            {shouldShowHeaderNickname ? <span>{nickname}</span> : null}
+            <strong>{headerDisplayName}</strong>
           </div>
           <button type="button" className="settings-inline-button" onClick={onOpenProfileSettings}>
             Визуал профиля
@@ -268,7 +268,7 @@ export const AccountSettings = ({
           <div className="account-settings-row">
             <div className="account-settings-row__copy">
               <strong>Имя пользователя</strong>
-              <span>{displayName}</span>
+              <span>{normalizedAccountName || "Не указано"}</span>
             </div>
             <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(isEditingDisplayName ? "" : "displayName")}>
               {isEditingDisplayName ? "Скрыть" : "Изменить"}

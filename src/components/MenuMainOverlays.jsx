@@ -1073,6 +1073,7 @@ export const MediaFrameEditorOverlay = ({
     avatarFrame={avatarFrame}
     avatarAlt={avatarAlt}
     mediaType={state?.file?.type || ""}
+    autoFrame={state?.autoFrame}
     onCancel={onCancel}
     onConfirm={onConfirm}
   />

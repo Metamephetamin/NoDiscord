@@ -7,6 +7,7 @@ import { recordPerfEvent } from "../utils/perf";
 let optimizedMediaEndpointDisabled = false;
 const failedOptimizedMediaSourceSet = new Set();
 const MEDIA_SOURCE_FAILURE_COOLDOWN_MS = 60000;
+const MAX_OPTIMIZED_MEDIA_EDGE = 1600;
 const failedMediaSourceExpiryMap = new Map();
 
 function getMediaSourceFailureExpiry(value) {
@@ -78,8 +79,8 @@ export default function AnimatedMedia({
     && !isVideoSource
     && !isMediaSourceCoolingDown;
   const isAnimatedImage = !isVideoSource && !isMediaSourceCoolingDown && isAnimatedAvatarUrl(resolvedSrc);
-  const targetWidth = Math.max(32, Math.min(512, Math.round((bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
-  const targetHeight = Math.max(32, Math.min(512, Math.round((bounds.height || bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
+  const targetWidth = Math.max(32, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
+  const targetHeight = Math.max(32, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.height || bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
   const optimizedImageSrc = useMemo(
     () => (
       canOptimizeImage && resolvedSrc

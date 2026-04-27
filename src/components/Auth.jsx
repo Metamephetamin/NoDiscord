@@ -281,6 +281,7 @@ export default function Auth({ onAuthSuccess }) {
   const [qrLoginStatus, setQrLoginStatus] = useState("loading");
   const [qrLoginError, setQrLoginError] = useState("");
   const [qrLoginRefreshIndex, setQrLoginRefreshIndex] = useState(0);
+  const [isQrLoginOpen, setIsQrLoginOpen] = useState(false);
   const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
   const [typedSloganLength, setTypedSloganLength] = useState(0);
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
@@ -927,6 +928,7 @@ export default function Auth({ onAuthSuccess }) {
   const switchMode = (nextMode) => {
     setMode(nextMode);
     setLoginMethod("code");
+    setIsQrLoginOpen(false);
     setMessage("");
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
@@ -938,6 +940,7 @@ export default function Auth({ onAuthSuccess }) {
 
   const switchLoginMethod = () => {
     setLoginMethod((previous) => (previous === "code" ? "password" : "code"));
+    setIsQrLoginOpen(false);
     setMessage("");
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
@@ -968,7 +971,7 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   return (
-    <div className="auth-page">
+    <div className={["auth-page", mode === "login" ? "auth-page--login" : "auth-page--register", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")}>
       <video
         ref={authVideoRef}
         className="auth-video-bg"
@@ -1023,10 +1026,7 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-card__main">
           <div className="auth-card__heading">
             {mode === "login" ? (
-              <h2 className="auth-card__title auth-card__title--login" aria-label="Вход">
-                <span className="auth-card__title-primary">ВХ</span>
-                <span className="auth-card__title-accent">ОД</span>
-              </h2>
+              <h2 className="auth-card__title auth-card__title--login">Вход</h2>
             ) : (
               <h2 className="auth-card__title">Регистрация</h2>
             )}
@@ -1034,7 +1034,7 @@ export default function Auth({ onAuthSuccess }) {
 
           {mode === "login" ? (
             <div className="auth-section">
-              <div className="auth-section__title">Данные для входа</div>
+              <div className="auth-section__title">Введите email</div>
               <label className="auth-field">
                 <input
                   className={`auth-input ${loginErrors.identifier ? "auth-input--error" : ""}`}
@@ -1191,6 +1191,24 @@ export default function Auth({ onAuthSuccess }) {
                 : "Зарегистрироваться"}
           </button>
 
+          {mode === "login" ? (
+            <>
+              <div className="auth-login-divider">
+                <span>или</span>
+              </div>
+              <button
+                type="button"
+                className="auth-qr-entry"
+                onClick={() => setIsQrLoginOpen((previous) => !previous)}
+                aria-expanded={isQrLoginOpen}
+              >
+                <span className="auth-qr-entry__icon" aria-hidden="true" />
+                <span>Войти по QR-коду</span>
+                <span className="auth-qr-entry__arrow" aria-hidden="true" />
+              </button>
+            </>
+          ) : null}
+
           <div className="auth-card__links">
             {mode === "login" ? (
               <button
@@ -1218,10 +1236,13 @@ export default function Auth({ onAuthSuccess }) {
           {message ? <p className={`auth-message auth-message--${authMessageTone}`}>{message}</p> : null}
         </div>
 
-        <aside className={`auth-card__side ${mode === "login" ? "auth-card__side--qr" : ""}`}>
-          {mode === "login" ? (
+        {mode === "login" && isQrLoginOpen ? (
+          <aside className="auth-card__side auth-card__side--qr">
             <div className="auth-qr-login" aria-live="polite">
-              <div className="auth-qr-login__title">Вход по QR-коду</div>
+              <div className="auth-qr-login__title">
+                <span>Отсканируйте QR-код</span>
+                <span>в приложении</span>
+              </div>
               <div className={`auth-qr-login__code ${qrLoginStatus === "expired" ? "auth-qr-login__code--muted" : ""}`}>
                 {qrLoginSvg ? (
                   <>
@@ -1241,17 +1262,20 @@ export default function Auth({ onAuthSuccess }) {
                     ? "Вход подтверждён."
                     : qrLoginStatus === "expired"
                       ? "QR-код устарел."
-                      : qrLoginStatus === "error"
+                  : qrLoginStatus === "error"
                         ? qrLoginError || "QR-вход недоступен."
                         : ""}
               </div>
-              {qrLoginStatus === "expired" || qrLoginStatus === "error" ? (
-                <button type="button" className="auth-switch-link auth-qr-login__refresh" onClick={refreshQrLoginSession}>
-                  Обновить QR-код
-                </button>
-              ) : null}
+              <button type="button" className="auth-switch-link auth-qr-login__refresh" onClick={refreshQrLoginSession}>
+                <span className="auth-qr-login__refresh-icon" aria-hidden="true" />
+                <span>Обновить QR-код</span>
+              </button>
             </div>
-          ) : (
+          </aside>
+        ) : null}
+
+        {mode !== "login" ? (
+          <aside className="auth-card__side">
             <>
               <div className="auth-side__title">Платёжная карта</div>
               <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
@@ -1305,8 +1329,8 @@ export default function Auth({ onAuthSuccess }) {
                 />
               </div>
             </>
-          )}
-        </aside>
+          </aside>
+        ) : null}
       </form>
 
       {emailVerificationModal.open && !isLoginEmailVerification ? (

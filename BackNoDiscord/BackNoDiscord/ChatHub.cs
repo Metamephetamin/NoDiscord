@@ -139,6 +139,8 @@ public class ChatHub : Hub
                 throw new HubException("Forbidden");
             }
 
+            var currentDisplayName = await ResolveCurrentUserDisplayNameAsync(currentUser);
+
             if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
             {
                 var mutedMember = await _context.GroupConversationMembers
@@ -206,7 +208,7 @@ public class ChatHub : Hub
             var msg = new Message
             {
                 ChannelId = normalizedChannelId,
-                Username = currentUser.DisplayName,
+                Username = currentDisplayName,
                 Content = null,
                 EncryptedContent = encrypted,
                 PhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(photoUrl, "/avatars/"),
@@ -220,7 +222,7 @@ public class ChatHub : Hub
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
             LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
             MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
-            await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, payload);
+            await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, currentDisplayName, payload);
         }
         catch (DbUpdateException ex)
         {
@@ -256,6 +258,8 @@ public class ChatHub : Hub
         {
             throw new HubException("Forbidden");
         }
+
+        var currentDisplayName = await ResolveCurrentUserDisplayNameAsync(currentUser);
 
         var sourceItems = items ?? [];
         if (sourceItems.Count == 0)
@@ -315,7 +319,7 @@ public class ChatHub : Hub
             var entity = new Message
             {
                 ChannelId = normalizedChannelId,
-                Username = currentUser.DisplayName,
+                Username = currentDisplayName,
                 Content = null,
                 EncryptedContent = _crypto.Encrypt(SerializePayload(payload)),
                 PhotoUrl = authorPhotoUrl,
@@ -353,7 +357,7 @@ public class ChatHub : Hub
 
         if (forwardedMessages.Count > 0)
         {
-            await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, forwardedMessages[^1].Payload);
+            await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, currentDisplayName, forwardedMessages[^1].Payload);
         }
     }
 
@@ -1108,7 +1112,41 @@ public class ChatHub : Hub
         return string.IsNullOrWhiteSpace(attachmentName) ? "Сообщение без текста" : attachmentName;
     }
 
-    private async Task SendDirectMessagePushIfNeededAsync(string channelId, AuthenticatedUser currentUser, ChatMessagePayload payload)
+    private async Task<string> ResolveCurrentUserDisplayNameAsync(AuthenticatedUser currentUser)
+    {
+        if (!int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return string.IsNullOrWhiteSpace(currentUser.DisplayName) ? "User" : currentUser.DisplayName;
+        }
+
+        var profile = await _context.Users
+            .AsNoTracking()
+            .Where(item => item.id == currentUserId)
+            .Select(item => new
+            {
+                item.nickname,
+                item.first_name,
+                item.last_name,
+                item.email
+            })
+            .FirstOrDefaultAsync(Context.ConnectionAborted);
+
+        if (profile is null)
+        {
+            return string.IsNullOrWhiteSpace(currentUser.DisplayName) ? "User" : currentUser.DisplayName;
+        }
+
+        var fullName = $"{profile.first_name} {profile.last_name}".Trim();
+        var displayName = string.IsNullOrWhiteSpace(profile.nickname)
+            ? fullName
+            : profile.nickname.Trim();
+
+        return string.IsNullOrWhiteSpace(displayName)
+            ? (profile.email ?? currentUser.DisplayName ?? "User")
+            : displayName;
+    }
+
+    private async Task SendDirectMessagePushIfNeededAsync(string channelId, AuthenticatedUser currentUser, string currentDisplayName, ChatMessagePayload payload)
     {
         if (!_pushNotificationService.IsConfigured ||
             !DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out _) ||
@@ -1127,7 +1165,7 @@ public class ChatHub : Hub
             [recipientUserId],
             new PushNotificationPayload
             {
-                Title = currentUser.DisplayName,
+                Title = string.IsNullOrWhiteSpace(currentDisplayName) ? currentUser.DisplayName : currentDisplayName,
                 Body = BuildMessagePreview(payload),
                 Tag = $"direct-message:{channelId}",
                 Url = "/",

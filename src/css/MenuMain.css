@@ -9032,6 +9032,10 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   line-height: 1.5;
 }
 
+.media-frame-editor__close {
+  flex: 0 0 auto;
+}
+
 .media-frame-editor__dialog--avatar .media-frame-editor__header {
   align-items: center;
 }

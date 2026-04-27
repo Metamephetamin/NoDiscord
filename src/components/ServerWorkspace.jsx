@@ -1509,7 +1509,7 @@ export const ServersSidebar = memo(({
   const renderVoiceChannels = (channels) => (
     <VoiceChannelList
       channels={channels}
-      activeChannelId={currentVoiceChannel || (selectedVoiceChannel ? `${activeServer?.id || ""}::${selectedVoiceChannel.id}` : "")}
+      activeChannelId={currentVoiceChannel || ""}
       participantsMap={activeVoiceParticipantsMap}
       serverId={activeServer?.id || ""}
       serverMembers={activeServer?.members || []}

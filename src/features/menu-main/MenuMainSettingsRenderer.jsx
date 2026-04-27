@@ -30,6 +30,7 @@ export function MenuMainSettingsContent({
   setSettingsTab,
   profileBackgroundSrc,
   profileDraft,
+  profileAccountName,
   profileDisplayName,
   profileStatus,
   emailChangeState,
@@ -144,6 +145,7 @@ export function MenuMainSettingsContent({
           profileBackgroundFrame={profileDraft.profileBackgroundFrame}
           avatarSrc={user?.avatarUrl || user?.avatar}
           avatarFrame={getUserAvatarFrame(user)}
+          accountName={profileAccountName}
           displayName={profileDisplayName || getDisplayName(user)}
           nickname={profileDraft.nickname}
           email={profileDraft.email}

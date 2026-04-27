@@ -20,6 +20,7 @@ import "../../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../../config/runtime";
 import {
   isVideoAvatarUrl,
+  readMediaFileDimensions,
   validateAvatarFile,
   validateProfileBackgroundFile,
   validateServerIconFile,
@@ -104,6 +105,7 @@ import {
 } from "../../utils/media";
 import { getDisplayCaptureSupportInfo } from "../../utils/browserMediaSupport";
 import {
+  getAutoMediaFrame,
   getDefaultMediaFrame,
   normalizeMediaFrame,
   parseMediaFrame,
@@ -179,6 +181,42 @@ const normalizeProfileNicknameInput = (value) =>
   normalizeScriptAwareNicknameInput(value, MAX_PROFILE_NICKNAME_LENGTH);
 
 const MAX_DEVICE_VOLUME_PERCENT = 200;
+const getServerSyncFingerprint = (server) => {
+  if (!server?.id) {
+    return "";
+  }
+
+  return JSON.stringify({
+    id: server.id,
+    name: server.name,
+    description: server.description,
+    icon: server.icon,
+    iconFrame: server.iconFrame,
+    isShared: Boolean(server.isShared),
+    ownerId: server.ownerId,
+    roles: server.roles || [],
+    members: server.members || [],
+    channelCategories: server.channelCategories || [],
+    textChannels: server.textChannels || [],
+    voiceChannels: server.voiceChannels || [],
+  });
+};
+
+const getServerSnapshotKey = (serverOrId, ownerId = "") => {
+  if (serverOrId && typeof serverOrId === "object") {
+    return getCanonicalSharedServerId(serverOrId.id || "", serverOrId.ownerId || ownerId);
+  }
+
+  return getCanonicalSharedServerId(String(serverOrId || ""), ownerId);
+};
+
+const getProfileFullName = (profile) => {
+  const firstName = String(profile?.firstName || profile?.first_name || "").trim();
+  const lastName = String(profile?.lastName || profile?.last_name || "").trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+  return fullName;
+};
+
 const clampDeviceVolumePercent = (value, fallback = 100) => {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) {
@@ -212,6 +250,8 @@ export default function MenuMain({
   onPendingImportedServerHandled,
 }) {
   const [servers, setServers] = useState(() => readStoredServers(user));
+  const latestServersRef = useRef(servers);
+  const pendingServerSyncFingerprintsRef = useRef(new Map());
   const [activeServerId, setActiveServerId] = useState(
     () => readWorkspaceState(user).activeServerId || localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
   );
@@ -500,27 +540,12 @@ export default function MenuMain({
     disableTotp,
   } = useMenuMainTotpSettings({ user, setUser });
 
-  const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
-  const activeServerSyncFingerprint = useMemo(() => {
-    if (!activeServer?.id) {
-      return "";
-    }
+  useEffect(() => {
+    latestServersRef.current = servers;
+  }, [servers]);
 
-    return JSON.stringify({
-      id: activeServer.id,
-      name: activeServer.name,
-      description: activeServer.description,
-      icon: activeServer.icon,
-      iconFrame: activeServer.iconFrame,
-      isShared: Boolean(activeServer.isShared),
-      ownerId: activeServer.ownerId,
-      roles: activeServer.roles || [],
-      members: activeServer.members || [],
-      channelCategories: activeServer.channelCategories || [],
-      textChannels: activeServer.textChannels || [],
-      voiceChannels: activeServer.voiceChannels || [],
-    });
-  }, [activeServer]);
+  const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
+  const activeServerSyncFingerprint = useMemo(() => getServerSyncFingerprint(activeServer), [activeServer]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
   const selectedVoiceChannel = useMemo(
     () => activeServer?.voiceChannels.find((channel) => String(channel.id) === String(selectedVoiceChannelId)) || null,
@@ -4722,6 +4747,12 @@ export default function MenuMain({
       return null;
     }
 
+    const syncKey = getServerSnapshotKey(serverSnapshot);
+    const syncFingerprint = getServerSyncFingerprint(serverSnapshot);
+    if (syncKey && syncFingerprint) {
+      pendingServerSyncFingerprintsRef.current.set(syncKey, syncFingerprint);
+    }
+
     try {
       const response = await authFetch(`${API_BASE_URL}/server-invites/server-sync`, {
         method: "POST",
@@ -4745,12 +4776,25 @@ export default function MenuMain({
       }
     } catch (error) {
       console.error("Ошибка синхронизации сервера:", error);
+    } finally {
+      if (syncKey && syncFingerprint) {
+        window.setTimeout(() => {
+          if (pendingServerSyncFingerprintsRef.current.get(syncKey) === syncFingerprint) {
+            pendingServerSyncFingerprintsRef.current.delete(syncKey);
+          }
+        }, 2000);
+      }
     }
 
     return null;
   };
   const refreshServerSnapshot = async (serverId) => {
     if (!serverId) return;
+
+    const requestServer = latestServersRef.current.find((server) =>
+      server.id === serverId || getServerSnapshotKey(server) === getServerSnapshotKey(serverId, server.ownerId)
+    );
+    const requestFingerprint = getServerSyncFingerprint(requestServer);
 
     try {
       const response = await authFetch(`${API_BASE_URL}/server-invites/server/${serverId}`, {
@@ -4760,6 +4804,20 @@ export default function MenuMain({
 
       const snapshot = await parseApiResponse(response);
       if (!response.ok || !snapshot) {
+        return;
+      }
+
+      const snapshotKey = getServerSnapshotKey(snapshot);
+      const latestServer = latestServersRef.current.find((server) =>
+        server.id === snapshot.id || getServerSnapshotKey(server) === snapshotKey
+      );
+      const latestFingerprint = getServerSyncFingerprint(latestServer);
+      const pendingFingerprint = pendingServerSyncFingerprintsRef.current.get(snapshotKey);
+      if (pendingFingerprint && pendingFingerprint === latestFingerprint) {
+        return;
+      }
+
+      if (requestFingerprint && latestFingerprint && requestFingerprint !== latestFingerprint) {
         return;
       }
 
@@ -5022,7 +5080,12 @@ export default function MenuMain({
         categoryId: normalizedCategoryId,
         privateChannel: inheritedPrivateChannel,
       };
-      updateServer((server) => ({ ...server, voiceChannels: [...server.voiceChannels, channel] }));
+      const nextServer = { ...activeServer, voiceChannels: [...activeServer.voiceChannels, channel] };
+      updateServer(() => nextServer);
+      if (nextServer.isShared) {
+        lastServerSyncFingerprintRef.current = getServerSyncFingerprint(nextServer);
+        void syncServerSnapshot(nextServer, { applyResponse: false });
+      }
       setChannelRenameState({
         type: "voice",
         channelId: channel.id,
@@ -5039,7 +5102,12 @@ export default function MenuMain({
       privateChannel: inheritedPrivateChannel,
       forumPosts: normalizedType === "forum" ? [] : undefined,
     };
-    updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
+    const nextServer = { ...activeServer, textChannels: [...activeServer.textChannels, channel] };
+    updateServer(() => nextServer);
+    if (nextServer.isShared) {
+      lastServerSyncFingerprintRef.current = getServerSyncFingerprint(nextServer);
+      void syncServerSnapshot(nextServer, { applyResponse: false });
+    }
     setCurrentTextChannelId(channel.id);
     setDesktopServerPane("text");
     setChannelRenameState({
@@ -5119,8 +5187,9 @@ export default function MenuMain({
     revokeMediaEditorPreviewUrl(mediaFrameEditorState);
     setMediaFrameEditorState(null);
   };
-  const openMediaFrameEditor = ({ kind, target, file, initialFrame, title }) => {
+  const openMediaFrameEditor = ({ kind, target, file, title }) => {
     const previewUrl = URL.createObjectURL(file);
+    const fallbackFrame = normalizeMediaFrame(getDefaultMediaFrame());
     revokeMediaEditorPreviewUrl(mediaFrameEditorState);
     setMediaFrameEditorState({
       kind,
@@ -5128,9 +5197,31 @@ export default function MenuMain({
       title: title || "",
       file,
       previewUrl,
-      frame: normalizeMediaFrame(initialFrame),
+      frame: fallbackFrame,
+      autoFrame: fallbackFrame,
       activeServerId: activeServer?.id || "",
     });
+
+    readMediaFileDimensions(file)
+      .then((dimensions) => {
+        if (!dimensions) {
+          return;
+        }
+
+        const autoFrame = getAutoMediaFrame({ ...dimensions, target });
+        setMediaFrameEditorState((previous) => {
+          if (previous?.previewUrl !== previewUrl) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            frame: autoFrame,
+            autoFrame,
+          };
+        });
+      })
+      .catch(() => {});
   };
   const uploadAvatarWithFrame = async (file, frame) => {
     const formData = new FormData();
@@ -6983,6 +7074,14 @@ export default function MenuMain({
     setSettingsTab,
     profileBackgroundSrc,
     profileDraft,
+    profileAccountName: getProfileFullName({
+      ...(user || {}),
+      firstName: profileDraft.firstName,
+      first_name: profileDraft.firstName,
+      lastName: profileDraft.lastName,
+      last_name: profileDraft.lastName,
+      nickname: profileDraft.nickname,
+    }),
     profileDisplayName: getDisplayName({
       ...(user || {}),
       nickname: profileDraft.nickname,
