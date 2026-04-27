@@ -327,8 +327,18 @@ app.Run();
 
 static void LoadDotEnv()
 {
-    var currentDirectory = Directory.GetCurrentDirectory();
-    var envFile = EnumerateDotEnvPaths(currentDirectory).FirstOrDefault(File.Exists);
+    var searchRoots = new[]
+    {
+        Directory.GetCurrentDirectory(),
+        AppContext.BaseDirectory
+    }
+        .Where(root => !string.IsNullOrWhiteSpace(root))
+        .Select(root => Path.GetFullPath(root))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    var envFile = searchRoots
+        .SelectMany(EnumerateDotEnvPaths)
+        .FirstOrDefault(File.Exists);
     if (string.IsNullOrWhiteSpace(envFile))
     {
         return;
