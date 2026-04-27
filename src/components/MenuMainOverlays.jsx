@@ -286,7 +286,7 @@ export const CreateServerModal = ({
             <h3>Создать сервер</h3>
             <p>Задайте имя серверу и, если хотите, сразу поставьте для него иконку.</p>
           </div>
-          <button type="button" className="stream-modal__close" onClick={onClose}>x</button>
+          <button type="button" className="create-server-modal__close" onClick={onClose} aria-label="Закрыть" />
         </div>
 
         <div className="create-server-modal__body">

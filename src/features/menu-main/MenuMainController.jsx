@@ -59,8 +59,14 @@ import {
 } from "../../utils/nameScripts";
 import {
   clearCachedTextChatMessages,
+  readCachedTextChatMessages,
   writeTextChatChannelClearedAt,
 } from "../../utils/textChatMessageCache";
+import {
+  normalizeProfileCustomization,
+  readProfileCustomization,
+  writeProfileCustomization,
+} from "../../utils/profileCustomization";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
@@ -226,6 +232,62 @@ const clampDeviceVolumePercent = (value, fallback = 100) => {
   return Math.max(0, Math.min(MAX_DEVICE_VOLUME_PERCENT, Math.round(numericValue)));
 };
 
+const withListOrder = (items = []) => items.map((item, index) => ({ ...item, order: index }));
+
+const reorderById = (items = [], sourceId, targetId) => {
+  const sourceIndex = items.findIndex((item) => String(item?.id || "") === String(sourceId || ""));
+  const targetIndex = items.findIndex((item) => String(item?.id || "") === String(targetId || ""));
+  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(sourceIndex, 1);
+  nextItems.splice(targetIndex, 0, movedItem);
+  return withListOrder(nextItems);
+};
+
+const normalizeChannelCategoryId = (categoryId) => String(categoryId || "");
+
+const moveChannelInList = (channels = [], { channelId, targetChannelId = "", targetCategoryId = "" } = {}) => {
+  const normalizedChannelId = String(channelId || "");
+  const normalizedTargetChannelId = String(targetChannelId || "");
+  const normalizedTargetCategoryId = normalizeChannelCategoryId(targetCategoryId);
+  const sourceIndex = channels.findIndex((channel) => String(channel?.id || "") === normalizedChannelId);
+  if (sourceIndex === -1) {
+    return channels;
+  }
+
+  const nextChannels = [...channels];
+  const [sourceChannel] = nextChannels.splice(sourceIndex, 1);
+  const movedChannel = { ...sourceChannel, categoryId: normalizedTargetCategoryId };
+  let insertIndex = -1;
+
+  if (normalizedTargetChannelId) {
+    insertIndex = nextChannels.findIndex((channel) => String(channel?.id || "") === normalizedTargetChannelId);
+  }
+
+  if (insertIndex === -1) {
+    insertIndex = nextChannels.length;
+    for (let index = nextChannels.length - 1; index >= 0; index -= 1) {
+      if (normalizeChannelCategoryId(nextChannels[index]?.categoryId) === normalizedTargetCategoryId) {
+        insertIndex = index + 1;
+        break;
+      }
+    }
+  }
+
+  nextChannels.splice(insertIndex, 0, movedChannel);
+
+  const categoryOrder = new Map();
+  return nextChannels.map((channel) => {
+    const categoryKey = normalizeChannelCategoryId(channel.categoryId);
+    const order = categoryOrder.get(categoryKey) || 0;
+    categoryOrder.set(categoryKey, order + 1);
+    return { ...channel, order };
+  });
+};
+
 const parseQrLoginPayload = (value) => {
   const rawValue = String(value || "").trim();
   if (!rawValue) {
@@ -265,6 +327,7 @@ export default function MenuMain({
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
+  const [profileCustomization, setProfileCustomization] = useState(() => readProfileCustomization(user));
   const [micVolume, setMicVolume] = useState(70);
   const [audioVolume, setAudioVolume] = useState(100);
   const [audioInputDevices, setAudioInputDevices] = useState([]);
@@ -696,6 +759,14 @@ export default function MenuMain({
     () => [selfDirectEntry, ...friends].filter(Boolean),
     [friends, selfDirectEntry]
   );
+  useEffect(() => {
+    setProfileCustomization(readProfileCustomization(user));
+  }, [user?.id]);
+  const handleProfileCustomizationChange = useCallback((nextCustomization) => {
+    const normalizedCustomization = normalizeProfileCustomization(nextCustomization);
+    setProfileCustomization(normalizedCustomization);
+    writeProfileCustomization(user, normalizedCustomization);
+  }, [user]);
   const conversationTargets = useMemo(
     () => conversations.filter(Boolean),
     [conversations]
@@ -5058,6 +5129,30 @@ export default function MenuMain({
       ),
     }));
   };
+  const reorderChannelCategories = (sourceCategoryId, targetCategoryId) => {
+    if (!canManageChannels || !activeServer || !sourceCategoryId || !targetCategoryId) return;
+
+    updateServer((server) => ({
+      ...server,
+      channelCategories: reorderById(server.channelCategories || [], sourceCategoryId, targetCategoryId),
+    }));
+  };
+  const moveServerChannel = ({ type = "text", channelId = "", targetChannelId = "", targetCategoryId = "" } = {}) => {
+    if (!canManageChannels || !activeServer || !channelId) return;
+
+    if (String(type || "text") === "voice") {
+      updateServer((server) => ({
+        ...server,
+        voiceChannels: moveChannelInList(server.voiceChannels || [], { channelId, targetChannelId, targetCategoryId }),
+      }));
+      return;
+    }
+
+    updateServer((server) => ({
+      ...server,
+      textChannels: moveChannelInList(server.textChannels || [], { channelId, targetChannelId, targetCategoryId }),
+    }));
+  };
   const createServerChannel = ({ type = "text", name = "", categoryId = "" } = {}) => {
     if (!canManageChannels || !activeServer) return null;
 
@@ -7274,6 +7369,7 @@ export default function MenuMain({
     avatarInputRef,
     serverIconInputRef,
     user,
+    profileCustomization,
     audioInputDevices,
     audioOutputDevices,
     selectedInputDeviceId,
@@ -7334,6 +7430,7 @@ export default function MenuMain({
     noiseSuppressionMode,
     noiseSuppressionStrength,
     outputSelectionAvailable,
+    profileCustomization,
     pingTone,
     pingTooltip,
     selectedInputDeviceId,
@@ -7352,10 +7449,12 @@ export default function MenuMain({
     }
 
     const padding = 12;
-    const menuWidth = 260;
-    const menuHeight = 320;
+    const menuWidth = 238;
+    const menuHeight = friend.isSelf ? 190 : 290;
     const nextX = Math.max(padding, Math.min(Number(event.clientX || 0), window.innerWidth - menuWidth - padding));
     const nextY = Math.max(padding, Math.min(Number(event.clientY || 0), window.innerHeight - menuHeight - padding));
+    const directChannelId = String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id));
+    const hasClearableChat = Boolean(currentUserId && directChannelId && readCachedTextChatMessages(currentUserId, directChannelId).length > 0);
 
     setFriendListProfileModal(null);
     setFriendListUserContextMenu({
@@ -7363,7 +7462,7 @@ export default function MenuMain({
       y: nextY,
       userId: String(friend.id || ""),
       username: getDisplayName(friend),
-      directChannelId: String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id)),
+      directChannelId,
       avatarUrl: String(friend.avatar || ""),
       avatarFrame: friend.avatarFrame || null,
       backgroundUrl: String(friend.profileBackgroundUrl || ""),
@@ -7372,6 +7471,7 @@ export default function MenuMain({
       isFriend: true,
       canOpenDirectChat: !friend.isSelf,
       canInviteToServer: false,
+      hasClearableChat,
     });
   };
   const closeFriendListUserContextMenu = () => setFriendListUserContextMenu(null);
@@ -7414,7 +7514,7 @@ export default function MenuMain({
   };
   const handleClearDirectChatForCurrentUser = () => {
     const normalizedChannelId = String(friendListUserContextMenu?.directChannelId || "").trim();
-    if (!currentUserId || !normalizedChannelId) {
+    if (!currentUserId || !normalizedChannelId || !friendListUserContextMenu?.hasClearableChat) {
       return;
     }
 
@@ -7444,41 +7544,36 @@ export default function MenuMain({
           setFriendListUserContextMenu(null);
         },
       },
-      {
-        id: "direct-call",
-        label: "Позвонить",
-        icon: "☎",
-        disabled: Boolean(friendListUserContextMenu?.isSelf || !friendListUserContextMenu?.userId),
-        onClick: () => {
-          const targetUserId = friendListUserContextMenu?.userId;
-          if (!targetUserId || friendListUserContextMenu?.isSelf) {
-            return;
-          }
+      ...(friendListUserContextMenu?.isSelf
+        ? []
+        : [{
+          id: "direct-call",
+          label: "Позвонить",
+          icon: "☎",
+          disabled: !friendListUserContextMenu?.userId,
+          onClick: () => {
+            const targetUserId = friendListUserContextMenu?.userId;
+            if (!targetUserId) {
+              return;
+            }
 
-          setFriendListUserContextMenu(null);
-          void startDirectCallWithUser(targetUserId);
-        },
-      },
+            setFriendListUserContextMenu(null);
+            void startDirectCallWithUser(targetUserId);
+          },
+        }]),
       {
         id: "clear-local-chat",
         label: "Очистить чат у себя",
         icon: "🧹",
-        disabled: !friendListUserContextMenu?.directChannelId,
+        disabled: !friendListUserContextMenu?.directChannelId || !friendListUserContextMenu?.hasClearableChat,
         onClick: handleClearDirectChatForCurrentUser,
       },
     ],
-    [
+    friendListUserContextMenu?.isSelf ? [] : [
       {
         id: "invite",
         label: "Пригласить на сервер",
         icon: "↗",
-        disabled: true,
-        onClick: closeFriendListUserContextMenu,
-      },
-      {
-        id: "friend",
-        label: "Уже в друзьях",
-        icon: "+",
         disabled: true,
         onClick: closeFriendListUserContextMenu,
       },
@@ -7510,7 +7605,7 @@ export default function MenuMain({
         },
       },
     ],
-  ];
+  ].filter((section) => section.length > 0);
   const renderFriendListOverlay = () => (
     <>
       <TextChatUserContextMenu
@@ -7618,7 +7713,9 @@ export default function MenuMain({
       onAddVoiceChannel={addVoiceChannel}
       onCreateCategory={createChannelCategory}
       onToggleCategory={toggleChannelCategory}
+      onReorderCategories={reorderChannelCategories}
       onCreateChannel={createServerChannel}
+      onMoveChannel={moveServerChannel}
       onOpenChannelSettings={openChannelSettings}
       onCloseChannelSettings={closeChannelSettings}
       onUpdateChannelSettings={updateChannelSettings}
@@ -7651,6 +7748,8 @@ export default function MenuMain({
       directSearchQuery={channelSearchQuery}
       textChatLocalStateVersion={textChatLocalStateVersion}
       directCallPanelProps={directCallPanelProps}
+      profileCustomization={profileCustomization}
+      onProfileCustomizationChange={handleProfileCustomizationChange}
       selectedStreamUserId={selectedStreamUserId}
       selectedStream={selectedStream}
       selectedStreamParticipant={selectedStreamParticipant}

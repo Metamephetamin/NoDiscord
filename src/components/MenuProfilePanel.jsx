@@ -1,5 +1,6 @@
 import AnimatedAvatar from "./AnimatedAvatar";
 import PercentageSlider from "./PercentageSlider";
+import { getProfileCustomizationClassName } from "../utils/profileCustomization";
 
 const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   <button type="button" className="device-menu__settings" onClick={onClick}>
@@ -162,6 +163,7 @@ export default function MenuProfilePanel({
   userAvatarFrame,
   displayName,
   activityStatus,
+  profileCustomization,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -202,10 +204,13 @@ export default function MenuProfilePanel({
   leaveVoiceActionAriaLabel = "Отключиться от голосового канала",
   directCallPanel = null,
 }) {
+  const profileCardClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
+  const voiceCardClassName = getProfileCustomizationClassName(profileCustomization, "voiceCard");
+
   return (
     <div className={`menu__profile-wrapper ${currentVoiceChannel ? "menu__profile-wrapper--voice-connected" : ""}`}>
       {currentVoiceChannel ? (
-        <div className="profile__voice-stack">
+        <div className={`profile__voice-stack ${voiceCardClassName}`}>
           <div className="profile__connection-card">
             <span
               className={`profile__ping-indicator ui-tooltip-anchor profile__ping-indicator--${pingTone}`}
@@ -261,7 +266,7 @@ export default function MenuProfilePanel({
 
       {directCallPanel}
 
-      <div className={`menu__profile menu__profile--discordish ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
+      <div className={`menu__profile menu__profile--discordish ${profileCardClassName} ${currentVoiceChannel ? "menu__profile--voice-connected" : ""}`}>
         <div className="profile__identity-row">
           <button type="button" className="profile__identity" onClick={onOpenProfileSettings}>
             <span className={`avatar-shell ${currentVoiceChannel && isCurrentUserSpeaking ? "avatar-shell--speaking" : ""}`} aria-hidden="true">
@@ -279,7 +284,9 @@ export default function MenuProfilePanel({
               <span className="profile__username">{displayName}</span>
               {activityStatus ? (
                 <span className="profile__activity-status">
-                  <span className="profile__activity-note" aria-hidden="true">♪</span>
+                  <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M10.5 2.25V10.1C10.5 11.42 9.28 12.5 7.78 12.5C6.57 12.5 5.75 11.9 5.75 11.02C5.75 10.1 6.68 9.38 7.9 9.38C8.43 9.38 8.9 9.5 9.25 9.72V4.25L13.75 5.38V7L10.5 6.18V10.1" />
+                  </svg>
                   <span className="profile__activity-text">{activityStatus}</span>
                 </span>
               ) : null}

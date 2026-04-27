@@ -38,6 +38,12 @@ const VoiceChannelList = ({
   onRenameValueChange,
   onRenameSubmit,
   onRenameCancel,
+  dragState,
+  categoryId = "",
+  onChannelDragStart,
+  onChannelDragOver,
+  onChannelDrop,
+  onChannelDragEnd,
   liveUserIds = [],
   speakingUserIds = [],
   watchedStreamUserId = null,
@@ -77,7 +83,11 @@ const VoiceChannelList = ({
   };
 
   return (
-    <ul className="voice-channel-list">
+    <ul
+      className="voice-channel-list"
+      onDragOver={(event) => onChannelDragOver?.(event, "voice", null, categoryId)}
+      onDrop={(event) => onChannelDrop?.(event, "voice", null, categoryId)}
+    >
       {channels.map((channel) => {
         const runtimeId = getChannelRuntimeId(serverId, channel.id);
         const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
@@ -111,7 +121,15 @@ const VoiceChannelList = ({
         };
 
         return (
-          <li key={channel.id} className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""}`}>
+          <li
+            key={channel.id}
+            className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
+            draggable={canManageChannels && !isEditing}
+            onDragStart={(event) => onChannelDragStart?.(event, "voice", channel, categoryId)}
+            onDragOver={(event) => onChannelDragOver?.(event, "voice", channel, categoryId)}
+            onDrop={(event) => onChannelDrop?.(event, "voice", channel, categoryId)}
+            onDragEnd={onChannelDragEnd}
+          >
             <div
               className={`voice-channel__row ${canJoinFromRow ? "voice-channel__row--interactive" : ""}`}
               onMouseEnter={triggerPrewarm}

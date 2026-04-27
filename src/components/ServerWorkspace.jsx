@@ -206,6 +206,36 @@ const CHANNEL_CREATE_OPTIONS = [
 
 const getTextChannelKind = (channel) => String(channel?.kind || channel?.type || "text") === "forum" ? "forum" : "text";
 
+const getOrderedItems = (items = []) =>
+  [...items].sort((first, second) => {
+    const firstOrder = Number(first?.order);
+    const secondOrder = Number(second?.order);
+    const firstHasOrder = Number.isFinite(firstOrder);
+    const secondHasOrder = Number.isFinite(secondOrder);
+
+    if (firstHasOrder && secondHasOrder && firstOrder !== secondOrder) {
+      return firstOrder - secondOrder;
+    }
+
+    if (firstHasOrder !== secondHasOrder) {
+      return firstHasOrder ? -1 : 1;
+    }
+
+    return 0;
+  });
+
+const getDragCategoryId = (categoryId) => String(categoryId || "");
+
+const encodeChannelDragPayload = (payload) => JSON.stringify(payload);
+
+const decodeChannelDragPayload = (event, fallback) => {
+  try {
+    return JSON.parse(event.dataTransfer?.getData("application/x-tend-channel-drag") || "") || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 const getChannelListIcon = (type) => {
   if (type === "voice") {
     return "◖";
@@ -1327,7 +1357,9 @@ export const ServersSidebar = memo(({
   onAddVoiceChannel,
   onCreateCategory,
   onToggleCategory,
+  onReorderCategories,
   onCreateChannel,
+  onMoveChannel,
   onOpenChannelSettings,
   onCloseChannelSettings,
   onUpdateChannelSettings,
@@ -1356,6 +1388,8 @@ export const ServersSidebar = memo(({
   const [createCategoryError, setCreateCategoryError] = useState("");
   const [createChannelDraft, setCreateChannelDraft] = useState(null);
   const [createChannelError, setCreateChannelError] = useState("");
+  const [dragState, setDragState] = useState(null);
+  const dragEndedRef = useRef(false);
 
   const updateServerMenuPosition = () => {
     const anchor = serverMembersRef?.current;
@@ -1403,9 +1437,129 @@ export const ServersSidebar = memo(({
   const showUnavailableServerMenuAction = () => {
     onShowServerFeedback?.("Этот раздел пока не подключён.");
   };
-  const channelCategories = Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : [];
-  const uncategorizedTextChannels = (activeServer?.textChannels || []).filter((channel) => !channel.categoryId);
-  const uncategorizedVoiceChannels = (activeServer?.voiceChannels || []).filter((channel) => !channel.categoryId);
+  const channelCategories = useMemo(() => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : []), [activeServer]);
+  const uncategorizedTextChannels = useMemo(
+    () => getOrderedItems((activeServer?.textChannels || []).filter((channel) => !channel.categoryId)),
+    [activeServer]
+  );
+  const uncategorizedVoiceChannels = useMemo(
+    () => getOrderedItems((activeServer?.voiceChannels || []).filter((channel) => !channel.categoryId)),
+    [activeServer]
+  );
+  const canDragChannels = Boolean(canManageChannels && activeServer);
+  const endDrag = () => {
+    dragEndedRef.current = true;
+    setDragState(null);
+    window.setTimeout(() => {
+      dragEndedRef.current = false;
+    }, 180);
+  };
+  const handleCategoryClick = (event, categoryId) => {
+    if (dragEndedRef.current) {
+      event.preventDefault();
+      return;
+    }
+
+    onToggleCategory?.(categoryId);
+  };
+  const startCategoryDrag = (event, category) => {
+    if (!canDragChannels || !category?.id) {
+      event.preventDefault();
+      return;
+    }
+
+    const payload = { kind: "category", categoryId: String(category.id) };
+    setDragState(payload);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-tend-channel-drag", encodeChannelDragPayload(payload));
+  };
+  const handleCategoryDragOver = (event, category) => {
+    if (!category?.id) {
+      return;
+    }
+
+    if (dragState?.kind === "category" && dragState.categoryId !== category.id) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      return;
+    }
+
+    if (dragState?.kind === "channel") {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    }
+  };
+  const handleCategoryDrop = (event, category) => {
+    const payload = decodeChannelDragPayload(event, dragState);
+    if (!category?.id) {
+      return;
+    }
+
+    if (payload?.kind === "channel") {
+      handleChannelDrop(event, payload.type, null, category.id);
+      return;
+    }
+
+    if (payload?.kind !== "category" || payload.categoryId === category.id) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    onReorderCategories?.(payload.categoryId, category.id);
+    endDrag();
+  };
+  const startChannelDrag = (event, type, channel, categoryId = "") => {
+    if (!canDragChannels || !channel?.id || event.target?.closest?.(".channel-edit-button, input, select, textarea")) {
+      event.preventDefault();
+      return;
+    }
+
+    const payload = {
+      kind: "channel",
+      type,
+      channelId: String(channel.id),
+      categoryId: getDragCategoryId(categoryId),
+    };
+    setDragState(payload);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-tend-channel-drag", encodeChannelDragPayload(payload));
+  };
+  const handleChannelDragOver = (event, type, channel = null, categoryId = "") => {
+    if (dragState?.kind !== "channel" || dragState.type !== type) {
+      return;
+    }
+
+    if (channel?.id && dragState.channelId === channel.id && dragState.categoryId === getDragCategoryId(categoryId)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+  };
+  const handleChannelDrop = (event, type, channel = null, categoryId = "") => {
+    const payload = decodeChannelDragPayload(event, dragState);
+    if (payload?.kind !== "channel" || payload.type !== type) {
+      return;
+    }
+
+    const nextCategoryId = getDragCategoryId(categoryId);
+    const targetChannelId = channel?.id ? String(channel.id) : "";
+    if (payload.channelId === targetChannelId && payload.categoryId === nextCategoryId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    onMoveChannel?.({
+      type,
+      channelId: payload.channelId,
+      targetChannelId,
+      targetCategoryId: nextCategoryId,
+    });
+    endDrag();
+  };
   const openCreateCategoryModal = () => {
     setCreateCategoryName("");
     setCreateCategoryPrivate(false);
@@ -1460,7 +1614,7 @@ export const ServersSidebar = memo(({
     });
     closeCreateChannelModal();
   };
-  const renderTextChannelItem = (channel) => {
+  const renderTextChannelItem = (channel, categoryId = "") => {
     const kind = getTextChannelKind(channel);
     const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
     const scopedChannelId = getScopedChatChannelId(activeServer?.id || "", channel.id);
@@ -1469,7 +1623,15 @@ export const ServersSidebar = memo(({
     const isTextChannelActive = desktopServerPane !== "voice" && currentTextChannel?.id === channel.id;
 
     return (
-      <li key={channel.id} className={`channel-item ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""}`}>
+      <li
+        key={channel.id}
+        className={`channel-item ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "channel-item--dragging" : ""}`}
+        draggable={canDragChannels && !isEditing}
+        onDragStart={(event) => startChannelDrag(event, "text", channel, categoryId)}
+        onDragOver={(event) => handleChannelDragOver(event, "text", channel, categoryId)}
+        onDrop={(event) => handleChannelDrop(event, "text", channel, categoryId)}
+        onDragEnd={endDrag}
+      >
         {isEditing ? (
           <input
             className="channel-inline-input"
@@ -1506,9 +1668,10 @@ export const ServersSidebar = memo(({
       </li>
     );
   };
-  const renderVoiceChannels = (channels) => (
+  const renderVoiceChannels = (channels, categoryId = "") => (
     <VoiceChannelList
       channels={channels}
+      categoryId={categoryId}
       activeChannelId={currentVoiceChannel || ""}
       participantsMap={activeVoiceParticipantsMap}
       serverId={activeServer?.id || ""}
@@ -1532,6 +1695,11 @@ export const ServersSidebar = memo(({
       onRenameValueChange={onUpdateChannelRenameValue}
       onRenameSubmit={onSubmitChannelRename}
       onRenameCancel={onCancelChannelRename}
+      dragState={dragState}
+      onChannelDragStart={startChannelDrag}
+      onChannelDragOver={handleChannelDragOver}
+      onChannelDrop={handleChannelDrop}
+      onChannelDragEnd={endDrag}
     />
   );
 
@@ -1765,8 +1933,12 @@ export const ServersSidebar = memo(({
               <span>Текстовые каналы</span>
               <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
             </div>
-            <ul className="channel-list">
-              {uncategorizedTextChannels.map(renderTextChannelItem)}
+            <ul
+              className="channel-list"
+              onDragOver={(event) => handleChannelDragOver(event, "text", null, "")}
+              onDrop={(event) => handleChannelDrop(event, "text", null, "")}
+            >
+              {uncategorizedTextChannels.map((channel) => renderTextChannelItem(channel, ""))}
             </ul>
           </div>
 
@@ -1775,22 +1947,30 @@ export const ServersSidebar = memo(({
               <span>Голосовые каналы</span>
               <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
             </div>
-            {renderVoiceChannels(uncategorizedVoiceChannels)}
+            {renderVoiceChannels(uncategorizedVoiceChannels, "")}
           </div>
 
           {channelCategories.map((category) => {
-            const textChannels = (activeServer?.textChannels || []).filter((channel) => channel.categoryId === category.id);
-            const voiceChannels = (activeServer?.voiceChannels || []).filter((channel) => channel.categoryId === category.id);
+            const textChannels = getOrderedItems((activeServer?.textChannels || []).filter((channel) => channel.categoryId === category.id));
+            const voiceChannels = getOrderedItems((activeServer?.voiceChannels || []).filter((channel) => channel.categoryId === category.id));
             const isCollapsed = Boolean(category.collapsed);
             const hasChannels = textChannels.length > 0 || voiceChannels.length > 0;
 
             return (
-              <div key={category.id} className="server-panel__section server-panel__section--category">
+              <div
+                key={category.id}
+                className={`server-panel__section server-panel__section--category ${dragState?.kind === "category" && dragState.categoryId === category.id ? "server-panel__section--dragging" : ""}`}
+                onDragOver={(event) => handleCategoryDragOver(event, category)}
+                onDrop={(event) => handleCategoryDrop(event, category)}
+              >
                 <div className="server-panel__header server-panel__header--category">
                   <button
                     type="button"
                     className="server-panel__category-toggle"
-                    onClick={() => onToggleCategory?.(category.id)}
+                    draggable={canDragChannels}
+                    onDragStart={(event) => startCategoryDrag(event, category)}
+                    onDragEnd={endDrag}
+                    onClick={(event) => handleCategoryClick(event, category.id)}
                     aria-expanded={!isCollapsed}
                   >
                     <span className={`server-panel__category-caret ${isCollapsed ? "" : "is-open"}`} aria-hidden="true" />
@@ -1802,8 +1982,14 @@ export const ServersSidebar = memo(({
                 {!isCollapsed ? (
                   hasChannels ? (
                     <>
-                      {textChannels.length > 0 ? <ul className="channel-list">{textChannels.map(renderTextChannelItem)}</ul> : null}
-                      {voiceChannels.length > 0 ? renderVoiceChannels(voiceChannels) : null}
+                      <ul
+                        className="channel-list"
+                        onDragOver={(event) => handleChannelDragOver(event, "text", null, category.id)}
+                        onDrop={(event) => handleChannelDrop(event, "text", null, category.id)}
+                      >
+                        {textChannels.map((channel) => renderTextChannelItem(channel, category.id))}
+                      </ul>
+                      {renderVoiceChannels(voiceChannels, category.id)}
                     </>
                   ) : (
                     <button

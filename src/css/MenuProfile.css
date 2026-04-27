@@ -307,8 +307,8 @@
 
 .avatar-shell {
   position: relative;
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
   overflow: hidden;
   border-radius: 50%;
@@ -386,11 +386,12 @@
 }
 
 .profile__activity-note {
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
-  color: #a78bfa;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
+  display: block;
+  fill: #2fcf72;
+  filter: drop-shadow(0 0 5px rgba(47, 207, 114, 0.32));
 }
 
 .profile__activity-text {

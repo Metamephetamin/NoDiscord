@@ -1421,7 +1421,7 @@ export default function TextChat({
     setUserContextMenu(null);
   };
 
-  const userContextMenuSections = [
+  let userContextMenuSections = [
     [
       {
         id: "profile",
@@ -1489,6 +1489,12 @@ export default function TextChat({
   if (userContextMenuSections[0]?.[0]) {
     userContextMenuSections[0][0].onClick = handleOpenProfileFromUserMenu;
   }
+  if (userContextMenu?.isSelf) {
+    userContextMenuSections[1] = [];
+  } else if (userContextMenu?.isFriend) {
+    userContextMenuSections[1] = userContextMenuSections[1].filter((action) => action.id !== "friend");
+  }
+  userContextMenuSections = userContextMenuSections.filter((section) => section.length > 0);
 
   const isEditableMessage = (messageItem) => {
     if (!messageItem) {

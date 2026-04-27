@@ -23,6 +23,7 @@ export default function MenuMainProfilePanelSlot({
   avatarInputRef,
   serverIconInputRef,
   user,
+  profileCustomization,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -82,6 +83,7 @@ export default function MenuMainProfilePanelSlot({
       userAvatarFrame={getUserAvatarFrame(user)}
       displayName={getDisplayName(user)}
       activityStatus={formatIntegrationActivityStatus(user?.activity || user?.externalActivity)}
+      profileCustomization={profileCustomization}
       audioInputDevices={audioInputDevices}
       audioOutputDevices={audioOutputDevices}
       selectedInputDeviceId={selectedInputDeviceId}
