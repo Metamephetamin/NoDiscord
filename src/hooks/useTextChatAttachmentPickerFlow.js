@@ -51,12 +51,13 @@ function revokeObjectUrls(urls) {
   });
 }
 
-function buildPendingSelectionPreviewItems(items, { onCreateObjectUrl } = {}) {
+function buildPendingSelectionPreviewItems(items, { maxItems = 6, onCreateObjectUrl } = {}) {
   if (!Array.isArray(items) || !items.length) {
     return [];
   }
 
   return items
+    .slice(0, Math.max(0, Number(maxItems) || 0))
     .map((item, index) => {
       if (item instanceof File) {
         const normalizedType = String(item?.type || "").trim();
@@ -308,52 +309,26 @@ export default function useTextChatAttachmentPickerFlow({
 
     const normalizedLayout = shouldPreferSendAsDocuments ? "document" : "media";
     const normalizedFirstFileName = getDisplayFileName(selectedInputFiles[0]?.name) || "";
+    const createdObjectUrls = [];
+    const nextPreviewItems = buildPendingSelectionPreviewItems(selectedInputFiles, {
+      maxItems: normalizedLayout === "document" ? 4 : 6,
+      onCreateObjectUrl: (objectUrl) => {
+        createdObjectUrls.push(objectUrl);
+      },
+    });
 
     flushSync(() => {
       clearPendingSelectionPreviewHydrationTimeout();
       resetPendingSelectionPreviewObjectUrls();
+      pendingSelectionPreviewObjectUrlsRef.current.push(...createdObjectUrls);
       setPendingBatchSelection({
         fileCount: selectedInputFiles.length,
         firstFileName: normalizedFirstFileName,
         layout: normalizedLayout,
         waitingForPicker: false,
-        previewItems: [],
+        previewItems: nextPreviewItems,
       });
     });
-
-    if (typeof window !== "undefined") {
-      pendingSelectionPreviewHydrationTimeoutRef.current = window.setTimeout(() => {
-        pendingSelectionPreviewHydrationTimeoutRef.current = 0;
-        const createdObjectUrls = [];
-        const nextPreviewItems = buildPendingSelectionPreviewItems(selectedInputFiles, {
-          onCreateObjectUrl: (objectUrl) => {
-            createdObjectUrls.push(objectUrl);
-          },
-        });
-
-        setPendingBatchSelection((previous) => {
-          const previousLayout = String(previous?.layout || "").trim() === "document" ? "document" : "media";
-          const previousFileCount = Math.max(0, Number(previous?.fileCount) || 0);
-          const previousFirstFileName = String(previous?.firstFileName || "").trim();
-          const canHydratePendingSelection = Boolean(previous)
-            && !previous?.waitingForPicker
-            && previousLayout === normalizedLayout
-            && previousFileCount === selectedInputFiles.length
-            && previousFirstFileName === normalizedFirstFileName;
-
-          if (!canHydratePendingSelection) {
-            revokeObjectUrls(createdObjectUrls);
-            return previous;
-          }
-
-          pendingSelectionPreviewObjectUrlsRef.current.push(...createdObjectUrls);
-          return {
-            ...previous,
-            previewItems: nextPreviewItems,
-          };
-        });
-      }, 0);
-    }
 
     recordPerfEvent("text-chat", "file-picker:pending-selection-flushed", {
       selectedFileCount: selectedInputFiles.length,

@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PendingUploadPreview from "./PendingUploadPreview";
 import { formatFileSize } from "../utils/textChatHelpers";
@@ -392,7 +392,7 @@ function TextChatBatchUploadSheet({
     : Math.max(0, Math.min(resolvedGridCount, resolvedFileCount) - visibleFiles.length);
   const previewEnabled = !showPendingShell && fileCount > 0;
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const pickerOpenedAt = typeof window !== "undefined"
       ? Number(window.__TEND_FILE_PICKER_OPENED_AT__ || 0)
       : 0;
@@ -417,7 +417,7 @@ function TextChatBatchUploadSheet({
     });
   });
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const traceId = typeof window !== "undefined"
             ? window.__TEND_PENDING_UPLOAD_SHELL_TRACE_ID__
       : "";

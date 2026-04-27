@@ -25,7 +25,7 @@ public sealed class ClientUpdateService : IClientUpdateService
         var required = CompareVersions(currentVersion, minimumVersion) < 0;
 
         var downloadUrl = ResolvePlatformValue(normalizedPlatform, normalizedArch, "DownloadUrl");
-        var sha256 = ResolvePlatformValue(normalizedPlatform, normalizedArch, "Sha256");
+        var sha256 = NormalizeSha256(ResolvePlatformValue(normalizedPlatform, normalizedArch, "Sha256"));
         var releaseNotes = _configuration["ClientUpdates:ReleaseNotes"]?.Trim() ?? string.Empty;
         var autoInstallOnQuit = bool.TryParse(_configuration["ClientUpdates:AutoInstallOnQuit"], out var parsedAutoInstallOnQuit)
             ? parsedAutoInstallOnQuit
@@ -41,7 +41,7 @@ public sealed class ClientUpdateService : IClientUpdateService
             UpdateAvailable = updateAvailable,
             Required = required,
             IsCompatible = !required,
-            DownloadAvailable = updateAvailable && !string.IsNullOrWhiteSpace(downloadUrl),
+            DownloadAvailable = updateAvailable && !string.IsNullOrWhiteSpace(downloadUrl) && !string.IsNullOrWhiteSpace(sha256),
             DownloadUrl = downloadUrl,
             Sha256 = sha256,
             ReleaseNotes = releaseNotes,
@@ -56,6 +56,14 @@ public sealed class ClientUpdateService : IClientUpdateService
             ?? _configuration[$"ClientUpdates:{platform}:{field}"]?.Trim()
             ?? _configuration[$"ClientUpdates:{field}"]?.Trim()
             ?? string.Empty;
+    }
+
+    private static string NormalizeSha256(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant() ?? string.Empty;
+        return normalized.Length == 64 && normalized.All(Uri.IsHexDigit)
+            ? normalized
+            : string.Empty;
     }
 
     internal static string NormalizePlatform(string? value)

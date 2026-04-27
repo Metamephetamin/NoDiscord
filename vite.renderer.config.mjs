@@ -50,10 +50,6 @@ export default defineConfig(({ command }) => ({
             return "signalr";
           }
 
-          if (normalizedId.includes("/node_modules/react-player/")) {
-            return "media-player";
-          }
-
           return undefined;
         },
       },

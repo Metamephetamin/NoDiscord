@@ -135,17 +135,19 @@ namespace BackNoDiscord
             return true;
         }
 
-        public void SetScreenShareState(string userId, bool isSharing)
+        public bool SetScreenShareState(string userId, bool isSharing)
         {
             if (string.IsNullOrWhiteSpace(userId))
             {
-                return;
+                return false;
             }
 
+            var changed = false;
             lock (_syncRoot)
             {
                 if (_participantsByUserId.TryGetValue(userId, out var participant))
                 {
+                    changed = participant.IsScreenSharing != isSharing;
                     participant.IsScreenSharing = isSharing;
                     _participantsByUserId[userId] = CloneParticipant(participant);
                 }
@@ -155,6 +157,7 @@ namespace BackNoDiscord
                     var existing = channel.FirstOrDefault(item => item.UserId == userId);
                     if (existing is not null)
                     {
+                        changed = changed || existing.IsScreenSharing != isSharing;
                         existing.IsScreenSharing = isSharing;
                     }
                 }
@@ -162,12 +165,15 @@ namespace BackNoDiscord
 
             if (isSharing)
             {
+                changed = changed || !_screenSharingUsers.ContainsKey(userId);
                 _screenSharingUsers[userId] = true;
             }
             else
             {
-                _screenSharingUsers.TryRemove(userId, out _);
+                changed = changed || _screenSharingUsers.TryRemove(userId, out _);
             }
+
+            return changed;
         }
 
         public Participant? SetVoiceState(

@@ -1,6 +1,7 @@
 using BackNoDiscord.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -11,11 +12,14 @@ namespace BackNoDiscord.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting("media-render")]
 [Route("api/media")]
 public sealed class MediaRenderController : ControllerBase
 {
     private const int MinEdge = 16;
     private const int MaxEdge = 1024;
+    private const long MaxSourceBytes = 30L * 1024L * 1024L;
+    private const long MaxGifSourceBytes = 8L * 1024L * 1024L;
     private readonly UploadStoragePaths _uploadStoragePaths;
 
     public MediaRenderController(UploadStoragePaths uploadStoragePaths)
@@ -42,9 +46,16 @@ public sealed class MediaRenderController : ControllerBase
             return NotFound();
         }
 
-        if (!System.IO.File.Exists(filePath))
+        var fileInfo = new FileInfo(filePath);
+        if (!fileInfo.Exists)
         {
             return NotFound();
+        }
+
+        if (fileInfo.Length > MaxSourceBytes ||
+            (string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase) && fileInfo.Length > MaxGifSourceBytes))
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge);
         }
 
         var targetWidth = NormalizeEdge(w);

@@ -21,13 +21,20 @@ public class VoiceHub : Hub
     private readonly ServerStateService _serverState;
     private readonly AppDbContext _context;
     private readonly PushNotificationService _pushNotificationService;
+    private readonly bool _legacySignalRScreenShareEnabled;
 
-    public VoiceHub(ChannelService channels, ServerStateService serverState, AppDbContext context, PushNotificationService pushNotificationService)
+    public VoiceHub(
+        ChannelService channels,
+        ServerStateService serverState,
+        AppDbContext context,
+        PushNotificationService pushNotificationService,
+        IConfiguration configuration)
     {
         _channels = channels;
         _serverState = serverState;
         _context = context;
         _pushNotificationService = pushNotificationService;
+        _legacySignalRScreenShareEnabled = configuration.GetValue("Voice:EnableLegacySignalRScreenShare", false);
     }
 
     public override async Task OnConnectedAsync()
@@ -246,7 +253,12 @@ public class VoiceHub : Hub
             return;
         }
 
-        _channels.SetScreenShareState(currentUser.UserId, isSharing);
+        var changed = _channels.SetScreenShareState(currentUser.UserId, isSharing);
+        if (!changed)
+        {
+            return;
+        }
+
         await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
     }
@@ -330,6 +342,11 @@ public class VoiceHub : Hub
 
     public async Task SendScreenShareFrame(string userId, byte[] frameBytes, string mimeType, int width, int height)
     {
+        if (!_legacySignalRScreenShareEnabled)
+        {
+            return;
+        }
+
         if (frameBytes is null ||
             frameBytes.Length == 0 ||
             frameBytes.Length > MaxScreenFrameBytes ||
@@ -360,6 +377,11 @@ public class VoiceHub : Hub
 
     public async Task SendScreenShareChunk(string userId, byte[] chunkBytes, string mimeType, bool hasAudio = false)
     {
+        if (!_legacySignalRScreenShareEnabled)
+        {
+            return;
+        }
+
         if (chunkBytes is null ||
             chunkBytes.Length == 0 ||
             chunkBytes.Length > MaxScreenChunkBytes ||

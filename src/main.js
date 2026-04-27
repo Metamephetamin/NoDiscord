@@ -19,6 +19,8 @@ const DOWNLOAD_PREFERENCES_STORE_KEY = "downloads.preferences";
 const BACKGROUND_PREFERENCES_STORE_KEY = "app.background.preferences";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
+const MAX_ELECTRON_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_ELECTRON_FETCH_BYTES = 25 * 1024 * 1024;
 const APP_PROTOCOL = "nodiscord";
 const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const APP_DISPLAY_NAME = "Tend";
@@ -605,17 +607,92 @@ const resolveDownloadedInstallerPath = (version, downloadUrl) => {
   return path.join(getAppUpdateDownloadsRoot(), version || "latest", installerFileName);
 };
 
+const normalizeSha256 = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return /^[a-f0-9]{64}$/.test(normalized) ? normalized : "";
+};
+
+const getOrigin = (value) => {
+  try {
+    return new URL(String(value || "").trim()).origin.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+const getTrustedApiOrigin = () => getOrigin(resolveApiUrl());
+
+const isTrustedLocalDownloadHost = (hostname) => TRUSTED_DEV_HOSTS.has(String(hostname || "").trim().toLowerCase());
+
+const getExtraTrustedDownloadOrigins = () => String(
+  process.env.ND_TRUSTED_DOWNLOAD_ORIGINS
+    || process.env.TEND_TRUSTED_DOWNLOAD_ORIGINS
+    || ""
+)
+  .split(",")
+  .map((item) => getOrigin(item.trim()))
+  .filter(Boolean);
+
+const isTrustedDownloadUrl = (value, { allowLocalDev = !app.isPackaged } = {}) => {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    if (!["https:", "http:"].includes(parsed.protocol)) {
+      return false;
+    }
+
+    if (parsed.protocol === "http:" && !(allowLocalDev && isTrustedLocalDownloadHost(parsed.hostname))) {
+      return false;
+    }
+
+    const apiOrigin = getTrustedApiOrigin();
+    const packagedOrigin = getOrigin(DEFAULT_PACKAGED_API_URL);
+    const rendererDevOrigin = getOrigin(RENDERER_DEV_SERVER_URL);
+    const extraOrigins = getExtraTrustedDownloadOrigins();
+    const sourceOrigin = parsed.origin.toLowerCase();
+    return Boolean(sourceOrigin)
+      && (
+        sourceOrigin === apiOrigin
+        || sourceOrigin === packagedOrigin
+        || extraOrigins.includes(sourceOrigin)
+        || (allowLocalDev && sourceOrigin === rendererDevOrigin)
+      );
+  } catch {
+    return false;
+  }
+};
+
+const isTrustedAppUpdateDownloadUrl = (value) => isTrustedDownloadUrl(value, { allowLocalDev: false });
+
+const calculateFileSha256 = async (filePath) => {
+  const buffer = await fs.readFile(filePath);
+  return createHash("sha256").update(buffer).digest("hex").toLowerCase();
+};
+
 const loadCachedDownloadedUpdate = async () => {
   const cache = await readAppUpdateCache();
   const cachedVersion = normalizeVersion(cache?.version);
   const cachedPath = String(cache?.downloadPath || "").trim();
+  const cachedDownloadUrl = String(cache?.downloadUrl || "").trim();
+  const cachedSha256 = normalizeSha256(cache?.sha256);
 
-  if (!cachedVersion || !cachedPath || !(await fileExists(cachedPath))) {
+  if (
+    !cachedVersion
+    || !cachedPath
+    || !cachedSha256
+    || !isTrustedAppUpdateDownloadUrl(cachedDownloadUrl)
+    || !(await fileExists(cachedPath))
+  ) {
     await clearAppUpdateCache();
     return;
   }
 
   if (compareVersions(app.getVersion(), cachedVersion) >= 0) {
+    await clearAppUpdateCache();
+    return;
+  }
+
+  const actualSha256 = await calculateFileSha256(cachedPath).catch(() => "");
+  if (actualSha256 !== cachedSha256) {
     await clearAppUpdateCache();
     return;
   }
@@ -630,9 +707,9 @@ const loadCachedDownloadedUpdate = async () => {
     required: cachedUpdateIsRequired,
     isCompatible: !cachedUpdateIsRequired,
     downloadAvailable: true,
-    downloadUrl: String(cache?.downloadUrl || "").trim(),
+    downloadUrl: cachedDownloadUrl,
     downloadPath: cachedPath,
-    sha256: String(cache?.sha256 || "").trim(),
+    sha256: cachedSha256,
     downloadedAt: String(cache?.downloadedAt || "").trim(),
     autoInstallOnQuit: cache?.autoInstallOnQuit !== false,
   });
@@ -641,10 +718,30 @@ const loadCachedDownloadedUpdate = async () => {
 
 const applyDownloadedUpdate = async () => {
   const downloadPath = String(appUpdateState.downloadPath || "").trim();
+  const expectedSha256 = normalizeSha256(appUpdateState.sha256);
   if (!downloadPath || !(await fileExists(downloadPath))) {
     updateAppUpdateState({
       status: "error",
       error: "Скачанный установщик обновления не найден. Проверьте обновления ещё раз.",
+    });
+    updateAppUpdateState({ message: getAppUpdateMessage() });
+    return false;
+  }
+
+  if (!expectedSha256) {
+    updateAppUpdateState({
+      status: "error",
+      error: "Update installer checksum is required.",
+    });
+    updateAppUpdateState({ message: getAppUpdateMessage() });
+    return false;
+  }
+
+  const actualSha256 = await calculateFileSha256(downloadPath).catch(() => "");
+  if (actualSha256 !== expectedSha256) {
+    updateAppUpdateState({
+      status: "error",
+      error: "Downloaded update checksum mismatch.",
     });
     updateAppUpdateState({ message: getAppUpdateMessage() });
     return false;
@@ -686,6 +783,7 @@ const installDownloadedUpdateAndQuit = async () => {
 const downloadClientUpdate = async (descriptor) => {
   const latestVersion = normalizeVersion(descriptor?.latestVersion);
   const downloadUrl = String(descriptor?.downloadUrl || "").trim();
+  const expectedSha256 = normalizeSha256(descriptor?.sha256);
   const updateIsRequired = descriptor?.required === true;
   const autoInstallOnQuit = descriptor?.autoInstallOnQuit !== false;
   if (!latestVersion || !downloadUrl) {
@@ -694,36 +792,61 @@ const downloadClientUpdate = async (descriptor) => {
     return getSanitizedAppUpdateState();
   }
 
-  const finalPath = resolveDownloadedInstallerPath(latestVersion, downloadUrl);
-  if (await fileExists(finalPath)) {
-    shouldInstallDownloadedUpdateOnQuit = autoInstallOnQuit;
+  if (!expectedSha256 || !isTrustedAppUpdateDownloadUrl(downloadUrl)) {
     updateAppUpdateState({
-      status: "downloaded",
+      status: "error",
       latestVersion,
       minimumVersion: normalizeVersion(descriptor.minimumVersion),
       updateAvailable: true,
       required: updateIsRequired,
       isCompatible: !updateIsRequired,
-      downloadAvailable: true,
-      downloadUrl,
-      downloadPath: finalPath,
-      sha256: String(descriptor.sha256 || "").trim(),
-      downloadedAt: new Date().toISOString(),
-      autoInstallOnQuit,
-      error: "",
+      downloadAvailable: false,
+      downloadUrl: "",
+      downloadPath: "",
+      sha256: "",
+      error: !expectedSha256
+        ? "Update installer checksum is required."
+        : "Update download URL is not trusted.",
     });
     updateAppUpdateState({ message: getAppUpdateMessage() });
-    await writeAppUpdateCache({
-      version: latestVersion,
-      minimumVersion: normalizeVersion(descriptor.minimumVersion),
-      required: updateIsRequired,
-      downloadUrl,
-      downloadPath: finalPath,
-      sha256: String(descriptor.sha256 || "").trim(),
-      downloadedAt: new Date().toISOString(),
-      autoInstallOnQuit,
-    });
     return getSanitizedAppUpdateState();
+  }
+
+  const finalPath = resolveDownloadedInstallerPath(latestVersion, downloadUrl);
+  if (await fileExists(finalPath)) {
+    const actualSha256 = await calculateFileSha256(finalPath).catch(() => "");
+    if (actualSha256 !== expectedSha256) {
+      await fs.rm(finalPath, { force: true }).catch(() => {});
+    } else {
+      shouldInstallDownloadedUpdateOnQuit = autoInstallOnQuit;
+      updateAppUpdateState({
+        status: "downloaded",
+        latestVersion,
+        minimumVersion: normalizeVersion(descriptor.minimumVersion),
+        updateAvailable: true,
+        required: updateIsRequired,
+        isCompatible: !updateIsRequired,
+        downloadAvailable: true,
+        downloadUrl,
+        downloadPath: finalPath,
+        sha256: expectedSha256,
+        downloadedAt: new Date().toISOString(),
+        autoInstallOnQuit,
+        error: "",
+      });
+      updateAppUpdateState({ message: getAppUpdateMessage() });
+      await writeAppUpdateCache({
+        version: latestVersion,
+        minimumVersion: normalizeVersion(descriptor.minimumVersion),
+        required: updateIsRequired,
+        downloadUrl,
+        downloadPath: finalPath,
+        sha256: expectedSha256,
+        downloadedAt: new Date().toISOString(),
+        autoInstallOnQuit,
+      });
+      return getSanitizedAppUpdateState();
+    }
   }
 
   if (appUpdateDownloadPromise) {
@@ -746,7 +869,7 @@ const downloadClientUpdate = async (descriptor) => {
       downloadAvailable: true,
       downloadUrl,
       downloadPath: "",
-      sha256: String(descriptor.sha256 || "").trim(),
+      sha256: expectedSha256,
       downloadedAt: "",
       autoInstallOnQuit,
       downloadProgress: 0,
@@ -754,14 +877,13 @@ const downloadClientUpdate = async (descriptor) => {
     });
     updateAppUpdateState({ message: getAppUpdateMessage() });
 
-    const response = await fetch(downloadUrl);
+    const response = await fetchTrustedDownloadResponse(downloadUrl);
     if (!response.ok || !response.body) {
       throw new Error(`Update download failed with status ${response.status}.`);
     }
 
     const totalBytes = Number.parseInt(response.headers.get("content-length") || "0", 10);
-    const expectedSha256 = String(descriptor.sha256 || "").trim().toLowerCase();
-    const hash = expectedSha256 ? createHash("sha256") : null;
+    const hash = createHash("sha256");
     const fileStream = createWriteStream(tempPath, { flags: "w" });
 
     try {
@@ -775,9 +897,7 @@ const downloadClientUpdate = async (descriptor) => {
         }
 
         const chunk = Buffer.from(value);
-        if (hash) {
-          hash.update(chunk);
-        }
+        hash.update(chunk);
 
         if (!fileStream.write(chunk)) {
           await once(fileStream, "drain");
@@ -795,11 +915,9 @@ const downloadClientUpdate = async (descriptor) => {
       throw error;
     }
 
-    if (hash) {
-      const actualSha256 = hash.digest("hex").toLowerCase();
-      if (actualSha256 !== expectedSha256) {
-        throw new Error("Downloaded update checksum mismatch.");
-      }
+    const actualSha256 = hash.digest("hex").toLowerCase();
+    if (actualSha256 !== expectedSha256) {
+      throw new Error("Downloaded update checksum mismatch.");
     }
 
     await fs.rename(tempPath, finalPath);
@@ -816,6 +934,7 @@ const downloadClientUpdate = async (descriptor) => {
       downloadAvailable: true,
       downloadUrl,
       downloadPath: finalPath,
+      sha256: expectedSha256,
       downloadedAt,
       autoInstallOnQuit,
       downloadProgress: 100,
@@ -829,7 +948,7 @@ const downloadClientUpdate = async (descriptor) => {
       required: updateIsRequired,
       downloadUrl,
       downloadPath: finalPath,
-      sha256: String(descriptor.sha256 || "").trim(),
+      sha256: expectedSha256,
       downloadedAt,
       autoInstallOnQuit,
     });
@@ -895,7 +1014,11 @@ const checkForClientUpdates = async ({ force = false } = {}) => {
     const minimumVersion = normalizeVersion(descriptor?.minimumVersion);
     const updateAvailable = Boolean(descriptor?.updateAvailable);
     const required = Boolean(descriptor?.required);
-    const downloadAvailable = Boolean(descriptor?.downloadAvailable);
+    const descriptorDownloadUrl = String(descriptor?.downloadUrl || "").trim();
+    const descriptorSha256 = normalizeSha256(descriptor?.sha256);
+    const downloadAvailable = Boolean(descriptor?.downloadAvailable)
+      && Boolean(descriptorSha256)
+      && isTrustedAppUpdateDownloadUrl(descriptorDownloadUrl);
 
     updateAppUpdateState({
       status: updateAvailable ? (downloadAvailable && isSupportedAutoUpdateRuntime() ? "available" : "available") : "up-to-date",
@@ -906,8 +1029,8 @@ const checkForClientUpdates = async ({ force = false } = {}) => {
       isCompatible: Boolean(descriptor?.isCompatible ?? !required),
       downloadAvailable,
       autoInstallOnQuit: descriptor?.autoInstallOnQuit !== false,
-      downloadUrl: String(descriptor?.downloadUrl || "").trim(),
-      sha256: String(descriptor?.sha256 || "").trim(),
+      downloadUrl: downloadAvailable ? descriptorDownloadUrl : "",
+      sha256: descriptorSha256,
       releaseNotes: String(descriptor?.releaseNotes || "").trim(),
       checkedAt: String(descriptor?.checkedAtUtc || new Date().toISOString()),
       error: "",
@@ -931,8 +1054,8 @@ const checkForClientUpdates = async ({ force = false } = {}) => {
       minimumVersion,
       required,
       autoInstallOnQuit: descriptor?.autoInstallOnQuit !== false,
-      downloadUrl: String(descriptor?.downloadUrl || "").trim(),
-      sha256: String(descriptor?.sha256 || "").trim(),
+      downloadUrl: descriptorDownloadUrl,
+      sha256: descriptorSha256,
     });
   })()
     .catch((error) => {
@@ -1054,6 +1177,76 @@ const sanitizeDownloadFileName = (value) => {
     })
     .join("");
   return normalized || DOWNLOAD_FILE_NAME_FALLBACK;
+};
+
+const assertTrustedDownloadUrl = (value) => {
+  const sourceUrl = String(value || "").trim();
+  if (!sourceUrl || !isTrustedDownloadUrl(sourceUrl)) {
+    throw new Error("Download URL is not trusted.");
+  }
+
+  return sourceUrl;
+};
+
+const buildSafeDownloadHeaders = (headers, sourceUrl) => {
+  const safeHeaders = new Headers();
+  const sourceOrigin = getOrigin(sourceUrl);
+  const apiOrigin = getTrustedApiOrigin();
+  const normalizedHeaders = headers && typeof headers === "object" && !Array.isArray(headers) ? headers : {};
+  const authorization = String(normalizedHeaders.Authorization || normalizedHeaders.authorization || "").trim();
+
+  if (authorization && sourceOrigin && sourceOrigin === apiOrigin && /^Bearer\s+\S+$/i.test(authorization)) {
+    safeHeaders.set("Authorization", authorization);
+  }
+
+  return safeHeaders;
+};
+
+const fetchTrustedDownloadResponse = async (sourceUrl, { headers } = {}, redirectsLeft = 5) => {
+  const trustedSourceUrl = assertTrustedDownloadUrl(sourceUrl);
+  const response = await fetch(trustedSourceUrl, {
+    headers: buildSafeDownloadHeaders(headers, trustedSourceUrl),
+    redirect: "manual",
+  });
+
+  if (response.status >= 300 && response.status < 400) {
+    if (redirectsLeft <= 0) {
+      throw new Error("Too many download redirects.");
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error(`Download request failed with status ${response.status}.`);
+    }
+
+    const redirectedUrl = new URL(location, trustedSourceUrl).toString();
+    return fetchTrustedDownloadResponse(redirectedUrl, { headers }, redirectsLeft - 1);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Download request failed with status ${response.status}.`);
+  }
+
+  const finalUrl = response.url || trustedSourceUrl;
+  if (!isTrustedDownloadUrl(finalUrl)) {
+    throw new Error("Download redirect target is not trusted.");
+  }
+
+  return response;
+};
+
+const readDownloadResponseBuffer = async (response, maxBytes = MAX_ELECTRON_DOWNLOAD_BYTES) => {
+  const contentLength = Number.parseInt(response.headers.get("content-length") || "0", 10);
+  if (contentLength > maxBytes) {
+    throw new Error("Download is too large.");
+  }
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length > maxBytes) {
+    throw new Error("Download is too large.");
+  }
+
+  return buffer;
 };
 
 const readDownloadPreferences = async () => {
@@ -1937,28 +2130,12 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("downloads:fetch-bytes", async (_event, payload) => {
-    const sourceUrl = String(payload?.url || "").trim();
-    if (!sourceUrl) {
-      throw new Error("No download URL provided.");
-    }
-
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(payload?.headers || {})) {
-      const normalizedKey = String(key || "").trim();
-      const normalizedValue = String(value || "").trim();
-      if (normalizedKey && normalizedValue) {
-        headers.set(normalizedKey, normalizedValue);
-      }
-    }
-
-    const response = await fetch(sourceUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`Download request failed with status ${response.status}.`);
-    }
+    const response = await fetchTrustedDownloadResponse(payload?.url, { headers: payload?.headers });
+    const buffer = await readDownloadResponseBuffer(response, MAX_ELECTRON_FETCH_BYTES);
 
     return {
       contentType: response.headers.get("content-type") || "",
-      bytes: Array.from(new Uint8Array(await response.arrayBuffer())),
+      bytes: Array.from(buffer),
     };
   });
 
@@ -1984,24 +2161,7 @@ app.whenReady().then(async () => {
 
   ipcMain.removeHandler("downloads:fetch-and-save");
   ipcMain.handle("downloads:fetch-and-save", async (_event, payload) => {
-    const sourceUrl = String(payload?.url || "").trim();
-    if (!sourceUrl) {
-      throw new Error("No download URL provided.");
-    }
-
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(payload?.headers || {})) {
-      const normalizedKey = String(key || "").trim();
-      const normalizedValue = String(value || "").trim();
-      if (normalizedKey && normalizedValue) {
-        headers.set(normalizedKey, normalizedValue);
-      }
-    }
-
-    const response = await fetch(sourceUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`Download request failed with status ${response.status}.`);
-    }
+    const response = await fetchTrustedDownloadResponse(payload?.url, { headers: payload?.headers });
 
     const { canceled, filePath, directoryPath, usedDialog } = await resolveDownloadTargetPath(payload?.defaultFileName, {
       forceDialog: payload?.forceDialog === true,
@@ -2011,7 +2171,7 @@ app.whenReady().then(async () => {
       return { canceled: true, filePath: "", directoryPath: "", usedDialog };
     }
 
-    const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+    const buffer = await readDownloadResponseBuffer(response);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, buffer);
     return {
@@ -2046,30 +2206,18 @@ app.whenReady().then(async () => {
     const savedFiles = [];
 
     for (const item of items) {
-      const sourceUrl = String(item?.url || "").trim();
-      if (!sourceUrl) {
+      if (!String(item?.url || "").trim()) {
         // eslint-disable-next-line no-continue
         continue;
       }
 
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(item?.headers || {})) {
-        const normalizedKey = String(key || "").trim();
-        const normalizedValue = String(value || "").trim();
-        if (normalizedKey && normalizedValue) {
-          headers.set(normalizedKey, normalizedValue);
-        }
-      }
-
       // eslint-disable-next-line no-await-in-loop
-      const response = await fetch(sourceUrl, { headers });
-      if (!response.ok) {
-        throw new Error(`Download request failed with status ${response.status}.`);
-      }
+      const response = await fetchTrustedDownloadResponse(item.url, { headers: item?.headers });
 
       // eslint-disable-next-line no-await-in-loop
       const nextFilePath = await buildUniqueDownloadPath(directorySelection.directoryPath, item?.defaultFileName);
-      const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+      // eslint-disable-next-line no-await-in-loop
+      const buffer = await readDownloadResponseBuffer(response);
       // eslint-disable-next-line no-await-in-loop
       await fs.writeFile(nextFilePath, buffer);
       savedFiles.push(nextFilePath);

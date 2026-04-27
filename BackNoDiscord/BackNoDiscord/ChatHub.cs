@@ -32,12 +32,16 @@ public class ChatHub : Hub
     private const string ChatChannelMarker = "::channel:";
     private const string PrivateServerPrefix = "server-";
     private const string PersonalServerPrefix = "server-main-";
-    private static readonly TimeSpan MessageSendCooldown = TimeSpan.Zero;
+    private static readonly TimeSpan MessageSendCooldown = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan ForwardCooldown = TimeSpan.FromMilliseconds(900);
     private static readonly TimeSpan MessageMutationCooldown = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan CooldownEntryMaxAge = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan CooldownCleanupInterval = TimeSpan.FromMinutes(5);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastSlowModeMessageSentAtByUserAndChannel = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
+    private static readonly object CooldownCleanupSync = new();
+    private static DateTime LastCooldownCleanupUtc = DateTime.MinValue;
 
     private readonly AppDbContext _context;
     private readonly CryptoService _crypto;
@@ -158,10 +162,12 @@ public class ChatHub : Hub
                 }
             }
 
+            var nowUtc = DateTime.UtcNow;
+            TrimCooldownState(nowUtc);
             if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
-                && DateTime.UtcNow - lastMessageSentAtUtc < MessageSendCooldown)
+                && nowUtc - lastMessageSentAtUtc < MessageSendCooldown)
             {
-                throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
+                throw new HubException("Подождите немного перед следующим сообщением.");
             }
 
             EnsureServerChannelSlowMode(normalizedChannelId, currentUser.UserId);
@@ -220,7 +226,7 @@ public class ChatHub : Hub
             await _context.SaveChangesAsync();
 
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
-            LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+            LastMessageSentAtByUser[currentUser.UserId] = nowUtc;
             MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
             await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, currentDisplayName, payload);
         }
@@ -267,10 +273,12 @@ public class ChatHub : Hub
             throw new HubException("messages are required");
         }
 
+        var nowUtc = DateTime.UtcNow;
+        TrimCooldownState(nowUtc);
         if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
-            && DateTime.UtcNow - lastMessageSentAtUtc < MessageSendCooldown)
+            && nowUtc - lastMessageSentAtUtc < MessageSendCooldown)
         {
-            throw new HubException("Подождите 1.5 секунды перед следующим сообщением.");
+            throw new HubException("Подождите немного перед следующим сообщением.");
         }
 
         EnsureServerChannelSlowMode(normalizedChannelId, currentUser.UserId);
@@ -352,7 +360,7 @@ public class ChatHub : Hub
         }
 
         _logger.LogInformation("User {UserId} forwarded {Count} messages to channel {ChannelId}", currentUser.UserId, forwardedMessages.Count, normalizedChannelId);
-        LastMessageSentAtByUser[currentUser.UserId] = DateTime.UtcNow;
+        LastMessageSentAtByUser[currentUser.UserId] = nowUtc;
         MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
 
         if (forwardedMessages.Count > 0)
@@ -966,14 +974,48 @@ public class ChatHub : Hub
 
     private static void EnsureActionCooldown(string userId, string actionName, TimeSpan cooldown, string message)
     {
+        var nowUtc = DateTime.UtcNow;
+        TrimCooldownState(nowUtc);
         var actionKey = $"{userId}:{actionName}";
         if (LastActionAtByUserAndName.TryGetValue(actionKey, out var lastActionAtUtc)
-            && DateTime.UtcNow - lastActionAtUtc < cooldown)
+            && nowUtc - lastActionAtUtc < cooldown)
         {
             throw new HubException(message);
         }
 
-        LastActionAtByUserAndName[actionKey] = DateTime.UtcNow;
+        LastActionAtByUserAndName[actionKey] = nowUtc;
+    }
+
+    private static void TrimCooldownState(DateTime nowUtc)
+    {
+        if (nowUtc - LastCooldownCleanupUtc < CooldownCleanupInterval)
+        {
+            return;
+        }
+
+        lock (CooldownCleanupSync)
+        {
+            if (nowUtc - LastCooldownCleanupUtc < CooldownCleanupInterval)
+            {
+                return;
+            }
+
+            LastCooldownCleanupUtc = nowUtc;
+            TrimCooldownDictionary(LastMessageSentAtByUser, nowUtc);
+            TrimCooldownDictionary(LastSlowModeMessageSentAtByUserAndChannel, nowUtc);
+            TrimCooldownDictionary(LastActionAtByUserAndName, nowUtc);
+        }
+    }
+
+    private static void TrimCooldownDictionary(ConcurrentDictionary<string, DateTime> dictionary, DateTime nowUtc)
+    {
+        foreach (var entry in dictionary)
+        {
+            if (nowUtc - entry.Value > CooldownEntryMaxAge)
+            {
+                dictionary.TryRemove(entry.Key, out _);
+            }
+        }
     }
 
     private void EnsureServerChannelSlowMode(string channelId, string userId)
