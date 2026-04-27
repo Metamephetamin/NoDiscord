@@ -7509,7 +7509,6 @@ html[data-ui-density="compact"] .settings-popup--shell {
   clip-path: inset(0 round 50%);
   object-fit: cover;
   image-rendering: auto;
-  image-rendering: -webkit-optimize-contrast;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -8851,15 +8850,16 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__preview-card {
   position: relative;
   overflow: hidden;
+  min-height: 306px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(180deg, rgba(19, 22, 31, 0.98), rgba(15, 17, 24, 0.98));
 }
 
 .profile-settings-form__cover {
-  position: relative;
-  min-height: 170px;
-  border-radius: 14px 14px 0 0;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   overflow: hidden;
   border: 0;
   background: linear-gradient(145deg, rgba(32, 35, 49, 0.98), rgba(18, 20, 28, 0.96));
@@ -8895,22 +8895,14 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   pointer-events: none;
 }
 
-.profile-settings-form__cover-action {
-  position: absolute;
-  right: 18px;
-  top: 18px;
-  z-index: 1;
-  min-height: 40px;
-  padding: 0 16px;
-}
-
 .profile-settings-form__preview-body {
+  position: absolute;
+  inset: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: flex-start;
   gap: 18px;
-  margin-top: -54px;
-  padding: 0 22px 22px;
-  position: relative;
+  padding: 0 36px;
   z-index: 2;
 }
 
@@ -8919,11 +8911,11 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   align-items: center;
   justify-content: center;
   position: relative;
-  width: 106px;
-  height: 106px;
-  flex: 0 0 106px;
+  width: 132px;
+  height: 132px;
+  flex: 0 0 132px;
   overflow: hidden;
-  border-radius: 28px;
+  border-radius: 32px;
   isolation: isolate;
   box-shadow:
     0 24px 54px rgba(0, 0, 0, 0.42),
@@ -8943,25 +8935,27 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   display: block;
   border-radius: inherit;
   object-fit: cover;
+  image-rendering: auto;
 }
 
 .profile-settings-form__identity {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 12px;
+  min-width: 0;
+  max-width: 320px;
+  align-self: center;
+  padding-top: 0;
+  transform: translateY(-44px);
 }
 
 .profile-settings-form__identity strong {
+  display: block;
   color: #f6f8ff;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.08;
-}
-
-.profile-settings-form__identity span {
-  color: #a8b2c8;
-  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6);
 }
 
 .profile-settings-form__fields {
@@ -9498,6 +9492,10 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
 }
 
+.profile-settings-form__actions {
+  gap: 10px;
+}
+
 .settings-popup--mobile .settings-shell__content {
   width: 100%;
   margin: 0;
@@ -9607,19 +9605,42 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.settings-popup--mobile .profile-settings-form__preview-card {
+  min-height: 280px;
+  border-radius: 18px;
+}
+
 .settings-popup--mobile .profile-settings-form__cover {
-  min-height: 160px;
   border-radius: 18px;
 }
 
 .settings-popup--mobile .profile-settings-form__avatar-wrap {
-  align-items: flex-start;
+  width: 112px;
+  height: 112px;
+  flex-basis: 112px;
+  border-radius: 28px;
 }
 
 .settings-popup--mobile .profile-settings-form__avatar {
-  width: 104px;
-  height: 104px;
-  border-radius: 24px;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.settings-popup--mobile .profile-settings-form__preview-body {
+  gap: 14px;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.settings-popup--mobile .profile-settings-form__identity {
+  max-width: min(48vw, 220px);
+  padding-top: 0;
+  transform: translateY(-36px);
+}
+
+.settings-popup--mobile .profile-settings-form__identity strong {
+  font-size: 20px;
 }
 
 .settings-popup--mobile .settings-server-card__icon {

@@ -92,7 +92,7 @@ public sealed class MediaRenderController : ControllerBase
 
         await image.SaveAsJpegAsync(outputStream, new JpegEncoder
         {
-            Quality = 82,
+            Quality = 92,
         }, cancellationToken);
         return BuildFileResult(outputStream, "image/jpeg");
     }

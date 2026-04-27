@@ -1434,6 +1434,7 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     title: APP_DISPLAY_NAME,
     icon: resolveAppIconPath(),
     backgroundColor: APP_WINDOW_BACKGROUND_COLOR,
@@ -1498,6 +1499,8 @@ const createWindow = () => {
   });
 
   mainWindow.once("ready-to-show", () => {
+    mainWindow.maximize();
+    mainWindow.show();
     finishPerfTrace(createWindowTraceId, {
       milestone: "ready-to-show",
     });

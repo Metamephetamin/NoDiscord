@@ -8,6 +8,7 @@ let optimizedMediaEndpointDisabled = false;
 const failedOptimizedMediaSourceSet = new Set();
 const MEDIA_SOURCE_FAILURE_COOLDOWN_MS = 60000;
 const MAX_OPTIMIZED_MEDIA_EDGE = 1600;
+const MIN_OPTIMIZED_AVATAR_EDGE = 256;
 const failedMediaSourceExpiryMap = new Map();
 
 function getMediaSourceFailureExpiry(value) {
@@ -72,6 +73,7 @@ export default function AnimatedMedia({
   const mediaStyle = useMemo(() => getMediaFrameStyle(frame, style), [frame, style]);
   const isVideoReady = readyVideoSrc === resolvedSrc;
   const shouldTrackVisibility = loading !== "eager" && typeof IntersectionObserver === "function";
+  const shouldUseAvatarQualityFloor = /\bavatar\b/i.test(className);
   const canOptimizeImage = optimize
     && !optimizedMediaEndpointDisabled
     && !failedOptimizedMediaSourceSet.has(resolvedSrc)
@@ -79,8 +81,9 @@ export default function AnimatedMedia({
     && !isVideoSource
     && !isMediaSourceCoolingDown;
   const isAnimatedImage = !isVideoSource && !isMediaSourceCoolingDown && isAnimatedAvatarUrl(resolvedSrc);
-  const targetWidth = Math.max(32, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
-  const targetHeight = Math.max(32, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.height || bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
+  const minOptimizedEdge = shouldUseAvatarQualityFloor ? MIN_OPTIMIZED_AVATAR_EDGE : 32;
+  const targetWidth = Math.max(minOptimizedEdge, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
+  const targetHeight = Math.max(minOptimizedEdge, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.height || bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
   const optimizedImageSrc = useMemo(
     () => (
       canOptimizeImage && resolvedSrc

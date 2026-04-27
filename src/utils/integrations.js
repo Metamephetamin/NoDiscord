@@ -69,6 +69,13 @@ export async function requestIntegrationConnectUrl(providerId) {
     throw new Error(getApiErrorMessage(response, data, "Не удалось начать подключение интеграции."));
   }
 
+  if (data?.provider) {
+    return {
+      provider: normalizeIntegrationProvider(data.provider),
+      localDev: Boolean(data.localDev),
+    };
+  }
+
   return String(data?.url || "");
 }
 

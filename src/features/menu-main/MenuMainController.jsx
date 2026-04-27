@@ -6188,7 +6188,15 @@ export default function MenuMain({
     try {
       const integrationMeta = integrations.find((provider) => provider.id === providerId);
       if (integrationMeta?.oauthEnabled) {
-        const url = await connectIntegration(providerId);
+        const result = await connectIntegration(providerId);
+        if (result && typeof result === "object" && result.provider) {
+          replaceIntegrationProvider(result.provider);
+          setIntegrationsStatus(result.localDev ? "Локальная dev-интеграция подключена без OAuth." : "Интеграция подключена.");
+          await refreshIntegrations();
+          return;
+        }
+
+        const url = String(result || "");
         if (!url) {
           throw new Error("Сервис не вернул ссылку авторизации.");
         }
@@ -6204,13 +6212,17 @@ export default function MenuMain({
         return;
       }
 
-      await connectIntegration(providerId);
+      const result = await connectIntegration(providerId);
+      if (result && typeof result === "object" && result.provider) {
+        replaceIntegrationProvider(result.provider);
+      }
+      await refreshIntegrations();
     } catch (error) {
       setIntegrationsStatus(error?.message || "Не удалось подключить интеграцию.");
     } finally {
       setIntegrationActionBusy("");
     }
-  }, [integrations, startIntegrationOAuthPolling]);
+  }, [integrations, refreshIntegrations, replaceIntegrationProvider, startIntegrationOAuthPolling]);
 
   const handleDisconnectIntegration = useCallback(async (providerId) => {
     setIntegrationActionBusy(providerId);

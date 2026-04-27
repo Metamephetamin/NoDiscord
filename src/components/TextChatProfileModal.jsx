@@ -44,7 +44,7 @@ export default function TextChatProfileModal({
         onClick={(event) => event.stopPropagation()}
       >
         <button type="button" className="chat-profile-modal__close" onClick={onClose} aria-label="Закрыть профиль">
-          ×
+          <span className="chat-profile-modal__close-icon" aria-hidden="true" />
         </button>
 
         <div className="chat-profile-modal__hero">
@@ -89,7 +89,7 @@ export default function TextChatProfileModal({
             <div className="chat-profile-modal__section">
               <span className="chat-profile-modal__eyebrow">Визуал</span>
               <p>
-                Фон идёт на всю ширину шапки, а аватар полностью лежит внутри композиции слева. Так проще подбирать
+                Фон идет на всю ширину шапки, а аватар полностью лежит внутри композиции слева. Так проще подбирать
                 парные картинки и делать профиль более цельным.
               </p>
             </div>

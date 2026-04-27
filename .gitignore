@@ -118,6 +118,8 @@ slnx.sqlite
 BackNoDiscord/BackNoDiscord/App_Data/*.json
 BackNoDiscord/BackNoDiscord/wwwroot/chat-files/
 BackNoDiscord/BackNoDiscord/wwwroot/avatars/user-*
+BackNoDiscord/BackNoDiscord/wwwroot/profile-backgrounds/profile-bg-*
+BackNoDiscord/BackNoDiscord/wwwroot/server-icons/
 
 # Sensitive config and local secrets
 BackNoDiscord/BackNoDiscord/appsettings.Production.json

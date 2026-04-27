@@ -422,7 +422,6 @@ export const PersonalProfileSettings = ({
   avatarSrc,
   avatarFrame,
   displayName,
-  email,
   onChangeAvatar,
   onChangeBackground,
 }) => (
@@ -448,9 +447,6 @@ export const PersonalProfileSettings = ({
             ) : (
               <div className="profile-settings-form__cover-fallback" aria-hidden="true" />
             )}
-            <button type="button" className="settings-inline-button profile-settings-form__cover-action" onClick={onChangeBackground}>
-              Сменить фон профиля
-            </button>
           </div>
 
           <div className="profile-settings-form__preview-body">
@@ -459,9 +455,17 @@ export const PersonalProfileSettings = ({
             </button>
             <div className="profile-settings-form__identity">
               <strong>{displayName}</strong>
-              <span>{email}</span>
             </div>
           </div>
+        </div>
+
+        <div className="settings-shell__actions profile-settings-form__actions">
+          <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
+            Сменить фон профиля
+          </button>
+          <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
+            Сменить аватар
+          </button>
         </div>
       </div>
     </section>

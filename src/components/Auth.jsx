@@ -29,9 +29,6 @@ const initialRegisterForm = {
   nickname: "",
   contact: "",
   password: "",
-  cardNumber: "",
-  cardExpiry: "",
-  cardCvc: "",
 };
 
 const initialLoginForm = {
@@ -65,22 +62,6 @@ const TYPING_FORWARD_DELAY_MS = 280;
 const TYPING_BACKWARD_DELAY_MS = 180;
 const TYPING_HOLD_FULL_MS = 1100;
 const TYPING_HOLD_EMPTY_MS = 360;
-
-const formatCardNumber = (value) =>
-  value
-    .replace(/\D/g, "")
-    .slice(0, 16)
-    .replace(/(\d{4})(?=\d)/g, "$1 ")
-    .trim();
-
-const formatCardExpiry = (value) => {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) {
-    return digits;
-  }
-
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-};
 
 function getRemainingSeconds(availableAt) {
   if (!availableAt) {
@@ -267,7 +248,6 @@ export default function Auth({ onAuthSuccess }) {
   const [loginErrors, setLoginErrors] = useState(initialLoginErrors);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [emailVerificationCode, setEmailVerificationCode] = useState("");
   const [emailVerificationTotpCode, setEmailVerificationTotpCode] = useState("");
   const [emailVerificationModal, setEmailVerificationModal] = useState(initialEmailVerificationModal);
@@ -289,26 +269,6 @@ export default function Auth({ onAuthSuccess }) {
   const authVideoRef = useRef(null);
   const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
   const authMessageTone = useMemo(() => getAuthMessageTone(message), [message]);
-
-  const cardHolderName = useMemo(() => {
-    const composed = `${registerForm.firstName} ${registerForm.lastName}`.trim();
-    return composed || "Ваше имя";
-  }, [registerForm.firstName, registerForm.lastName]);
-
-  const displayedCardNumber = useMemo(() => {
-    const formatted = formatCardNumber(registerForm.cardNumber);
-    return formatted || "0000 0000 0000 0000";
-  }, [registerForm.cardNumber]);
-
-  const displayedCardExpiry = useMemo(
-    () => formatCardExpiry(registerForm.cardExpiry) || "MM/YY",
-    [registerForm.cardExpiry]
-  );
-
-  const displayedCardCvc = useMemo(() => {
-    const digits = registerForm.cardCvc.replace(/\D/g, "").slice(0, 3);
-    return digits || "000";
-  }, [registerForm.cardCvc]);
 
   const normalizedRegisterEmail = useMemo(
     () => registerForm.contact.trim().toLowerCase(),
@@ -569,13 +529,7 @@ export default function Auth({ onAuthSuccess }) {
   const handleRegisterFieldChange = (field) => (event) => {
     let nextValue = event.target.value;
 
-    if (field === "cardNumber") {
-      nextValue = formatCardNumber(nextValue);
-    } else if (field === "cardExpiry") {
-      nextValue = formatCardExpiry(nextValue);
-    } else if (field === "cardCvc") {
-      nextValue = nextValue.replace(/\D/g, "").slice(0, 3);
-    } else if (field === "firstName" || field === "lastName") {
+    if (field === "firstName" || field === "lastName") {
       const otherField = field === "firstName" ? "lastName" : "firstName";
 
       setRegisterForm((previous) => {
@@ -1020,7 +974,7 @@ export default function Auth({ onAuthSuccess }) {
       </div>
 
       <form
-        className={`auth-card auth-card--wide ${mode === "login" ? "auth-card--login" : ""}`}
+        className={`auth-card auth-card--wide ${mode === "login" ? "auth-card--login" : "auth-card--register"}`}
         onSubmit={handleAuthSubmit}
       >
         <div className="auth-card__main">
@@ -1227,7 +1181,7 @@ export default function Auth({ onAuthSuccess }) {
               onClick={() => switchMode(mode === "login" ? "register" : "login")}
               disabled={isSubmitting || isRequestingLoginCode}
             >
-              {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт?"}
+              {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт? Войти"}
             </button>
           </div>
 
@@ -1274,63 +1228,6 @@ export default function Auth({ onAuthSuccess }) {
           </aside>
         ) : null}
 
-        {mode !== "login" ? (
-          <aside className="auth-card__side">
-            <>
-              <div className="auth-side__title">Платёжная карта</div>
-              <div className={`bank-card ${isCardFlipped ? "bank-card--flipped" : ""}`}>
-                <div className="bank-card__face bank-card__face--front">
-                  <div className="bank-card__brand">MAX PAY</div>
-                  <div className="bank-card__number">{displayedCardNumber}</div>
-                  <div className="bank-card__meta">
-                    <div>
-                      <span className="bank-card__label">Держатель</span>
-                      <span className="bank-card__value">{cardHolderName}</span>
-                    </div>
-                    <div>
-                      <span className="bank-card__label">Срок</span>
-                      <span className="bank-card__value">{displayedCardExpiry}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bank-card__face bank-card__face--back">
-                  <div className="bank-card__stripe" />
-                  <div className="bank-card__cvc-box">
-                    <span className="bank-card__label">CVC</span>
-                    <span>Показываем только визуальный макет</span>
-                    <span className="bank-card__cvc">{displayedCardCvc}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="auth-grid auth-grid--double auth-grid--card">
-                <input
-                  className="auth-input"
-                  placeholder="Номер карты"
-                  value={registerForm.cardNumber}
-                  onChange={handleRegisterFieldChange("cardNumber")}
-                  onFocus={() => setIsCardFlipped(false)}
-                />
-                <input
-                  className="auth-input"
-                  placeholder="Срок действия"
-                  value={registerForm.cardExpiry}
-                  onChange={handleRegisterFieldChange("cardExpiry")}
-                  onFocus={() => setIsCardFlipped(false)}
-                />
-                <input
-                  className="auth-input auth-input--compact"
-                  placeholder="CVC"
-                  value={registerForm.cardCvc}
-                  onChange={handleRegisterFieldChange("cardCvc")}
-                  onFocus={() => setIsCardFlipped(true)}
-                  onBlur={() => setIsCardFlipped(false)}
-                />
-              </div>
-            </>
-          </aside>
-        ) : null}
       </form>
 
       {emailVerificationModal.open && !isLoginEmailVerification ? (

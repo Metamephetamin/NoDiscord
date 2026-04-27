@@ -7,6 +7,7 @@ const USER_STORAGE_KEY = "user";
 const REFRESH_TOKEN_STORAGE_KEY = "refresh_token";
 const ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY = "access_token_expires_at";
 const SESSION_API_URL_STORAGE_KEY = "session_api_url";
+const LEGACY_LOCAL_AUTH_BYPASS_TOKEN = "local-dev-auth-bypass-token";
 
 export const AUTH_UNAUTHORIZED_EVENT = "nodiscord:auth-unauthorized";
 
@@ -20,6 +21,70 @@ const sessionCache = {
 };
 
 let refreshPromise = null;
+
+function isTrustedLocalHost(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  return normalizedValue === "localhost" || normalizedValue === "127.0.0.1";
+}
+
+export function isLocalAuthBypassEnabled() {
+  return Boolean(import.meta.env.DEV)
+    && typeof window !== "undefined"
+    && !window.electronRuntime?.isPackagedApp
+    && /^https?:$/i.test(String(window.location?.protocol || ""))
+    && isTrustedLocalHost(window.location?.hostname);
+}
+
+function mapLocalDevAuthUser(data) {
+  return {
+    id: data?.id,
+    firstName: data?.first_name || "",
+    lastName: data?.last_name || "",
+    nickname: data?.nickname || "",
+    email: data?.email || "",
+    isEmailVerified: Boolean(data?.is_email_verified),
+    phoneNumber: data?.phone_number || "",
+    isPhoneVerified: Boolean(data?.is_phone_verified),
+    isTotpEnabled: Boolean(data?.is_totp_enabled),
+    avatarUrl: data?.avatar_url || data?.avatarUrl || "",
+    avatar: data?.avatar_url || data?.avatarUrl || "",
+    avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
+    avatar_frame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
+    profileBackgroundUrl: data?.profile_background_url || data?.profileBackgroundUrl || "",
+    profileBackground: data?.profile_background_url || data?.profileBackgroundUrl || "",
+    profileBackgroundFrame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
+    profile_background_frame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
+  };
+}
+
+export async function requestLocalAuthBypassSession() {
+  if (!isLocalAuthBypassEnabled()) {
+    return null;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/auth/local-dev-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await parseApiResponse(response);
+
+  if (!response.ok || !data?.token || !data?.id) {
+    return null;
+  }
+
+  return {
+    user: mapLocalDevAuthUser(data),
+    session: {
+      accessToken: data.token,
+      refreshToken: data.refreshToken || "",
+      accessTokenExpiresAt: data.accessTokenExpiresAt || "",
+    },
+  };
+}
+
+export function isLocalAuthBypassSession(token = getStoredToken()) {
+  return isLocalAuthBypassEnabled() && normalizeStoredValue(token) === LEGACY_LOCAL_AUTH_BYPASS_TOKEN;
+}
 
 function normalizeApiScope(value) {
   const normalizedValue = normalizeStoredValue(value);
@@ -476,6 +541,10 @@ export async function clearStoredSession() {
 }
 
 export function notifyUnauthorizedSession(reason = "unauthorized") {
+  if (isLocalAuthBypassSession()) {
+    return;
+  }
+
   void clearStoredSession();
 
   if (typeof window === "undefined") {

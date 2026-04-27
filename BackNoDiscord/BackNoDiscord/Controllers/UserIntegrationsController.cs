@@ -75,19 +75,22 @@ public class UserIntegrationsController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly CryptoService _cryptoService;
+    private readonly IWebHostEnvironment _environment;
 
     public UserIntegrationsController(
         AppDbContext context,
         IHubContext<ChatHub> chatHubContext,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        CryptoService cryptoService)
+        CryptoService cryptoService,
+        IWebHostEnvironment environment)
     {
         _context = context;
         _chatHubContext = chatHubContext;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _cryptoService = cryptoService;
+        _environment = environment;
     }
 
     [HttpGet]
@@ -107,7 +110,7 @@ public class UserIntegrationsController : ControllerBase
     }
 
     [HttpGet("spotify/connect-url")]
-    public IActionResult GetSpotifyConnectUrl()
+    public async Task<IActionResult> GetSpotifyConnectUrl(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
         {
@@ -117,6 +120,11 @@ public class UserIntegrationsController : ControllerBase
         var spotifyOptions = GetSpotifyOptions();
         if (!spotifyOptions.IsConfigured)
         {
+            if (IsLocalDevRequest())
+            {
+                return await ConnectLocalDevIntegrationAsync(currentUserId, SpotifyProviderId, cancellationToken);
+            }
+
             return BadRequest(new { message = "Spotify пока не настроен на сервере. Добавьте Spotify__ClientId и Spotify__ClientSecret в .env, затем перезапустите backend." });
         }
 
@@ -139,7 +147,7 @@ public class UserIntegrationsController : ControllerBase
     }
 
     [HttpGet("{provider}/connect-url")]
-    public IActionResult GetIntegrationConnectUrl([FromRoute] string provider)
+    public async Task<IActionResult> GetIntegrationConnectUrl([FromRoute] string provider, CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
         {
@@ -153,12 +161,33 @@ public class UserIntegrationsController : ControllerBase
 
         if (providerId == SpotifyProviderId)
         {
-            return GetSpotifyConnectUrl();
+            return await GetSpotifyConnectUrl(cancellationToken);
         }
 
         if (providerId == YandexMusicProviderId)
         {
+            if (IsLocalDevRequest())
+            {
+                return await ConnectLocalDevIntegrationAsync(currentUserId, providerId, cancellationToken);
+            }
+
             return BadRequest(new { message = "У Яндекс Музыки нет публичного официального API для текущего трека. Без серых схем подключение не добавлено." });
+        }
+
+        if (IsLocalDevRequest())
+        {
+            var isConfigured = providerId switch
+            {
+                GithubProviderId => GetGithubOptions().IsConfigured,
+                BattlenetProviderId => GetBattlenetOptions().IsConfigured,
+                SteamProviderId => GetSteamOptions().IsConfigured,
+                _ => true
+            };
+
+            if (!isConfigured)
+            {
+                return await ConnectLocalDevIntegrationAsync(currentUserId, providerId, cancellationToken);
+            }
         }
 
         PurgeExpiredOAuthStates();
@@ -455,11 +484,21 @@ public class UserIntegrationsController : ControllerBase
     }
 
     [HttpPost("{provider}/connect")]
-    public IActionResult Connect([FromRoute] string provider)
+    public async Task<IActionResult> Connect([FromRoute] string provider, CancellationToken cancellationToken)
     {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
         if (!TryNormalizeProvider(provider, out var providerId))
         {
             return NotFound(new { message = "Интеграция не найдена." });
+        }
+
+        if (IsLocalDevRequest())
+        {
+            return await ConnectLocalDevIntegrationAsync(currentUserId, providerId, cancellationToken);
         }
 
         var providerInfo = ProviderById[providerId];
@@ -761,6 +800,69 @@ public class UserIntegrationsController : ControllerBase
         record.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<IActionResult> ConnectLocalDevIntegrationAsync(int userId, string providerId, CancellationToken cancellationToken)
+    {
+        var providerInfo = ProviderById[providerId];
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.UserIntegrations
+            .FirstOrDefaultAsync(item => item.UserId == userId && item.Provider == providerId, cancellationToken);
+
+        if (record is null)
+        {
+            record = new UserIntegrationRecord
+            {
+                UserId = userId,
+                Provider = providerId,
+                ConnectedAt = now,
+                DisplayInProfile = true,
+                UseAsStatus = providerInfo.DefaultActivityKind is "music" or "game"
+            };
+            _context.UserIntegrations.Add(record);
+        }
+
+        var displayName = providerInfo.Id switch
+        {
+            SpotifyProviderId => "Local Spotify",
+            SteamProviderId => "Local Steam",
+            BattlenetProviderId => "Local Battle.net",
+            GithubProviderId => "localdev",
+            YandexMusicProviderId => "Local Music",
+            _ => providerInfo.Name
+        };
+        var activityTitle = providerInfo.Id switch
+        {
+            SpotifyProviderId => "Midnight City",
+            SteamProviderId => "Counter-Strike 2",
+            BattlenetProviderId => "Battle.net",
+            GithubProviderId => "GitHub",
+            YandexMusicProviderId => "Плейлист для разработки",
+            _ => providerInfo.Name
+        };
+        var activitySubtitle = providerInfo.Id switch
+        {
+            SpotifyProviderId => "M83",
+            YandexMusicProviderId => "Яндекс Музыка",
+            _ => string.Empty
+        };
+
+        record.DisplayName = ClampText(displayName, 120);
+        record.ExternalUserId = ClampText($"local-dev-{providerId}-{userId}", 512);
+        record.AccessTokenEncrypted = _cryptoService.Encrypt($"local-dev-access-{providerId}-{userId}");
+        record.RefreshTokenEncrypted = _cryptoService.Encrypt($"local-dev-refresh-{providerId}-{userId}");
+        record.TokenExpiresAt = now.AddDays(30);
+        SetIntegrationActivity(record, providerInfo.DefaultActivityKind, activityTitle, activitySubtitle, "Локальная dev-интеграция без внешнего OAuth.");
+        record.UpdatedAt = now;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await BroadcastActivityUpdatedAsync(userId, cancellationToken);
+
+        return Ok(new
+        {
+            provider = BuildProviderPayload(providerInfo, record),
+            localDev = true
+        });
     }
 
     private async Task<SpotifyTokenResponse> ExchangeSpotifyCodeAsync(string code, SpotifyOptions spotifyOptions, CancellationToken cancellationToken)
@@ -1213,6 +1315,7 @@ public class UserIntegrationsController : ControllerBase
             SteamProviderId => !string.IsNullOrWhiteSpace(record.ExternalUserId),
             GithubProviderId => !string.IsNullOrWhiteSpace(record.AccessTokenEncrypted),
             BattlenetProviderId => !string.IsNullOrWhiteSpace(record.AccessTokenEncrypted),
+            YandexMusicProviderId => !string.IsNullOrWhiteSpace(record.ExternalUserId),
             _ => false
         };
 
@@ -1269,6 +1372,24 @@ public class UserIntegrationsController : ControllerBase
 
     private string GetIntegrationBaseUrl() =>
         $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/integrations";
+
+    private bool IsLocalDevRequest()
+    {
+        if (!_environment.IsDevelopment())
+        {
+            return false;
+        }
+
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        if (remoteIp != null && IPAddress.IsLoopback(remoteIp))
+        {
+            return true;
+        }
+
+        var host = HttpContext.Request.Host.Host;
+        return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static AuthenticationHeaderValue BuildSpotifyBasicAuthHeader(SpotifyOptions options)
     {

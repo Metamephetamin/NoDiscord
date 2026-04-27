@@ -30,14 +30,51 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IConfiguration _config;
     private readonly IEmailVerificationSender _emailVerificationSender;
+    private readonly IWebHostEnvironment _environment;
     private readonly PasswordHasher<User> _passwordHasher;
 
-    public AuthController(AppDbContext context, IConfiguration config, IEmailVerificationSender emailVerificationSender)
+    public AuthController(
+        AppDbContext context,
+        IConfiguration config,
+        IEmailVerificationSender emailVerificationSender,
+        IWebHostEnvironment environment)
     {
         _context = context;
         _config = config;
         _emailVerificationSender = emailVerificationSender;
+        _environment = environment;
         _passwordHasher = new PasswordHasher<User>();
+    }
+
+    [HttpPost("local-dev-session")]
+    public async Task<IActionResult> CreateLocalDevSession()
+    {
+        if (!_environment.IsDevelopment() || !IsLocalRequest())
+        {
+            return NotFound();
+        }
+
+        const string devEmail = "localdev@localhost";
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == devEmail);
+        if (user == null)
+        {
+            user = new User
+            {
+                first_name = "Local",
+                last_name = "Dev",
+                nickname = "localdev",
+                email = devEmail,
+                is_email_verified = true,
+                is_phone_verified = false,
+            };
+            user.password_hash = _passwordHasher.HashPassword(user, Guid.NewGuid().ToString("N"));
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+        }
+
+        var authSession = await IssueAuthSessionAsync(user);
+        return Ok(BuildAuthResponse(user, authSession));
     }
 
     [HttpPost("resend-email-verification")]
@@ -1066,6 +1103,19 @@ public class AuthController : ControllerBase
     private string GetEmailDeliveryMode()
     {
         return string.IsNullOrWhiteSpace(_config["Email:Mode"]) ? "mock" : _config["Email:Mode"]!.Trim().ToLowerInvariant();
+    }
+
+    private bool IsLocalRequest()
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        if (remoteIp != null && System.Net.IPAddress.IsLoopback(remoteIp))
+        {
+            return true;
+        }
+
+        var host = HttpContext.Request.Host.Host;
+        return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<User?> GetCurrentUserAsync()

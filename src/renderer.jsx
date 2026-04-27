@@ -24,8 +24,11 @@ import {
   getStoredToken,
   hydrateStoredSession,
   authFetch,
+  isLocalAuthBypassEnabled,
+  isLocalAuthBypassSession,
   isUnauthorizedError,
   parseApiResponse,
+  requestLocalAuthBypassSession,
   storeSession,
 } from "./utils/auth";
 
@@ -374,6 +377,44 @@ export default function Renderer() {
       const savedSession = await hydrateStoredSession();
       const savedToken = savedSession.accessToken;
       const savedUser = savedSession.user;
+
+      if (isLocalAuthBypassSession(savedToken)) {
+        await clearStoredSession();
+        const localDevSession = await requestLocalAuthBypassSession();
+        if (localDevSession) {
+          await storeSession(localDevSession.user, localDevSession.session);
+
+          if (!disposed) {
+            setUser(localDevSession.user);
+            setToken(localDevSession.session.accessToken);
+            setSessionHydrated(true);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (!disposed) {
+          setSessionHydrated(true);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (isLocalAuthBypassEnabled() && (!savedToken || !savedUser)) {
+        const localDevSession = await requestLocalAuthBypassSession();
+
+        if (localDevSession) {
+          await storeSession(localDevSession.user, localDevSession.session);
+
+          if (!disposed) {
+            setUser(localDevSession.user);
+            setToken(localDevSession.session.accessToken);
+            setSessionHydrated(true);
+            setLoading(false);
+          }
+          return;
+        }
+      }
 
       if (!savedToken || !savedUser) {
         if (!disposed) {
