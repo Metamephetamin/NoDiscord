@@ -328,14 +328,7 @@ app.Run();
 static void LoadDotEnv()
 {
     var currentDirectory = Directory.GetCurrentDirectory();
-    var candidatePaths = new[]
-    {
-        Path.Combine(currentDirectory, ".env"),
-        Path.GetFullPath(Path.Combine(currentDirectory, "..", "..", ".env")),
-        Path.GetFullPath(Path.Combine(currentDirectory, "..", "..", "..", ".env"))
-    };
-
-    var envFile = candidatePaths.FirstOrDefault(File.Exists);
+    var envFile = EnumerateDotEnvPaths(currentDirectory).FirstOrDefault(File.Exists);
     if (string.IsNullOrWhiteSpace(envFile))
     {
         return;
@@ -364,5 +357,15 @@ static void LoadDotEnv()
         }
 
         Environment.SetEnvironmentVariable(key, value);
+    }
+}
+
+static IEnumerable<string> EnumerateDotEnvPaths(string startDirectory)
+{
+    var directory = new DirectoryInfo(startDirectory);
+    while (directory is not null)
+    {
+        yield return Path.Combine(directory.FullName, ".env");
+        directory = directory.Parent;
     }
 }
