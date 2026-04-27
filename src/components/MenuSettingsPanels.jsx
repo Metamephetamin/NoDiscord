@@ -267,7 +267,7 @@ export const AccountSettings = ({
         <section className="account-settings-card account-settings-card--rows">
           <div className="account-settings-row">
             <div className="account-settings-row__copy">
-              <strong>Отображаемое имя</strong>
+              <strong>Имя пользователя</strong>
               <span>{displayName}</span>
             </div>
             <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(isEditingDisplayName ? "" : "displayName")}>
@@ -302,7 +302,7 @@ export const AccountSettings = ({
 
           <div className="account-settings-row">
             <div className="account-settings-row__copy">
-              <strong>Имя пользователя</strong>
+              <strong>Отображаемое имя</strong>
               <span>{nickname || "Не указано"}</span>
             </div>
             <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(isEditingNickname ? "" : "nickname")}>
