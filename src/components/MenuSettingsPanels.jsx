@@ -424,139 +424,241 @@ export const PersonalProfileSettings = ({
   displayName,
   onChangeAvatar,
   onChangeBackground,
-}) => (
-  <div className="settings-shell__content">
-    <div className="settings-shell__content-header">
-      <div>
-        <h2>Личный профиль</h2>
-        <p>Настройте только внешний вид профиля. Имя, никнейм и почта теперь находятся в учётной записи.</p>
+}) => {
+  const [styleLabSettings, setStyleLabSettings] = useState({
+    avatarFrame: "neon",
+    topFrame: "glow",
+    background: "graphite",
+    actionButtons: "glass",
+    voiceIconColor: "green",
+    miniIconColor: "silver",
+    statusColor: "green",
+    waveAnimation: "pulse",
+    ornaments: "lines",
+  });
+  const setStyleOption = (key, value) => {
+    setStyleLabSettings((previous) => ({ ...previous, [key]: value }));
+  };
+  const styleGroups = [
+    {
+      id: "avatarFrame",
+      title: "Рамка аватарки",
+      options: [
+        { value: "soft", label: "Мягкая", tone: "soft" },
+        { value: "neon", label: "Неон", tone: "neon" },
+        { value: "glass", label: "Стекло", tone: "glass" },
+      ],
+    },
+    {
+      id: "topFrame",
+      title: "Верх блока",
+      options: [
+        { value: "none", label: "Без рамки" },
+        { value: "glow", label: "Свечение" },
+        { value: "line", label: "Тонкая линия" },
+      ],
+    },
+    {
+      id: "background",
+      title: "Фон карточки",
+      options: [
+        { value: "graphite", label: "Графит" },
+        { value: "static", label: "Статичный" },
+        { value: "animated", label: "Анимированный" },
+      ],
+    },
+    {
+      id: "actionButtons",
+      title: "Кнопки сверху",
+      options: [
+        { value: "glass", label: "Стекло" },
+        { value: "flat", label: "Плоские" },
+        { value: "dark", label: "Тёмные" },
+      ],
+    },
+    {
+      id: "voiceIconColor",
+      title: "Иконка подключения",
+      options: [
+        { value: "green", label: "Зелёная", tone: "green" },
+        { value: "violet", label: "Фиолетовая", tone: "violet" },
+        { value: "rose", label: "Розовая", tone: "rose" },
+      ],
+    },
+    {
+      id: "miniIconColor",
+      title: "Нижние иконки",
+      options: [
+        { value: "silver", label: "Серые", tone: "silver" },
+        { value: "violet", label: "Фиолетовые", tone: "violet" },
+        { value: "green", label: "Зелёные", tone: "green" },
+      ],
+    },
+    {
+      id: "statusColor",
+      title: "Цвет статуса",
+      options: [
+        { value: "green", label: "Зелёный", tone: "green" },
+        { value: "violet", label: "Фиолетовый", tone: "violet" },
+        { value: "blue", label: "Синий", tone: "blue" },
+      ],
+    },
+    {
+      id: "waveAnimation",
+      title: "Анимация волн",
+      options: [
+        { value: "pulse", label: "Пульс" },
+        { value: "equalizer", label: "Эквалайзер" },
+        { value: "off", label: "Выкл." },
+      ],
+    },
+    {
+      id: "ornaments",
+      title: "Украшения",
+      options: [
+        { value: "lines", label: "Линии" },
+        { value: "shine", label: "Блик" },
+        { value: "none", label: "Без декора" },
+      ],
+    },
+  ];
+  const cardClassName = [
+    "profile-style-lab__card",
+    `profile-style-lab__card--top-${styleLabSettings.topFrame}`,
+    `profile-style-lab__card--bg-${styleLabSettings.background}`,
+    `profile-style-lab__card--buttons-${styleLabSettings.actionButtons}`,
+    `profile-style-lab__card--ornaments-${styleLabSettings.ornaments}`,
+    `profile-style-lab__card--wave-${styleLabSettings.waveAnimation}`,
+  ].join(" ");
+
+  return (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Личный профиль</h2>
+          <p>Настройте только внешний вид профиля. Имя, никнейм и почта теперь находятся в учётной записи.</p>
+        </div>
       </div>
-    </div>
 
-    <section className="voice-settings-card voice-settings-card--profile">
-      <div className="profile-settings-form">
-        <div className="profile-settings-form__preview-card">
-          <div className="profile-settings-form__cover">
-            {profileBackgroundSrc ? (
-              <AnimatedMedia
-                className="profile-settings-form__cover-media"
-                src={profileBackgroundSrc}
-                alt=""
-                frame={profileBackgroundFrame}
-              />
-            ) : (
-              <div className="profile-settings-form__cover-fallback" aria-hidden="true" />
-            )}
-          </div>
-
-          <div className="profile-settings-form__preview-body">
-            <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={onChangeAvatar}>
-              <AnimatedAvatar className="profile-settings-form__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
-            </button>
-            <div className="profile-settings-form__identity">
-              <strong>{displayName}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="settings-shell__actions profile-settings-form__actions">
-          <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
-            Сменить фон профиля
-          </button>
-          <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
-            Сменить аватар
-          </button>
-        </div>
-
-        <div className="profile-style-lab">
-          <div className="profile-style-lab__card">
-            <div className="profile-style-lab__background" aria-hidden="true">
+      <section className="voice-settings-card voice-settings-card--profile">
+        <div className="profile-settings-form">
+          <div className="profile-settings-form__preview-card">
+            <div className="profile-settings-form__cover">
               {profileBackgroundSrc ? (
                 <AnimatedMedia
-                  className="profile-style-lab__background-media"
+                  className="profile-settings-form__cover-media"
                   src={profileBackgroundSrc}
                   alt=""
                   frame={profileBackgroundFrame}
                 />
-              ) : null}
+              ) : (
+                <div className="profile-settings-form__cover-fallback" aria-hidden="true" />
+              )}
             </div>
 
-            <div className="profile-style-lab__voice">
-              <span className="profile-style-lab__signal" aria-hidden="true" />
-              <div className="profile-style-lab__voice-copy">
-                <strong>Подключено</strong>
-                <span>general_voice</span>
-              </div>
-              <span className="profile-style-lab__wave" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-                <i />
-              </span>
-            </div>
-
-            <div className="profile-style-lab__actions" aria-hidden="true">
-              <span className="profile-style-lab__tool profile-style-lab__tool--settings" />
-              <span className="profile-style-lab__tool profile-style-lab__tool--monitor" />
-              <span className="profile-style-lab__tool profile-style-lab__tool--camera" />
-              <span className="profile-style-lab__tool profile-style-lab__tool--call" />
-            </div>
-
-            <div className="profile-style-lab__identity">
-              <button type="button" className="profile-style-lab__avatar-frame" onClick={onChangeAvatar} aria-label="Сменить аватар">
-                <AnimatedAvatar className="profile-style-lab__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+            <div className="profile-settings-form__preview-body">
+              <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={onChangeAvatar}>
+                <AnimatedAvatar className="profile-settings-form__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
               </button>
-              <div className="profile-style-lab__name">
+              <div className="profile-settings-form__identity">
                 <strong>{displayName}</strong>
-                <span>Kai Wachi — PRECIOUS</span>
               </div>
-              <span className="profile-style-lab__mini-icons" aria-hidden="true">
-                <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--mic" />
-                <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--sound" />
-                <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--settings" />
-              </span>
             </div>
           </div>
 
-          <div className="profile-style-lab__options">
-            <div className="profile-style-lab__option">
-              <span>Рамка аватарки</span>
-              <div className="profile-style-lab__chips">
-                <i className="profile-style-lab__frame-dot profile-style-lab__frame-dot--soft" />
-                <i className="profile-style-lab__frame-dot profile-style-lab__frame-dot--neon" />
-                <i className="profile-style-lab__frame-dot profile-style-lab__frame-dot--glass" />
+          <div className="settings-shell__actions profile-settings-form__actions">
+            <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
+              Сменить фон профиля
+            </button>
+            <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
+              Сменить аватар
+            </button>
+          </div>
+
+          <div className="profile-style-lab">
+            <div className="profile-style-lab__header">
+              <span>Отдельная карточка профиля</span>
+              <h3>Кастомизация блока в звонке</h3>
+              <p>Это не фон личного профиля. Здесь настраивается отдельная карточка: рамки, иконки, кнопки, анимации и будущий собственный фон.</p>
+            </div>
+
+            <div className={cardClassName}>
+              <div className="profile-style-lab__background" aria-hidden="true" />
+
+              <div className="profile-style-lab__voice">
+                <span className={`profile-style-lab__signal profile-style-lab__signal--${styleLabSettings.voiceIconColor}`} aria-hidden="true" />
+                <div className="profile-style-lab__voice-copy">
+                  <strong>Подключено</strong>
+                  <span>general_voice</span>
+                </div>
+                <span className="profile-style-lab__wave" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              </div>
+
+              <div className="profile-style-lab__actions" aria-hidden="true">
+                <span className="profile-style-lab__tool profile-style-lab__tool--settings" />
+                <span className="profile-style-lab__tool profile-style-lab__tool--monitor" />
+                <span className="profile-style-lab__tool profile-style-lab__tool--camera" />
+                <span className="profile-style-lab__tool profile-style-lab__tool--call" />
+              </div>
+
+              <div className="profile-style-lab__identity">
+                <button
+                  type="button"
+                  className={`profile-style-lab__avatar-frame profile-style-lab__avatar-frame--${styleLabSettings.avatarFrame}`}
+                  onClick={onChangeAvatar}
+                  aria-label="Сменить аватар"
+                >
+                  <AnimatedAvatar className="profile-style-lab__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+                </button>
+                <div className={`profile-style-lab__name profile-style-lab__name--${styleLabSettings.statusColor}`}>
+                  <strong>{displayName}</strong>
+                  <span>Kai Wachi — PRECIOUS</span>
+                </div>
+                <span className={`profile-style-lab__mini-icons profile-style-lab__mini-icons--${styleLabSettings.miniIconColor}`} aria-hidden="true">
+                  <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--mic" />
+                  <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--chevron" />
+                  <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--sound" />
+                  <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--chevron" />
+                  <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--settings" />
+                </span>
               </div>
             </div>
-            <div className="profile-style-lab__option">
-              <span>Цвет иконок</span>
-              <div className="profile-style-lab__chips">
-                <i className="profile-style-lab__color-dot profile-style-lab__color-dot--violet" />
-                <i className="profile-style-lab__color-dot profile-style-lab__color-dot--green" />
-                <i className="profile-style-lab__color-dot profile-style-lab__color-dot--rose" />
-              </div>
-            </div>
-            <div className="profile-style-lab__option">
-              <span>Верх блока</span>
-              <strong>Световая рамка</strong>
-            </div>
-            <div className="profile-style-lab__option">
-              <span>Анимация</span>
-              <strong>Пульс волн</strong>
-            </div>
-            <div className="profile-style-lab__option">
-              <span>Фон карточки</span>
-              <strong>Статичный / анимированный</strong>
-            </div>
-            <div className="profile-style-lab__option">
-              <span>Украшения</span>
-              <strong>Линии, блики, значки</strong>
+
+            <div className="profile-style-menu" aria-label="Настройки кастомной карточки профиля">
+              {styleGroups.map((group) => (
+                <div key={group.id} className="profile-style-menu__group">
+                  <span>{group.title}</span>
+                  <div className="profile-style-menu__options">
+                    {group.options.map((option) => {
+                      const isActive = styleLabSettings[group.id] === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`profile-style-menu__option ${isActive ? "profile-style-menu__option--active" : ""}`}
+                          onClick={() => setStyleOption(group.id, option.value)}
+                          aria-pressed={isActive}
+                        >
+                          {option.tone ? <i className={`profile-style-menu__swatch profile-style-menu__swatch--${option.tone}`} aria-hidden="true" /> : null}
+                          <span>{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
-    </section>
-  </div>
-);
+      </section>
+    </div>
+  );
+};
 
 const formatDeviceSessionDate = (value) => {
   const parsed = Date.parse(String(value || ""));

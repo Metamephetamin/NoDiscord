@@ -835,7 +835,7 @@ export const UI_SOUND_PATHS = {
   unmute: withUiSoundVersion("/sounds/tend-unmute.wav"),
 };
 export const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
-export const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone-svgrepo-com.svg");
+export const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
 export const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
 export const MONITOR_ICON_URL = resolveStaticAssetUrl("/icons/monitor.svg");
 export const CAMERA_ICON_URL = resolveStaticAssetUrl("/icons/camera.png");

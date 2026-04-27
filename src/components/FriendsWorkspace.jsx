@@ -28,6 +28,16 @@ function FriendsNavIcon({ kind }) {
           <path d="M15 11H21" />
         </svg>
       );
+    case "store":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M5.25 10.25V19C5.25 20.1 6.15 21 7.25 21H16.75C17.85 21 18.75 20.1 18.75 19V10.25" />
+          <path d="M4.25 10.25H19.75L18.65 5.8C18.43 4.91 17.63 4.28 16.71 4.28H7.29C6.37 4.28 5.57 4.91 5.35 5.8L4.25 10.25Z" />
+          <path d="M8 10.25C8 11.35 8.9 12.25 10 12.25C11.1 12.25 12 11.35 12 10.25" />
+          <path d="M12 10.25C12 11.35 12.9 12.25 14 12.25C15.1 12.25 16 11.35 16 10.25" />
+          <path d="M9.25 21V16.75C9.25 16.34 9.59 16 10 16H14C14.41 16 14.75 16.34 14.75 16.75V21" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -77,6 +87,31 @@ const CONVERSATION_ROLE_PRIORITIES = {
   inviter: 1,
   member: 0,
 };
+
+const STORE_ITEMS = [
+  { id: "amethyst", title: "Набор «Сумеречный аметист»", category: "Космос", type: "Набор", accent: "amethyst", price: "Бесплатно", discount: "-11%", colors: ["#ef4444", "#c4cbd6", "#a78bfa", "#38bdf8"], description: "Рамка аватарки, фон карточки и мягкий космический блик." },
+  { id: "constellation", title: "Набор «Созвездия»", category: "Космос", type: "Фон", accent: "constellation", price: "Бесплатно", discount: "-8%", colors: ["#d7d9e3", "#93c5fd"], description: "Серебристый фон карточки с лёгкой звёздной анимацией." },
+  { id: "solar", title: "Луна", category: "Космос", type: "Рамка", accent: "solar", price: "Бесплатно", colors: ["#ff9b31", "#fb7185"], description: "Тёплая световая рамка вокруг аватарки и волн." },
+  { id: "lunar", title: "Солнечная вспышка", category: "Космос", type: "Иконки", accent: "lunar", price: "Бесплатно", colors: ["#f59e0b", "#f8fafc"], description: "Спокойная сине-серая тема для иконок и статуса." },
+  { id: "candy", title: "Набор «Синнаморолл»", category: "Найдите свой стиль", type: "Набор", accent: "candy", price: "Бесплатно", discount: "-12%", colors: ["#93c5fd", "#f9a8d4"], description: "Яркий фон, розовый статус и мягкая рамка аватарки." },
+  { id: "kitty", title: "Набор Hello Kitty", category: "Найдите свой стиль", type: "Набор", accent: "kitty", price: "Бесплатно", discount: "-12%", colors: ["#fb7185", "#f9a8d4"], description: "Розовый набор для карточки профиля и статуса." },
+  { id: "forest", title: "Набор «Помпомпурин»", category: "Найдите свой стиль", type: "Фон", accent: "forest", price: "Бесплатно", discount: "-12%", colors: ["#65e48f", "#facc15"], description: "Зелёный фон карточки и спокойные иконки подключения." },
+  { id: "raven", title: "Ворон", category: "Найдите свой стиль", type: "Анимация", accent: "raven", price: "Бесплатно", colors: ["#111827", "#9ca3af"], description: "Тёмная карточка с тонкими бликами и выключенной суетой." },
+  { id: "kuromi", title: "Набор «Куроми»", category: "Найдите свой стиль", type: "Набор", accent: "kuromi", price: "Бесплатно", discount: "-12%", colors: ["#f472b6", "#a78bfa"], description: "Мягкая розово-фиолетовая тема для карточки и рамки." },
+  { id: "dark-roses", title: "Набор «Тёмные розы»", category: "Найдите свой стиль", type: "Набор", accent: "dark-roses", price: "Бесплатно", discount: "-11%", colors: ["#4c1d95", "#be123c"], description: "Тёмный цветочный фон с глубоким синим статусом." },
+  { id: "venom", title: "Веном", category: "Найдите свой стиль", type: "Рамка", accent: "venom", price: "Бесплатно", colors: ["#0f172a", "#e5e7eb"], description: "Контрастная рамка, тёмные кнопки и плотная анимация волн." },
+  { id: "spider", title: "Набор «Человек-паук»", category: "Найдите свой стиль", type: "Набор", accent: "spider", price: "Бесплатно", discount: "-11%", colors: ["#dc2626", "#e5e7eb"], description: "Красные акценты, сетка и динамичная рамка карточки." },
+  { id: "melody", title: "Набор «Май Мелоди»", category: "Найдите свой стиль", type: "Набор", accent: "melody", price: "Бесплатно", discount: "-12%", colors: ["#fb7185", "#c084fc"], description: "Светлая розовая карточка с мягкими декоративными бликами." },
+  { id: "pochacco", title: "Набор «Почакко»", category: "Найдите свой стиль", type: "Набор", accent: "pochacco", price: "Бесплатно", discount: "-12%", colors: ["#38bdf8", "#f9a8d4"], description: "Лёгкий голубой стиль для фона и нижнего статуса." },
+  { id: "rage", title: "Гнев", category: "Найдите свой стиль", type: "Реакция", accent: "rage", price: "Бесплатно", colors: ["#ef4444", "#f472b6", "#fde047"], description: "Резкая красная анимация вокруг аватарки." },
+  { id: "itadori", title: "Юдзи Итадори", category: "Найдите свой стиль", type: "Фон", accent: "itadori", price: "Бесплатно", colors: ["#991b1b", "#111827"], description: "Тёмная карточка с красным нижним баннером." },
+  { id: "twins", title: "Набор «Звёздочки-близняшки»", category: "Найдите свой стиль", type: "Набор", accent: "twins", price: "Бесплатно", discount: "-9%", colors: ["#93c5fd", "#f9a8d4"], description: "Пастельная рамка и звёздные украшения профиля." },
+  { id: "wolf", title: "Набор «Одинокий волк»", category: "Найдите свой стиль", type: "Набор", accent: "wolf", price: "Бесплатно", discount: "-11%", colors: ["#2563eb", "#c4b5fd"], description: "Синий ночной фон и холодная рамка аватарки." },
+  { id: "sakura", title: "Hello Kitty", category: "Найдите свой стиль", type: "Украшение", accent: "sakura", price: "Бесплатно", colors: ["#f9a8d4", "#fb7185"], description: "Сакура и мягкие розовые украшения карточки." },
+];
+
+const STORE_FEATURED_ITEMS = STORE_ITEMS.slice(0, 4);
+const STORE_CATEGORIES = ["Космос", "Найдите свой стиль"];
 
 const getConversationRoleLabel = (role) => CONVERSATION_ROLE_LABELS[String(role || "member").toLowerCase()] || "Участник";
 const getConversationRolePriority = (role) => CONVERSATION_ROLE_PRIORITIES[String(role || "member").toLowerCase()] ?? 0;
@@ -157,6 +192,19 @@ export const FriendsSidebar = ({
           >
             <span className="friends-nav__icon"><FriendsNavIcon kind="conversations" /></span>
             <span>Беседы</span>
+          </button>
+
+          <button
+            type="button"
+            className={`friends-nav__item ${friendsPageSection === "store" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
+            onClick={() => {
+              onOpenFriendsWorkspace();
+              onResetDirect();
+              onSetFriendsSection("store");
+            }}
+          >
+            <span className="friends-nav__icon"><FriendsNavIcon kind="store" /></span>
+            <span>Магазин</span>
           </button>
         </div>
 
@@ -264,6 +312,151 @@ export const FriendsSidebar = ({
   );
 };
 
+const StoreProductArtwork = ({ item, size = "card" }) => (
+  <div className={`profile-store-art profile-store-art--${item.accent} profile-store-art--${size}`} aria-hidden="true">
+    <span className="profile-store-art__card" />
+    <span className="profile-store-art__avatar" />
+    <span className="profile-store-art__bar" />
+    <span className="profile-store-art__spark profile-store-art__spark--one" />
+    <span className="profile-store-art__spark profile-store-art__spark--two" />
+  </div>
+);
+
+const StoreProfilePreview = ({ item, avatarSrc, displayName }) => (
+  <div className={`profile-store-demo profile-store-demo--${item.accent}`}>
+    <div className="profile-store-demo__cover" />
+    <div className="profile-store-demo__body">
+      <span className="profile-store-demo__avatar-ring">
+        <AnimatedAvatar className="profile-store-demo__avatar" src={avatarSrc} alt={displayName} loading="eager" decoding="sync" />
+      </span>
+      <div className="profile-store-demo__copy">
+        <strong>{displayName}</strong>
+        <span>{item.title}</span>
+      </div>
+      <div className="profile-store-demo__input">
+        <span>Сообщение для @{displayName}</span>
+        <i />
+      </div>
+    </div>
+  </div>
+);
+
+const StoreProductModal = ({ item, appliedItemId, avatarSrc, displayName, onApply, onClose }) => {
+  if (!item) {
+    return null;
+  }
+
+  const isApplied = appliedItemId === item.id;
+
+  return (
+    <div className="profile-store-modal" role="dialog" aria-modal="true" aria-label={`Просмотр ${item.title}`}>
+      <div className="profile-store-modal__backdrop" onClick={onClose} />
+      <div className="profile-store-modal__dialog">
+        <aside className="profile-store-modal__info">
+          <StoreProductArtwork item={item} size="large" />
+          <span className="profile-store-modal__type">{item.type} · {item.category}</span>
+          <h2>{item.title}</h2>
+          <p>{item.description}</p>
+          <strong className="profile-store-modal__price">{item.price}</strong>
+          <div className="profile-store-modal__actions">
+            <button type="button" className="profile-store-modal__apply" onClick={() => onApply(item)}>
+              {isApplied ? "Применено" : "Применить бесплатно"}
+            </button>
+            <button type="button" className="profile-store-modal__gift" onClick={() => onApply(item)} aria-label="Получить бесплатно">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 10H20V20H4V10Z" />
+                <path d="M12 10V20" />
+                <path d="M3 6H21V10H3V6Z" />
+                <path d="M12 6C12 4.9 11.1 4 10 4C8.9 4 8 4.9 8 6H12Z" />
+                <path d="M12 6C12 4.9 12.9 4 14 4C15.1 4 16 4.9 16 6H12Z" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+        <section className={`profile-store-modal__preview profile-store-modal__preview--${item.accent}`}>
+          <div className="profile-store-modal__top-actions">
+            <button type="button" aria-label="В избранное">♡</button>
+            <button type="button" aria-label="Ссылка">↗</button>
+            <button type="button" aria-label="Закрыть" onClick={onClose}>×</button>
+          </div>
+          <StoreProfilePreview item={item} avatarSrc={avatarSrc} displayName={displayName} />
+        </section>
+      </div>
+    </div>
+  );
+};
+
+const StoreProductCard = ({ item, isApplied, onOpen }) => (
+  <button type="button" className={`profile-store-card ${isApplied ? "profile-store-card--applied" : ""}`} onClick={() => onOpen(item)}>
+    <StoreProductArtwork item={item} />
+    <span className="profile-store-card__meta">
+      <strong>{item.title}</strong>
+      <span className="profile-store-card__price">
+        {item.price}
+        {item.discount ? <em>{item.discount}</em> : null}
+      </span>
+    </span>
+    {item.colors?.length ? (
+      <span className="profile-store-card__swatches" aria-hidden="true">
+        {item.colors.map((color) => <i key={color} style={{ background: color }} />)}
+      </span>
+    ) : null}
+    {isApplied ? <span className="profile-store-card__badge">Применено</span> : null}
+  </button>
+);
+
+const ProfileStoreView = ({ avatarSrc, displayName, appliedItem, onApply, onOpenItem }) => {
+  const appliedItemId = appliedItem?.id || "";
+
+  return (
+    <div className="friends-main__content friends-main__content--store">
+      <section className="profile-store-hero">
+        <div className="profile-store-hero__art" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="profile-store-hero__copy">
+          <span>Магазин профиля</span>
+          <h1>Украшения, рамки и анимации</h1>
+          <p>Все предметы сейчас бесплатные. Нажмите на товар, посмотрите предпросмотр и примените стиль сразу.</p>
+        </div>
+        <button type="button" className="profile-store-hero__button" onClick={() => onOpenItem(STORE_ITEMS[0])}>
+          Просмотреть коллекцию
+        </button>
+      </section>
+
+      <section className="profile-store-section">
+        <div className="profile-store-section__header">
+          <h2>Рекомендуем</h2>
+        </div>
+        <div className="profile-store-row">
+          {STORE_FEATURED_ITEMS.map((item) => (
+            <StoreProductCard key={item.id} item={item} isApplied={appliedItemId === item.id} onOpen={onOpenItem} />
+          ))}
+        </div>
+      </section>
+
+      {STORE_CATEGORIES.map((category) => (
+        <section key={category} className="profile-store-section">
+          <div className="profile-store-section__header">
+            <h2>{category}</h2>
+            <button type="button" onClick={() => onOpenItem(STORE_ITEMS.find((item) => item.category === category) || STORE_ITEMS[0])}>
+              Показать все
+            </button>
+          </div>
+          <div className="profile-store-grid">
+            {STORE_ITEMS.filter((item) => item.category === category).map((item) => (
+              <StoreProductCard key={item.id} item={item} isApplied={appliedItemId === item.id} onOpen={onOpenItem} />
+            ))}
+          </div>
+        </section>
+      ))}
+
+    </div>
+  );
+};
+
 export const FriendsMain = ({
   user,
   currentDirectFriend,
@@ -326,6 +519,8 @@ export const FriendsMain = ({
 }) => {
   const conversationAvatarInputRef = useRef(null);
   const conversationSettingsAvatarInputRef = useRef(null);
+  const [activeStoreItem, setActiveStoreItem] = useState(null);
+  const [appliedStoreItem, setAppliedStoreItem] = useState(STORE_ITEMS[0]);
   const [createConversationStep, setCreateConversationStep] = useState("");
   const [conversationTitle, setConversationTitle] = useState("");
   const [conversationAvatarFile, setConversationAvatarFile] = useState(null);
@@ -824,6 +1019,16 @@ export const FriendsMain = ({
             >
               Беседы
             </button>
+            <button
+              type="button"
+              className={`friends-main__tab ${friendsPageSection === "store" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
+              onClick={() => {
+                onResetDirect();
+                onSetFriendsSection("store");
+              }}
+            >
+              Магазин
+            </button>
           </div>
         </div>
 
@@ -941,6 +1146,17 @@ export const FriendsMain = ({
               />
             )}
           </div>
+        ) : friendsPageSection === "store" ? (
+          <ProfileStoreView
+            avatarSrc={user?.avatar || ""}
+            displayName={getDisplayName(user)}
+            appliedItem={appliedStoreItem}
+            onApply={(item) => setAppliedStoreItem(item)}
+            onOpenItem={(item) => {
+              setAppliedStoreItem(item);
+              setActiveStoreItem(item);
+            }}
+          />
         ) : friendsPageSection !== "conversations" ? (
             <div className="friends-main__content">
             <div className="friends-hero friends-add-inline">
@@ -1526,6 +1742,15 @@ export const FriendsMain = ({
           </form>
         </div>
       ) : null}
+
+      <StoreProductModal
+        item={activeStoreItem}
+        appliedItemId={appliedStoreItem?.id || ""}
+        avatarSrc={user?.avatar || ""}
+        displayName={getDisplayName(user)}
+        onApply={(item) => setAppliedStoreItem(item)}
+        onClose={() => setActiveStoreItem(null)}
+      />
 
       <aside className="friends-contacts">
         <h3>Активные контакты</h3>

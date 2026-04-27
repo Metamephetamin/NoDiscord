@@ -6,7 +6,7 @@ import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
-const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/microphone-svgrepo-com.svg");
+const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
 const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
 
 const getVoiceDisplayName = (name) => {
