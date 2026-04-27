@@ -277,7 +277,12 @@ export default function MenuProfilePanel({
             />
             <div className="profile__names">
               <span className="profile__username">{displayName}</span>
-              {activityStatus ? <span className="profile__activity-status">{activityStatus}</span> : null}
+              {activityStatus ? (
+                <span className="profile__activity-status">
+                  <span className="profile__activity-note" aria-hidden="true">♪</span>
+                  <span className="profile__activity-text">{activityStatus}</span>
+                </span>
+              ) : null}
             </div>
           </button>
 

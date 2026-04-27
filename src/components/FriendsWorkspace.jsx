@@ -350,6 +350,8 @@ export const FriendsMain = ({
     String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
       ? directCallPanelProps
       : null;
+  const hasFriendSearchText = String(friendEmail || "").trim().length > 0;
+  const shouldShowFriendLookupList = hasFriendSearchText && (friendLookupLoading || friendsError || friendLookupPerformed || friendLookupResults.length > 0);
   const isWatchingCurrentDirectStream =
     !currentConversationTarget &&
     currentDirectFriend &&
@@ -945,30 +947,58 @@ export const FriendsMain = ({
                 <h2>Добавить в друзья</h2>
                 <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
                 <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
-                    value={friendEmail}
-                    onChange={(event) => onFriendSearchChange(event.target.value)}
-                  />
+                  <div className={`friends-search-combobox ${shouldShowFriendLookupList ? "friends-search-combobox--open" : ""}`}>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
+                      value={friendEmail}
+                      onChange={(event) => onFriendSearchChange(event.target.value)}
+                    />
+                    {shouldShowFriendLookupList ? (
+                      <div className="friends-search-dropdown">
+                        {friendsError ? <div className="friends-search-dropdown__message friends-search-dropdown__message--error">{friendsError}</div> : null}
+                        {!friendsError && friendLookupLoading ? <div className="friends-search-dropdown__message">Ищем...</div> : null}
+                        {!friendsError && friendLookupResults.map((friend) => (
+                          <div key={friend.id} className="friends-search-dropdown__item">
+                            <div className="friends-results__identity">
+                              <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                              <div className="friends-results__meta">
+                                <strong>{getDisplayName(friend)}</strong>
+                                <span>{friend.email || "Без email"}</span>
+                              </div>
+                            </div>
+                            <button type="button" className="friends-results__action" disabled={isAddingFriend} onClick={() => onAddFriend(friend)}>
+                              {isAddingFriend ? "..." : "Добавить"}
+                            </button>
+                          </div>
+                        ))}
+                        {!friendsError && friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
+                          <div className="friends-search-dropdown__message">
+                            {friendQueryMode === "email"
+                              ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
+                              : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                   <button type="submit" disabled={friendLookupLoading}>
                     {friendLookupLoading ? "Ищем..." : "Найти"}
                   </button>
                 </form>
             </div>
 
-            {friendRequestsLoading || friendRequestsError || incomingFriendRequests.length ? (
+            {friendRequestsError || incomingFriendRequests.length ? (
               <div className="friends-hero friends-requests">
                 <div className="friends-requests__header">
                   <h2>Входящие заявки</h2>
                   {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
                 </div>
                 {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
-                {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
-                {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
+                {!friendRequestsError && incomingFriendRequests.length ? (
                   <div className="friends-results friends-results--requests">
                     {incomingFriendRequests.map((request) => (
                       <div key={request.id} className="friends-results__item friends-results__item--request">
@@ -995,35 +1025,6 @@ export const FriendsMain = ({
                     ))}
                   </div>
                 ) : null}
-              </div>
-            ) : null}
-
-            {friendsError || friendLookupResults.length || friendLookupPerformed ? (
-              <div className="friends-hero friends-search-results-panel">
-                {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
-                <div className="friends-results">
-                  {friendLookupResults.map((friend) => (
-                    <div key={friend.id} className="friends-results__item">
-                      <div className="friends-results__identity">
-                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                        <div className="friends-results__meta">
-                          <strong>{getDisplayName(friend)}</strong>
-                          <span>{friend.email || "Без email"}</span>
-                        </div>
-                      </div>
-                      <button type="button" className="friends-results__action" disabled={isAddingFriend} onClick={() => onAddFriend(friend)}>
-                        {isAddingFriend ? "Отправляем..." : "Добавить"}
-                      </button>
-                    </div>
-                  ))}
-                  {friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
-                    <div className="friends-panel__empty">
-                      {friendQueryMode === "email"
-                        ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
-                        : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
-                    </div>
-                  ) : null}
-                </div>
               </div>
             ) : null}
 

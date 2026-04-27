@@ -307,8 +307,8 @@
 
 .avatar-shell {
   position: relative;
-  width: 50px;
-  height: 50px;
+  width: 46px;
+  height: 46px;
   flex: 0 0 auto;
   overflow: hidden;
   border-radius: 50%;
@@ -356,7 +356,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 3px;
+  gap: 7px;
   padding-top: 1px;
 }
 
@@ -372,13 +372,29 @@
 }
 
 .profile__activity-status {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   max-width: 148px;
   color: #65e48f;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
+  min-width: 0;
+  margin-top: 1px;
+}
+
+.profile__activity-note {
+  flex: 0 0 auto;
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.profile__activity-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }

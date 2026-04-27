@@ -467,6 +467,92 @@ export const PersonalProfileSettings = ({
             Сменить аватар
           </button>
         </div>
+
+        <div className="profile-style-lab">
+          <div className="profile-style-lab__card">
+            <div className="profile-style-lab__background" aria-hidden="true">
+              {profileBackgroundSrc ? (
+                <AnimatedMedia
+                  className="profile-style-lab__background-media"
+                  src={profileBackgroundSrc}
+                  alt=""
+                  frame={profileBackgroundFrame}
+                />
+              ) : null}
+            </div>
+
+            <div className="profile-style-lab__voice">
+              <span className="profile-style-lab__signal" aria-hidden="true" />
+              <div className="profile-style-lab__voice-copy">
+                <strong>Подключено</strong>
+                <span>general_voice</span>
+              </div>
+              <span className="profile-style-lab__wave" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+
+            <div className="profile-style-lab__actions" aria-hidden="true">
+              <span className="profile-style-lab__tool profile-style-lab__tool--settings" />
+              <span className="profile-style-lab__tool profile-style-lab__tool--monitor" />
+              <span className="profile-style-lab__tool profile-style-lab__tool--camera" />
+              <span className="profile-style-lab__tool profile-style-lab__tool--call" />
+            </div>
+
+            <div className="profile-style-lab__identity">
+              <button type="button" className="profile-style-lab__avatar-frame" onClick={onChangeAvatar} aria-label="Сменить аватар">
+                <AnimatedAvatar className="profile-style-lab__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+              </button>
+              <div className="profile-style-lab__name">
+                <strong>{displayName}</strong>
+                <span>Kai Wachi — PRECIOUS</span>
+              </div>
+              <span className="profile-style-lab__mini-icons" aria-hidden="true">
+                <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--mic" />
+                <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--sound" />
+                <i className="profile-style-lab__mini-icon profile-style-lab__mini-icon--settings" />
+              </span>
+            </div>
+          </div>
+
+          <div className="profile-style-lab__options">
+            <div className="profile-style-lab__option">
+              <span>Рамка аватарки</span>
+              <div className="profile-style-lab__chips">
+                <i className="profile-style-lab__frame-dot profile-style-lab__frame-dot--soft" />
+                <i className="profile-style-lab__frame-dot profile-style-lab__frame-dot--neon" />
+                <i className="profile-style-lab__frame-dot profile-style-lab__frame-dot--glass" />
+              </div>
+            </div>
+            <div className="profile-style-lab__option">
+              <span>Цвет иконок</span>
+              <div className="profile-style-lab__chips">
+                <i className="profile-style-lab__color-dot profile-style-lab__color-dot--violet" />
+                <i className="profile-style-lab__color-dot profile-style-lab__color-dot--green" />
+                <i className="profile-style-lab__color-dot profile-style-lab__color-dot--rose" />
+              </div>
+            </div>
+            <div className="profile-style-lab__option">
+              <span>Верх блока</span>
+              <strong>Световая рамка</strong>
+            </div>
+            <div className="profile-style-lab__option">
+              <span>Анимация</span>
+              <strong>Пульс волн</strong>
+            </div>
+            <div className="profile-style-lab__option">
+              <span>Фон карточки</span>
+              <strong>Статичный / анимированный</strong>
+            </div>
+            <div className="profile-style-lab__option">
+              <span>Украшения</span>
+              <strong>Линии, блики, значки</strong>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </div>

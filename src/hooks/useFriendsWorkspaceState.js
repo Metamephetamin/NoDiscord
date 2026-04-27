@@ -45,6 +45,7 @@ export default function useFriendsWorkspaceState({
   const [conversationActionStatus, setConversationActionStatus] = useState("");
 
   const latestSearchRef = useRef("");
+  const friendSearchRequestRef = useRef(0);
 
   const loadFriends = async () => {
     try {
@@ -70,10 +71,13 @@ export default function useFriendsWorkspaceState({
   const searchFriendCandidates = async (query) => {
     const { mode, normalizedQuery } = parseFriendSearchInput(query);
     latestSearchRef.current = query;
+    const requestId = friendSearchRequestRef.current + 1;
+    friendSearchRequestRef.current = requestId;
 
     if (!normalizedQuery) {
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
+      setFriendLookupLoading(false);
       return;
     }
 
@@ -92,6 +96,10 @@ export default function useFriendsWorkspaceState({
         throw new Error(getApiErrorMessage(response, data, "Не удалось найти пользователей."));
       }
 
+      if (friendSearchRequestRef.current !== requestId || latestSearchRef.current !== query) {
+        return;
+      }
+
       setFriendLookupResults(
         Array.isArray(data)
           ? sortFriends(data.map(normalizeFriend).filter((friend) => friend.id))
@@ -99,11 +107,17 @@ export default function useFriendsWorkspaceState({
       );
       setFriendLookupPerformed(true);
     } catch (error) {
+      if (friendSearchRequestRef.current !== requestId || latestSearchRef.current !== query) {
+        return;
+      }
+
       setFriendLookupResults([]);
       setFriendLookupPerformed(true);
       setFriendsError(error.message || "Не удалось найти пользователей.");
     } finally {
-      setFriendLookupLoading(false);
+      if (friendSearchRequestRef.current === requestId && latestSearchRef.current === query) {
+        setFriendLookupLoading(false);
+      }
     }
   };
 
