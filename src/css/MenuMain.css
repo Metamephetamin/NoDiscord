@@ -7344,7 +7344,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .menu__profile-wrapper--voice-connected .profile__voice-stack {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  background: linear-gradient(180deg, rgba(9, 10, 13, 0.985), rgba(22, 24, 30, 0.94));
+  background: rgba(16, 17, 23, 0.985);
   border-bottom-color: transparent;
   box-shadow: none;
   margin-bottom: -3px;
@@ -7639,6 +7639,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   border-top-color: transparent;
+  background: rgba(16, 17, 23, 0.985);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
 }
 
@@ -12588,6 +12589,15 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-customization--wave-off .profile__waveform--live span {
   animation: none;
   opacity: 0.52;
+}
+
+.menu__profile-wrapper--voice-connected .profile__voice-stack.profile-customization,
+.menu__profile-wrapper--voice-connected .menu__profile.profile-customization .profile__identity-row {
+  background: rgba(16, 17, 23, 0.985);
+}
+
+.menu__profile-wrapper--voice-connected .menu__profile.profile-customization .profile__identity-row::after {
+  display: none;
 }
 
 .workspace-status-toast--success {
