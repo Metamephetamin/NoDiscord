@@ -940,51 +940,16 @@ export const FriendsMain = ({
             )}
           </div>
         ) : friendsPageSection !== "conversations" ? (
-          <div className="friends-main__content">
+            <div className="friends-main__content">
             <div className="friends-hero friends-add-inline">
                 <h2>Добавить в друзья</h2>
                 <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
-                {friendRequestsLoading || friendRequestsError || incomingFriendRequests.length ? (
-                  <div className="friends-requests">
-                    <div className="friends-requests__header">
-                      <h2>Входящие заявки</h2>
-                      {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
-                    </div>
-                    {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
-                    {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
-                    {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
-                      <div className="friends-results friends-results--requests">
-                        {incomingFriendRequests.map((request) => (
-                          <div key={request.id} className="friends-results__item friends-results__item--request">
-                            <div className="friends-results__identity">
-                              <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
-                              <div className="friends-results__meta">
-                                <strong>{getDisplayName(request.sender)}</strong>
-                                <span>{request.sender.email || "Без email"}</span>
-                              </div>
-                            </div>
-                            <div className="friends-results__actions">
-                              <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
-                                {friendRequestActionId === request.id ? "..." : "✓"}
-                              </button>
-                              <button type="button" className="friends-results__action friends-results__action--decline" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                                {friendRequestActionId === request.id ? "..." : (
-                                  <svg className="friends-results__action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                    <path d="M4 4l8 8M12 4l-8 8" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
                 <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
                   <input
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
                     value={friendEmail}
                     onChange={(event) => onFriendSearchChange(event.target.value)}
@@ -993,6 +958,48 @@ export const FriendsMain = ({
                     {friendLookupLoading ? "Ищем..." : "Найти"}
                   </button>
                 </form>
+            </div>
+
+            {friendRequestsLoading || friendRequestsError || incomingFriendRequests.length ? (
+              <div className="friends-hero friends-requests">
+                <div className="friends-requests__header">
+                  <h2>Входящие заявки</h2>
+                  {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
+                </div>
+                {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
+                {friendRequestsLoading ? <div className="friends-panel__empty">Загружаем заявки...</div> : null}
+                {!friendRequestsLoading && !friendRequestsError && incomingFriendRequests.length ? (
+                  <div className="friends-results friends-results--requests">
+                    {incomingFriendRequests.map((request) => (
+                      <div key={request.id} className="friends-results__item friends-results__item--request">
+                        <div className="friends-results__identity">
+                          <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
+                          <div className="friends-results__meta">
+                            <strong>{getDisplayName(request.sender)}</strong>
+                            <span>{request.sender.email || "Без email"}</span>
+                          </div>
+                        </div>
+                        <div className="friends-results__actions">
+                          <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
+                            {friendRequestActionId === request.id ? "..." : "✓"}
+                          </button>
+                          <button type="button" className="friends-results__action friends-results__action--decline" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
+                            {friendRequestActionId === request.id ? "..." : (
+                              <svg className="friends-results__action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                <path d="M4 4l8 8M12 4l-8 8" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {friendsError || friendLookupResults.length || friendLookupPerformed ? (
+              <div className="friends-hero friends-search-results-panel">
                 {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
                 <div className="friends-results">
                   {friendLookupResults.map((friend) => (
@@ -1017,7 +1024,8 @@ export const FriendsMain = ({
                     </div>
                   ) : null}
                 </div>
-            </div>
+              </div>
+            ) : null}
 
             <div className="friends-hero">
               <h1>Все друзья</h1>
