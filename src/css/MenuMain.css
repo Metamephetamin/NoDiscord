@@ -9753,6 +9753,17 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   }
 }
 
+@keyframes profileCustomizationWrapperShine {
+  0%,
+  45% {
+    background-position: 140% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
 @keyframes profileCustomizationScan {
   0% {
     background-position: 0 0;
@@ -13958,7 +13969,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized {
-  overflow: hidden;
+  overflow: visible;
   border-radius: 18px;
   isolation: isolate;
 }
@@ -13970,12 +13981,14 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   bottom: 0;
   left: 0;
   width: 100%;
-  z-index: 2;
+  z-index: 0;
   border-radius: inherit;
   pointer-events: none;
   background: linear-gradient(120deg, transparent 0 36%, rgba(255, 255, 255, 0.09) 50%, transparent 64% 100%);
+  background-size: 220% 100%;
+  background-position: 140% 0;
   opacity: 0;
-  transform: translateX(-100%);
+  transform: none;
 }
 
 .menu__profile.profile-customization .profile__identity-row::after,
@@ -14007,7 +14020,12 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized.profile-customization--motion-shine::after {
   opacity: 1;
-  animation: profileCustomizationShine 4.4s ease-in-out infinite;
+  animation: profileCustomizationWrapperShine 4.4s ease-in-out infinite;
+}
+
+.menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized .profile__voice-stack.profile-customization,
+.menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized .menu__profile.profile-customization .profile__identity-row {
+  overflow: visible;
 }
 
 .menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized.profile-customization--motion-shine .profile__identity-row::after,
