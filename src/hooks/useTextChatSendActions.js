@@ -5,6 +5,7 @@ import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,
+  isAllowedChatAttachmentFile,
   revokePendingUploadPreviews,
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
@@ -817,6 +818,7 @@ export default function useTextChatSendActions({
     });
     const validFiles = [];
     let hasOversizedFile = false;
+    let hasUnsupportedFile = false;
 
     for (const file of Array.isArray(files) ? files : []) {
       if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -824,16 +826,27 @@ export default function useTextChatSendActions({
         continue;
       }
 
+      if (!isAllowedChatAttachmentFile(file)) {
+        hasUnsupportedFile = true;
+        continue;
+      }
+
       validFiles.push(file);
     }
 
     if (!validFiles.length) {
-      setErrorMessage("Размер файла не должен быть больше 100 МБ.");
+      setErrorMessage(hasUnsupportedFile
+        ? "Этот тип файла нельзя отправить."
+        : "Размер файла не должен быть больше 100 МБ.");
       return;
     }
 
-    if (hasOversizedFile) {
+    if (hasOversizedFile && hasUnsupportedFile) {
+      setErrorMessage("Некоторые файлы пропущены: неподдерживаемый тип или размер больше 100 МБ.");
+    } else if (hasOversizedFile) {
       setErrorMessage("Некоторые файлы пропущены: размер файла не должен быть больше 100 МБ.");
+    } else if (hasUnsupportedFile) {
+      setErrorMessage("Некоторые файлы пропущены: неподдерживаемый тип файла.");
     } else {
       setErrorMessage("");
     }

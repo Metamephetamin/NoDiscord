@@ -27,6 +27,28 @@ const UPLOAD_SIGNATURE_CONTENT_TYPES = {
   ".webm": "video/webm",
 };
 
+const ALLOWED_CHAT_ATTACHMENT_EXTENSIONS = new Set([
+  ".jpg",
+  ".jpeg",
+  ".jfif",
+  ".png",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".pdf",
+  ".txt",
+  ".md",
+  ".bin",
+  ".zip",
+  ".rar",
+  ".7z",
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".mp4",
+  ".webm",
+]);
+
 const JPEG_EXTENSIONS = new Set([".jpg", ".jpeg", ".jfif"]);
 
 function getCompressedImageSettings(file) {
@@ -136,6 +158,15 @@ function getFileExtension(name) {
   const normalizedName = String(name || "").trim();
   const dotIndex = normalizedName.lastIndexOf(".");
   return dotIndex > 0 ? normalizedName.slice(dotIndex).toLowerCase() : "";
+}
+
+export function isAllowedChatAttachmentFile(file) {
+  if (!(file instanceof File)) {
+    return false;
+  }
+
+  const extension = getFileExtension(file.name);
+  return !extension || ALLOWED_CHAT_ATTACHMENT_EXTENSIONS.has(extension);
 }
 
 function bytesStartWith(bytes, signature) {
