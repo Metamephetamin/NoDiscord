@@ -186,16 +186,14 @@
   transform: translateY(calc(-50% + 2px));
 }
 
+.voice-channel__button {
+  padding-right: 38px;
+}
+
 .list__items:hover .voice-channel__row > .channel-edit-button,
 .list__items:focus-within .voice-channel__row > .channel-edit-button,
 .list__items--editing .voice-channel__row > .channel-edit-button {
   transform: translateY(-50%);
-}
-
-.list__items:hover .voice-channel__button,
-.list__items:focus-within .voice-channel__button,
-.list__items--editing .voice-channel__button {
-  padding-right: 38px;
 }
 
 .channel-inline-input {

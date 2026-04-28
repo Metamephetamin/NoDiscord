@@ -1648,6 +1648,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
 }
 
+.friends-directs__item--active::before {
+  left: 0;
+}
+
 .friends-nav__icon {
   width: 18px;
   flex: 0 0 18px;
