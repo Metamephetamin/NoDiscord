@@ -45,11 +45,11 @@ public class SpeechController : ControllerBase
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _logger.LogWarning(exception, "Speech punctuation failed, using heuristic fallback.");
+            _logger.LogWarning(exception, "Speech punctuation failed, using conservative fallback.");
             result = new SpeechPunctuationResult
             {
-                Text = SpeechPunctuationService.ApplyHeuristicPunctuation(rawText),
-                Provider = "server-heuristic-fallback",
+                Text = SpeechPunctuationService.ApplyConservativeSpeechPunctuation(rawText),
+                Provider = "server-conservative-fallback",
                 UsedModel = false,
             };
         }

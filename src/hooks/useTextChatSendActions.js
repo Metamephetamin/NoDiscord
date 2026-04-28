@@ -10,7 +10,7 @@ import {
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
 import { createPollMessagePayload } from "../utils/pollMessages";
-import { autocorrectUserText } from "../utils/textAutocorrect";
+import { punctuateTypedMessageText } from "../utils/speechPunctuation";
 import {
   getChatErrorMessage,
   MAX_FILE_SIZE_BYTES,
@@ -350,7 +350,6 @@ export default function useTextChatSendActions({
 
   const send = async () => {
     const rawMessageText = message.trim();
-    const messageText = autocorrectUserText(rawMessageText);
     const filesToSend = selectedFiles.filter((item) => item?.status !== "cancelled");
 
     if (messageEditState && filesToSend.length) {
@@ -358,7 +357,7 @@ export default function useTextChatSendActions({
       return;
     }
 
-    if ((!messageText && !filesToSend.length) || !scopedChannelId || uploadingFile || voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
+    if ((!rawMessageText && !filesToSend.length) || !scopedChannelId || uploadingFile || voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "sending") {
       return;
     }
 
@@ -370,6 +369,11 @@ export default function useTextChatSendActions({
     }
 
     if (!messageEditState && blockBySlowModeIfNeeded()) {
+      return;
+    }
+
+    const messageText = await punctuateTypedMessageText(rawMessageText);
+    if (!messageText && !filesToSend.length) {
       return;
     }
 

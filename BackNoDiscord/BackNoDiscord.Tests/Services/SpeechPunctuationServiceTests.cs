@@ -5,6 +5,17 @@ namespace BackNoDiscord.Tests.Services;
 public class SpeechPunctuationServiceTests
 {
     [Theory]
+    [InlineData("я думаю что всё готово", "Я думаю что всё готово")]
+    [InlineData("напиши мне запятая когда освободишься", "Напиши мне, когда освободишься")]
+    [InlineData("привет точка как дела вопросительный знак", "Привет. Как дела?")]
+    public void ApplyConservativeSpeechPunctuation_DoesNotGuessGrammarCommas(string input, string expected)
+    {
+        var result = SpeechPunctuationService.ApplyConservativeSpeechPunctuation(input);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
     [InlineData("я думаю что всё готово", "Я думаю, что всё готово.")]
     [InlineData("кто сегодня придет", "Кто сегодня придет?")]
     [InlineData("привет алексей", "Привет, алексей!")]

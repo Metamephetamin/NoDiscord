@@ -2,7 +2,26 @@ import { API_URL } from "../config/runtime";
 import { authFetch } from "./auth";
 import { autocorrectUserText } from "./textAutocorrect";
 
-export async function punctuateTextOnServer(rawText) {
+const TYPED_PUNCTUATION_TIMEOUT_MS = 3500;
+
+function shouldUseServerTypedPunctuation(text) {
+  const normalizedText = String(text || "").trim();
+  if (normalizedText.length < 8) {
+    return false;
+  }
+
+  if (!/[а-яё]/i.test(normalizedText)) {
+    return false;
+  }
+
+  if (/https?:\/\/|www\.|```|^\s*[/>]|[\w.+-]+@[\w.-]+\.\w+/i.test(normalizedText)) {
+    return false;
+  }
+
+  return normalizedText.split(/\s+/).filter(Boolean).length >= 3;
+}
+
+export async function punctuateTextOnServer(rawText, options = {}) {
   const normalizedText = String(rawText || "").trim();
   if (!normalizedText) {
     return "";
@@ -12,6 +31,7 @@ export async function punctuateTextOnServer(rawText) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: normalizedText }),
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -43,5 +63,26 @@ export function formatServerPunctuationResult(result, fallbackText = "") {
 }
 
 export async function punctuateTypedMessageText(rawText) {
-  return autocorrectUserText(String(rawText || "").trim());
+  const normalizedText = autocorrectUserText(String(rawText || "").trim());
+  if (!shouldUseServerTypedPunctuation(normalizedText)) {
+    return normalizedText;
+  }
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? globalThis.setTimeout(() => controller.abort(), TYPED_PUNCTUATION_TIMEOUT_MS)
+    : 0;
+
+  try {
+    const result = await punctuateTextOnServer(normalizedText, {
+      signal: controller?.signal,
+    });
+    return formatServerPunctuationResult(result, normalizedText);
+  } catch {
+    return normalizedText;
+  } finally {
+    if (timeoutId) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
 }
