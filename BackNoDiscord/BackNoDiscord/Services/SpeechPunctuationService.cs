@@ -195,10 +195,22 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
 
         return new SpeechPunctuationResult
         {
-            Text = ApplyHeuristicPunctuation(normalizedInput),
-            Provider = "server-heuristic",
+            Text = ApplyConservativeSpeechPunctuation(normalizedInput),
+            Provider = "server-spoken-punctuation",
             UsedModel = false,
         };
+    }
+
+    public static string ApplyConservativeSpeechPunctuation(string text)
+    {
+        var normalizedText = ApplySpokenPunctuation(text);
+        if (string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return string.Empty;
+        }
+
+        normalizedText = NormalizeSpacing(normalizedText);
+        return CapitalizeSentences(normalizedText);
     }
 
     public static string ApplyHeuristicPunctuation(string text)
@@ -327,11 +339,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
             return null;
         }
 
-        var pythonExecutable = _configuration["SpeechPunctuation:PythonExecutable"];
-        if (string.IsNullOrWhiteSpace(pythonExecutable))
-        {
-            pythonExecutable = "python";
-        }
+        var pythonExecutable = ResolvePythonExecutable();
 
         using var process = new Process
         {
@@ -406,7 +414,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
                 // ignore cleanup failures
             }
 
-            _logger.LogWarning(exception, "Speech punctuation model is unavailable, using heuristic fallback.");
+            _logger.LogWarning(exception, "Speech punctuation model is unavailable, using conservative fallback.");
             return null;
         }
     }
@@ -438,6 +446,25 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         }
 
         return Path.Combine(_environment.ContentRootPath, "Punctuation", "speech_punctuate.py");
+    }
+
+    private string ResolvePythonExecutable()
+    {
+        var configuredExecutable = _configuration["SpeechPunctuation:PythonExecutable"];
+        if (!string.IsNullOrWhiteSpace(configuredExecutable))
+        {
+            return configuredExecutable;
+        }
+
+        var venvPython = OperatingSystem.IsWindows()
+            ? Path.Combine(_environment.ContentRootPath, ".venv", "Scripts", "python.exe")
+            : Path.Combine(_environment.ContentRootPath, ".venv", "bin", "python");
+        if (File.Exists(venvPython))
+        {
+            return venvPython;
+        }
+
+        return OperatingSystem.IsWindows() ? "python" : "python3";
     }
 
     private static string NormalizeInput(string? text)

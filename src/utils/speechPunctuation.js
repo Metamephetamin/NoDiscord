@@ -1,8 +1,6 @@
 import { API_URL } from "../config/runtime";
 import { authFetch } from "./auth";
 import { autocorrectUserText } from "./textAutocorrect";
-import { formatTypedMessageText, shouldAutoPunctuateTypedText } from "./textChatModel";
-import { restoreRussianSpeechPunctuation } from "./voiceMessages";
 
 export async function punctuateTextOnServer(rawText) {
   const normalizedText = String(rawText || "").trim();
@@ -41,20 +39,9 @@ export function formatServerPunctuationResult(result, fallbackText = "") {
     return autocorrectUserText(normalizedText);
   }
 
-  return autocorrectUserText(restoreRussianSpeechPunctuation(normalizedText, { finalize: true }));
+  return autocorrectUserText(normalizedText);
 }
 
 export async function punctuateTypedMessageText(rawText) {
-  const normalizedText = autocorrectUserText(String(rawText || "").trim());
-  if (!shouldAutoPunctuateTypedText(normalizedText)) {
-    return normalizedText;
-  }
-
-  try {
-    const punctuationResult = await punctuateTextOnServer(normalizedText);
-    return formatServerPunctuationResult(punctuationResult, normalizedText);
-  } catch (error) {
-    console.error("Typed message punctuation error:", error);
-    return formatTypedMessageText(normalizedText);
-  }
+  return autocorrectUserText(String(rawText || "").trim());
 }

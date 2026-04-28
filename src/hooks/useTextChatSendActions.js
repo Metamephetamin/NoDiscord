@@ -10,7 +10,7 @@ import {
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
 import { createPollMessagePayload } from "../utils/pollMessages";
-import { punctuateTypedMessageText } from "../utils/speechPunctuation";
+import { autocorrectUserText } from "../utils/textAutocorrect";
 import {
   getChatErrorMessage,
   MAX_FILE_SIZE_BYTES,
@@ -350,7 +350,7 @@ export default function useTextChatSendActions({
 
   const send = async () => {
     const rawMessageText = message.trim();
-    const messageText = await punctuateTypedMessageText(rawMessageText);
+    const messageText = autocorrectUserText(rawMessageText);
     const filesToSend = selectedFiles.filter((item) => item?.status !== "cancelled");
 
     if (messageEditState && filesToSend.length) {

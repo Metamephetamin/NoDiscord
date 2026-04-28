@@ -325,6 +325,58 @@ jobs:
             echo \"Backend environment apply completed\"
           '"
 
+      - name: Install speech punctuation model dependencies
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+          BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
+          BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 20m bash -lc '
+            set -e
+            BACKEND_PATH='$BACKEND_PATH'
+            BACKEND_OWNER='$BACKEND_OWNER'
+            case \"\$BACKEND_PATH\" in
+              /opt/nodiscord/*) ;;
+              *)
+                echo \"Unsafe backend deploy path: \$BACKEND_PATH\" >&2
+                exit 1
+                ;;
+            esac
+            REQUIREMENTS=\"\$BACKEND_PATH/Punctuation/requirements.txt\"
+            if [ ! -f \"\$REQUIREMENTS\" ]; then
+              echo \"Speech punctuation requirements not found, skipping model dependency install.\"
+              exit 0
+            fi
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo \"python3 is not installed on the server; speech punctuation will use conservative fallback.\" >&2
+              exit 0
+            fi
+            if ! python3 -m venv \"\$BACKEND_PATH/.venv\"; then
+              if command -v apt-get >/dev/null 2>&1 && [ \"\$(id -u)\" = \"0\" ]; then
+                apt-get update
+                apt-get install -y python3-venv python3-pip
+                python3 -m venv \"\$BACKEND_PATH/.venv\"
+              else
+                echo \"python3 venv is not available; speech punctuation will use conservative fallback.\" >&2
+                exit 0
+              fi
+            fi
+            \"\$BACKEND_PATH/.venv/bin/python\" -m pip install --upgrade pip
+            \"\$BACKEND_PATH/.venv/bin/python\" -m pip install -r \"\$REQUIREMENTS\"
+            chown -R \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.venv\"
+            echo \"Speech punctuation Python environment is ready\"
+          '"
+
       - name: Restart backend and reload nginx
         if: steps.validate.outputs.ready == 'true'
         shell: bash

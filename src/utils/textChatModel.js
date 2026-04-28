@@ -19,7 +19,7 @@ export const VOICE_HIGH_SHELF_GAIN_DB = 1.2;
 export const VOICE_LOW_PASS_FREQUENCY_HZ = 9800;
 export const VOICE_OUTPUT_GAIN = 1.08;
 export const SPEECH_RECOGNITION_RESTART_DELAY_MS = 240;
-export const AUTO_PUNCTUATE_TYPED_MESSAGES = true;
+export const AUTO_PUNCTUATE_TYPED_MESSAGES = false;
 export const ENABLE_VOICE_MESSAGE_BUTTON = false; // voice messages are disabled; keep only speech-to-text input
 export const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
 
