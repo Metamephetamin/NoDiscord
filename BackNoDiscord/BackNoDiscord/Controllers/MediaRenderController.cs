@@ -20,6 +20,17 @@ public sealed class MediaRenderController : ControllerBase
     private const int MaxEdge = 1024;
     private const long MaxSourceBytes = 30L * 1024L * 1024L;
     private const long MaxGifSourceBytes = 8L * 1024L * 1024L;
+    private static readonly HashSet<string> RenderableImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".jfif",
+        ".png",
+        ".webp",
+        ".gif",
+        ".bmp"
+    };
+
     private readonly UploadStoragePaths _uploadStoragePaths;
 
     public MediaRenderController(UploadStoragePaths uploadStoragePaths)
@@ -72,40 +83,51 @@ public sealed class MediaRenderController : ControllerBase
             81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        using var image = await Image.LoadAsync(inputStream, cancellationToken);
-
-        image.Mutate(context =>
+        Image image;
+        try
         {
-            context.AutoOrient();
-            context.Resize(new ResizeOptions
+            image = await Image.LoadAsync(inputStream, cancellationToken);
+        }
+        catch (UnknownImageFormatException)
+        {
+            return NotFound();
+        }
+
+        using (image)
+        {
+            image.Mutate(context =>
             {
-                Mode = resizeMode,
-                Position = AnchorPositionMode.Center,
-                Size = new Size(targetWidth, targetHeight),
-                Sampler = KnownResamplers.Lanczos3,
+                context.AutoOrient();
+                context.Resize(new ResizeOptions
+                {
+                    Mode = resizeMode,
+                    Position = AnchorPositionMode.Center,
+                    Size = new Size(targetWidth, targetHeight),
+                    Sampler = KnownResamplers.Lanczos3,
+                });
             });
-        });
 
-        var outputStream = new MemoryStream();
-        var preserveAnimatedGif = ParseAnimatedFlag(animated) && string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase);
+            var outputStream = new MemoryStream();
+            var preserveAnimatedGif = ParseAnimatedFlag(animated) && string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase);
 
-        if (preserveAnimatedGif)
-        {
-            await image.SaveAsGifAsync(outputStream, new GifEncoder(), cancellationToken);
-            return BuildFileResult(outputStream, "image/gif");
+            if (preserveAnimatedGif)
+            {
+                await image.SaveAsGifAsync(outputStream, new GifEncoder(), cancellationToken);
+                return BuildFileResult(outputStream, "image/gif");
+            }
+
+            if (SupportsTransparentOutput(extension))
+            {
+                await image.SaveAsPngAsync(outputStream, new PngEncoder(), cancellationToken);
+                return BuildFileResult(outputStream, "image/png");
+            }
+
+            await image.SaveAsJpegAsync(outputStream, new JpegEncoder
+            {
+                Quality = 92,
+            }, cancellationToken);
+            return BuildFileResult(outputStream, "image/jpeg");
         }
-
-        if (SupportsTransparentOutput(extension))
-        {
-            await image.SaveAsPngAsync(outputStream, new PngEncoder(), cancellationToken);
-            return BuildFileResult(outputStream, "image/png");
-        }
-
-        await image.SaveAsJpegAsync(outputStream, new JpegEncoder
-        {
-            Quality = 92,
-        }, cancellationToken);
-        return BuildFileResult(outputStream, "image/jpeg");
     }
 
     private static bool SupportsTransparentOutput(string extension) =>
@@ -168,6 +190,11 @@ public sealed class MediaRenderController : ControllerBase
             }
 
             extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (!RenderableImageExtensions.Contains(extension))
+            {
+                return false;
+            }
+
             filePath = Path.Combine(mapping.Directory, fileName);
             return true;
         }

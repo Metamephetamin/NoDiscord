@@ -238,6 +238,15 @@ public sealed class ChatMessagesController : ControllerBase
             : await _context.Users
                 .AsNoTracking()
                 .Where(user => reactorNumericIds.Contains(user.id))
+                .Select(user => new
+                {
+                    user.id,
+                    user.nickname,
+                    user.first_name,
+                    user.last_name,
+                    user.email,
+                    user.avatar_url
+                })
                 .ToListAsync(cancellationToken);
 
         var reactorLookup = reactorUsers.ToDictionary(

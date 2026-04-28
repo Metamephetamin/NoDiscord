@@ -101,13 +101,24 @@ public sealed class ConversationsController : ControllerBase
             .ToListAsync(cancellationToken);
 
         var users = await LoadUsersAsync(members.Select(item => item.UserId), cancellationToken);
+        var membersByConversationId = members
+            .GroupBy(item => item.ConversationId)
+            .ToDictionary(item => item.Key, item => item.ToList());
 
         var payload = conversations
-            .Select(conversation => BuildConversationPayload(
-                conversation,
-                members.Where(item => item.ConversationId == conversation.Id).ToList(),
-                users,
-                currentUserId))
+            .Select(conversation =>
+            {
+                IReadOnlyCollection<GroupConversationMemberRecord> conversationMembers =
+                    membersByConversationId.TryGetValue(conversation.Id, out var groupedMembers)
+                        ? groupedMembers
+                        : Array.Empty<GroupConversationMemberRecord>();
+
+                return BuildConversationPayload(
+                    conversation,
+                    conversationMembers,
+                    users,
+                    currentUserId);
+            })
             .ToList();
 
         return Ok(payload);
@@ -804,7 +815,7 @@ public sealed class ConversationsController : ControllerBase
             .ToListAsync(cancellationToken);
     }
 
-    private async Task<Dictionary<int, User>> LoadUsersAsync(IEnumerable<int> userIds, CancellationToken cancellationToken)
+    private async Task<Dictionary<int, ConversationUserProjection>> LoadUsersAsync(IEnumerable<int> userIds, CancellationToken cancellationToken)
     {
         var normalizedUserIds = userIds
             .Where(item => item > 0)
@@ -819,7 +830,17 @@ public sealed class ConversationsController : ControllerBase
         return await _context.Users
             .AsNoTracking()
             .Where(item => normalizedUserIds.Contains(item.id))
-            .ToDictionaryAsync(item => item.id, cancellationToken);
+            .Select(item => new ConversationUserProjection
+            {
+                Id = item.id,
+                FirstName = item.first_name,
+                LastName = item.last_name,
+                Nickname = item.nickname,
+                Email = item.email,
+                AvatarUrl = item.avatar_url,
+                LastSeenAt = item.last_seen_at
+            })
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
     }
 
     private (Message Entity, ChatMessagePayload Payload) AddConversationSystemMessage(
@@ -890,21 +911,21 @@ public sealed class ConversationsController : ControllerBase
         return $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
     }
 
-    private static string GetUserDisplayName(User? user, int fallbackUserId)
+    private static string GetUserDisplayName(ConversationUserProjection? user, int fallbackUserId)
     {
         if (user is null)
         {
             return $"User {fallbackUserId}";
         }
 
-        var nickname = UploadPolicies.TrimToLength(user.nickname, 160).Trim();
+        var nickname = UploadPolicies.TrimToLength(user.Nickname, 160).Trim();
         if (!string.IsNullOrWhiteSpace(nickname))
         {
             return nickname;
         }
 
-        var fullName = $"{user.first_name} {user.last_name}".Trim();
-        return string.IsNullOrWhiteSpace(fullName) ? (user.email ?? $"User {fallbackUserId}") : fullName;
+        var fullName = $"{user.FirstName} {user.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? (user.Email ?? $"User {fallbackUserId}") : fullName;
     }
 
     private async Task BroadcastConversationsUpdatedAsync(IEnumerable<int> userIds, CancellationToken cancellationToken)
@@ -926,12 +947,13 @@ public sealed class ConversationsController : ControllerBase
     private object BuildConversationPayload(
         GroupConversationRecord conversation,
         IReadOnlyCollection<GroupConversationMemberRecord> members,
-        IReadOnlyDictionary<int, User> users,
+        IReadOnlyDictionary<int, ConversationUserProjection> users,
         int currentUserId)
     {
         var currentMember = members.FirstOrDefault(item => item.UserId == currentUserId && !item.IsBanned);
         var currentRole = NormalizeConversationRole(currentMember?.Role);
         var permissions = GetConversationPermissions(currentRole);
+        var now = DateTimeOffset.UtcNow;
 
         var activeMembers = members
             .Where(item => !item.IsBanned)
@@ -945,18 +967,18 @@ public sealed class ConversationsController : ControllerBase
                 return new
                 {
                     id = item.UserId,
-                    first_name = user?.first_name ?? string.Empty,
-                    last_name = user?.last_name ?? string.Empty,
-                    nickname = user?.nickname ?? string.Empty,
-                    email = user?.email ?? string.Empty,
-                    avatar_url = user?.avatar_url ?? string.Empty,
-                    last_seen_at = user?.last_seen_at,
+                    first_name = user?.FirstName ?? string.Empty,
+                    last_name = user?.LastName ?? string.Empty,
+                    nickname = user?.Nickname ?? string.Empty,
+                    email = user?.Email ?? string.Empty,
+                    avatar_url = user?.AvatarUrl ?? string.Empty,
+                    last_seen_at = user?.LastSeenAt,
                     is_online = isOnline,
                     presence = isOnline ? "online" : "offline",
                     directChannelId = DirectMessageChannels.BuildChannelId(currentUserId, item.UserId),
                     role = item.Role,
                     mute_until = item.MutedUntil,
-                    is_muted = item.MutedUntil.HasValue && item.MutedUntil > DateTimeOffset.UtcNow,
+                    is_muted = item.MutedUntil.HasValue && item.MutedUntil > now,
                     joined_at = item.JoinedAt
                 };
             })
@@ -1034,6 +1056,17 @@ public sealed class ConversationsController : ControllerBase
         public string? Title { get; set; }
         public string? AvatarUrl { get; set; }
         public List<int>? MemberUserIds { get; set; }
+    }
+
+    private sealed class ConversationUserProjection
+    {
+        public int Id { get; set; }
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Nickname { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public string? AvatarUrl { get; set; }
+        public DateTimeOffset? LastSeenAt { get; set; }
     }
 
     public sealed class UpdateConversationRequest

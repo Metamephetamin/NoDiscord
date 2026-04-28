@@ -1812,37 +1812,6 @@ app.whenReady().then(async () => {
     await clearSecureSession();
     return true;
   });
-  ipcMain.handle("secure-store:get", async (_event, key) => {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey) {
-      return null;
-    }
-
-    const secureStore = await readSecureKeyValueStore();
-    return secureStore[normalizedKey] ?? null;
-  });
-  ipcMain.handle("secure-store:set", async (_event, key, value) => {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey) {
-      return false;
-    }
-
-    const secureStore = await readSecureKeyValueStore();
-    secureStore[normalizedKey] = value ?? null;
-    await writeSecureKeyValueStore(secureStore);
-    return true;
-  });
-  ipcMain.handle("secure-store:remove", async (_event, key) => {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey) {
-      return false;
-    }
-
-    const secureStore = await readSecureKeyValueStore();
-    delete secureStore[normalizedKey];
-    await writeSecureKeyValueStore(secureStore);
-    return true;
-  });
   ipcMain.handle("clipboard:write-text", async (_event, value) => {
     clipboard.writeText(String(value ?? ""));
     return true;

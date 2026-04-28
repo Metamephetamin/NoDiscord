@@ -146,18 +146,6 @@ contextBridge.exposeInMainWorld("electronSecureSession", {
   },
 });
 
-contextBridge.exposeInMainWorld("electronSecrets", {
-  async get(key) {
-    return ipcRenderer.invoke("secure-store:get", key);
-  },
-  async set(key, value) {
-    return ipcRenderer.invoke("secure-store:set", key, value);
-  },
-  async remove(key) {
-    return ipcRenderer.invoke("secure-store:remove", key);
-  },
-});
-
 contextBridge.exposeInMainWorld("electronDownloads", {
   async saveFile(payload) {
     return ipcRenderer.invoke("downloads:save-file", payload);

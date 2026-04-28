@@ -1314,8 +1314,16 @@ public class ChatHub : Hub
         var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
 
         var unreadMessages = await _context.Messages
+            .AsNoTracking()
             .Where(message => equivalentChannelIds.Contains(message.ChannelId) && !message.IsDeleted && message.ReadAt == null)
             .OrderBy(message => message.Timestamp)
+            .Select(message => new
+            {
+                message.Id,
+                message.ChannelId,
+                message.Content,
+                message.EncryptedContent
+            })
             .ToListAsync();
 
         if (unreadMessages.Count == 0)
@@ -1328,14 +1336,12 @@ public class ChatHub : Hub
 
         foreach (var unreadMessage in unreadMessages)
         {
-            var payload = DeserializePayload(GetRawPayload(unreadMessage));
+            var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
             if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            unreadMessage.ReadAt = readAtUtc;
-            unreadMessage.ReadByUserId = currentUser.UserId;
             readMessageIds.Add(unreadMessage.Id);
         }
 
@@ -1344,7 +1350,11 @@ public class ChatHub : Hub
             return;
         }
 
-        await _context.SaveChangesAsync();
+        await _context.Messages
+            .Where(message => readMessageIds.Contains(message.Id))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(message => message.ReadAt, readAtUtc)
+                .SetProperty(message => message.ReadByUserId, currentUser.UserId));
 
         await Clients.Group(normalizedChannelId).SendAsync("MessagesRead", new MessageReadReceiptDto
         {
@@ -1353,6 +1363,24 @@ public class ChatHub : Hub
             MessageIds = readMessageIds,
             ReadAt = readAtUtc
         });
+    }
+
+    private string GetRawPayload(string? content, string? encryptedContent, int messageId, string channelId)
+    {
+        if (string.IsNullOrWhiteSpace(encryptedContent))
+        {
+            return content ?? string.Empty;
+        }
+
+        try
+        {
+            return _crypto.Decrypt(encryptedContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to decrypt chat message {MessageId} in channel {ChannelId}.", messageId, channelId);
+            return content ?? string.Empty;
+        }
     }
 
     private string NormalizeChannelId(string? channelId)
