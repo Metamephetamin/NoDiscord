@@ -102,6 +102,13 @@ Architecture must serve performance, not purity.
 - Keep render trees shallow in frequently updated areas
 - Prefer splitting hot subtrees into isolated components
 
+## State and data flow
+- Keep server/cache state separate from short-lived UI state
+- Do not duplicate the same source of truth across controllers unless there is a measured reason
+- Normalize frequently updated collections when it avoids repeated list scans
+- Use refs for transport/media handles and transient guards that should not rerender UI
+- Keep optimistic UI changes reversible when a request can fail
+
 ## Hot paths
 Be extra careful in:
 - chat message list
@@ -120,12 +127,14 @@ Be extra careful in:
 - Abort or ignore stale async results
 - Guard against repeated taps/clicks
 - Prevent race conditions in join/leave flows
+- Do not put async work in effects with unstable dependencies unless the repeated run is intended
 
 ## Media
 - Release object URLs when no longer needed
 - Stop media tracks correctly
 - Remove stale listeners from video/audio elements
 - Avoid rebuilding media-heavy UI unnecessarily
+- Prefer lazy decoding/loading for offscreen heavy media
 
 ---
 
@@ -154,6 +163,18 @@ Prefer:
 
 ---
 
+# ELECTRON / DESKTOP RULES
+
+- Keep Electron main/preload code minimal and explicit
+- Do not expose broad Node APIs to the renderer
+- Prefer typed, narrow IPC channels for desktop-only features
+- Validate IPC payloads on both sides when they can cross trust boundaries
+- Avoid blocking filesystem or process work on the renderer thread
+- Clean up desktop event listeners on window close/reload
+- Check both browser and Electron behavior when changing media, notifications, downloads, deep links, or window lifecycle
+
+---
+
 # UI / UX RULES
 
 The UI must feel fast first, pretty second.
@@ -164,6 +185,9 @@ The UI must feel fast first, pretty second.
 - Do not add extra buttons/labels/noise unless needed
 - Loading states should be lightweight and immediate
 - Avoid blocking the main thread with heavy synchronous logic
+- Preserve keyboard focus and text selection during rerenders
+- Keep keyboard shortcuts, Esc behavior, and Enter/send behavior consistent
+- Interactive controls should have accessible names even when icon-only
 
 For mobile voice UI:
 - toolbar stays one row
@@ -187,6 +211,8 @@ Backend should support fast UI and realtime reliability.
 - Avoid duplicate event emission
 - Make reconnect/rejoin flows tolerant and cheap
 - Prefer idempotent handling for repeated client events
+- Pass CancellationToken through request and database paths where practical
+- Do not log high-volume hub events noisily in production
 
 ## EF Core / PostgreSQL
 - Avoid N+1 queries
@@ -195,6 +221,36 @@ Backend should support fast UI and realtime reliability.
 - Avoid over-fetching
 - Use AsNoTracking where appropriate
 - Do not create slow query patterns for convenience
+- Add indexes with migrations when introducing new lookup/filter patterns
+- Check query shape before adding Include chains on hot endpoints
+
+## Migrations and data
+- Treat migrations as production changes, not local cleanup
+- Keep migrations focused and reversible when possible
+- Never drop or rewrite production data without an explicit user request
+- For risky data changes, describe the rollback path before applying
+- Do not commit local secrets, connection strings, dumps, or generated private data
+
+---
+
+# OBSERVABILITY / LOGGING RULES
+
+- Logs should help debug reconnects, failed media joins, auth failures, and backend errors
+- Do not log passwords, tokens, cookies, invite secrets, authorization headers, or message contents unless explicitly needed for a safe local debug task
+- Prefer structured logs over string blobs in backend code
+- Keep noisy logs out of hot render/realtime paths
+- When fixing a flaky bug, add lightweight diagnostics only if they can stay useful after the fix
+- User-facing errors should be short and actionable; detailed diagnostics belong in logs
+
+---
+
+# DEPENDENCY RULES
+
+- Do not add a new package for small helpers that can be implemented clearly in local code
+- Prefer existing project libraries and patterns before introducing alternatives
+- Check bundle/runtime cost before adding frontend dependencies
+- Avoid packages that require broad Electron permissions or native modules unless the product need is clear
+- If adding or upgrading a dependency, verify lockfile changes and mention why it is needed
 
 ---
 
@@ -257,6 +313,16 @@ When touching a hot path:
 When touching cold/admin/setup paths:
 - keep the solution simple and readable
 - do not over-optimize code that does not affect user interaction speed
+
+---
+
+# WORKTREE HYGIENE
+
+- Run `git status --short` before editing when the task touches code
+- Do not overwrite or revert unrelated user changes
+- If a file already has unrelated edits, make the smallest compatible patch
+- Keep generated files, formatting churn, and dependency lockfile changes out of the patch unless needed
+- Before final response, mention any existing unrelated dirty files if they could affect verification
 
 ---
 
@@ -425,6 +491,18 @@ For auth/security changes, consider:
 - No ???? placeholders
 - scripts/check-encoding.mjs is required
 - If encoding breaks, fix the source text rather than bypassing checks
+
+---
+
+# TESTING / VERIFICATION RULES
+
+- Use the cheapest relevant check first, then broaden only when the touched area is risky
+- For frontend hot paths, prefer targeted manual verification plus `npm run lint:ci` or `npm run build:frontend`
+- For Russian text or encoding-sensitive changes, run `npm run check:encoding`
+- For backend behavior, prefer focused tests or `dotnet test` when the touched area has coverage
+- For DB/query changes, verify generated SQL or query shape when performance matters
+- For UI changes, check at least one narrow/mobile and one desktop viewport when practical
+- If a check cannot be run locally, say exactly why and what should be run next
 
 ---
 

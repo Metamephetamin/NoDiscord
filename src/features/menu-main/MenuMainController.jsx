@@ -72,7 +72,9 @@ import useMenuMainCameraPreview from "./useMenuMainCameraPreview";
 import useMenuMainDirectCalls from "./useMenuMainDirectCalls";
 import useMenuMainDirectCallHistory from "./useMenuMainDirectCallHistory";
 import useMenuMainDirectCallLifecycle from "./useMenuMainDirectCallLifecycle";
+import useMenuMainKeyboardShortcuts from "./useMenuMainKeyboardShortcuts";
 import useMenuMainLocalShareActions from "./useMenuMainLocalShareActions";
+import useMenuMainNavigation from "./useMenuMainNavigation";
 import useMenuMainSelfVoiceStateSync from "./useMenuMainSelfVoiceStateSync";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
 import useMenuMainVoiceProcessing from "./useMenuMainVoiceProcessing";
@@ -83,10 +85,8 @@ import {
   getInitialTextChannelId,
   getStoredTextChannelId,
   readWorkspaceState,
-  readWorkspaceStateFromStorageKey,
   useMenuMainStorageKeys,
   writeStoredTextChannelId,
-  writeWorkspaceStateToStorageKey,
 } from "./menuMainWorkspaceStorage";
 import {
   buildDirectCallState,
@@ -589,10 +589,6 @@ export default function MenuMain({
   const serverLongPressTriggeredRef = useRef(false);
   const suppressedServerClickRef = useRef("");
   const micLevelUiActiveRef = useRef(false);
-  const navigationHistoryRef = useRef({ back: [], forward: [] });
-  const lastNavigationSnapshotRef = useRef(null);
-  const restoredWorkspaceStateKeyRef = useRef("");
-  const skipNextWorkspaceStatePersistRef = useRef(false);
   const lastServerSyncFingerprintRef = useRef("");
   const {
     serversStorageKey,
@@ -956,66 +952,37 @@ export default function MenuMain({
         : { ...previous, connectionQuality: nextQuality };
     });
   }, [activeLatencyMs]);
-  const buildNavigationSnapshot = () => ({
+  const {
+    canNavigateBack,
+    canNavigateForward,
+    pushNavigationHistory,
+    navigateHistoryBack,
+    navigateHistoryForward,
+  } = useMenuMainNavigation({
     workspaceMode,
-    activeServerId: String(activeServerId || ""),
-    currentTextChannelId: String(currentTextChannelId || ""),
-    activeDirectFriendId: String(activeDirectFriendId || ""),
-    activeConversationId: String(activeConversationId || ""),
-    desktopServerPane: String(desktopServerPane || "text"),
-    selectedStreamUserId: selectedStreamUserId ? String(selectedStreamUserId) : "",
-    mobileSection: String(mobileSection || "servers"),
-    mobileServersPane: String(mobileServersPane || "channels"),
+    setWorkspaceMode,
+    activeServerId,
+    setActiveServerId,
+    currentTextChannelId,
+    setCurrentTextChannelId,
+    activeDirectFriendId,
+    setActiveDirectFriendId,
+    activeConversationId,
+    setActiveConversationId,
+    friendsPageSection,
+    setFriendsPageSection,
+    desktopServerPane,
+    setDesktopServerPane,
+    selectedStreamUserId,
+    setSelectedStreamUserId,
+    mobileSection,
+    setMobileSection,
+    mobileServersPane,
+    setMobileServersPane,
+    isMobileViewport,
+    currentVoiceChannel,
+    workspaceStateStorageKey,
   });
-  const applyNavigationSnapshot = (snapshot) => {
-    if (!snapshot) {
-      return;
-    }
-
-    setWorkspaceMode(snapshot.workspaceMode === "friends" ? "friends" : "servers");
-    setActiveServerId(String(snapshot.activeServerId || ""));
-    setCurrentTextChannelId(String(snapshot.currentTextChannelId || ""));
-    setActiveDirectFriendId(String(snapshot.activeDirectFriendId || ""));
-    setActiveConversationId(String(snapshot.activeConversationId || ""));
-    setDesktopServerPane(snapshot.desktopServerPane === "voice" ? "voice" : "text");
-    setSelectedStreamUserId(snapshot.selectedStreamUserId ? String(snapshot.selectedStreamUserId) : null);
-    if (isMobileViewport) {
-      setMobileSection(snapshot.mobileSection || "servers");
-      setMobileServersPane(snapshot.mobileServersPane || "channels");
-    }
-  };
-  const pushNavigationHistory = (nextSnapshotFactory) => {
-    const currentSnapshot = buildNavigationSnapshot();
-    const currentKey = JSON.stringify(currentSnapshot);
-    const lastKey = JSON.stringify(lastNavigationSnapshotRef.current);
-    if (currentKey !== lastKey) {
-      navigationHistoryRef.current.back = [...navigationHistoryRef.current.back.slice(-39), currentSnapshot];
-      lastNavigationSnapshotRef.current = currentSnapshot;
-    }
-
-    navigationHistoryRef.current.forward = [];
-    nextSnapshotFactory();
-  };
-  const navigateHistoryBack = () => {
-    const previousSnapshot = navigationHistoryRef.current.back.pop();
-    if (!previousSnapshot) {
-      return;
-    }
-
-    navigationHistoryRef.current.forward = [...navigationHistoryRef.current.forward.slice(-39), buildNavigationSnapshot()];
-    applyNavigationSnapshot(previousSnapshot);
-    lastNavigationSnapshotRef.current = previousSnapshot;
-  };
-  const navigateHistoryForward = () => {
-    const nextSnapshot = navigationHistoryRef.current.forward.pop();
-    if (!nextSnapshot) {
-      return;
-    }
-
-    navigationHistoryRef.current.back = [...navigationHistoryRef.current.back.slice(-39), buildNavigationSnapshot()];
-    applyNavigationSnapshot(nextSnapshot);
-    lastNavigationSnapshotRef.current = nextSnapshot;
-  };
   useEffect(() => {
     const allowedFps = SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"];
     if (!allowedFps.includes(fps)) {
@@ -1040,95 +1007,6 @@ export default function MenuMain({
     mediaQueryList.addListener(handleViewportChange);
     return () => mediaQueryList.removeListener(handleViewportChange);
   }, []);
-  useEffect(() => {
-    if (!isMobileViewport) {
-      return;
-    }
-
-    setMobileSection((previousSection) => {
-      if (previousSection === "profile") {
-        return previousSection;
-      }
-
-      return workspaceMode === "friends" ? "friends" : "servers";
-    });
-  }, [isMobileViewport, workspaceMode]);
-  useEffect(() => {
-    lastNavigationSnapshotRef.current = buildNavigationSnapshot();
-  }, [
-    activeConversationId,
-    activeDirectFriendId,
-    activeServerId,
-    currentTextChannelId,
-    desktopServerPane,
-    mobileSection,
-    mobileServersPane,
-    selectedStreamUserId,
-    workspaceMode,
-  ]);
-  useEffect(() => {
-    if (!workspaceStateStorageKey || restoredWorkspaceStateKeyRef.current === workspaceStateStorageKey) {
-      return;
-    }
-
-    restoredWorkspaceStateKeyRef.current = workspaceStateStorageKey;
-    skipNextWorkspaceStatePersistRef.current = true;
-
-    const storedWorkspaceState = readWorkspaceStateFromStorageKey(workspaceStateStorageKey);
-    setWorkspaceMode(storedWorkspaceState.workspaceMode || "servers");
-    setActiveDirectFriendId(storedWorkspaceState.activeDirectFriendId || "");
-    setActiveConversationId(storedWorkspaceState.activeConversationId || "");
-    setFriendsPageSection(storedWorkspaceState.friendsPageSection || "friends");
-    if (storedWorkspaceState.activeServerId) {
-      setActiveServerId(storedWorkspaceState.activeServerId);
-    }
-    if (storedWorkspaceState.currentTextChannelId) {
-      setCurrentTextChannelId(storedWorkspaceState.currentTextChannelId);
-    }
-    setDesktopServerPane(storedWorkspaceState.desktopServerPane || "text");
-    setMobileSection(storedWorkspaceState.mobileSection || "servers");
-    setMobileServersPane(storedWorkspaceState.mobileServersPane || "channels");
-  }, [workspaceStateStorageKey]);
-  useEffect(() => {
-    if (!workspaceStateStorageKey) {
-      return;
-    }
-
-    if (skipNextWorkspaceStatePersistRef.current) {
-      skipNextWorkspaceStatePersistRef.current = false;
-      return;
-    }
-
-    writeWorkspaceStateToStorageKey(workspaceStateStorageKey, {
-      workspaceMode,
-      activeDirectFriendId,
-      activeConversationId,
-      friendsPageSection,
-      activeServerId,
-      currentTextChannelId,
-      desktopServerPane,
-      mobileSection,
-      mobileServersPane,
-    });
-  }, [
-    activeConversationId,
-    activeDirectFriendId,
-    activeServerId,
-    currentTextChannelId,
-    desktopServerPane,
-    friendsPageSection,
-    mobileSection,
-    mobileServersPane,
-    workspaceMode,
-    workspaceStateStorageKey,
-  ]);
-  useEffect(() => {
-    if (!isMobileViewport || currentVoiceChannel || mobileServersPane !== "voice") {
-      return;
-    }
-
-    setMobileServersPane("channels");
-  }, [currentVoiceChannel, isMobileViewport, mobileServersPane]);
   useEffect(() => {
     if (!activeServer && (settingsTab === "server" || settingsTab === "roles")) {
       setSettingsTab("voice_video");
@@ -1993,131 +1871,6 @@ export default function MenuMain({
       handleWatchStream(item.userId);
     }
   };
-
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      const target = event.target;
-      const isEditableTarget =
-        target instanceof HTMLInputElement
-        || target instanceof HTMLTextAreaElement
-        || target?.isContentEditable;
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setQuickSwitcherOpen((previous) => {
-          const nextOpen = !previous;
-          if (!nextOpen) {
-            setQuickSwitcherQuery("");
-            setQuickSwitcherSelectedIndex(0);
-          } else {
-            setQuickSwitcherSelectedIndex(0);
-          }
-          return nextOpen;
-        });
-        return;
-      }
-
-      if (quickSwitcherOpen && event.key === "Escape") {
-        event.preventDefault();
-        closeQuickSwitcher();
-        return;
-      }
-
-      if (quickSwitcherOpen) {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setQuickSwitcherSelectedIndex((previous) => (
-            quickSwitcherItems.length ? (previous + 1) % quickSwitcherItems.length : 0
-          ));
-          return;
-        }
-
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setQuickSwitcherSelectedIndex((previous) => (
-            quickSwitcherItems.length ? (previous - 1 + quickSwitcherItems.length) % quickSwitcherItems.length : 0
-          ));
-          return;
-        }
-
-        if (event.key === "Enter") {
-          const selectedItem = quickSwitcherItems[quickSwitcherSelectedIndex] || quickSwitcherItems[0];
-          if (selectedItem) {
-            event.preventDefault();
-            handleQuickSwitcherSelect(selectedItem);
-          }
-          return;
-        }
-      }
-
-      if (isEditableTarget) {
-        return;
-      }
-
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "m") {
-        event.preventDefault();
-        toggleMicMute();
-        return;
-      }
-
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        toggleSoundMute();
-        return;
-      }
-
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "a") {
-        if (directCallStateRef.current.phase === "incoming") {
-          event.preventDefault();
-          void acceptDirectCall();
-        }
-        return;
-      }
-
-      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "e") {
-        if (directCallStateRef.current.phase === "connected") {
-          event.preventDefault();
-          void endDirectCall();
-          return;
-        }
-
-        if (directCallStateRef.current.phase !== "idle") {
-          event.preventDefault();
-          void declineDirectCall();
-          return;
-        }
-      }
-
-      if (event.altKey && event.key === "ArrowLeft") {
-        event.preventDefault();
-        navigateHistoryBack();
-        return;
-      }
-
-      if (event.altKey && event.key === "ArrowRight") {
-        event.preventDefault();
-        navigateHistoryForward();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [
-    acceptDirectCall,
-    closeQuickSwitcher,
-    declineDirectCall,
-    endDirectCall,
-    handleQuickSwitcherSelect,
-    navigateHistoryBack,
-    navigateHistoryForward,
-    quickSwitcherItems,
-    quickSwitcherOpen,
-    quickSwitcherSelectedIndex,
-    toggleMicMute,
-    toggleSoundMute,
-  ]);
 
   const dismissDirectToast = (toastId) => {
     const timeoutId = directToastTimeoutsRef.current.get(toastId);
@@ -5047,6 +4800,24 @@ export default function MenuMain({
     appendDirectCallHistoryEntry,
     showServerInviteFeedback,
   });
+  useMenuMainKeyboardShortcuts({
+    quickSwitcherOpen,
+    quickSwitcherItems,
+    quickSwitcherSelectedIndex,
+    setQuickSwitcherOpen,
+    setQuickSwitcherQuery,
+    setQuickSwitcherSelectedIndex,
+    closeQuickSwitcher,
+    handleQuickSwitcherSelect,
+    toggleMicMute,
+    toggleSoundMute,
+    directCallStateRef,
+    acceptDirectCall,
+    declineDirectCall,
+    endDirectCall,
+    navigateHistoryBack,
+    navigateHistoryForward,
+  });
   const openServerInviteModal = useCallback(() => {
     if (!activeServer) {
       showServerInviteFeedback("Сервер не найден.");
@@ -7281,8 +7052,6 @@ export default function MenuMain({
       />
     </Suspense>
   );
-  const canNavigateBack = navigationHistoryRef.current.back.length > 0;
-  const canNavigateForward = navigationHistoryRef.current.forward.length > 0;
   const desktopTitlebarContext = useMemo(() => {
     if (SHOW_DIRECT_CALL_IN_TITLEBAR && directCallState.phase !== "idle") {
       return {
