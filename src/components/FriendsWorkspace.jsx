@@ -1391,7 +1391,6 @@ export const FriendsMain = ({
                       ? `Найдено — ${friendLookupResults.length}`
                       : "Поиск обновляется автоматически"}
                 </span>
-                <span>Можно искать без @</span>
               </div>
 
               <div className="friends-directory__list friends-results--scroll">
