@@ -8986,7 +8986,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: 104.5%;
+  width: 100%;
   box-sizing: border-box;
   min-height: 58px;
   padding: 6px 16px;
@@ -9024,9 +9024,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   align-items: flex-start;
   gap: 12px;
   width: 100%;
+  max-width: 100%;
   min-height: 42px;
   padding: 0 10px;
-  margin: 0 0 0 -10px;
+  margin: 0;
   border: 0;
   border-radius: 14px;
   background: transparent;
