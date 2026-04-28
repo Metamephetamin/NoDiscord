@@ -1491,20 +1491,30 @@ const resolveDownloadTargetPath = async (defaultFileName, { forceDialog = false 
   };
 };
 
-const normalizeDownloadBytes = (bytes) => {
+const normalizeDownloadBytes = (bytes, maxBytes = MAX_ELECTRON_DOWNLOAD_BYTES) => {
+  const assertDownloadByteLength = (byteLength) => {
+    if (Number(byteLength || 0) > maxBytes) {
+      throw new Error("Download is too large.");
+    }
+  };
+
   if (bytes instanceof Uint8Array) {
+    assertDownloadByteLength(bytes.byteLength);
     return Buffer.from(bytes);
   }
 
   if (ArrayBuffer.isView(bytes)) {
+    assertDownloadByteLength(bytes.byteLength);
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   }
 
   if (bytes instanceof ArrayBuffer) {
+    assertDownloadByteLength(bytes.byteLength);
     return Buffer.from(new Uint8Array(bytes));
   }
 
   if (Array.isArray(bytes)) {
+    assertDownloadByteLength(bytes.length);
     return Buffer.from(bytes);
   }
 
@@ -1512,6 +1522,7 @@ const normalizeDownloadBytes = (bytes) => {
     const numericValues = Object.values(bytes)
       .filter((value) => Number.isInteger(value) && value >= 0 && value <= 255);
     if (numericValues.length) {
+      assertDownloadByteLength(numericValues.length);
       return Buffer.from(numericValues);
     }
   }
