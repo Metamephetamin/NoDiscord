@@ -1,7 +1,7 @@
 .menu__profile-wrapper {
   align-self: stretch;
-  width: calc(100% + 105px);
-  margin: 18px -32px -10px -16px;
+  width: 100%;
+  margin: 18px 0 -10px;
   position: relative;
   z-index: 90;
   overflow: visible;
