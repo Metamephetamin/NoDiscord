@@ -5642,6 +5642,7 @@
 .composer-tool--active,
 .composer-tool--recording-holding,
 .composer-tool--recording-locked,
+.composer-tool--recording-canceling,
 .composer-tool--recording-sending {
   color: #edf2ff;
 }
@@ -5672,6 +5673,7 @@
 
 .composer-tool--recording-holding,
 .composer-tool--recording-locked,
+.composer-tool--recording-canceling,
 .composer-tool--recording-sending {
   color: #ff8ba6;
 }
@@ -5687,7 +5689,8 @@
 }
 
 .composer-tool--recording-holding .composer-tool__ring,
-.composer-tool--recording-locked .composer-tool__ring {
+.composer-tool--recording-locked .composer-tool__ring,
+.composer-tool--recording-canceling .composer-tool__ring {
   opacity: 0.95;
 }
 
@@ -5871,9 +5874,19 @@
   color: #edf2ff;
 }
 
+.composer-tool--speech.composer-tool--gesture-canceling,
+.composer-tool--voice.composer-tool--recording-canceling {
+  color: #ff8ba6;
+}
+
 .composer-tool--speech.composer-tool--gesture-holding .composer-tool__mic,
 .composer-tool--speech.composer-tool--gesture-locked .composer-tool__mic {
   filter: drop-shadow(0 0 18px rgba(121, 179, 255, 0.58));
+}
+
+.composer-tool--speech.composer-tool--gesture-canceling .composer-tool__mic,
+.composer-tool--voice.composer-tool--recording-canceling .composer-tool__mic {
+  filter: drop-shadow(0 0 18px rgba(255, 109, 132, 0.58));
 }
 
 .composer-tool__speech-hint {
@@ -5888,6 +5901,26 @@
   text-shadow: 0 0 16px rgba(120, 179, 255, 0.48);
   animation: composer-speech-hint-float 0.84s ease-in-out infinite;
   pointer-events: none;
+}
+
+.composer-tool__speech-hint--cancel {
+  left: -10px;
+  transform: translateX(0);
+  color: rgba(255, 160, 176, 0.96);
+  text-shadow: 0 0 16px rgba(255, 99, 132, 0.48);
+  animation: composer-speech-cancel-hint 0.84s ease-in-out infinite;
+}
+
+@keyframes composer-speech-cancel-hint {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: translateX(-7px);
+    opacity: 1;
+  }
 }
 
 @keyframes composer-speech-hint-float {
@@ -6084,6 +6117,7 @@
 
 .composer-tool--recording-holding .composer-tool__voice-wave,
 .composer-tool--recording-locked .composer-tool__voice-wave,
+.composer-tool--recording-canceling .composer-tool__voice-wave,
 .composer-tool--recording-sending .composer-tool__voice-wave {
   opacity: 0.82;
 }

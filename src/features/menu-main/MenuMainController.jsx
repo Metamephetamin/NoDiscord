@@ -1061,6 +1061,21 @@ export default function MenuMain({
     [directUnreadCounts]
   );
   const incomingFriendRequestCount = useMemo(() => incomingFriendRequests.length, [incomingFriendRequests]);
+  const conversationUnreadThreadCount = useMemo(
+    () => conversationTargets.reduce((sum, conversation) => {
+      const channelId = String(conversation?.directChannelId || "").trim();
+      if (!channelId || channelId === currentConversationChannelId) {
+        return sum;
+      }
+
+      const hasLocalCount = Object.prototype.hasOwnProperty.call(directUnreadCounts || {}, channelId);
+      const unreadCount = hasLocalCount
+        ? Number(directUnreadCounts[channelId] || 0)
+        : Number(conversation?.unreadCount || 0);
+      return unreadCount > 0 ? sum + 1 : sum;
+    }, 0),
+    [conversationTargets, currentConversationChannelId, directUnreadCounts]
+  );
   const totalFriendsAttentionCount = useMemo(
     () => totalDirectUnreadCount + incomingFriendRequestCount,
     [incomingFriendRequestCount, totalDirectUnreadCount]
@@ -1362,13 +1377,14 @@ export default function MenuMain({
     }
 
     setDirectUnreadCounts((previous) => {
-      if (!previous[channelId]) {
+      if (Object.prototype.hasOwnProperty.call(previous, channelId) && Number(previous[channelId] || 0) === 0) {
         return previous;
       }
 
-      const next = { ...previous };
-      delete next[channelId];
-      return next;
+      return {
+        ...previous,
+        [channelId]: 0,
+      };
     });
   };
   const clearServerUnread = (channelKey) => {
@@ -2263,6 +2279,42 @@ export default function MenuMain({
 
     clearDirectUnread(currentConversationChannelId);
   }, [currentConversationChannelId, workspaceMode]);
+
+  useEffect(() => {
+    if (!conversationTargets.length) {
+      return;
+    }
+
+    setDirectUnreadCounts((previous) => {
+      let changed = false;
+      const next = { ...previous };
+
+      conversationTargets.forEach((conversation) => {
+        const channelId = String(conversation?.directChannelId || "").trim();
+        if (!channelId) {
+          return;
+        }
+
+        if (workspaceMode === "friends" && channelId === currentConversationChannelId) {
+          if (Number(next[channelId] || 0) !== 0 || !Object.prototype.hasOwnProperty.call(next, channelId)) {
+            next[channelId] = 0;
+            changed = true;
+          }
+          return;
+        }
+
+        const unreadCount = Math.max(0, Number(conversation?.unreadCount || 0) || 0);
+        const hasLocalCount = Object.prototype.hasOwnProperty.call(next, channelId);
+        const localUnreadCount = Number(next[channelId] || 0);
+        if (unreadCount > localUnreadCount && (!hasLocalCount || localUnreadCount > 0)) {
+          next[channelId] = Math.min(999, unreadCount);
+          changed = true;
+        }
+      });
+
+      return changed ? next : previous;
+    });
+  }, [conversationTargets, currentConversationChannelId, workspaceMode]);
 
   useEffect(() => {
     if (workspaceMode !== "servers" || !activeServerId || !currentTextChannelId || activeDirectFriendId) {
@@ -5301,6 +5353,7 @@ export default function MenuMain({
         navItems={FRIENDS_SIDEBAR_ITEMS}
         friendsPageSection={friendsPageSection}
         incomingFriendRequestCount={incomingFriendRequestCount}
+        conversationUnreadThreadCount={conversationUnreadThreadCount}
         filteredFriends={filteredFriends}
         filteredConversations={filteredConversations}
         activeDirectFriendId={activeDirectFriendId}

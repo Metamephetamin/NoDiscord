@@ -145,21 +145,25 @@ public class ChatHub : Hub
 
             var currentDisplayName = await ResolveCurrentUserDisplayNameAsync(currentUser);
 
+            GroupConversationRecord? currentConversation = null;
+            GroupConversationMemberRecord? currentConversationMember = null;
             if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
             {
-                var mutedMember = await _context.GroupConversationMembers
-                    .AsNoTracking()
+                currentConversationMember = await _context.GroupConversationMembers
                     .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId.ToString() == currentUser.UserId && !item.IsBanned);
 
-                if (mutedMember is null)
+                if (currentConversationMember is null)
                 {
                     throw new HubException("Forbidden");
                 }
 
-                if (mutedMember.MutedUntil.HasValue && mutedMember.MutedUntil > DateTimeOffset.UtcNow)
+                if (currentConversationMember.MutedUntil.HasValue && currentConversationMember.MutedUntil > DateTimeOffset.UtcNow)
                 {
-                    throw new HubException($"Вы временно замучены в беседе до {mutedMember.MutedUntil.Value.LocalDateTime:dd.MM HH:mm}.");
+                    throw new HubException($"Вы временно замучены в беседе до {currentConversationMember.MutedUntil.Value.LocalDateTime:dd.MM HH:mm}.");
                 }
+
+                currentConversation = await _context.GroupConversations
+                    .FirstOrDefaultAsync(item => item.Id == conversationId);
             }
 
             var nowUtc = DateTime.UtcNow;
@@ -223,6 +227,15 @@ public class ChatHub : Hub
             };
 
             _context.Messages.Add(msg);
+            if (currentConversation is not null)
+            {
+                var sentAt = new DateTimeOffset(DateTime.SpecifyKind(msg.Timestamp, DateTimeKind.Utc));
+                currentConversation.UpdatedAt = sentAt;
+                if (currentConversationMember is not null)
+                {
+                    currentConversationMember.LastReadAt = sentAt;
+                }
+            }
             await _context.SaveChangesAsync();
 
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
@@ -393,7 +406,7 @@ public class ChatHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, equivalentChannelId);
         }
 
-        await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
+        await MarkChannelMessagesAsReadAsync(normalizedChannelId, currentUser);
 
         return [];
     }
@@ -416,7 +429,7 @@ public class ChatHub : Hub
             throw new HubException("Forbidden");
         }
 
-        await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
+        await MarkChannelMessagesAsReadAsync(normalizedChannelId, currentUser);
     }
 
     public async Task LeaveChannel(string channelId)
@@ -1301,6 +1314,37 @@ public class ChatHub : Hub
         return await _context.GroupConversationMembers
             .AsNoTracking()
             .AnyAsync(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned, Context.ConnectionAborted);
+    }
+
+    private async Task MarkChannelMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)
+    {
+        var normalizedChannelId = NormalizeChannelId(channelId);
+        if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out _))
+        {
+            await MarkConversationMessagesAsReadAsync(normalizedChannelId, currentUser);
+            return;
+        }
+
+        await MarkDirectMessagesAsReadAsync(normalizedChannelId, currentUser);
+    }
+
+    private async Task MarkConversationMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)
+    {
+        if (!ConversationChannels.TryParseChatChannelId(channelId, out var conversationId)
+            || !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return;
+        }
+
+        var member = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned);
+        if (member is null)
+        {
+            return;
+        }
+
+        member.LastReadAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
     }
 
     private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)

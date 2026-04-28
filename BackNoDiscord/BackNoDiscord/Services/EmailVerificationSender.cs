@@ -83,6 +83,11 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
             throw new EmailDeliveryException("Email:Smtp:Port must be greater than zero.");
         }
 
+        if (!string.IsNullOrWhiteSpace(options.Smtp.Username) && string.IsNullOrWhiteSpace(options.Smtp.Password))
+        {
+            throw new EmailDeliveryException("Email:Smtp:Password is not configured.");
+        }
+
         var subject = "Код MAX";
         var expiresLocal = expiresAt.ToLocalTime().ToString("HH:mm");
         var plainTextBody =

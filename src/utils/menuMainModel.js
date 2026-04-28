@@ -796,6 +796,7 @@ export const normalizeFriend = (friend) => ({
   activity: friend?.activity || friend?.externalActivity || null,
   lastSeenAt: getUserLastSeenAt(friend),
   directChannelId: String(friend?.directChannelId || ""),
+  unreadCount: Math.max(0, Number(friend?.unreadCount ?? friend?.unread_count ?? 0) || 0),
   isOnline: isUserCurrentlyOnline(friend),
   isSelf: Boolean(friend?.isSelf),
 });
@@ -823,14 +824,14 @@ export const normalizeConversationTarget = (conversation) => {
     : null;
 
   return {
-    id: String(conversation?.directChannelId || conversation?.id || ""),
+    id: String(conversation?.directChannelId || conversation?.direct_channel_id || conversation?.id || ""),
     conversationId: Number(conversation?.id || 0),
     kind: "conversation",
     title: String(conversation?.title || "Новая беседа"),
     name: String(conversation?.title || "Новая беседа"),
     nickname: String(conversation?.title || "Новая беседа"),
     avatar: String(conversation?.avatar_url || conversation?.avatarUrl || members[0]?.avatar || ""),
-    directChannelId: String(conversation?.directChannelId || ""),
+    directChannelId: String(conversation?.directChannelId || conversation?.direct_channel_id || ""),
     voiceChannelId: String(conversation?.voiceChannelId || ""),
     ownerUserId: String(conversation?.ownerUserId || conversation?.owner_user_id || ""),
     canManage: Boolean(conversation?.canManage ?? conversation?.can_manage),
@@ -845,6 +846,7 @@ export const normalizeConversationTarget = (conversation) => {
     isMuted: Boolean(conversation?.isMuted ?? conversation?.is_muted),
     muteUntil: String(conversation?.muteUntil || conversation?.mute_until || ""),
     memberCount: Number(conversation?.memberCount || conversation?.member_count || members.length),
+    unreadCount: Math.max(0, Number(conversation?.unreadCount ?? conversation?.unread_count ?? 0) || 0),
     members,
     lastMessage,
     activeCallChannel: String(conversation?.activeCallChannel || conversation?.active_call_channel || ""),

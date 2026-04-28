@@ -387,6 +387,9 @@ public class GroupConversationMemberRecord
     [Column("joined_at")]
     public DateTimeOffset JoinedAt { get; set; }
 
+    [Column("last_read_at")]
+    public DateTimeOffset? LastReadAt { get; set; }
+
     [Column("added_by_user_id")]
     public int? AddedByUserId { get; set; }
 

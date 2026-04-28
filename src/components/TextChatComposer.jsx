@@ -235,10 +235,13 @@ function TextChatComposer({
     : undefined;
   const speechIsHolding = speechCaptureState === "holding";
   const speechIsLocked = speechCaptureState === "locked";
+  const speechIsCanceling = speechCaptureState === "canceling" || voiceRecordingState === "canceling";
   const hybridMicStateClass = voiceRecordingState !== "idle"
     ? `composer-tool--gesture-${voiceRecordingState}`
     : speechIsLocked
       ? "composer-tool--gesture-locked"
+      : speechIsCanceling
+        ? "composer-tool--gesture-canceling"
       : speechIsHolding
         ? "composer-tool--gesture-holding"
         : "";
@@ -756,7 +759,7 @@ function TextChatComposer({
                     onStopSpeechRecognition(false);
                   }
 
-                  if (voiceRecordingState === "holding" || voiceRecordingState === "locked") {
+                  if (voiceRecordingState === "holding" || voiceRecordingState === "locked" || voiceRecordingState === "canceling") {
                     event.preventDefault();
                     void onCancelVoiceRecording();
                     return;
@@ -810,6 +813,7 @@ function TextChatComposer({
                     uploadingFile
                     || voiceRecordingState === "holding"
                     || voiceRecordingState === "locked"
+                    || voiceRecordingState === "canceling"
                     || voiceRecordingState === "sending"
                     || !hasSendPayload
                   }
@@ -849,14 +853,16 @@ function TextChatComposer({
                   }}
                   disabled={uploadingFile || voiceRecordingState === "sending"}
                   style={speechMicStyle}
-                  title={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Удерживайте для голосового сообщения, свайп вверх для голосового ввода текста"}
-                  aria-label={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Микрофон: удерживайте для голосового сообщения, свайп вверх для диктовки"}
+                  title={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Нажмите для диктовки. Удерживайте для голосового сообщения, свайп вверх для диктовки, влево для отмены"}
+                  aria-label={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Микрофон: нажмите для диктовки, удерживайте для голосового сообщения, свайп вверх для диктовки, влево для отмены"}
                 >
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--outer" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--inner" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--pulse" aria-hidden="true" />
                   <span className="composer-tool__mic" aria-hidden="true" />
-                  {voiceRecordingState === "holding" || speechIsHolding ? (
+                  {speechIsCanceling ? (
+                    <span className="composer-tool__speech-hint composer-tool__speech-hint--cancel" aria-hidden="true">←</span>
+                  ) : voiceRecordingState === "holding" || speechIsHolding ? (
                     <span className="composer-tool__speech-hint" aria-hidden="true">↑</span>
                   ) : null}
                   {speechIsLocked || voiceRecordingState === "locked" ? (
@@ -891,13 +897,17 @@ function TextChatComposer({
                       ? "Отправить голосовое сообщение"
                       : voiceRecordingState === "holding"
                         ? "Запись голосового сообщения"
+                        : voiceRecordingState === "canceling"
+                          ? "Отменить запись голосового сообщения"
                         : "Записать голосовое сообщение"
                   }
                   title={
                     voiceRecordingState === "locked"
                       ? "Нажмите, чтобы отправить голосовое сообщение"
                       : voiceRecordingState === "holding"
-                        ? "Потяните вверх для фиксации или отпустите для отправки"
+                        ? "Потяните вверх для фиксации, влево для отмены или отпустите для отправки"
+                        : voiceRecordingState === "canceling"
+                          ? "Отпустите, чтобы отменить запись"
                         : "Удерживайте для записи голосового сообщения"
                   }
                 >

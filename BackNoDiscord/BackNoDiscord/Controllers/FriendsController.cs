@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace BackNoDiscord.Controllers;
 
@@ -17,17 +18,21 @@ public class FriendsController : ControllerBase
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly FriendRequestService _friendRequestService;
     private readonly UserPresenceService _userPresenceService;
+    private readonly CryptoService _crypto;
+    private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
 
     public FriendsController(
         AppDbContext context,
         IHubContext<ChatHub> chatHubContext,
         FriendRequestService friendRequestService,
-        UserPresenceService userPresenceService)
+        UserPresenceService userPresenceService,
+        CryptoService crypto)
     {
         _context = context;
         _chatHubContext = chatHubContext;
         _friendRequestService = friendRequestService;
         _userPresenceService = userPresenceService;
+        _crypto = crypto;
     }
 
     [HttpGet]
@@ -54,12 +59,17 @@ public class FriendsController : ControllerBase
             .Where(item => friendIds.Contains(item.id))
             .ToDictionaryAsync(item => item.id);
         var activityByUserId = await LoadActiveActivitiesAsync(friendIds);
+        var unreadCountsByFriendId = await BuildDirectUnreadCountsAsync(currentUserId, friendIds);
 
         var result = friendships
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .Distinct()
             .Where(friendId => users.ContainsKey(friendId))
-            .Select(friendId => BuildFriendPayload(users[friendId], currentUserId, activityByUserId));
+            .Select(friendId => BuildFriendPayload(
+                users[friendId],
+                currentUserId,
+                activityByUserId,
+                unreadCountsByFriendId.TryGetValue(friendId, out var unreadCount) ? unreadCount : 0));
 
         return Ok(result);
     }
@@ -330,10 +340,107 @@ public class FriendsController : ControllerBase
                     .First());
     }
 
+    private async Task<Dictionary<int, int>> BuildDirectUnreadCountsAsync(int currentUserId, IReadOnlyCollection<int> friendIds)
+    {
+        if (friendIds.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var channelFriendLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var friendId in friendIds)
+        {
+            var channelId = BuildDirectChannelId(currentUserId, friendId);
+            foreach (var equivalentChannelId in DirectMessageChannels.GetEquivalentChannelIds(channelId))
+            {
+                channelFriendLookup[equivalentChannelId] = friendId;
+            }
+        }
+
+        if (channelFriendLookup.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var channelIds = channelFriendLookup.Keys.ToArray();
+        var unreadMessages = await _context.Messages
+            .AsNoTracking()
+            .Where(message => channelIds.Contains(message.ChannelId) && !message.IsDeleted && message.ReadAt == null)
+            .Select(message => new
+            {
+                message.ChannelId,
+                message.Content,
+                message.EncryptedContent
+            })
+            .ToListAsync();
+
+        var counts = new Dictionary<int, int>();
+        var currentUserKey = currentUserId.ToString();
+        foreach (var message in unreadMessages)
+        {
+            if (!channelFriendLookup.TryGetValue(message.ChannelId, out var friendId))
+            {
+                continue;
+            }
+
+            var payload = DeserializePayload(GetRawPayload(message.Content, message.EncryptedContent));
+            if (string.Equals(payload.AuthorUserId, currentUserKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            counts[friendId] = counts.TryGetValue(friendId, out var count)
+                ? Math.Min(999, count + 1)
+                : 1;
+        }
+
+        return counts;
+    }
+
+    private string GetRawPayload(string? content, string? encryptedContent)
+    {
+        if (string.IsNullOrWhiteSpace(encryptedContent))
+        {
+            return content ?? string.Empty;
+        }
+
+        try
+        {
+            return _crypto.Decrypt(encryptedContent);
+        }
+        catch
+        {
+            return content ?? string.Empty;
+        }
+    }
+
+    private static ChatMessagePayload DeserializePayload(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new ChatMessagePayload();
+        }
+
+        if (!raw.StartsWith(MessagePayloadPrefix, StringComparison.Ordinal))
+        {
+            return new ChatMessagePayload { Message = raw };
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ChatMessagePayload>(raw[MessagePayloadPrefix.Length..]) ?? new ChatMessagePayload();
+        }
+        catch
+        {
+            return new ChatMessagePayload { Message = raw };
+        }
+    }
+
     private object BuildFriendPayload(
         User friend,
         int currentUserId,
-        IReadOnlyDictionary<int, UserIntegrationRecord>? activityByUserId = null)
+        IReadOnlyDictionary<int, UserIntegrationRecord>? activityByUserId = null,
+        int unreadCount = 0)
     {
         var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
         UserIntegrationRecord? activity = null;
@@ -350,7 +457,8 @@ public class FriendsController : ControllerBase
             presence = isOnline ? "online" : "offline",
             last_seen_at = friend.last_seen_at,
             activity = BuildActivityPayload(activity),
-            directChannelId = BuildDirectChannelId(currentUserId, friend.id)
+            directChannelId = BuildDirectChannelId(currentUserId, friend.id),
+            unreadCount = Math.Clamp(unreadCount, 0, 999)
         };
     }
 

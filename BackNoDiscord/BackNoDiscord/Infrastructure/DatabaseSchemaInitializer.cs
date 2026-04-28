@@ -108,6 +108,8 @@ public static class DatabaseSchemaInitializer
                 banned_at timestamptz NULL,
                 banned_by_user_id integer NULL REFERENCES users(id) ON DELETE SET NULL
             );
+            ALTER TABLE group_conversation_members
+                ADD COLUMN IF NOT EXISTS last_read_at timestamptz NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS ix_group_conversation_members_conversation_user
                 ON group_conversation_members (conversation_id, user_id);
             CREATE INDEX IF NOT EXISTS ix_group_conversation_members_user_banned

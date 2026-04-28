@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -523,7 +524,7 @@ public class AuthController : ControllerBase
 
         if (await _context.Users.AnyAsync(u => u.email == normalizedEmail))
         {
-            return BadRequest(new { message = "Email already exists" });
+            return CreateEmailAlreadyRegisteredResponse();
         }
 
         var nicknameLookup = nickname.ToLowerInvariant();
@@ -547,7 +548,19 @@ public class AuthController : ControllerBase
 
         _context.Users.Add(user);
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(
+            ex,
+            "ix_users_email_not_null",
+            "IX_users_email",
+            "users_email_key"))
+        {
+            _context.ChangeTracker.Clear();
+            return CreateEmailAlreadyRegisteredResponse();
+        }
 
         if (!string.IsNullOrWhiteSpace(normalizedEmail) && RequireEmailRegistrationVerification)
         {
@@ -1118,6 +1131,28 @@ public class AuthController : ControllerBase
     private string GetEmailDeliveryMode()
     {
         return string.IsNullOrWhiteSpace(_config["Email:Mode"]) ? "mock" : _config["Email:Mode"]!.Trim().ToLowerInvariant();
+    }
+
+    private IActionResult CreateEmailAlreadyRegisteredResponse()
+    {
+        return Conflict(new { message = "Пользователь с таким email уже существует." });
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception, params string[] constraintNames)
+    {
+        if (exception.InnerException is not PostgresException postgresException ||
+            !string.Equals(postgresException.SqlState, PostgresErrorCodes.UniqueViolation, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (constraintNames.Length == 0)
+        {
+            return true;
+        }
+
+        return constraintNames.Any(constraintName =>
+            string.Equals(postgresException.ConstraintName, constraintName, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool IsLocalRequest()

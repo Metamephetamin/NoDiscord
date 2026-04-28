@@ -229,6 +229,8 @@ export const FriendsSidebar = ({
   query,
   navItems,
   friendsPageSection,
+  incomingFriendRequestCount = 0,
+  conversationUnreadThreadCount = 0,
   filteredFriends,
   activeDirectFriendId,
   activeConversationId,
@@ -279,6 +281,9 @@ export const FriendsSidebar = ({
             >
               <span className="friends-nav__icon"><FriendsNavIcon kind="friends" /></span>
               <span>{item.label}</span>
+              {incomingFriendRequestCount > 0 ? (
+                <span className="friends-nav__badge">{Math.min(incomingFriendRequestCount, 99)}</span>
+              ) : null}
             </button>
           ))}
 
@@ -293,6 +298,9 @@ export const FriendsSidebar = ({
           >
             <span className="friends-nav__icon"><FriendsNavIcon kind="conversations" /></span>
             <span>Беседы</span>
+            {conversationUnreadThreadCount > 0 ? (
+              <span className="friends-nav__badge">{Math.min(conversationUnreadThreadCount, 99)}</span>
+            ) : null}
           </button>
 
           <button
@@ -319,7 +327,14 @@ export const FriendsSidebar = ({
           {filteredFriends.length ? (
             filteredFriends.map((friend) => {
               const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
-              const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
+              const hasLiveUnreadCount = Object.prototype.hasOwnProperty.call(directUnreadCounts, directChannelId);
+              const liveUnreadCount = Number(directUnreadCounts[directChannelId] || 0);
+              const serverUnreadCount = Number(friend.unreadCount || 0);
+              const unreadCount = String(activeDirectFriendId) === String(friend.id)
+                ? 0
+                : hasLiveUnreadCount
+                  ? liveUnreadCount
+                  : serverUnreadCount;
               const hasDraft = Boolean(chatDraftPresence[directChannelId]);
               const activityStatus = formatIntegrationActivityStatus(friend.activity || friend.externalActivity);
 
@@ -1183,6 +1198,15 @@ export const FriendsMain = ({
           <div className={`friends-main__chat ${activeDirectCallPanelProps ? "friends-main__chat--with-call" : ""}`}>
             <div className="chat__topbar friends-direct-chat-topbar">
               <div className="chat__topbar-title friends-direct-chat-topbar__title">
+                <button
+                  type="button"
+                  className="friends-direct-chat-topbar__back"
+                  onClick={onResetDirect}
+                  aria-label="Назад"
+                  title="Назад"
+                >
+                  <span aria-hidden="true">←</span>
+                </button>
                 <div className="chat__topbar-copy">
                   <strong className={currentDirectFriend && isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>
                     {currentConversationTarget ? currentConversationTarget.title : getDisplayName(currentDirectFriend)}
@@ -1458,7 +1482,11 @@ export const FriendsMain = ({
                 <div className="friends-conversation-list friends-results--scroll">
                   {filteredConversations.map((conversation) => {
                     const conversationId = conversation.conversationId || conversation.id;
-                    const unreadCount = Number(directUnreadCounts[conversation.directChannelId] || 0);
+                    const isActive = String(activeConversationId || "") === String(conversationId || "");
+                    const hasLiveUnreadCount = Object.prototype.hasOwnProperty.call(directUnreadCounts, conversation.directChannelId);
+                    const liveUnreadCount = Number(directUnreadCounts[conversation.directChannelId] || 0);
+                    const serverUnreadCount = Number(conversation.unreadCount || 0);
+                    const unreadCount = isActive ? 0 : hasLiveUnreadCount ? liveUnreadCount : serverUnreadCount;
                     const lastMessage = conversation.lastMessage || null;
                     const previewText = String(lastMessage?.preview || "").trim();
                     const lastAuthorName = String(lastMessage?.authorUserId || "") === String(user?.id || "")
@@ -1466,7 +1494,6 @@ export const FriendsMain = ({
                       : String(lastMessage?.username || "").trim() || "Участник";
                     const previewTime = formatConversationPreviewTime(lastMessage?.timestamp || conversation.updatedAt);
                     const memberCount = conversation.memberCount || conversation.members?.length || 0;
-                    const isActive = String(activeConversationId || "") === String(conversationId || "");
 
                     return (
                       <button
@@ -1499,8 +1526,10 @@ export const FriendsMain = ({
                           </span>
                         </span>
                         <span className="friends-conversation-card__aside">
-                          {previewTime ? <span className="friends-conversation-card__time">{previewTime}</span> : null}
-                          {unreadCount > 0 ? <span className="friends-conversation-card__badge">{Math.min(unreadCount, 99)}</span> : null}
+                          <span className="friends-conversation-card__meta">
+                            {previewTime ? <span className="friends-conversation-card__time">{previewTime}</span> : null}
+                            {unreadCount > 0 ? <span className="friends-conversation-card__badge">{Math.min(unreadCount, 99)}</span> : null}
+                          </span>
                           {conversation.isMuted ? (
                             <span className="friends-conversation-card__muted" aria-label="Уведомления выключены">
                               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

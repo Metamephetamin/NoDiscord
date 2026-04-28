@@ -1757,6 +1757,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .friends-directs__meta {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1791,6 +1792,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
+  margin-left: auto;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -4128,6 +4130,14 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   gap: 8px;
   color: #8f9bb1;
   font-size: 13px;
+}
+
+.friends-conversation-card__meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 28px;
 }
 
 .friends-conversation-card__time {
@@ -6977,6 +6987,26 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   min-width: 0;
 }
 
+.friends-direct-chat-topbar__back {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b7c2d9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.friends-direct-chat-topbar__back:hover {
+  color: #ffffff;
+}
+
 .friends-direct-chat-topbar .chat__topbar-copy strong {
   font-size: 18px;
   line-height: 1.1;
@@ -7444,7 +7474,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .menu__main--mobile .friends-conversation-card {
   min-height: 92px;
-  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(58px, auto);
   gap: 10px;
   padding: 12px;
 }
@@ -7465,6 +7495,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .menu__main--mobile .friends-conversation-card__aside {
   font-size: 11px;
+}
+
+.menu__main--mobile .friends-conversation-card__meta {
+  gap: 6px;
 }
 
 .menu__main--mobile .friends-conversation-card__badge {

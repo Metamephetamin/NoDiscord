@@ -115,6 +115,11 @@ public sealed class ConversationsController : ControllerBase
                 .AsNoTracking()
                 .Where(message => latestMessageIds.Contains(message.Id))
                 .ToDictionaryAsync(message => message.ChannelId, StringComparer.Ordinal, cancellationToken);
+        var unreadCountsByConversationId = await BuildConversationUnreadCountsAsync(
+            currentUserId,
+            memberships,
+            conversationIds,
+            cancellationToken);
 
         var users = await LoadUsersAsync(members.Select(item => item.UserId), cancellationToken);
         var membersByConversationId = members
@@ -136,7 +141,10 @@ public sealed class ConversationsController : ControllerBase
                     currentUserId,
                     latestMessagesByChannelId.TryGetValue(ConversationChannels.BuildChatChannelId(conversation.Id), out var latestMessage)
                         ? latestMessage
-                        : null);
+                        : null,
+                    unreadCountsByConversationId.TryGetValue(conversation.Id, out var unreadCount)
+                        ? unreadCount
+                        : 0);
             })
             .ToList();
 
@@ -198,6 +206,7 @@ public sealed class ConversationsController : ControllerBase
                 UserId = currentUserId,
                 Role = "owner",
                 JoinedAt = now,
+                LastReadAt = now,
                 AddedByUserId = currentUserId,
                 IsBanned = false
             }
@@ -209,6 +218,7 @@ public sealed class ConversationsController : ControllerBase
             UserId = memberUserId,
             Role = "member",
             JoinedAt = now,
+            LastReadAt = now,
             AddedByUserId = currentUserId,
             IsBanned = false
         }));
@@ -326,6 +336,7 @@ public sealed class ConversationsController : ControllerBase
             UserId = userId,
             Role = "member",
             JoinedAt = now,
+            LastReadAt = now,
             AddedByUserId = currentUserId,
             IsBanned = false
         });
@@ -951,18 +962,23 @@ public sealed class ConversationsController : ControllerBase
 
     private string GetRawPayload(Message message)
     {
-        if (string.IsNullOrWhiteSpace(message.EncryptedContent))
+        return GetRawPayload(message.Content, message.EncryptedContent);
+    }
+
+    private string GetRawPayload(string? content, string? encryptedContent)
+    {
+        if (string.IsNullOrWhiteSpace(encryptedContent))
         {
-            return message.Content ?? string.Empty;
+            return content ?? string.Empty;
         }
 
         try
         {
-            return _crypto.Decrypt(message.EncryptedContent);
+            return _crypto.Decrypt(encryptedContent);
         }
         catch
         {
-            return message.Content ?? string.Empty;
+            return content ?? string.Empty;
         }
     }
 
@@ -1055,6 +1071,73 @@ public sealed class ConversationsController : ControllerBase
         return string.IsNullOrWhiteSpace(attachmentName) ? "Сообщение без текста" : attachmentName;
     }
 
+    private async Task<Dictionary<int, int>> BuildConversationUnreadCountsAsync(
+        int currentUserId,
+        IReadOnlyCollection<GroupConversationMemberRecord> currentUserMemberships,
+        IReadOnlyCollection<int> conversationIds,
+        CancellationToken cancellationToken)
+    {
+        var readCutoffsByChannelId = currentUserMemberships
+            .Where(item => conversationIds.Contains(item.ConversationId) && !item.IsBanned)
+            .Select(item => new
+            {
+                item.ConversationId,
+                ChannelId = ConversationChannels.BuildChatChannelId(item.ConversationId),
+                Cutoff = item.LastReadAt ?? item.JoinedAt
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.ChannelId))
+            .ToDictionary(item => item.ChannelId, item => (item.ConversationId, item.Cutoff), StringComparer.Ordinal);
+
+        if (readCutoffsByChannelId.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var minCutoffUtc = readCutoffsByChannelId.Values.Min(item => item.Cutoff).UtcDateTime;
+        var channelIds = readCutoffsByChannelId.Keys.ToArray();
+        var candidates = await _context.Messages
+            .AsNoTracking()
+            .Where(message => channelIds.Contains(message.ChannelId)
+                && !message.IsDeleted
+                && message.Timestamp > minCutoffUtc)
+            .Select(message => new
+            {
+                message.ChannelId,
+                message.Content,
+                message.EncryptedContent,
+                message.Timestamp
+            })
+            .ToListAsync(cancellationToken);
+
+        var counts = new Dictionary<int, int>();
+        var currentUserKey = currentUserId.ToString();
+        foreach (var message in candidates)
+        {
+            if (!readCutoffsByChannelId.TryGetValue(message.ChannelId, out var state))
+            {
+                continue;
+            }
+
+            var messageTimestamp = DateTime.SpecifyKind(message.Timestamp, DateTimeKind.Utc);
+            if (messageTimestamp <= state.Cutoff.UtcDateTime)
+            {
+                continue;
+            }
+
+            var payload = DeserializePayload(GetRawPayload(message.Content, message.EncryptedContent));
+            if (string.Equals(payload.AuthorUserId, currentUserKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            counts[state.ConversationId] = counts.TryGetValue(state.ConversationId, out var count)
+                ? Math.Min(999, count + 1)
+                : 1;
+        }
+
+        return counts;
+    }
+
     private static string GetUserDisplayName(ConversationUserProjection? user, int fallbackUserId)
     {
         if (user is null)
@@ -1093,7 +1176,8 @@ public sealed class ConversationsController : ControllerBase
         IReadOnlyCollection<GroupConversationMemberRecord> members,
         IReadOnlyDictionary<int, ConversationUserProjection> users,
         int currentUserId,
-        Message? latestMessage = null)
+        Message? latestMessage = null,
+        int unreadCount = 0)
     {
         var currentMember = members.FirstOrDefault(item => item.UserId == currentUserId && !item.IsBanned);
         var currentRole = NormalizeConversationRole(currentMember?.Role);
@@ -1152,6 +1236,7 @@ public sealed class ConversationsController : ControllerBase
             memberCount = activeMembers.Count,
             members = activeMembers,
             lastMessage = BuildConversationLastMessagePayload(latestMessage),
+            unreadCount = Math.Clamp(unreadCount, 0, 999),
             createdAt = conversation.CreatedAt,
             updatedAt = conversation.UpdatedAt,
             activeCallChannel = conversation.ActiveCallChannel,
