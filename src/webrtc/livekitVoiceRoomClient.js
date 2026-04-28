@@ -331,6 +331,7 @@ export function createVoiceRoomClient({
   let signalConnectPromise = null;
   let room = null;
   let roomConnectPromise = null;
+  let roomConnectChannelName = "";
   let currentUser = null;
   let currentChannel = null;
   let localMicSourceStream = null;
@@ -367,6 +368,8 @@ export function createVoiceRoomClient({
   let micPublication = null;
   let localShareVideoPublication = null;
   let localShareAudioPublication = null;
+  let localShareOperationPromise = null;
+  let localShareOperationKey = "";
   let isIntentionalRoomDisconnect = false;
   let isSelfMicMuted = false;
   let isSelfDeafened = false;
@@ -2354,6 +2357,29 @@ const handleDeviceChange = () => {
     await updateScreenShareStatus(false).catch(() => {});
   };
 
+  const runLocalShareOperation = async (operationKey, operation) => {
+    if (localShareOperationPromise) {
+      if (localShareOperationKey === operationKey) {
+        return localShareOperationPromise;
+      }
+
+      await localShareOperationPromise.catch(() => {});
+    }
+
+    localShareOperationKey = operationKey;
+    const operationPromise = Promise.resolve().then(operation);
+    localShareOperationPromise = operationPromise;
+
+    try {
+      return await operationPromise;
+    } finally {
+      if (localShareOperationPromise === operationPromise) {
+        localShareOperationPromise = null;
+        localShareOperationKey = "";
+      }
+    }
+  };
+
   const applyPublishedAudioState = async () => {
     const shouldMuteMicrophone = isSelfMicMuted || (isSelfDeafened && !isDirectCallChannelId(currentChannel));
     const microphoneTrack = micPublication?.track;
@@ -2792,10 +2818,18 @@ const handleDeviceChange = () => {
     }
 
     if (roomConnectPromise) {
-      return roomConnectPromise;
+      if (roomConnectChannelName === channelName) {
+        return roomConnectPromise;
+      }
+
+      await roomConnectPromise.catch(() => {});
+      if (room && currentChannel === channelName) {
+        return room;
+      }
     }
 
-    roomConnectPromise = (async () => {
+    roomConnectChannelName = channelName;
+    const activeRoomConnectPromise = (async () => {
       if (room) {
         await stopRoom({ preserveChannel: true });
       }
@@ -2865,11 +2899,15 @@ const handleDeviceChange = () => {
         throw error;
       }
     })();
+    roomConnectPromise = activeRoomConnectPromise;
 
     try {
-      return await roomConnectPromise;
+      return await activeRoomConnectPromise;
     } finally {
-      roomConnectPromise = null;
+      if (roomConnectPromise === activeRoomConnectPromise) {
+        roomConnectPromise = null;
+        roomConnectChannelName = "";
+      }
     }
   };
 
@@ -3212,6 +3250,7 @@ const handleDeviceChange = () => {
     },
 
     async startScreenShare({ resolution = "1080p", fps = 60, shareAudio = false } = {}) {
+      return runLocalShareOperation("start-screen", async () => {
       if (!currentChannel || !room) {
         throw new Error("Join a voice channel first.");
       }
@@ -3255,37 +3294,46 @@ const handleDeviceChange = () => {
 
       const [videoTrack] = localScreenStream.getVideoTracks();
       if (!videoTrack) {
+        await stopScreenShareInternal();
         throw new Error("Display capture did not return a video track.");
       }
 
-      videoTrack.contentHint = "detail";
-      videoTrack.onended = () => {
-        stopScreenShareInternal().catch((error) => console.error("Failed to stop screen share:", error));
-      };
+      try {
+        videoTrack.contentHint = "detail";
+        videoTrack.onended = () => {
+          runLocalShareOperation("stop-share", () => stopScreenShareInternal())
+            .catch((error) => console.error("Failed to stop screen share:", error));
+        };
 
-      const screenSharePublishOptions = getScreenSharePublishOptions(resolution, fps);
-      localShareVideoPublication = await room.localParticipant.publishTrack(videoTrack, {
-        source: Track.Source.ScreenShare,
-        name: SCREEN_VIDEO_TRACK_NAME,
-        ...screenSharePublishOptions,
-      });
-
-      const [audioTrack] = localScreenStream.getAudioTracks();
-      if (audioTrack) {
-        audioTrack.contentHint = "music";
-        localShareAudioPublication = await room.localParticipant.publishTrack(audioTrack, {
-          source: Track.Source.ScreenShareAudio,
-          name: SCREEN_AUDIO_TRACK_NAME,
-          ...getScreenShareAudioPublishOptions(),
+        const screenSharePublishOptions = getScreenSharePublishOptions(resolution, fps);
+        localShareVideoPublication = await room.localParticipant.publishTrack(videoTrack, {
+          source: Track.Source.ScreenShare,
+          name: SCREEN_VIDEO_TRACK_NAME,
+          ...screenSharePublishOptions,
         });
-      }
 
-      localLiveShareMode = "screen";
-      emitLocalScreenState();
-      await updateScreenShareStatus(true);
+        const [audioTrack] = localScreenStream.getAudioTracks();
+        if (audioTrack) {
+          audioTrack.contentHint = "music";
+          localShareAudioPublication = await room.localParticipant.publishTrack(audioTrack, {
+            source: Track.Source.ScreenShareAudio,
+            name: SCREEN_AUDIO_TRACK_NAME,
+            ...getScreenShareAudioPublishOptions(),
+          });
+        }
+
+        localLiveShareMode = "screen";
+        emitLocalScreenState();
+        await updateScreenShareStatus(true);
+      } catch (error) {
+        await stopScreenShareInternal();
+        throw error;
+      }
+      });
     },
 
     async startCameraShare({ deviceId = "", resolution = "auto", fps = 30 } = {}) {
+      return runLocalShareOperation("start-camera", async () => {
       if (!currentChannel || !room) {
         throw new Error("Join a voice channel first.");
       }
@@ -3317,28 +3365,36 @@ const handleDeviceChange = () => {
 
       const [cameraTrack] = localScreenStream.getVideoTracks();
       if (!cameraTrack) {
+        await stopScreenShareInternal();
         throw new Error("Camera access did not return a video track.");
       }
 
-      cameraTrack.contentHint = "motion";
-      cameraTrack.onended = () => {
-        stopScreenShareInternal().catch((error) => console.error("Failed to stop camera share:", error));
-      };
+      try {
+        cameraTrack.contentHint = "motion";
+        cameraTrack.onended = () => {
+          runLocalShareOperation("stop-share", () => stopScreenShareInternal())
+            .catch((error) => console.error("Failed to stop camera share:", error));
+        };
 
-      const cameraPublishOptions = getCameraPublishOptions(effectiveResolution, fps);
-      localShareVideoPublication = await room.localParticipant.publishTrack(cameraTrack, {
-        source: Track.Source.Camera,
-        name: CAMERA_TRACK_NAME,
-        ...cameraPublishOptions,
+        const cameraPublishOptions = getCameraPublishOptions(effectiveResolution, fps);
+        localShareVideoPublication = await room.localParticipant.publishTrack(cameraTrack, {
+          source: Track.Source.Camera,
+          name: CAMERA_TRACK_NAME,
+          ...cameraPublishOptions,
+        });
+
+        localLiveShareMode = "camera";
+        emitLocalScreenState();
+        await updateScreenShareStatus(true);
+      } catch (error) {
+        await stopScreenShareInternal();
+        throw error;
+      }
       });
-
-      localLiveShareMode = "camera";
-      emitLocalScreenState();
-      await updateScreenShareStatus(true);
     },
 
     async stopScreenShare() {
-      await stopScreenShareInternal();
+      await runLocalShareOperation("stop-share", () => stopScreenShareInternal());
     },
 
     async requestScreenShare(targetUserId) {

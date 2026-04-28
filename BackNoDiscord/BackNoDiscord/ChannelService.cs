@@ -183,6 +183,24 @@ namespace BackNoDiscord
             bool applyForceLocks = false,
             bool respectForceLocks = false)
         {
+            return SetVoiceState(
+                userId,
+                isMicMuted,
+                isDeafened,
+                applyForceLocks,
+                respectForceLocks,
+                out _);
+        }
+
+        public Participant? SetVoiceState(
+            string userId,
+            bool? isMicMuted,
+            bool? isDeafened,
+            bool applyForceLocks,
+            bool respectForceLocks,
+            out bool voiceStateChanged)
+        {
+            voiceStateChanged = false;
             if (string.IsNullOrWhiteSpace(userId))
             {
                 return null;
@@ -194,6 +212,11 @@ namespace BackNoDiscord
                 {
                     return null;
                 }
+
+                var previousMicMuted = participant.IsMicMuted;
+                var previousDeafened = participant.IsDeafened;
+                var previousMicForced = participant.IsMicForced;
+                var previousDeafenedForced = participant.IsDeafenedForced;
 
                 if (isMicMuted.HasValue)
                 {
@@ -230,6 +253,12 @@ namespace BackNoDiscord
                         participant.IsDeafenedForced = false;
                     }
                 }
+
+                voiceStateChanged =
+                    previousMicMuted != participant.IsMicMuted ||
+                    previousDeafened != participant.IsDeafened ||
+                    previousMicForced != participant.IsMicForced ||
+                    previousDeafenedForced != participant.IsDeafenedForced;
 
                 _participantsByUserId[userId] = CloneParticipant(participant);
 
@@ -276,7 +305,7 @@ namespace BackNoDiscord
                     channel.RemoveAll(user => user.UserId == userId);
                 }
 
-                _screenSharingUsers.TryRemove(userId, out _);
+                var removedScreenShareState = _screenSharingUsers.TryRemove(userId, out _);
                 _participantsByUserId.TryRemove(userId, out var participant);
 
                 if (_userIdToConnection.TryRemove(userId, out var connectionId))
@@ -288,6 +317,7 @@ namespace BackNoDiscord
                 {
                     ChannelName = removedFromChannel,
                     Participant = participant is null ? null : CloneParticipant(participant),
+                    VoiceStateChanged = !string.IsNullOrWhiteSpace(removedFromChannel) || removedScreenShareState,
                 };
             }
         }
@@ -305,7 +335,7 @@ namespace BackNoDiscord
                     channel.RemoveAll(user => user.UserId == userId);
                 }
 
-                _screenSharingUsers.TryRemove(userId, out _);
+                var removedScreenShareState = _screenSharingUsers.TryRemove(userId, out _);
 
                 return new RemoveUserResult
                 {
@@ -313,6 +343,7 @@ namespace BackNoDiscord
                     Participant = _participantsByUserId.TryGetValue(userId, out var participant)
                         ? CloneParticipant(participant)
                         : null,
+                    VoiceStateChanged = !string.IsNullOrWhiteSpace(removedFromChannel) || removedScreenShareState,
                 };
             }
         }
@@ -367,5 +398,6 @@ namespace BackNoDiscord
     {
         public string? ChannelName { get; set; }
         public Participant? Participant { get; set; }
+        public bool VoiceStateChanged { get; set; }
     }
 }

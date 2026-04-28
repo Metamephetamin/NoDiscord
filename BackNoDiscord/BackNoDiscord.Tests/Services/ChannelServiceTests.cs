@@ -62,6 +62,54 @@ public class ChannelServiceTests
     }
 
     [Fact]
+    public void SetVoiceState_WhenStateChanges_MarksVoiceStateChanged()
+    {
+        var service = new ChannelService();
+        service.SetUserChannel("voice:general", new Participant
+        {
+            UserId = "user-state-change",
+            Name = "Mira"
+        }, "conn-state-change");
+
+        var updated = service.SetVoiceState(
+            "user-state-change",
+            isMicMuted: true,
+            isDeafened: false,
+            applyForceLocks: false,
+            respectForceLocks: false,
+            voiceStateChanged: out var voiceStateChanged);
+
+        Assert.NotNull(updated);
+        Assert.True(updated!.IsMicMuted);
+        Assert.True(voiceStateChanged);
+    }
+
+    [Fact]
+    public void SetVoiceState_WhenStateIsSame_DoesNotMarkVoiceStateChanged()
+    {
+        var service = new ChannelService();
+        service.SetUserChannel("voice:general", new Participant
+        {
+            UserId = "user-state-same",
+            Name = "Nika",
+            IsMicMuted = true
+        }, "conn-state-same");
+
+        var updated = service.SetVoiceState(
+            "user-state-same",
+            isMicMuted: true,
+            isDeafened: false,
+            applyForceLocks: false,
+            respectForceLocks: false,
+            voiceStateChanged: out var voiceStateChanged);
+
+        Assert.NotNull(updated);
+        Assert.True(updated!.IsMicMuted);
+        Assert.False(updated.IsDeafened);
+        Assert.False(voiceStateChanged);
+    }
+
+    [Fact]
     public void RemoveConnection_ClearsChannelAndScreenShareState()
     {
         var service = new ChannelService();
@@ -76,6 +124,7 @@ public class ChannelServiceTests
 
         Assert.Equal("voice:general", result.ChannelName);
         Assert.NotNull(result.Participant);
+        Assert.True(result.VoiceStateChanged);
         Assert.Empty(service.GetParticipantsInChannel("voice:general"));
         Assert.Empty(service.GetScreenSharingUserIds());
         Assert.False(service.TryGetConnectionId("user-3", out _));
@@ -97,11 +146,43 @@ public class ChannelServiceTests
 
         Assert.Equal("voice:general", result.ChannelName);
         Assert.NotNull(result.Participant);
+        Assert.True(result.VoiceStateChanged);
         Assert.Empty(service.GetParticipantsInChannel("voice:general"));
         Assert.Empty(service.GetScreenSharingUserIds());
         Assert.True(service.TryGetConnectionId("user-4", out var connectionId));
         Assert.Equal("conn-direct-call", connectionId);
         Assert.True(service.TryGetUserId("conn-direct-call", out var userId));
         Assert.Equal("user-4", userId);
+    }
+
+    [Fact]
+    public void LeaveChannel_WhenUserIsOnlyRegistered_DoesNotMarkVoiceStateChanged()
+    {
+        var service = new ChannelService();
+        service.RegisterConnection("conn-idle", new Participant
+        {
+            UserId = "user-5",
+            Name = "Egor"
+        });
+
+        var result = service.LeaveChannel("user-5");
+
+        Assert.Null(result.ChannelName);
+        Assert.NotNull(result.Participant);
+        Assert.False(result.VoiceStateChanged);
+        Assert.True(service.TryGetConnectionId("user-5", out var connectionId));
+        Assert.Equal("conn-idle", connectionId);
+    }
+
+    [Fact]
+    public void RemoveConnection_WhenConnectionIsUnknown_DoesNotMarkVoiceStateChanged()
+    {
+        var service = new ChannelService();
+
+        var result = service.RemoveConnection("missing-connection");
+
+        Assert.Null(result.ChannelName);
+        Assert.Null(result.Participant);
+        Assert.False(result.VoiceStateChanged);
     }
 }

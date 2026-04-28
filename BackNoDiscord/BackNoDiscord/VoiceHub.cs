@@ -136,9 +136,12 @@ public class VoiceHub : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, currentChannel);
         }
 
-        _channels.LeaveChannel(currentUser.UserId);
-        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
-        await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        var removed = _channels.LeaveChannel(currentUser.UserId);
+        if (removed.VoiceStateChanged)
+        {
+            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        }
     }
 
     public async Task StartDirectCall(string targetUserId, string channelName, string avatar)
@@ -298,16 +301,20 @@ public class VoiceHub : Hub
             isMicMuted,
             isDeafened,
             applyForceLocks: !isSelfUpdate,
-            respectForceLocks: isSelfUpdate);
+            respectForceLocks: isSelfUpdate,
+            voiceStateChanged: out var voiceStateChanged);
 
         if (updatedParticipant is null)
         {
             return;
         }
 
-        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        if (voiceStateChanged)
+        {
+            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        }
 
-        if (_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+        if (voiceStateChanged && _channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
         {
             await Clients.Client(targetConnectionId).SendAsync("voice:self-state", new VoiceStatePayload
             {
@@ -476,8 +483,11 @@ public class VoiceHub : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, removed.ChannelName);
         }
 
-        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
-        await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        if (removed.VoiceStateChanged)
+        {
+            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        }
         await base.OnDisconnectedAsync(exception);
     }
 

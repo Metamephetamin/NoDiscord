@@ -101,9 +101,11 @@ public class VoiceController : ControllerBase
             return Unauthorized();
         }
 
-        _channels.LeaveChannel(currentUser.UserId);
-
-        await _hub.Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        var removed = _channels.LeaveChannel(currentUser.UserId);
+        if (removed.VoiceStateChanged)
+        {
+            await _hub.Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        }
         return Ok();
     }
 

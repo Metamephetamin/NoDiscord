@@ -5732,10 +5732,16 @@ export default function MenuMain({
         region: channel.region || "auto",
       });
       if (voiceJoinAttemptRef.current !== joinAttemptId) {
-        try {
-          await voiceClientRef.current.leaveChannel();
-        } catch {
-          // ignore stale join cleanup failures
+        const latestPendingChannelId = String(pendingVoiceChannelTargetRef.current || "");
+        const latestVisibleChannelId = String(currentVoiceChannelRef.current || "");
+        const isStaleChannelStillActive =
+          latestPendingChannelId === scopedChannelId || latestVisibleChannelId === scopedChannelId;
+        if (isStaleChannelStillActive) {
+          try {
+            await voiceClientRef.current.leaveChannel();
+          } catch {
+            // ignore stale join cleanup failures
+          }
         }
         finishJoinTrace({
           channelId: String(channel.id || ""),
