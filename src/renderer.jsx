@@ -1,8 +1,9 @@
-import { Profiler, Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Profiler, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Auth from "./components/Auth";
 import AppUpdateBanner from "./components/AppUpdateBanner";
 import { API_BASE_URL } from "./config/runtime";
+import { installChunkLoadRecovery, lazyWithChunkRecovery } from "./utils/chunkLoadRecovery";
 import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./utils/inviteFlow";
 import "./index.css";
 import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
@@ -34,9 +35,11 @@ import {
 
 const MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY = "nd_media_permissions_bootstrap_v2";
 const rendererBootstrapTraceId = startPerfTrace("app-shell", "renderer-bootstrap");
-const MenuMain = lazy(() => import("./components/MenuMain"));
-const ServerInvitePage = lazy(() => import("./components/ServerInvitePage"));
-const QrLoginConfirmPage = lazy(() => import("./components/QrLoginConfirmPage"));
+installChunkLoadRecovery();
+
+const MenuMain = lazyWithChunkRecovery(() => import("./components/MenuMain"));
+const ServerInvitePage = lazyWithChunkRecovery(() => import("./components/ServerInvitePage"));
+const QrLoginConfirmPage = lazyWithChunkRecovery(() => import("./components/QrLoginConfirmPage"));
 
 function readMediaPermissionBootstrapState() {
   if (typeof window === "undefined") {

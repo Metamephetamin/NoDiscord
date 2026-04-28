@@ -7,9 +7,10 @@ import TextChatMessageList from "../../components/TextChatMessageList";
 import TextChatMediaPreview from "../../components/TextChatMediaPreview";
 import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
 import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
+import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
 import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
 
-const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
+const TextChatForwardModal = lazy(() => recoverChunkImport(() => import("../../components/TextChatForwardModal")));
 
 function useStableCallback(callback) {
   const callbackRef = useRef(callback);

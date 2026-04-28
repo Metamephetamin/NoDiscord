@@ -166,6 +166,7 @@ import {
   VOICE_INPUT_MODES,
 } from "../../utils/menuMainModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../../utils/perf";
+import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
 
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
 const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
@@ -178,19 +179,19 @@ const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
 }, {});
 let voiceRoomClientFactoryPromise = null;
 const MenuMainSettingsContent = lazy(() =>
-  import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainSettingsContent }))
+  recoverChunkImport(() => import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainSettingsContent })))
 );
 const MenuMainMobileSettingsShell = lazy(() =>
-  import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainMobileSettingsShell }))
+  recoverChunkImport(() => import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainMobileSettingsShell })))
 );
 const FriendsSidebar = lazy(() =>
-  import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsSidebar }))
+  recoverChunkImport(() => import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsSidebar })))
 );
 const FriendsMain = lazy(() =>
-  import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsMain }))
+  recoverChunkImport(() => import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsMain })))
 );
-const MobileProfileScreen = lazy(() => import("../../components/MobileProfileScreen"));
-const MobileVoiceRoom = lazy(() => import("../../components/MobileVoiceRoom"));
+const MobileProfileScreen = lazy(() => recoverChunkImport(() => import("../../components/MobileProfileScreen")));
+const MobileVoiceRoom = lazy(() => recoverChunkImport(() => import("../../components/MobileVoiceRoom")));
 
 const settingsContentFallback = (
   <div className="settings-panel settings-panel--loading" aria-busy="true">
@@ -249,7 +250,7 @@ function writeFriendRelations(userId, nextRelations) {
 
 function loadVoiceRoomClientFactory() {
   if (!voiceRoomClientFactoryPromise) {
-    voiceRoomClientFactoryPromise = import("../../webrtc/voiceRoomClient")
+    voiceRoomClientFactoryPromise = recoverChunkImport(() => import("../../webrtc/voiceRoomClient"))
       .then((module) => module.createVoiceRoomClient);
   }
 

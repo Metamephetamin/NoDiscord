@@ -4,9 +4,10 @@ import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
-const loadVoiceRoomStage = () => import("./VoiceRoomStage");
+const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
 const EMPTY_CHANNEL_LIST = Object.freeze([]);
 

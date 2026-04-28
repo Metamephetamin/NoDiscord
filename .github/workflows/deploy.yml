@@ -236,7 +236,8 @@ jobs:
               exit 1
               ;;
           esac
-          rsync -az --checksum --delete-delay --chown="$FRONTEND_OWNER" --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" "$FRONTEND_SOURCE/" "$DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH/"
+          rsync -az --checksum --chown="$FRONTEND_OWNER" --info=progress2 --timeout=60 -e "ssh $SSH_OPTS" "$FRONTEND_SOURCE/" "$DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH/"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "find '$FRONTEND_PATH/assets' -type f -mtime +14 -delete 2>/dev/null || true"
           echo "Frontend deploy sync completed"
 
       - name: Sync backend publish to server
