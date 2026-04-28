@@ -267,7 +267,7 @@ export const FriendsSidebar = ({
             <button
               key={item.id}
               type="button"
-              className={`friends-nav__item ${item.id === "friends" && friendsPageSection === "friends" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
+              className={`friends-nav__item ${item.id === friendsPageSection && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
               onClick={() => {
                 if (item.id === "friends") {
                   onOpenFriendsWorkspace();
@@ -276,12 +276,19 @@ export const FriendsSidebar = ({
                   return;
                 }
 
+                if (item.id === "add") {
+                  onOpenFriendsWorkspace();
+                  onResetDirect();
+                  onSetFriendsSection("add");
+                  return;
+                }
+
                 onOpenServersWorkspace();
               }}
             >
-              <span className="friends-nav__icon"><FriendsNavIcon kind="friends" /></span>
+              <span className="friends-nav__icon"><FriendsNavIcon kind={item.id} /></span>
               <span>{item.label}</span>
-              {incomingFriendRequestCount > 0 ? (
+              {item.id === "friends" && incomingFriendRequestCount > 0 ? (
                 <span className="friends-nav__badge">{Math.min(incomingFriendRequestCount, 99)}</span>
               ) : null}
             </button>
@@ -570,6 +577,12 @@ export const FriendsMain = ({
   friendRequestsError,
   friendRequestsLoading,
   friendRequestActionId,
+  friendEmail = "",
+  friendLookupLoading = false,
+  friendLookupResults = [],
+  friendLookupPerformed = false,
+  friendsError = "",
+  isAddingFriend = false,
   activeContacts,
   conversations,
   directUnreadCounts = {},
@@ -593,6 +606,9 @@ export const FriendsMain = ({
   onOpenDirectActions,
   onCloseSelectedStream,
   onFriendRequestAction,
+  onFriendSearchSubmit,
+  onFriendSearchChange,
+  onAddFriend,
   onDirectSearchQueryChange,
   onClearDirectSearchQuery,
   phoneIcon,
@@ -1173,6 +1189,16 @@ export const FriendsMain = ({
             </button>
             <button
               type="button"
+              className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
+              onClick={() => {
+                onResetDirect();
+                onSetFriendsSection("add");
+              }}
+            >
+              Добавить
+            </button>
+            <button
+              type="button"
               className={`friends-main__tab ${friendsPageSection === "conversations" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
               onClick={() => {
                 onResetDirect();
@@ -1316,6 +1342,111 @@ export const FriendsMain = ({
                 onStartDirectCall={onStartDirectCall}
               />
             )}
+          </div>
+        ) : friendsPageSection === "add" ? (
+          <div className="friends-main__content friends-main__content--directory">
+            <section className="friends-directory">
+              <div className="friends-directory__header">
+                <div className="friends-directory__title">
+                  <h1>Добавить друзей</h1>
+                  <p>Начните вводить имя, никнейм или email</p>
+                </div>
+              </div>
+
+              <form className="friends-directory__search" onSubmit={onFriendSearchSubmit}>
+                <span aria-hidden="true" />
+                <input
+                  type="text"
+                  value={friendEmail}
+                  onChange={(event) => onFriendSearchChange?.(event.target.value)}
+                  placeholder="Найти пользователя"
+                  autoComplete="off"
+                />
+              </form>
+
+              <div className="friends-directory__summary">
+                <span>
+                  {friendLookupLoading
+                    ? "Идёт поиск"
+                    : friendLookupPerformed
+                      ? `Найдено — ${friendLookupResults.length}`
+                      : "Поиск обновляется автоматически"}
+                </span>
+                <span>Можно искать без @</span>
+              </div>
+
+              <div className="friends-directory__list friends-results--scroll">
+                {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
+                {!friendsError && !friendEmail.trim() ? (
+                  <div className="friends-panel__empty">Введите часть имени, никнейма или email.</div>
+                ) : null}
+                {!friendsError && friendEmail.trim() && friendLookupLoading ? (
+                  <div className="friends-panel__empty">Ищем пользователей...</div>
+                ) : null}
+                {!friendsError && friendEmail.trim() && !friendLookupLoading && friendLookupResults.map((candidate) => {
+                  const friendshipStatus = String(candidate.friendshipStatus || "").toLowerCase();
+                  const isFriend = friendshipStatus === "friend";
+                  const isOutgoingPending = friendshipStatus === "pending_outgoing";
+                  const isIncomingPending = friendshipStatus === "pending_incoming";
+                  const actionLabel = isFriend
+                    ? "Написать"
+                    : isOutgoingPending
+                      ? "Заявка отправлена"
+                      : isIncomingPending
+                        ? "Принять"
+                        : "Добавить";
+                  const isActionDisabled = isAddingFriend || isOutgoingPending;
+
+                  return (
+                    <div key={candidate.id} className="friends-directory__row">
+                      <div className="friends-directory__identity">
+                        <span className="friends-directory__avatar-wrap">
+                          <AnimatedAvatar className="friends-directory__avatar" src={candidate.avatar || ""} alt={getDisplayName(candidate)} loading="lazy" decoding="async" />
+                          <span className={`friends-directory__presence friends-directory__presence--${isUserCurrentlyOnline(candidate) ? "online" : "offline"}`} aria-hidden="true" />
+                        </span>
+                        <span className="friends-directory__copy">
+                          <strong>{getDisplayName(candidate)}</strong>
+                          <span>{candidate.email || `ID: ${candidate.id}`}</span>
+                        </span>
+                      </div>
+                      <div className={`friends-directory__status friends-directory__status--${isUserCurrentlyOnline(candidate) ? "online" : "offline"}`}>
+                        <span>
+                          <strong>
+                            {isFriend
+                              ? "У вас в друзьях"
+                              : isOutgoingPending
+                                ? "Ожидает ответа"
+                                : isIncomingPending
+                                  ? "Отправил заявку"
+                                  : formatUserPresenceStatus(candidate)}
+                          </strong>
+                        </span>
+                      </div>
+                      <div className="friends-directory__actions">
+                        <button
+                          type="button"
+                          className="friends-directory__action friends-directory__action--wide"
+                          disabled={isActionDisabled}
+                          onClick={() => {
+                            if (isFriend) {
+                              onOpenDirectChat(candidate.id);
+                              return;
+                            }
+
+                            onAddFriend?.(candidate);
+                          }}
+                        >
+                          {actionLabel}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!friendsError && friendEmail.trim() && !friendLookupLoading && friendLookupPerformed && !friendLookupResults.length ? (
+                  <div className="friends-panel__empty">Пользователей по этому запросу не найдено.</div>
+                ) : null}
+              </div>
+            </section>
           </div>
         ) : friendsPageSection === "store" ? (
           <ProfileStoreView

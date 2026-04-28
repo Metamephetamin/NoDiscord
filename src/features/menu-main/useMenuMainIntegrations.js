@@ -35,6 +35,11 @@ export default function useMenuMainIntegrations({
   const [integrationsStatus, setIntegrationsStatus] = useState("");
   const [integrationActionBusy, setIntegrationActionBusy] = useState("");
   const integrationOAuthPollRef = useRef(null);
+  const latestUserRef = useRef(user);
+
+  useEffect(() => {
+    latestUserRef.current = user;
+  }, [user]);
 
   const refreshDeviceSessions = useCallback(async () => {
     if (!user?.id) {
@@ -77,27 +82,29 @@ export default function useMenuMainIntegrations({
   }, [openSettings, refreshDeviceSessions, settingsTab]);
 
   const applyCurrentUserActivity = useCallback((activity) => {
-    if (!user) {
+    const currentUser = latestUserRef.current;
+    if (!currentUser) {
       return;
     }
 
-    if (JSON.stringify(user.activity || user.externalActivity || null) === JSON.stringify(activity || null)) {
+    if (JSON.stringify(currentUser.activity || currentUser.externalActivity || null) === JSON.stringify(activity || null)) {
       return;
     }
 
     const nextUser = {
-      ...user,
+      ...currentUser,
       activity: activity || null,
       externalActivity: activity || null,
     };
 
+    latestUserRef.current = nextUser;
     setUser?.(nextUser);
     void storeSession(nextUser, {
       accessToken: getStoredToken(),
       refreshToken: getStoredRefreshToken(),
       accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
     });
-  }, [setUser, user]);
+  }, [setUser]);
 
   const replaceIntegrationProvider = useCallback((nextProvider) => {
     setIntegrations((previous) =>

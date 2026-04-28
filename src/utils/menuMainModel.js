@@ -794,6 +794,8 @@ export const normalizeFriend = (friend) => ({
   status: String(friend?.status || friend?.presence || friend?.presenceStatus || friend?.onlineStatus || ""),
   presence: String(friend?.presence || friend?.presenceStatus || friend?.onlineStatus || friend?.status || ""),
   activity: friend?.activity || friend?.externalActivity || null,
+  friendshipStatus: String(friend?.friendshipStatus || friend?.friendship_status || ""),
+  friendRequestId: Number(friend?.friendRequestId ?? friend?.friend_request_id ?? 0) || 0,
   lastSeenAt: getUserLastSeenAt(friend),
   directChannelId: String(friend?.directChannelId || ""),
   unreadCount: Math.max(0, Number(friend?.unreadCount ?? friend?.unread_count ?? 0) || 0),
@@ -882,6 +884,7 @@ export const SEARCH_ICON_URL = resolveStaticAssetUrl("/icons/search.svg");
 export const SMS_ICON_URL = resolveStaticAssetUrl("/icons/sms.svg");
 export const FRIENDS_SIDEBAR_ITEMS = [
   { id: "friends", label: "Друзья", icon: "??" },
+  { id: "add", label: "Добавить", icon: "??" },
 ];
 export const SETTINGS_NAV_ITEMS = [
   { id: "account", label: "Моя учётная запись", section: "Пользователь" },

@@ -92,17 +92,25 @@ public class FriendsController : ControllerBase
         var condensedQuery = CondenseSearchValue(normalizedQuery);
         var queryTokens = TokenizeSearchValue(normalizedQuery);
         var reversedQuery = queryTokens.Count > 1 ? string.Join(" ", queryTokens.AsEnumerable().Reverse()) : string.Empty;
-        var existingFriendIds = await _context.Friendships
+        var existingFriendIds = (await _context.Friendships
             .AsNoTracking()
             .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .Distinct()
-            .ToListAsync();
-        var pendingFriendIds = (await _friendRequestService.GetPendingRelatedUserIdsAsync(currentUserId)).ToList();
+            .ToListAsync())
+            .ToHashSet();
+        var pendingRequestsByUserId = (await _context.FriendRequests
+            .AsNoTracking()
+            .Where(item =>
+                item.Status == FriendRequestStatuses.Pending &&
+                (item.UserLowId == currentUserId || item.UserHighId == currentUserId))
+            .ToListAsync())
+            .GroupBy(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.CreatedAt).First());
 
         var usersQuery = _context.Users
             .AsNoTracking()
-            .Where(item => item.id != currentUserId && !existingFriendIds.Contains(item.id) && !pendingFriendIds.Contains(item.id))
+            .Where(item => item.id != currentUserId)
             .Select(item => new
             {
                 id = item.id,
@@ -124,6 +132,7 @@ public class FriendsController : ControllerBase
                     item.nickname.ToLower().Contains(normalizedQuery) ||
                     item.first_name.ToLower().Contains(normalizedQuery) ||
                     item.last_name.ToLower().Contains(normalizedQuery) ||
+                    (item.email ?? string.Empty).ToLower().Contains(normalizedQuery) ||
                     (item.nickname + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
                     (item.first_name + " " + item.last_name).ToLower().Contains(normalizedQuery) ||
                     (item.last_name + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
@@ -151,7 +160,13 @@ public class FriendsController : ControllerBase
             item.last_seen_at,
             is_online = _userPresenceService.IsOnline(item.id.ToString()),
             presence = _userPresenceService.IsOnline(item.id.ToString()) ? "online" : "offline",
-            item.directChannelId
+            item.directChannelId,
+            friendshipStatus = existingFriendIds.Contains(item.id)
+                ? "friend"
+                : pendingRequestsByUserId.TryGetValue(item.id, out var pendingRequest)
+                    ? pendingRequest.SenderUserId == currentUserId ? "pending_outgoing" : "pending_incoming"
+                    : "none",
+            friendRequestId = pendingRequestsByUserId.TryGetValue(item.id, out var request) ? request.Id : 0
         }));
     }
 
