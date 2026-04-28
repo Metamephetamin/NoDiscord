@@ -1887,31 +1887,6 @@ export default function MenuMain({
     await voiceClientRef.current.leaveChannel();
   };
 
-  const {
-    startDirectCallWithUser,
-    acceptDirectCall,
-    declineDirectCall,
-    endDirectCall,
-    retryDirectCall,
-    clearRemoteDirectCall,
-    setDirectCallMiniMode,
-    dismissDirectCallOverlay,
-  } = useMenuMainDirectCalls({
-    currentUserId,
-    user,
-    directConversationTargets,
-    activeLatencyMs,
-    directCallStateRef,
-    currentVoiceChannelRef,
-    voiceClientRef,
-    ensureVoiceClientReady,
-    disconnectFromActiveVoiceContext,
-    openDirectChat,
-    setDirectCallState,
-    appendDirectCallHistoryEntry,
-    showServerInviteFeedback,
-  });
-
   const openServerChannelFromToast = (toast) => {
     if (!toast?.serverId || !toast?.channelId) {
       return;
@@ -5047,6 +5022,30 @@ export default function MenuMain({
     canInviteToServer,
     syncServerSnapshot,
     markServerAsShared,
+  });
+  const {
+    startDirectCallWithUser,
+    acceptDirectCall,
+    declineDirectCall,
+    endDirectCall,
+    retryDirectCall,
+    clearRemoteDirectCall,
+    setDirectCallMiniMode,
+    dismissDirectCallOverlay,
+  } = useMenuMainDirectCalls({
+    currentUserId,
+    user,
+    directConversationTargets,
+    activeLatencyMs,
+    directCallStateRef,
+    currentVoiceChannelRef,
+    voiceClientRef,
+    ensureVoiceClientReady,
+    disconnectFromActiveVoiceContext,
+    openDirectChat,
+    setDirectCallState,
+    appendDirectCallHistoryEntry,
+    showServerInviteFeedback,
   });
   const openServerInviteModal = useCallback(() => {
     if (!activeServer) {
