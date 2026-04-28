@@ -67,6 +67,7 @@ import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
 import useVoiceRoomWarmup from "../../hooks/useVoiceRoomWarmup";
+import useMenuMainAudioDevices from "./useMenuMainAudioDevices";
 import useMenuMainCameraPreview from "./useMenuMainCameraPreview";
 import useMenuMainDirectCalls from "./useMenuMainDirectCalls";
 import useMenuMainDirectCallHistory from "./useMenuMainDirectCallHistory";
@@ -74,6 +75,7 @@ import useMenuMainDirectCallLifecycle from "./useMenuMainDirectCallLifecycle";
 import useMenuMainLocalShareActions from "./useMenuMainLocalShareActions";
 import useMenuMainSelfVoiceStateSync from "./useMenuMainSelfVoiceStateSync";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
+import useMenuMainVoiceProcessing from "./useMenuMainVoiceProcessing";
 import MenuMainProfilePanelSlot from "./MenuMainProfilePanelSlot";
 import MenuMainOverlayLayer from "./MenuMainOverlayLayer";
 import MenuMainMobileLayout from "./MenuMainMobileLayout";
@@ -176,28 +178,6 @@ const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
   sections[item.section].push(item);
   return sections;
 }, {});
-const NOISE_PROFILE_OPTIONS = [
-  {
-    id: "transparent",
-    title: "Студия",
-    description: "Естественный голос с лёгким EQ и мягкой компрессией, почти без заметного шумодава.",
-  },
-  {
-    id: "broadcast",
-    title: "Эфир",
-    description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
-  },
-  {
-    id: "ai_noise_suppression",
-    title: "AI шумодав",
-    description: "Тяжелая RNNoise/WASM-модель перед отправкой голоса: лучше режет клавиатуру, вентилятор и фон.",
-  },
-  {
-    id: "hard_gate",
-    title: "Hard RNNoise",
-    description: "Агрессивно давит фон и посторонние звуки, оставляя в приоритете почти только голос.",
-  },
-];
 let voiceRoomClientFactoryPromise = null;
 const MenuMainSettingsContent = lazy(() =>
   import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainSettingsContent }))
@@ -395,15 +375,7 @@ export default function MenuMain({
   const [profileCustomization, setProfileCustomization] = useState(() => readProfileCustomization(user));
   const [micVolume, setMicVolume] = useState(70);
   const [audioVolume, setAudioVolume] = useState(100);
-  const [audioInputDevices, setAudioInputDevices] = useState([]);
-  const [audioOutputDevices, setAudioOutputDevices] = useState([]);
-  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("");
-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState("");
-  const [outputSelectionSupported, setOutputSelectionSupported] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
-  const [noiseSuppressionMode, setNoiseSuppressionMode] = useState("transparent");
-  const [noiseSuppressionStrength, setNoiseSuppressionStrength] = useState(100);
-  const [echoCancellationEnabled, setEchoCancellationEnabled] = useState(true);
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -616,8 +588,6 @@ export default function MenuMain({
   const serverLongPressTimeoutRef = useRef(null);
   const serverLongPressTriggeredRef = useRef(false);
   const suppressedServerClickRef = useRef("");
-  const appliedInputDeviceRef = useRef("");
-  const appliedOutputDeviceRef = useRef("");
   const micLevelUiActiveRef = useRef(false);
   const navigationHistoryRef = useRef({ back: [], forward: [] });
   const lastNavigationSnapshotRef = useRef(null);
@@ -651,7 +621,6 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
   } = useMenuMainStorageKeys(user);
-  const noiseSuppressionStrengthStorageKey = `${noiseSuppressionStorageKey}:strength`;
   const {
     cameraDevices,
     selectedVideoDeviceId,
@@ -665,6 +634,46 @@ export default function MenuMain({
     stopCameraPreview,
     resetCameraPreviewState,
   } = useMenuMainCameraPreview();
+  const {
+    audioInputDevices,
+    audioOutputDevices,
+    selectedInputDeviceId,
+    selectedOutputDeviceId,
+    setSelectedInputDeviceId,
+    setSelectedOutputDeviceId,
+    outputSelectionSupported,
+    outputSelectionAvailable,
+    deviceInputLabel,
+    deviceOutputLabel,
+    handleAudioDevicesChanged,
+    applySelectedAudioDevicesToClient,
+  } = useMenuMainAudioDevices({
+    user,
+    voiceClientRef,
+    audioInputDeviceStorageKey,
+    audioOutputDeviceStorageKey,
+    openSettings,
+    settingsTab,
+    showMicMenu,
+    showSoundMenu,
+    isMicTestActive,
+  });
+  const {
+    noiseProfileOptions,
+    activeNoiseProfile,
+    noiseSuppressionMode,
+    setNoiseSuppressionMode,
+    noiseSuppressionStrength,
+    setNoiseSuppressionStrength,
+    echoCancellationEnabled,
+    setEchoCancellationEnabled,
+    applyVoiceProcessingToClient,
+  } = useMenuMainVoiceProcessing({
+    user,
+    voiceClientRef,
+    noiseSuppressionStorageKey,
+    echoCancellationStorageKey,
+  });
   const {
     directCallHistory,
     appendDirectCallHistoryEntry,
@@ -2591,83 +2600,6 @@ export default function MenuMain({
 
   useEffect(() => {
     if (!user) {
-      setNoiseSuppressionMode("transparent");
-      return;
-    }
-
-    try {
-      const storedMode = localStorage.getItem(noiseSuppressionStorageKey);
-      const normalizedStoredMode =
-        storedMode === "voice_isolation"
-          ? "hard_gate"
-          : storedMode === "rnnoise" || storedMode === "krisp"
-            ? "ai_noise_suppression"
-            : storedMode;
-      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "transparent");
-    } catch {
-      setNoiseSuppressionMode("transparent");
-    }
-  }, [noiseSuppressionStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    try {
-      localStorage.setItem(noiseSuppressionStorageKey, noiseSuppressionMode);
-    } catch {
-      // ignore storage failures
-    }
-  }, [noiseSuppressionMode, noiseSuppressionStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setNoiseSuppressionStrength(100);
-      return;
-    }
-
-    try {
-      const storedStrength = Number(localStorage.getItem(noiseSuppressionStrengthStorageKey));
-      setNoiseSuppressionStrength(Number.isFinite(storedStrength) ? Math.max(0, Math.min(100, Math.round(storedStrength))) : 100);
-    } catch {
-      setNoiseSuppressionStrength(100);
-    }
-  }, [noiseSuppressionStrengthStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    try {
-      localStorage.setItem(noiseSuppressionStrengthStorageKey, String(noiseSuppressionStrength));
-    } catch {
-      // ignore storage failures
-    }
-  }, [noiseSuppressionStrength, noiseSuppressionStrengthStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setEchoCancellationEnabled(true);
-      return;
-    }
-
-    try {
-      setEchoCancellationEnabled(localStorage.getItem(echoCancellationStorageKey) !== "false");
-    } catch {
-      setEchoCancellationEnabled(true);
-    }
-  }, [echoCancellationStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    try {
-      localStorage.setItem(echoCancellationStorageKey, echoCancellationEnabled ? "true" : "false");
-    } catch {
-      // ignore storage failures
-    }
-  }, [echoCancellationEnabled, echoCancellationStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
       setDirectNotificationsEnabled(true);
       return;
     }
@@ -3041,62 +2973,10 @@ export default function MenuMain({
 
   useEffect(() => {
     if (!user) {
-      setAudioInputDevices([]);
-      setAudioOutputDevices([]);
-      setSelectedInputDeviceId("");
-      setSelectedOutputDeviceId("");
-      setOutputSelectionSupported(false);
       setMicLevel(0);
       resetCameraPreviewState();
-      appliedInputDeviceRef.current = "";
-      appliedOutputDeviceRef.current = "";
-      return;
     }
-
-    try {
-      setSelectedInputDeviceId(localStorage.getItem(audioInputDeviceStorageKey) || "");
-    } catch {
-      setSelectedInputDeviceId("");
-    }
-
-    try {
-      setSelectedOutputDeviceId(localStorage.getItem(audioOutputDeviceStorageKey) || "");
-    } catch {
-      setSelectedOutputDeviceId("");
-    }
-  }, [audioInputDeviceStorageKey, audioOutputDeviceStorageKey, resetCameraPreviewState, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      if (selectedInputDeviceId) {
-        localStorage.setItem(audioInputDeviceStorageKey, selectedInputDeviceId);
-      } else {
-        localStorage.removeItem(audioInputDeviceStorageKey);
-      }
-    } catch {
-      // ignore storage failures
-    }
-  }, [audioInputDeviceStorageKey, selectedInputDeviceId, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      if (selectedOutputDeviceId) {
-        localStorage.setItem(audioOutputDeviceStorageKey, selectedOutputDeviceId);
-      } else {
-        localStorage.removeItem(audioOutputDeviceStorageKey);
-      }
-    } catch {
-      // ignore storage failures
-    }
-  }, [audioOutputDeviceStorageKey, selectedOutputDeviceId, user]);
+  }, [resetCameraPreviewState, user]);
 
   useEffect(() => {
     if (!user) {
@@ -3722,36 +3602,6 @@ export default function MenuMain({
     });
   }, []);
 
-  const handleAudioDevicesChanged = useCallback(({
-    inputs,
-    outputs,
-    selectedInputDeviceId: nextInputDeviceId,
-    selectedOutputDeviceId: nextOutputDeviceId,
-    outputSelectionSupported: nextOutputSelectionSupported,
-  }) => {
-    const normalizedInputs = Array.isArray(inputs) ? inputs : [];
-    const normalizedOutputs = Array.isArray(outputs) ? outputs : [];
-    const normalizedInputDeviceId = nextInputDeviceId || "";
-    const normalizedOutputDeviceId = nextOutputDeviceId || "";
-    const normalizedOutputSelectionSupported = Boolean(nextOutputSelectionSupported);
-
-    setAudioInputDevices((previousValue) => (
-      areObjectArraysEqual(previousValue, normalizedInputs) ? previousValue : normalizedInputs
-    ));
-    setAudioOutputDevices((previousValue) => (
-      areObjectArraysEqual(previousValue, normalizedOutputs) ? previousValue : normalizedOutputs
-    ));
-    setSelectedInputDeviceId((previousValue) => (
-      previousValue === normalizedInputDeviceId ? previousValue : normalizedInputDeviceId
-    ));
-    setSelectedOutputDeviceId((previousValue) => (
-      previousValue === normalizedOutputDeviceId ? previousValue : normalizedOutputDeviceId
-    ));
-    setOutputSelectionSupported((previousValue) => (
-      previousValue === normalizedOutputSelectionSupported ? previousValue : normalizedOutputSelectionSupported
-    ));
-  }, []);
-
   useEffect(() => {
     let disposed = false;
     const measurePing = async ({ commit = true } = {}) => {
@@ -4080,27 +3930,8 @@ export default function MenuMain({
       },
     });
     voiceClientRef.current = client;
-    if (selectedInputDeviceId) {
-      appliedInputDeviceRef.current = selectedInputDeviceId;
-      client.setInputDevice(selectedInputDeviceId).catch((error) => {
-        console.error("Ошибка применения устройства ввода:", error);
-      });
-    }
-    if (selectedOutputDeviceId) {
-      appliedOutputDeviceRef.current = selectedOutputDeviceId;
-      client.setOutputDevice(selectedOutputDeviceId).catch((error) => {
-        console.error("Ошибка применения устройства вывода:", error);
-      });
-    }
-    client.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
-      console.error("Ошибка применения стартового режима шумоподавления:", error);
-    });
-    client.setNoiseSuppressionStrength?.(noiseSuppressionStrength).catch((error) => {
-      console.error("Ошибка применения силы шумоподавления:", error);
-    });
-    client.setEchoCancellationEnabled(echoCancellationEnabled).catch((error) => {
-      console.error("Ошибка применения стартового эхоподавления:", error);
-    });
+    applySelectedAudioDevicesToClient(client);
+    applyVoiceProcessingToClient(client);
     client.connect(user).catch((error) => logVoiceHubError("Ошибка подключения к голосовому хабу:", error));
     flushQueuedSelfVoiceState();
       return client;
@@ -4139,6 +3970,8 @@ export default function MenuMain({
       if (voiceClientRef.current === client) voiceClientRef.current = null;
     };
   }, [
+    applySelectedAudioDevicesToClient,
+    applyVoiceProcessingToClient,
     handleAudioDevicesChanged,
     handleLiveUsersChanged,
     handleMicLevelChanged,
@@ -4171,84 +4004,6 @@ export default function MenuMain({
   useEffect(() => {
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume);
   }, [audioVolume, isSoundMuted]);
-  useEffect(() => {
-    if (!voiceClientRef.current) return;
-
-    voiceClientRef.current.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
-      console.error("Ошибка переключения режима шумоподавления:", error);
-    });
-  }, [noiseSuppressionMode]);
-  useEffect(() => {
-    if (!voiceClientRef.current) return;
-
-    voiceClientRef.current.setNoiseSuppressionStrength?.(noiseSuppressionStrength).catch((error) => {
-      console.error("Ошибка переключения силы шумоподавления:", error);
-    });
-  }, [noiseSuppressionStrength]);
-  useEffect(() => {
-    if (!voiceClientRef.current) return;
-
-    voiceClientRef.current.setEchoCancellationEnabled(echoCancellationEnabled).catch((error) => {
-      console.error("Ошибка переключения эхоподавления:", error);
-    });
-  }, [echoCancellationEnabled]);
-  useEffect(() => {
-    if (!voiceClientRef.current || !selectedInputDeviceId) {
-      return;
-    }
-
-    if (appliedInputDeviceRef.current === selectedInputDeviceId) {
-      return;
-    }
-
-    appliedInputDeviceRef.current = selectedInputDeviceId;
-    voiceClientRef.current.setInputDevice(selectedInputDeviceId).catch((error) => {
-      console.error("Ошибка переключения устройства ввода:", error);
-    });
-  }, [selectedInputDeviceId]);
-  useEffect(() => {
-    if (!voiceClientRef.current || !selectedOutputDeviceId) {
-      return;
-    }
-
-    if (appliedOutputDeviceRef.current === selectedOutputDeviceId) {
-      return;
-    }
-
-    appliedOutputDeviceRef.current = selectedOutputDeviceId;
-    voiceClientRef.current.setOutputDevice(selectedOutputDeviceId).catch((error) => {
-      console.error("Ошибка переключения устройства вывода:", error);
-    });
-  }, [selectedOutputDeviceId]);
-  useEffect(() => {
-    if (!voiceClientRef.current || !user?.id) {
-      return;
-    }
-
-    const shouldPreviewMicrophone = showMicMenu || isMicTestActive;
-    const shouldLoadAudioDevices = shouldPreviewMicrophone || showSoundMenu || (openSettings && settingsTab === "voice_video");
-
-    if (!shouldLoadAudioDevices) {
-      voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
-        console.error("Ошибка остановки предпросмотра микрофона:", error);
-      });
-      return;
-    }
-
-    if (shouldPreviewMicrophone) {
-      voiceClientRef.current.ensureMicrophonePreview().catch((error) => {
-        console.error("Ошибка запуска предпросмотра микрофона:", error);
-      });
-      return;
-    }
-
-    voiceClientRef.current.releaseMicrophonePreview().catch((error) => {
-      console.error("Ошибка остановки предпросмотра микрофона:", error);
-    });
-    voiceClientRef.current.getAudioDevices().catch((error) => {
-      console.error("Ошибка обновления списка аудио-устройств:", error);
-    });
-  }, [isMicTestActive, openSettings, settingsTab, showMicMenu, showSoundMenu, user?.id]);
   useEffect(() => {
     const voiceClient = voiceClientRef.current;
     if (!voiceClient) {
@@ -6650,20 +6405,8 @@ export default function MenuMain({
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
     SETTINGS_NAV_ITEMS.find((item) => item.id === settingsTab) ||
     SETTINGS_NAV_ITEMS[0];
-  const deviceInputLabel =
-    audioInputDevices.find((device) => device.id === selectedInputDeviceId)?.label ||
-    audioInputDevices[0]?.label ||
-    "Системный микрофон";
-  const deviceOutputLabel =
-    audioOutputDevices.find((device) => device.id === selectedOutputDeviceId)?.label ||
-    audioOutputDevices[0]?.label ||
-    "Системный вывод";
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
   const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
-  const outputSelectionAvailable = outputSelectionSupported && audioOutputDevices.length > 0;
-  const noiseProfileOptions = NOISE_PROFILE_OPTIONS;
-  const activeNoiseProfile =
-    noiseProfileOptions.find((option) => option.id === noiseSuppressionMode) || noiseProfileOptions[0];
   const displayedPingMs = currentVoiceChannel ? resolvedVoicePingMs : resolvedApiPingMs;
   const pingTone = getPingTone(displayedPingMs);
   const pingTooltip =
