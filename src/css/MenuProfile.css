@@ -1,11 +1,14 @@
 .menu__profile-wrapper {
+  --profile-card-bleed: 16px;
   align-self: stretch;
-  width: 100%;
-  margin: 18px 0 -10px;
+  width: calc(100% + var(--profile-card-bleed) * 2);
+  max-width: calc(100% + var(--profile-card-bleed) * 2);
+  margin: 18px calc(var(--profile-card-bleed) * -1) -10px;
   position: relative;
   z-index: 90;
   overflow: visible;
   pointer-events: none;
+  isolation: isolate;
 }
 
 .menu__profile {
@@ -383,7 +386,6 @@
   white-space: nowrap;
   min-width: 0;
   margin-top: 1px;
-  margin-left: -4px;
 }
 
 .profile__activity-note {
