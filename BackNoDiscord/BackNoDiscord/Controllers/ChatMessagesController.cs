@@ -57,7 +57,7 @@ public sealed class ChatMessagesController : ControllerBase
             return BadRequest(new { message = "chatId is required" });
         }
 
-        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser, cancellationToken))
         {
             return Forbid();
         }
@@ -297,17 +297,17 @@ public sealed class ChatMessagesController : ControllerBase
                     .ToList());
     }
 
-    private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
+    private async Task<bool> TryAuthorizeChannelAccessAsync(string channelId, AuthenticatedUser currentUser, CancellationToken cancellationToken)
     {
         var normalizedChannelId = NormalizeChannelId(channelId);
         if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
         {
-            return CanAccessConversationChannel(currentUser.UserId, conversationId);
+            return await CanAccessConversationChannelAsync(currentUser.UserId, conversationId, cancellationToken);
         }
 
         if (DirectMessageChannels.TryParse(normalizedChannelId, out var firstUserId, out var secondUserId, out _))
         {
-            return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
+            return await CanAccessDirectChannelAsync(currentUser.UserId, firstUserId, secondUserId, cancellationToken);
         }
 
         if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(normalizedChannelId, out var serverId))
@@ -319,7 +319,7 @@ public sealed class ChatMessagesController : ControllerBase
         return ServerChannelAuthorization.CanAccessServer(serverId, currentUser, snapshot);
     }
 
-    private bool CanAccessDirectChannel(string currentUserId, int firstUserId, int secondUserId)
+    private async Task<bool> CanAccessDirectChannelAsync(string currentUserId, int firstUserId, int secondUserId, CancellationToken cancellationToken)
     {
         if (!int.TryParse(currentUserId, out var actorUserId))
         {
@@ -339,21 +339,21 @@ public sealed class ChatMessagesController : ControllerBase
         var lowId = Math.Min(firstUserId, secondUserId);
         var highId = Math.Max(firstUserId, secondUserId);
 
-        return _context.Friendships
+        return await _context.Friendships
             .AsNoTracking()
-            .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
+            .AnyAsync(item => item.UserLowId == lowId && item.UserHighId == highId, cancellationToken);
     }
 
-    private bool CanAccessConversationChannel(string currentUserId, int conversationId)
+    private async Task<bool> CanAccessConversationChannelAsync(string currentUserId, int conversationId, CancellationToken cancellationToken)
     {
         if (!int.TryParse(currentUserId, out var actorUserId) || actorUserId <= 0 || conversationId <= 0)
         {
             return false;
         }
 
-        return _context.GroupConversationMembers
+        return await _context.GroupConversationMembers
             .AsNoTracking()
-            .Any(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned);
+            .AnyAsync(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned, cancellationToken);
     }
 
     private string NormalizeChannelId(string? channelId)

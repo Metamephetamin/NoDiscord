@@ -2296,6 +2296,7 @@ const handleDeviceChange = () => {
     localShareAudioPublication = null;
     roomActiveSpeakerIds.clear();
     emitSpeakingUsers();
+    preferredRemoteShareUserId = "";
     clearRemoteScreens();
     removeAllRemoteAudioElements();
     remoteParticipantMedia.clear();
@@ -2791,13 +2792,36 @@ const handleDeviceChange = () => {
         return;
       }
 
+      if (room && room !== nextRoom) {
+        logVoiceDebug("room:event:disconnected-ignored-stale-room", {
+          currentChannel,
+          nextRoomState: nextRoom.state,
+        });
+        return;
+      }
+
+      await runLocalShareOperation("stop-share", () => stopScreenShareInternal()).catch(() => {});
       clearVoicePingPolling();
+      if (room === nextRoom) {
+        room = null;
+      }
+      roomConnectPromise = null;
+      roomConnectChannelName = "";
+      currentLiveKitServerUrl = "";
+      currentLiveKitRoomName = "";
+      micPublication = null;
+      localShareVideoPublication = null;
+      localShareAudioPublication = null;
+      preferredRemoteShareUserId = "";
       clearRemoteScreens();
       removeAllRemoteAudioElements();
       remoteParticipantMedia.clear();
       roomActiveSpeakerIds.clear();
       emitSpeakingUsers();
       onRoomParticipantsChanged?.({ channel: "", participants: [] });
+      if (!microphoneMonitorActive) {
+        stopLocalMic();
+      }
 
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
         try {
@@ -3151,8 +3175,14 @@ const handleDeviceChange = () => {
         return;
       }
 
+      if (roomConnectPromise && roomConnectChannelName === channelName) {
+        await roomConnectPromise;
+        publishVoiceDebugSnapshot("join:already-connecting");
+        return;
+      }
+
       if (currentChannel && currentChannel !== channelName) {
-        await this.leaveChannel();
+        await this.leaveChannel({ preserveMic: true });
       }
 
       const sessionPrewarmPromise = prewarmLiveKitSession(channelName, user).catch((error) => {
@@ -3202,7 +3232,7 @@ const handleDeviceChange = () => {
       }
     },
 
-    async leaveChannel() {
+    async leaveChannel({ preserveMic = false } = {}) {
       await stopScreenShareInternal();
       await stopRoom({ preserveChannel: true });
 
@@ -3212,6 +3242,10 @@ const handleDeviceChange = () => {
 
       currentChannel = null;
       onChannelChanged?.(null);
+
+      if (!preserveMic && !microphoneMonitorActive) {
+        stopLocalMic();
+      }
     },
 
     async startDirectCall(targetUserId, channelName, user) {

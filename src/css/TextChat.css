@@ -964,7 +964,8 @@
 
 .message-item--dm .msg-content--attachments,
 .message-item--dm .msg-content--media-only {
-  width: auto;
+  width: fit-content;
+  min-width: min(220px, 100%);
   max-width: min(100%, 840px);
   flex: 0 1 auto;
 }
@@ -2066,6 +2067,18 @@
 .message-item--dm-own .msg-content--media-only .message-attachments-stack--with-overlay {
   width: min(100%, var(--media-grid-standard-width)) !important;
   max-width: 100%;
+}
+
+.message-item--dm .msg-content--media-only > .message-media,
+.message-item--dm .msg-content--media-only .message-attachment-single,
+.message-item--dm .msg-content--media-only .message-attachment-single .message-media,
+.message-item--dm .msg-content--media-only .message-media__fallback {
+  min-width: min(220px, 100%);
+}
+
+.message-item--dm .msg-content--media-only .message-attachments-stack:not(.message-attachments-stack--single),
+.message-item--dm .msg-content--media-only .message-media-overlay-anchor > .message-attachment-grid {
+  min-width: min(320px, 100%);
 }
 
 .message-media-overlay-anchor {
@@ -7656,6 +7669,32 @@ html[data-ui-density="compact"] .input-area {
 
 .media-preview__nav--next {
   right: 22px;
+}
+
+html[data-ui-reduce-motion="true"] .media-preview,
+html[data-ui-reduce-motion="true"] .media-preview__dialog,
+body[data-ui-reduce-motion="true"] .media-preview,
+body[data-ui-reduce-motion="true"] .media-preview__dialog {
+  animation: none;
+}
+
+html[data-ui-reduce-motion="true"] .media-preview__image,
+html[data-ui-reduce-motion="true"] .media-preview__video,
+body[data-ui-reduce-motion="true"] .media-preview__image,
+body[data-ui-reduce-motion="true"] .media-preview__video {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-preview,
+  .media-preview__dialog {
+    animation: none;
+  }
+
+  .media-preview__image,
+  .media-preview__video {
+    transition: none;
+  }
 }
 
 @keyframes mediaPreviewIn {

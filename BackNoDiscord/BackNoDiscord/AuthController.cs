@@ -24,6 +24,7 @@ public class AuthController : ControllerBase
     private static readonly TimeSpan QrLoginLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
+    private const string MediaAccessTokenCookieName = "tend_access_token";
     private const int MaxEmailVerificationAttempts = 5;
     private bool RequireEmailRegistrationVerification => _config.GetValue<bool?>("Auth:RequireEmailVerification") ?? true;
 
@@ -897,6 +898,7 @@ public class AuthController : ControllerBase
 
     private object BuildAuthResponse(User user, AuthSessionResult authSession)
     {
+        AppendMediaAccessCookie(authSession);
         return new
         {
             user.id,
@@ -921,6 +923,7 @@ public class AuthController : ControllerBase
 
     private object BuildQrAuthResponse(User user, AuthSessionResult authSession)
     {
+        AppendMediaAccessCookie(authSession);
         return new
         {
             status = "approved",
@@ -943,6 +946,18 @@ public class AuthController : ControllerBase
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
             refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O")
         };
+    }
+
+    private void AppendMediaAccessCookie(AuthSessionResult authSession)
+    {
+        Response.Cookies.Append(MediaAccessTokenCookieName, authSession.AccessToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = "/",
+            MaxAge = TimeSpan.FromMinutes(20)
+        });
     }
 
     private object BuildDeviceSessionPayload(RefreshTokenRecord session, string? currentRefreshTokenHash)

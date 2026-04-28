@@ -88,7 +88,8 @@ public class VoiceHub : Hub
         }
 
         var previousChannel = _channels.GetChannelForUser(participant.UserId);
-        if (!string.IsNullOrWhiteSpace(previousChannel))
+        var isAlreadyInRequestedChannel = string.Equals(previousChannel, normalizedChannelName, StringComparison.Ordinal);
+        if (!string.IsNullOrWhiteSpace(previousChannel) && !isAlreadyInRequestedChannel)
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, previousChannel);
         }
@@ -101,7 +102,14 @@ public class VoiceHub : Hub
         _channels.SetUserChannel(normalizedChannelName, participant, Context.ConnectionId);
 
         await Groups.AddToGroupAsync(Context.ConnectionId, normalizedChannelName);
-        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        if (isAlreadyInRequestedChannel)
+        {
+            await Clients.Caller.SendAsync("voice:update", _channels.GetAllChannels());
+        }
+        else
+        {
+            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        }
         await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
 
         if (_channels.TryGetParticipant(participant.UserId, out var updatedParticipant))

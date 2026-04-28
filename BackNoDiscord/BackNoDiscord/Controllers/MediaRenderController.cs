@@ -47,6 +47,13 @@ public sealed class MediaRenderController : ControllerBase
         [FromQuery] string? animated,
         CancellationToken cancellationToken = default)
     {
+        var normalizedSource = StringFromUrlPath(src);
+        if (normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase) &&
+            User.Identity?.IsAuthenticated != true)
+        {
+            return Unauthorized();
+        }
+
         if (!TryResolveAllowedAsset(src, out var filePath, out var extension))
         {
             return NotFound();

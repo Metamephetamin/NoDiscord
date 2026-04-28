@@ -4,12 +4,12 @@ import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
+import TextChatMediaPreview from "../../components/TextChatMediaPreview";
 import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
 import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
 
 const TextChatForwardModal = lazy(() => import("../../components/TextChatForwardModal"));
-const TextChatMediaPreview = lazy(() => import("../../components/TextChatMediaPreview"));
 
 function useStableCallback(callback) {
   const callbackRef = useRef(callback);
@@ -619,31 +619,29 @@ export default function TextChatView(props) {
           onSend={send}
         />
       )}
-      <Suspense fallback={null}>
-        <TextChatMediaPreview
-          mediaPreview={mediaPreview}
-          videoRef={mediaPreviewVideoRef}
-          onClose={() => setMediaPreview(null)}
-          onDownload={() =>
-            handleDownloadAttachment({
-              attachmentKind: mediaPreview.type,
-              attachmentUrl: mediaPreview.url,
-              attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
-              attachmentName: mediaPreview.name,
-              attachmentContentType: mediaPreview.contentType || "",
-              attachmentEncryption: mediaPreview.attachmentEncryption || null,
-              messageId: mediaPreview.messageId || "",
-              attachmentIndex: mediaPreview.attachmentIndex || 0,
-            })
-          }
-          onDownloadAll={handleDownloadAllMediaPreviewItems}
-          onFullscreen={handleOpenMediaPreviewFullscreen}
-          onNavigate={updateMediaPreviewIndex}
-          onZoom={updateMediaPreviewZoom}
-          onPan={updateMediaPreviewPan}
-          onResetZoom={resetMediaPreviewZoom}
-        />
-      </Suspense>
+      <TextChatMediaPreview
+        mediaPreview={mediaPreview}
+        videoRef={mediaPreviewVideoRef}
+        onClose={() => setMediaPreview(null)}
+        onDownload={() =>
+          handleDownloadAttachment({
+            attachmentKind: mediaPreview.type,
+            attachmentUrl: mediaPreview.url,
+            attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
+            attachmentName: mediaPreview.name,
+            attachmentContentType: mediaPreview.contentType || "",
+            attachmentEncryption: mediaPreview.attachmentEncryption || null,
+            messageId: mediaPreview.messageId || "",
+            attachmentIndex: mediaPreview.attachmentIndex || 0,
+          })
+        }
+        onDownloadAll={handleDownloadAllMediaPreviewItems}
+        onFullscreen={handleOpenMediaPreviewFullscreen}
+        onNavigate={updateMediaPreviewIndex}
+        onZoom={updateMediaPreviewZoom}
+        onPan={updateMediaPreviewPan}
+        onResetZoom={resetMediaPreviewZoom}
+      />
       <TextChatContextMenu
         menuRef={contextMenuRef}
         menu={messageContextMenu}

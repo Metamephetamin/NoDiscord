@@ -2674,7 +2674,7 @@ export default function TextChat({
     }
 
     const clipboardFiles = clipboardItems
-      .filter((item) => String(item?.kind || "") === "file" && String(item?.type || "").startsWith("image/"))
+      .filter((item) => String(item?.kind || "") === "file")
       .map((item) => item.getAsFile?.())
       .filter((file) => file instanceof File);
 
@@ -2683,7 +2683,7 @@ export default function TextChat({
     }
 
     event.preventDefault();
-    queueFiles(clipboardFiles, { source: "clipboard-image" });
+    queueFiles(clipboardFiles, { source: "clipboard-file" });
   }, [queueFiles]);
 
   const buildForwardPayloadForTargetChannel = (targetChannelId, sourceMessages) => buildForwardPayloadForTargetChannelCore({

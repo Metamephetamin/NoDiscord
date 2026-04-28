@@ -37,7 +37,6 @@ import { getChatDraftUpdatedEventName, hasChatDraft } from "../../utils/chatDraf
 import { buildDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { getDirectCallChannelId, isDirectCallChannelId } from "../../utils/directCallModel";
 import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
-import { startDirectCallTone } from "../../utils/directCallSounds";
 import {
   connectIntegration,
   disconnectIntegration,
@@ -68,6 +67,11 @@ import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
 import useVoiceRoomWarmup from "../../hooks/useVoiceRoomWarmup";
+import useMenuMainCameraPreview from "./useMenuMainCameraPreview";
+import useMenuMainDirectCallHistory from "./useMenuMainDirectCallHistory";
+import useMenuMainDirectCallLifecycle from "./useMenuMainDirectCallLifecycle";
+import useMenuMainLocalShareActions from "./useMenuMainLocalShareActions";
+import useMenuMainSelfVoiceStateSync from "./useMenuMainSelfVoiceStateSync";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
 import MenuMainProfilePanelSlot from "./MenuMainProfilePanelSlot";
 import MenuMainOverlayLayer from "./MenuMainOverlayLayer";
@@ -84,11 +88,8 @@ import {
 import {
   buildDirectCallState,
   createDirectCallState,
-  DIRECT_CALL_NO_ANSWER_TIMEOUT_MS,
   getDirectCallConnectionQuality,
   normalizeMeasuredPingMs,
-  readDirectCallHistory,
-  writeDirectCallHistory,
 } from "./menuMainDirectCallState";
 import {
   areObjectArraysEqual,
@@ -386,7 +387,6 @@ export default function MenuMain({
   const [selectedVoiceChannelId, setSelectedVoiceChannelId] = useState("");
   const [joiningVoiceChannelId, setJoiningVoiceChannelId] = useState("");
   const [directCallState, setDirectCallState] = useState(() => createDirectCallState());
-  const [directCallHistory, setDirectCallHistory] = useState([]);
   const [desktopServerPane, setDesktopServerPane] = useState(() => readWorkspaceState(user).desktopServerPane || "text");
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
@@ -511,10 +511,6 @@ export default function MenuMain({
   const [showMicMenu, setShowMicMenu] = useState(false);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [showSoundMenu, setShowSoundMenu] = useState(false);
-  const [cameraDevices, setCameraDevices] = useState([]);
-  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState("");
-  const [cameraError, setCameraError] = useState("");
-  const [hasCameraPreview, setHasCameraPreview] = useState(false);
   const [deviceSessions, setDeviceSessions] = useState([]);
   const [deviceSessionsLoading, setDeviceSessionsLoading] = useState(false);
   const [deviceSessionsError, setDeviceSessionsError] = useState("");
@@ -593,11 +589,8 @@ export default function MenuMain({
   const pendingVoiceChannelTargetRef = useRef("");
   const suppressedVoiceChannelRef = useRef("");
   const notificationSoundInputRef = useRef(null);
-  const directCallToneStopRef = useRef(null);
   const directCallStateRef = useRef(createDirectCallState());
   const currentVoiceChannelRef = useRef(null);
-  const cameraPreviewRef = useRef(null);
-  const cameraStreamRef = useRef(null);
   const voiceClientRef = useRef(null);
   const initializeVoiceClientRef = useRef(null);
   const voiceClientInitPromiseRef = useRef(null);
@@ -610,6 +603,7 @@ export default function MenuMain({
   const pendingLocalMicToneRef = useRef("");
   const pendingLocalSoundToneRef = useRef("");
   const pendingLocalScreenShareToneRef = useRef("");
+  const directCallActionInFlightRef = useRef(false);
   const previousVoiceParticipantIdsRef = useRef({ channelId: "", participantIds: [] });
   const previousLiveVoiceUserIdsRef = useRef({ channelId: "", userIds: [] });
   const joinedDirectChannelsRef = useRef(new Set());
@@ -658,6 +652,34 @@ export default function MenuMain({
     uiTouchTargetStorageKey,
   } = useMenuMainStorageKeys(user);
   const noiseSuppressionStrengthStorageKey = `${noiseSuppressionStorageKey}:strength`;
+  const {
+    cameraDevices,
+    selectedVideoDeviceId,
+    setSelectedVideoDeviceId,
+    cameraError,
+    setCameraError,
+    hasCameraPreview,
+    cameraPreviewRef,
+    loadCameraDevices,
+    startCameraPreview,
+    stopCameraPreview,
+    resetCameraPreviewState,
+  } = useMenuMainCameraPreview();
+  const {
+    directCallHistory,
+    appendDirectCallHistoryEntry,
+  } = useMenuMainDirectCallHistory(directCallHistoryStorageKey);
+  useMenuMainDirectCallLifecycle({
+    directCallState,
+    directCallStateRef,
+    setDirectCallState,
+    voiceClientRef,
+    user,
+  });
+  const {
+    flushQueuedSelfVoiceState,
+    queueSelfVoiceStateSync,
+  } = useMenuMainSelfVoiceStateSync({ voiceClientRef });
   const {
     isTotpEnabled,
     totpSetup,
@@ -863,52 +885,6 @@ export default function MenuMain({
     setMobileServersPane("chat");
   }, []);
   useEffect(() => {
-    directCallStateRef.current = directCallState;
-  }, [directCallState]);
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-
-    if (directCallState.phase !== "outgoing" || !directCallState.startedAt) {
-      return undefined;
-    }
-
-    const startedAtMs = new Date(directCallState.startedAt).getTime();
-    if (!Number.isFinite(startedAtMs)) {
-      return undefined;
-    }
-
-    const timeoutDelay = Math.max(0, DIRECT_CALL_NO_ANSWER_TIMEOUT_MS - (Date.now() - startedAtMs));
-    const timeoutId = window.setTimeout(() => {
-      const currentCall = directCallStateRef.current;
-      if (currentCall.phase !== "outgoing" || currentCall.channelId !== directCallState.channelId) {
-        return;
-      }
-
-      voiceClientRef.current?.declineDirectCall(currentCall.peerUserId, currentCall.channelId, "no-answer", user).catch((error) => {
-        console.error("Не удалось завершить личный звонок по таймауту:", error);
-      });
-      setDirectCallState(buildDirectCallState({
-        ...currentCall,
-        phase: "declined",
-        statusLabel: "Нет ответа",
-        canRetry: true,
-        isMiniMode: true,
-        lastReason: "no-answer",
-        endedAt: new Date().toISOString(),
-      }));
-    }, timeoutDelay);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [directCallState.channelId, directCallState.phase, directCallState.startedAt, user]);
-  useEffect(() => {
-    setDirectCallHistory(readDirectCallHistory(directCallHistoryStorageKey));
-  }, [directCallHistoryStorageKey]);
-  useEffect(() => {
-    writeDirectCallHistory(directCallHistoryStorageKey, directCallHistory);
-  }, [directCallHistory, directCallHistoryStorageKey]);
-  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -971,35 +947,6 @@ export default function MenuMain({
         : { ...previous, connectionQuality: nextQuality };
     });
   }, [activeLatencyMs]);
-  useEffect(() => {
-    let disposed = false;
-
-    directCallToneStopRef.current?.();
-    directCallToneStopRef.current = null;
-
-    if (directCallState.phase !== "outgoing" && directCallState.phase !== "incoming") {
-      return () => {
-        directCallToneStopRef.current?.();
-        directCallToneStopRef.current = null;
-      };
-    }
-
-    void (async () => {
-      const stopTone = await startDirectCallTone(directCallState.phase === "incoming" ? "incoming" : "outgoing");
-      if (disposed) {
-        stopTone?.();
-        return;
-      }
-
-      directCallToneStopRef.current = stopTone;
-    })();
-
-    return () => {
-      disposed = true;
-      directCallToneStopRef.current?.();
-      directCallToneStopRef.current = null;
-    };
-  }, [directCallState.phase]);
   const buildNavigationSnapshot = () => ({
     workspaceMode,
     activeServerId: String(activeServerId || ""),
@@ -1908,32 +1855,6 @@ export default function MenuMain({
     });
   };
 
-  const appendDirectCallHistoryEntry = ({
-    peerUserId,
-    peerName,
-    peerAvatar,
-    direction,
-    outcome,
-    timestamp = new Date().toISOString(),
-  }) => {
-    if (!peerUserId) {
-      return;
-    }
-
-    setDirectCallHistory((previous) => [
-      {
-        id: createId("direct-call-log"),
-        peerUserId: String(peerUserId),
-        peerName: String(peerName || "Пользователь"),
-        peerAvatar: String(peerAvatar || ""),
-        direction: String(direction || ""),
-        outcome: String(outcome || "ended"),
-        timestamp,
-      },
-      ...previous,
-    ].slice(0, 24));
-  };
-
   const setDirectCallMiniMode = (isMiniMode) => {
     setDirectCallState((previous) => (
       previous.phase === "idle"
@@ -1988,6 +1909,10 @@ export default function MenuMain({
       return;
     }
 
+    if (directCallActionInFlightRef.current) {
+      return;
+    }
+
     if (!voiceClientRef.current) {
       await ensureVoiceClientReady();
     }
@@ -2002,9 +1927,11 @@ export default function MenuMain({
       return;
     }
 
+    directCallActionInFlightRef.current = true;
     const targetUser = directConversationTargets.find((friend) => String(friend?.id || "") === normalizedTargetUserId);
     const channelId = getDirectCallChannelId(currentUserId, normalizedTargetUserId);
     if (!targetUser || !channelId) {
+      directCallActionInFlightRef.current = false;
       showServerInviteFeedback("Не удалось подготовить личный звонок.");
       return;
     }
@@ -2058,6 +1985,8 @@ export default function MenuMain({
         outcome: "failed",
       });
       showServerInviteFeedback(error?.message || "Не удалось начать звонок.");
+    } finally {
+      directCallActionInFlightRef.current = false;
     }
   };
 
@@ -2067,6 +1996,11 @@ export default function MenuMain({
       return;
     }
 
+    if (directCallActionInFlightRef.current) {
+      return;
+    }
+
+    directCallActionInFlightRef.current = true;
     try {
       if (!voiceClientRef.current) {
         await ensureVoiceClientReady();
@@ -2091,15 +2025,26 @@ export default function MenuMain({
 
       await voiceClientRef.current.acceptDirectCall(currentCall.peerUserId, currentCall.channelId, user);
       await voiceClientRef.current.joinChannel(currentCall.channelId, user);
-      setDirectCallState((previous) => ({
-        ...previous,
-        phase: "connected",
-        status: "connected",
-        statusLabel: "Идёт разговор",
-        isMiniMode: true,
-        canRetry: false,
-        connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
-      }));
+      if (directCallStateRef.current.channelId !== currentCall.channelId || directCallStateRef.current.phase !== "connecting") {
+        if (currentVoiceChannelRef.current === currentCall.channelId) {
+          await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
+        }
+        return;
+      }
+
+      setDirectCallState((previous) => (
+        previous.channelId === currentCall.channelId && previous.phase === "connecting"
+          ? {
+              ...previous,
+              phase: "connected",
+              status: "connected",
+              statusLabel: "Идёт разговор",
+              isMiniMode: true,
+              canRetry: false,
+              connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
+            }
+          : previous
+      ));
     } catch (error) {
       console.error("Не удалось принять личный звонок:", error);
       if (currentVoiceChannelRef.current === currentCall.channelId) {
@@ -2130,6 +2075,8 @@ export default function MenuMain({
         endedAt: new Date().toISOString(),
       }));
       showServerInviteFeedback(error?.message || "Не удалось принять звонок.");
+    } finally {
+      directCallActionInFlightRef.current = false;
     }
   };
 
@@ -2139,6 +2086,11 @@ export default function MenuMain({
       return;
     }
 
+    if (directCallActionInFlightRef.current) {
+      return;
+    }
+
+    directCallActionInFlightRef.current = true;
     try {
       if (currentCall.phase === "incoming") {
         await voiceClientRef.current.declineDirectCall(currentCall.peerUserId, currentCall.channelId, "declined", user);
@@ -2163,6 +2115,7 @@ export default function MenuMain({
         outcome: currentCall.phase === "incoming" ? "declined" : "cancelled",
       });
       setDirectCallState(createDirectCallState());
+      directCallActionInFlightRef.current = false;
     }
   };
 
@@ -2172,6 +2125,11 @@ export default function MenuMain({
       return;
     }
 
+    if (directCallActionInFlightRef.current) {
+      return;
+    }
+
+    directCallActionInFlightRef.current = true;
     let endedSuccessfully = false;
 
     try {
@@ -2210,6 +2168,7 @@ export default function MenuMain({
               endedAt: new Date().toISOString(),
             })
       );
+      directCallActionInFlightRef.current = false;
     }
   };
 
@@ -3394,10 +3353,7 @@ export default function MenuMain({
       setSelectedOutputDeviceId("");
       setOutputSelectionSupported(false);
       setMicLevel(0);
-      setCameraDevices([]);
-      setSelectedVideoDeviceId("");
-      setCameraError("");
-      setHasCameraPreview(false);
+      resetCameraPreviewState();
       appliedInputDeviceRef.current = "";
       appliedOutputDeviceRef.current = "";
       return;
@@ -3414,7 +3370,7 @@ export default function MenuMain({
     } catch {
       setSelectedOutputDeviceId("");
     }
-  }, [audioInputDeviceStorageKey, audioOutputDeviceStorageKey, user]);
+  }, [audioInputDeviceStorageKey, audioOutputDeviceStorageKey, resetCameraPreviewState, user]);
 
   useEffect(() => {
     if (!user) {
@@ -4332,19 +4288,34 @@ export default function MenuMain({
 
         void (async () => {
           try {
+            if (directCallStateRef.current.channelId !== channelName || directCallStateRef.current.phase !== "connecting") {
+              return;
+            }
+
             if (currentVoiceChannelRef.current && currentVoiceChannelRef.current !== channelName) {
               await disconnectFromActiveVoiceContext();
             }
 
             await voiceClientRef.current?.joinChannel(channelName, user);
-            setDirectCallState((previous) => ({
-              ...previous,
-              phase: "connected",
-              status: "connected",
-              statusLabel: "Идёт разговор",
-              isMiniMode: true,
-              connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
-            }));
+            if (directCallStateRef.current.channelId !== channelName || directCallStateRef.current.phase !== "connecting") {
+              if (currentVoiceChannelRef.current === channelName) {
+                await disconnectFromActiveVoiceContext({ preserveSuppressedChannel: false });
+              }
+              return;
+            }
+
+            setDirectCallState((previous) => (
+              previous.channelId === channelName
+                ? {
+                    ...previous,
+                    phase: "connected",
+                    status: "connected",
+                    statusLabel: "Идёт разговор",
+                    isMiniMode: true,
+                    connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
+                  }
+                : previous
+            ));
           } catch (error) {
             console.error("Не удалось подключить исходящий звонок:", error);
             if (currentVoiceChannelRef.current === channelName) {
@@ -4437,6 +4408,7 @@ export default function MenuMain({
       console.error("Ошибка применения стартового эхоподавления:", error);
     });
     client.connect(user).catch((error) => logVoiceHubError("Ошибка подключения к голосовому хабу:", error));
+    flushQueuedSelfVoiceState();
       return client;
     };
 
@@ -4482,6 +4454,7 @@ export default function MenuMain({
     handleSelfVoiceStateChanged,
     handleSpeakingUsersChanged,
     ensureVoiceClientReady,
+    flushQueuedSelfVoiceState,
     user?.id,
   ]);
   useEffect(() => {
@@ -4499,10 +4472,8 @@ export default function MenuMain({
       isMicMuted
       || (Boolean(currentVoiceChannel) && isMicTestActive)
       || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
-    voiceClientRef.current?.updateSelfVoiceState({ isMicMuted: shouldMutePublishedMic, isDeafened: isSoundMuted }).catch((error) => {
-      console.error("Ошибка обновления состояния микрофона:", error);
-    });
-  }, [currentVoiceChannel, isMicMuted, isMicTestActive, isSoundMuted]);
+    queueSelfVoiceStateSync({ isMicMuted: shouldMutePublishedMic, isDeafened: isSoundMuted });
+  }, [currentVoiceChannel, isMicMuted, isMicTestActive, isSoundMuted, queueSelfVoiceStateSync]);
   useEffect(() => {
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume);
   }, [audioVolume, isSoundMuted]);
@@ -5669,7 +5640,21 @@ export default function MenuMain({
     setSelectedVoiceChannelId(channel.id);
     const userLimit = Math.min(99, Math.max(0, Number(channel.userLimit || 0)));
     const channelParticipants = activeVoiceParticipantsMap?.[channel.id] || activeVoiceParticipantsMap?.[scopedChannelId] || [];
-    const isAlreadyInTargetChannel = String(currentVoiceChannelRef.current || "") === String(scopedChannelId);
+    const clientVoiceChannelId = String(voiceClientRef.current?.getCurrentChannel?.() || "");
+    const isAlreadyInTargetChannel =
+      String(currentVoiceChannelRef.current || "") === String(scopedChannelId)
+      || clientVoiceChannelId === String(scopedChannelId);
+
+    if (voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current === scopedChannelId) {
+      return;
+    }
+
+    if (isAlreadyInTargetChannel) {
+      pendingLocalVoiceTransitionRef.current = null;
+      setJoiningVoiceChannelId((previous) => (String(previous || "") === scopedChannelId ? "" : previous));
+      return;
+    }
+
     if (userLimit > 0 && !isAlreadyInTargetChannel && channelParticipants.length >= userLimit) {
       showServerInviteFeedback(`Голосовой канал заполнен: ${userLimit}/${userLimit}.`);
       return;
@@ -5679,9 +5664,6 @@ export default function MenuMain({
       await ensureVoiceClientReady();
     }
     if (!voiceClientRef.current) return;
-    if (voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current === scopedChannelId) {
-      return;
-    }
 
     const joinTraceId = startPerfTrace("voice", "join-voice-channel", {
       channelId: String(channel.id || ""),
@@ -5847,6 +5829,8 @@ export default function MenuMain({
       pendingVoiceChannelTargetRef.current = "";
       setJoiningVoiceChannelId("");
       setCurrentVoiceChannel(null);
+      setSelectedStreamUserId(null);
+      setIsLocalSharePreviewVisible(false);
       pushNavigationHistory(() => {
         setDesktopServerPane("text");
         if (isMobileViewport) {
@@ -5888,88 +5872,43 @@ export default function MenuMain({
       onLogout?.();
     }
   };
-  const startScreenShare = async () => {
-    if (!voiceClientRef.current) {
-      return;
-    }
-
-    setScreenShareError("");
-    pendingLocalScreenShareToneRef.current = "shareStart";
-    clearScreenShareStartToneTimeout();
-
-    try {
-      await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
-      scheduleScreenShareStartTone(140);
-      setShowModal(false);
-      setSelectedStreamUserId(null);
-      setIsLocalSharePreviewVisible(true);
-    } catch (error) {
-      pendingLocalScreenShareToneRef.current = "";
-      clearScreenShareStartToneTimeout();
-      const message = error?.message || "Не удалось запустить трансляцию экрана.";
-      setScreenShareError(message);
-      showServerInviteFeedback(message);
-      throw error;
-    }
-  };
-  const stopScreenShare = async () => {
-    if (!voiceClientRef.current) {
-      return;
-    }
-
-    setScreenShareError("");
-    pendingLocalScreenShareToneRef.current = "shareStop";
-    clearScreenShareStartToneTimeout();
-    playUiTone("shareStop");
-
-    try {
-      await voiceClientRef.current.stopScreenShare();
-      setShowModal(false);
-      setIsLocalSharePreviewVisible(false);
-    } catch (error) {
-      pendingLocalScreenShareToneRef.current = "";
-      const message = error?.message || "Не удалось остановить трансляцию экрана.";
-      setScreenShareError(message);
-      showServerInviteFeedback(message);
-      throw error;
-    }
-  };
-  const handleScreenShareAction = async () => {
-    if (isScreenShareActive) {
-      await stopScreenShare();
-      return;
-    }
-
-    if (!currentVoiceChannel) {
-      showServerInviteFeedback("Сначала подключитесь к голосовому каналу.");
-      return;
-    }
-
-    if (!isScreenShareSupported) {
-      setScreenShareError(displayCaptureSupportInfo.subtitle);
-      showServerInviteFeedback(displayCaptureSupportInfo.subtitle);
-      return;
-    }
-
-    setShowCameraModal(false);
-    setScreenShareError("");
-    setShowModal(true);
-  };
-  const openLocalSharePreview = () => {
-    if (!hasLocalSharePreview) {
-      showServerInviteFeedback("Сначала запустите камеру или стрим.");
-      return;
-    }
-
-    pushNavigationHistory(() => {
-      setSelectedStreamUserId(null);
-      setDesktopServerPane("voice");
-      setIsLocalSharePreviewVisible(true);
-    });
-  };
-  const closeLocalSharePreview = () => {
-    setIsLocalSharePreviewVisible(false);
-  };
+  const {
+    startScreenShare,
+    stopScreenShare,
+    handleScreenShareAction,
+    openLocalSharePreview,
+    closeLocalSharePreview,
+    startCameraShare,
+    stopCameraShare,
+  } = useMenuMainLocalShareActions({
+    voiceClientRef,
+    currentVoiceChannel,
+    currentVoiceChannelRef,
+    servers,
+    resolution,
+    fps,
+    shareStreamAudio,
+    selectedVideoDeviceId,
+    isScreenShareActive,
+    isScreenShareSupported,
+    displayCaptureSupportInfo,
+    hasLocalSharePreview,
+    setShowModal,
+    setShowCameraModal,
+    setSelectedStreamUserId,
+    setIsLocalSharePreviewVisible,
+    setScreenShareError,
+    setCameraError,
+    setDesktopServerPane,
+    pushNavigationHistory,
+    showServerInviteFeedback,
+    stopCameraPreview,
+    startCameraPreview,
+    pendingLocalScreenShareToneRef,
+    clearScreenShareStartToneTimeout,
+    scheduleScreenShareStartTone,
+    playUiTone,
+  });
   const openMobileVoiceStageFullscreen = async () => {
     const videoElement = mobileVoiceStageVideoRef.current;
     const targetElement = videoElement || mobileVoiceStageImageRef.current || mobileVoiceStageShellRef.current;
@@ -5988,144 +5927,6 @@ export default function MenuMain({
       }
     } catch (error) {
       console.error("Не удалось открыть эфир на весь экран:", error);
-    }
-  };
-  const startCameraShare = async () => {
-    if (!voiceClientRef.current) return;
-
-    setCameraError("");
-    stopCameraPreview();
-
-    try {
-      const currentChannelConfig = servers
-        .flatMap((server) => (server.voiceChannels || []).map((channel) => ({
-          ...channel,
-          runtimeId: getScopedVoiceChannelId(server.id, channel.id),
-        })))
-        .find((channel) => String(channel.runtimeId || "") === String(currentVoiceChannelRef.current || ""));
-      const channelVideoQuality = String(currentChannelConfig?.videoQuality || "auto");
-      const effectiveResolution =
-        channelVideoQuality && channelVideoQuality !== "auto" ? channelVideoQuality : resolution;
-
-      await voiceClientRef.current.startCameraShare({
-        deviceId: selectedVideoDeviceId,
-        resolution: effectiveResolution,
-        fps,
-      });
-      setShowCameraModal(false);
-      setSelectedStreamUserId(null);
-      setIsLocalSharePreviewVisible(true);
-    } catch (error) {
-      setCameraError(error?.message || "Не удалось запустить трансляцию камеры.");
-      startCameraPreview(selectedVideoDeviceId).catch(() => {});
-    }
-  };
-  const stopCameraShare = async () => {
-    if (!voiceClientRef.current) return;
-
-    setCameraError("");
-    try {
-      await voiceClientRef.current.stopScreenShare();
-      setShowCameraModal(false);
-      setIsLocalSharePreviewVisible(false);
-      stopCameraPreview();
-    } catch (error) {
-      setCameraError(error?.message || "Не удалось остановить трансляцию камеры.");
-    }
-  };
-  const stopCameraPreview = () => {
-    cameraStreamRef.current?.getTracks?.().forEach((track) => {
-      try {
-        track.stop();
-      } catch {
-        // ignore camera shutdown failures
-      }
-    });
-    cameraStreamRef.current = null;
-
-    if (cameraPreviewRef.current) {
-      cameraPreviewRef.current.srcObject = null;
-    }
-
-    setHasCameraPreview(false);
-  };
-  const loadCameraDevices = async (preferredDeviceId = "") => {
-    if (!navigator.mediaDevices?.enumerateDevices) {
-      setCameraDevices([]);
-      return [];
-    }
-
-    const devices = (await navigator.mediaDevices.enumerateDevices())
-      .filter((device) => device.kind === "videoinput")
-      .map((device, index) => ({
-        id: device.deviceId || `camera-${index + 1}`,
-        label: String(device.label || "").trim() || `Камера ${index + 1}`,
-      }));
-
-    setCameraDevices(devices);
-
-    const nextDeviceId =
-      devices.find((device) => device.id === preferredDeviceId)?.id ||
-      devices.find((device) => device.id === selectedVideoDeviceId)?.id ||
-      devices[0]?.id ||
-      "";
-
-    if (nextDeviceId && nextDeviceId !== selectedVideoDeviceId) {
-      setSelectedVideoDeviceId(nextDeviceId);
-    }
-
-    return devices;
-  };
-  const startCameraPreview = async (deviceId = selectedVideoDeviceId) => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Эта система не дала приложению доступ к видеоустройствам.");
-      return;
-    }
-
-    stopCameraPreview();
-    setCameraError("");
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: deviceId && !String(deviceId).startsWith("camera-")
-          ? {
-              deviceId: { exact: deviceId },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            }
-          : {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-        audio: false,
-      });
-
-      cameraStreamRef.current = stream;
-
-      if (cameraPreviewRef.current) {
-        cameraPreviewRef.current.srcObject = stream;
-        cameraPreviewRef.current.muted = true;
-        cameraPreviewRef.current.play().catch(() => {});
-      }
-      setHasCameraPreview(true);
-
-      const devices = await loadCameraDevices(deviceId);
-      const activeTrack = stream.getVideoTracks?.()[0];
-      const activeDeviceId = activeTrack?.getSettings?.().deviceId || deviceId || devices[0]?.id || "";
-
-      if (activeDeviceId && activeDeviceId !== selectedVideoDeviceId) {
-        setSelectedVideoDeviceId(activeDeviceId);
-      }
-
-      if (!devices.length) {
-        setCameraError("Камеры не найдены. Подключите веб-камеру или виртуальную камеру вроде Camo.");
-        setHasCameraPreview(false);
-      }
-    } catch (error) {
-      await loadCameraDevices(deviceId).catch(() => {});
-      setCameraError("Не удалось открыть камеру. Проверьте доступ к ней и выбранное устройство.");
-      setHasCameraPreview(false);
-      console.error("Ошибка запуска камеры:", error);
     }
   };
   const openCameraModal = () => {

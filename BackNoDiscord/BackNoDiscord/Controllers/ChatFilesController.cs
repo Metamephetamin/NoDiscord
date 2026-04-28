@@ -3,6 +3,7 @@ using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace BackNoDiscord.Controllers;
@@ -18,6 +19,7 @@ public class UploadChatFileRequest
 public class ChatFilesController : ControllerBase
 {
     private const long MaxFileSizeBytes = 100L * 1024 * 1024;
+    private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
     private readonly UploadStoragePaths _uploadStoragePaths;
 
     public ChatFilesController(UploadStoragePaths uploadStoragePaths)
@@ -70,5 +72,33 @@ public class ChatFilesController : ControllerBase
             size = file.Length,
             contentType
         });
+    }
+
+    [HttpGet("/chat-files/{fileName}")]
+    [HttpHead("/chat-files/{fileName}")]
+    public IActionResult Download([FromRoute] string fileName)
+    {
+        var safeFileName = Path.GetFileName(fileName ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(safeFileName) ||
+            !string.Equals(safeFileName, fileName, StringComparison.Ordinal))
+        {
+            return NotFound();
+        }
+
+        var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");
+        var filePath = Path.Combine(uploadsDirectory, safeFileName);
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound();
+        }
+
+        if (!ContentTypeProvider.TryGetContentType(filePath, out var contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        Response.Headers.CacheControl = "private,max-age=604800";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return PhysicalFile(filePath, contentType, enableRangeProcessing: true);
     }
 }

@@ -138,7 +138,7 @@ public class ChatHub : Hub
                 throw new HubException("channelId is required");
             }
 
-            if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+            if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser))
             {
                 throw new HubException("Forbidden");
             }
@@ -260,7 +260,7 @@ public class ChatHub : Hub
             throw new HubException("channelId is required");
         }
 
-        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser))
         {
             throw new HubException("Forbidden");
         }
@@ -382,7 +382,7 @@ public class ChatHub : Hub
             throw new HubException("channelId is required");
         }
 
-        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser))
         {
             throw new HubException("Forbidden");
         }
@@ -411,7 +411,7 @@ public class ChatHub : Hub
             throw new HubException("channelId is required");
         }
 
-        if (!TryAuthorizeChannelAccess(normalizedChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser))
         {
             throw new HubException("Forbidden");
         }
@@ -492,7 +492,7 @@ public class ChatHub : Hub
             throw new HubException("Message not found.");
         }
 
-        if (!TryAuthorizeChannelAccess(msg.ChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(msg.ChannelId, currentUser))
         {
             throw new HubException("Forbidden");
         }
@@ -548,7 +548,7 @@ public class ChatHub : Hub
             throw new HubException("Message not found.");
         }
 
-        if (!TryAuthorizeChannelAccess(message.ChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(message.ChannelId, currentUser))
         {
             throw new HubException("Forbidden");
         }
@@ -1117,7 +1117,7 @@ public class ChatHub : Hub
             throw new HubException("Исходное сообщение для ответа не найдено.");
         }
 
-        if (!TryAuthorizeChannelAccess(replyMessage.ChannelId, currentUser))
+        if (!await TryAuthorizeChannelAccessAsync(replyMessage.ChannelId, currentUser))
         {
             if (allowMissing)
             {
@@ -1244,17 +1244,17 @@ public class ChatHub : Hub
         });
     }
 
-    private bool TryAuthorizeChannelAccess(string channelId, AuthenticatedUser currentUser)
+    private async Task<bool> TryAuthorizeChannelAccessAsync(string channelId, AuthenticatedUser currentUser)
     {
         var normalizedChannelId = NormalizeChannelId(channelId);
         if (ConversationChannels.TryParseChatChannelId(normalizedChannelId, out var conversationId))
         {
-            return CanAccessConversationChannel(currentUser.UserId, conversationId);
+            return await CanAccessConversationChannelAsync(currentUser.UserId, conversationId);
         }
 
         if (DirectMessageChannels.TryParse(normalizedChannelId, out var firstUserId, out var secondUserId, out _))
         {
-            return CanAccessDirectChannel(currentUser.UserId, firstUserId, secondUserId);
+            return await CanAccessDirectChannelAsync(currentUser.UserId, firstUserId, secondUserId);
         }
 
         if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(normalizedChannelId, out var serverId))
@@ -1266,7 +1266,7 @@ public class ChatHub : Hub
         return ServerChannelAuthorization.CanAccessServer(serverId, currentUser, snapshot);
     }
 
-    private bool CanAccessDirectChannel(string currentUserId, int firstUserId, int secondUserId)
+    private async Task<bool> CanAccessDirectChannelAsync(string currentUserId, int firstUserId, int secondUserId)
     {
         if (!int.TryParse(currentUserId, out var actorUserId))
         {
@@ -1286,21 +1286,21 @@ public class ChatHub : Hub
         var lowId = Math.Min(firstUserId, secondUserId);
         var highId = Math.Max(firstUserId, secondUserId);
 
-        return _context.Friendships
+        return await _context.Friendships
             .AsNoTracking()
-            .Any(item => item.UserLowId == lowId && item.UserHighId == highId);
+            .AnyAsync(item => item.UserLowId == lowId && item.UserHighId == highId, Context.ConnectionAborted);
     }
 
-    private bool CanAccessConversationChannel(string currentUserId, int conversationId)
+    private async Task<bool> CanAccessConversationChannelAsync(string currentUserId, int conversationId)
     {
         if (!int.TryParse(currentUserId, out var actorUserId) || actorUserId <= 0 || conversationId <= 0)
         {
             return false;
         }
 
-        return _context.GroupConversationMembers
+        return await _context.GroupConversationMembers
             .AsNoTracking()
-            .Any(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned);
+            .AnyAsync(item => item.ConversationId == conversationId && item.UserId == actorUserId && !item.IsBanned, Context.ConnectionAborted);
     }
 
     private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)

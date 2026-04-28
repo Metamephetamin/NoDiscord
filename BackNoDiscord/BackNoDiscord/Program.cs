@@ -32,6 +32,8 @@ if (jwtKey.Length < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 characters long.");
 }
 
+const string MediaAccessTokenCookieName = "tend_access_token";
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
@@ -89,6 +91,12 @@ builder.Services
                 if (HubQueryTokenPolicy.CanAcceptQueryToken(accessToken, path, origin, builder.Configuration))
                 {
                     context.Token = accessToken;
+                }
+                else if (CanAcceptMediaCookieToken(context.Request, path) &&
+                         context.Request.Cookies.TryGetValue(MediaAccessTokenCookieName, out var mediaAccessToken) &&
+                         !string.IsNullOrWhiteSpace(mediaAccessToken))
+                {
+                    context.Token = mediaAccessToken;
                 }
 
                 return Task.CompletedTask;
@@ -277,35 +285,34 @@ app.UseStaticFiles(new StaticFileOptions
         context.Context.Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
     }
 });
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(chatFilesDirectory),
-    RequestPath = "/chat-files",
-    OnPrepareResponse = context =>
-    {
-        context.Context.Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
-
-        var origin = context.Context.Request.Headers.Origin.ToString();
-        if (!FrontendOriginPolicy.IsAllowed(origin, app.Configuration))
-        {
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(origin))
-        {
-            context.Context.Response.Headers["Access-Control-Allow-Origin"] = origin;
-            context.Context.Response.Headers["Vary"] = "Origin";
-            context.Context.Response.Headers["Access-Control-Allow-Credentials"] = "true";
-        }
-    }
-});
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var authorization = context.Request.Headers.Authorization.ToString();
+    if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    {
+        var token = authorization["Bearer ".Length..].Trim();
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            context.Response.OnStarting(() =>
+            {
+                if (context.User.Identity?.IsAuthenticated == true)
+                {
+                    AppendMediaAccessCookie(context, MediaAccessTokenCookieName, token);
+                }
+
+                return Task.CompletedTask;
+            });
+        }
+    }
+
+    await next();
+});
 app.UseAuthorization();
 
 app.MapGet("/api/ping", () => Results.Ok(new { status = "ok" }))
@@ -404,4 +411,27 @@ static IEnumerable<string> EnumerateDotEnvPaths(string startDirectory)
         yield return Path.Combine(directory.FullName, ".env");
         directory = directory.Parent;
     }
+}
+
+static bool CanAcceptMediaCookieToken(HttpRequest request, PathString path)
+{
+    if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method))
+    {
+        return false;
+    }
+
+    return path.StartsWithSegments("/chat-files") ||
+           path.StartsWithSegments("/api/media");
+}
+
+static void AppendMediaAccessCookie(HttpContext context, string cookieName, string token)
+{
+    context.Response.Cookies.Append(cookieName, token, new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = context.Request.IsHttps,
+        SameSite = context.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+        Path = "/",
+        MaxAge = TimeSpan.FromMinutes(20)
+    });
 }

@@ -551,12 +551,18 @@ export default function useTextChatVirtualizer({
   const bottomSpacerHeight = virtualizationEnabled
     ? Math.max(0, measurements.totalHeight - (measurements.offsets[visibleRange.endIndex + 1] || 0))
     : 0;
+  const visibleMessages = useMemo(
+    () => (
+      virtualizationEnabled
+        ? messages.slice(visibleRange.startIndex, visibleRange.endIndex + 1)
+        : messages
+    ),
+    [messages, virtualizationEnabled, visibleRange.endIndex, visibleRange.startIndex]
+  );
 
   return {
     virtualizationEnabled,
-    visibleMessages: virtualizationEnabled
-      ? messages.slice(visibleRange.startIndex, visibleRange.endIndex + 1)
-      : messages,
+    visibleMessages,
     visibleStartIndex: virtualizationEnabled ? visibleRange.startIndex : 0,
     visibleEndIndex: virtualizationEnabled ? visibleRange.endIndex : Math.max(0, messages.length - 1),
     topSpacerHeight,

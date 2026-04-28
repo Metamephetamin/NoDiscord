@@ -55,11 +55,8 @@
 }
 
 body.media-preview-open .desktop-app-topbar {
-  display: none;
-}
-
-body.media-preview-open .menu-shell__content {
-  height: 100vh;
+  opacity: 0;
+  pointer-events: none;
 }
 
 html[data-ui-density="compact"] .desktop-app-topbar {

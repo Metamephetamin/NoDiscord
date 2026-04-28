@@ -2137,6 +2137,8 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
     && previousProps.onToggleReaction === nextProps.onToggleReaction
     && previousProps.onJumpToReply === nextProps.onJumpToReply
     && previousProps.onCancelLocalEchoUpload === nextProps.onCancelLocalEchoUpload
+    && previousProps.onRetryLocalEchoUpload === nextProps.onRetryLocalEchoUpload
+    && previousProps.onRemoveLocalEchoUpload === nextProps.onRemoveLocalEchoUpload
   );
 }
 
