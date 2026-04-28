@@ -34,6 +34,7 @@ export default function TextChatMediaPreview({
   const translateX = Number(mediaPreview?.panX) || 0;
   const translateY = Number(mediaPreview?.panY) || 0;
   const isImagePreview = mediaPreview?.type === "image";
+  const isPreviewOpen = Boolean(mediaPreview);
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -190,7 +191,7 @@ export default function TextChatMediaPreview({
   }, []);
 
   useEffect(() => {
-    if (!mediaPreview) {
+    if (!isPreviewOpen) {
       return undefined;
     }
 
@@ -200,7 +201,7 @@ export default function TextChatMediaPreview({
       document.body.classList.remove("media-preview-open");
       window.electronWindowControls?.setTitleBarOverlayVisible?.(true).catch?.(() => {});
     };
-  }, [mediaPreview]);
+  }, [isPreviewOpen]);
 
   if (!mediaPreview) {
     return null;
@@ -265,6 +266,8 @@ export default function TextChatMediaPreview({
                 className="media-preview__image"
                 src={mediaPreview.url}
                 alt=""
+                decoding="async"
+                fetchPriority="high"
                 style={{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})` }}
               />
             ) : (

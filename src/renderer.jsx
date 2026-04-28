@@ -322,7 +322,7 @@ export default function Renderer() {
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [pendingImportedServer, setPendingImportedServer] = useState(null);
@@ -367,7 +367,7 @@ export default function Renderer() {
 
       if (!disposed) {
         setUser(null);
-        setToken(null);
+        setIsAuthenticated(false);
         setSessionHydrated(true);
         setLoading(false);
       }
@@ -386,7 +386,7 @@ export default function Renderer() {
 
           if (!disposed) {
             setUser(localDevSession.user);
-            setToken(localDevSession.session.accessToken);
+            setIsAuthenticated(Boolean(localDevSession.session.accessToken));
             setSessionHydrated(true);
             setLoading(false);
           }
@@ -408,7 +408,7 @@ export default function Renderer() {
 
           if (!disposed) {
             setUser(localDevSession.user);
-            setToken(localDevSession.session.accessToken);
+            setIsAuthenticated(Boolean(localDevSession.session.accessToken));
             setSessionHydrated(true);
             setLoading(false);
           }
@@ -427,7 +427,7 @@ export default function Renderer() {
       const restoreCachedSession = () => {
         if (!disposed) {
           setUser(savedUser);
-          setToken(getStoredToken() || savedToken);
+          setIsAuthenticated(Boolean(getStoredToken() || savedToken));
           setSessionHydrated(true);
           setLoading(false);
         }
@@ -498,7 +498,7 @@ export default function Renderer() {
 
         if (!disposed) {
           setUser(nextUser);
-          setToken(getStoredToken() || savedToken);
+          setIsAuthenticated(Boolean(getStoredToken() || savedToken));
           setSessionHydrated(true);
           setLoading(false);
         }
@@ -532,7 +532,7 @@ export default function Renderer() {
   }, []);
 
   useEffect(() => {
-    if (!sessionHydrated || !token || !user) {
+    if (!sessionHydrated || !isAuthenticated || !user) {
       mediaPermissionBootstrapStartedRef.current = false;
       return;
     }
@@ -571,7 +571,7 @@ export default function Renderer() {
     return () => {
       disposed = true;
     };
-  }, [sessionHydrated, token, user]);
+  }, [isAuthenticated, sessionHydrated, user]);
 
   useEffect(() => {
     if (!sessionHydrated) {
@@ -580,7 +580,7 @@ export default function Renderer() {
 
     let disposed = false;
 
-    if (token && user) {
+    if (isAuthenticated && user) {
       ensureBrowserPushSubscription().catch((error) => {
         if (!disposed) {
           console.warn("Browser push registration failed", error);
@@ -593,23 +593,23 @@ export default function Renderer() {
     return () => {
       disposed = true;
     };
-  }, [sessionHydrated, token, user]);
+  }, [isAuthenticated, sessionHydrated, user]);
 
   useEffect(() => {
     if (!sessionHydrated) {
       return;
     }
 
-    if (token && user) {
+    if (isAuthenticated && user) {
       void storeSession(user, {
-        accessToken: token,
+        accessToken: getStoredToken(),
         refreshToken: getStoredRefreshToken(),
         accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
       });
     } else {
       void clearStoredSession();
     }
-  }, [sessionHydrated, token, user]);
+  }, [isAuthenticated, sessionHydrated, user]);
 
   useEffect(() => {
     const appLinksApi = window?.electronAppLinks;
@@ -635,11 +635,11 @@ export default function Renderer() {
     rendererBootstrapFinishedRef.current = true;
     finishPerfTraceOnNextFrame(rendererBootstrapTraceId, {
       sessionHydrated,
-      authenticated: Boolean(token && user),
+      authenticated: Boolean(isAuthenticated && user),
       inviteRoute: isInviteRoute,
       qrLoginRoute: isQrLoginRoute,
     }, 2);
-  }, [isInviteRoute, isQrLoginRoute, loading, sessionHydrated, token, user]);
+  }, [isAuthenticated, isInviteRoute, isQrLoginRoute, loading, sessionHydrated, user]);
 
   useEffect(() => {
     const updaterApi = window?.electronAppUpdate;
@@ -684,7 +684,7 @@ export default function Renderer() {
       nextSession && typeof nextSession === "object" ? nextSession.accessToken || nextSession.token || "" : nextSession;
 
     setUser(nextUser);
-    setToken(accessToken);
+    setIsAuthenticated(Boolean(accessToken));
     setSessionHydrated(true);
     void storeSession(nextUser, nextSession);
 
@@ -698,7 +698,7 @@ export default function Renderer() {
   const handleLogout = () => {
     clearPendingInviteAcceptCode();
     setUser(null);
-    setToken(null);
+    setIsAuthenticated(false);
     setSessionHydrated(true);
     void clearStoredSession();
   };
@@ -799,7 +799,7 @@ export default function Renderer() {
         onInstall={handleInstallDownloadedUpdate}
         onRetry={handleRetryAppUpdateCheck}
       />
-      {token && user ? (
+      {isAuthenticated && user ? (
         <Suspense fallback={shellFallback}>
           {PERF_ENABLED ? (
             <Profiler id="MenuMain" onRender={handleRootProfilerRender}>

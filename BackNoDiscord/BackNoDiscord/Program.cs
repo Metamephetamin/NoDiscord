@@ -84,9 +84,9 @@ builder.Services
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
+                var origin = context.Request.Headers.Origin.ToString();
 
-                if (!string.IsNullOrEmpty(accessToken) &&
-                    (path.StartsWithSegments("/chatHub") || path.StartsWithSegments("/voiceHub")))
+                if (HubQueryTokenPolicy.CanAcceptQueryToken(accessToken, path, origin, builder.Configuration))
                 {
                     context.Token = accessToken;
                 }

@@ -653,7 +653,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
         <video
           className={`message-media__video-frame ${readyFrameSourceUrl === sourceUrl ? "message-media__video-frame--ready" : ""}`.trim()}
           src={sourceUrl}
-          preload="auto"
+          preload="metadata"
           muted
           playsInline
           disablePictureInPicture

@@ -3114,6 +3114,10 @@ const handleDeviceChange = () => {
   };
 
   return {
+    getCurrentChannel() {
+      return currentChannel;
+    },
+
     async connect(user) {
       await ensureSignalConnection(user);
     },

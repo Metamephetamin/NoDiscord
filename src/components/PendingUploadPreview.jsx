@@ -70,7 +70,8 @@ function PendingUploadPreview({
           className={`pending-upload-preview__full ${fullPreviewReady ? "pending-upload-preview__full--ready" : ""}`.trim()}
           muted
           playsInline
-          preload={fullPreviewIsImmediate || !preferThumbnailOnly ? "auto" : "metadata"}
+          preload="metadata"
+          onLoadedMetadata={() => setLoadedPreviewUrl(previewUrl)}
           onLoadedData={() => setLoadedPreviewUrl(previewUrl)}
           onError={() => setLoadedPreviewUrl("")}
         />

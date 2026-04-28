@@ -1,11 +1,8 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
-import MobileProfileScreen from "../../components/MobileProfileScreen";
-import MobileVoiceRoom from "../../components/MobileVoiceRoom";
-import { FriendsMain, FriendsSidebar } from "../../components/FriendsWorkspace";
 import {
   DesktopServerRail,
   MobileDirectChat,
@@ -72,10 +69,6 @@ import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
 import useVoiceRoomWarmup from "../../hooks/useVoiceRoomWarmup";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
-import {
-  MenuMainMobileSettingsShell,
-  MenuMainSettingsContent,
-} from "./MenuMainSettingsRenderer";
 import MenuMainProfilePanelSlot from "./MenuMainProfilePanelSlot";
 import MenuMainOverlayLayer from "./MenuMainOverlayLayer";
 import MenuMainMobileLayout from "./MenuMainMobileLayout";
@@ -204,6 +197,36 @@ const NOISE_PROFILE_OPTIONS = [
   },
 ];
 let voiceRoomClientFactoryPromise = null;
+const MenuMainSettingsContent = lazy(() =>
+  import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainSettingsContent }))
+);
+const MenuMainMobileSettingsShell = lazy(() =>
+  import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainMobileSettingsShell }))
+);
+const FriendsSidebar = lazy(() =>
+  import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsSidebar }))
+);
+const FriendsMain = lazy(() =>
+  import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsMain }))
+);
+const MobileProfileScreen = lazy(() => import("../../components/MobileProfileScreen"));
+const MobileVoiceRoom = lazy(() => import("../../components/MobileVoiceRoom"));
+
+const settingsContentFallback = (
+  <div className="settings-panel settings-panel--loading" aria-busy="true">
+    Загрузка...
+  </div>
+);
+const friendsWorkspaceFallback = (
+  <div className="friends-workspace__loading" aria-busy="true">
+    Загрузка...
+  </div>
+);
+const coldPanelFallback = (
+  <div className="menu-main__lazy-loading" aria-busy="true">
+    Загрузка...
+  </div>
+);
 
 function loadVoiceRoomClientFactory() {
   if (!voiceRoomClientFactoryPromise) {
@@ -724,32 +747,6 @@ export default function MenuMain({
 
     return nextMap;
   }, [activeServer?.id, participantsMap]);
-  const likelyVoiceWarmupChannelId = useMemo(() => {
-    const voiceChannels = Array.isArray(activeServer?.voiceChannels) ? activeServer.voiceChannels : [];
-    if (!voiceChannels.length || currentVoiceChannel) {
-      return "";
-    }
-
-    const rankedChannels = voiceChannels
-      .map((channel) => {
-        const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
-        const participants = activeVoiceParticipantsMap?.[channel.id] || activeVoiceParticipantsMap?.[scopedChannelId] || [];
-        return {
-          id: channel.id,
-          participantCount: Array.isArray(participants) ? participants.length : 0,
-        };
-      })
-      .sort((left, right) => right.participantCount - left.participantCount);
-
-    return String(rankedChannels[0]?.id || "");
-  }, [activeServer?.id, activeServer?.voiceChannels, activeVoiceParticipantsMap, currentVoiceChannel, getScopedVoiceChannelId]);
-  useEffect(() => {
-    if (!likelyVoiceWarmupChannelId) {
-      return;
-    }
-
-    prewarmVoiceChannel(likelyVoiceWarmupChannelId);
-  }, [likelyVoiceWarmupChannelId, prewarmVoiceChannel]);
   const currentVoiceChannelName = useMemo(() => {
     if (isDirectCallChannelId(currentVoiceChannel)) {
       return "Личный звонок";
@@ -5734,8 +5731,11 @@ export default function MenuMain({
       if (voiceJoinAttemptRef.current !== joinAttemptId) {
         const latestPendingChannelId = String(pendingVoiceChannelTargetRef.current || "");
         const latestVisibleChannelId = String(currentVoiceChannelRef.current || "");
+        const clientVoiceChannelId = String(voiceClientRef.current?.getCurrentChannel?.() || "");
         const isStaleChannelStillActive =
-          latestPendingChannelId === scopedChannelId || latestVisibleChannelId === scopedChannelId;
+          latestPendingChannelId === scopedChannelId
+          || latestVisibleChannelId === scopedChannelId
+          || clientVoiceChannelId === scopedChannelId;
         if (isStaleChannelStillActive) {
           try {
             await voiceClientRef.current.leaveChannel();
@@ -7327,18 +7327,24 @@ export default function MenuMain({
     currentServerRole,
   };
 
-  const renderSettingsContent = () => <MenuMainSettingsContent {...settingsContentProps} />;
+  const renderSettingsContent = () => (
+    <Suspense fallback={settingsContentFallback}>
+      <MenuMainSettingsContent {...settingsContentProps} />
+    </Suspense>
+  );
   const renderMobileSettingsShell = () => (
-    <MenuMainMobileSettingsShell
-      activeSettingsTabMeta={activeSettingsTabMeta}
-      user={user}
-      mobileSettingsNavItems={mobileSettingsNavItems}
-      settingsTab={settingsTab}
-      setOpenSettings={setOpenSettings}
-      setSettingsTab={setSettingsTab}
-    >
-      {renderSettingsContent()}
-    </MenuMainMobileSettingsShell>
+    <Suspense fallback={settingsContentFallback}>
+      <MenuMainMobileSettingsShell
+        activeSettingsTabMeta={activeSettingsTabMeta}
+        user={user}
+        mobileSettingsNavItems={mobileSettingsNavItems}
+        settingsTab={settingsTab}
+        setOpenSettings={setOpenSettings}
+        setSettingsTab={setSettingsTab}
+      >
+        {renderSettingsContent()}
+      </MenuMainMobileSettingsShell>
+    </Suspense>
   );
   const closeServerInviteModal = useCallback(() => setServerInviteModalOpen(false), []);
   const clearChannelSearch = useCallback(() => setChannelSearchQuery(""), []);
@@ -7684,30 +7690,32 @@ export default function MenuMain({
     stableStartDirectCallWithUser,
   ]);
   const renderFriendsSidebar = () => (
-    <FriendsSidebar
-      query={friendsSidebarQuery}
-      navItems={FRIENDS_SIDEBAR_ITEMS}
-      friendsPageSection={friendsPageSection}
-      incomingFriendRequestCount={incomingFriendRequestCount}
-      filteredFriends={filteredFriends}
-      filteredConversations={filteredConversations}
-      activeDirectFriendId={activeDirectFriendId}
-      activeConversationId={activeConversationId}
-      directUnreadCounts={directUnreadCounts}
-      chatDraftPresence={chatDraftPresence}
-      currentUserId={currentUserId}
-      profilePanel={renderProfilePanel()}
-      onQueryChange={setFriendsSidebarQuery}
-      onOpenFriendsWorkspace={openFriendsWorkspace}
-      onOpenServersWorkspace={openServersWorkspace}
-      onResetDirect={resetActiveFriendWorkspaceSelection}
-      onSetFriendsSection={setFriendsPageSection}
-      onOpenDirectChat={stableOpenDirectChat}
-      onOpenConversationChat={openConversationChat}
-      onOpenUserContextMenu={openFriendListUserContextMenu}
-      overlayContent={friendListOverlayElement}
-      getDisplayName={getDisplayName}
-    />
+    <Suspense fallback={friendsWorkspaceFallback}>
+      <FriendsSidebar
+        query={friendsSidebarQuery}
+        navItems={FRIENDS_SIDEBAR_ITEMS}
+        friendsPageSection={friendsPageSection}
+        incomingFriendRequestCount={incomingFriendRequestCount}
+        filteredFriends={filteredFriends}
+        filteredConversations={filteredConversations}
+        activeDirectFriendId={activeDirectFriendId}
+        activeConversationId={activeConversationId}
+        directUnreadCounts={directUnreadCounts}
+        chatDraftPresence={chatDraftPresence}
+        currentUserId={currentUserId}
+        profilePanel={renderProfilePanel()}
+        onQueryChange={setFriendsSidebarQuery}
+        onOpenFriendsWorkspace={openFriendsWorkspace}
+        onOpenServersWorkspace={openServersWorkspace}
+        onResetDirect={resetActiveFriendWorkspaceSelection}
+        onSetFriendsSection={setFriendsPageSection}
+        onOpenDirectChat={stableOpenDirectChat}
+        onOpenConversationChat={openConversationChat}
+        onOpenUserContextMenu={openFriendListUserContextMenu}
+        overlayContent={friendListOverlayElement}
+        getDisplayName={getDisplayName}
+      />
+    </Suspense>
   );
   const renderServersSidebar = (includeProfilePanel = true) => (
     <ServersSidebar
@@ -7780,93 +7788,95 @@ export default function MenuMain({
     />
   );
   const renderFriendsMain = () => (
-    <FriendsMain
-      user={user}
-      currentDirectFriend={currentDirectFriend}
-      currentConversationTarget={currentConversationTarget}
-      activeConversationId={activeConversationId}
-      currentDirectChannelId={currentDirectChannelId}
-      currentConversationChannelId={currentConversationChannelId}
-      directConversationTargets={directConversationTargets}
-      directSearchQuery={channelSearchQuery}
-      textChatLocalStateVersion={textChatLocalStateVersion}
-      directCallPanelProps={directCallPanelProps}
-      profileCustomization={profileCustomization}
-      onProfileCustomizationChange={handleProfileCustomizationChange}
-      selectedStreamUserId={selectedStreamUserId}
-      selectedStream={selectedStream}
-      selectedStreamParticipant={selectedStreamParticipant}
-      selectedStreamDebugInfo={selectedStreamDebugInfo}
-      friendsPageSection={friendsPageSection}
-      friends={friends}
-      incomingFriendRequestCount={incomingFriendRequestCount}
-      incomingFriendRequests={incomingFriendRequests}
-      friendRequestsError={friendRequestsError}
-      friendRequestsLoading={friendRequestsLoading}
-      friendRequestActionId={friendRequestActionId}
-      friendEmail={friendEmail}
-      friendQueryMode={friendQueryMode}
-      friendLookupLoading={friendLookupLoading}
-      friendLookupResults={friendLookupResults}
-      friendLookupPerformed={friendLookupPerformed}
-      friendsError={friendsError}
-      isAddingFriend={isAddingFriend}
-      activeContacts={activeContacts}
-      conversations={conversations}
-      conversationsLoading={conversationsLoading}
-      conversationsError={conversationsError}
-      conversationActionLoading={conversationActionLoading}
-      onResetDirect={resetActiveFriendWorkspaceSelection}
-      onSetFriendsSection={setFriendsPageSection}
-      onOpenDirectChat={stableOpenDirectChat}
-      onOpenConversationChat={openConversationChat}
-      onCreateConversation={handleCreateConversation}
-      onUploadConversationAvatar={handleUploadConversationAvatar}
-      onAddConversationMember={handleAddConversationMember}
-      onUpdateConversation={handleUpdateConversation}
-      onUpdateConversationMemberRole={handleUpdateConversationMemberRole}
-      onRemoveConversationMember={handleRemoveConversationMember}
-      onLeaveConversation={async (conversationId) => {
-        const result = await handleLeaveConversation(conversationId);
-        if (String(activeConversationId || "") === String(conversationId || "")) {
-          resetActiveFriendWorkspaceSelection();
-          setFriendsPageSection("conversations");
-        }
-        return result;
-      }}
-      onDeleteConversation={async (conversationId) => {
-        const result = await handleDeleteConversation(conversationId);
-        if (String(activeConversationId || "") === String(conversationId || "")) {
-          resetActiveFriendWorkspaceSelection();
-          setFriendsPageSection("conversations");
-        }
-        return result;
-      }}
-      onClearConversationStatus={() => setConversationActionStatus("")}
-      onStartDirectCall={stableStartDirectCallWithUser}
-      onOpenDirectActions={openFriendListUserContextMenu}
-      onCloseSelectedStream={closeSelectedStream}
-      onFriendRequestAction={handleFriendRequestAction}
-      onFriendSearchSubmit={handleFriendSearchSubmit}
-      onFriendSearchChange={(value) => {
-        setFriendEmail(value);
-        if (friendsError) {
-          setFriendsError("");
-        }
-        if (friendActionStatus) {
-          setFriendActionStatus("");
-        }
-      }}
-      onDirectSearchQueryChange={setChannelSearchQuery}
-      onClearDirectSearchQuery={clearChannelSearch}
-      onAddFriend={handleAddFriend}
-      onOpenServersWorkspace={openServersWorkspace}
-      onImportServer={handleImportServer}
-      onServerShared={markServerAsShared}
-      phoneIcon={PHONE_ICON_URL}
-      searchIcon={SEARCH_ICON_URL}
-      getDisplayName={getDisplayName}
-    />
+    <Suspense fallback={friendsWorkspaceFallback}>
+      <FriendsMain
+        user={user}
+        currentDirectFriend={currentDirectFriend}
+        currentConversationTarget={currentConversationTarget}
+        activeConversationId={activeConversationId}
+        currentDirectChannelId={currentDirectChannelId}
+        currentConversationChannelId={currentConversationChannelId}
+        directConversationTargets={directConversationTargets}
+        directSearchQuery={channelSearchQuery}
+        textChatLocalStateVersion={textChatLocalStateVersion}
+        directCallPanelProps={directCallPanelProps}
+        profileCustomization={profileCustomization}
+        onProfileCustomizationChange={handleProfileCustomizationChange}
+        selectedStreamUserId={selectedStreamUserId}
+        selectedStream={selectedStream}
+        selectedStreamParticipant={selectedStreamParticipant}
+        selectedStreamDebugInfo={selectedStreamDebugInfo}
+        friendsPageSection={friendsPageSection}
+        friends={friends}
+        incomingFriendRequestCount={incomingFriendRequestCount}
+        incomingFriendRequests={incomingFriendRequests}
+        friendRequestsError={friendRequestsError}
+        friendRequestsLoading={friendRequestsLoading}
+        friendRequestActionId={friendRequestActionId}
+        friendEmail={friendEmail}
+        friendQueryMode={friendQueryMode}
+        friendLookupLoading={friendLookupLoading}
+        friendLookupResults={friendLookupResults}
+        friendLookupPerformed={friendLookupPerformed}
+        friendsError={friendsError}
+        isAddingFriend={isAddingFriend}
+        activeContacts={activeContacts}
+        conversations={conversations}
+        conversationsLoading={conversationsLoading}
+        conversationsError={conversationsError}
+        conversationActionLoading={conversationActionLoading}
+        onResetDirect={resetActiveFriendWorkspaceSelection}
+        onSetFriendsSection={setFriendsPageSection}
+        onOpenDirectChat={stableOpenDirectChat}
+        onOpenConversationChat={openConversationChat}
+        onCreateConversation={handleCreateConversation}
+        onUploadConversationAvatar={handleUploadConversationAvatar}
+        onAddConversationMember={handleAddConversationMember}
+        onUpdateConversation={handleUpdateConversation}
+        onUpdateConversationMemberRole={handleUpdateConversationMemberRole}
+        onRemoveConversationMember={handleRemoveConversationMember}
+        onLeaveConversation={async (conversationId) => {
+          const result = await handleLeaveConversation(conversationId);
+          if (String(activeConversationId || "") === String(conversationId || "")) {
+            resetActiveFriendWorkspaceSelection();
+            setFriendsPageSection("conversations");
+          }
+          return result;
+        }}
+        onDeleteConversation={async (conversationId) => {
+          const result = await handleDeleteConversation(conversationId);
+          if (String(activeConversationId || "") === String(conversationId || "")) {
+            resetActiveFriendWorkspaceSelection();
+            setFriendsPageSection("conversations");
+          }
+          return result;
+        }}
+        onClearConversationStatus={() => setConversationActionStatus("")}
+        onStartDirectCall={stableStartDirectCallWithUser}
+        onOpenDirectActions={openFriendListUserContextMenu}
+        onCloseSelectedStream={closeSelectedStream}
+        onFriendRequestAction={handleFriendRequestAction}
+        onFriendSearchSubmit={handleFriendSearchSubmit}
+        onFriendSearchChange={(value) => {
+          setFriendEmail(value);
+          if (friendsError) {
+            setFriendsError("");
+          }
+          if (friendActionStatus) {
+            setFriendActionStatus("");
+          }
+        }}
+        onDirectSearchQueryChange={setChannelSearchQuery}
+        onClearDirectSearchQuery={clearChannelSearch}
+        onAddFriend={handleAddFriend}
+        onOpenServersWorkspace={openServersWorkspace}
+        onImportServer={handleImportServer}
+        onServerShared={markServerAsShared}
+        phoneIcon={PHONE_ICON_URL}
+        searchIcon={SEARCH_ICON_URL}
+        getDisplayName={getDisplayName}
+      />
+    </Suspense>
   );
   const renderServerMain = () => (
     <ServerMain
@@ -7979,56 +7989,60 @@ export default function MenuMain({
     />
   );
   const renderMobileVoiceRoom = () => (
-    <MobileVoiceRoom
-      stageMode={mobileVoiceStageMode}
-      stageCopy={mobileVoiceStageCopy}
-      spotlightParticipant={spotlightVoiceParticipant}
-      stageShellRef={mobileVoiceStageShellRef}
-      stageVideoRef={mobileVoiceStageVideoRef}
-      stageImageRef={mobileVoiceStageImageRef}
-      selectedStream={selectedStream}
-      localSharePreview={localSharePreview}
-      participants={currentVoiceParticipants}
-      canInvite={canInviteToServer(activeServer)}
-      isMicMuted={isMicMuted}
-      isSoundMuted={isSoundMuted}
-      isScreenShareActive={isScreenShareActive}
-      isCameraShareActive={isCameraShareActive}
-      icons={{
-        ...mobileVoiceStageIcons,
-      }}
-      onOpenFullscreen={openMobileVoiceStageFullscreen}
-      onCloseRemoteStream={closeSelectedStream}
-      onCloseLocalPreview={stableCloseLocalSharePreview}
-      onStopScreenShare={stableStopScreenShare}
-      onStopCameraShare={stableStopCameraShare}
-      onWatchStream={stableHandleWatchStream}
-      onInvite={handleInvitePeopleToVoice}
-      onToggleMic={stableToggleMicMute}
-      onToggleSound={stableToggleSoundMute}
-      onOpenChat={openMobileServersChatPane}
-      onScreenShareAction={stableHandleScreenShareAction}
-      onOpenCamera={stableOpenCameraModal}
-      onLeave={stableLeaveVoiceChannel}
-    />
+    <Suspense fallback={coldPanelFallback}>
+      <MobileVoiceRoom
+        stageMode={mobileVoiceStageMode}
+        stageCopy={mobileVoiceStageCopy}
+        spotlightParticipant={spotlightVoiceParticipant}
+        stageShellRef={mobileVoiceStageShellRef}
+        stageVideoRef={mobileVoiceStageVideoRef}
+        stageImageRef={mobileVoiceStageImageRef}
+        selectedStream={selectedStream}
+        localSharePreview={localSharePreview}
+        participants={currentVoiceParticipants}
+        canInvite={canInviteToServer(activeServer)}
+        isMicMuted={isMicMuted}
+        isSoundMuted={isSoundMuted}
+        isScreenShareActive={isScreenShareActive}
+        isCameraShareActive={isCameraShareActive}
+        icons={{
+          ...mobileVoiceStageIcons,
+        }}
+        onOpenFullscreen={openMobileVoiceStageFullscreen}
+        onCloseRemoteStream={closeSelectedStream}
+        onCloseLocalPreview={stableCloseLocalSharePreview}
+        onStopScreenShare={stableStopScreenShare}
+        onStopCameraShare={stableStopCameraShare}
+        onWatchStream={stableHandleWatchStream}
+        onInvite={handleInvitePeopleToVoice}
+        onToggleMic={stableToggleMicMute}
+        onToggleSound={stableToggleSoundMute}
+        onOpenChat={openMobileServersChatPane}
+        onScreenShareAction={stableHandleScreenShareAction}
+        onOpenCamera={stableOpenCameraModal}
+        onLeave={stableLeaveVoiceChannel}
+      />
+    </Suspense>
   );
   const renderMobileProfileScreen = () => (
-    <MobileProfileScreen
-      profileBackgroundSrc={profileBackgroundSrc}
-      profileBackgroundFrame={profileDraft.profileBackgroundFrame}
-      avatarSrc={getUserAvatar(user)}
-      avatarFrame={getUserAvatarFrame(user)}
-      displayName={getDisplayName(user)}
-      email={user?.email || ""}
-      isSpeaking={Boolean(currentVoiceChannel && isCurrentUserSpeaking)}
-      currentVoiceChannelName={currentVoiceChannelName}
-      onChangeAvatar={() => avatarInputRef.current?.click()}
-      onChangeBackground={() => profileBackgroundInputRef.current?.click()}
-      onOpenProfileSettings={() => openSettingsPanel("personal_profile")}
-      onOpenVoiceSettings={() => openSettingsPanel("voice_video")}
-      onOpenNotificationSettings={() => openSettingsPanel("notifications")}
-      onLogout={handleLogout}
-    />
+    <Suspense fallback={coldPanelFallback}>
+      <MobileProfileScreen
+        profileBackgroundSrc={profileBackgroundSrc}
+        profileBackgroundFrame={profileDraft.profileBackgroundFrame}
+        avatarSrc={getUserAvatar(user)}
+        avatarFrame={getUserAvatarFrame(user)}
+        displayName={getDisplayName(user)}
+        email={user?.email || ""}
+        isSpeaking={Boolean(currentVoiceChannel && isCurrentUserSpeaking)}
+        currentVoiceChannelName={currentVoiceChannelName}
+        onChangeAvatar={() => avatarInputRef.current?.click()}
+        onChangeBackground={() => profileBackgroundInputRef.current?.click()}
+        onOpenProfileSettings={() => openSettingsPanel("personal_profile")}
+        onOpenVoiceSettings={() => openSettingsPanel("voice_video")}
+        onOpenNotificationSettings={() => openSettingsPanel("notifications")}
+        onLogout={handleLogout}
+      />
+    </Suspense>
   );
   const canNavigateBack = navigationHistoryRef.current.back.length > 0;
   const canNavigateForward = navigationHistoryRef.current.forward.length > 0;

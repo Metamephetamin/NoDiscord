@@ -371,6 +371,10 @@ export default function Auth({ onAuthSuccess }) {
   }, []);
 
   useEffect(() => {
+    if (isLiteVisualMode) {
+      return undefined;
+    }
+
     const videoNode = authVideoRef.current;
     if (!videoNode) {
       return undefined;
@@ -391,7 +395,7 @@ export default function Auth({ onAuthSuccess }) {
     syncVideoPlayback();
     document.addEventListener("visibilitychange", syncVideoPlayback);
     return () => document.removeEventListener("visibilitychange", syncVideoPlayback);
-  }, []);
+  }, [isLiteVisualMode]);
 
   useEffect(() => {
     if (!emailVerificationModal.open) {
@@ -926,20 +930,22 @@ export default function Auth({ onAuthSuccess }) {
 
   return (
     <div className={["auth-page", mode === "login" ? "auth-page--login" : "auth-page--register", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")}>
-      <video
-        ref={authVideoRef}
-        className="auth-video-bg"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        disablePictureInPicture
-        disableRemotePlayback
-        aria-hidden="true"
-      >
-        <source src={AUTH_BACKGROUND_VIDEO_URL} type="video/mp4" />
-      </video>
+      {!isLiteVisualMode ? (
+        <video
+          ref={authVideoRef}
+          className="auth-video-bg"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          disablePictureInPicture
+          disableRemotePlayback
+          aria-hidden="true"
+        >
+          <source src={AUTH_BACKGROUND_VIDEO_URL} type="video/mp4" />
+        </video>
+      ) : null}
 
       <div className="auth-brand">
         <div className="auth-brand__badge">
