@@ -286,22 +286,24 @@ export default function MenuProfilePanel({
               className="hidden-input"
               onChange={onServerIconChange}
             />
-            <div className="profile__names">
-              <span className="profile__username">{displayName}</span>
-              {activityStatus ? (
-                <span className="profile__activity-status">
-                  <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path d="M10.5 2.25V10.1C10.5 11.42 9.28 12.5 7.78 12.5C6.57 12.5 5.75 11.9 5.75 11.02C5.75 10.1 6.68 9.38 7.9 9.38C8.43 9.38 8.9 9.5 9.25 9.72V4.25L13.75 5.38V7L10.5 6.18V10.1" />
-                  </svg>
-                  <span className="profile__activity-marquee" title={activityStatus}>
-                    <span key={activityStatus} className="profile__activity-track">
-                      <span className="profile__activity-text">{activityStatus}</span>
-                      <span className="profile__activity-text" aria-hidden="true">{activityStatus}</span>
+            {!currentVoiceChannel ? (
+              <div className="profile__names">
+                <span className="profile__username">{displayName}</span>
+                {activityStatus ? (
+                  <span className="profile__activity-status">
+                    <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M10.5 2.25V10.1C10.5 11.42 9.28 12.5 7.78 12.5C6.57 12.5 5.75 11.9 5.75 11.02C5.75 10.1 6.68 9.38 7.9 9.38C8.43 9.38 8.9 9.5 9.25 9.72V4.25L13.75 5.38V7L10.5 6.18V10.1" />
+                    </svg>
+                    <span className="profile__activity-marquee" title={activityStatus}>
+                      <span key={activityStatus} className="profile__activity-track">
+                        <span className="profile__activity-text">{activityStatus}</span>
+                        <span className="profile__activity-text" aria-hidden="true">{activityStatus}</span>
+                      </span>
                     </span>
                   </span>
-                </span>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
+            ) : null}
           </button>
 
           <div className="profile__identity-controls">

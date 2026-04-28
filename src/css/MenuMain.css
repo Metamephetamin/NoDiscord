@@ -9007,6 +9007,14 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
 }
 
+.menu__profile--voice-connected .profile__identity {
+  flex: 0 0 auto;
+  align-items: center;
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
 .profile__identity {
   min-width: 0;
   flex: 1;
