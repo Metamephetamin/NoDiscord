@@ -3,6 +3,7 @@ import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
+import ServerRailContextLayer from "../../components/ServerRailContextLayer";
 import {
   DesktopServerRail,
   MobileDirectChat,
@@ -15,13 +16,6 @@ import "../../css/MenuMain.css";
 import "../../css/MenuProfile.css";
 import "../../css/ListChannels.css";
 import { API_BASE_URL, API_URL } from "../../config/runtime";
-import {
-  isVideoAvatarUrl,
-  readMediaFileDimensions,
-  validateAvatarFile,
-  validateProfileBackgroundFile,
-  validateServerIconFile,
-} from "../../utils/avatarMedia";
 import {
   authFetch,
   getApiErrorMessage,
@@ -36,21 +30,12 @@ import { copyTextToClipboard } from "../../utils/clipboard";
 import { getChatDraftUpdatedEventName, hasChatDraft } from "../../utils/chatDrafts";
 import { buildDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { isDirectCallChannelId } from "../../utils/directCallModel";
-import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
-import {
-  connectIntegration,
-  disconnectIntegration,
-  fetchIntegrations,
-  refreshIntegrationActivity,
-  updateIntegrationSettings,
-} from "../../utils/integrations";
 import { isUserMentioned } from "../../utils/messageMentions";
 import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
 import {
   areNamesUsingSameScript,
   detectNameScript,
   isNicknameUsingSingleScript,
-  normalizeScriptAwareNicknameInput,
   normalizeSingleWordNameInput,
 } from "../../utils/nameScripts";
 import {
@@ -66,18 +51,26 @@ import {
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
+import useTransientScrollbars from "../../hooks/useTransientScrollbars";
 import useVoiceRoomWarmup from "../../hooks/useVoiceRoomWarmup";
 import useMenuMainAudioDevices from "./useMenuMainAudioDevices";
 import useMenuMainCameraPreview from "./useMenuMainCameraPreview";
+import useMenuMainChannelActions from "./useMenuMainChannelActions";
 import useMenuMainDirectCalls from "./useMenuMainDirectCalls";
 import useMenuMainDirectCallHistory from "./useMenuMainDirectCallHistory";
 import useMenuMainDirectCallLifecycle from "./useMenuMainDirectCallLifecycle";
+import useMenuMainIntegrations from "./useMenuMainIntegrations";
 import useMenuMainKeyboardShortcuts from "./useMenuMainKeyboardShortcuts";
 import useMenuMainLocalShareActions from "./useMenuMainLocalShareActions";
+import useMenuMainMediaFrameActions from "./useMenuMainMediaFrameActions";
 import useMenuMainNavigation from "./useMenuMainNavigation";
+import useMenuMainNotificationSound from "./useMenuMainNotificationSound";
+import useMenuMainQrScanner from "./useMenuMainQrScanner";
 import useMenuMainSelfVoiceStateSync from "./useMenuMainSelfVoiceStateSync";
+import useMenuMainServerInviteFlow, { useMenuMainServerInvitePermissions } from "./useMenuMainServerInviteFlow";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
 import useMenuMainVoiceProcessing from "./useMenuMainVoiceProcessing";
+import useStableEvent from "./useStableEvent";
 import MenuMainProfilePanelSlot from "./MenuMainProfilePanelSlot";
 import MenuMainOverlayLayer from "./MenuMainOverlayLayer";
 import MenuMainMobileLayout from "./MenuMainMobileLayout";
@@ -103,14 +96,21 @@ import {
 } from "./menuMainRealtimeComparators";
 import { buildMenuMainQuickSwitcherItems } from "./menuMainQuickSwitcher";
 import {
+  EMPTY_ARRAY,
+  MAX_PROFILE_NICKNAME_LENGTH,
+  clampDeviceVolumePercent,
+  getProfileFullName,
+  getServerSnapshotKey,
+  getServerSyncFingerprint,
+  normalizeProfileNicknameInput,
+} from "./menuMainControllerUtils";
+import {
   DEFAULT_SERVER_ICON,
   resolveMediaUrl,
 } from "../../utils/media";
 import { getDisplayCaptureSupportInfo } from "../../utils/browserMediaSupport";
 import {
-  getAutoMediaFrame,
   getDefaultMediaFrame,
-  normalizeMediaFrame,
   parseMediaFrame,
   serializeMediaFrame,
 } from "../../utils/mediaFrames";
@@ -150,7 +150,6 @@ import {
   normalizeFriend,
   normalizeServers,
   normalizeTextChannelName,
-  NOTIFICATION_SOUND_OPTIONS,
   parseServerChatChannelId,
   PENCIL_ICON_URL,
   PHONE_ICON_URL,
@@ -166,10 +165,7 @@ import {
 } from "../../utils/menuMainModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../../utils/perf";
 
-const MAX_PROFILE_NICKNAME_LENGTH = 50;
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
-const DEVICE_SESSION_REFRESH_TOKEN_HEADER = "X-Refresh-Token";
-const EMPTY_ARRAY = Object.freeze([]);
 const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
   if (!sections[item.section]) {
     sections[item.section] = [];
@@ -219,137 +215,6 @@ function loadVoiceRoomClientFactory() {
   return voiceRoomClientFactoryPromise;
 }
 
-const normalizeProfileNicknameInput = (value) =>
-  normalizeScriptAwareNicknameInput(value, MAX_PROFILE_NICKNAME_LENGTH);
-
-const MAX_DEVICE_VOLUME_PERCENT = 200;
-const getServerSyncFingerprint = (server) => {
-  if (!server?.id) {
-    return "";
-  }
-
-  return JSON.stringify({
-    id: server.id,
-    name: server.name,
-    description: server.description,
-    icon: server.icon,
-    iconFrame: server.iconFrame,
-    isShared: Boolean(server.isShared),
-    ownerId: server.ownerId,
-    roles: server.roles || [],
-    members: server.members || [],
-    channelCategories: server.channelCategories || [],
-    textChannels: server.textChannels || [],
-    voiceChannels: server.voiceChannels || [],
-  });
-};
-
-const getServerSnapshotKey = (serverOrId, ownerId = "") => {
-  if (serverOrId && typeof serverOrId === "object") {
-    return getCanonicalSharedServerId(serverOrId.id || "", serverOrId.ownerId || ownerId);
-  }
-
-  return getCanonicalSharedServerId(String(serverOrId || ""), ownerId);
-};
-
-const getProfileFullName = (profile) => {
-  const firstName = String(profile?.firstName || profile?.first_name || "").trim();
-  const lastName = String(profile?.lastName || profile?.last_name || "").trim();
-  const fullName = `${firstName} ${lastName}`.trim();
-  return fullName;
-};
-
-const clampDeviceVolumePercent = (value, fallback = 100) => {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return fallback;
-  }
-
-  return Math.max(0, Math.min(MAX_DEVICE_VOLUME_PERCENT, Math.round(numericValue)));
-};
-
-function useStableEvent(handler) {
-  const handlerRef = useRef(handler);
-
-  useEffect(() => {
-    handlerRef.current = handler;
-  }, [handler]);
-
-  return useCallback((...args) => handlerRef.current?.(...args), []);
-}
-
-const withListOrder = (items = []) => items.map((item, index) => ({ ...item, order: index }));
-
-const reorderById = (items = [], sourceId, targetId) => {
-  const sourceIndex = items.findIndex((item) => String(item?.id || "") === String(sourceId || ""));
-  const targetIndex = items.findIndex((item) => String(item?.id || "") === String(targetId || ""));
-  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
-    return items;
-  }
-
-  const nextItems = [...items];
-  const [movedItem] = nextItems.splice(sourceIndex, 1);
-  nextItems.splice(targetIndex, 0, movedItem);
-  return withListOrder(nextItems);
-};
-
-const normalizeChannelCategoryId = (categoryId) => String(categoryId || "");
-
-const moveChannelInList = (channels = [], { channelId, targetChannelId = "", targetCategoryId = "" } = {}) => {
-  const normalizedChannelId = String(channelId || "");
-  const normalizedTargetChannelId = String(targetChannelId || "");
-  const normalizedTargetCategoryId = normalizeChannelCategoryId(targetCategoryId);
-  const sourceIndex = channels.findIndex((channel) => String(channel?.id || "") === normalizedChannelId);
-  if (sourceIndex === -1) {
-    return channels;
-  }
-
-  const nextChannels = [...channels];
-  const [sourceChannel] = nextChannels.splice(sourceIndex, 1);
-  const movedChannel = { ...sourceChannel, categoryId: normalizedTargetCategoryId };
-  let insertIndex = -1;
-
-  if (normalizedTargetChannelId) {
-    insertIndex = nextChannels.findIndex((channel) => String(channel?.id || "") === normalizedTargetChannelId);
-  }
-
-  if (insertIndex === -1) {
-    insertIndex = nextChannels.length;
-    for (let index = nextChannels.length - 1; index >= 0; index -= 1) {
-      if (normalizeChannelCategoryId(nextChannels[index]?.categoryId) === normalizedTargetCategoryId) {
-        insertIndex = index + 1;
-        break;
-      }
-    }
-  }
-
-  nextChannels.splice(insertIndex, 0, movedChannel);
-
-  const categoryOrder = new Map();
-  return nextChannels.map((channel) => {
-    const categoryKey = normalizeChannelCategoryId(channel.categoryId);
-    const order = categoryOrder.get(categoryKey) || 0;
-    categoryOrder.set(categoryKey, order + 1);
-    return { ...channel, order };
-  });
-};
-
-const parseQrLoginPayload = (value) => {
-  const rawValue = String(value || "").trim();
-  if (!rawValue) {
-    return null;
-  }
-
-  try {
-    const url = new URL(rawValue, typeof window !== "undefined" ? window.location.origin : API_URL);
-    const sessionId = String(url.searchParams.get("sid") || "").trim();
-    const scannerToken = String(url.searchParams.get("token") || "").trim();
-    return sessionId && scannerToken ? { sessionId, scannerToken } : null;
-  } catch {
-    return null;
-  }
-};
-
 export default function MenuMain({
   user,
   setUser,
@@ -379,7 +244,6 @@ export default function MenuMain({
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
-  const [showQrScannerModal, setShowQrScannerModal] = useState(false);
   const [screenShareError, setScreenShareError] = useState("");
   const [showCreateServerModal, setShowCreateServerModal] = useState(false);
   const [createServerName, setCreateServerName] = useState("");
@@ -419,14 +283,6 @@ export default function MenuMain({
   const [workspaceStatusToasts, setWorkspaceStatusToasts] = useState([]);
   const [directUnreadCounts, setDirectUnreadCounts] = useState({});
   const [serverUnreadCounts, setServerUnreadCounts] = useState({});
-  const [notificationSoundEnabled, setNotificationSoundEnabled] = useState(true);
-  const [notificationSoundId, setNotificationSoundId] = useState(NOTIFICATION_SOUND_OPTIONS[0].id);
-  const [customNotificationSoundData, setCustomNotificationSoundData] = useState("");
-  const [customNotificationSoundName, setCustomNotificationSoundName] = useState("");
-  const [notificationSoundError, setNotificationSoundError] = useState("");
-  const [directMessageSoundEnabled, setDirectMessageSoundEnabled] = useState(true);
-  const [directMessageSendSoundId, setDirectMessageSendSoundId] = useState(getDirectMessageSoundOptions("send")[0]?.id || "classic");
-  const [directMessageReceiveSoundId, setDirectMessageReceiveSoundId] = useState(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
   const [chatDraftPresence, setChatDraftPresence] = useState({});
   const [textChatLocalStateVersion, setTextChatLocalStateVersion] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState(() => readWorkspaceState(user).workspaceMode || "servers");
@@ -478,26 +334,14 @@ export default function MenuMain({
     apiBaseUrl: API_BASE_URL,
     activeDirectFriendId,
     friendsPageSection,
-  });  const [settingsTab, setSettingsTab] = useState("account");
+  });
+  const [settingsTab, setSettingsTab] = useState("account");
   const [channelSettingsState, setChannelSettingsState] = useState(null);
   const [autoInputSensitivity, setAutoInputSensitivity] = useState(true);
   const [showMicMenu, setShowMicMenu] = useState(false);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [showSoundMenu, setShowSoundMenu] = useState(false);
-  const [deviceSessions, setDeviceSessions] = useState([]);
-  const [deviceSessionsLoading, setDeviceSessionsLoading] = useState(false);
-  const [deviceSessionsError, setDeviceSessionsError] = useState("");
-  const [integrations, setIntegrations] = useState([]);
-  const [integrationsLoading, setIntegrationsLoading] = useState(false);
-  const [integrationsStatus, setIntegrationsStatus] = useState("");
-  const [integrationActionBusy, setIntegrationActionBusy] = useState("");
-  const [qrScannerDevices, setQrScannerDevices] = useState([]);
-  const [selectedQrScannerDeviceId, setSelectedQrScannerDeviceId] = useState("");
-  const [qrScannerError, setQrScannerError] = useState("");
-  const [qrScannerStatus, setQrScannerStatus] = useState("");
-  const [hasQrScannerPreview, setHasQrScannerPreview] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
-  const [serverInviteModalOpen, setServerInviteModalOpen] = useState(false);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState("");
   const [quickSwitcherSelectedIndex, setQuickSwitcherSelectedIndex] = useState(0);
@@ -522,7 +366,6 @@ export default function MenuMain({
     isBusy: false,
     awaitingCode: false,
   });
-  const [mediaFrameEditorState, setMediaFrameEditorState] = useState(null);
   const [isMobileViewport, setIsMobileViewport] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return false;
@@ -545,15 +388,6 @@ export default function MenuMain({
   const noiseMenuRef = useRef(null);
   const micMenuRef = useRef(null);
   const soundMenuRef = useRef(null);
-  const qrScannerPreviewRef = useRef(null);
-  const qrScannerStreamRef = useRef(null);
-  const qrScannerFrameRef = useRef(0);
-  const qrScannerBusyRef = useRef(false);
-  const qrScannerCooldownUntilRef = useRef(0);
-  const integrationOAuthPollRef = useRef(null);
-  const avatarInputRef = useRef(null);
-  const profileBackgroundInputRef = useRef(null);
-  const serverIconInputRef = useRef(null);
   const mobileVoiceStageShellRef = useRef(null);
   const mobileVoiceStageVideoRef = useRef(null);
   const mobileVoiceStageImageRef = useRef(null);
@@ -561,7 +395,6 @@ export default function MenuMain({
   const voiceJoinInFlightRef = useRef(false);
   const pendingVoiceChannelTargetRef = useRef("");
   const suppressedVoiceChannelRef = useRef("");
-  const notificationSoundInputRef = useRef(null);
   const directCallStateRef = useRef(createDirectCallState());
   const currentVoiceChannelRef = useRef(null);
   const voiceClientRef = useRef(null);
@@ -590,6 +423,18 @@ export default function MenuMain({
   const suppressedServerClickRef = useRef("");
   const micLevelUiActiveRef = useRef(false);
   const lastServerSyncFingerprintRef = useRef("");
+  const leaveVoiceChannelRef = useRef(null);
+
+  useTransientScrollbars();
+
+  const requestLeaveVoiceChannel = useCallback(() => {
+    if (!leaveVoiceChannelRef.current) {
+      return Promise.resolve();
+    }
+
+    return leaveVoiceChannelRef.current();
+  }, []);
+
   const {
     serversStorageKey,
     activeServerStorageKey,
@@ -617,6 +462,58 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
   } = useMenuMainStorageKeys(user);
+  const {
+    notificationSoundEnabled,
+    setNotificationSoundEnabled,
+    notificationSoundId,
+    setNotificationSoundId,
+    notificationSoundOptions,
+    customNotificationSoundData,
+    setCustomNotificationSoundData,
+    customNotificationSoundName,
+    setCustomNotificationSoundName,
+    notificationSoundError,
+    setNotificationSoundError,
+    notificationSoundInputRef,
+    directMessageSoundEnabled,
+    setDirectMessageSoundEnabled,
+    directMessageSendSoundId,
+    setDirectMessageSendSoundId,
+    directMessageReceiveSoundId,
+    setDirectMessageReceiveSoundId,
+    handleCustomNotificationSoundChange,
+    playNotificationSound,
+    playDirectMessageReceiveSound,
+  } = useMenuMainNotificationSound({
+    user,
+    directMessageSoundEnabledStorageKey,
+    directMessageSendSoundStorageKey,
+    directMessageReceiveSoundStorageKey,
+    notificationSoundEnabledStorageKey,
+    notificationSoundStorageKey,
+    notificationSoundCustomDataStorageKey,
+    notificationSoundCustomNameStorageKey,
+  });
+  const {
+    deviceSessions,
+    deviceSessionsLoading,
+    deviceSessionsError,
+    refreshDeviceSessions,
+    integrations,
+    integrationsLoading,
+    integrationsStatus,
+    integrationActionBusy,
+    handleConnectIntegration,
+    handleDisconnectIntegration,
+    handleToggleIntegrationSetting,
+  } = useMenuMainIntegrations({
+    user,
+    setUser,
+    openSettings,
+    settingsTab,
+    currentUserId,
+    updateFriendProfile,
+  });
   const {
     cameraDevices,
     selectedVideoDeviceId,
@@ -1069,10 +966,7 @@ export default function MenuMain({
   const canManageChannels = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_channels"), [activeServer, currentUserId]);
   const canManageRoles = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_roles"), [activeServer, currentUserId]);
   const canInviteMembers = useMemo(() => hasServerPermission(activeServer, currentUserId, "invite_members"), [activeServer, currentUserId]);
-  const canInviteToServer = (server) =>
-    Boolean(server) &&
-    !isPersonalDefaultServer(server, user) &&
-    (hasServerPermission(server, currentUserId, "invite_members") || hasServerPermission(server, currentUserId, "manage_server"));
+  const { canInviteToServer } = useMenuMainServerInvitePermissions({ currentUserId, user });
   const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
   const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
@@ -1364,43 +1258,6 @@ export default function MenuMain({
       return title.includes(query) || memberNames.includes(query);
     });
   }, [conversationTargets, friendsSidebarQuery, getDisplayName]);
-  const notificationSoundOptions = useMemo(() => {
-    if (!customNotificationSoundData && notificationSoundId !== "custom") {
-      return NOTIFICATION_SOUND_OPTIONS;
-    }
-
-    return [
-      ...NOTIFICATION_SOUND_OPTIONS,
-      {
-        id: "custom",
-        label: customNotificationSoundName ? `Свой файл: ${customNotificationSoundName}` : "Свой файл",
-        path: customNotificationSoundData,
-      },
-    ];
-  }, [customNotificationSoundData, customNotificationSoundName, notificationSoundId]);
-  const activeNotificationSound = useMemo(
-    () => notificationSoundOptions.find((option) => option.id === notificationSoundId) || notificationSoundOptions[0],
-    [notificationSoundId, notificationSoundOptions]
-  );
-  const directMessageReceiveSoundPath = useMemo(
-    () => getDirectMessageSoundOptions("receive").find((option) => option.id === directMessageReceiveSoundId)?.path || "",
-    [directMessageReceiveSoundId]
-  );
-
-  const playSoundPath = (soundPath, volume = 0.42) => {
-    if (!soundPath) {
-      return;
-    }
-
-    try {
-      const audio = new Audio(soundPath);
-      audio.volume = volume;
-      audio.preload = "auto";
-      audio.play().catch(() => {});
-    } catch {
-      // ignore sound failures
-    }
-  };
 
   const playUiTone = (type) => {
     try {
@@ -1471,20 +1328,6 @@ export default function MenuMain({
       }, 90);
     }
   };
-  const playNotificationSound = () => {
-    if (!notificationSoundEnabled || !activeNotificationSound?.path) {
-      return;
-    }
-
-    playSoundPath(activeNotificationSound.path);
-  };
-  const playDirectMessageReceiveSound = () => {
-    if (!directMessageSoundEnabled || !directMessageReceiveSoundPath) {
-      return;
-    }
-
-    playSoundPath(directMessageReceiveSoundPath, 0.4);
-  };
   const incrementDirectUnread = (channelId) => {
     if (!channelId) {
       return;
@@ -1534,78 +1377,6 @@ export default function MenuMain({
       delete next[channelKey];
       return next;
     });
-  };
-  const validateCustomNotificationSound = async (file) => {
-    const fileName = String(file?.name || "").trim();
-    const lowerName = fileName.toLowerCase();
-    const fileType = String(file?.type || "").toLowerCase();
-    const isSupportedType =
-      lowerName.endsWith(".mp3") ||
-      lowerName.endsWith(".wav") ||
-      fileType === "audio/mpeg" ||
-      fileType === "audio/mp3" ||
-      fileType === "audio/wav" ||
-      fileType === "audio/x-wav";
-
-    if (!isSupportedType) {
-      throw new Error("Можно выбрать только MP3 или WAV файл.");
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-
-    try {
-      const durationSeconds = await new Promise((resolve, reject) => {
-        const audio = new Audio();
-        audio.preload = "metadata";
-        audio.onloadedmetadata = () => {
-          const duration = Number(audio.duration || 0);
-          if (!Number.isFinite(duration) || duration <= 0) {
-            reject(new Error("Не удалось определить длительность звука."));
-            return;
-          }
-
-          resolve(duration);
-        };
-        audio.onerror = () => reject(new Error("Не удалось прочитать выбранный аудиофайл."));
-        audio.src = objectUrl;
-      });
-
-      if (durationSeconds > 3) {
-        throw new Error("Звук уведомления должен быть не длиннее 3 секунд.");
-      }
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
-
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Не удалось сохранить выбранный аудиофайл."));
-      reader.readAsDataURL(file);
-    });
-
-    return {
-      name: fileName || "custom-notification-sound",
-      dataUrl,
-    };
-  };
-  const handleCustomNotificationSoundChange = async (event) => {
-    const file = event.target.files?.[0] || null;
-    event.target.value = "";
-
-    if (!file) {
-      return;
-    }
-
-    try {
-      setNotificationSoundError("");
-      const validatedSound = await validateCustomNotificationSound(file);
-      setCustomNotificationSoundData(validatedSound.dataUrl);
-      setCustomNotificationSoundName(validatedSound.name);
-      setNotificationSoundId("custom");
-    } catch (error) {
-      setNotificationSoundError(error.message || "Не удалось применить выбранный звук уведомления.");
-    }
   };
   const logVoiceHubError = (label, error) => {
     if (isUnauthorizedError(error)) {
@@ -2370,114 +2141,6 @@ export default function MenuMain({
 
   useEffect(() => {
     if (!user) {
-      setNotificationSoundEnabled(true);
-      return;
-    }
-
-    try {
-      const storedSetting = localStorage.getItem(notificationSoundEnabledStorageKey);
-      setNotificationSoundEnabled(storedSetting !== "false");
-    } catch {
-      setNotificationSoundEnabled(true);
-    }
-  }, [notificationSoundEnabledStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setDirectMessageSoundEnabled(true);
-      return;
-    }
-
-    try {
-      const storedSetting = localStorage.getItem(directMessageSoundEnabledStorageKey);
-      setDirectMessageSoundEnabled(storedSetting !== "false");
-    } catch {
-      setDirectMessageSoundEnabled(true);
-    }
-  }, [directMessageSoundEnabledStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setDirectMessageSendSoundId(getDirectMessageSoundOptions("send")[0]?.id || "classic");
-      return;
-    }
-
-    try {
-      const storedSoundId = localStorage.getItem(directMessageSendSoundStorageKey);
-      setDirectMessageSendSoundId(
-        getDirectMessageSoundOptions("send").some((option) => option.id === storedSoundId)
-          ? storedSoundId
-          : getDirectMessageSoundOptions("send")[0]?.id || "classic"
-      );
-    } catch {
-      setDirectMessageSendSoundId(getDirectMessageSoundOptions("send")[0]?.id || "classic");
-    }
-  }, [directMessageSendSoundStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setDirectMessageReceiveSoundId(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
-      return;
-    }
-
-    try {
-      const storedSoundId = localStorage.getItem(directMessageReceiveSoundStorageKey);
-      setDirectMessageReceiveSoundId(
-        getDirectMessageSoundOptions("receive").some((option) => option.id === storedSoundId)
-          ? storedSoundId
-          : getDirectMessageSoundOptions("receive")[0]?.id || "classic"
-      );
-    } catch {
-      setDirectMessageReceiveSoundId(getDirectMessageSoundOptions("receive")[0]?.id || "classic");
-    }
-  }, [directMessageReceiveSoundStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setNotificationSoundId(NOTIFICATION_SOUND_OPTIONS[0].id);
-      return;
-    }
-
-    try {
-      const storedSoundId = localStorage.getItem(notificationSoundStorageKey);
-      setNotificationSoundId(
-        storedSoundId === "custom" || NOTIFICATION_SOUND_OPTIONS.some((option) => option.id === storedSoundId)
-          ? storedSoundId
-          : NOTIFICATION_SOUND_OPTIONS[0].id
-      );
-    } catch {
-      setNotificationSoundId(NOTIFICATION_SOUND_OPTIONS[0].id);
-    }
-  }, [notificationSoundStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setCustomNotificationSoundData("");
-      return;
-    }
-
-    try {
-      setCustomNotificationSoundData(localStorage.getItem(notificationSoundCustomDataStorageKey) || "");
-    } catch {
-      setCustomNotificationSoundData("");
-    }
-  }, [notificationSoundCustomDataStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setCustomNotificationSoundName("");
-      return;
-    }
-
-    try {
-      setCustomNotificationSoundName(localStorage.getItem(notificationSoundCustomNameStorageKey) || "");
-    } catch {
-      setCustomNotificationSoundName("");
-    }
-  }, [notificationSoundCustomNameStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
       return;
     }
 
@@ -2511,104 +2174,6 @@ export default function MenuMain({
       // ignore storage failures
     }
   }, [serverNotificationsEnabled, serverNotificationsStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(notificationSoundEnabledStorageKey, String(notificationSoundEnabled));
-    } catch {
-      // ignore storage failures
-    }
-  }, [notificationSoundEnabled, notificationSoundEnabledStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(directMessageSoundEnabledStorageKey, String(directMessageSoundEnabled));
-    } catch {
-      // ignore storage failures
-    }
-  }, [directMessageSoundEnabled, directMessageSoundEnabledStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(directMessageSendSoundStorageKey, directMessageSendSoundId);
-    } catch {
-      // ignore storage failures
-    }
-  }, [directMessageSendSoundId, directMessageSendSoundStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(directMessageReceiveSoundStorageKey, directMessageReceiveSoundId);
-    } catch {
-      // ignore storage failures
-    }
-  }, [directMessageReceiveSoundId, directMessageReceiveSoundStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(notificationSoundStorageKey, notificationSoundId);
-    } catch {
-      // ignore storage failures
-    }
-  }, [notificationSoundId, notificationSoundStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      if (customNotificationSoundData) {
-        localStorage.setItem(notificationSoundCustomDataStorageKey, customNotificationSoundData);
-      } else {
-        localStorage.removeItem(notificationSoundCustomDataStorageKey);
-      }
-    } catch {
-      // ignore storage failures
-    }
-  }, [customNotificationSoundData, notificationSoundCustomDataStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      if (customNotificationSoundName) {
-        localStorage.setItem(notificationSoundCustomNameStorageKey, customNotificationSoundName);
-      } else {
-        localStorage.removeItem(notificationSoundCustomNameStorageKey);
-      }
-    } catch {
-      // ignore storage failures
-    }
-  }, [customNotificationSoundName, notificationSoundCustomNameStorageKey, user]);
-
-  useEffect(() => {
-    if (notificationSoundId === "custom" && !customNotificationSoundData && !user) {
-      setNotificationSoundId(NOTIFICATION_SOUND_OPTIONS[0].id);
-    }
-  }, [customNotificationSoundData, notificationSoundId, user]);
 
   useEffect(() => {
     if (!user) {
@@ -3775,21 +3340,6 @@ export default function MenuMain({
     stopCameraPreview();
   }, []);
   useEffect(() => {
-    if (!showQrScannerModal) {
-      stopQrScannerPreview();
-      return;
-    }
-
-    if (!hasQrScannerPreview) {
-      return;
-    }
-
-    startQrScannerLoop();
-  }, [hasQrScannerPreview, showQrScannerModal]);
-  useEffect(() => () => {
-    stopQrScannerPreview();
-  }, []);
-  useEffect(() => {
     const previousChannel = previousVoiceChannelRef.current;
     if (voiceTransitionSoundTimeoutRef.current) {
       clearTimeout(voiceTransitionSoundTimeoutRef.current);
@@ -4115,90 +3665,32 @@ export default function MenuMain({
     setCreateServerIconFrame(getDefaultMediaFrame());
     setCreateServerError("");
   };
-  const openChannelSettings = (type, channel) => {
-    if (!canManageChannels || !channel?.id) return;
-
-    setChannelSettingsState({
-      type,
-      channelId: channel.id,
-    });
-    setChannelRenameState(null);
-  };
-  const closeChannelSettings = () => {
-    setChannelSettingsState(null);
-  };
-  const updateChannelSettings = (type, channelId, patch) => {
-    if (!canManageChannels || !channelId || !patch) return;
-
-    if (type === "voice") {
-      updateServer((server) => ({
-        ...server,
-        voiceChannels: server.voiceChannels.map((channel) =>
-          channel.id === channelId
-            ? { ...channel, ...patch, name: patch.name !== undefined ? String(patch.name ?? "") : channel.name }
-            : channel
-        ),
-      }));
-      return;
-    }
-
-    updateServer((server) => ({
-      ...server,
-      textChannels: server.textChannels.map((channel) =>
-        channel.id === channelId
-          ? { ...channel, ...patch, name: patch.name !== undefined ? String(patch.name ?? "") : channel.name }
-          : channel
-      ),
-    }));
-  };
-  const cancelChannelRename = () => setChannelRenameState(null);
-  const updateChannelRenameValue = (value) => {
-    setChannelRenameState((previous) => (previous ? { ...previous, value } : previous));
-  };
-  const submitChannelRename = () => {
-    if (!channelRenameState?.channelId) return;
-
-    const nextName = channelRenameState.value.trim();
-    if (!nextName) {
-      cancelChannelRename();
-      return;
-    }
-
-    if (channelRenameState.type === "voice") {
-      updateVoiceChannelName(channelRenameState.channelId, nextName);
-    } else {
-      updateTextChannelName(channelRenameState.channelId, nextName);
-    }
-
-    cancelChannelRename();
-  };
+  const {
+    mediaFrameEditorState,
+    avatarInputRef,
+    profileBackgroundInputRef,
+    serverIconInputRef,
+    closeMediaFrameEditor,
+    handleMediaFrameConfirm,
+    handleCreateServerIconChange,
+    handleAvatarChange,
+    handleProfileBackgroundChange,
+    handleServerIconChange,
+  } = useMenuMainMediaFrameActions({
+    user,
+    setUser,
+    activeServer,
+    canManageServer,
+    updateServer,
+    setProfileDraft,
+    setProfileStatus,
+    createServerIconFrame,
+    setCreateServerIcon,
+    setCreateServerIconFrame,
+    setCreateServerError,
+  });
   const handleAddServer = () => {
     openCreateServerModal();
-  };
-  const handleCreateServerIconChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    try {
-      const validationError = await validateServerIconFile(file);
-      if (validationError) {
-        setCreateServerError(validationError);
-        return;
-      }
-    } catch (error) {
-      console.error("Ошибка подготовки иконки сервера:", error);
-      setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
-      return;
-    }
-
-    openMediaFrameEditor({
-      kind: "createServerIcon",
-      target: "serverIcon",
-      file,
-      initialFrame: createServerIconFrame,
-      title: "Иконка сервера",
-    });
   };
   const handleCreateServerSubmit = (event) => {
     event?.preventDefault?.();
@@ -4255,205 +3747,6 @@ export default function MenuMain({
     setSelectedStreamUserId(null);
     setProfileStatus("Сервер удалён.");
   };
-  const handleDeleteTextChannel = (channelId) => {
-    if (!canManageChannels) return;
-    if (!activeServer) return;
-    const nextChannels = activeServer.textChannels.filter((channel) => channel.id !== channelId);
-    updateServer((server) => ({ ...server, textChannels: nextChannels }));
-    if (currentTextChannelId === channelId) setCurrentTextChannelId(nextChannels[0]?.id || "");
-    setChannelSettingsState((previous) => (previous?.type === "text" && previous.channelId === channelId ? null : previous));
-  };
-  const handleDeleteVoiceChannel = async (channelId) => {
-    if (!canManageChannels) return;
-    if (!activeServer) return;
-    if (currentVoiceChannel === getScopedVoiceChannelId(activeServer.id, channelId)) await leaveVoiceChannel();
-    updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.filter((channel) => channel.id !== channelId) }));
-    setChannelSettingsState((previous) => (previous?.type === "voice" && previous.channelId === channelId ? null : previous));
-  };
-  const addTextChannel = () => {
-    if (!canManageChannels || !activeServer) return;
-    const channel = { id: createId("text"), name: "новый-канал" };
-    updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
-    setCurrentTextChannelId(channel.id);
-    setDesktopServerPane("text");
-    setChannelRenameState({
-      type: "text",
-      channelId: channel.id,
-      value: channel.name,
-    });
-  };
-  const addVoiceChannel = () => {
-    if (!canManageChannels || !activeServer) return;
-    const channel = { id: createId("voice"), name: "голосовой-канал" };
-    updateServer((server) => ({ ...server, voiceChannels: [...server.voiceChannels, channel] }));
-    setChannelRenameState({
-      type: "voice",
-      channelId: channel.id,
-      value: channel.name,
-    });
-  };
-  const createChannelCategory = ({ name, privateCategory = false } = {}) => {
-    if (!canManageChannels || !activeServer) return;
-    const category = {
-      id: createId("category"),
-      name: String(name || "Новая категория").trim() || "Новая категория",
-      privateCategory: Boolean(privateCategory),
-      collapsed: false,
-      order: activeServer.channelCategories?.length || 0,
-    };
-
-    updateServer((server) => ({
-      ...server,
-      channelCategories: [...(server.channelCategories || []), category],
-    }));
-  };
-  const toggleChannelCategory = (categoryId) => {
-    if (!activeServer || !categoryId) return;
-
-    updateServer((server) => ({
-      ...server,
-      channelCategories: (server.channelCategories || []).map((category) =>
-        category.id === categoryId
-          ? { ...category, collapsed: !category.collapsed }
-          : category
-      ),
-    }));
-  };
-  const reorderChannelCategories = (sourceCategoryId, targetCategoryId) => {
-    if (!canManageChannels || !activeServer || !sourceCategoryId || !targetCategoryId) return;
-
-    updateServer((server) => ({
-      ...server,
-      channelCategories: reorderById(server.channelCategories || [], sourceCategoryId, targetCategoryId),
-    }));
-  };
-  const moveServerChannel = ({ type = "text", channelId = "", targetChannelId = "", targetCategoryId = "" } = {}) => {
-    if (!canManageChannels || !activeServer || !channelId) return;
-
-    if (String(type || "text") === "voice") {
-      updateServer((server) => ({
-        ...server,
-        voiceChannels: moveChannelInList(server.voiceChannels || [], { channelId, targetChannelId, targetCategoryId }),
-      }));
-      return;
-    }
-
-    updateServer((server) => ({
-      ...server,
-      textChannels: moveChannelInList(server.textChannels || [], { channelId, targetChannelId, targetCategoryId }),
-    }));
-  };
-  const createServerChannel = ({ type = "text", name = "", categoryId = "" } = {}) => {
-    if (!canManageChannels || !activeServer) return null;
-
-    const normalizedType = String(type || "text");
-    const normalizedCategoryId = String(categoryId || "");
-    const category = (activeServer.channelCategories || []).find((item) => item.id === normalizedCategoryId);
-    const inheritedPrivateChannel = Boolean(category?.privateCategory);
-    const fallbackName =
-      normalizedType === "voice"
-        ? "голосовой-канал"
-        : normalizedType === "forum"
-          ? "форум"
-          : "новый-канал";
-    const channelName = String(name || fallbackName).trim() || fallbackName;
-
-    if (normalizedType === "voice") {
-      const channel = {
-        id: createId("voice"),
-        name: channelName,
-        categoryId: normalizedCategoryId,
-        privateChannel: inheritedPrivateChannel,
-      };
-      const nextServer = { ...activeServer, voiceChannels: [...activeServer.voiceChannels, channel] };
-      updateServer(() => nextServer);
-      if (nextServer.isShared) {
-        lastServerSyncFingerprintRef.current = getServerSyncFingerprint(nextServer);
-        void syncServerSnapshot(nextServer, { applyResponse: false });
-      }
-      setChannelRenameState({
-        type: "voice",
-        channelId: channel.id,
-        value: channel.name,
-      });
-      return channel;
-    }
-
-    const channel = {
-      id: createId(normalizedType === "forum" ? "forum" : "text"),
-      name: normalizeTextChannelName(channelName, fallbackName),
-      categoryId: normalizedCategoryId,
-      kind: normalizedType === "forum" ? "forum" : "text",
-      privateChannel: inheritedPrivateChannel,
-      forumPosts: normalizedType === "forum" ? [] : undefined,
-    };
-    const nextServer = { ...activeServer, textChannels: [...activeServer.textChannels, channel] };
-    updateServer(() => nextServer);
-    if (nextServer.isShared) {
-      lastServerSyncFingerprintRef.current = getServerSyncFingerprint(nextServer);
-      void syncServerSnapshot(nextServer, { applyResponse: false });
-    }
-    setCurrentTextChannelId(channel.id);
-    setDesktopServerPane("text");
-    setChannelRenameState({
-      type: "text",
-      channelId: channel.id,
-      value: channel.name,
-    });
-    return channel;
-  };
-  const createForumPost = (channelId, post) => {
-    if (!activeServer || !channelId || !post?.title) return null;
-
-    const createdPost = {
-      id: createId("forum-post"),
-      title: String(post.title || "").trim(),
-      content: String(post.content || "").trim(),
-      authorName: getDisplayName(user),
-      authorAvatar: getUserAvatar(user),
-      createdAt: new Date().toISOString(),
-      reactions: 0,
-      replies: [],
-    };
-
-    updateServer((server) => ({
-      ...server,
-      textChannels: server.textChannels.map((channel) =>
-        channel.id === channelId
-          ? { ...channel, forumPosts: [...(channel.forumPosts || []), createdPost] }
-          : channel
-      ),
-    }));
-
-    return createdPost;
-  };
-  const addForumReply = (channelId, postId, text) => {
-    if (!activeServer || !channelId || !postId || !String(text || "").trim()) return;
-
-    const reply = {
-      id: createId("forum-reply"),
-      text: String(text || "").trim(),
-      authorName: getDisplayName(user),
-      authorAvatar: getUserAvatar(user),
-      createdAt: new Date().toISOString(),
-    };
-
-    updateServer((server) => ({
-      ...server,
-      textChannels: server.textChannels.map((channel) =>
-        channel.id === channelId
-          ? {
-              ...channel,
-              forumPosts: (channel.forumPosts || []).map((post) =>
-                post.id === postId
-                  ? { ...post, replies: [...(post.replies || []), reply] }
-                  : post
-              ),
-            }
-          : channel
-      ),
-    }));
-  };
   const updateActiveServerName = (value) => {
     if (!canManageServer) return;
     updateServer((server) => ({ ...server, name: value }));
@@ -4461,183 +3754,6 @@ export default function MenuMain({
   const updateActiveServerDescription = (value) => {
     if (!canManageServer) return;
     updateServer((server) => ({ ...server, description: String(value || "").slice(0, 280) }));
-  };
-  const revokeMediaEditorPreviewUrl = (editorState) => {
-    const previewUrl = String(editorState?.previewUrl || "");
-    if (previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(previewUrl);
-    }
-  };
-  const closeMediaFrameEditor = () => {
-    revokeMediaEditorPreviewUrl(mediaFrameEditorState);
-    setMediaFrameEditorState(null);
-  };
-  const openMediaFrameEditor = ({ kind, target, file, title }) => {
-    const previewUrl = URL.createObjectURL(file);
-    const fallbackFrame = normalizeMediaFrame(getDefaultMediaFrame());
-    revokeMediaEditorPreviewUrl(mediaFrameEditorState);
-    setMediaFrameEditorState({
-      kind,
-      target,
-      title: title || "",
-      file,
-      previewUrl,
-      frame: fallbackFrame,
-      autoFrame: fallbackFrame,
-      activeServerId: activeServer?.id || "",
-    });
-
-    readMediaFileDimensions(file)
-      .then((dimensions) => {
-        if (!dimensions) {
-          return;
-        }
-
-        const autoFrame = getAutoMediaFrame({ ...dimensions, target });
-        setMediaFrameEditorState((previous) => {
-          if (previous?.previewUrl !== previewUrl) {
-            return previous;
-          }
-
-          return {
-            ...previous,
-            frame: autoFrame,
-            autoFrame,
-          };
-        });
-      })
-      .catch(() => {});
-  };
-  const uploadAvatarWithFrame = async (file, frame) => {
-    const formData = new FormData();
-    formData.append("avatar", file);
-    formData.append("frame", JSON.stringify(serializeMediaFrame(frame)));
-    const response = await authFetch(`${API_URL}/api/user/upload-avatar`, { method: "POST", body: formData });
-    const data = await parseApiResponse(response);
-    if (!response.ok) {
-      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить аватар."));
-    }
-
-    const nextAvatarUrl = data?.avatarUrl || data?.avatar_url || "";
-    const nextAvatarFrame = parseMediaFrame(data?.avatar_frame, data?.avatarFrame, frame);
-    const nextUser = {
-      ...user,
-      avatarUrl: nextAvatarUrl,
-      avatar: nextAvatarUrl,
-      avatarFrame: nextAvatarFrame,
-      avatar_frame: nextAvatarFrame,
-    };
-    setUser?.(nextUser);
-    await storeSession(nextUser, {
-      accessToken: getStoredToken(),
-      refreshToken: getStoredRefreshToken(),
-      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
-    });
-    setProfileStatus("Аватар сохранён.");
-  };
-  const uploadProfileBackgroundWithFrame = async (file, frame) => {
-    const formData = new FormData();
-    formData.append("background", file);
-    formData.append("frame", JSON.stringify(serializeMediaFrame(frame)));
-
-    const response = await authFetch(`${API_URL}/api/user/upload-profile-background`, { method: "POST", body: formData });
-    const data = await parseApiResponse(response);
-    if (!response.ok) {
-      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить фон профиля."));
-    }
-
-    const nextProfileBackgroundUrl = data?.profileBackgroundUrl || data?.profile_background_url || "";
-    const nextProfileBackgroundFrame = parseMediaFrame(
-      data?.profile_background_frame,
-      data?.profileBackgroundFrame,
-      frame
-    );
-    const nextUser = {
-      ...user,
-      profileBackgroundUrl: nextProfileBackgroundUrl,
-      profile_background_url: nextProfileBackgroundUrl,
-      profileBackground: nextProfileBackgroundUrl,
-      profileBackgroundFrame: nextProfileBackgroundFrame,
-      profile_background_frame: nextProfileBackgroundFrame,
-    };
-    setUser?.(nextUser);
-    setProfileDraft((previous) => ({
-      ...previous,
-      profileBackgroundUrl: nextProfileBackgroundUrl,
-      profileBackgroundFrame: nextProfileBackgroundFrame,
-    }));
-    await storeSession(nextUser, {
-      accessToken: getStoredToken(),
-      refreshToken: getStoredRefreshToken(),
-      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
-    });
-    setProfileStatus("Фон профиля сохранён.");
-  };
-  const uploadServerIconWithFrame = async (file, frame, { createDraft = false } = {}) => {
-    const formData = new FormData();
-    formData.append("icon", file);
-    const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
-      method: "POST",
-      body: formData,
-    });
-    const data = await parseApiResponse(response);
-    if (!response.ok) {
-      throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить иконку сервера."));
-    }
-
-    const nextIconUrl = data?.iconUrl || data?.icon_url || "";
-    const nextIconFrame = normalizeMediaFrame(frame);
-    if (createDraft) {
-      setCreateServerIcon(nextIconUrl);
-      setCreateServerIconFrame(nextIconFrame);
-      setCreateServerError("");
-      return;
-    }
-
-    updateServer((server) => ({ ...server, icon: nextIconUrl, iconFrame: nextIconFrame }));
-    setProfileStatus("Иконка сервера сохранена.");
-  };
-  const handleMediaFrameConfirm = async (frame) => {
-    const editorState = mediaFrameEditorState;
-    if (!editorState?.file) {
-      closeMediaFrameEditor();
-      return;
-    }
-
-    try {
-      if (editorState.kind === "avatar") {
-        await uploadAvatarWithFrame(editorState.file, frame);
-      } else if (editorState.kind === "profileBackground") {
-        await uploadProfileBackgroundWithFrame(editorState.file, frame);
-      } else if (editorState.kind === "serverIcon") {
-        await uploadServerIconWithFrame(editorState.file, frame);
-      } else if (editorState.kind === "createServerIcon") {
-        await uploadServerIconWithFrame(editorState.file, frame, { createDraft: true });
-      }
-    } catch (error) {
-      if (editorState.kind === "createServerIcon") {
-        setCreateServerError(error?.message || "Не удалось загрузить иконку сервера.");
-      } else {
-        setProfileStatus(error?.message || "Не удалось сохранить медиа.");
-      }
-      console.error("Ошибка сохранения медиа с кадрированием:", error);
-    } finally {
-      revokeMediaEditorPreviewUrl(editorState);
-      setMediaFrameEditorState(null);
-    }
-  };
-  const updateTextChannelName = (channelId, value) => {
-    if (!canManageChannels) return;
-    updateServer((server) => ({
-      ...server,
-      textChannels: server.textChannels.map((channel) =>
-        channel.id === channelId ? { ...channel, name: normalizeTextChannelName(value) } : channel
-      ),
-    }));
-  };
-  const updateVoiceChannelName = (channelId, value) => {
-    if (!canManageChannels) return;
-    updateServer((server) => ({ ...server, voiceChannels: server.voiceChannels.map((channel) => channel.id === channelId ? { ...channel, name: value } : channel) }));
   };
   const updateMicVolume = (value) => {
     const normalizedValue = clampDeviceVolumePercent(value, micVolume);
@@ -4777,6 +3893,49 @@ export default function MenuMain({
     markServerAsShared,
   });
   const {
+    closeServerInviteModal,
+    createServerInviteLinkForModal,
+    handleLeaveServer,
+    openServerInviteModal,
+    serverInviteModalOpen,
+    serverInviteTarget,
+    serverInviteTargetChannelName,
+  } = useMenuMainServerInviteFlow({
+    activeServer,
+    activeServerId,
+    activeTextChannelStorageKey,
+    canInviteToServer,
+    currentTextChannel,
+    currentVoiceChannel,
+    leaveVoiceChannel: requestLeaveVoiceChannel,
+    requestServerInviteLink,
+    servers,
+    setActiveServerId,
+    setCurrentTextChannelId,
+    setProfileStatus,
+    setSelectedStreamUserId,
+    setServerContextMenu,
+    setServers,
+    showServerInviteFeedback,
+    user,
+  });
+  const {
+    showQrScannerModal,
+    qrScannerDevices,
+    selectedQrScannerDeviceId,
+    qrScannerPreviewRef,
+    hasQrScannerPreview,
+    qrScannerError,
+    qrScannerStatus,
+    openQrDeviceScanner,
+    closeQrScannerModal,
+    handleQrScannerDeviceChange,
+    startQrScannerPreview,
+  } = useMenuMainQrScanner({
+    refreshDeviceSessions,
+    showServerInviteFeedback,
+  });
+  const {
     startDirectCallWithUser,
     acceptDirectCall,
     declineDirectCall,
@@ -4818,23 +3977,6 @@ export default function MenuMain({
     navigateHistoryBack,
     navigateHistoryForward,
   });
-  const openServerInviteModal = useCallback(() => {
-    if (!activeServer) {
-      showServerInviteFeedback("Сервер не найден.");
-      return;
-    }
-
-    if (!canInviteToServer(activeServer)) {
-      showServerInviteFeedback("Недостаточно прав для приглашения.");
-      return;
-    }
-
-    setServerInviteModalOpen(true);
-  }, [activeServer, canInviteToServer, showServerInviteFeedback]);
-  const createServerInviteLinkForModal = useCallback(
-    () => requestServerInviteLink(activeServer, { copyToClipboard: false }),
-    [activeServer, requestServerInviteLink]
-  );
   const sendServerInviteToFriend = useCallback(
     async (friend, inviteLink) => {
       const friendId = String(friend?.id || friend?.userId || "").trim();
@@ -5067,6 +4209,8 @@ export default function MenuMain({
       });
     }
   };
+  leaveVoiceChannelRef.current = leaveVoiceChannel;
+
   const leaveCurrentVoiceContext = async () => {
     if (isDirectCallChannelId(currentVoiceChannelRef.current) && directCallStateRef.current.phase !== "idle") {
       if (directCallStateRef.current.phase === "connected") {
@@ -5080,6 +4224,40 @@ export default function MenuMain({
 
     await leaveVoiceChannel();
   };
+  const {
+    openChannelSettings,
+    closeChannelSettings,
+    updateChannelSettings,
+    cancelChannelRename,
+    updateChannelRenameValue,
+    submitChannelRename,
+    handleDeleteTextChannel,
+    handleDeleteVoiceChannel,
+    addTextChannel,
+    addVoiceChannel,
+    createChannelCategory,
+    toggleChannelCategory,
+    reorderChannelCategories,
+    moveServerChannel,
+    createServerChannel,
+    createForumPost,
+    addForumReply,
+  } = useMenuMainChannelActions({
+    user,
+    activeServer,
+    canManageChannels,
+    currentTextChannelId,
+    setCurrentTextChannelId,
+    currentVoiceChannel,
+    leaveVoiceChannel,
+    updateServer,
+    syncServerSnapshot,
+    lastServerSyncFingerprintRef,
+    setDesktopServerPane,
+    channelRenameState,
+    setChannelRenameState,
+    setChannelSettingsState,
+  });
   const handleLogout = async () => {
     try { await voiceClientRef.current?.disconnect(); } catch (error) { console.error("Ошибка при отключении перед выходом:", error); }
     finally {
@@ -5159,544 +4337,6 @@ export default function MenuMain({
     setShowCameraModal(false);
     setCameraError("");
     stopCameraPreview();
-  };
-  const stopQrScannerLoop = () => {
-    if (qrScannerFrameRef.current) {
-      window.cancelAnimationFrame(qrScannerFrameRef.current);
-      qrScannerFrameRef.current = 0;
-    }
-    qrScannerBusyRef.current = false;
-  };
-  const stopQrScannerPreview = () => {
-    stopQrScannerLoop();
-    qrScannerStreamRef.current?.getTracks?.().forEach((track) => {
-      try {
-        track.stop();
-      } catch {
-        // ignore qr scanner shutdown failures
-      }
-    });
-    qrScannerStreamRef.current = null;
-
-    if (qrScannerPreviewRef.current) {
-      qrScannerPreviewRef.current.srcObject = null;
-    }
-
-    setHasQrScannerPreview(false);
-  };
-  const loadQrScannerDevices = async (preferredDeviceId = "") => {
-    if (!navigator.mediaDevices?.enumerateDevices) {
-      setQrScannerDevices([]);
-      return [];
-    }
-
-    const devices = (await navigator.mediaDevices.enumerateDevices())
-      .filter((device) => device.kind === "videoinput")
-      .map((device, index) => ({
-        id: device.deviceId || `qr-camera-${index + 1}`,
-        label: String(device.label || "").trim() || `Камера ${index + 1}`,
-      }));
-
-    setQrScannerDevices(devices);
-
-    const nextDeviceId =
-      devices.find((device) => device.id === preferredDeviceId)?.id ||
-      devices.find((device) => device.id === selectedQrScannerDeviceId)?.id ||
-      devices[0]?.id ||
-      "";
-
-    if (nextDeviceId && nextDeviceId !== selectedQrScannerDeviceId) {
-      setSelectedQrScannerDeviceId(nextDeviceId);
-    }
-
-    return devices;
-  };
-  const refreshDeviceSessions = useCallback(async () => {
-    if (!user?.id) {
-      setDeviceSessions([]);
-      setDeviceSessionsError("");
-      return;
-    }
-
-    setDeviceSessionsLoading(true);
-    setDeviceSessionsError("");
-
-    try {
-      const refreshToken = getStoredRefreshToken();
-      const response = await authFetch(`${API_BASE_URL}/auth/devices`, {
-        method: "GET",
-        headers: refreshToken ? { [DEVICE_SESSION_REFRESH_TOKEN_HEADER]: refreshToken } : undefined,
-      });
-      const data = await parseApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить список устройств."));
-      }
-
-      setDeviceSessions(Array.isArray(data?.sessions) ? data.sessions : []);
-    } catch (error) {
-      setDeviceSessionsError(error?.message || "Не удалось загрузить список устройств.");
-    } finally {
-      setDeviceSessionsLoading(false);
-    }
-  }, [user?.id]);
-  useEffect(() => {
-    if (!openSettings || settingsTab !== "devices") {
-      return;
-    }
-
-    refreshDeviceSessions().catch((error) => {
-      console.error("Ошибка загрузки устройств:", error);
-    });
-  }, [openSettings, refreshDeviceSessions, settingsTab]);
-
-  const applyCurrentUserActivity = useCallback((activity) => {
-    if (!user) {
-      return;
-    }
-
-    if (JSON.stringify(user.activity || user.externalActivity || null) === JSON.stringify(activity || null)) {
-      return;
-    }
-
-    const nextUser = {
-      ...user,
-      activity: activity || null,
-      externalActivity: activity || null,
-    };
-
-    setUser?.(nextUser);
-    void storeSession(nextUser, {
-      accessToken: getStoredToken(),
-      refreshToken: getStoredRefreshToken(),
-      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
-    });
-  }, [setUser, user]);
-
-  const replaceIntegrationProvider = useCallback((nextProvider) => {
-    setIntegrations((previous) =>
-      previous.map((provider) => (provider.id === nextProvider.id ? nextProvider : provider))
-    );
-  }, []);
-
-  const refreshIntegrations = useCallback(async () => {
-    if (!user?.id) {
-      setIntegrations([]);
-      setIntegrationsStatus("");
-      return;
-    }
-
-    setIntegrationsLoading(true);
-    setIntegrationsStatus("");
-
-    try {
-      const data = await fetchIntegrations();
-      setIntegrations(data.providers);
-      applyCurrentUserActivity(data.activity);
-    } catch (error) {
-      setIntegrationsStatus(error?.message || "Не удалось загрузить интеграции.");
-    } finally {
-      setIntegrationsLoading(false);
-    }
-  }, [applyCurrentUserActivity, user?.id]);
-
-  useEffect(() => {
-    if (!openSettings || settingsTab !== "integrations") {
-      return;
-    }
-
-    refreshIntegrations().catch((error) => {
-      console.error("Ошибка загрузки интеграций:", error);
-    });
-  }, [openSettings, refreshIntegrations, settingsTab]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    refreshIntegrations().catch((error) => {
-      console.error("Ошибка загрузки интеграций:", error);
-    });
-  }, [refreshIntegrations, user?.id]);
-
-  const startIntegrationOAuthPolling = useCallback(() => {
-    if (integrationOAuthPollRef.current) {
-      window.clearInterval(integrationOAuthPollRef.current);
-      integrationOAuthPollRef.current = null;
-    }
-
-    let attempt = 0;
-    integrationOAuthPollRef.current = window.setInterval(() => {
-      attempt += 1;
-      refreshIntegrations().catch((error) => {
-        console.error("Ошибка обновления интеграций:", error);
-      });
-
-      if (attempt >= 30 && integrationOAuthPollRef.current) {
-        window.clearInterval(integrationOAuthPollRef.current);
-        integrationOAuthPollRef.current = null;
-      }
-    }, 2000);
-  }, [refreshIntegrations]);
-
-  useEffect(() => () => {
-    if (integrationOAuthPollRef.current) {
-      window.clearInterval(integrationOAuthPollRef.current);
-      integrationOAuthPollRef.current = null;
-    }
-  }, []);
-
-  const handleConnectIntegration = useCallback(async (providerId) => {
-    setIntegrationActionBusy(providerId);
-    setIntegrationsStatus("");
-
-    try {
-      const integrationMeta = integrations.find((provider) => provider.id === providerId);
-      if (integrationMeta?.oauthEnabled) {
-        const result = await connectIntegration(providerId);
-        if (result && typeof result === "object" && result.provider) {
-          replaceIntegrationProvider(result.provider);
-          setIntegrationsStatus(result.localDev ? "Локальная dev-интеграция подключена без OAuth." : "Интеграция подключена.");
-          await refreshIntegrations();
-          return;
-        }
-
-        const url = String(result || "");
-        if (!url) {
-          throw new Error("Сервис не вернул ссылку авторизации.");
-        }
-
-        const popup = window.open(url, `tend_${providerId}_oauth`, "width=560,height=760");
-        if (!popup) {
-          window.location.href = url;
-          return;
-        }
-
-        startIntegrationOAuthPolling();
-        setIntegrationsStatus("Подтвердите доступ в открывшемся окне, затем вернитесь сюда.");
-        return;
-      }
-
-      const result = await connectIntegration(providerId);
-      if (result && typeof result === "object" && result.provider) {
-        replaceIntegrationProvider(result.provider);
-      }
-      await refreshIntegrations();
-    } catch (error) {
-      setIntegrationsStatus(error?.message || "Не удалось подключить интеграцию.");
-    } finally {
-      setIntegrationActionBusy("");
-    }
-  }, [integrations, refreshIntegrations, replaceIntegrationProvider, startIntegrationOAuthPolling]);
-
-  const handleDisconnectIntegration = useCallback(async (providerId) => {
-    setIntegrationActionBusy(providerId);
-    setIntegrationsStatus("");
-
-    try {
-      await disconnectIntegration(providerId);
-      setIntegrations((previous) =>
-        previous.map((provider) =>
-          provider.id === providerId
-            ? { ...provider, connected: false, activity: null }
-            : provider
-        )
-      );
-      await refreshIntegrations();
-    } catch (error) {
-      setIntegrationsStatus(error?.message || "Не удалось отключить интеграцию.");
-    } finally {
-      setIntegrationActionBusy("");
-    }
-  }, [refreshIntegrations]);
-
-  const handleToggleIntegrationSetting = useCallback(async (providerId, field, value) => {
-    setIntegrationActionBusy(providerId);
-    setIntegrationsStatus("");
-
-    try {
-      const nextProvider = await updateIntegrationSettings(providerId, { [field]: value });
-      replaceIntegrationProvider(nextProvider);
-      await refreshIntegrations();
-    } catch (error) {
-      setIntegrationsStatus(error?.message || "Не удалось сохранить настройки интеграции.");
-    } finally {
-      setIntegrationActionBusy("");
-    }
-  }, [refreshIntegrations, replaceIntegrationProvider]);
-
-  const integrationStatusPollingEnabled = integrations.some((provider) =>
-    provider.connected && provider.displayInProfile && provider.useAsStatus && ["spotify", "steam"].includes(provider.id)
-  );
-
-  useEffect(() => {
-    if (!integrationStatusPollingEnabled) {
-      return undefined;
-    }
-
-    let isCanceled = false;
-    let isRefreshing = false;
-
-    const refreshCurrentTrack = async () => {
-      if (isRefreshing) {
-        return;
-      }
-
-      isRefreshing = true;
-      try {
-        const data = await refreshIntegrationActivity();
-        if (isCanceled) {
-          return;
-        }
-
-        if (Array.isArray(data.providers)) {
-          setIntegrations(data.providers);
-        }
-        applyCurrentUserActivity(data.activity);
-      } catch (error) {
-        if (!isCanceled) {
-          console.error("Ошибка обновления статуса Spotify:", error);
-        }
-      } finally {
-        isRefreshing = false;
-      }
-    };
-
-    refreshCurrentTrack();
-    const intervalId = window.setInterval(refreshCurrentTrack, 20000);
-
-    return () => {
-      isCanceled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [applyCurrentUserActivity, integrationStatusPollingEnabled]);
-
-  useEffect(() => {
-    if (!user) {
-      return undefined;
-    }
-
-    const handleUserActivityUpdated = (payload) => {
-      const updatedUserId = String(payload?.userId || "");
-      if (!updatedUserId) {
-        return;
-      }
-
-      const nextActivity = payload?.activity || null;
-
-      updateFriendProfile(updatedUserId, (friend) => ({
-        ...friend,
-        activity: nextActivity,
-        externalActivity: nextActivity,
-      }));
-
-      if (updatedUserId === currentUserId) {
-        applyCurrentUserActivity(nextActivity);
-      }
-    };
-
-    chatConnection.on("UserActivityUpdated", handleUserActivityUpdated);
-
-    return () => {
-      chatConnection.off("UserActivityUpdated", handleUserActivityUpdated);
-    };
-  }, [applyCurrentUserActivity, currentUserId, updateFriendProfile, user]);
-  const closeQrScannerModal = () => {
-    setShowQrScannerModal(false);
-    setQrScannerError("");
-    setQrScannerStatus("");
-    stopQrScannerPreview();
-  };
-  const confirmQrScannerPayload = async (payload) => {
-    setQrScannerError("");
-    setQrScannerStatus("Подтверждаем вход...");
-    qrScannerCooldownUntilRef.current = Number.POSITIVE_INFINITY;
-    stopQrScannerLoop();
-
-    try {
-      const previewQuery = new URLSearchParams({ scannerToken: payload.scannerToken });
-      const previewResponse = await authFetch(
-        `${API_BASE_URL}/auth/qr-login/session/${encodeURIComponent(payload.sessionId)}/preview?${previewQuery}`,
-        { method: "GET" }
-      );
-      const previewData = await parseApiResponse(previewResponse);
-
-      if (!previewResponse.ok) {
-        throw new Error(getApiErrorMessage(previewResponse, previewData, "QR-код устарел или уже использован."));
-      }
-
-      const approveResponse = await authFetch(`${API_BASE_URL}/auth/qr-login/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const approveData = await parseApiResponse(approveResponse);
-
-      if (!approveResponse.ok) {
-        throw new Error(getApiErrorMessage(approveResponse, approveData, "Не удалось подключить устройство."));
-      }
-
-      setQrScannerStatus("Устройство подключено.");
-      await refreshDeviceSessions();
-      showServerInviteFeedback("Устройство подключено.");
-      window.setTimeout(() => {
-        closeQrScannerModal();
-      }, 700);
-    } catch (error) {
-      qrScannerCooldownUntilRef.current = performance.now() + 1800;
-      setQrScannerStatus("");
-      setQrScannerError(error?.message || "Не удалось подключить устройство.");
-    }
-  };
-  const startQrScannerLoop = () => {
-    stopQrScannerLoop();
-
-    const BarcodeDetectorClass = typeof window !== "undefined" ? window.BarcodeDetector : undefined;
-    if (typeof BarcodeDetectorClass !== "function") {
-      setQrScannerStatus("");
-      setQrScannerError("На этом устройстве браузер пока не умеет считывать QR-коды через камеру.");
-      return;
-    }
-
-    const detector = new BarcodeDetectorClass({ formats: ["qr_code"] });
-    const tick = async () => {
-      if (!showQrScannerModal) {
-        stopQrScannerLoop();
-        return;
-      }
-
-      const video = qrScannerPreviewRef.current;
-      if (!video || video.readyState < 2) {
-        qrScannerFrameRef.current = window.requestAnimationFrame(tick);
-        return;
-      }
-
-      if (qrScannerBusyRef.current || performance.now() < qrScannerCooldownUntilRef.current) {
-        qrScannerFrameRef.current = window.requestAnimationFrame(tick);
-        return;
-      }
-
-      qrScannerBusyRef.current = true;
-      try {
-        const results = await detector.detect(video);
-        const rawValue = String(results?.[0]?.rawValue || "").trim();
-        if (rawValue) {
-          const payload = parseQrLoginPayload(rawValue);
-          if (!payload) {
-            qrScannerCooldownUntilRef.current = performance.now() + 1500;
-            setQrScannerStatus("");
-            setQrScannerError("Это не QR-код входа MAX.");
-          } else {
-            await confirmQrScannerPayload(payload);
-          }
-        }
-      } catch (error) {
-        console.error("Ошибка распознавания QR-кода:", error);
-        setQrScannerStatus("");
-        setQrScannerError("Не удалось распознать QR-код. Попробуйте ещё раз.");
-        qrScannerCooldownUntilRef.current = performance.now() + 1500;
-      } finally {
-        qrScannerBusyRef.current = false;
-      }
-
-      qrScannerFrameRef.current = window.requestAnimationFrame(tick);
-    };
-
-    qrScannerFrameRef.current = window.requestAnimationFrame(tick);
-  };
-  const startQrScannerPreview = async (deviceId = selectedQrScannerDeviceId) => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setQrScannerError("Эта система не дала приложению доступ к камере.");
-      return;
-    }
-
-    stopQrScannerPreview();
-    setQrScannerError("");
-    setQrScannerStatus("Наведите камеру на QR-код входа.");
-
-    try {
-      const preferredVideoConstraints = deviceId && !String(deviceId).startsWith("qr-camera-")
-        ? {
-            deviceId: { exact: deviceId },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-        : {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          };
-      let stream = null;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: preferredVideoConstraints,
-          audio: false,
-        });
-      } catch (captureError) {
-        if (deviceId && !String(deviceId).startsWith("qr-camera-")) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-            audio: false,
-          });
-        } else {
-          throw captureError;
-        }
-      }
-
-      qrScannerStreamRef.current = stream;
-
-      if (qrScannerPreviewRef.current) {
-        qrScannerPreviewRef.current.srcObject = stream;
-        qrScannerPreviewRef.current.muted = true;
-        await qrScannerPreviewRef.current.play().catch(() => {});
-      }
-
-      setHasQrScannerPreview(true);
-
-      const devices = await loadQrScannerDevices(deviceId);
-      const activeTrack = stream.getVideoTracks?.()[0];
-      const activeDeviceId = activeTrack?.getSettings?.().deviceId || deviceId || devices[0]?.id || "";
-
-      if (activeDeviceId && activeDeviceId !== selectedQrScannerDeviceId) {
-        setSelectedQrScannerDeviceId(activeDeviceId);
-      }
-
-      startQrScannerLoop();
-    } catch (error) {
-      await loadQrScannerDevices(deviceId).catch(() => {});
-      setQrScannerStatus("");
-      setQrScannerError("Не удалось открыть камеру для сканирования QR-кода.");
-      console.error("Ошибка запуска QR-сканера:", error);
-    }
-  };
-  const openQrDeviceScanner = () => {
-    setQrScannerError("");
-    setQrScannerStatus("");
-    qrScannerCooldownUntilRef.current = 0;
-    setShowQrScannerModal(true);
-    window.requestAnimationFrame(() => {
-      loadQrScannerDevices(selectedQrScannerDeviceId)
-        .then((devices) => startQrScannerPreview(
-          devices.find((device) => device.id === selectedQrScannerDeviceId)?.id || devices[0]?.id || selectedQrScannerDeviceId
-        ))
-        .catch((error) => {
-          console.error("Ошибка подготовки QR-сканера:", error);
-          setQrScannerError("Не удалось подготовить камеру для сканирования QR-кода.");
-        });
-    });
-  };
-  const handleQrScannerDeviceChange = (deviceId) => {
-    setSelectedQrScannerDeviceId(deviceId);
-
-    if (hasQrScannerPreview) {
-      startQrScannerPreview(deviceId).catch((error) => {
-        console.error("Ошибка обновления QR-сканера:", error);
-      });
-    }
   };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
@@ -5857,68 +4497,6 @@ export default function MenuMain({
     }
 
     delete target.dataset.tooltipSuppressed;
-  };
-  const handleAvatarChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !user?.id) return;
-
-    const avatarValidationError = await validateAvatarFile(file);
-    if (avatarValidationError) {
-      setProfileStatus(avatarValidationError);
-      return;
-    }
-
-    openMediaFrameEditor({
-      kind: "avatar",
-      target: "avatar",
-      file,
-      initialFrame: getUserAvatarFrame(user),
-      title: "Аватар",
-    });
-  };
-  const handleProfileBackgroundChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !user?.id) return;
-
-    const backgroundValidationError = await validateProfileBackgroundFile(file);
-    if (backgroundValidationError) {
-      setProfileStatus(backgroundValidationError);
-      return;
-    }
-
-    openMediaFrameEditor({
-      kind: "profileBackground",
-      target: "profileBackground",
-      file,
-      initialFrame: profileDraft.profileBackgroundFrame,
-      title: "Фон профиля",
-    });
-  };
-  const handleServerIconChange = async (event) => {
-    if (!canManageServer) return;
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !activeServer) return;
-    try {
-      const validationError = await validateServerIconFile(file);
-      if (validationError) {
-        setProfileStatus(validationError);
-        return;
-      }
-
-      openMediaFrameEditor({
-        kind: "serverIcon",
-        target: "serverIcon",
-        file,
-        initialFrame: getServerIconFrame(activeServer),
-        title: "Иконка сервера",
-      });
-    } catch (error) {
-      console.error("Ошибка смены иконки сервера:", error);
-      setProfileStatus(error?.message || "Не удалось загрузить иконку сервера.");
-    }
   };
   const updateProfileDraft = (field, value) => {
     if (field === "firstName" || field === "lastName") {
@@ -6354,7 +4932,6 @@ export default function MenuMain({
       </MenuMainMobileSettingsShell>
     </Suspense>
   );
-  const closeServerInviteModal = useCallback(() => setServerInviteModalOpen(false), []);
   const clearChannelSearch = useCallback(() => setChannelSearchQuery(""), []);
   const stableOpenDirectChat = useStableEvent(openDirectChat);
   const stableStartDirectCallWithUser = useStableEvent(startDirectCallWithUser);
@@ -6759,6 +5336,8 @@ export default function MenuMain({
       onShowServerFeedback={showServerInviteFeedback}
       inviteFriends={directConversationTargets}
       isServerInviteModalOpen={serverInviteModalOpen}
+      serverInviteTarget={serverInviteTarget}
+      serverInviteTargetChannelName={serverInviteTargetChannelName}
       onOpenServerInviteModal={openServerInviteModal}
       onCloseServerInviteModal={closeServerInviteModal}
       onCreateServerInviteLink={createServerInviteLinkForModal}
@@ -6767,6 +5346,7 @@ export default function MenuMain({
       onUpdateMemberVoiceState={updateMemberVoiceState}
       onUpdateMemberRole={updateMemberRole}
       onCopyServerInvite={copyServerInviteLink}
+      onLeaveServer={handleLeaveServer}
       onAddServer={stableHandleAddServer}
       onAddTextChannel={addTextChannel}
       onAddVoiceChannel={addVoiceChannel}
@@ -7277,6 +5857,27 @@ export default function MenuMain({
           {workspaceMode === "friends" ? renderFriendsSidebar() : renderServersSidebar()}
           {workspaceMode === "friends" ? renderFriendsMain() : renderServerMain()}
         </div>
+        {workspaceMode === "friends" ? (
+          <ServerRailContextLayer
+            servers={servers}
+            serverContextMenu={serverContextMenu}
+            serverContextMenuRef={serverContextMenuRef}
+            canInviteToServer={canInviteToServer}
+            currentUserId={currentUserId}
+            inviteFriends={directConversationTargets}
+            isServerInviteModalOpen={serverInviteModalOpen}
+            serverInviteTarget={serverInviteTarget}
+            serverInviteTargetChannelName={serverInviteTargetChannelName}
+            currentTextChannel={currentTextChannel}
+            onOpenServerInviteModal={openServerInviteModal}
+            onCloseServerInviteModal={closeServerInviteModal}
+            onCreateServerInviteLink={createServerInviteLinkForModal}
+            onSendServerInviteToFriend={sendServerInviteToFriend}
+            onCopyServerInvite={copyServerInviteLink}
+            onLeaveServer={handleLeaveServer}
+            getChannelDisplayName={getChannelDisplayName}
+          />
+        ) : null}
       </div>
     </div>
   );

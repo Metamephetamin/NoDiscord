@@ -374,8 +374,8 @@
 .profile__activity-status {
   display: flex;
   align-items: center;
-  gap: 5px;
-  max-width: 148px;
+  gap: 4px;
+  max-width: min(184px, 100%);
   color: #65e48f;
   font-size: 12px;
   font-weight: 700;
@@ -383,6 +383,7 @@
   white-space: nowrap;
   min-width: 0;
   margin-top: 1px;
+  margin-left: -4px;
 }
 
 .profile__activity-note {
@@ -394,10 +395,46 @@
   filter: drop-shadow(0 0 5px rgba(47, 207, 114, 0.32));
 }
 
-.profile__activity-text {
+.profile__activity-marquee {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 14px), transparent 100%);
+}
+
+.profile__activity-track {
+  display: inline-flex;
+  width: max-content;
+  gap: 34px;
+  animation: profileActivityMarquee 8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.profile__activity-text {
+  flex: 0 0 auto;
+}
+
+@keyframes profileActivityMarquee {
+  0%,
+  28% {
+    transform: translateX(0);
+  }
+
+  68%,
+  82% {
+    transform: translateX(calc(-50% - 17px));
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile__activity-track {
+    animation: none;
+  }
 }
 
 .status__profile {

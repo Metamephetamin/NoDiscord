@@ -572,7 +572,7 @@ function ForumChannelView({
   );
 }
 
-function ServerInviteFriendsModal({
+export function ServerInviteFriendsModal({
   activeServer,
   channelName,
   friends = [],
@@ -1361,6 +1361,8 @@ export const ServersSidebar = memo(({
   onShowServerFeedback,
   inviteFriends = [],
   isServerInviteModalOpen = false,
+  serverInviteTarget = null,
+  serverInviteTargetChannelName = "",
   onOpenServerInviteModal,
   onCloseServerInviteModal,
   onCreateServerInviteLink,
@@ -1370,6 +1372,7 @@ export const ServersSidebar = memo(({
   onUpdateMemberVoiceState,
   onUpdateMemberRole,
   onCopyServerInvite,
+  onLeaveServer,
   onAddServer,
   onAddTextChannel,
   onAddVoiceChannel,
@@ -1827,11 +1830,12 @@ export const ServersSidebar = memo(({
 
           {isServerInviteModalOpen ? (
             <ServerInviteFriendsModal
-              activeServer={activeServer}
-              channelName={getChannelDisplayName(currentTextChannel?.name || "основной", "text")}
+              key={serverInviteTargetChannelName || currentTextChannel?.name || "server-invite"}
+              activeServer={serverInviteTarget || activeServer}
+              channelName={getChannelDisplayName(serverInviteTargetChannelName || currentTextChannel?.name || "основной", "text")}
               friends={inviteFriends}
               currentUserId={currentUserId}
-              canInvite={canInviteToServer(activeServer)}
+              canInvite={canInviteToServer(serverInviteTarget || activeServer)}
               onClose={onCloseServerInviteModal}
               onCreateInviteLink={onCreateServerInviteLink}
               onSendInviteToFriend={onSendServerInviteToFriend}
@@ -1913,10 +1917,11 @@ export const ServersSidebar = memo(({
           ) : null}
 
           {serverContextMenu ? (
-            <div ref={serverContextMenuRef} className="member-role-menu member-role-menu--server" style={{ left: serverContextMenu.x, top: serverContextMenu.y }}>
+            <div ref={serverContextMenuRef} className="member-role-menu member-role-menu--server member-role-menu--server-compact" style={{ left: serverContextMenu.x, top: serverContextMenu.y }}>
               {(() => {
                 const targetServer = servers.find((server) => String(server.id) === String(serverContextMenu.serverId));
                 const canCopyInvite = canInviteToServer(targetServer);
+                const canUseServerActions = Boolean(targetServer);
 
                 return (
                   <>
@@ -1924,10 +1929,26 @@ export const ServersSidebar = memo(({
                     <button
                       type="button"
                       className={`member-role-menu__item ${!canCopyInvite ? "member-role-menu__item--disabled" : ""}`}
+                      onClick={() => onOpenServerInviteModal?.(targetServer)}
+                      disabled={!canCopyInvite || serverContextMenu.isLoading}
+                    >
+                      Пригласить друзей
+                    </button>
+                    <button
+                      type="button"
+                      className={`member-role-menu__item ${!canCopyInvite ? "member-role-menu__item--disabled" : ""}`}
                       onClick={onCopyServerInvite}
                       disabled={!canCopyInvite || serverContextMenu.isLoading}
                     >
-                      {serverContextMenu.isLoading ? "Готовим ссылку..." : "Скопировать ссылку-приглашение"}
+                      {serverContextMenu.isLoading ? "Готовим ссылку..." : "Скопировать ссылку"}
+                    </button>
+                    <button
+                      type="button"
+                      className="member-role-menu__item member-role-menu__item--danger"
+                      onClick={() => onLeaveServer?.(targetServer)}
+                      disabled={!canUseServerActions}
+                    >
+                      Выйти с сервера
                     </button>
                     {serverContextMenu.status ? (
                       <>
@@ -2351,7 +2372,20 @@ export const DesktopServerRail = ({
   onServerPointerCancel,
   onAddServer,
   getServerIconFrame,
-}) => (
+}) => {
+  const [serverTooltip, setServerTooltip] = useState(null);
+
+  const showServerTooltip = (event, server) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setServerTooltip({
+      name: server?.name || "Без названия",
+      left: rect.right + 12,
+      top: rect.top + rect.height / 2,
+    });
+  };
+  const hideServerTooltip = () => setServerTooltip(null);
+
+  return (
   <aside className="sidebar__servers">
     <button type="button" className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`} onClick={onOpenFriendsWorkspace} aria-label="Друзья">
       <img src={smsIcon} alt="" />
@@ -2368,8 +2402,9 @@ export const DesktopServerRail = ({
         <span className="btn__direct-call-icon" aria-hidden="true" />
       </button>
     ) : null}
-    {servers.map((server) => (
-      <button
+    <div className="sidebar__servers-list" onScroll={hideServerTooltip}>
+      {servers.map((server) => (
+        <button
         key={server.id}
         type="button"
         className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
@@ -2379,6 +2414,10 @@ export const DesktopServerRail = ({
         onPointerUp={onServerPointerUp}
         onPointerLeave={onServerPointerCancel}
         onPointerCancel={onServerPointerCancel}
+        onMouseEnter={(event) => showServerTooltip(event, server)}
+        onMouseLeave={hideServerTooltip}
+        onFocus={(event) => showServerTooltip(event, server)}
+        onBlur={hideServerTooltip}
         aria-label={server.name || "Без названия"}
       >
         {server.icon ? (
@@ -2394,11 +2433,19 @@ export const DesktopServerRail = ({
         ) : (
           <span className="btn__server-empty" aria-hidden="true" />
         )}
-      </button>
-    ))}
-    <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={onAddServer}>+</button>
+          <span className="btn__server-tooltip" role="tooltip">{server.name || "Без названия"}</span>
+        </button>
+      ))}
+      <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={onAddServer}>+</button>
+    </div>
+    {serverTooltip ? (
+      <div className="server-rail-tooltip" style={{ left: serverTooltip.left, top: serverTooltip.top }}>
+        {serverTooltip.name}
+      </div>
+    ) : null}
   </aside>
-);
+  );
+};
 
 export const MobileServerStrip = ({
   servers,

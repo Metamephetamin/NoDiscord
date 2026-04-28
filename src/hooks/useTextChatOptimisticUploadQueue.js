@@ -387,6 +387,7 @@ export default function useTextChatOptimisticUploadQueue({
       return false;
     }
 
+    const jobIds = [];
     optimisticMessages.forEach((optimisticMessage, index) => {
       const descriptor = descriptors[index];
       if (!descriptor) {
@@ -417,8 +418,20 @@ export default function useTextChatOptimisticUploadQueue({
         runningPromise: null,
       });
 
-      void runJob(jobId);
+      jobIds.push(jobId);
     });
+
+    if (!shouldGroupItems && jobIds.length > 1) {
+      let sequence = Promise.resolve(true);
+      jobIds.forEach((jobId) => {
+        sequence = sequence.then(() => runJob(jobId));
+      });
+      void sequence;
+    } else {
+      jobIds.forEach((jobId) => {
+        void runJob(jobId);
+      });
+    }
 
     return true;
   }, [onCreateLocalEchoMessages, runJob]);

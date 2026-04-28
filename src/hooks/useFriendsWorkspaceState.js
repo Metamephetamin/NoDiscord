@@ -721,7 +721,7 @@ export default function useFriendsWorkspaceState({
   }, [friendEmail, friendsPageSection, user?.id, user?.email]);
 
   useEffect(() => {
-    if (!user || activeDirectFriendId || friendsPageSection !== "add") {
+    if (!user || friendsPageSection !== "add") {
       setFriendLookupResults([]);
       setFriendLookupPerformed(false);
       return undefined;
@@ -739,7 +739,7 @@ export default function useFriendsWorkspaceState({
     }, 260);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeDirectFriendId, friendEmail, friendsPageSection, user?.id]);
+  }, [friendEmail, friendsPageSection, user?.id]);
 
   useEffect(() => {
     if (!user || friendsPageSection !== "add" || activeDirectFriendId) {

@@ -44,7 +44,12 @@ public class ServerInvitesController : ControllerBase
             return StatusCode(403, new { message = "Недостаточно прав для создания приглашения." });
         }
 
-        var syncedSnapshot = _serverState.UpsertSnapshot(request.ServerSnapshot, currentUser.UserId);
+        var inviteSource = existingSnapshot is not null &&
+            ServerPermissionEvaluator.CanReadServer(existingSnapshot, currentUser.UserId) &&
+            !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId)
+                ? existingSnapshot
+                : request.ServerSnapshot;
+        var syncedSnapshot = _serverState.UpsertSnapshot(inviteSource, currentUser.UserId);
         var result = _invites.CreateInvite(currentUser.UserId, syncedSnapshot);
 
         return Ok(new

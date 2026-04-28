@@ -70,34 +70,19 @@ public static class ServerPermissionEvaluator
             return false;
         }
 
-        if (CanInviteMembers(existingSnapshot, userId))
+        if (existingSnapshot is not null)
         {
-            return true;
+            if (CanReadServer(existingSnapshot, userId))
+            {
+                return true;
+            }
+
+            var hasStoredOwner = !string.IsNullOrWhiteSpace(existingSnapshot.OwnerId);
+            var hasStoredMembers = existingSnapshot.Members?.Any(member => !string.IsNullOrWhiteSpace(member.UserId)) == true;
+            return !hasStoredOwner && !hasStoredMembers && CanInviteMembers(requestedSnapshot, userId);
         }
 
-        if (!CanInviteMembers(requestedSnapshot, userId))
-        {
-            return false;
-        }
-
-        if (existingSnapshot is null)
-        {
-            return true;
-        }
-
-        var normalizedUserId = userId.Trim();
-        var existingOwnerId = existingSnapshot.OwnerId?.Trim() ?? string.Empty;
-        var requestedOwnerId = requestedSnapshot.OwnerId?.Trim() ?? string.Empty;
-
-        if (!string.IsNullOrWhiteSpace(existingOwnerId))
-        {
-            return string.Equals(existingOwnerId, normalizedUserId, StringComparison.Ordinal) &&
-                   (string.IsNullOrWhiteSpace(requestedOwnerId) ||
-                    string.Equals(requestedOwnerId, normalizedUserId, StringComparison.Ordinal));
-        }
-
-        return string.IsNullOrWhiteSpace(requestedOwnerId) ||
-               string.Equals(requestedOwnerId, normalizedUserId, StringComparison.Ordinal);
+        return CanInviteMembers(requestedSnapshot, userId);
     }
 
     public static bool CanManageVoiceState(ServerSnapshot? snapshot, string actorUserId, string targetUserId, string permission)

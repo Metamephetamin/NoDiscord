@@ -1505,6 +1505,10 @@
   contain: paint;
 }
 
+.message-attachment-grid:not(.message-attachment-grid--feature-stack):not(.message-attachment-grid--five-tile):not(.message-attachment-grid--six-tile):not(.message-attachment-grid--seven-tile):not(.message-attachment-grid--wide-top-mosaic):not(.message-attachment-grid--dense-gallery) {
+  grid-auto-rows: var(--media-grid-large-row);
+}
+
 .message-attachment-grid--feature-stack {
   grid-template-columns: minmax(0, 0.86fr) minmax(0, 0.44fr);
   align-items: stretch;
@@ -2078,7 +2082,8 @@
 
 .message-item--dm .msg-content--media-only .message-attachments-stack:not(.message-attachments-stack--single),
 .message-item--dm .msg-content--media-only .message-media-overlay-anchor > .message-attachment-grid {
-  min-width: min(320px, 100%);
+  min-width: 0;
+  width: min(100%, var(--media-grid-standard-width)) !important;
 }
 
 .message-media-overlay-anchor {
@@ -3620,16 +3625,41 @@
 }
 
 .chat-user-menu__close {
-  width: 22px;
-  height: 22px;
+  position: relative;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #dce3f3;
+  border-radius: 6px;
+  background: transparent;
+  color: #aeb4c2;
   cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
+  transition: color 0.14s ease, background-color 0.14s ease;
+}
+
+.chat-user-menu__close::before,
+.chat-user-menu__close::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 13px;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.chat-user-menu__close::before {
+  transform: rotate(45deg);
+}
+
+.chat-user-menu__close::after {
+  transform: rotate(-45deg);
+}
+
+.chat-user-menu__close:hover {
+  background: transparent;
+  color: #ffffff;
 }
 
 .chat-user-menu__body {
@@ -4336,7 +4366,7 @@
   gap: 5px;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 64px;
+  min-height: 58px;
   padding: 0 14px 0 4px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 18px;
@@ -4347,7 +4377,7 @@
 }
 
 .composer-textarea-shell {
-  --composer-textarea-padding: 13px 8px 12px 6px;
+  --composer-textarea-padding: 10px 8px 9px 6px;
   --composer-textarea-font-size: 15px;
   --composer-textarea-line-height: 1.5;
   order: 1;
@@ -4358,7 +4388,7 @@
   justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 48px;
+  min-height: 44px;
   align-self: center;
 }
 
@@ -4367,7 +4397,7 @@
   z-index: 1;
   display: block;
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
 }
 
 .composer-textarea-shell > textarea[data-editing="true"] {
@@ -6319,7 +6349,7 @@
   flex: 1 1 auto;
   position: relative;
   z-index: 1;
-  min-height: 48px;
+  min-height: 44px;
   max-height: 140px;
   display: block;
   align-self: stretch;
@@ -8097,5 +8127,60 @@ html[data-ui-density="compact"] .message-composer {
     left: 6px;
     right: 6px;
   }
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) * {
+  scrollbar-color: transparent transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) .is-scroll-active {
+  scrollbar-color: rgba(150, 160, 184, 0.42) transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) .is-scroll-active::-webkit-scrollbar-thumb {
+  background: rgba(150, 160, 184, 0.42) !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) :where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus,
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) :where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: none !important;
 }
 

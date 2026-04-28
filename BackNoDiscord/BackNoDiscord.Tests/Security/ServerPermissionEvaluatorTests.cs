@@ -51,7 +51,7 @@ public class ServerPermissionEvaluatorTests
     }
 
     [Fact]
-    public void CanCreateInvite_RejectsClientSideRoleEscalationAgainstStoredSnapshot()
+    public void CanCreateInvite_AllowsStoredServerMembers()
     {
         var existingSnapshot = CreateSnapshot();
         var requestedSnapshot = CreateSnapshot();
@@ -62,7 +62,8 @@ public class ServerPermissionEvaluatorTests
             new ServerRoleSnapshot { Id = "member", Priority = 100, Permissions = ["invite_members"] }
         ];
 
-        Assert.False(ServerPermissionEvaluator.CanCreateInvite(existingSnapshot, requestedSnapshot, "member"));
+        Assert.True(ServerPermissionEvaluator.CanCreateInvite(existingSnapshot, requestedSnapshot, "member"));
+        Assert.False(ServerPermissionEvaluator.CanCreateInvite(existingSnapshot, requestedSnapshot, "stranger"));
     }
 
     private static ServerSnapshot CreateSnapshot()

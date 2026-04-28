@@ -57,6 +57,42 @@ function FriendsNavIcon({ kind }) {
   }
 }
 
+function FriendsActionIcon({ kind }) {
+  switch (kind) {
+    case "chat":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6.5 18.5L4 20V6.75C4 5.78 4.78 5 5.75 5H18.25C19.22 5 20 5.78 20 6.75V16.25C20 17.22 19.22 18 18.25 18H8.1L6.5 18.5Z" />
+          <path d="M8 9H16" />
+          <path d="M8 13H13.5" />
+        </svg>
+      );
+    case "call":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M7.1 5.4L9.2 7.5C9.65 7.95 9.78 8.63 9.53 9.21L8.78 10.96C9.72 12.84 11.16 14.28 13.04 15.22L14.79 14.47C15.37 14.22 16.05 14.35 16.5 14.8L18.6 16.9C19.12 17.42 19.13 18.25 18.63 18.78C18.03 19.42 17.19 19.78 16.31 19.75C9.68 19.5 4.5 14.32 4.25 7.69C4.22 6.81 4.58 5.97 5.22 5.37C5.75 4.87 6.58 4.88 7.1 5.4Z" />
+        </svg>
+      );
+    case "more":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 7.25H12.01" />
+          <path d="M12 12H12.01" />
+          <path d="M12 16.75H12.01" />
+        </svg>
+      );
+    case "future":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 3.75L13.35 8.35L18 9.75L13.35 11.15L12 15.75L10.65 11.15L6 9.75L10.65 8.35L12 3.75Z" />
+          <path d="M17.5 14.5L18.25 17L20.75 17.75L18.25 18.5L17.5 21L16.75 18.5L14.25 17.75L16.75 17L17.5 14.5Z" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 const CONVERSATION_ROLE_OPTIONS = [
   {
     id: "admin",
@@ -110,7 +146,6 @@ export const FriendsSidebar = ({
   navItems,
   friendsPageSection,
   filteredFriends,
-  filteredConversations,
   activeDirectFriendId,
   activeConversationId,
   directUnreadCounts,
@@ -123,7 +158,6 @@ export const FriendsSidebar = ({
   onResetDirect,
   onSetFriendsSection,
   onOpenDirectChat,
-  onOpenConversationChat,
   onOpenUserContextMenu,
   overlayContent = null,
   getDisplayName,
@@ -190,102 +224,57 @@ export const FriendsSidebar = ({
             <span>Магазин</span>
           </button>
         </div>
+      </div>
 
-        <div className="friends-directs">
-          <div className="friends-directs__header">
-            <span>Личные сообщения</span>
-          </div>
-
-          <div className="friends-directs__list">
-            {filteredFriends.length ? (
-              filteredFriends.map((friend) => {
-                const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
-                const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
-                const hasDraft = Boolean(chatDraftPresence[directChannelId]);
-                const activityStatus = formatIntegrationActivityStatus(friend.activity || friend.externalActivity);
-
-                return (
-                  <button
-                    key={friend.id}
-                    type="button"
-                    className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""} ${pressedFriendId === String(friend.id) ? "friends-directs__item--pressing" : ""}`}
-                    onClick={(event) => {
-                      if (friendItemLongPress.consumeSuppressedClick()) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        return;
-                      }
-
-                      onOpenDirectChat(friend.id);
-                    }}
-                    onContextMenu={(event) => onOpenUserContextMenu?.(event, friend)}
-                    {...friendItemLongPress.bindLongPress(friend, (event, pressedFriend) => {
-                      onOpenUserContextMenu?.(event, pressedFriend);
-                    }, {
-                      onStart: (pressedFriend) => setPressedFriendId(String(pressedFriend?.id || "")),
-                      onCancel: () => setPressedFriendId(""),
-                      onTrigger: () => setPressedFriendId(""),
-                    })}
-                  >
-                    <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                    <span className="friends-directs__meta">
-                      <span className={`friends-directs__name ${isUserCurrentlyOnline(friend) ? "friends-directs__name--online" : ""}`}>{getDisplayName(friend)}</span>
-                      {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
-                      {!hasDraft && activityStatus ? <span className="friends-directs__status">{activityStatus}</span> : null}
-                    </span>
-                    {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="friends-panel__empty">Подходящих друзей пока нет.</div>
-            )}
-          </div>
+      <div className="friends-directs">
+        <div className="friends-directs__header">
+          <span>Личные сообщения</span>
         </div>
 
-        <div className="friends-directs friends-directs--conversations">
-          <div className="friends-directs__header">
-            <span>БЕСЕДЫ</span>
-          </div>
+        <div className="friends-directs__list">
+          {filteredFriends.length ? (
+            filteredFriends.map((friend) => {
+              const directChannelId = friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id);
+              const unreadCount = Number(directUnreadCounts[directChannelId] || 0);
+              const hasDraft = Boolean(chatDraftPresence[directChannelId]);
+              const activityStatus = formatIntegrationActivityStatus(friend.activity || friend.externalActivity);
 
-          <div className="friends-directs__list">
-            {filteredConversations.length ? (
-              filteredConversations.map((conversation) => {
-                const conversationId = String(conversation.conversationId || conversation.id || "");
-                const conversationChannelId = String(conversation.directChannelId || "");
-                const unreadCount = Number(directUnreadCounts[conversationChannelId] || 0);
-                const hasDraft = Boolean(chatDraftPresence[conversationChannelId]);
-                const memberCount = Number(conversation.memberCount || conversation.members?.length || 0);
-                const participantLabel = `${memberCount} ${memberCount === 1 ? "участник" : memberCount < 5 ? "участника" : "участников"}`;
+              return (
+                <button
+                  key={friend.id}
+                  type="button"
+                  className={`friends-directs__item ${String(activeDirectFriendId) === String(friend.id) ? "friends-directs__item--active" : ""} ${pressedFriendId === String(friend.id) ? "friends-directs__item--pressing" : ""}`}
+                  onClick={(event) => {
+                    if (friendItemLongPress.consumeSuppressedClick()) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      return;
+                    }
 
-                return (
-                  <button
-                    key={conversationId}
-                    type="button"
-                    className={`friends-directs__item ${String(activeConversationId) === conversationId ? "friends-directs__item--active" : ""}`}
-                    onClick={() => onOpenConversationChat(conversationId)}
-                  >
-                    <AnimatedAvatar
-                      className="friends-directs__avatar"
-                      src={conversation.avatar || ""}
-                      alt={conversation.title || "Беседа"}
-                      loading="eager"
-                      decoding="sync"
-                    />
-                    <span className="friends-directs__meta">
-                      <span className="friends-directs__name">{conversation.title || "Новая беседа"}</span>
-                      <span className="friends-directs__status">
-                        {hasDraft ? "Черновик" : participantLabel}
-                      </span>
-                    </span>
-                    {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="friends-panel__empty">Пока нет бесед.</div>
-            )}
-          </div>
+                    onOpenDirectChat(friend.id);
+                  }}
+                  onContextMenu={(event) => onOpenUserContextMenu?.(event, friend)}
+                  {...friendItemLongPress.bindLongPress(friend, (event, pressedFriend) => {
+                    onOpenUserContextMenu?.(event, pressedFriend);
+                  }, {
+                    onStart: (pressedFriend) => setPressedFriendId(String(pressedFriend?.id || "")),
+                    onCancel: () => setPressedFriendId(""),
+                    onTrigger: () => setPressedFriendId(""),
+                  })}
+                >
+                  <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="lazy" decoding="async" />
+                  <span className="friends-directs__meta">
+                    <span className={`friends-directs__name ${isUserCurrentlyOnline(friend) ? "friends-directs__name--online" : ""}`}>{getDisplayName(friend)}</span>
+                    {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
+                    {!hasDraft && activityStatus ? <span className="friends-directs__status">{activityStatus}</span> : null}
+                  </span>
+                  {unreadCount > 0 ? <span className="sidebar-unread-badge">{Math.min(unreadCount, 99)}</span> : null}
+                </button>
+              );
+            })
+          ) : (
+            <div className="friends-panel__empty">Подходящих друзей пока нет.</div>
+          )}
         </div>
       </div>
 
@@ -529,6 +518,7 @@ export const FriendsMain = ({
   const [conversationAvatarPreview, setConversationAvatarPreview] = useState("");
   const [selectedConversationFriendIds, setSelectedConversationFriendIds] = useState([]);
   const [conversationFriendSearch, setConversationFriendSearch] = useState("");
+  const [conversationListSearch, setConversationListSearch] = useState("");
   const [showAddConversationMemberForm, setShowAddConversationMemberForm] = useState(false);
   const [addConversationMemberSearch, setAddConversationMemberSearch] = useState("");
   const [pendingConversationMemberId, setPendingConversationMemberId] = useState("");
@@ -591,6 +581,22 @@ export const FriendsMain = ({
       return displayName.includes(normalizedQuery) || email.includes(normalizedQuery);
     });
   }, [addConversationMemberSearch, addableConversationFriends, getDisplayName]);
+  const filteredConversations = useMemo(() => {
+    const normalizedQuery = String(conversationListSearch || "").trim().toLowerCase();
+    if (!normalizedQuery) {
+      return conversations;
+    }
+
+    return conversations.filter((conversation) => {
+      const title = String(conversation?.title || "").toLowerCase();
+      const memberNames = (conversation?.members || [])
+        .map((member) => `${member?.name || ""} ${member?.nickname || ""} ${member?.email || ""}`)
+        .join(" ")
+        .toLowerCase();
+
+      return title.includes(normalizedQuery) || memberNames.includes(normalizedQuery);
+    });
+  }, [conversationListSearch, conversations]);
   const filteredConversationMembers = useMemo(() => {
     const normalizedQuery = String(conversationSettingsSearch || "").trim().toLowerCase();
     const members = Array.isArray(currentConversationTarget?.members) ? currentConversationTarget.members : [];
@@ -1160,7 +1166,7 @@ export const FriendsMain = ({
             onOpenItem={(item) => setActiveStoreItem(item)}
           />
         ) : friendsPageSection !== "conversations" ? (
-            <div className="friends-main__content">
+            <div className="friends-main__content friends-main__content--directory">
             <div className="friends-hero friends-add-inline">
                 <h2>Добавить в друзья</h2>
                 <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
@@ -1246,23 +1252,62 @@ export const FriendsMain = ({
               </div>
             ) : null}
 
-            <div className="friends-hero">
-              <h1>Все друзья</h1>
-              <p>Здесь находятся все уже добавленные друзья. Отсюда можно сразу открыть личный чат.</p>
+            <div className="friends-hero friends-hero--compact friends-hero--directory">
+              <div className="friends-hero__header friends-hero__header--compact">
+                <div className="friends-hero__header-copy">
+                  <h1>Все друзья</h1>
+                  <p>{friends.length ? `${friends.length} контактов. Чат, звонок и быстрые действия под рукой.` : "У вас пока нет друзей."}</p>
+                </div>
+              </div>
               {friends.length ? (
-                <div className="friends-results">
+                <div className="friends-results friends-results--compact friends-results--scroll">
                   {friends.map((friend) => (
-                    <div key={friend.id} className="friends-results__item">
+                    <div key={friend.id} className="friends-results__item friends-results__item--compact">
                       <div className="friends-results__identity">
-                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="lazy" decoding="async" />
                         <div className="friends-results__meta">
-                          <strong>{getDisplayName(friend)}</strong>
+                          <strong className={isUserCurrentlyOnline(friend) ? "friends-results__name--online" : ""}>{getDisplayName(friend)}</strong>
                           <span>{friend.email || "Без email"}</span>
                         </div>
                       </div>
-                      <button type="button" className="friends-results__action" onClick={() => onOpenDirectChat(friend.id)}>
-                        Открыть чат
-                      </button>
+                      <div className="friends-results__actions friends-results__actions--icon">
+                        <button
+                          type="button"
+                          className="friends-results__icon-action friends-results__icon-action--primary"
+                          onClick={() => onOpenDirectChat(friend.id)}
+                          aria-label={`Открыть чат с ${getDisplayName(friend)}`}
+                          title="Открыть чат"
+                        >
+                          <FriendsActionIcon kind="chat" />
+                        </button>
+                        <button
+                          type="button"
+                          className="friends-results__icon-action"
+                          onClick={() => onStartDirectCall?.(friend.id)}
+                          aria-label={`Позвонить ${getDisplayName(friend)}`}
+                          title="Позвонить"
+                        >
+                          <FriendsActionIcon kind="call" />
+                        </button>
+                        <button
+                          type="button"
+                          className="friends-results__icon-action"
+                          onClick={(event) => onOpenDirectActions?.(event, friend)}
+                          aria-label={`Действия с ${getDisplayName(friend)}`}
+                          title="Действия"
+                        >
+                          <FriendsActionIcon kind="more" />
+                        </button>
+                        <button
+                          type="button"
+                          className="friends-results__icon-action friends-results__icon-action--future"
+                          aria-label="Будущие быстрые действия"
+                          title="Скоро: быстрые действия"
+                          disabled
+                        >
+                          <FriendsActionIcon kind="future" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1272,8 +1317,8 @@ export const FriendsMain = ({
             </div>
           </div>
         ) : friendsPageSection === "conversations" ? (
-          <div className="friends-main__content">
-            <div className="friends-hero">
+          <div className="friends-main__content friends-main__content--directory">
+            <div className="friends-hero friends-hero--compact friends-hero--directory">
               <div className="friends-hero__header">
                 <div className="friends-hero__header-copy">
                   <h1>Беседы</h1>
@@ -1281,25 +1326,35 @@ export const FriendsMain = ({
                 </div>
                 <button
                   type="button"
-                  className="friends-create-button"
+                  className="friends-create-button friends-create-button--compact"
                   onClick={openCreateConversationFlow}
                 >
-                  Создать беседу
+                  <span aria-hidden="true">+</span>
+                  Создать
                 </button>
               </div>
+              <label className="friends-directory-search">
+                <span aria-hidden="true" />
+                <input
+                  type="text"
+                  value={conversationListSearch}
+                  onChange={(event) => setConversationListSearch(event.target.value)}
+                  placeholder="Найти беседу"
+                />
+              </label>
               {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
               {conversationsLoading ? <div className="friends-panel__empty">Загружаем беседы...</div> : null}
-              {!conversationsLoading && conversations.length ? (
-                <div className="friends-results">
-                  {conversations.map((conversation) => (
-                    <div key={conversation.conversationId || conversation.id} className="friends-results__item">
+              {!conversationsLoading && filteredConversations.length ? (
+                <div className="friends-results friends-results--compact friends-results--scroll">
+                  {filteredConversations.map((conversation) => (
+                    <div key={conversation.conversationId || conversation.id} className="friends-results__item friends-results__item--compact">
                       <div className="friends-results__identity">
                         <AnimatedAvatar
                           className="friends-results__avatar"
                           src={conversation.avatar || ""}
                           alt={conversation.title || "Беседа"}
-                          loading="eager"
-                          decoding="sync"
+                          loading="lazy"
+                          decoding="async"
                         />
                         <div className="friends-results__meta">
                           <strong>{conversation.title || "Новая беседа"}</strong>
@@ -1308,10 +1363,12 @@ export const FriendsMain = ({
                       </div>
                       <button
                         type="button"
-                        className="friends-results__action"
+                        className="friends-results__icon-action friends-results__icon-action--primary"
                         onClick={() => onOpenConversationChat(conversation.conversationId || conversation.id)}
+                        aria-label={`Открыть беседу ${conversation.title || "Новая беседа"}`}
+                        title="Открыть чат"
                       >
-                        Открыть чат
+                        <FriendsActionIcon kind="chat" />
                       </button>
                     </div>
                   ))}
@@ -1319,6 +1376,9 @@ export const FriendsMain = ({
               ) : null}
               {!conversationsLoading && !conversationsError && !conversations.length ? (
                 <div className="friends-panel__empty">Пока нет ни одной беседы.</div>
+              ) : null}
+              {!conversationsLoading && !conversationsError && conversations.length > 0 && !filteredConversations.length ? (
+                <div className="friends-panel__empty">По этому запросу бесед не найдено.</div>
               ) : null}
             </div>
           </div>

@@ -107,7 +107,7 @@ export default function TextChatUserContextMenu({
             <strong>{menu.username || "User"}</strong>
             <span>{menu.isSelf ? "Это вы" : `ID: ${menu.userId}`}</span>
           </div>
-          <button type="button" className="chat-user-menu__close" onClick={onClose} aria-label="Закрыть меню">×</button>
+          <button type="button" className="chat-user-menu__close" onClick={onClose} aria-label="Закрыть меню" />
         </div>
 
         <div className="chat-user-menu__body" role="menu">
