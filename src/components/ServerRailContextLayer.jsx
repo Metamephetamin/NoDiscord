@@ -1,4 +1,5 @@
 import { ServerInviteFriendsModal } from "./ServerWorkspace";
+import { isServerOwnedByUser } from "../utils/menuMainModel";
 
 export default function ServerRailContextLayer({
   servers,
@@ -17,6 +18,7 @@ export default function ServerRailContextLayer({
   onSendServerInviteToFriend,
   onCopyServerInvite,
   onLeaveServer,
+  onDeleteServer,
   getChannelDisplayName,
 }) {
   const targetServer = serverContextMenu
@@ -25,6 +27,7 @@ export default function ServerRailContextLayer({
   const inviteModalServer = serverInviteTarget || targetServer;
   const canCopyInvite = canInviteToServer?.(targetServer);
   const canUseServerActions = Boolean(targetServer);
+  const isTargetServerOwner = isServerOwnedByUser(targetServer, currentUserId);
   const rawChannelName = serverInviteTargetChannelName || currentTextChannel?.name || "основной";
   const channelName = getChannelDisplayName ? getChannelDisplayName(rawChannelName, "text") : rawChannelName;
 
@@ -70,10 +73,10 @@ export default function ServerRailContextLayer({
           <button
             type="button"
             className="member-role-menu__item member-role-menu__item--danger"
-            onClick={() => onLeaveServer?.(targetServer)}
-            disabled={!canUseServerActions}
+            onClick={() => (isTargetServerOwner ? onDeleteServer?.(targetServer?.id) : onLeaveServer?.(targetServer))}
+            disabled={!canUseServerActions || (isTargetServerOwner ? !onDeleteServer : !onLeaveServer)}
           >
-            Выйти с сервера
+            {isTargetServerOwner ? "Удалить сервер" : "Выйти с сервера"}
           </button>
           {serverContextMenu.status ? (
             <>

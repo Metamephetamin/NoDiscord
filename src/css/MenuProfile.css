@@ -407,7 +407,7 @@
   display: inline-flex;
   width: max-content;
   gap: 34px;
-  animation: profileActivityMarquee 8s ease-in-out infinite;
+  animation: profileActivityMarquee 20s linear infinite;
   will-change: transform;
 }
 
@@ -417,17 +417,13 @@
 
 @keyframes profileActivityMarquee {
   0%,
-  28% {
+  24% {
     transform: translateX(0);
   }
 
-  68%,
-  82% {
-    transform: translateX(calc(-50% - 17px));
-  }
-
+  78%,
   100% {
-    transform: translateX(0);
+    transform: translateX(calc(-50% - 17px));
   }
 }
 

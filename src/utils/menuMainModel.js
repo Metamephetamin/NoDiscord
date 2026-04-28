@@ -423,6 +423,9 @@ export const inferSharedServer = (server, currentUser) => {
 
   return false;
 };
+export const isServerOwnedByUser = (server, userId) =>
+  Boolean(server && userId && String(server.ownerId || server.owner_id || server.OwnerId || "") === String(userId));
+
 export const getRolePermissions = (server, roleId) => {
   const role = server?.roles?.find((item) => item.id === roleId);
   return Array.isArray(role?.permissions) ? role.permissions : [];
@@ -436,7 +439,7 @@ export const hasServerPermission = (server, userId, permission) => {
     return false;
   }
 
-  if (String(server.ownerId || "") === String(userId)) {
+  if (isServerOwnedByUser(server, userId)) {
     return true;
   }
 
@@ -719,19 +722,36 @@ export const getIncomingMessagePreview = (messageItem, fallbackText = "Ново�
     return resolvedText;
   }
 
-  if (messageItem?.voiceMessage || messageItem?.VoiceMessage) {
+  const attachments = Array.isArray(messageItem?.attachments)
+    ? messageItem.attachments
+    : Array.isArray(messageItem?.Attachments)
+      ? messageItem.Attachments
+      : [];
+  const firstAttachment = attachments[0] || null;
+  if (messageItem?.voiceMessage || messageItem?.VoiceMessage || firstAttachment?.voiceMessage || firstAttachment?.VoiceMessage) {
     return "Голосовое сообщение";
   }
 
-  const contentType = String(messageItem?.attachmentContentType || "").toLowerCase();
+  if (attachments.length > 1) {
+    return `${attachments.length} вложений`;
+  }
+
+  const contentType = String(
+    messageItem?.attachmentContentType
+    || messageItem?.AttachmentContentType
+    || firstAttachment?.attachmentContentType
+    || firstAttachment?.AttachmentContentType
+    || ""
+  ).toLowerCase();
   if (contentType.startsWith("image/")) {
     return "Отправил изображение";
   }
   if (contentType.startsWith("video/")) {
     return "Отправил видео";
   }
-  if (messageItem?.attachmentName) {
-    return `Отправил файл: ${messageItem.attachmentName}`;
+  const attachmentName = String(messageItem?.attachmentName || messageItem?.AttachmentName || firstAttachment?.attachmentName || firstAttachment?.AttachmentName || "");
+  if (attachmentName) {
+    return `Отправил файл: ${attachmentName}`;
   }
 
   return fallbackText;
@@ -790,6 +810,18 @@ export const normalizeConversationTarget = (conversation) => {
     }))
     : [];
 
+  const rawLastMessage = conversation?.lastMessage || conversation?.last_message || null;
+  const lastMessage = rawLastMessage && typeof rawLastMessage === "object"
+    ? {
+      id: String(rawLastMessage.id || rawLastMessage.Id || ""),
+      channelId: String(rawLastMessage.channelId || rawLastMessage.channel_id || rawLastMessage.ChannelId || ""),
+      authorUserId: String(rawLastMessage.authorUserId || rawLastMessage.author_user_id || rawLastMessage.AuthorUserId || ""),
+      username: String(rawLastMessage.username || rawLastMessage.Username || ""),
+      preview: String(rawLastMessage.preview || rawLastMessage.Preview || ""),
+      timestamp: String(rawLastMessage.timestamp || rawLastMessage.Timestamp || ""),
+    }
+    : null;
+
   return {
     id: String(conversation?.directChannelId || conversation?.id || ""),
     conversationId: Number(conversation?.id || 0),
@@ -810,8 +842,11 @@ export const normalizeConversationTarget = (conversation) => {
     canManageRoles: Boolean(conversation?.canManageRoles ?? conversation?.can_manage_roles),
     canLeave: Boolean(conversation?.canLeave ?? conversation?.can_leave),
     canDeleteConversation: Boolean(conversation?.canDeleteConversation ?? conversation?.can_delete_conversation),
+    isMuted: Boolean(conversation?.isMuted ?? conversation?.is_muted),
+    muteUntil: String(conversation?.muteUntil || conversation?.mute_until || ""),
     memberCount: Number(conversation?.memberCount || conversation?.member_count || members.length),
     members,
+    lastMessage,
     activeCallChannel: String(conversation?.activeCallChannel || conversation?.active_call_channel || ""),
     activeCallStartedAt: String(conversation?.activeCallStartedAt || conversation?.active_call_started_at || ""),
     updatedAt: String(conversation?.updatedAt || conversation?.updated_at || ""),

@@ -93,6 +93,49 @@ function FriendsActionIcon({ kind }) {
   }
 }
 
+function ActiveContactStatusIcon({ kind }) {
+  if (kind === "voice") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 14.5V19" />
+        <path d="M10 10V19" />
+        <path d="M15 5V19" />
+        <path d="M20 8V19" />
+      </svg>
+    );
+  }
+
+  if (kind === "music") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M9 18.5C9 19.6 8.05 20.5 6.85 20.5C5.65 20.5 4.7 19.6 4.7 18.5C4.7 17.4 5.65 16.5 6.85 16.5C8.05 16.5 9 17.4 9 18.5Z" />
+        <path d="M9 18.5V6.5L18.5 4.5V15.5" />
+        <path d="M18.5 15.5C18.5 16.6 17.55 17.5 16.35 17.5C15.15 17.5 14.2 16.6 14.2 15.5C14.2 14.4 15.15 13.5 16.35 13.5C17.55 13.5 18.5 14.4 18.5 15.5Z" />
+      </svg>
+    );
+  }
+
+  if (kind === "game") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M8.2 15H8.21" />
+        <path d="M6.5 12.5H9.9" />
+        <path d="M8.2 10.8V14.2" />
+        <path d="M15.7 12.2H15.71" />
+        <path d="M17.8 15H17.81" />
+        <path d="M6.2 18.5H17.8C19.5 18.5 20.8 17.05 20.55 15.38L19.95 11.38C19.7 9.7 18.25 8.5 16.55 8.5H7.45C5.75 8.5 4.3 9.7 4.05 11.38L3.45 15.38C3.2 17.05 4.5 18.5 6.2 18.5Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 5.25V12L16.25 14.5" />
+      <path d="M20.25 12C20.25 16.56 16.56 20.25 12 20.25C7.44 20.25 3.75 16.56 3.75 12C3.75 7.44 7.44 3.75 12 3.75C16.56 3.75 20.25 7.44 20.25 12Z" />
+    </svg>
+  );
+}
+
 const CONVERSATION_ROLE_OPTIONS = [
   {
     id: "admin",
@@ -134,6 +177,47 @@ const CONVERSATION_ROLE_PRIORITIES = {
 
 const getConversationRoleLabel = (role) => CONVERSATION_ROLE_LABELS[String(role || "member").toLowerCase()] || "Участник";
 const getConversationRolePriority = (role) => CONVERSATION_ROLE_PRIORITIES[String(role || "member").toLowerCase()] ?? 0;
+
+const formatConversationMemberCount = (value) => {
+  const count = Math.max(0, Number(value) || 0);
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return `${count} участник`;
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${count} участника`;
+  }
+  return `${count} участников`;
+};
+
+const formatConversationPreviewTime = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDiff = Math.floor((startOfToday.getTime() - startOfDate.getTime()) / 86400000);
+
+  if (dayDiff === 0) {
+    return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  }
+  if (dayDiff === 1) {
+    return "Вчера";
+  }
+  if (dayDiff > 1 && dayDiff < 7) {
+    return date.toLocaleDateString("ru-RU", { weekday: "short" });
+  }
+
+  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+};
 
 const getConversationMemberRole = (member, ownerUserId) => (
   String(member?.id || "") === String(ownerUserId || "")
@@ -471,15 +555,9 @@ export const FriendsMain = ({
   friendRequestsError,
   friendRequestsLoading,
   friendRequestActionId,
-  friendEmail,
-  friendQueryMode,
-  friendLookupLoading,
-  friendLookupResults,
-  friendLookupPerformed,
-  friendsError,
-  isAddingFriend,
   activeContacts,
   conversations,
+  directUnreadCounts = {},
   conversationsLoading,
   conversationsError,
   conversationActionLoading,
@@ -500,11 +578,8 @@ export const FriendsMain = ({
   onOpenDirectActions,
   onCloseSelectedStream,
   onFriendRequestAction,
-  onFriendSearchSubmit,
-  onFriendSearchChange,
   onDirectSearchQueryChange,
   onClearDirectSearchQuery,
-  onAddFriend,
   phoneIcon,
   searchIcon,
   getDisplayName,
@@ -528,6 +603,8 @@ export const FriendsMain = ({
   const [conversationSettingsAvatarPreview, setConversationSettingsAvatarPreview] = useState("");
   const [conversationSettingsSearch, setConversationSettingsSearch] = useState("");
   const [activeConversationMemberActionId, setActiveConversationMemberActionId] = useState("");
+  const [friendDirectorySearch, setFriendDirectorySearch] = useState("");
+  const [friendDirectoryFilter, setFriendDirectoryFilter] = useState("all");
   const activeDirectCall = directCallPanelProps?.call;
   const activeDirectCallPanelProps =
     !currentConversationTarget &&
@@ -537,8 +614,6 @@ export const FriendsMain = ({
     String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
       ? directCallPanelProps
       : null;
-  const hasFriendSearchText = String(friendEmail || "").trim().length > 0;
-  const shouldShowFriendLookupList = hasFriendSearchText && (friendLookupLoading || friendsError || friendLookupPerformed || friendLookupResults.length > 0);
   const appliedStoreItem = getProfileStoreItemById(profileCustomization?.appliedItemId);
   const applyStoreItem = (item) => {
     onProfileCustomizationChange?.(applyProfileStoreItem(profileCustomization, item));
@@ -610,6 +685,66 @@ export const FriendsMain = ({
       return displayName.includes(normalizedQuery) || email.includes(normalizedQuery);
     });
   }, [conversationSettingsSearch, currentConversationTarget?.members, getDisplayName]);
+  const activeContactById = useMemo(
+    () => new Map((activeContacts || []).map((friend) => [String(friend?.id || ""), friend])),
+    [activeContacts]
+  );
+  const onlineFriendCount = useMemo(
+    () => friends.reduce((count, friend) => count + (isUserCurrentlyOnline(friend) ? 1 : 0), 0),
+    [friends]
+  );
+  const friendDirectoryRows = useMemo(() => {
+    const normalizedQuery = String(friendDirectorySearch || "").trim().toLowerCase();
+    const matchesQuery = (friend) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return [
+        getDisplayName(friend),
+        friend?.email,
+        friend?.nickname,
+        friend?.name,
+        friend?.id,
+      ].some((value) => String(value || "").toLowerCase().includes(normalizedQuery));
+    };
+
+    if (friendDirectoryFilter === "online") {
+      return friends.filter((friend) => isUserCurrentlyOnline(friend) && matchesQuery(friend));
+    }
+
+    if (friendDirectoryFilter === "recent" || friendDirectoryFilter === "blocked") {
+      return [];
+    }
+
+    return friends.filter(matchesQuery);
+  }, [friendDirectoryFilter, friendDirectorySearch, friends, getDisplayName]);
+  const getFriendDirectoryStatus = (friend) => {
+    const activeContact = activeContactById.get(String(friend?.id || ""));
+    if (activeContact?.activeStatus) {
+      return {
+        kind: activeContact.activeStatusKind || "activity",
+        label: activeContact.activeStatus,
+        detail: activeContact.activeVoiceChannelName || activeContact.activeVoiceServerName || "",
+      };
+    }
+
+    const activityLabel = formatIntegrationActivityStatus(friend?.activity || friend?.externalActivity);
+    if (activityLabel) {
+      const activityKind = String((friend?.activity || friend?.externalActivity)?.kind || "activity").toLowerCase();
+      return {
+        kind: activityKind === "music" || activityKind === "game" ? activityKind : "activity",
+        label: activityLabel,
+        detail: "",
+      };
+    }
+
+    if (isUserCurrentlyOnline(friend)) {
+      return { kind: "online", label: "В сети", detail: "" };
+    }
+
+    return { kind: "offline", label: "Не в сети", detail: formatUserPresenceStatus(friend) };
+  };
   const fallbackConversationRole = useMemo(() => {
     if (!currentConversationTarget) {
       return "member";
@@ -1166,155 +1301,130 @@ export const FriendsMain = ({
             onOpenItem={(item) => setActiveStoreItem(item)}
           />
         ) : friendsPageSection !== "conversations" ? (
-            <div className="friends-main__content friends-main__content--directory">
-            <div className="friends-hero friends-add-inline">
-                <h2>Добавить в друзья</h2>
-                <p>Введите имя для поиска по имени. Если в запросе есть символ `@`, поиск автоматически переключится на email.</p>
-                <form className="friends-hero__form" onSubmit={onFriendSearchSubmit}>
-                  <div className={`friends-search-combobox ${shouldShowFriendLookupList ? "friends-search-combobox--open" : ""}`}>
-                    <input
-                      type="text"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      placeholder={friendQueryMode === "email" ? "friend@example.com" : "Введите имя пользователя"}
-                      value={friendEmail}
-                      onChange={(event) => onFriendSearchChange(event.target.value)}
-                    />
-                    {shouldShowFriendLookupList ? (
-                      <div className="friends-search-dropdown">
-                        {friendsError ? <div className="friends-search-dropdown__message friends-search-dropdown__message--error">{friendsError}</div> : null}
-                        {!friendsError && friendLookupLoading ? <div className="friends-search-dropdown__message">Ищем...</div> : null}
-                        {!friendsError && friendLookupResults.map((friend) => (
-                          <div key={friend.id} className="friends-search-dropdown__item">
-                            <div className="friends-results__identity">
-                              <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                              <div className="friends-results__meta">
-                                <strong>{getDisplayName(friend)}</strong>
-                                <span>{friend.email || "Без email"}</span>
-                              </div>
-                            </div>
-                            <button type="button" className="friends-results__action" disabled={isAddingFriend} onClick={() => onAddFriend(friend)}>
-                              {isAddingFriend ? "..." : "Добавить"}
-                            </button>
-                          </div>
-                        ))}
-                        {!friendsError && friendLookupPerformed && !friendLookupLoading && !friendLookupResults.length ? (
-                          <div className="friends-search-dropdown__message">
-                            {friendQueryMode === "email"
-                              ? "Никого не нашли. Проверьте email и попробуйте ещё раз."
-                              : "Никого не нашли. Попробуйте другую букву, имя или фамилию."}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <button type="submit" disabled={friendLookupLoading}>
-                    {friendLookupLoading ? "Ищем..." : "Найти"}
+          <div className="friends-main__content friends-main__content--directory">
+            <section className="friends-directory">
+              <div className="friends-directory__header">
+                <div className="friends-directory__title">
+                  <h1>Друзья</h1>
+                  <p>Общайтесь, играйте и проводите время вместе</p>
+                </div>
+              </div>
+
+              <label className="friends-directory__search">
+                <span aria-hidden="true" />
+                <input
+                  type="text"
+                  value={friendDirectorySearch}
+                  onChange={(event) => setFriendDirectorySearch(event.target.value)}
+                  placeholder="Найти друга по имени или email"
+                />
+              </label>
+
+              <div className="friends-directory__filters" role="tablist" aria-label="Фильтр друзей">
+                {[
+                  { id: "all", label: "Все" },
+                  { id: "online", label: "Онлайн", badge: onlineFriendCount },
+                  { id: "requests", label: "Запросы", badge: incomingFriendRequestCount },
+                  { id: "recent", label: "Недавние" },
+                  { id: "blocked", label: "Заблокированные" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`friends-directory__filter ${friendDirectoryFilter === item.id ? "friends-directory__filter--active" : ""}`}
+                    onClick={() => setFriendDirectoryFilter(item.id)}
+                    role="tab"
+                    aria-selected={friendDirectoryFilter === item.id}
+                  >
+                    {item.label}
+                    {item.badge > 0 ? <span>{Math.min(item.badge, 99)}</span> : null}
                   </button>
-                </form>
-            </div>
-
-            {friendRequestsError || incomingFriendRequests.length ? (
-              <div className="friends-hero friends-requests">
-                <div className="friends-requests__header">
-                  <h2>Входящие заявки</h2>
-                  {incomingFriendRequestCount > 0 ? <span className="friends-main__tab-badge">{Math.min(incomingFriendRequestCount, 99)}</span> : null}
-                </div>
-                {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
-                {!friendRequestsError && incomingFriendRequests.length ? (
-                  <div className="friends-results friends-results--requests">
-                    {incomingFriendRequests.map((request) => (
-                      <div key={request.id} className="friends-results__item friends-results__item--request">
-                        <div className="friends-results__identity">
-                          <AnimatedAvatar className="friends-results__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="eager" decoding="sync" />
-                          <div className="friends-results__meta">
-                            <strong>{getDisplayName(request.sender)}</strong>
-                            <span>{request.sender.email || "Без email"}</span>
-                          </div>
-                        </div>
-                        <div className="friends-results__actions">
-                          <button type="button" className="friends-results__action friends-results__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
-                            {friendRequestActionId === request.id ? "..." : "✓"}
-                          </button>
-                          <button type="button" className="friends-results__action friends-results__action--decline" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                            {friendRequestActionId === request.id ? "..." : (
-                              <svg className="friends-results__action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                <path d="M4 4l8 8M12 4l-8 8" />
-                              </svg>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                ))}
               </div>
-            ) : null}
 
-            <div className="friends-hero friends-hero--compact friends-hero--directory">
-              <div className="friends-hero__header friends-hero__header--compact">
-                <div className="friends-hero__header-copy">
-                  <h1>Все друзья</h1>
-                  <p>{friends.length ? `${friends.length} контактов. Чат, звонок и быстрые действия под рукой.` : "У вас пока нет друзей."}</p>
-                </div>
+              <div className="friends-directory__summary">
+                <span>
+                  {friendDirectoryFilter === "requests"
+                    ? `Входящие заявки — ${incomingFriendRequestCount}`
+                    : `Все друзья — ${friends.length}`}
+                </span>
+                <span>Сортировать: По имени</span>
               </div>
-              {friends.length ? (
-                <div className="friends-results friends-results--compact friends-results--scroll">
-                  {friends.map((friend) => (
-                    <div key={friend.id} className="friends-results__item friends-results__item--compact">
-                      <div className="friends-results__identity">
-                        <AnimatedAvatar className="friends-results__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="lazy" decoding="async" />
-                        <div className="friends-results__meta">
-                          <strong className={isUserCurrentlyOnline(friend) ? "friends-results__name--online" : ""}>{getDisplayName(friend)}</strong>
-                          <span>{friend.email || "Без email"}</span>
-                        </div>
+
+              {friendDirectoryFilter === "requests" ? (
+                <div className="friends-directory__list friends-results--scroll">
+                  {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
+                  {!friendRequestsError && incomingFriendRequests.map((request) => (
+                    <div key={request.id} className="friends-directory__row">
+                      <div className="friends-directory__identity">
+                        <AnimatedAvatar className="friends-directory__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="lazy" decoding="async" />
+                        <span className="friends-directory__copy">
+                          <strong>{getDisplayName(request.sender)}</strong>
+                          <span>{request.sender.email || `ID: ${request.sender.id}`}</span>
+                        </span>
                       </div>
-                      <div className="friends-results__actions friends-results__actions--icon">
-                        <button
-                          type="button"
-                          className="friends-results__icon-action friends-results__icon-action--primary"
-                          onClick={() => onOpenDirectChat(friend.id)}
-                          aria-label={`Открыть чат с ${getDisplayName(friend)}`}
-                          title="Открыть чат"
-                        >
-                          <FriendsActionIcon kind="chat" />
+                      <div className="friends-directory__actions">
+                        <button type="button" className="friends-directory__action friends-directory__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
+                          {friendRequestActionId === request.id ? "..." : "✓"}
                         </button>
-                        <button
-                          type="button"
-                          className="friends-results__icon-action"
-                          onClick={() => onStartDirectCall?.(friend.id)}
-                          aria-label={`Позвонить ${getDisplayName(friend)}`}
-                          title="Позвонить"
-                        >
-                          <FriendsActionIcon kind="call" />
-                        </button>
-                        <button
-                          type="button"
-                          className="friends-results__icon-action"
-                          onClick={(event) => onOpenDirectActions?.(event, friend)}
-                          aria-label={`Действия с ${getDisplayName(friend)}`}
-                          title="Действия"
-                        >
-                          <FriendsActionIcon kind="more" />
-                        </button>
-                        <button
-                          type="button"
-                          className="friends-results__icon-action friends-results__icon-action--future"
-                          aria-label="Будущие быстрые действия"
-                          title="Скоро: быстрые действия"
-                          disabled
-                        >
-                          <FriendsActionIcon kind="future" />
+                        <button type="button" className="friends-directory__action" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
+                          {friendRequestActionId === request.id ? "..." : "×"}
                         </button>
                       </div>
                     </div>
                   ))}
+                  {!friendRequestsError && !incomingFriendRequests.length ? (
+                    <div className="friends-panel__empty">Новых заявок нет.</div>
+                  ) : null}
                 </div>
               ) : (
-                <div className="friends-panel__empty">У вас пока нет друзей. Найдите пользователя по имени или email.</div>
+                <div className="friends-directory__list friends-results--scroll">
+                  {friendDirectoryRows.map((friend) => {
+                    const status = getFriendDirectoryStatus(friend);
+
+                    return (
+                      <div key={friend.id} className="friends-directory__row">
+                        <div className="friends-directory__identity">
+                          <span className="friends-directory__avatar-wrap">
+                            <AnimatedAvatar className="friends-directory__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="lazy" decoding="async" />
+                            <span className={`friends-directory__presence friends-directory__presence--${status.kind}`} aria-hidden="true" />
+                          </span>
+                          <span className="friends-directory__copy">
+                            <strong>{getDisplayName(friend)}</strong>
+                            <span>{friend.email || `ID: ${friend.id}`}</span>
+                          </span>
+                        </div>
+                        <div className={`friends-directory__status friends-directory__status--${status.kind}`}>
+                          <span className="friends-directory__status-icon" aria-hidden="true">
+                            <ActiveContactStatusIcon kind={status.kind} />
+                          </span>
+                          <span>
+                            <strong>{status.label}</strong>
+                            {status.detail ? <em>{status.detail}</em> : null}
+                          </span>
+                        </div>
+                        <div className="friends-directory__actions">
+                          <button type="button" className="friends-directory__action" onClick={() => onOpenDirectChat(friend.id)} aria-label={`Открыть чат с ${getDisplayName(friend)}`} title="Открыть чат">
+                            <FriendsActionIcon kind="chat" />
+                          </button>
+                          <button type="button" className="friends-directory__action" onClick={() => onStartDirectCall?.(friend.id)} aria-label={`Позвонить ${getDisplayName(friend)}`} title="Позвонить">
+                            <FriendsActionIcon kind="call" />
+                          </button>
+                          <button type="button" className="friends-directory__action" onClick={(event) => onOpenDirectActions?.(event, friend)} aria-label={`Действия с ${getDisplayName(friend)}`} title="Действия">
+                            <FriendsActionIcon kind="more" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {friendDirectoryFilter === "recent" ? <div className="friends-panel__empty">Недавние контакты появятся здесь позже.</div> : null}
+                  {friendDirectoryFilter === "blocked" ? <div className="friends-panel__empty">Заблокированных пользователей нет.</div> : null}
+                  {friendDirectoryFilter !== "recent" && friendDirectoryFilter !== "blocked" && !friendDirectoryRows.length ? (
+                    <div className="friends-panel__empty">По этому запросу друзей не найдено.</div>
+                  ) : null}
+                </div>
               )}
-            </div>
+            </section>
           </div>
         ) : friendsPageSection === "conversations" ? (
           <div className="friends-main__content friends-main__content--directory">
@@ -1345,33 +1455,64 @@ export const FriendsMain = ({
               {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
               {conversationsLoading ? <div className="friends-panel__empty">Загружаем беседы...</div> : null}
               {!conversationsLoading && filteredConversations.length ? (
-                <div className="friends-results friends-results--compact friends-results--scroll">
-                  {filteredConversations.map((conversation) => (
-                    <div key={conversation.conversationId || conversation.id} className="friends-results__item friends-results__item--compact">
-                      <div className="friends-results__identity">
+                <div className="friends-conversation-list friends-results--scroll">
+                  {filteredConversations.map((conversation) => {
+                    const conversationId = conversation.conversationId || conversation.id;
+                    const unreadCount = Number(directUnreadCounts[conversation.directChannelId] || 0);
+                    const lastMessage = conversation.lastMessage || null;
+                    const previewText = String(lastMessage?.preview || "").trim();
+                    const lastAuthorName = String(lastMessage?.authorUserId || "") === String(user?.id || "")
+                      ? "Вы"
+                      : String(lastMessage?.username || "").trim() || "Участник";
+                    const previewTime = formatConversationPreviewTime(lastMessage?.timestamp || conversation.updatedAt);
+                    const memberCount = conversation.memberCount || conversation.members?.length || 0;
+                    const isActive = String(activeConversationId || "") === String(conversationId || "");
+
+                    return (
+                      <button
+                        key={conversationId}
+                        type="button"
+                        className={`friends-conversation-card ${isActive ? "friends-conversation-card--active" : ""}`}
+                        onClick={() => onOpenConversationChat(conversationId)}
+                        aria-label={`Открыть беседу ${conversation.title || "Новая беседа"}`}
+                      >
                         <AnimatedAvatar
-                          className="friends-results__avatar"
+                          className="friends-conversation-card__avatar"
                           src={conversation.avatar || ""}
                           alt={conversation.title || "Беседа"}
                           loading="lazy"
                           decoding="async"
                         />
-                        <div className="friends-results__meta">
-                          <strong>{conversation.title || "Новая беседа"}</strong>
-                          <span>{`${Number(conversation.memberCount || conversation.members?.length || 0)} участников`}</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="friends-results__icon-action friends-results__icon-action--primary"
-                        onClick={() => onOpenConversationChat(conversation.conversationId || conversation.id)}
-                        aria-label={`Открыть беседу ${conversation.title || "Новая беседа"}`}
-                        title="Открыть чат"
-                      >
-                        <FriendsActionIcon kind="chat" />
+                        <span className="friends-conversation-card__body">
+                          <strong className="friends-conversation-card__title">{conversation.title || "Новая беседа"}</strong>
+                          <span className="friends-conversation-card__members">{formatConversationMemberCount(memberCount)}</span>
+                          <span className={`friends-conversation-card__preview ${previewText ? "" : "friends-conversation-card__preview--empty"}`.trim()}>
+                            <span className="friends-conversation-card__dot" aria-hidden="true" />
+                            {previewText ? (
+                              <>
+                                <strong>{lastAuthorName}:</strong>
+                                <span>{previewText}</span>
+                              </>
+                            ) : (
+                              <span>Сообщений пока нет</span>
+                            )}
+                          </span>
+                        </span>
+                        <span className="friends-conversation-card__aside">
+                          {previewTime ? <span className="friends-conversation-card__time">{previewTime}</span> : null}
+                          {unreadCount > 0 ? <span className="friends-conversation-card__badge">{Math.min(unreadCount, 99)}</span> : null}
+                          {conversation.isMuted ? (
+                            <span className="friends-conversation-card__muted" aria-label="Уведомления выключены">
+                              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M17.5 9.5V11.5C17.5 14 18.75 15.25 19.5 16H4.5C5.25 15.25 6.5 14 6.5 11.5V9.5C6.5 6.7 8.75 4.5 12 4.5C15.25 4.5 17.5 6.7 17.5 9.5Z" />
+                                <path d="M9.75 19C10.25 19.6 11 20 12 20C13 20 13.75 19.6 14.25 19" />
+                              </svg>
+                            </span>
+                          ) : null}
+                        </span>
                       </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : null}
               {!conversationsLoading && !conversationsError && !conversations.length ? (
@@ -1823,8 +1964,17 @@ export const FriendsMain = ({
           <div className="friends-contacts__list">
             {activeContacts.map((friend) => (
               <button key={friend.id} type="button" className="friends-contacts__item" onClick={() => onOpenDirectChat(friend.id)}>
-                <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                <span>{getDisplayName(friend)}</span>
+                <span className="friends-contacts__avatar-wrap">
+                  <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
+                  <span className={`friends-contacts__presence friends-contacts__presence--${friend.activeStatusKind || "online"}`} aria-hidden="true" />
+                </span>
+                <span className="friends-contacts__copy">
+                  <strong>{getDisplayName(friend)}</strong>
+                  <span>{friend.activeStatus || formatUserPresenceStatus(friend)}</span>
+                </span>
+                <span className={`friends-contacts__activity-icon friends-contacts__activity-icon--${friend.activeStatusKind || "online"}`} aria-hidden="true">
+                  <ActiveContactStatusIcon kind={friend.activeStatusKind} />
+                </span>
               </button>
             ))}
           </div>

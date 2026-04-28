@@ -4,7 +4,7 @@ import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
-import { createId, formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 
 const loadVoiceRoomStage = () => import("./VoiceRoomStage");
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
@@ -1373,6 +1373,7 @@ export const ServersSidebar = memo(({
   onUpdateMemberRole,
   onCopyServerInvite,
   onLeaveServer,
+  onDeleteServer,
   onAddServer,
   onAddTextChannel,
   onAddVoiceChannel,
@@ -1922,6 +1923,7 @@ export const ServersSidebar = memo(({
                 const targetServer = servers.find((server) => String(server.id) === String(serverContextMenu.serverId));
                 const canCopyInvite = canInviteToServer(targetServer);
                 const canUseServerActions = Boolean(targetServer);
+                const isTargetServerOwner = isServerOwnedByUser(targetServer, currentUserId);
 
                 return (
                   <>
@@ -1945,10 +1947,10 @@ export const ServersSidebar = memo(({
                     <button
                       type="button"
                       className="member-role-menu__item member-role-menu__item--danger"
-                      onClick={() => onLeaveServer?.(targetServer)}
-                      disabled={!canUseServerActions}
+                      onClick={() => (isTargetServerOwner ? onDeleteServer?.(targetServer?.id) : onLeaveServer?.(targetServer))}
+                      disabled={!canUseServerActions || (isTargetServerOwner ? !onDeleteServer : !onLeaveServer)}
                     >
-                      Выйти с сервера
+                      {isTargetServerOwner ? "Удалить сервер" : "Выйти с сервера"}
                     </button>
                     {serverContextMenu.status ? (
                       <>
@@ -2356,11 +2358,41 @@ export const ServerMain = memo(ServerMainComponent, areServerMainPropsEqual);
 
 ServersSidebar.displayName = "ServersSidebar";
 ServerMain.displayName = "ServerMain";
+
+function getServerVoiceActivityIds(servers = [], participantsMap = {}) {
+  const activeIds = new Set();
+  servers.forEach((server) => {
+    const hasActiveVoice = (server?.voiceChannels || []).some((channel) => {
+      const scopedChannelId = `${server.id}::${channel.id}`;
+      const participants = participantsMap?.[scopedChannelId] || participantsMap?.[channel.id] || [];
+      return Array.isArray(participants) && participants.length > 0;
+    });
+
+    if (hasActiveVoice) {
+      activeIds.add(String(server.id || ""));
+    }
+  });
+  return activeIds;
+}
+
+function ServerVoiceBadge() {
+  return (
+    <span className="btn__server-voice-badge" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M12 14.5C14 14.5 15.25 13.05 15.25 11.25V6.75C15.25 4.95 14 3.5 12 3.5C10 3.5 8.75 4.95 8.75 6.75V11.25C8.75 13.05 10 14.5 12 14.5Z" />
+        <path d="M5.75 10.75C5.75 14.2 8.25 16.75 12 16.75C15.75 16.75 18.25 14.2 18.25 10.75" />
+        <path d="M12 16.75V20.5" />
+      </svg>
+    </span>
+  );
+}
+
 export const DesktopServerRail = ({
   servers,
   workspaceMode,
   activeServer,
   activeDirectCall = null,
+  participantsMap = {},
   defaultServerIcon,
   smsIcon,
   onOpenFriendsWorkspace,
@@ -2374,6 +2406,10 @@ export const DesktopServerRail = ({
   getServerIconFrame,
 }) => {
   const [serverTooltip, setServerTooltip] = useState(null);
+  const serverVoiceActivityIds = useMemo(
+    () => getServerVoiceActivityIds(servers, participantsMap),
+    [participantsMap, servers]
+  );
 
   const showServerTooltip = (event, server) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -2403,11 +2439,14 @@ export const DesktopServerRail = ({
       </button>
     ) : null}
     <div className="sidebar__servers-list" onScroll={hideServerTooltip}>
-      {servers.map((server) => (
+      {servers.map((server) => {
+        const hasVoiceActivity = serverVoiceActivityIds.has(String(server.id || ""));
+
+        return (
         <button
         key={server.id}
         type="button"
-        className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
+        className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""} ${hasVoiceActivity ? "btn__server--voice-active" : ""}`}
         onClick={onServerShortcutClick(server)}
         onContextMenu={(event) => onServerContextMenu(event, server)}
         onPointerDown={(event) => onServerPointerDown(event, server)}
@@ -2433,9 +2472,11 @@ export const DesktopServerRail = ({
         ) : (
           <span className="btn__server-empty" aria-hidden="true" />
         )}
+          {hasVoiceActivity ? <ServerVoiceBadge /> : null}
           <span className="btn__server-tooltip" role="tooltip">{server.name || "Без названия"}</span>
         </button>
-      ))}
+        );
+      })}
       <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={onAddServer}>+</button>
     </div>
     {serverTooltip ? (
@@ -2451,6 +2492,7 @@ export const MobileServerStrip = ({
   servers,
   workspaceMode,
   activeServer,
+  participantsMap = {},
   defaultServerIcon,
   onServerShortcutClick,
   onServerPointerDown,
@@ -2458,14 +2500,23 @@ export const MobileServerStrip = ({
   onServerPointerCancel,
   onAddServer,
   getServerIconFrame,
-}) => (
+}) => {
+  const serverVoiceActivityIds = useMemo(
+    () => getServerVoiceActivityIds(servers, participantsMap),
+    [participantsMap, servers]
+  );
+
+  return (
   <div className="mobile-server-strip">
     <div className="mobile-server-strip__scroller">
-      {servers.map((server) => (
+      {servers.map((server) => {
+        const hasVoiceActivity = serverVoiceActivityIds.has(String(server.id || ""));
+
+        return (
         <button
           key={server.id}
           type="button"
-          className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""}`}
+          className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""} ${hasVoiceActivity ? "btn__server--voice-active" : ""}`}
           onClick={onServerShortcutClick(server)}
           onPointerDown={(event) => onServerPointerDown(event, server)}
           onPointerUp={onServerPointerUp}
@@ -2486,12 +2537,15 @@ export const MobileServerStrip = ({
           ) : (
             <span className="btn__server-empty" aria-hidden="true" />
           )}
+          {hasVoiceActivity ? <ServerVoiceBadge /> : null}
         </button>
-      ))}
+        );
+      })}
       <button type="button" className="btn__create-server btn__create-server--mobile" aria-label="Создать сервер" onClick={onAddServer}>+</button>
     </div>
   </div>
-);
+  );
+};
 
 export const MobileDirectChat = ({
   currentDirectFriend,

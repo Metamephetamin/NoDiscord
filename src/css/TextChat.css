@@ -964,10 +964,10 @@
 
 .message-item--dm .msg-content--attachments,
 .message-item--dm .msg-content--media-only {
-  width: fit-content;
-  min-width: min(220px, 100%);
+  width: min(100%, 840px);
+  min-width: min(520px, 100%);
   max-width: min(100%, 840px);
-  flex: 0 1 auto;
+  flex: 1 1 auto;
 }
 
 .message-item--selectable {
@@ -2023,6 +2023,14 @@
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.message-item--dm .msg-content--media-only,
+.message-item--dm-own.msg-content--media-only {
+  width: min(100%, 840px);
+  min-width: min(520px, 100%);
+  max-width: min(100%, 840px);
+  flex: 1 1 auto;
 }
 
 .msg-content--inline-emoji-only {

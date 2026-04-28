@@ -7,6 +7,7 @@ import {
 } from "../utils/auth";
 import {
   getDisplayName,
+  getIncomingMessagePreview,
   normalizeConversationTarget,
   normalizeFriend,
   normalizeFriendRequest,
@@ -19,6 +20,13 @@ const sortFriends = (friends) =>
   friends.sort((left, right) =>
     getDisplayName(left).localeCompare(getDisplayName(right), "ru", { sensitivity: "base" })
   );
+
+const sortConversations = (conversations) =>
+  conversations.sort((left, right) => {
+    const leftTime = String(left.lastMessage?.timestamp || left.updatedAt || "");
+    const rightTime = String(right.lastMessage?.timestamp || right.updatedAt || "");
+    return rightTime.localeCompare(leftTime);
+  });
 
 export default function useFriendsWorkspaceState({
   user,
@@ -165,10 +173,9 @@ export default function useFriendsWorkspaceState({
 
       setConversations(
         Array.isArray(data)
-          ? data
+          ? sortConversations(data
               .map(normalizeConversationTarget)
-              .filter((conversation) => conversation.conversationId && conversation.directChannelId)
-              .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+              .filter((conversation) => conversation.conversationId && conversation.directChannelId))
           : []
       );
     } catch (error) {
@@ -654,6 +661,38 @@ export default function useFriendsWorkspaceState({
     const handleConversationsUpdated = () => {
       loadConversations().catch(() => {});
     };
+    const handleConversationMessage = (messageItem) => {
+      const channelId = String(messageItem?.channelId || messageItem?.ChannelId || "").trim();
+      if (!channelId || channelId.startsWith("dm:")) {
+        return;
+      }
+
+      setConversations((previous) => {
+        let changed = false;
+        const next = previous.map((conversation) => {
+          if (String(conversation.directChannelId || "") !== channelId) {
+            return conversation;
+          }
+
+          changed = true;
+          const timestamp = String(messageItem?.timestamp || messageItem?.Timestamp || new Date().toISOString());
+          return {
+            ...conversation,
+            updatedAt: timestamp,
+            lastMessage: {
+              id: String(messageItem?.id || messageItem?.Id || ""),
+              channelId,
+              authorUserId: String(messageItem?.authorUserId || messageItem?.AuthorUserId || ""),
+              username: String(messageItem?.username || messageItem?.Username || "User"),
+              preview: getIncomingMessagePreview(messageItem, "Новое сообщение"),
+              timestamp,
+            },
+          };
+        });
+
+        return changed ? sortConversations(next) : previous;
+      });
+    };
     const handleFriendPresenceUpdated = (payload) => {
       const updatedUserId = String(payload?.userId || payload?.user_id || "").trim();
       if (!updatedUserId) {
@@ -697,6 +736,7 @@ export default function useFriendsWorkspaceState({
     chatConnection.on("FriendListUpdated", handleFriendListUpdated);
     chatConnection.on("FriendRequestsUpdated", handleFriendRequestsUpdated);
     chatConnection.on("ConversationsUpdated", handleConversationsUpdated);
+    chatConnection.on("ReceiveMessage", handleConversationMessage);
     chatConnection.on("FriendPresenceUpdated", handleFriendPresenceUpdated);
     window.addEventListener("focus", handleWindowFocus);
 
@@ -714,6 +754,7 @@ export default function useFriendsWorkspaceState({
       chatConnection.off("FriendListUpdated", handleFriendListUpdated);
       chatConnection.off("FriendRequestsUpdated", handleFriendRequestsUpdated);
       chatConnection.off("ConversationsUpdated", handleConversationsUpdated);
+      chatConnection.off("ReceiveMessage", handleConversationMessage);
       chatConnection.off("FriendPresenceUpdated", handleFriendPresenceUpdated);
       window.removeEventListener("focus", handleWindowFocus);
       window.clearInterval(intervalId);

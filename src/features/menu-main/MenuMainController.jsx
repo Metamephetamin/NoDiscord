@@ -95,6 +95,7 @@ import {
   normalizeMicLevel,
 } from "./menuMainRealtimeComparators";
 import { buildMenuMainQuickSwitcherItems } from "./menuMainQuickSwitcher";
+import { buildActiveContacts } from "./menuMainActiveContacts";
 import {
   EMPTY_ARRAY,
   MAX_PROFILE_NICKNAME_LENGTH,
@@ -141,6 +142,7 @@ import {
   hasServerPermission,
   HEADPHONES_ICON_URL,
   isPersonalDefaultServer,
+  isServerOwnedByUser,
   isValidProfileName,
   MAX_PROFILE_NAME_LENGTH,
   mergePersistedServers,
@@ -1045,8 +1047,14 @@ export default function MenuMain({
     return nextMap;
   }, [activeVoiceParticipantsMap]);
   const activeContacts = useMemo(
-    () => friends.filter((friend) => voiceParticipantByUserId.has(String(friend.id))),
-    [friends, voiceParticipantByUserId]
+    () => buildActiveContacts({
+      friends,
+      participantsMap,
+      servers,
+      currentUserId,
+      getScopedVoiceChannelId,
+    }),
+    [currentUserId, friends, participantsMap, servers]
   );
   const totalDirectUnreadCount = useMemo(
     () => Object.values(directUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
@@ -3717,9 +3725,21 @@ export default function MenuMain({
     setCreateServerError("");
   };
   const handleDeleteServer = async (serverId) => {
-    if (!canManageServer) return;
-    const serverToDelete = servers.find((server) => server.id === serverId);
+    const serverToDelete = servers.find((server) => String(server.id) === String(serverId));
     if (!serverToDelete) return;
+    setServerContextMenu(null);
+    if (!hasServerPermission(serverToDelete, currentUserId, "manage_server")) return;
+    if (isPersonalDefaultServer(serverToDelete, user)) {
+      setProfileStatus("Личный сервер нельзя удалить.");
+      return;
+    }
+
+    const serverName = serverToDelete.name || "сервер";
+    const isOwnerDelete = isServerOwnedByUser(serverToDelete, currentUserId);
+    const confirmMessage = isOwnerDelete
+      ? `Удалить сервер «${serverName}»? Это действие нельзя отменить.`
+      : `Удалить сервер «${serverName}»?`;
+    if (typeof window !== "undefined" && !window.confirm(confirmMessage)) return;
 
     if (serverToDelete.isShared) {
       try {
@@ -3738,8 +3758,8 @@ export default function MenuMain({
     }
 
     if (serverToDelete.voiceChannels.some((channel) => getScopedVoiceChannelId(serverToDelete.id, channel.id) === currentVoiceChannel)) await leaveVoiceChannel();
-    const nextServers = servers.filter((server) => server.id !== serverId);
-    const nextActiveId = activeServerId === serverId ? nextServers[0]?.id || "" : activeServerId;
+    const nextServers = servers.filter((server) => String(server.id) !== String(serverId));
+    const nextActiveId = String(activeServerId) === String(serverId) ? nextServers[0]?.id || "" : activeServerId;
     const nextActiveServer = nextServers.find((server) => server.id === nextActiveId) || nextServers[0] || null;
     setServers(nextServers);
     setActiveServerId(nextActiveId);
@@ -5347,6 +5367,7 @@ export default function MenuMain({
       onUpdateMemberRole={updateMemberRole}
       onCopyServerInvite={copyServerInviteLink}
       onLeaveServer={handleLeaveServer}
+      onDeleteServer={handleDeleteServer}
       onAddServer={stableHandleAddServer}
       onAddTextChannel={addTextChannel}
       onAddVoiceChannel={addVoiceChannel}
@@ -5410,6 +5431,7 @@ export default function MenuMain({
         isAddingFriend={isAddingFriend}
         activeContacts={activeContacts}
         conversations={conversations}
+        directUnreadCounts={directUnreadCounts}
         conversationsLoading={conversationsLoading}
         conversationsError={conversationsError}
         conversationActionLoading={conversationActionLoading}
@@ -5529,6 +5551,7 @@ export default function MenuMain({
       workspaceMode={workspaceMode}
       activeServer={activeServer}
       activeDirectCall={directCallState.phase !== "idle" ? directCallState : null}
+      participantsMap={participantsMap}
       defaultServerIcon={DEFAULT_SERVER_ICON}
       smsIcon={SMS_ICON_URL}
       onOpenFriendsWorkspace={openFriendsWorkspace}
@@ -5553,6 +5576,7 @@ export default function MenuMain({
       servers={servers}
       workspaceMode={workspaceMode}
       activeServer={activeServer}
+      participantsMap={participantsMap}
       defaultServerIcon={DEFAULT_SERVER_ICON}
       onServerShortcutClick={handleServerShortcutClick}
       onServerPointerDown={handleServerShortcutPointerDown}
@@ -5875,6 +5899,7 @@ export default function MenuMain({
             onSendServerInviteToFriend={sendServerInviteToFriend}
             onCopyServerInvite={copyServerInviteLink}
             onLeaveServer={handleLeaveServer}
+            onDeleteServer={handleDeleteServer}
             getChannelDisplayName={getChannelDisplayName}
           />
         ) : null}

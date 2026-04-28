@@ -100,6 +100,22 @@ public sealed class ConversationsController : ControllerBase
             .Where(item => conversationIds.Contains(item.ConversationId))
             .ToListAsync(cancellationToken);
 
+        var conversationChannelIds = conversationIds
+            .Select(ConversationChannels.BuildChatChannelId)
+            .ToArray();
+        var latestMessageIds = await _context.Messages
+            .AsNoTracking()
+            .Where(message => conversationChannelIds.Contains(message.ChannelId) && !message.IsDeleted)
+            .GroupBy(message => message.ChannelId)
+            .Select(group => group.Max(message => message.Id))
+            .ToListAsync(cancellationToken);
+        var latestMessagesByChannelId = latestMessageIds.Count == 0
+            ? new Dictionary<string, Message>(StringComparer.Ordinal)
+            : await _context.Messages
+                .AsNoTracking()
+                .Where(message => latestMessageIds.Contains(message.Id))
+                .ToDictionaryAsync(message => message.ChannelId, StringComparer.Ordinal, cancellationToken);
+
         var users = await LoadUsersAsync(members.Select(item => item.UserId), cancellationToken);
         var membersByConversationId = members
             .GroupBy(item => item.ConversationId)
@@ -117,7 +133,10 @@ public sealed class ConversationsController : ControllerBase
                     conversation,
                     conversationMembers,
                     users,
-                    currentUserId);
+                    currentUserId,
+                    latestMessagesByChannelId.TryGetValue(ConversationChannels.BuildChatChannelId(conversation.Id), out var latestMessage)
+                        ? latestMessage
+                        : null);
             })
             .ToList();
 
@@ -911,6 +930,131 @@ public sealed class ConversationsController : ControllerBase
         return $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
     }
 
+    private object? BuildConversationLastMessagePayload(Message? message)
+    {
+        if (message is null)
+        {
+            return null;
+        }
+
+        var payload = DeserializePayload(GetRawPayload(message));
+        return new
+        {
+            id = message.Id,
+            channelId = message.ChannelId,
+            authorUserId = payload.AuthorUserId,
+            username = message.Username,
+            preview = BuildConversationMessagePreview(payload),
+            timestamp = message.Timestamp
+        };
+    }
+
+    private string GetRawPayload(Message message)
+    {
+        if (string.IsNullOrWhiteSpace(message.EncryptedContent))
+        {
+            return message.Content ?? string.Empty;
+        }
+
+        try
+        {
+            return _crypto.Decrypt(message.EncryptedContent);
+        }
+        catch
+        {
+            return message.Content ?? string.Empty;
+        }
+    }
+
+    private static ChatMessagePayload DeserializePayload(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new ChatMessagePayload();
+        }
+
+        if (!raw.StartsWith(MessagePayloadPrefix, StringComparison.Ordinal))
+        {
+            return new ChatMessagePayload { Message = raw };
+        }
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<ChatMessagePayload>(raw[MessagePayloadPrefix.Length..]) ?? new ChatMessagePayload();
+            NormalizeLegacyPayload(payload);
+            return payload;
+        }
+        catch
+        {
+            return new ChatMessagePayload { Message = raw };
+        }
+    }
+
+    private static void NormalizeLegacyPayload(ChatMessagePayload payload)
+    {
+        payload.Attachments ??= [];
+        if (payload.Attachments.Count == 0 && (!string.IsNullOrWhiteSpace(payload.AttachmentUrl) || payload.VoiceMessage is not null))
+        {
+            payload.Attachments.Add(new ChatAttachmentPayload
+            {
+                AttachmentEncryption = payload.AttachmentEncryption,
+                AttachmentUrl = payload.AttachmentUrl,
+                AttachmentName = payload.AttachmentName,
+                AttachmentSize = payload.AttachmentSize,
+                AttachmentContentType = payload.AttachmentContentType,
+                AttachmentSpoiler = payload.AttachmentSpoiler,
+                AttachmentAsFile = payload.AttachmentAsFile,
+                VoiceMessage = payload.VoiceMessage
+            });
+        }
+    }
+
+    private static string BuildConversationMessagePreview(ChatMessagePayload payload)
+    {
+        var message = UploadPolicies.TrimToLength(payload.Message, 180).Trim();
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            return message;
+        }
+
+        if (payload.SystemEvent is not null)
+        {
+            return payload.SystemEvent.Type switch
+            {
+                ConversationSystemMemberAdded => "Новый участник в беседе",
+                ConversationSystemTitleUpdated => "Название беседы изменено",
+                ConversationSystemAvatarUpdated => "Аватар беседы обновлён",
+                _ => "Системное сообщение"
+            };
+        }
+
+        var attachments = payload.Attachments ?? [];
+        var firstAttachment = attachments.FirstOrDefault();
+        if (firstAttachment?.VoiceMessage is not null || payload.VoiceMessage is not null)
+        {
+            return "Голосовое сообщение";
+        }
+
+        if (attachments.Count > 1)
+        {
+            return $"{attachments.Count} вложений";
+        }
+
+        var contentType = firstAttachment?.AttachmentContentType ?? payload.AttachmentContentType ?? string.Empty;
+        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Изображение";
+        }
+
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Видео";
+        }
+
+        var attachmentName = UploadPolicies.TrimToLength(firstAttachment?.AttachmentName ?? payload.AttachmentName, 180).Trim();
+        return string.IsNullOrWhiteSpace(attachmentName) ? "Сообщение без текста" : attachmentName;
+    }
+
     private static string GetUserDisplayName(ConversationUserProjection? user, int fallbackUserId)
     {
         if (user is null)
@@ -948,7 +1092,8 @@ public sealed class ConversationsController : ControllerBase
         GroupConversationRecord conversation,
         IReadOnlyCollection<GroupConversationMemberRecord> members,
         IReadOnlyDictionary<int, ConversationUserProjection> users,
-        int currentUserId)
+        int currentUserId,
+        Message? latestMessage = null)
     {
         var currentMember = members.FirstOrDefault(item => item.UserId == currentUserId && !item.IsBanned);
         var currentRole = NormalizeConversationRole(currentMember?.Role);
@@ -1002,8 +1147,11 @@ public sealed class ConversationsController : ControllerBase
             canManageRoles = HasConversationPermission(currentRole, ConversationPermissionManageRoles),
             canLeave = currentMember is not null,
             canDeleteConversation = conversation.OwnerUserId == currentUserId,
+            isMuted = currentMember?.MutedUntil.HasValue == true && currentMember.MutedUntil > now,
+            muteUntil = currentMember?.MutedUntil,
             memberCount = activeMembers.Count,
             members = activeMembers,
+            lastMessage = BuildConversationLastMessagePayload(latestMessage),
             createdAt = conversation.CreatedAt,
             updatedAt = conversation.UpdatedAt,
             activeCallChannel = conversation.ActiveCallChannel,
