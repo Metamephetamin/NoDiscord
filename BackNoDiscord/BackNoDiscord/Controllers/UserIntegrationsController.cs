@@ -342,7 +342,10 @@ public class UserIntegrationsController : ControllerBase
             }
 
             var profile = await FetchSpotifyProfileAsync(token.AccessToken, cancellationToken);
-            await UpsertSpotifyIntegrationAsync(stateRecord.UserId, token, profile, cancellationToken);
+            var record = await UpsertSpotifyIntegrationAsync(stateRecord.UserId, token, profile, cancellationToken);
+            await RefreshRecordActivityAsync(record, cancellationToken);
+            record.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
             await BroadcastActivityUpdatedAsync(stateRecord.UserId, cancellationToken);
 
             return Content(BuildCallbackHtml("Spotify подключен", "Можно закрыть это окно и вернуться в Tend."), "text/html; charset=utf-8");
@@ -771,7 +774,7 @@ public class UserIntegrationsController : ControllerBase
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task UpsertSpotifyIntegrationAsync(int userId, SpotifyTokenResponse token, SpotifyProfile profile, CancellationToken cancellationToken)
+    private async Task<UserIntegrationRecord> UpsertSpotifyIntegrationAsync(int userId, SpotifyTokenResponse token, SpotifyProfile profile, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var record = await _context.UserIntegrations
@@ -800,6 +803,7 @@ public class UserIntegrationsController : ControllerBase
         record.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
+        return record;
     }
 
     private async Task<IActionResult> ConnectLocalDevIntegrationAsync(int userId, string providerId, CancellationToken cancellationToken)

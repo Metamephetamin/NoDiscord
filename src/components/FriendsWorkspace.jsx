@@ -81,6 +81,13 @@ function FriendsActionIcon({ kind }) {
           <path d="M12 16.75H12.01" />
         </svg>
       );
+    case "close":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M7 7L17 17" />
+          <path d="M17 7L7 17" />
+        </svg>
+      );
     case "future":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -496,7 +503,7 @@ const ProfileStoreView = ({ avatarSrc, displayName, appliedItem, onOpenItem }) =
           <h1>Украшения, рамки и анимации</h1>
           <p>Все предметы сейчас бесплатные. Нажмите на товар, посмотрите предпросмотр и примените стиль кнопкой в окне товара.</p>
         </div>
-        <button type="button" className="profile-store-hero__button" onClick={() => onOpenItem(PROFILE_STORE_ITEMS[0])}>
+        <button type="button" className="profile-store-hero__button" onClick={() => onOpenItem(PROFILE_STORE_FEATURED_ITEMS[0] || PROFILE_STORE_ITEMS[0])}>
           Просмотреть коллекцию
         </button>
       </section>
@@ -721,7 +728,7 @@ export const FriendsMain = ({
     [activeContacts]
   );
   const onlineFriendCount = useMemo(
-    () => friends.reduce((count, friend) => count + (isUserCurrentlyOnline(friend) ? 1 : 0), 0),
+    () => friends.reduce((count, friend) => count + (!friend?.isBlocked && isUserCurrentlyOnline(friend) ? 1 : 0), 0),
     [friends]
   );
   const friendDirectoryRows = useMemo(() => {
@@ -741,16 +748,28 @@ export const FriendsMain = ({
     };
 
     if (friendDirectoryFilter === "online") {
-      return friends.filter((friend) => isUserCurrentlyOnline(friend) && matchesQuery(friend));
+      return friends.filter((friend) => !friend?.isBlocked && isUserCurrentlyOnline(friend) && matchesQuery(friend));
     }
 
-    if (friendDirectoryFilter === "recent" || friendDirectoryFilter === "blocked") {
+    if (friendDirectoryFilter === "blocked") {
+      return friends.filter((friend) => friend?.isBlocked && matchesQuery(friend));
+    }
+
+    if (friendDirectoryFilter === "recent") {
       return [];
     }
 
-    return friends.filter(matchesQuery);
+    return friends.filter((friend) => !friend?.isBlocked && matchesQuery(friend));
   }, [friendDirectoryFilter, friendDirectorySearch, friends, getDisplayName]);
   const getFriendDirectoryStatus = (friend) => {
+    if (friend?.isBlocked) {
+      return { kind: "blocked", label: "Заблокирован", detail: "Можно разблокировать через меню" };
+    }
+
+    if (friend?.isIgnored) {
+      return { kind: "ignored", label: "Игнорируется", detail: "Скрыт из быстрых чатов" };
+    }
+
     const activeContact = activeContactById.get(String(friend?.id || ""));
     if (activeContact?.activeStatus) {
       return {
@@ -1510,7 +1529,7 @@ export const FriendsMain = ({
                 <div className="friends-directory__list friends-results--scroll">
                   {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
                   {!friendRequestsError && incomingFriendRequests.map((request) => (
-                    <div key={request.id} className="friends-directory__row">
+                    <div key={request.id} className="friends-directory__row friends-directory__row--request">
                       <div className="friends-directory__identity">
                         <AnimatedAvatar className="friends-directory__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="lazy" decoding="async" />
                         <span className="friends-directory__copy">
@@ -1523,7 +1542,7 @@ export const FriendsMain = ({
                           {friendRequestActionId === request.id ? "..." : "✓"}
                         </button>
                         <button type="button" className="friends-directory__action" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                          {friendRequestActionId === request.id ? "..." : "×"}
+                          {friendRequestActionId === request.id ? "..." : <FriendsActionIcon kind="close" />}
                         </button>
                       </div>
                     </div>
@@ -1536,6 +1555,7 @@ export const FriendsMain = ({
                 <div className="friends-directory__list friends-results--scroll">
                   {friendDirectoryRows.map((friend) => {
                     const status = getFriendDirectoryStatus(friend);
+                    const actionDisabled = Boolean(friend?.isBlocked);
 
                     return (
                       <div key={friend.id} className="friends-directory__row">
@@ -1559,10 +1579,10 @@ export const FriendsMain = ({
                           </span>
                         </div>
                         <div className="friends-directory__actions">
-                          <button type="button" className="friends-directory__action" onClick={() => onOpenDirectChat(friend.id)} aria-label={`Открыть чат с ${getDisplayName(friend)}`} title="Открыть чат">
+                          <button type="button" className="friends-directory__action" disabled={actionDisabled} onClick={() => onOpenDirectChat(friend.id)} aria-label={`Открыть чат с ${getDisplayName(friend)}`} title="Открыть чат">
                             <FriendsActionIcon kind="chat" />
                           </button>
-                          <button type="button" className="friends-directory__action" onClick={() => onStartDirectCall?.(friend.id)} aria-label={`Позвонить ${getDisplayName(friend)}`} title="Позвонить">
+                          <button type="button" className="friends-directory__action" disabled={actionDisabled} onClick={() => onStartDirectCall?.(friend.id)} aria-label={`Позвонить ${getDisplayName(friend)}`} title="Позвонить">
                             <FriendsActionIcon kind="call" />
                           </button>
                           <button type="button" className="friends-directory__action" onClick={(event) => onOpenDirectActions?.(event, friend)} aria-label={`Действия с ${getDisplayName(friend)}`} title="Действия">
@@ -1573,7 +1593,7 @@ export const FriendsMain = ({
                     );
                   })}
                   {friendDirectoryFilter === "recent" ? <div className="friends-panel__empty">Недавние контакты появятся здесь позже.</div> : null}
-                  {friendDirectoryFilter === "blocked" ? <div className="friends-panel__empty">Заблокированных пользователей нет.</div> : null}
+                  {friendDirectoryFilter === "blocked" && !friendDirectoryRows.length ? <div className="friends-panel__empty">Заблокированных пользователей нет.</div> : null}
                   {friendDirectoryFilter !== "recent" && friendDirectoryFilter !== "blocked" && !friendDirectoryRows.length ? (
                     <div className="friends-panel__empty">По этому запросу друзей не найдено.</div>
                   ) : null}

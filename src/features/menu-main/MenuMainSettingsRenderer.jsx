@@ -151,6 +151,7 @@ export function MenuMainSettingsContent({
           email={profileDraft.email}
           profileDraft={profileDraft}
           profileStatus={profileStatus}
+          maxNicknameLength={maxProfileNicknameLength}
           emailChangeState={emailChangeState}
           isTotpEnabled={isTotpEnabled}
           totpSetup={totpSetup}

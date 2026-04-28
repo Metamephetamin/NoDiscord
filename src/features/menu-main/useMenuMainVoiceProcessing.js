@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { VOICE_INPUT_MODES } from "../../utils/menuMainModel";
 
 const NOISE_PROFILE_OPTIONS = [
@@ -13,13 +13,8 @@ const NOISE_PROFILE_OPTIONS = [
     description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
   },
   {
-    id: "ai_noise_suppression",
-    title: "AI шумодав",
-    description: "Тяжелая RNNoise/WASM-модель перед отправкой голоса: лучше режет клавиатуру, вентилятор и фон.",
-  },
-  {
     id: "hard_gate",
-    title: "Hard RNNoise",
+    title: "Hard Gate",
     description: "Агрессивно давит фон и посторонние звуки, оставляя в приоритете почти только голос.",
   },
 ];
@@ -46,8 +41,8 @@ export default function useMenuMainVoiceProcessing({
       const normalizedStoredMode =
         storedMode === "voice_isolation"
           ? "hard_gate"
-          : storedMode === "rnnoise" || storedMode === "krisp"
-            ? "ai_noise_suppression"
+          : storedMode === "rnnoise" || storedMode === "krisp" || storedMode === "ai_noise_suppression"
+            ? "hard_gate"
             : storedMode;
       setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "transparent");
     } catch {

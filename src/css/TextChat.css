@@ -4041,7 +4041,7 @@
 .chat-profile-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1710;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4052,24 +4052,25 @@
 
 .chat-profile-modal {
   position: relative;
-  width: min(880px, calc(100vw - 32px));
-  min-height: min(620px, calc(100vh - 48px));
+  width: min(1000px, calc(100vw - 32px));
+  min-height: min(720px, calc(100vh - 48px));
   overflow: hidden;
   border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(119, 137, 174, 0.34);
   background:
-    radial-gradient(circle at top right, rgba(107, 127, 255, 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(18, 20, 26, 0.985), rgba(12, 14, 19, 0.995));
+    radial-gradient(circle at 8% 8%, rgba(112, 95, 255, 0.16), transparent 26%),
+    radial-gradient(circle at 85% 18%, rgba(63, 139, 255, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(15, 18, 27, 0.98), rgba(9, 11, 17, 0.995));
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
 }
 
 .chat-profile-modal__close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 24px;
+  right: 24px;
   z-index: 3;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -4088,8 +4089,8 @@
 }
 
 .chat-profile-modal__close-icon {
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   display: inline-block;
   background-color: currentColor;
   -webkit-mask: url("/icons/close.svg") center / contain no-repeat;
@@ -4098,8 +4099,7 @@
 
 .chat-profile-modal__hero {
   position: relative;
-  min-height: 260px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  min-height: 360px;
   overflow: hidden;
 }
 
@@ -4111,8 +4111,9 @@
 }
 
 .chat-profile-modal__hero-media {
-  width: 100%;
-  height: 100%;
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
   object-fit: cover;
   object-position: center center;
   transform: scale(1.04);
@@ -4128,28 +4129,29 @@
 
 .chat-profile-modal__hero-scrim {
   background:
-    linear-gradient(90deg, rgba(6, 8, 12, 0.48) 0%, rgba(8, 10, 15, 0.16) 52%, rgba(8, 10, 15, 0.38) 100%),
-    linear-gradient(180deg, rgba(8, 10, 15, 0.04) 0%, rgba(8, 10, 15, 0.52) 100%);
+    linear-gradient(90deg, rgba(6, 8, 13, 0.62) 0%, rgba(8, 10, 16, 0.22) 52%, rgba(8, 10, 16, 0.48) 100%),
+    linear-gradient(180deg, rgba(8, 10, 15, 0.02) 0%, rgba(8, 10, 15, 0.78) 100%);
 }
 
 .chat-profile-modal__hero-content {
   position: relative;
   z-index: 1;
-  min-height: 260px;
-  padding: 34px 34px 34px 168px;
+  min-height: 360px;
+  padding: 74px 46px 58px 244px;
   display: flex;
   align-items: center;
 }
 
 .chat-profile-modal__avatar {
   position: absolute;
-  left: 34px;
+  left: 46px;
   top: 50%;
-  width: 108px;
-  height: 108px;
-  border-radius: 30px;
+  width: 148px;
+  height: 148px;
+  border-radius: 34px;
   object-fit: cover;
   transform: translateY(-50%);
+  border: 2px solid rgba(162, 174, 209, 0.42);
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.38);
   background: rgba(255, 255, 255, 0.08);
 }
@@ -4163,22 +4165,20 @@
 
 .chat-profile-modal__identity strong {
   color: #ffffff;
-  font-size: clamp(28px, 3vw, 36px);
+  font-size: clamp(38px, 4vw, 48px);
   line-height: 1;
   text-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
 }
 
-.chat-profile-modal__identity span {
-  color: rgba(240, 244, 255, 0.82);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
 .chat-profile-modal__body {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
-  gap: 22px;
-  padding: 28px 30px 30px;
+  grid-template-columns: minmax(0, 1fr) 314px;
+  align-items: start;
+  gap: 26px;
+  padding: 0 30px 32px;
+  margin-top: -56px;
+  position: relative;
+  z-index: 2;
 }
 
 .chat-profile-modal__main,
@@ -4186,67 +4186,177 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
 
 .chat-profile-modal__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .chat-profile-modal__chip {
-  padding: 8px 12px;
+  padding: 10px 16px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #dfe6f7;
-  font-size: 12px;
+  background: rgba(18, 24, 39, 0.58);
+  border: 1px solid rgba(125, 145, 255, 0.32);
+  color: #dfe7ff;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.chat-profile-modal__section,
-.chat-profile-modal__meta {
-  padding: 18px 18px 20px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+.chat-profile-modal__chip--friend {
+  border-color: rgba(173, 105, 255, 0.46);
 }
 
-.chat-profile-modal__eyebrow {
+.chat-profile-modal__chip--id {
+  border-color: rgba(80, 152, 255, 0.5);
+}
+
+.chat-profile-modal__presence {
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 4px;
+  color: rgba(225, 232, 247, 0.78);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chat-profile-modal__presence i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #7b849b;
+}
+
+.chat-profile-modal__presence--online i {
+  background: #48e083;
+  box-shadow: 0 0 16px rgba(72, 224, 131, 0.58);
+}
+
+.chat-profile-modal__section {
+  min-height: 104px;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 20px 24px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(26, 31, 45, 0.86), rgba(13, 17, 27, 0.88));
+  border: 1px solid rgba(126, 139, 170, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 42px rgba(0, 0, 0, 0.16);
+}
+
+.chat-profile-modal__section-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(119, 138, 255, 0.24), rgba(52, 63, 93, 0.58)),
+    rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(126, 145, 255, 0.22);
+  position: relative;
+}
+
+.chat-profile-modal__section-icon::before,
+.chat-profile-modal__section-icon::after {
+  content: "";
+  position: absolute;
+  inset: 15px;
+  border: 2px solid #8aa2ff;
+  border-radius: 999px;
+}
+
+.chat-profile-modal__section-icon--info::before {
+  inset: 14px;
+}
+
+.chat-profile-modal__section-icon--info::after {
+  inset: auto 25px 13px;
+  height: 16px;
+  width: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: #8aa2ff;
+}
+
+.chat-profile-modal__section-icon--common::before {
+  inset: 16px 12px 18px;
+}
+
+.chat-profile-modal__section-icon--common::after {
+  inset: 24px 18px 13px;
+}
+
+.chat-profile-modal__section-copy {
+  min-width: 0;
+}
+
+.chat-profile-modal__section-copy > strong {
+  display: block;
   margin-bottom: 10px;
-  color: #8fa0c9;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  color: #f6f8ff;
+  font-size: 20px;
+  line-height: 1.15;
 }
 
 .chat-profile-modal__section p {
   margin: 0;
-  color: #e8edf9;
+  color: rgba(230, 236, 250, 0.82);
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.55;
+}
+
+.chat-profile-modal__info-list {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-profile-modal__info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: rgba(214, 222, 241, 0.78);
+  font-size: 15px;
+}
+
+.chat-profile-modal__info-row + .chat-profile-modal__info-row {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-profile-modal__info-row b {
+  color: #f6f8ff;
+  text-align: right;
 }
 
 .chat-profile-modal__actions {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
 .chat-profile-modal__action {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
+  min-height: 70px;
+  padding: 0 22px;
+  border: 1px solid rgba(126, 139, 170, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(26, 31, 45, 0.86), rgba(13, 17, 27, 0.9));
   color: #eef2ff;
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
   transition: transform 0.16s ease, background-color 0.16s ease, opacity 0.16s ease;
 }
 
@@ -4266,31 +4376,88 @@
 }
 
 .chat-profile-modal__action--ghost {
-  background: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(135deg, rgba(26, 31, 45, 0.8), rgba(13, 17, 27, 0.88));
   color: #bec8db;
 }
 
-.chat-profile-modal__meta {
-  display: grid;
-  gap: 14px;
+.chat-profile-modal__action-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-block;
+  opacity: 0.92;
+  position: relative;
+  flex: 0 0 auto;
 }
 
-.chat-profile-modal__meta-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
+.chat-profile-modal__action-icon::before,
+.chat-profile-modal__action-icon::after {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
 }
 
-.chat-profile-modal__meta-row span {
-  color: #8d99b1;
-  font-size: 12px;
+.chat-profile-modal__action-icon--message::before {
+  inset: 3px 2px 6px;
+  border: 2px solid currentColor;
+  border-radius: 7px;
 }
 
-.chat-profile-modal__meta-row strong {
-  color: #f5f7ff;
-  font-size: 13px;
-  text-align: right;
+.chat-profile-modal__action-icon--message::after {
+  left: 8px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: skewX(-24deg);
+}
+
+.chat-profile-modal__action-icon--call::before {
+  inset: 3px;
+  border: 3px solid currentColor;
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-radius: 50%;
+  transform: rotate(-42deg);
+}
+
+.chat-profile-modal__action-icon--friend::before {
+  left: 2px;
+  top: 3px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  box-shadow: 10px 0 0 -1px rgba(0, 0, 0, 0), 10px 0 0 0 currentColor;
+}
+
+.chat-profile-modal__action-icon--friend::after {
+  left: 1px;
+  right: 1px;
+  bottom: 3px;
+  height: 9px;
+  border: 2px solid currentColor;
+  border-radius: 10px 10px 5px 5px;
+  border-bottom: 0;
+}
+
+.chat-profile-modal__action-icon--copy::before {
+  left: 8px;
+  top: 4px;
+  width: 12px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+.chat-profile-modal__action-icon--copy::after {
+  left: 3px;
+  top: 8px;
+  width: 12px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  background: rgba(16, 20, 31, 0.9);
 }
 
 @media (max-width: 760px) {
@@ -4306,23 +4473,44 @@
 
   .chat-profile-modal__hero,
   .chat-profile-modal__hero-content {
-    min-height: 232px;
+    min-height: 300px;
   }
 
   .chat-profile-modal__hero-content {
-    padding: 24px 20px 24px 130px;
+    padding: 34px 20px 30px 132px;
   }
 
   .chat-profile-modal__avatar {
     left: 20px;
-    width: 92px;
-    height: 92px;
+    width: 96px;
+    height: 96px;
     border-radius: 24px;
   }
 
   .chat-profile-modal__body {
     grid-template-columns: 1fr;
-    padding: 20px;
+    margin-top: -34px;
+    padding: 0 16px 20px;
+  }
+
+  .chat-profile-modal__identity strong {
+    font-size: 30px;
+  }
+
+  .chat-profile-modal__section {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .chat-profile-modal__section-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .chat-profile-modal__action {
+    min-height: 56px;
+    font-size: 16px;
   }
 }
 
@@ -4385,7 +4573,7 @@
 }
 
 .composer-textarea-shell {
-  --composer-textarea-padding: 10px 8px 9px 6px;
+  --composer-textarea-padding: 11px 8px 8px 6px;
   --composer-textarea-font-size: 15px;
   --composer-textarea-line-height: 1.5;
   order: 1;
@@ -4457,13 +4645,32 @@
 }
 
 .attach-button__icon {
+  position: relative;
   width: 20px;
   height: 20px;
   display: inline-block;
-  background-color: currentColor;
-  -webkit-mask: url("/icons/plus.png") center / contain no-repeat;
-  mask: url("/icons/plus.png") center / contain no-repeat;
   transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.attach-button__icon::before,
+.attach-button__icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.attach-button__icon::before {
+  width: 100%;
+  height: 3px;
+}
+
+.attach-button__icon::after {
+  width: 3px;
+  height: 100%;
 }
 
 .attach-button:hover .attach-button__icon {

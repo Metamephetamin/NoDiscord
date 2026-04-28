@@ -1,1 +1,1 @@
-deepmultilingualpunctuation
+deepmultilingualpunctuation==1.0.1

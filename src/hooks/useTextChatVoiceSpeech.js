@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
-import { punctuateTextOnServer } from "../utils/speechPunctuation";
+import { formatServerPunctuationResult, punctuateTextOnServer } from "../utils/speechPunctuation";
 import {
   buildVoiceWaveform,
   getSupportedVoiceRecordingMimeType,
@@ -224,8 +224,8 @@ export default function useTextChatVoiceSpeech({
       return "";
     }
 
-    const punctuatedTranscript = await punctuateTextOnServer(normalizedTranscript);
-    return formatSpeechTranscriptDraft(punctuatedTranscript, true);
+    const punctuationResult = await punctuateTextOnServer(normalizedTranscript);
+    return formatServerPunctuationResult(punctuationResult, normalizedTranscript);
   };
 
   const sampleVoiceLevel = () => {

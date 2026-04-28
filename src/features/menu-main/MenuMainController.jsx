@@ -208,6 +208,45 @@ const coldPanelFallback = (
   </div>
 );
 
+const getFriendRelationsStorageKey = (userId) => `tend:friend-relations:${String(userId || "guest").trim() || "guest"}`;
+
+function normalizeRelationIds(value) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
+function readFriendRelations(userId) {
+  if (typeof window === "undefined") {
+    return { ignoredIds: [], blockedIds: [] };
+  }
+
+  try {
+    const parsedValue = JSON.parse(window.localStorage.getItem(getFriendRelationsStorageKey(userId)) || "{}");
+    return {
+      ignoredIds: normalizeRelationIds(parsedValue?.ignoredIds),
+      blockedIds: normalizeRelationIds(parsedValue?.blockedIds),
+    };
+  } catch {
+    return { ignoredIds: [], blockedIds: [] };
+  }
+}
+
+function writeFriendRelations(userId, nextRelations) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(getFriendRelationsStorageKey(userId), JSON.stringify({
+      ignoredIds: normalizeRelationIds(nextRelations?.ignoredIds),
+      blockedIds: normalizeRelationIds(nextRelations?.blockedIds),
+    }));
+  } catch {
+    // Local relationship flags are optional UI state.
+  }
+}
+
 function loadVoiceRoomClientFactory() {
   if (!voiceRoomClientFactoryPromise) {
     voiceRoomClientFactoryPromise = import("../../webrtc/voiceRoomClient")
@@ -464,6 +503,7 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
   } = useMenuMainStorageKeys(user);
+  const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {
     notificationSoundEnabled,
     setNotificationSoundEnabled,
@@ -707,6 +747,46 @@ export default function MenuMain({
   );
   const currentServerMember = useMemo(() => activeServer?.members?.find((member) => String(member.userId) === String(currentUserId)) || null, [activeServer, currentUserId]);
   const currentServerRole = useMemo(() => activeServer?.roles?.find((role) => role.id === currentServerMember?.roleId) || null, [activeServer, currentServerMember?.roleId]);
+  useEffect(() => {
+    setFriendRelations(readFriendRelations(currentUserId));
+  }, [currentUserId]);
+  const ignoredFriendIds = useMemo(() => new Set(normalizeRelationIds(friendRelations.ignoredIds)), [friendRelations.ignoredIds]);
+  const blockedFriendIds = useMemo(() => new Set(normalizeRelationIds(friendRelations.blockedIds)), [friendRelations.blockedIds]);
+  const friendsWithRelationState = useMemo(
+    () =>
+      friends.map((friend) => {
+        const friendId = String(friend?.id || "");
+        if (!friendId) {
+          return friend;
+        }
+
+        return {
+          ...friend,
+          isIgnored: ignoredFriendIds.has(friendId),
+          isBlocked: blockedFriendIds.has(friendId),
+        };
+      }),
+    [blockedFriendIds, friends, ignoredFriendIds]
+  );
+  const updateFriendRelation = useCallback((targetUserId, updater) => {
+    const normalizedUserId = String(targetUserId || "").trim();
+    if (!currentUserId || !normalizedUserId || normalizedUserId === String(currentUserId)) {
+      return null;
+    }
+
+    const ignoredIds = new Set(normalizeRelationIds(friendRelations.ignoredIds));
+    const blockedIds = new Set(normalizeRelationIds(friendRelations.blockedIds));
+    updater({ ignoredIds, blockedIds });
+    const nextRelations = {
+      ignoredIds: Array.from(ignoredIds),
+      blockedIds: Array.from(blockedIds),
+    };
+
+    setFriendRelations(nextRelations);
+    writeFriendRelations(currentUserId, nextRelations);
+
+    return nextRelations;
+  }, [currentUserId, friendRelations.blockedIds, friendRelations.ignoredIds]);
   const selfDirectEntry = useMemo(() => {
     if (!user || !currentUserId) {
       return null;
@@ -724,8 +804,11 @@ export default function MenuMain({
     });
   }, [currentUserId, user]);
   const directConversationTargets = useMemo(
-    () => [selfDirectEntry, ...friends].filter(Boolean),
-    [friends, selfDirectEntry]
+    () => [
+      selfDirectEntry,
+      ...friendsWithRelationState.filter((friend) => !friend?.isBlocked && !friend?.isIgnored),
+    ].filter(Boolean),
+    [friendsWithRelationState, selfDirectEntry]
   );
   useEffect(() => {
     setProfileCustomization(readProfileCustomization(user));
@@ -1048,13 +1131,13 @@ export default function MenuMain({
   }, [activeVoiceParticipantsMap]);
   const activeContacts = useMemo(
     () => buildActiveContacts({
-      friends,
+      friends: friendsWithRelationState.filter((friend) => !friend?.isBlocked && !friend?.isIgnored),
       participantsMap,
       servers,
       currentUserId,
       getScopedVoiceChannelId,
     }),
-    [currentUserId, friends, participantsMap, servers]
+    [currentUserId, friendsWithRelationState, participantsMap, servers]
   );
   const totalDirectUnreadCount = useMemo(
     () => Object.values(directUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
@@ -3165,22 +3248,25 @@ export default function MenuMain({
           return;
         }
 
-        setDirectCallState((previous) => ({
-          ...previous,
+        const currentCall = directCallStateRef.current;
+        const connectingCall = {
+          ...currentCall,
           phase: "connecting",
           status: "connecting",
           statusLabel: "Соединяем звонок",
-          peerUserId: String(fromUserId || previous.peerUserId || ""),
-          peerName: String(fromName || previous.peerName || "Пользователь"),
-          peerAvatar: String(fromAvatar || previous.peerAvatar || ""),
+          peerUserId: String(fromUserId || currentCall.peerUserId || ""),
+          peerName: String(fromName || currentCall.peerName || "Пользователь"),
+          peerAvatar: String(fromAvatar || currentCall.peerAvatar || ""),
           peer: {
-            userId: String(fromUserId || previous.peerUserId || ""),
-            name: String(fromName || previous.peerName || "Пользователь"),
-            avatar: String(fromAvatar || previous.peerAvatar || ""),
-            avatarFrame: previous.peerAvatarFrame || null,
+            userId: String(fromUserId || currentCall.peerUserId || ""),
+            name: String(fromName || currentCall.peerName || "Пользователь"),
+            avatar: String(fromAvatar || currentCall.peerAvatar || ""),
+            avatarFrame: currentCall.peerAvatarFrame || null,
           },
           canRetry: false,
-        }));
+        };
+        directCallStateRef.current = connectingCall;
+        setDirectCallState(connectingCall);
         openDirectChat(fromUserId);
 
         void (async () => {
@@ -3201,18 +3287,20 @@ export default function MenuMain({
               return;
             }
 
-            setDirectCallState((previous) => (
-              previous.channelId === channelName
-                ? {
-                    ...previous,
-                    phase: "connected",
-                    status: "connected",
-                    statusLabel: "Идёт разговор",
-                    isMiniMode: true,
-                    connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
-                  }
-                : previous
-            ));
+            if (directCallStateRef.current.channelId !== channelName) {
+              return;
+            }
+
+            const connectedCall = {
+              ...directCallStateRef.current,
+              phase: "connected",
+              status: "connected",
+              statusLabel: "Идёт разговор",
+              isMiniMode: true,
+              connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
+            };
+            directCallStateRef.current = connectedCall;
+            setDirectCallState(connectedCall);
           } catch (error) {
             console.error("Не удалось подключить исходящий звонок:", error);
             if (currentVoiceChannelRef.current === channelName) {
@@ -3229,7 +3317,7 @@ export default function MenuMain({
               direction: "outgoing",
               outcome: "failed",
             });
-            setDirectCallState(buildDirectCallState({
+            const failedCall = buildDirectCallState({
               phase: "disconnected",
               statusLabel: "Не удалось подключить звонок",
               peerUserId: String(fromUserId || directCallStateRef.current.peerUserId || ""),
@@ -3241,7 +3329,9 @@ export default function MenuMain({
               direction: "outgoing",
               lastReason: error?.message || "failed",
               endedAt: new Date().toISOString(),
-            }));
+            });
+            directCallStateRef.current = failedCall;
+            setDirectCallState(failedCall);
             showServerInviteFeedback(error?.message || "Не удалось подключить звонок.");
           }
         })();
@@ -3848,8 +3938,8 @@ export default function MenuMain({
     const normalizedMode =
       mode === "voice_isolation"
         ? "hard_gate"
-        : mode === "rnnoise" || mode === "krisp"
-          ? "ai_noise_suppression"
+        : mode === "rnnoise" || mode === "krisp" || mode === "ai_noise_suppression"
+          ? "hard_gate"
           : mode;
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : "transparent");
     setShowNoiseMenu(false);
@@ -4067,6 +4157,63 @@ export default function MenuMain({
     },
     [currentUserId, user]
   );
+  const findInviteServerForFriend = useCallback((targetUserId) => {
+    const normalizedUserId = String(targetUserId || "").trim();
+    if (!normalizedUserId) {
+      return null;
+    }
+
+    const seenServerIds = new Set();
+    return [activeServer, ...servers].find((server) => {
+      const serverId = String(server?.id || "");
+      if (!serverId || seenServerIds.has(serverId) || !canInviteToServer(server)) {
+        return false;
+      }
+
+      seenServerIds.add(serverId);
+      return !(server.members || []).some((member) => String(member?.userId || member?.id || "") === normalizedUserId);
+    }) || null;
+  }, [activeServer, canInviteToServer, servers]);
+  const canInviteFriendToAnyServer = useCallback(
+    (targetUserId) => Boolean(findInviteServerForFriend(targetUserId)),
+    [findInviteServerForFriend]
+  );
+  const handleInviteFriendListUserToServer = useCallback(async () => {
+    const menu = friendListUserContextMenu;
+    const targetUserId = String(menu?.userId || "").trim();
+    if (!targetUserId || menu?.isSelf || menu?.isBlocked) {
+      return;
+    }
+
+    const targetServer = findInviteServerForFriend(targetUserId);
+    if (!targetServer) {
+      showServerInviteFeedback("Нет сервера, куда можно пригласить этого друга.");
+      setFriendListUserContextMenu(null);
+      return;
+    }
+
+    setFriendListUserContextMenu(null);
+    showServerInviteFeedback("Готовим приглашение...");
+
+    try {
+      const inviteLink = await requestServerInviteLink(targetServer, { copyToClipboard: false });
+      await sendServerInviteToFriend({
+        id: targetUserId,
+        userId: targetUserId,
+        directChannelId: menu.directChannelId || buildDirectMessageChannelId(currentUserId, targetUserId),
+      }, inviteLink);
+      showServerInviteFeedback(`Приглашение на ${targetServer.name || "сервер"} отправлено.`);
+    } catch (error) {
+      showServerInviteFeedback(error?.message || "Не удалось отправить приглашение.");
+    }
+  }, [
+    currentUserId,
+    findInviteServerForFriend,
+    friendListUserContextMenu,
+    requestServerInviteLink,
+    sendServerInviteToFriend,
+    showServerInviteFeedback,
+  ]);
   const joinVoiceChannel = async (channel) => {
     if (!user?.id || !channel?.id || !activeServer?.id) return;
     const scopedChannelId = getScopedVoiceChannelId(activeServer.id, channel.id);
@@ -5161,22 +5308,30 @@ export default function MenuMain({
     const nextY = Math.max(padding, Math.min(Number(event.clientY || 0), window.innerHeight - menuHeight - padding));
     const directChannelId = String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id));
     const hasClearableChat = Boolean(currentUserId && directChannelId && readCachedTextChatMessages(currentUserId, directChannelId).length > 0);
+    const friendId = String(friend.id || "");
+    const isBlocked = Boolean(friend.isBlocked || blockedFriendIds.has(friendId));
+    const isIgnored = Boolean(friend.isIgnored || ignoredFriendIds.has(friendId));
 
     setFriendListProfileModal(null);
     setFriendListUserContextMenu({
       x: nextX,
       y: nextY,
-      userId: String(friend.id || ""),
+      userId: friendId,
       username: getDisplayName(friend),
       directChannelId,
       avatarUrl: String(friend.avatar || ""),
       avatarFrame: friend.avatarFrame || null,
       backgroundUrl: String(friend.profileBackgroundUrl || ""),
       backgroundFrame: friend.profileBackgroundFrame || null,
+      isOnline: Boolean(friend.isOnline ?? friend.is_online ?? friend.online ?? false),
+      lastSeenAt: String(friend.lastSeenAt || friend.last_seen_at || friend.lastSeen || friend.last_seen || ""),
+      presence: friend.presence || friend.presenceStatus || friend.presence_status || "",
       isSelf: Boolean(friend.isSelf),
       isFriend: true,
-      canOpenDirectChat: !friend.isSelf,
-      canInviteToServer: false,
+      isBlocked,
+      isIgnored,
+      canOpenDirectChat: !friend.isSelf && !isBlocked,
+      canInviteToServer: !isBlocked && canInviteFriendToAnyServer(friendId),
       hasClearableChat,
     });
   };
@@ -5194,9 +5349,14 @@ export default function MenuMain({
       avatarFrame: friendListUserContextMenu.avatarFrame || null,
       backgroundUrl: friendListUserContextMenu.backgroundUrl || "",
       backgroundFrame: friendListUserContextMenu.backgroundFrame || null,
+      isOnline: friendListUserContextMenu.isOnline,
+      lastSeenAt: friendListUserContextMenu.lastSeenAt || "",
+      presence: friendListUserContextMenu.presence || "",
       isSelf: friendListUserContextMenu.isSelf,
       isFriend: true,
-      canOpenDirectChat: friendListUserContextMenu.canOpenDirectChat,
+      isBlocked: friendListUserContextMenu.isBlocked,
+      isIgnored: friendListUserContextMenu.isIgnored,
+      canOpenDirectChat: friendListUserContextMenu.canOpenDirectChat && !friendListUserContextMenu.isBlocked,
     });
     setFriendListUserContextMenu(null);
   };
@@ -5229,6 +5389,59 @@ export default function MenuMain({
     setTextChatLocalStateVersion((previous) => previous + 1);
     setFriendsError("");
     setFriendActionStatus(`Чат с ${friendListUserContextMenu?.username || "пользователем"} очищен только у вас.`);
+    setFriendListUserContextMenu(null);
+  };
+  const handleToggleFriendListIgnore = () => {
+    const targetUserId = String(friendListUserContextMenu?.userId || "").trim();
+    if (!targetUserId || friendListUserContextMenu?.isSelf || friendListUserContextMenu?.isBlocked) {
+      return;
+    }
+
+    const willIgnore = !friendListUserContextMenu?.isIgnored;
+    updateFriendRelation(targetUserId, ({ ignoredIds }) => {
+      if (willIgnore) {
+        ignoredIds.add(targetUserId);
+      } else {
+        ignoredIds.delete(targetUserId);
+      }
+    });
+
+    if (willIgnore && String(activeDirectFriendId || "") === targetUserId) {
+      setActiveDirectFriendId("");
+    }
+
+    setFriendActionStatus(
+      willIgnore
+        ? `${friendListUserContextMenu?.username || "Пользователь"} добавлен в игнор.`
+        : `${friendListUserContextMenu?.username || "Пользователь"} убран из игнора.`
+    );
+    setFriendListUserContextMenu(null);
+  };
+  const handleToggleFriendListBlock = () => {
+    const targetUserId = String(friendListUserContextMenu?.userId || "").trim();
+    if (!targetUserId || friendListUserContextMenu?.isSelf) {
+      return;
+    }
+
+    const willBlock = !friendListUserContextMenu?.isBlocked;
+    updateFriendRelation(targetUserId, ({ ignoredIds, blockedIds }) => {
+      if (willBlock) {
+        blockedIds.add(targetUserId);
+        ignoredIds.delete(targetUserId);
+      } else {
+        blockedIds.delete(targetUserId);
+      }
+    });
+
+    if (willBlock && String(activeDirectFriendId || "") === targetUserId) {
+      setActiveDirectFriendId("");
+    }
+
+    setFriendActionStatus(
+      willBlock
+        ? `${friendListUserContextMenu?.username || "Пользователь"} заблокирован.`
+        : `${friendListUserContextMenu?.username || "Пользователь"} разблокирован.`
+    );
     setFriendListUserContextMenu(null);
   };
   const friendListUserContextMenuSections = [
@@ -5280,23 +5493,23 @@ export default function MenuMain({
         id: "invite",
         label: "Пригласить на сервер",
         icon: "↗",
-        disabled: true,
-        onClick: closeFriendListUserContextMenu,
+        disabled: !friendListUserContextMenu?.canInviteToServer,
+        onClick: handleInviteFriendListUserToServer,
       },
       {
         id: "ignore",
-        label: "Игнорировать",
+        label: friendListUserContextMenu?.isIgnored ? "Убрать из игнора" : "Игнорировать",
         icon: "◦",
-        disabled: true,
-        onClick: closeFriendListUserContextMenu,
+        disabled: Boolean(friendListUserContextMenu?.isBlocked),
+        onClick: handleToggleFriendListIgnore,
       },
       {
         id: "block",
-        label: "Заблокировать",
+        label: friendListUserContextMenu?.isBlocked ? "Разблокировать" : "Заблокировать",
         icon: "⊖",
-        danger: true,
-        disabled: true,
-        onClick: closeFriendListUserContextMenu,
+        danger: !friendListUserContextMenu?.isBlocked,
+        disabled: false,
+        onClick: handleToggleFriendListBlock,
       },
     ],
     [
@@ -5469,7 +5682,7 @@ export default function MenuMain({
         selectedStreamParticipant={selectedStreamParticipant}
         selectedStreamDebugInfo={selectedStreamDebugInfo}
         friendsPageSection={friendsPageSection}
-        friends={friends}
+        friends={friendsWithRelationState}
         incomingFriendRequestCount={incomingFriendRequestCount}
         incomingFriendRequests={incomingFriendRequests}
         friendRequestsError={friendRequestsError}
@@ -5900,7 +6113,7 @@ export default function MenuMain({
       directUnreadCounts={directUnreadCounts}
       currentDirectChannelId={currentDirectChannelId}
       friendsPageSection={friendsPageSection}
-      friends={friends}
+      friends={friendsWithRelationState}
       incomingFriendRequestCount={incomingFriendRequestCount}
       totalFriendsAttentionCount={totalFriendsAttentionCount}
       hasLocalSharePreview={hasLocalSharePreview}

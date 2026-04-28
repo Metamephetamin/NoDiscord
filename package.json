@@ -58,7 +58,6 @@
   "dependencies": {
     "@microsoft/signalr": "^9.0.6",
     "@microsoft/signalr-protocol-msgpack": "^10.0.0",
-    "@shiguredo/noise-suppression": "^2025.1.0",
     "electron-squirrel-startup": "^1.0.1",
     "leaflet": "^1.9.4",
     "livekit-client": "^2.18.1",

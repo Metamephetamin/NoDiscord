@@ -74,6 +74,154 @@ function VoiceStageModuleFallback({ channelName = "" }) {
   );
 }
 
+function StreamMiniPlayer({
+  stream,
+  videoSrc = "",
+  imageSrc = "",
+  muted = true,
+  title = "Stream",
+  actionLabel = "",
+  actionVariant = "default",
+  onAction,
+  onOpen,
+}) {
+  const videoRef = useRef(null);
+  const shellRef = useRef(null);
+  const dragRef = useRef(null);
+  const [position, setPosition] = useState({ right: 24, bottom: 24 });
+
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+    if (!mediaElement) {
+      return;
+    }
+
+    mediaElement.srcObject = stream || null;
+    mediaElement.src = stream ? "" : videoSrc || "";
+    mediaElement.muted = muted;
+
+    if (stream || videoSrc) {
+      mediaElement.play().catch(() => {});
+    }
+
+    return () => {
+      mediaElement.srcObject = null;
+      mediaElement.src = "";
+    };
+  }, [muted, stream, videoSrc]);
+
+  const handlePointerDown = (event) => {
+    const target = event.target;
+    if (event.button !== 0 || (target instanceof Element && target.closest("button"))) {
+      return;
+    }
+
+    const shell = shellRef.current;
+    const rect = shell?.getBoundingClientRect();
+    if (!shell || !rect) {
+      return;
+    }
+
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      moved: false,
+      width: rect.width,
+      height: rect.height,
+    };
+    shell.setPointerCapture?.(event.pointerId);
+  };
+
+  const handlePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const margin = 12;
+    const maxLeft = Math.max(margin, window.innerWidth - drag.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - drag.height - margin);
+    const left = Math.min(maxLeft, Math.max(margin, event.clientX - drag.offsetX));
+    const top = Math.min(maxTop, Math.max(margin, event.clientY - drag.offsetY));
+
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) {
+      return;
+    }
+
+    drag.moved = true;
+    setPosition({
+      right: Math.max(margin, window.innerWidth - left - drag.width),
+      bottom: Math.max(margin, window.innerHeight - top - drag.height),
+    });
+  };
+
+  const handlePointerUp = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    dragRef.current = null;
+    shellRef.current?.releasePointerCapture?.(event.pointerId);
+    if (!drag.moved) {
+      onOpen?.();
+    }
+  };
+
+  const hasVideo = Boolean(stream || videoSrc || imageSrc);
+
+  return (
+    <div
+      ref={shellRef}
+      className="stream-mini-player"
+      style={{ right: position.right, bottom: position.bottom }}
+      role="button"
+      tabIndex={0}
+      aria-label="Открыть стрим"
+      title={title}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen?.();
+        }
+      }}
+    >
+      {hasVideo ? (
+        stream || videoSrc ? (
+          <video ref={videoRef} className="stream-mini-player__video" autoPlay playsInline />
+        ) : (
+          <img src={imageSrc} alt={title} className="stream-mini-player__image" />
+        )
+      ) : (
+        <div className="stream-mini-player__empty">Stream</div>
+      )}
+      <div className="stream-mini-player__controls">
+        <span className="stream-mini-player__label">{title}</span>
+        {onAction ? (
+          <button
+            type="button"
+            className={`stream-mini-player__button ${actionVariant === "danger" ? "stream-mini-player__button--danger" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAction();
+            }}
+            aria-label={actionLabel || "Действие со стримом"}
+            title={actionLabel || "Действие"}
+          >
+            Stop
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function areStringArraysEqual(previousValue = [], nextValue = []) {
   if (previousValue === nextValue) {
     return true;
@@ -114,6 +262,8 @@ function areUserLikeEntriesEqual(previousEntries = [], nextEntries = []) {
       || Boolean(previousEntry?.isLive) !== Boolean(nextEntry?.isLive)
       || Boolean(previousEntry?.isSpeaking) !== Boolean(nextEntry?.isSpeaking)
       || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
+      || Boolean(previousEntry?.isIgnored) !== Boolean(nextEntry?.isIgnored)
+      || Boolean(previousEntry?.isBlocked) !== Boolean(nextEntry?.isBlocked)
       || Boolean(previousEntry?.isSelf) !== Boolean(nextEntry?.isSelf)
     ) {
       return false;
@@ -1537,7 +1687,8 @@ export const ServersSidebar = memo(({
     endDrag();
   };
   const startChannelDrag = (event, type, channel, categoryId = "") => {
-    if (!canDragChannels || !channel?.id || event.target?.closest?.(".channel-edit-button, input, select, textarea")) {
+    const dragTarget = event.target instanceof Element ? event.target.closest(".channel-drag-handle") : null;
+    if (!canDragChannels || !channel?.id || !dragTarget || event.target?.closest?.(".channel-edit-button, input, select, textarea")) {
       event.preventDefault();
       return;
     }
@@ -1652,9 +1803,7 @@ export const ServersSidebar = memo(({
     return (
       <li
         key={channel.id}
-        className={`channel-item ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "channel-item--dragging" : ""}`}
-        draggable={canDragChannels && !isEditing}
-        onDragStart={(event) => startChannelDrag(event, "text", channel, categoryId)}
+        className={`channel-item ${canDragChannels && !isEditing ? "channel-item--with-drag-handle" : ""} ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "channel-item--dragging" : ""}`}
         onDragOver={(event) => handleChannelDragOver(event, "text", channel, categoryId)}
         onDrop={(event) => handleChannelDrop(event, "text", channel, categoryId)}
         onDragEnd={endDrag}
@@ -1682,12 +1831,25 @@ export const ServersSidebar = memo(({
             }}
           />
         ) : (
+          <>
+          {canDragChannels ? (
+            <span
+              className="channel-drag-handle"
+              draggable
+              onDragStart={(event) => startChannelDrag(event, "text", channel, categoryId)}
+              onDragEnd={endDrag}
+              role="button"
+              tabIndex={-1}
+              aria-label="Drag channel"
+            />
+          ) : null}
           <button type="button" className="channel-item__button" onClick={() => onSelectTextChannel(channel.id)}>
             <span className="channel-item__icon" aria-hidden="true">{getChannelListIcon(kind)}</span>
             <span className="channel-item__label">{getChannelDisplayName(channel.name, "text")}</span>
             {hasDraft ? <span className="channel-item__draft">Черновик</span> : null}
             {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
           </button>
+          </>
         )}
         <button type="button" className="channel-edit-button" onClick={() => onOpenChannelSettings?.("text", channel)} aria-label="Настройки канала" disabled={!canManageChannels}>
           <img src={icons.settings} alt="" />
@@ -2163,6 +2325,31 @@ function ServerMainComponent({
   const selectedVoiceParticipants = selectedVoiceChannel
     ? (activeVoiceParticipantsMap?.[selectedVoiceChannel.id] || activeVoiceParticipantsMap?.[selectedVoiceRuntimeId] || [])
     : [];
+  const shouldShowFloatingStream = Boolean(activeServer && desktopServerPane !== "voice" && (selectedStreamUserId || hasLocalSharePreview));
+  const floatingStream = shouldShowFloatingStream && selectedStreamUserId
+    ? {
+        kind: "remote",
+        stream: selectedStream?.stream || null,
+        videoSrc: selectedStream?.videoSrc || "",
+        imageSrc: selectedStream?.imageSrc || "",
+        muted: !Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length),
+        title: selectedStreamParticipant?.name || "Стрим",
+        onOpen: () => onWatchStream?.(selectedStreamUserId),
+      }
+    : shouldShowFloatingStream && hasLocalSharePreview
+      ? {
+          kind: "local",
+          stream: localSharePreview?.stream || null,
+          videoSrc: "",
+          imageSrc: "",
+          muted: true,
+          title: localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим",
+          actionLabel: localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим",
+          actionVariant: "danger",
+          onAction: localSharePreview?.mode === "camera" ? onStopCameraShare : onStopScreenShare,
+          onOpen: onOpenLocalSharePreview,
+        }
+      : null;
 
   return (
     <main className="chat__wrapper chat__wrapper--servers">
@@ -2239,7 +2426,7 @@ function ServerMainComponent({
             onLeave={onLeave}
           />
           </Suspense>
-        ) : selectedStreamUserId ? (
+        ) : desktopServerPane === "voice" && selectedStreamUserId ? (
           <ScreenShareViewer
             stream={selectedStream?.stream || null}
             videoSrc={selectedStream?.videoSrc || ""}
@@ -2251,7 +2438,7 @@ function ServerMainComponent({
             onClose={onCloseSelectedStream}
             debugInfo={selectedStreamDebugInfo}
           />
-        ) : isLocalSharePreviewVisible && hasLocalSharePreview ? (
+        ) : desktopServerPane === "voice" && isLocalSharePreviewVisible && hasLocalSharePreview ? (
           <ScreenShareViewer
             stream={localSharePreview?.stream || null}
             title={localSharePreviewMeta.title}
@@ -2295,6 +2482,19 @@ function ServerMainComponent({
           ) : null
         )}
       </div>
+      {floatingStream ? (
+        <StreamMiniPlayer
+          stream={floatingStream.stream}
+          videoSrc={floatingStream.videoSrc}
+          imageSrc={floatingStream.imageSrc}
+          muted={floatingStream.muted}
+          title={floatingStream.title}
+          actionLabel={floatingStream.actionLabel}
+          actionVariant={floatingStream.actionVariant}
+          onAction={floatingStream.onAction}
+          onOpen={floatingStream.onOpen}
+        />
+      ) : null}
     </main>
   );
 }

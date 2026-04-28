@@ -107,7 +107,7 @@ const VoiceChannelList = ({
             return;
           }
 
-          if (event.target instanceof Element && event.target.closest(".channel-edit-button")) {
+          if (event.target instanceof Element && event.target.closest(".channel-edit-button, .channel-drag-handle")) {
             return;
           }
 
@@ -123,20 +123,29 @@ const VoiceChannelList = ({
         return (
           <li
             key={channel.id}
-            className={`list__items ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
-            draggable={canManageChannels && !isEditing}
-            onDragStart={(event) => onChannelDragStart?.(event, "voice", channel, categoryId)}
+            className={`list__items ${canManageChannels && !isEditing ? "list__items--with-drag-handle" : ""} ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
             onDragOver={(event) => onChannelDragOver?.(event, "voice", channel, categoryId)}
             onDrop={(event) => onChannelDrop?.(event, "voice", channel, categoryId)}
             onDragEnd={onChannelDragEnd}
           >
+            {canManageChannels && !isEditing ? (
+              <span
+                className="channel-drag-handle"
+                draggable
+                onDragStart={(event) => onChannelDragStart?.(event, "voice", channel, categoryId)}
+                onDragEnd={onChannelDragEnd}
+                role="button"
+                tabIndex={-1}
+                aria-label="Drag channel"
+              />
+            ) : null}
             <div
               className={`voice-channel__row ${canJoinFromRow ? "voice-channel__row--interactive" : ""}`}
               onMouseEnter={triggerPrewarm}
               onPointerEnter={triggerPrewarm}
               onTouchStart={triggerPrewarm}
               onPointerDown={(event) => {
-                if (event.target instanceof Element && event.target.closest(".channel-edit-button")) {
+                if (event.target instanceof Element && event.target.closest(".channel-edit-button, .channel-drag-handle")) {
                   return;
                 }
 

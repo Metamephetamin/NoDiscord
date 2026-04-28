@@ -3,7 +3,6 @@ import { DEFAULT_AVATAR } from "../utils/media";
 const NOISE_SUPPRESSION_MODE_TRANSPARENT = "transparent";
 const NOISE_SUPPRESSION_MODE_BROADCAST = "broadcast";
 const NOISE_SUPPRESSION_MODE_HARD_GATE = "hard_gate";
-const NOISE_SUPPRESSION_MODE_AI = "ai_noise_suppression";
 const PREFERRED_AUDIO_SAMPLE_RATE = 48_000;
 const SCREEN_SHARE_PRESETS = {
   "720p": { width: 1280, height: 720 },
@@ -193,7 +192,6 @@ export {
   NOISE_SUPPRESSION_MODE_TRANSPARENT,
   NOISE_SUPPRESSION_MODE_BROADCAST,
   NOISE_SUPPRESSION_MODE_HARD_GATE,
-  NOISE_SUPPRESSION_MODE_AI,
   getAvatar,
   getCameraConstraints,
   getDisplayName,

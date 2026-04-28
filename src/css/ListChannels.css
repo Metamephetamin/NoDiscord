@@ -5,6 +5,7 @@
 }
 
 .list__items {
+  position: relative;
   padding: 10px 10px;
   margin-bottom: 8px;
   border-radius: 13px;
@@ -13,12 +14,8 @@
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.list__items[draggable="true"] {
-  cursor: grab;
-}
-
-.list__items[draggable="true"]:active {
-  cursor: grabbing;
+.list__items--with-drag-handle {
+  padding-top: 16px;
 }
 
 .list__items:hover {

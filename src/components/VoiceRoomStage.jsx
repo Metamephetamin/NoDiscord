@@ -971,7 +971,7 @@ export default function VoiceRoomStage({
   );
 
   return (
-    <section className="voice-room-stage">
+    <section className={`voice-room-stage ${activeStage ? "voice-room-stage--active-stream" : ""}`}>
       <div className="voice-room-stage__header">
         <div className="voice-room-stage__header-copy">
           <span>{activeServerName || "Сервер"}</span>
@@ -1014,6 +1014,9 @@ export default function VoiceRoomStage({
                 <span>{activeStage.subtitle}</span>
               </div>
             </div>
+          </div>
+          <div className="voice-room-stage__hero-controls">
+            {stageToolbar}
           </div>
         </div>
       ) : stageCards.length ? (
@@ -1077,7 +1080,7 @@ export default function VoiceRoomStage({
         </div>
       )}
 
-      {stageCards.length || isJoining ? stageToolbar : null}
+      {!activeStage && (stageCards.length || isJoining) ? stageToolbar : null}
     </section>
   );
 }

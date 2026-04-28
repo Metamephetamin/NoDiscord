@@ -21,7 +21,27 @@ export async function punctuateTextOnServer(rawText) {
   }
 
   const payload = await response.json().catch(() => ({}));
-  return String(payload?.text || normalizedText).trim();
+  return {
+    text: String(payload?.text || normalizedText).trim(),
+    provider: String(payload?.provider || "server").trim(),
+    usedModel: payload?.usedModel === true,
+  };
+}
+
+export function formatServerPunctuationResult(result, fallbackText = "") {
+  const normalizedResult = typeof result === "string"
+    ? { text: result, usedModel: false }
+    : result || {};
+  const normalizedText = String(normalizedResult.text || fallbackText || "").trim();
+  if (!normalizedText) {
+    return "";
+  }
+
+  if (normalizedResult.usedModel === true) {
+    return autocorrectUserText(normalizedText);
+  }
+
+  return autocorrectUserText(restoreRussianSpeechPunctuation(normalizedText, { finalize: true }));
 }
 
 export async function punctuateTypedMessageText(rawText) {
@@ -31,8 +51,8 @@ export async function punctuateTypedMessageText(rawText) {
   }
 
   try {
-    const punctuatedText = await punctuateTextOnServer(normalizedText);
-    return autocorrectUserText(restoreRussianSpeechPunctuation(punctuatedText, { finalize: true }));
+    const punctuationResult = await punctuateTextOnServer(normalizedText);
+    return formatServerPunctuationResult(punctuationResult, normalizedText);
   } catch (error) {
     console.error("Typed message punctuation error:", error);
     return formatTypedMessageText(normalizedText);

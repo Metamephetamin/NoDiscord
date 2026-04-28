@@ -1345,6 +1345,56 @@ public class ChatHub : Hub
 
         member.LastReadAt = DateTimeOffset.UtcNow;
         await _context.SaveChangesAsync();
+
+        var unreadMessages = await _context.Messages
+            .AsNoTracking()
+            .Where(message => message.ChannelId == channelId && !message.IsDeleted && message.ReadAt == null)
+            .OrderBy(message => message.Timestamp)
+            .Select(message => new
+            {
+                message.Id,
+                message.ChannelId,
+                message.Content,
+                message.EncryptedContent
+            })
+            .ToListAsync();
+
+        if (unreadMessages.Count == 0)
+        {
+            return;
+        }
+
+        var readMessageIds = new List<int>();
+        foreach (var unreadMessage in unreadMessages)
+        {
+            var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
+            if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            readMessageIds.Add(unreadMessage.Id);
+        }
+
+        if (readMessageIds.Count == 0)
+        {
+            return;
+        }
+
+        var readAtUtc = DateTime.UtcNow;
+        await _context.Messages
+            .Where(message => readMessageIds.Contains(message.Id))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(message => message.ReadAt, readAtUtc)
+                .SetProperty(message => message.ReadByUserId, currentUser.UserId));
+
+        await Clients.Group(channelId).SendAsync("MessagesRead", new MessageReadReceiptDto
+        {
+            ChannelId = channelId,
+            ReaderUserId = currentUser.UserId,
+            MessageIds = readMessageIds,
+            ReadAt = readAtUtc
+        });
     }
 
     private async Task MarkDirectMessagesAsReadAsync(string channelId, AuthenticatedUser currentUser)

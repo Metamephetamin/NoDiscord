@@ -49,6 +49,8 @@ function areUserLikeEntriesEqual(previousEntries, nextEntries) {
       || String(previousEntry?.roleId || "") !== String(nextEntry?.roleId || "")
       || String(previousEntry?.lastSeenAt || previousEntry?.last_seen_at || "") !== String(nextEntry?.lastSeenAt || nextEntry?.last_seen_at || "")
       || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
+      || Boolean(previousEntry?.isIgnored) !== Boolean(nextEntry?.isIgnored)
+      || Boolean(previousEntry?.isBlocked) !== Boolean(nextEntry?.isBlocked)
     ) {
       return false;
     }

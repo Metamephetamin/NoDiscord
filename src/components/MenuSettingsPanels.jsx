@@ -210,6 +210,7 @@ export const AccountSettings = ({
   email,
   profileDraft,
   profileStatus,
+  maxNicknameLength,
   emailChangeState,
   isTotpEnabled,
   totpSetup,
@@ -318,6 +319,7 @@ export const AccountSettings = ({
                   type="text"
                   value={profileDraft?.nickname || ""}
                   onChange={(event) => onUpdateProfileDraft?.("nickname", event.target.value)}
+                  maxLength={maxNicknameLength}
                 />
               </label>
               <button type="submit" className="settings-inline-button">Сохранить ник</button>

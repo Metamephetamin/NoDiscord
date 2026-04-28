@@ -1,8 +1,22 @@
 const PROFILE_CUSTOMIZATION_STORAGE_PREFIX = "profile-customization";
 
-export const PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID = "amethyst";
+export const PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID = "none";
 
 export const PROFILE_STORE_ITEMS = [
+  {
+    id: "none",
+    title: "Обычный вид",
+    category: "Базовое",
+    type: "Сброс",
+    accent: "mono",
+    price: "Бесплатно",
+    colors: ["#20232b", "#8b95a7"],
+    description: "Снимает украшения профиля, рамки, анимации и эффекты голосовой карточки.",
+    applies: {
+      profileCard: { theme: "", frame: "", controls: "", motion: "" },
+      voiceCard: { theme: "", frame: "", wave: "", motion: "" },
+    },
+  },
   {
     id: "amethyst",
     title: "Набор «Сумеречный аметист»",
@@ -223,19 +237,17 @@ export const PROFILE_STORE_ITEMS = [
 
 export const PROFILE_STORE_CATEGORIES = Array.from(new Set(PROFILE_STORE_ITEMS.map((item) => item.category)));
 export const PROFILE_STORE_TYPES = Array.from(new Set(PROFILE_STORE_ITEMS.map((item) => item.type)));
-export const PROFILE_STORE_FEATURED_ITEMS = PROFILE_STORE_ITEMS.slice(0, 6);
+export const PROFILE_STORE_FEATURED_ITEMS = PROFILE_STORE_ITEMS.filter((item) => item.id !== "none").slice(0, 6);
 
 export const getProfileStoreItemById = (itemId) => (
   PROFILE_STORE_ITEMS.find((item) => item.id === itemId) || PROFILE_STORE_ITEMS[0]
 );
 
 export const createDefaultProfileCustomization = () => {
-  const defaultItem = getProfileStoreItemById(PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID);
-
   return {
-    appliedItemId: defaultItem.id,
-    profileCard: { ...(defaultItem.applies.profileCard || {}) },
-    voiceCard: { ...(defaultItem.applies.voiceCard || {}) },
+    appliedItemId: PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID,
+    profileCard: {},
+    voiceCard: {},
   };
 };
 
@@ -247,14 +259,8 @@ export const normalizeProfileCustomization = (value) => {
 
   return {
     appliedItemId: String(value.appliedItemId || defaults.appliedItemId),
-    profileCard: {
-      ...defaults.profileCard,
-      ...(value.profileCard && typeof value.profileCard === "object" ? value.profileCard : {}),
-    },
-    voiceCard: {
-      ...defaults.voiceCard,
-      ...(value.voiceCard && typeof value.voiceCard === "object" ? value.voiceCard : {}),
-    },
+    profileCard: value.profileCard && typeof value.profileCard === "object" ? value.profileCard : defaults.profileCard,
+    voiceCard: value.voiceCard && typeof value.voiceCard === "object" ? value.voiceCard : defaults.voiceCard,
   };
 };
 
@@ -296,19 +302,24 @@ export const applyProfileStoreItem = (customization, item) => {
   return normalizeProfileCustomization({
     ...normalizedCustomization,
     appliedItemId: nextItem.id,
-    profileCard: {
-      ...normalizedCustomization.profileCard,
-      ...(nextItem.applies.profileCard || {}),
-    },
-    voiceCard: {
-      ...normalizedCustomization.voiceCard,
-      ...(nextItem.applies.voiceCard || {}),
-    },
+    profileCard: { ...(nextItem.applies.profileCard || {}) },
+    voiceCard: { ...(nextItem.applies.voiceCard || {}) },
   });
 };
 
 export const getProfileCustomizationClassName = (customization, surface) => {
   const surfaceSettings = normalizeProfileCustomization(customization)[surface] || {};
+  const hasSurfaceSettings = [
+    surfaceSettings.theme,
+    surfaceSettings.frame,
+    surfaceSettings.controls,
+    surfaceSettings.wave,
+    surfaceSettings.motion,
+  ].some((value) => String(value || "").trim());
+
+  if (!hasSurfaceSettings) {
+    return "";
+  }
 
   return [
     "profile-customization",

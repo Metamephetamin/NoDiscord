@@ -1234,6 +1234,8 @@ export default function TextChat({
     const avatarFrame = matchedDirectTarget?.avatarFrame || null;
     const backgroundUrl = String(matchedDirectTarget?.profileBackgroundUrl || matchedDirectTarget?.profile_background_url || "").trim();
     const backgroundFrame = matchedDirectTarget?.profileBackgroundFrame || matchedDirectTarget?.profile_background_frame || null;
+    const isOnline = Boolean(matchedDirectTarget?.isOnline ?? matchedDirectTarget?.is_online ?? matchedDirectTarget?.online ?? false);
+    const lastSeenAt = String(matchedDirectTarget?.lastSeenAt || matchedDirectTarget?.last_seen_at || matchedDirectTarget?.lastSeen || matchedDirectTarget?.last_seen || "").trim();
     const { x, y } = clampMenuPosition(event.clientX, event.clientY);
 
     setMessageContextMenu(null);
@@ -1247,6 +1249,9 @@ export default function TextChat({
       avatarFrame,
       backgroundUrl,
       backgroundFrame,
+      isOnline,
+      lastSeenAt,
+      presence: matchedDirectTarget?.presence || matchedDirectTarget?.presenceStatus || matchedDirectTarget?.presence_status || "",
       isSelf: userId === currentUserId,
       isFriend: Boolean(matchedDirectTarget && !matchedDirectTarget?.isSelf),
       canOpenDirectChat: typeof onOpenDirectChat === "function" && userId !== currentUserId,
@@ -1409,6 +1414,9 @@ export default function TextChat({
       avatarFrame: userContextMenu.avatarFrame || null,
       backgroundUrl: userContextMenu.backgroundUrl || "",
       backgroundFrame: userContextMenu.backgroundFrame || null,
+      isOnline: userContextMenu.isOnline,
+      lastSeenAt: userContextMenu.lastSeenAt || "",
+      presence: userContextMenu.presence || "",
       isSelf: userContextMenu.isSelf,
       isFriend: userContextMenu.isFriend,
       canOpenDirectChat: userContextMenu.canOpenDirectChat,

@@ -260,7 +260,7 @@ export default function useMenuMainIntegrations({
   }, [refreshIntegrations, replaceIntegrationProvider]);
 
   const integrationStatusPollingEnabled = integrations.some((provider) =>
-    provider.connected && provider.displayInProfile && provider.useAsStatus && ["spotify", "steam"].includes(provider.id)
+    provider.connected && ["spotify", "steam"].includes(provider.id)
   );
 
   useEffect(() => {
@@ -296,12 +296,22 @@ export default function useMenuMainIntegrations({
       }
     };
 
+    const refreshOnVisibleFocus = () => {
+      if (document.visibilityState !== "hidden") {
+        refreshCurrentTrack();
+      }
+    };
+
     refreshCurrentTrack();
-    const intervalId = window.setInterval(refreshCurrentTrack, 20000);
+    const intervalId = window.setInterval(refreshCurrentTrack, 10000);
+    window.addEventListener("focus", refreshOnVisibleFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibleFocus);
 
     return () => {
       isCanceled = true;
       window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnVisibleFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibleFocus);
     };
   }, [applyCurrentUserActivity, integrationStatusPollingEnabled]);
 

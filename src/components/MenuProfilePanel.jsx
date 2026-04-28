@@ -206,9 +206,15 @@ export default function MenuProfilePanel({
 }) {
   const profileCardClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
   const voiceCardClassName = getProfileCustomizationClassName(profileCustomization, "voiceCard");
+  const wrapperClassName = [
+    "menu__profile-wrapper",
+    currentVoiceChannel ? "menu__profile-wrapper--voice-connected" : "",
+    currentVoiceChannel && (profileCardClassName || voiceCardClassName) ? "menu__profile-wrapper--customized" : "",
+    currentVoiceChannel ? (voiceCardClassName || profileCardClassName) : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={`menu__profile-wrapper ${currentVoiceChannel ? "menu__profile-wrapper--voice-connected" : ""}`}>
+    <div className={wrapperClassName}>
       {currentVoiceChannel ? (
         <div className={`profile__voice-stack ${voiceCardClassName}`}>
           <div className="profile__connection-card">

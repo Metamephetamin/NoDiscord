@@ -187,7 +187,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         {
             return new SpeechPunctuationResult
             {
-                Text = ApplyRuleBasedPolish(modelResult.Text, inferTerminalPunctuation: true),
+                Text = PolishModelPunctuation(modelResult.Text, inferTerminalPunctuation: true),
                 Provider = modelResult.Provider,
                 UsedModel = true,
             };
@@ -268,6 +268,35 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         }
 
         if (!inferTerminalPunctuation)
+        {
+            return normalizedText;
+        }
+
+        if (ShouldEndWithQuestionMark(normalizedText))
+        {
+            return $"{normalizedText}?";
+        }
+
+        if (ExclamationStartRegex.IsMatch(normalizedText))
+        {
+            return $"{normalizedText}!";
+        }
+
+        return $"{normalizedText}.";
+    }
+
+    private static string PolishModelPunctuation(string text, bool inferTerminalPunctuation)
+    {
+        var normalizedText = NormalizeInput(text);
+        if (string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return string.Empty;
+        }
+
+        normalizedText = NormalizeSpacing(normalizedText);
+        normalizedText = CapitalizeSentences(normalizedText);
+
+        if (Regex.IsMatch(normalizedText, "[.!?\\u2026]$") || !inferTerminalPunctuation)
         {
             return normalizedText;
         }

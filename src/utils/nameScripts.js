@@ -184,7 +184,7 @@ export function normalizeScriptAwareNicknameInput(value, maxLength, forcedScript
     }
   }
 
-  return sanitized.join("").slice(0, maxLength).trimEnd();
+  return sanitized.join("").slice(0, maxLength);
 }
 
 export function isNicknameUsingSingleScript(value) {
