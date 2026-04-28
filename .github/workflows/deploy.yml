@@ -374,7 +374,7 @@ jobs:
           chown -R "$BACKEND_OWNER" "$BACKEND_PATH/.venv"
           echo "Speech punctuation Python environment is ready"
           SPEECH_PUNCTUATION_INSTALL
-          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "chmod +x '$BACKEND_PATH/install-punctuation-env.sh' && BACKEND_PATH='$BACKEND_PATH' BACKEND_OWNER='$BACKEND_OWNER' nohup bash '$BACKEND_PATH/install-punctuation-env.sh' > '$BACKEND_PATH/punctuation-install.log' 2>&1 < /dev/null &"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "chmod +x '$BACKEND_PATH/install-punctuation-env.sh' && bash -lc 'setsid env BACKEND_PATH=\"'$BACKEND_PATH'\" BACKEND_OWNER=\"'$BACKEND_OWNER'\" bash \"'$BACKEND_PATH'/install-punctuation-env.sh\" > \"'$BACKEND_PATH'/punctuation-install.log\" 2>&1 < /dev/null & disown || true'"
           echo "Speech punctuation dependency install started in background"
 
       - name: Restart backend and reload nginx
