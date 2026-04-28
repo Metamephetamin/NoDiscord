@@ -346,10 +346,13 @@ function getAttachmentUrlValue(attachment) {
   return normalizeAttachmentUrlValue(
     attachment?.attachmentUrl
     || attachment?.AttachmentUrl
+    || attachment?.attachment_url
     || attachment?.attachmentSourceUrl
     || attachment?.AttachmentSourceUrl
+    || attachment?.attachment_source_url
     || attachment?.fileUrl
     || attachment?.FileUrl
+    || attachment?.file_url
     || attachment?.url
     || attachment?.Url
     || attachment?.src
@@ -371,26 +374,30 @@ export function normalizeAttachmentItems(messageItem) {
       return {
         id: String(attachment?.id || attachment?.Id || `${messageItem?.id || "message"}:${index}`),
         attachmentUrl,
-        attachmentSourceUrl: normalizeAttachmentUrlValue(attachment?.attachmentSourceUrl || attachment?.AttachmentSourceUrl || attachmentUrl),
-        attachmentName: String(attachment?.attachmentName || attachment?.AttachmentName || attachment?.fileName || attachment?.FileName || attachment?.name || attachment?.Name || "").trim(),
+        attachmentSourceUrl: normalizeAttachmentUrlValue(attachment?.attachmentSourceUrl || attachment?.AttachmentSourceUrl || attachment?.attachment_source_url || attachmentUrl),
+        attachmentName: String(attachment?.attachmentName || attachment?.AttachmentName || attachment?.attachment_name || attachment?.fileName || attachment?.FileName || attachment?.file_name || attachment?.name || attachment?.Name || "").trim(),
         attachmentSize: Number.isFinite(Number(attachment?.attachmentSize))
           ? Number(attachment.attachmentSize)
           : Number.isFinite(Number(attachment?.AttachmentSize))
             ? Number(attachment.AttachmentSize)
+            : Number.isFinite(Number(attachment?.attachment_size))
+              ? Number(attachment.attachment_size)
             : Number.isFinite(Number(attachment?.size))
               ? Number(attachment.size)
               : Number.isFinite(Number(attachment?.Size))
                 ? Number(attachment.Size)
                 : null,
-        attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || attachment?.contentType || attachment?.ContentType || attachment?.type || attachment?.Type || "").trim(),
-        attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile),
-        attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || null,
-        voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage),
+        attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || attachment?.attachment_content_type || attachment?.contentType || attachment?.ContentType || attachment?.content_type || attachment?.type || attachment?.Type || "").trim(),
+        attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile || attachment?.attachment_as_file),
+        attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || attachment?.attachment_encryption || null,
+        voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage || attachment?.voice_message),
         attachmentIndex: Number.isFinite(Number(attachment?.attachmentIndex))
           ? Number(attachment.attachmentIndex)
           : Number.isFinite(Number(attachment?.AttachmentIndex))
             ? Number(attachment.AttachmentIndex)
-            : index,
+            : Number.isFinite(Number(attachment?.attachment_index))
+              ? Number(attachment.attachment_index)
+              : index,
       };
     })
     .filter((attachment) => attachment.attachmentUrl || attachment.attachmentEncryption || attachment.voiceMessage);
@@ -400,9 +407,9 @@ export function normalizeAttachmentItems(messageItem) {
   }
 
   const legacyAttachmentUrl = getAttachmentUrlValue(messageItem);
-  const legacyAttachmentEncryption = messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || null;
-  const legacyAttachmentAsFile = Boolean(messageItem?.attachmentAsFile || messageItem?.AttachmentAsFile);
-  const legacyVoiceMessage = normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage);
+  const legacyAttachmentEncryption = messageItem?.attachmentEncryption || messageItem?.AttachmentEncryption || messageItem?.attachment_encryption || null;
+  const legacyAttachmentAsFile = Boolean(messageItem?.attachmentAsFile || messageItem?.AttachmentAsFile || messageItem?.attachment_as_file);
+  const legacyVoiceMessage = normalizeVoiceMessageMetadata(messageItem?.voiceMessage || messageItem?.VoiceMessage || messageItem?.voice_message);
 
   if (!legacyAttachmentUrl && !legacyAttachmentEncryption && !legacyVoiceMessage) {
     return [];
@@ -411,18 +418,20 @@ export function normalizeAttachmentItems(messageItem) {
   return [{
     id: String(messageItem?.id || "message"),
     attachmentUrl: legacyAttachmentUrl,
-    attachmentSourceUrl: normalizeAttachmentUrlValue(messageItem?.attachmentSourceUrl || messageItem?.AttachmentSourceUrl || legacyAttachmentUrl),
-    attachmentName: String(messageItem?.attachmentName || messageItem?.AttachmentName || messageItem?.fileName || messageItem?.FileName || messageItem?.name || messageItem?.Name || "").trim(),
+    attachmentSourceUrl: normalizeAttachmentUrlValue(messageItem?.attachmentSourceUrl || messageItem?.AttachmentSourceUrl || messageItem?.attachment_source_url || legacyAttachmentUrl),
+    attachmentName: String(messageItem?.attachmentName || messageItem?.AttachmentName || messageItem?.attachment_name || messageItem?.fileName || messageItem?.FileName || messageItem?.file_name || messageItem?.name || messageItem?.Name || "").trim(),
     attachmentSize: Number.isFinite(Number(messageItem?.attachmentSize))
       ? Number(messageItem.attachmentSize)
       : Number.isFinite(Number(messageItem?.AttachmentSize))
         ? Number(messageItem.AttachmentSize)
+        : Number.isFinite(Number(messageItem?.attachment_size))
+          ? Number(messageItem.attachment_size)
         : Number.isFinite(Number(messageItem?.size))
           ? Number(messageItem.size)
           : Number.isFinite(Number(messageItem?.Size))
             ? Number(messageItem.Size)
             : null,
-    attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || messageItem?.contentType || messageItem?.ContentType || messageItem?.type || messageItem?.Type || "").trim(),
+    attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || messageItem?.attachment_content_type || messageItem?.contentType || messageItem?.ContentType || messageItem?.content_type || messageItem?.type || messageItem?.Type || "").trim(),
     attachmentAsFile: legacyAttachmentAsFile,
     attachmentEncryption: legacyAttachmentEncryption,
     voiceMessage: legacyVoiceMessage,
