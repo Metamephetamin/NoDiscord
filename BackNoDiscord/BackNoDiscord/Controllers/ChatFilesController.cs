@@ -3,6 +3,7 @@ using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BackNoDiscord.Controllers;
 
@@ -25,7 +26,9 @@ public class ChatFilesController : ControllerBase
     }
 
     [HttpPost("upload")]
+    [EnableRateLimiting("chat-upload")]
     [RequestSizeLimit(MaxFileSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSizeBytes)]
     public async Task<IActionResult> Upload([FromForm] UploadChatFileRequest request, CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
