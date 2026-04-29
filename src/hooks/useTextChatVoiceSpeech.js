@@ -85,6 +85,28 @@ export default function useTextChatVoiceSpeech({
   const PREFERRED_VOICE_SAMPLE_SIZE = 24;
   const MAX_VOICE_SAMPLE_SIZE = 32;
 
+  const getPointerGestureDistances = (pointerState, event) => {
+    const deltaX = (Number(event.clientX) || 0) - (Number(pointerState?.startX) || 0);
+    const deltaY = (Number(event.clientY) || 0) - (Number(pointerState?.startY) || 0);
+    return {
+      leftDistance: Math.max(0, -deltaX),
+      upDistance: Math.max(0, -deltaY),
+      horizontalDistance: Math.abs(deltaX),
+      verticalDistance: Math.abs(deltaY),
+    };
+  };
+
+  const isCancelSwipe = (distances) =>
+    distances.leftDistance >= VOICE_CANCEL_DRAG_THRESHOLD_PX
+    && distances.leftDistance >= distances.verticalDistance * 1.2;
+
+  const isCancelSwipeReleased = (distances) =>
+    distances.leftDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.65;
+
+  const isSpeechSwipe = (distances) =>
+    distances.upDistance >= VOICE_LOCK_DRAG_THRESHOLD_PX
+    && distances.upDistance >= distances.horizontalDistance * 1.1;
+
   const getVoiceLowPassFrequency = (audioContext) => {
     const nyquistLimit = Math.max(4000, Number(audioContext?.sampleRate || VOICE_RECORDING_SAMPLE_RATE) * 0.45);
     return Math.min(VOICE_LOW_PASS_FREQUENCY_HZ, nyquistLimit);
@@ -757,14 +779,14 @@ export default function useTextChatVoiceSpeech({
         return;
       }
 
-      const cancelDistance = pointerState.startX - event.clientX;
-      if (cancelDistance >= VOICE_CANCEL_DRAG_THRESHOLD_PX) {
+      const gestureDistances = getPointerGestureDistances(pointerState, event);
+      if (isCancelSwipe(gestureDistances)) {
         voicePointerStateRef.current = { ...pointerState, canceled: true };
         setVoiceRecordingState("canceling");
         return;
       }
 
-      if (voiceRecordingState === "canceling" && cancelDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.5) {
+      if (voiceRecordingState === "canceling" && isCancelSwipeReleased(gestureDistances)) {
         voicePointerStateRef.current = { ...pointerState, canceled: false };
         setVoiceRecordingState("holding");
       }
@@ -773,8 +795,7 @@ export default function useTextChatVoiceSpeech({
         return;
       }
 
-      const lockDistance = pointerState.startY - event.clientY;
-      if (lockDistance >= VOICE_LOCK_DRAG_THRESHOLD_PX) {
+      if (isSpeechSwipe(gestureDistances)) {
         void switchHeldVoiceRecordingToSpeechRecognition(event);
       }
       return;
@@ -789,14 +810,14 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    const cancelDistance = pointerState.startX - event.clientX;
-    if (cancelDistance >= VOICE_CANCEL_DRAG_THRESHOLD_PX) {
+    const gestureDistances = getPointerGestureDistances(pointerState, event);
+    if (isCancelSwipe(gestureDistances)) {
       speechPointerStateRef.current = { ...pointerState, canceled: true };
       setSpeechCaptureState("canceling");
       return;
     }
 
-    if (speechCaptureState === "canceling" && cancelDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.5) {
+    if (speechCaptureState === "canceling" && isCancelSwipeReleased(gestureDistances)) {
       speechPointerStateRef.current = { ...pointerState, canceled: false };
       setSpeechCaptureState("holding");
     }
@@ -805,8 +826,7 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    const lockDistance = pointerState.startY - event.clientY;
-    if (lockDistance >= VOICE_LOCK_DRAG_THRESHOLD_PX) {
+    if (isSpeechSwipe(gestureDistances)) {
       speechPointerStateRef.current = { ...pointerState, locked: true };
       setSpeechCaptureState("locked");
     }
@@ -1091,14 +1111,14 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    const cancelDistance = pointerState.startX - event.clientX;
-    if (cancelDistance >= VOICE_CANCEL_DRAG_THRESHOLD_PX) {
+    const gestureDistances = getPointerGestureDistances(pointerState, event);
+    if (isCancelSwipe(gestureDistances)) {
       voicePointerStateRef.current = { ...pointerState, canceled: true };
       setVoiceRecordingState("canceling");
       return;
     }
 
-    if (voiceRecordingState === "canceling" && cancelDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.5) {
+    if (voiceRecordingState === "canceling" && isCancelSwipeReleased(gestureDistances)) {
       voicePointerStateRef.current = { ...pointerState, canceled: false };
       setVoiceRecordingState("holding");
     }
@@ -1107,8 +1127,7 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    const lockDistance = pointerState.startY - event.clientY;
-    if (lockDistance >= VOICE_LOCK_DRAG_THRESHOLD_PX) {
+    if (isSpeechSwipe(gestureDistances)) {
       voicePointerStateRef.current = { ...pointerState, locked: true };
       setVoiceRecordingState("locked");
     }

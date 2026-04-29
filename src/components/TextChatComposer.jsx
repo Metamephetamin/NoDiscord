@@ -102,7 +102,6 @@ function TextChatComposer({
   const [translationError, setTranslationError] = useState("");
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
-  const micGesturePointerRef = useRef({ pointerId: null, startX: 0, startY: 0 });
   const translatorButtonRef = useRef(null);
   const translatorMenuRef = useRef(null);
   const attachMenuCloseTimeoutRef = useRef(0);
@@ -278,50 +277,6 @@ function TextChatComposer({
       : speechIsHolding
         ? "composer-tool--gesture-holding"
         : "";
-  const resetMicGestureVisuals = (target) => {
-    if (!target?.style) {
-      return;
-    }
-
-    target.style.removeProperty("--composer-mic-drag-x");
-    target.style.removeProperty("--composer-mic-drag-y");
-    target.style.removeProperty("--composer-mic-cancel-progress");
-    target.style.removeProperty("color");
-  };
-  const updateMicGestureVisuals = (event) => {
-    const pointerState = micGesturePointerRef.current;
-    if (pointerState.pointerId !== event.pointerId) {
-      return;
-    }
-
-    const dragX = Math.max(-92, Math.min(22, (Number(event.clientX) || 0) - pointerState.startX));
-    const dragY = Math.max(-76, Math.min(18, (Number(event.clientY) || 0) - pointerState.startY));
-    const cancelProgress = Math.max(0, Math.min(1, Math.abs(Math.min(0, dragX)) / 46));
-    event.currentTarget.style.setProperty("--composer-mic-drag-x", `${Math.round(dragX)}px`);
-    event.currentTarget.style.setProperty("--composer-mic-drag-y", `${Math.round(dragY)}px`);
-    event.currentTarget.style.setProperty("--composer-mic-cancel-progress", cancelProgress.toFixed(3));
-    if (cancelProgress > 0.18) {
-      event.currentTarget.style.setProperty("color", "#ff6b7e");
-    } else {
-      event.currentTarget.style.removeProperty("color");
-    }
-  };
-  const startMicGestureVisuals = (event) => {
-    micGesturePointerRef.current = {
-      pointerId: event.pointerId ?? null,
-      startX: Number(event.clientX) || 0,
-      startY: Number(event.clientY) || 0,
-    };
-    resetMicGestureVisuals(event.currentTarget);
-  };
-  const finishMicGestureVisuals = (target, pointerId) => {
-    if (micGesturePointerRef.current.pointerId !== pointerId) {
-      return;
-    }
-
-    micGesturePointerRef.current = { pointerId: null, startX: 0, startY: 0 };
-    resetMicGestureVisuals(target);
-  };
   const handleClearPendingUploads = () => {
     onClearPendingUploads();
   };
@@ -987,34 +942,27 @@ function TextChatComposer({
                   }}
                   onPointerDown={async (event) => {
                     suppressSpeechClickRef.current = true;
-                    startMicGestureVisuals(event);
                     event.currentTarget.setPointerCapture?.(event.pointerId);
                     await onSpeechRecognitionPointerDown?.(event);
                   }}
-                  onPointerMove={(event) => {
-                    updateMicGestureVisuals(event);
-                    onSpeechRecognitionPointerMove?.(event);
-                  }}
+                  onPointerMove={onSpeechRecognitionPointerMove}
                   onPointerUp={async (event) => {
                     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
                       event.currentTarget.releasePointerCapture?.(event.pointerId);
                     }
                     await onSpeechRecognitionPointerUp?.(event);
-                    finishMicGestureVisuals(event.currentTarget, event.pointerId);
                   }}
                   onPointerCancel={async (event) => {
                     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
                       event.currentTarget.releasePointerCapture?.(event.pointerId);
                     }
                     await onSpeechRecognitionPointerCancel?.(event);
-                    finishMicGestureVisuals(event.currentTarget, event.pointerId);
                   }}
                   disabled={uploadingFile || voiceRecordingState === "sending"}
                   style={speechMicStyle}
                   title={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Нажмите для диктовки. Удерживайте для голосового сообщения, свайп вверх для диктовки, влево для отмены"}
                   aria-label={speechRecognitionActive ? "Завершить голосовой ввод текста" : "Микрофон: нажмите для диктовки, удерживайте для голосового сообщения, свайп вверх для диктовки, влево для отмены"}
                 >
-                  <span className="composer-tool__cancel-zone" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--outer" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--inner" aria-hidden="true" />
                   <span className="composer-tool__speech-ring composer-tool__speech-ring--pulse" aria-hidden="true" />

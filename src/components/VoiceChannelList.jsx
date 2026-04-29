@@ -8,6 +8,13 @@ const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `$
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
 const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
+const PARTICIPANT_CONNECTOR_WIDTH = 44;
+const PARTICIPANT_CONNECTOR_TOP_Y = 0;
+const PARTICIPANT_CONNECTOR_FIRST_Y = 40;
+const PARTICIPANT_CONNECTOR_STEP_Y = 34;
+const PARTICIPANT_CONNECTOR_STEM_X = 4;
+const PARTICIPANT_CONNECTOR_END_X = 38;
+const PARTICIPANT_CONNECTOR_RADIUS = 6;
 
 const getVoiceDisplayName = (name) => {
   const normalized = String(name || "").trim();
@@ -20,6 +27,35 @@ const getVoiceDisplayName = (name) => {
 
 const normalizeVoiceUserLimit = (value) => Math.min(99, Math.max(0, Number(value) || 0));
 const formatVoiceLimitCount = (value) => String(Math.min(99, Math.max(0, Number(value) || 0))).padStart(2, "0");
+const buildParticipantConnectorPath = (participantCount) => {
+  const count = Math.max(0, Number(participantCount) || 0);
+  if (!count) {
+    return { height: 0, path: "" };
+  }
+
+  const lastY = PARTICIPANT_CONNECTOR_FIRST_Y + PARTICIPANT_CONNECTOR_STEP_Y * (count - 1);
+  const height = lastY + 4;
+  const topCornerX = PARTICIPANT_CONNECTOR_STEM_X + PARTICIPANT_CONNECTOR_RADIUS;
+  const finalTurnY = Math.max(PARTICIPANT_CONNECTOR_TOP_Y, lastY - PARTICIPANT_CONNECTOR_RADIUS);
+  const pathParts = [
+    `M ${PARTICIPANT_CONNECTOR_END_X} ${PARTICIPANT_CONNECTOR_TOP_Y}`,
+    `H ${topCornerX}`,
+    `Q ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_TOP_Y} ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_RADIUS}`,
+  ];
+
+  for (let index = 0; index < count - 1; index += 1) {
+    const y = PARTICIPANT_CONNECTOR_FIRST_Y + PARTICIPANT_CONNECTOR_STEP_Y * index;
+    pathParts.push(`V ${y}`, `H ${PARTICIPANT_CONNECTOR_END_X}`, `H ${PARTICIPANT_CONNECTOR_STEM_X}`);
+  }
+
+  pathParts.push(
+    `V ${finalTurnY}`,
+    `Q ${PARTICIPANT_CONNECTOR_STEM_X} ${lastY} ${topCornerX} ${lastY}`,
+    `H ${PARTICIPANT_CONNECTOR_END_X}`
+  );
+
+  return { height, path: pathParts.join(" ") };
+};
 
 const VoiceChannelList = ({
   channels,
@@ -117,6 +153,7 @@ const VoiceChannelList = ({
       {channels.flatMap((channel) => {
         const runtimeId = getChannelRuntimeId(serverId, channel.id);
         const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
+        const participantConnector = buildParticipantConnectorPath(participants.length);
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
@@ -240,6 +277,16 @@ const VoiceChannelList = ({
 
             {participants.length > 0 && (
               <div className="participant-list">
+                <svg
+                  className="participant-list__connector"
+                  viewBox={`0 0 ${PARTICIPANT_CONNECTOR_WIDTH} ${participantConnector.height}`}
+                  height={participantConnector.height}
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path className="participant-list__connector-path" d={participantConnector.path} />
+                  <path className="participant-list__connector-path participant-list__connector-path--flow" d={participantConnector.path} />
+                </svg>
                 {participants.map((participant) => (
                   <div
                     key={participant.userId}

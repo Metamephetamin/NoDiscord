@@ -24,7 +24,7 @@ internal sealed class PythonSpeechPunctuationResponse
     public bool UsedModel { get; set; }
 }
 
-public sealed class SpeechPunctuationService : ISpeechPunctuationService
+public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDisposable
 {
     private static readonly Regex QuestionStartRegex = new(
         "^(?:а\\s+)?(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
@@ -166,12 +166,22 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
     private readonly ILogger<SpeechPunctuationService> _logger;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly SemaphoreSlim _pythonWorkerLock = new(1, 1);
+    private Process? _pythonWorkerProcess;
+    private StreamWriter? _pythonWorkerInput;
+    private StreamReader? _pythonWorkerOutput;
 
     public SpeechPunctuationService(ILogger<SpeechPunctuationService> logger, IWebHostEnvironment environment, IConfiguration configuration)
     {
         _logger = logger;
         _environment = environment;
         _configuration = configuration;
+    }
+
+    public void Dispose()
+    {
+        StopPythonWorker();
+        _pythonWorkerLock.Dispose();
     }
 
     public async Task<SpeechPunctuationResult> PunctuateAsync(string text, CancellationToken cancellationToken = default)
@@ -348,48 +358,26 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
 
         var pythonExecutable = ResolvePythonExecutable();
 
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = pythonExecutable,
-                WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? _environment.ContentRootPath,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            }
-        };
-
-        process.StartInfo.ArgumentList.Add(scriptPath);
-
+        await _pythonWorkerLock.WaitAsync(cancellationToken);
         try
         {
-            if (!process.Start())
+            var process = EnsurePythonWorkerProcess(scriptPath, pythonExecutable);
+            if (process is null || _pythonWorkerInput is null || _pythonWorkerOutput is null)
             {
                 return null;
             }
 
-            var payload = JsonSerializer.Serialize(new { text = normalizedText });
-            await process.StandardInput.WriteAsync(payload);
-            await process.StandardInput.FlushAsync();
-            process.StandardInput.Close();
-
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var timeoutCts = new CancellationTokenSource();
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(GetTimeoutSeconds()));
 
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
-            var stderrTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
-            await process.WaitForExitAsync(timeoutCts.Token);
+            var payload = JsonSerializer.Serialize(new { text = normalizedText });
+            await _pythonWorkerInput.WriteLineAsync(payload).WaitAsync(timeoutCts.Token);
+            await _pythonWorkerInput.FlushAsync().WaitAsync(timeoutCts.Token);
 
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
-            if (process.ExitCode != 0)
+            var stdout = await _pythonWorkerOutput.ReadLineAsync().WaitAsync(timeoutCts.Token);
+            if (string.IsNullOrWhiteSpace(stdout))
             {
-                _logger.LogWarning("Speech punctuation model process exited with code {ExitCode}. stderr: {Error}", process.ExitCode, stderr);
+                RestartPythonWorker();
                 return null;
             }
 
@@ -409,20 +397,100 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         }
         catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
         {
-            try
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-            }
-            catch
-            {
-                // ignore cleanup failures
-            }
-
+            RestartPythonWorker();
             _logger.LogWarning(exception, "Speech punctuation model is unavailable, using conservative fallback.");
             return null;
+        }
+        finally
+        {
+            _pythonWorkerLock.Release();
+        }
+    }
+
+    private Process? EnsurePythonWorkerProcess(string scriptPath, string pythonExecutable)
+    {
+        if (_pythonWorkerProcess is { HasExited: false } && _pythonWorkerInput is not null && _pythonWorkerOutput is not null)
+        {
+            return _pythonWorkerProcess;
+        }
+
+        StopPythonWorker();
+
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = pythonExecutable,
+                WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? _environment.ContentRootPath,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+            },
+            EnableRaisingEvents = true,
+        };
+
+        process.StartInfo.ArgumentList.Add(scriptPath);
+        process.StartInfo.ArgumentList.Add("--server");
+        process.ErrorDataReceived += (_, eventArgs) =>
+        {
+            if (!string.IsNullOrWhiteSpace(eventArgs.Data))
+            {
+                _logger.LogDebug("Speech punctuation worker stderr: {Message}", eventArgs.Data);
+            }
+        };
+        process.Exited += (_, _) =>
+        {
+            _logger.LogDebug("Speech punctuation worker exited.");
+        };
+
+        if (!process.Start())
+        {
+            process.Dispose();
+            return null;
+        }
+
+        process.BeginErrorReadLine();
+        _pythonWorkerProcess = process;
+        _pythonWorkerInput = process.StandardInput;
+        _pythonWorkerOutput = process.StandardOutput;
+        return process;
+    }
+
+    private void RestartPythonWorker()
+    {
+        StopPythonWorker();
+    }
+
+    private void StopPythonWorker()
+    {
+        var process = _pythonWorkerProcess;
+        _pythonWorkerProcess = null;
+        _pythonWorkerInput = null;
+        _pythonWorkerOutput = null;
+
+        if (process is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // ignore cleanup failures
+        }
+        finally
+        {
+            process.Dispose();
         }
     }
 

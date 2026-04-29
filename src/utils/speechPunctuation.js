@@ -2,7 +2,7 @@ import { API_URL } from "../config/runtime";
 import { authFetch } from "./auth";
 import { autocorrectUserText } from "./textAutocorrect";
 
-const TYPED_PUNCTUATION_TIMEOUT_MS = 16000;
+const TYPED_PUNCTUATION_TIMEOUT_MS = 2200;
 
 function shouldUseServerTypedPunctuation(text) {
   const normalizedText = String(text || "").trim();
