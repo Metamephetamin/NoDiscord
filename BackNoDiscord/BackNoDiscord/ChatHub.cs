@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 
 namespace BackNoDiscord;
@@ -37,6 +38,10 @@ public class ChatHub : Hub
     private static readonly TimeSpan MessageMutationCooldown = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan CooldownEntryMaxAge = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan CooldownCleanupInterval = TimeSpan.FromMinutes(5);
+    private static readonly Regex AsyncPunctuationCyrillicRegex = new("[А-Яа-яЁё]", RegexOptions.Compiled);
+    private static readonly Regex AsyncPunctuationSkipRegex = new(
+        @"https?://|www\.|```|^\s*[/>]|[\w.+-]+@[\w.-]+\.\w+|@\w|#\w|:[A-Za-z0-9_+-]+:",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastSlowModeMessageSentAtByUserAndChannel = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
@@ -49,6 +54,7 @@ public class ChatHub : Hub
     private readonly ServerStateService _serverState;
     private readonly PushNotificationService _pushNotificationService;
     private readonly UserPresenceService _userPresenceService;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public ChatHub(
         AppDbContext context,
@@ -56,7 +62,8 @@ public class ChatHub : Hub
         ILogger<ChatHub> logger,
         ServerStateService serverState,
         PushNotificationService pushNotificationService,
-        UserPresenceService userPresenceService)
+        UserPresenceService userPresenceService,
+        IServiceScopeFactory scopeFactory)
     {
         _context = context;
         _crypto = crypto;
@@ -64,6 +71,7 @@ public class ChatHub : Hub
         _serverState = serverState;
         _pushNotificationService = pushNotificationService;
         _userPresenceService = userPresenceService;
+        _scopeFactory = scopeFactory;
     }
 
     public override async Task OnConnectedAsync()
@@ -239,6 +247,7 @@ public class ChatHub : Hub
             await _context.SaveChangesAsync();
 
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
+            QueueAsyncPunctuationUpdate(msg.Id, normalizedChannelId, payload.AuthorUserId, payload.Message);
             LastMessageSentAtByUser[currentUser.UserId] = nowUtc;
             MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
             await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, currentDisplayName, payload);
@@ -617,6 +626,106 @@ public class ChatHub : Hub
         });
     }
 
+    private void QueueAsyncPunctuationUpdate(int messageId, string channelId, string authorUserId, string originalMessage)
+    {
+        var normalizedOriginalMessage = UploadPolicies.TrimToLength(originalMessage, MaxMessageLength).Trim();
+        if (!ShouldUseAsyncServerPunctuation(normalizedOriginalMessage))
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ApplyAsyncPunctuationUpdateAsync(messageId, channelId, authorUserId, normalizedOriginalMessage);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Async punctuation update failed for message {MessageId} in channel {ChannelId}.", messageId, channelId);
+            }
+        });
+    }
+
+    private async Task ApplyAsyncPunctuationUpdateAsync(int messageId, string channelId, string authorUserId, string originalMessage)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var punctuationService = scope.ServiceProvider.GetRequiredService<ISpeechPunctuationService>();
+        var punctuationResult = await punctuationService.PunctuateAsync(originalMessage);
+        var punctuatedMessage = UploadPolicies.TrimToLength(punctuationResult.Text, MaxMessageLength).Trim();
+        if (string.IsNullOrWhiteSpace(punctuatedMessage) ||
+            string.Equals(punctuatedMessage, originalMessage, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var crypto = scope.ServiceProvider.GetRequiredService<CryptoService>();
+        var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ChatHub>>();
+
+        var message = await dbContext.Messages.FirstOrDefaultAsync(item => item.Id == messageId && !item.IsDeleted);
+        if (message is null || !string.Equals(message.ChannelId, channelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        ChatMessagePayload payload;
+        try
+        {
+            var rawPayload = string.IsNullOrWhiteSpace(message.EncryptedContent)
+                ? message.Content ?? string.Empty
+                : crypto.Decrypt(message.EncryptedContent);
+            payload = DeserializePayload(rawPayload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read message {MessageId} for async punctuation update.", messageId);
+            return;
+        }
+
+        if (!string.Equals(payload.AuthorUserId, authorUserId, StringComparison.Ordinal) ||
+            !string.Equals(payload.Message.Trim(), originalMessage, StringComparison.Ordinal) ||
+            payload.EditedAt.HasValue)
+        {
+            return;
+        }
+
+        payload.Message = punctuatedMessage;
+        message.EncryptedContent = crypto.Encrypt(SerializePayload(payload));
+        message.Content = null;
+
+        await dbContext.SaveChangesAsync();
+
+        var reactionsByMessageId = await BuildReactionMapAsync(dbContext, [messageId]);
+        await hubContext.Clients.Group(message.ChannelId).SendAsync(
+            "MessageUpdated",
+            ToMessageDto(
+                message,
+                payload,
+                reactionsByMessageId.TryGetValue(messageId, out var reactions) ? reactions : []));
+    }
+
+    private static bool ShouldUseAsyncServerPunctuation(string message)
+    {
+        var normalizedMessage = message.Trim();
+        if (normalizedMessage.Length < 4)
+        {
+            return false;
+        }
+
+        if (!AsyncPunctuationCyrillicRegex.IsMatch(normalizedMessage))
+        {
+            return false;
+        }
+
+        if (AsyncPunctuationSkipRegex.IsMatch(normalizedMessage))
+        {
+            return false;
+        }
+
+        return normalizedMessage.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length >= 2;
+    }
+
     private static MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)
     {
         return new MessageDto
@@ -893,7 +1002,12 @@ public class ChatHub : Hub
         }
     }
 
-    private async Task<Dictionary<int, List<MessageReactionDto>>> BuildReactionMapAsync(IEnumerable<int> messageIds)
+    private Task<Dictionary<int, List<MessageReactionDto>>> BuildReactionMapAsync(IEnumerable<int> messageIds)
+    {
+        return BuildReactionMapAsync(_context, messageIds);
+    }
+
+    private static async Task<Dictionary<int, List<MessageReactionDto>>> BuildReactionMapAsync(AppDbContext dbContext, IEnumerable<int> messageIds)
     {
         var normalizedMessageIds = messageIds
             .Distinct()
@@ -905,7 +1019,7 @@ public class ChatHub : Hub
             return [];
         }
 
-        var rawReactions = await _context.MessageReactions
+        var rawReactions = await dbContext.MessageReactions
             .AsNoTracking()
             .Where(item => normalizedMessageIds.Contains(item.MessageId))
             .OrderBy(item => item.CreatedAt)
@@ -924,7 +1038,7 @@ public class ChatHub : Hub
 
         var reactorUsers = reactorNumericIds.Length == 0
             ? []
-            : await _context.Users
+            : await dbContext.Users
                 .AsNoTracking()
                 .Where(user => reactorNumericIds.Contains(user.id))
                 .ToListAsync();

@@ -10,7 +10,6 @@ import {
 } from "../utils/chatPendingUploads";
 import { extractMentionsFromText } from "../utils/messageMentions";
 import { createPollMessagePayload } from "../utils/pollMessages";
-import { punctuateTypedMessageText } from "../utils/speechPunctuation";
 import {
   getChatErrorMessage,
   MAX_FILE_SIZE_BYTES,
@@ -372,7 +371,7 @@ export default function useTextChatSendActions({
       return;
     }
 
-    const messageText = await punctuateTypedMessageText(rawMessageText);
+    const messageText = rawMessageText;
     if (!messageText && !filesToSend.length) {
       return;
     }
