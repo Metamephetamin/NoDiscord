@@ -453,7 +453,7 @@ function CreateCategoryModal({
       <form className="channel-create-modal" onSubmit={onSubmit} onClick={(event) => event.stopPropagation()}>
         <div className="channel-create-modal__header">
           <h3>Создать категорию</h3>
-          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть">x</button>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть" />
         </div>
 
         <label className="stream-modal__field">
@@ -513,7 +513,7 @@ function CreateChannelModal({
             <h3>Создать канал</h3>
             <p>Выберите тип канала и категорию, куда его положить.</p>
           </div>
-          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть">x</button>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть" />
         </div>
 
         <div className="channel-create-modal__types" role="radiogroup" aria-label="Тип канала">
@@ -1693,6 +1693,8 @@ export const ServersSidebar = memo(({
   );
   const uncategorizedTextChannels = textChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
   const uncategorizedVoiceChannels = voiceChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
+  const hasUncategorizedTextChannels = uncategorizedTextChannels.length > 0;
+  const hasUncategorizedVoiceChannels = uncategorizedVoiceChannels.length > 0;
   const canDragChannels = Boolean(canManageChannels && activeServer);
   const endDrag = () => {
     dragEndedRef.current = true;
@@ -2296,27 +2298,31 @@ export const ServersSidebar = memo(({
 
       {activeServer ? (
         <>
-          <div className="server-panel__section">
-            <div className="server-panel__header">
-              <span>Текстовые каналы</span>
-              <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
+          {hasUncategorizedTextChannels ? (
+            <div className="server-panel__section">
+              <div className="server-panel__header">
+                <span>Текстовые каналы</span>
+                <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
+              </div>
+              <ul
+                className="channel-list"
+                onDragOver={(event) => handleChannelDragOver(event, "text", null, "")}
+                onDrop={(event) => handleChannelDrop(event, "text", null, "")}
+              >
+                {renderTextChannelListItems(uncategorizedTextChannels, "")}
+              </ul>
             </div>
-            <ul
-              className="channel-list"
-              onDragOver={(event) => handleChannelDragOver(event, "text", null, "")}
-              onDrop={(event) => handleChannelDrop(event, "text", null, "")}
-            >
-              {renderTextChannelListItems(uncategorizedTextChannels, "")}
-            </ul>
-          </div>
+          ) : null}
 
-          <div className="server-panel__section">
-            <div className="server-panel__header">
-              <span>Голосовые каналы</span>
-              <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
+          {hasUncategorizedVoiceChannels ? (
+            <div className="server-panel__section">
+              <div className="server-panel__header">
+                <span>Голосовые каналы</span>
+                <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
+              </div>
+              {renderVoiceChannels(uncategorizedVoiceChannels, "")}
             </div>
-            {renderVoiceChannels(uncategorizedVoiceChannels, "")}
-          </div>
+          ) : null}
 
           {channelCategories.map((category) => {
             const categoryId = getDragCategoryId(category.id);

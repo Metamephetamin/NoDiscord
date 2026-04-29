@@ -312,7 +312,27 @@
 
 .participant-item::before,
 .participant-item::after {
-  content: none;
+  content: "";
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.participant-item::before {
+  background: var(--voice-connector-color);
+  box-shadow: 0 0 8px rgba(40, 56, 104, 0.16);
+}
+
+.participant-item::after {
+  background: var(--voice-connector-flow);
+  opacity: 0;
+  filter: drop-shadow(0 0 6px rgba(86, 108, 171, 0.22));
+  animation: participantConnectorGlow 2.2s ease-in-out infinite;
 }
 
 .participant-item__avatar-shell {
@@ -428,14 +448,15 @@
 
 .participant-live-badge {
   flex: 0 0 auto;
-  padding: 4px 8px;
+  min-height: 20px;
+  padding: 2px 8px;
   border: 0;
   border-radius: 999px;
   background: #d92d20;
   color: #ffffff;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  line-height: 16px;
   cursor: pointer;
 }
 
@@ -459,7 +480,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .list__items--has-participants::after {
+  .list__items--has-participants::after,
+  .participant-item::after {
     animation: none;
     opacity: 0.36;
   }

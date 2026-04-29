@@ -226,9 +226,9 @@ public class ServerStateService
 
         merged.Roles = MergeRoles(normalizedExisting.Roles, merged.Roles);
         merged.Members = MergeMembers(normalizedExisting.Members, merged.Members, merged.OwnerId);
-        merged.ChannelCategories = MergeCategories(normalizedExisting.ChannelCategories, merged.ChannelCategories);
-        merged.TextChannels = MergeChannels(normalizedExisting.TextChannels, merged.TextChannels);
-        merged.VoiceChannels = MergeChannels(normalizedExisting.VoiceChannels, merged.VoiceChannels);
+        merged.ChannelCategories = CloneCategories(merged.ChannelCategories);
+        merged.TextChannels = CloneChannels(merged.TextChannels);
+        merged.VoiceChannels = CloneChannels(merged.VoiceChannels);
 
         return NormalizeSnapshot(merged, merged.OwnerId);
     }
@@ -316,52 +316,19 @@ public class ServerStateService
         return result.Values.ToList();
     }
 
-    private static List<ChannelSnapshot> MergeChannels(List<ChannelSnapshot>? existing, List<ChannelSnapshot>? incoming)
+    private static List<ChannelSnapshot> CloneChannels(List<ChannelSnapshot>? channels)
     {
-        var result = new Dictionary<string, ChannelSnapshot>(StringComparer.Ordinal);
-
-        foreach (var channel in existing ?? Enumerable.Empty<ChannelSnapshot>())
-        {
-            if (!string.IsNullOrWhiteSpace(channel.Id))
-            {
-                result[channel.Id] = CloneChannel(channel);
-            }
-        }
-
-        foreach (var channel in incoming ?? Enumerable.Empty<ChannelSnapshot>())
-        {
-            if (!string.IsNullOrWhiteSpace(channel.Id))
-            {
-                result[channel.Id] = CloneChannel(channel);
-            }
-        }
-
-        return result.Values.ToList();
+        return (channels ?? Enumerable.Empty<ChannelSnapshot>())
+            .Where(channel => !string.IsNullOrWhiteSpace(channel.Id))
+            .Select(CloneChannel)
+            .ToList();
     }
 
-    private static List<ChannelCategorySnapshot> MergeCategories(
-        List<ChannelCategorySnapshot>? existing,
-        List<ChannelCategorySnapshot>? incoming)
+    private static List<ChannelCategorySnapshot> CloneCategories(List<ChannelCategorySnapshot>? categories)
     {
-        var result = new Dictionary<string, ChannelCategorySnapshot>(StringComparer.Ordinal);
-
-        foreach (var category in existing ?? Enumerable.Empty<ChannelCategorySnapshot>())
-        {
-            if (!string.IsNullOrWhiteSpace(category.Id))
-            {
-                result[category.Id] = CloneCategory(category);
-            }
-        }
-
-        foreach (var category in incoming ?? Enumerable.Empty<ChannelCategorySnapshot>())
-        {
-            if (!string.IsNullOrWhiteSpace(category.Id))
-            {
-                result[category.Id] = CloneCategory(category);
-            }
-        }
-
-        return result.Values
+        return (categories ?? Enumerable.Empty<ChannelCategorySnapshot>())
+            .Where(category => !string.IsNullOrWhiteSpace(category.Id))
+            .Select(CloneCategory)
             .OrderBy(category => category.Order)
             .ThenBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();

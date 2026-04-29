@@ -146,6 +146,7 @@ import {
   isServerOwnedByUser,
   isValidProfileName,
   MAX_PROFILE_NAME_LENGTH,
+  DEFAULT_VOICE_INPUT_MODE,
   mergePersistedServers,
   MICROPHONE_ICON_URL,
   MOBILE_VIEWPORT_QUERY,
@@ -162,6 +163,8 @@ import {
   SETTINGS_ICON_URL,
   SETTINGS_NAV_ITEMS,
   SMS_ICON_URL,
+  STREAM_FPS_OPTIONS,
+  STREAM_RESOLUTION_OPTIONS,
   UI_SOUND_PATHS,
   uiSoundCache,
   VOICE_INPUT_MODES,
@@ -178,6 +181,13 @@ const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
   sections[item.section].push(item);
   return sections;
 }, {});
+
+const getAllowedStreamFps = (resolution) => SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"] || [30];
+const normalizeStreamFpsForResolution = (value, resolution) => {
+  const allowedFps = getAllowedStreamFps(resolution);
+  const requestedFps = Math.round(Number(value) || allowedFps[0] || 30);
+  return allowedFps.includes(requestedFps) ? requestedFps : allowedFps[0] || 30;
+};
 let voiceRoomClientFactoryPromise = null;
 const MenuMainSettingsContent = lazy(() =>
   recoverChunkImport(() => import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainSettingsContent })))
@@ -600,8 +610,6 @@ export default function MenuMain({
     activeNoiseProfile,
     noiseSuppressionMode,
     setNoiseSuppressionMode,
-    noiseSuppressionStrength,
-    setNoiseSuppressionStrength,
     echoCancellationEnabled,
     setEchoCancellationEnabled,
     applyVoiceProcessingToClient,
@@ -971,7 +979,7 @@ export default function MenuMain({
     workspaceStateStorageKey,
   });
   useEffect(() => {
-    const allowedFps = SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"];
+    const allowedFps = getAllowedStreamFps(resolution);
     if (!allowedFps.includes(fps)) {
       setFps(allowedFps[0] || 30);
     }
@@ -1060,9 +1068,13 @@ export default function MenuMain({
   const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
   const liveUserIds = useMemo(() => Array.from(new Set([...remoteScreenShares.map((item) => item.userId).filter(Boolean), ...announcedLiveUserIds, ...(isSharingScreen && user?.id ? [String(user.id)] : [])])), [remoteScreenShares, announcedLiveUserIds, isSharingScreen, user?.id]);
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
-  const isScreenShareActive = isSharingScreen && localLiveShareMode === "screen";
-  const isCameraShareActive = isSharingScreen && localLiveShareMode === "camera";
+  const isScreenShareActive = isSharingScreen && (localLiveShareMode === "screen" || localLiveShareMode === "both");
+  const isCameraShareActive = isSharingScreen && (localLiveShareMode === "camera" || localLiveShareMode === "both");
   const hasLocalSharePreview = Boolean(localSharePreview?.stream);
+  const streamFpsOptions = useMemo(
+    () => STREAM_FPS_OPTIONS.filter((option) => getAllowedStreamFps(resolution).includes(option.value)),
+    [resolution]
+  );
   const displayCaptureSupportInfo = useMemo(() => getDisplayCaptureSupportInfo(), []);
   const isScreenShareSupported = displayCaptureSupportInfo.supported;
   const selectedStreamParticipant = useMemo(() => {
@@ -3946,12 +3958,8 @@ export default function MenuMain({
         : mode === "rnnoise" || mode === "krisp" || mode === "ai_noise_suppression"
           ? "hard_gate"
           : mode;
-    setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : "transparent");
+    setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : DEFAULT_VOICE_INPUT_MODE);
     setShowNoiseMenu(false);
-  };
-  const handleNoiseSuppressionStrengthChange = (value) => {
-    const numericValue = Number(value);
-    setNoiseSuppressionStrength(Number.isFinite(numericValue) ? Math.max(0, Math.min(100, Math.round(numericValue))) : 100);
   };
   const toggleEchoCancellation = () => {
     setEchoCancellationEnabled((previous) => !previous);
@@ -4494,6 +4502,36 @@ export default function MenuMain({
       onLogout?.();
     }
   };
+  const applyLiveStreamQuality = useCallback((nextResolution, nextFps) => {
+    if (!isScreenShareActive && !isCameraShareActive) {
+      return;
+    }
+
+    voiceClientRef.current?.setLocalShareVideoQuality?.({
+      resolution: nextResolution,
+      fps: nextFps,
+    }).catch((error) => {
+      console.error("Не удалось обновить качество стрима:", error);
+      showServerInviteFeedback(error?.message || "Не удалось обновить качество стрима.");
+    });
+  }, [isCameraShareActive, isScreenShareActive, showServerInviteFeedback, voiceClientRef]);
+  const handleStreamResolutionChange = useCallback((nextResolution) => {
+    const normalizedResolution = STREAM_RESOLUTION_OPTIONS.some((option) => option.value === nextResolution)
+      ? nextResolution
+      : "1080p";
+    const nextFps = normalizeStreamFpsForResolution(fps, normalizedResolution);
+
+    setResolution(normalizedResolution);
+    if (nextFps !== fps) {
+      setFps(nextFps);
+    }
+    applyLiveStreamQuality(normalizedResolution, nextFps);
+  }, [applyLiveStreamQuality, fps]);
+  const handleStreamFpsChange = useCallback((nextFpsValue) => {
+    const nextFps = normalizeStreamFpsForResolution(nextFpsValue, resolution);
+    setFps(nextFps);
+    applyLiveStreamQuality(resolution, nextFps);
+  }, [applyLiveStreamQuality, resolution]);
   const {
     startScreenShare,
     stopScreenShare,
@@ -4512,6 +4550,7 @@ export default function MenuMain({
     shareStreamAudio,
     selectedVideoDeviceId,
     isScreenShareActive,
+    isCameraShareActive,
     isScreenShareSupported,
     displayCaptureSupportInfo,
     hasLocalSharePreview,
@@ -5075,7 +5114,6 @@ export default function MenuMain({
     isMicTestActive,
     noiseProfileOptions,
     noiseSuppressionMode,
-    noiseSuppressionStrength,
     activeNoiseProfile,
     echoCancellationEnabled,
     autoInputSensitivity,
@@ -5085,7 +5123,6 @@ export default function MenuMain({
     updateAudioVolume,
     toggleMicrophoneTestPreview,
     handleNoiseSuppressionModeChange,
-    handleNoiseSuppressionStrengthChange,
     toggleEchoCancellation,
     setAutoInputSensitivity,
     directNotificationsEnabled,
@@ -5220,6 +5257,10 @@ export default function MenuMain({
     isCurrentUserSpeaking,
     isScreenShareActive,
     isCameraShareActive,
+    streamResolution: resolution,
+    streamFps: fps,
+    streamResolutionOptions: STREAM_RESOLUTION_OPTIONS,
+    streamFpsOptions,
     isMicMuted,
     isSoundMuted,
     showMicMenu,
@@ -5239,7 +5280,6 @@ export default function MenuMain({
     deviceOutputLabel,
     noiseProfileOptions,
     noiseSuppressionMode,
-    noiseSuppressionStrength,
     activeNoiseProfile,
     echoCancellationEnabled,
     micVolume,
@@ -5248,6 +5288,10 @@ export default function MenuMain({
     openSettingsPanel,
     handleScreenShareAction: stableHandleScreenShareAction,
     openCameraModal: stableOpenCameraModal,
+    stopCameraShare: stableStopCameraShare,
+    openLocalSharePreview,
+    handleStreamResolutionChange,
+    handleStreamFpsChange,
     leaveVoiceChannel: stableLeaveVoiceChannel,
     leaveCurrentVoiceContext,
     handleAvatarChange,
@@ -5259,7 +5303,6 @@ export default function MenuMain({
     handleInputDeviceChange,
     handleOutputDeviceChange,
     handleNoiseSuppressionModeChange,
-    handleNoiseSuppressionStrengthChange,
     toggleEchoCancellation,
     updateMicVolume,
     updateAudioVolume,
@@ -5280,6 +5323,9 @@ export default function MenuMain({
     deviceOutputLabel,
     directCallState,
     echoCancellationEnabled,
+    fps,
+    handleStreamFpsChange,
+    handleStreamResolutionChange,
     isCameraShareActive,
     isCurrentUserSpeaking,
     isMicMuted,
@@ -5288,15 +5334,18 @@ export default function MenuMain({
     micVolume,
     noiseProfileOptions,
     noiseSuppressionMode,
-    noiseSuppressionStrength,
+    openLocalSharePreview,
     outputSelectionAvailable,
     profileCustomization,
     pingTone,
     pingTooltip,
+    resolution,
     selectedInputDeviceId,
     selectedOutputDeviceId,
     showMicMenu,
     showSoundMenu,
+    stableStopCameraShare,
+    streamFpsOptions,
     user,
   ]);
   const renderProfilePanel = () => profilePanelElement;
@@ -6247,8 +6296,8 @@ export default function MenuMain({
       screenShareError={screenShareError}
       setShowModal={setShowModal}
       setScreenShareError={setScreenShareError}
-      setResolution={setResolution}
-      setFps={setFps}
+      setResolution={handleStreamResolutionChange}
+      setFps={handleStreamFpsChange}
       setShareStreamAudio={setShareStreamAudio}
       startScreenShare={startScreenShare}
       stopScreenShare={stopScreenShare}

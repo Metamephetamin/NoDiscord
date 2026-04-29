@@ -11,6 +11,7 @@ export default function useMenuMainLocalShareActions({
   shareStreamAudio,
   selectedVideoDeviceId,
   isScreenShareActive,
+  isCameraShareActive,
   isScreenShareSupported,
   displayCaptureSupportInfo,
   hasLocalSharePreview,
@@ -87,7 +88,7 @@ export default function useMenuMainLocalShareActions({
     try {
       await voiceClientRef.current.stopScreenShare();
       setShowModal(false);
-      setIsLocalSharePreviewVisible(false);
+      setIsLocalSharePreviewVisible(Boolean(isCameraShareActive));
     } catch (error) {
       pendingLocalScreenShareToneRef.current = "";
       const message = error?.message || "Не удалось остановить трансляцию экрана.";
@@ -99,6 +100,7 @@ export default function useMenuMainLocalShareActions({
     }
   }, [
     clearScreenShareStartToneTimeout,
+    isCameraShareActive,
     pendingLocalScreenShareToneRef,
     playUiTone,
     setIsLocalSharePreviewVisible,
@@ -133,6 +135,7 @@ export default function useMenuMainLocalShareActions({
     displayCaptureSupportInfo.subtitle,
     isScreenShareActive,
     isScreenShareSupported,
+    isCameraShareActive,
     setScreenShareError,
     setShowCameraModal,
     setShowModal,
@@ -221,9 +224,9 @@ export default function useMenuMainLocalShareActions({
     localShareActionInFlightRef.current = true;
     setCameraError("");
     try {
-      await voiceClientRef.current.stopScreenShare();
+      await voiceClientRef.current.stopCameraShare();
       setShowCameraModal(false);
-      setIsLocalSharePreviewVisible(false);
+      setIsLocalSharePreviewVisible(Boolean(isScreenShareActive));
       stopCameraPreview();
     } catch (error) {
       setCameraError(error?.message || "Не удалось остановить трансляцию камеры.");
@@ -232,6 +235,7 @@ export default function useMenuMainLocalShareActions({
     }
   }, [
     setCameraError,
+    isScreenShareActive,
     setIsLocalSharePreviewVisible,
     setShowCameraModal,
     stopCameraPreview,

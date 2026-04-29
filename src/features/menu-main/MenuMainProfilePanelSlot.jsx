@@ -14,6 +14,10 @@ export default function MenuMainProfilePanelSlot({
   isCurrentUserSpeaking,
   isScreenShareActive,
   isCameraShareActive,
+  streamResolution,
+  streamFps,
+  streamResolutionOptions,
+  streamFpsOptions,
   isMicMuted,
   isSoundMuted,
   showMicMenu,
@@ -33,7 +37,6 @@ export default function MenuMainProfilePanelSlot({
   deviceOutputLabel,
   noiseProfileOptions,
   noiseSuppressionMode,
-  noiseSuppressionStrength,
   activeNoiseProfile,
   echoCancellationEnabled,
   micVolume,
@@ -42,6 +45,10 @@ export default function MenuMainProfilePanelSlot({
   openSettingsPanel,
   handleScreenShareAction,
   openCameraModal,
+  stopCameraShare,
+  openLocalSharePreview,
+  handleStreamResolutionChange,
+  handleStreamFpsChange,
   leaveVoiceChannel,
   leaveCurrentVoiceContext,
   handleAvatarChange,
@@ -53,7 +60,6 @@ export default function MenuMainProfilePanelSlot({
   handleInputDeviceChange,
   handleOutputDeviceChange,
   handleNoiseSuppressionModeChange,
-  handleNoiseSuppressionStrengthChange,
   toggleEchoCancellation,
   updateMicVolume,
   updateAudioVolume,
@@ -71,6 +77,10 @@ export default function MenuMainProfilePanelSlot({
       isCurrentUserSpeaking={isCurrentUserSpeaking}
       isScreenShareActive={isScreenShareActive}
       isCameraShareActive={isCameraShareActive}
+      streamResolution={streamResolution}
+      streamFps={streamFps}
+      streamResolutionOptions={streamResolutionOptions}
+      streamFpsOptions={streamFpsOptions}
       isMicMuted={isMicMuted}
       isSoundMuted={isSoundMuted}
       showMicMenu={showMicMenu}
@@ -93,7 +103,6 @@ export default function MenuMainProfilePanelSlot({
       deviceOutputLabel={deviceOutputLabel}
       noiseProfileOptions={noiseProfileOptions}
       noiseSuppressionMode={noiseSuppressionMode}
-      noiseSuppressionStrength={noiseSuppressionStrength}
       activeNoiseProfile={activeNoiseProfile}
       echoCancellationEnabled={echoCancellationEnabled}
       micVolume={micVolume}
@@ -104,6 +113,10 @@ export default function MenuMainProfilePanelSlot({
       onOpenVoiceSettings={() => openSettingsPanel("voice_video")}
       onScreenShareAction={handleScreenShareAction}
       onOpenCamera={openCameraModal}
+      onStopCameraShare={stopCameraShare}
+      onOpenLocalSharePreview={openLocalSharePreview}
+      onStreamResolutionChange={handleStreamResolutionChange}
+      onStreamFpsChange={handleStreamFpsChange}
       onLeaveVoiceChannel={leaveCurrentVoiceContext || leaveVoiceChannel}
       onAvatarChange={handleAvatarChange}
       onServerIconChange={handleServerIconChange}
@@ -114,7 +127,6 @@ export default function MenuMainProfilePanelSlot({
       onInputDeviceChange={handleInputDeviceChange}
       onOutputDeviceChange={handleOutputDeviceChange}
       onNoiseProfileChange={handleNoiseSuppressionModeChange}
-      onNoiseStrengthChange={handleNoiseSuppressionStrengthChange}
       onToggleEchoCancellation={toggleEchoCancellation}
       onMicVolumeChange={updateMicVolume}
       onAudioVolumeChange={updateAudioVolume}

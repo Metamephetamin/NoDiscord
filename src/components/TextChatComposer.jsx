@@ -14,6 +14,7 @@ import {
   resolveAnimatedEmojiFallbackGlyph,
 } from "../utils/textChatModel";
 import { formatFileSize } from "../utils/textChatHelpers";
+import { COMPOSER_TRANSLATION_LANGUAGES, translateComposerText } from "../utils/textTranslation";
 
 function normalizePendingUploadProgress(progressValue) {
   const numericProgress = Number(progressValue);
@@ -96,8 +97,13 @@ function TextChatComposer({
   const [locationPickerLocating, setLocationPickerLocating] = useState(false);
   const [locationPickerError, setLocationPickerError] = useState("");
   const [locationPickerCurrentPosition, setLocationPickerCurrentPosition] = useState(null);
+  const [translatorMenuOpen, setTranslatorMenuOpen] = useState(false);
+  const [translationPending, setTranslationPending] = useState(false);
+  const [translationError, setTranslationError] = useState("");
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
+  const translatorButtonRef = useRef(null);
+  const translatorMenuRef = useRef(null);
   const attachMenuCloseTimeoutRef = useRef(0);
   const suppressSpeechClickRef = useRef(false);
   const deferredMessage = useDeferredValue(message);
@@ -157,6 +163,32 @@ function TextChatComposer({
       setEmojiPreviewCount(8);
     }
   }, [composerEmojiPickerOpen]);
+
+  useEffect(() => {
+    if (!translatorMenuOpen || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (translatorMenuRef.current?.contains(event.target) || translatorButtonRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setTranslatorMenuOpen(false);
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setTranslatorMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [translatorMenuOpen]);
 
   const clearAttachMenuCloseTimeout = () => {
     if (!attachMenuCloseTimeoutRef.current || typeof window === "undefined") {
@@ -317,6 +349,34 @@ function TextChatComposer({
     }
 
     return onSendLocation(locationPayload);
+  };
+
+  const handleTranslateComposerText = async (targetLanguage) => {
+    const sourceText = String(message || "").trim();
+    if (!sourceText || translationPending) {
+      return;
+    }
+
+    setTranslationPending(true);
+    setTranslationError("");
+
+    try {
+      const result = await translateComposerText(sourceText, targetLanguage);
+      if (result.text) {
+        onMessageChange(result.text);
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus?.();
+          const nextPosition = result.text.length;
+          textareaRef.current?.setSelectionRange?.(nextPosition, nextPosition);
+          onSyncComposerSelection(textareaRef.current);
+        });
+      }
+      setTranslatorMenuOpen(false);
+    } catch (error) {
+      setTranslationError(error?.message || "Не удалось перевести текст.");
+    } finally {
+      setTranslationPending(false);
+    }
   };
 
   const getPendingUploadStatusLabel = (selectedFile) => {
@@ -539,6 +599,53 @@ function TextChatComposer({
               </button>
             </div>
             </div>
+
+            <button
+              ref={translatorButtonRef}
+              type="button"
+              className={`composer-tool composer-tool--translator ${translatorMenuOpen ? "composer-tool--active" : ""}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onSyncComposerSelection();
+                onToggleEmojiPicker(false);
+                setTranslationError("");
+                setTranslatorMenuOpen((previous) => !previous);
+              }}
+              disabled={uploadingFile || voiceRecordingState === "sending" || translationPending || !String(message || "").trim()}
+              title="Перевести текст"
+              aria-label="Перевести текст"
+              aria-expanded={translatorMenuOpen}
+            >
+              <span className="composer-tool__translator-icon" aria-hidden="true">
+                <span>文</span>
+                <span>A</span>
+              </span>
+            </button>
+
+            {translatorMenuOpen ? (
+              <div ref={translatorMenuRef} className="composer-translator-menu" role="menu" aria-label="Выбор языка перевода">
+                <div className="composer-translator-menu__header">
+                  <strong>{translationPending ? "Переводим..." : "Перевести на"}</strong>
+                  <span>Исходный язык определится автоматически</span>
+                </div>
+                <div className="composer-translator-menu__list">
+                  {COMPOSER_TRANSLATION_LANGUAGES.map((language) => (
+                    <button
+                      key={language.value}
+                      type="button"
+                      className="composer-translator-menu__item"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => void handleTranslateComposerText(language.value)}
+                      disabled={translationPending}
+                      role="menuitem"
+                    >
+                      {language.label}
+                    </button>
+                  ))}
+                </div>
+                {translationError ? <div className="composer-translator-menu__error">{translationError}</div> : null}
+              </div>
+            ) : null}
 
             <button
               ref={composerEmojiButtonRef}

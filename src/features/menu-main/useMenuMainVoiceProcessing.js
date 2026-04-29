@@ -1,5 +1,9 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { VOICE_INPUT_MODES } from "../../utils/menuMainModel";
+import {
+  DEFAULT_VOICE_INPUT_MODE,
+  VOICE_INPUT_MODES,
+  getVoiceInputModeNoiseStrength,
+} from "../../utils/menuMainModel";
 
 const NOISE_PROFILE_OPTIONS = [
   {
@@ -25,14 +29,16 @@ export default function useMenuMainVoiceProcessing({
   noiseSuppressionStorageKey,
   echoCancellationStorageKey,
 }) {
-  const noiseSuppressionStrengthStorageKey = `${noiseSuppressionStorageKey}:strength`;
-  const [noiseSuppressionMode, setNoiseSuppressionMode] = useState("transparent");
-  const [noiseSuppressionStrength, setNoiseSuppressionStrength] = useState(100);
+  const [noiseSuppressionMode, setNoiseSuppressionMode] = useState(DEFAULT_VOICE_INPUT_MODE);
   const [echoCancellationEnabled, setEchoCancellationEnabled] = useState(true);
+  const noiseSuppressionStrength = useMemo(
+    () => getVoiceInputModeNoiseStrength(noiseSuppressionMode),
+    [noiseSuppressionMode]
+  );
 
   useEffect(() => {
     if (!user) {
-      setNoiseSuppressionMode("transparent");
+      setNoiseSuppressionMode(DEFAULT_VOICE_INPUT_MODE);
       return;
     }
 
@@ -44,9 +50,9 @@ export default function useMenuMainVoiceProcessing({
           : storedMode === "rnnoise" || storedMode === "krisp" || storedMode === "ai_noise_suppression"
             ? "hard_gate"
             : storedMode;
-      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : "transparent");
+      setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : DEFAULT_VOICE_INPUT_MODE);
     } catch {
-      setNoiseSuppressionMode("transparent");
+      setNoiseSuppressionMode(DEFAULT_VOICE_INPUT_MODE);
     }
   }, [noiseSuppressionStorageKey, user]);
 
@@ -61,32 +67,6 @@ export default function useMenuMainVoiceProcessing({
       // ignore storage failures
     }
   }, [noiseSuppressionMode, noiseSuppressionStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setNoiseSuppressionStrength(100);
-      return;
-    }
-
-    try {
-      const storedStrength = Number(localStorage.getItem(noiseSuppressionStrengthStorageKey));
-      setNoiseSuppressionStrength(Number.isFinite(storedStrength) ? Math.max(0, Math.min(100, Math.round(storedStrength))) : 100);
-    } catch {
-      setNoiseSuppressionStrength(100);
-    }
-  }, [noiseSuppressionStrengthStorageKey, user]);
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(noiseSuppressionStrengthStorageKey, String(noiseSuppressionStrength));
-    } catch {
-      // ignore storage failures
-    }
-  }, [noiseSuppressionStrength, noiseSuppressionStrengthStorageKey, user]);
 
   useEffect(() => {
     if (!user) {
@@ -171,7 +151,6 @@ export default function useMenuMainVoiceProcessing({
     noiseSuppressionMode,
     setNoiseSuppressionMode,
     noiseSuppressionStrength,
-    setNoiseSuppressionStrength,
     echoCancellationEnabled,
     setEchoCancellationEnabled,
     applyVoiceProcessingToClient,

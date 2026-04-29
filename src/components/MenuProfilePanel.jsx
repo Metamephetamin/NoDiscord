@@ -1,3 +1,4 @@
+import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import PercentageSlider from "./PercentageSlider";
 import { getProfileCustomizationClassName } from "../utils/profileCustomization";
@@ -23,13 +24,84 @@ const DeviceToggleButton = ({ active, title, onClick }) => (
   </button>
 );
 
+const StreamStatusBanner = ({
+  isScreenShareActive,
+  isCameraShareActive,
+  resolution,
+  fps,
+  resolutionOptions = [],
+  fpsOptions = [],
+  onOpenPreview = () => {},
+  onResolutionChange = () => {},
+  onFpsChange = () => {},
+}) => {
+  const [showSettings, setShowSettings] = useState(false);
+  const isActive = isScreenShareActive || isCameraShareActive;
+  const streamTitle = isScreenShareActive && isCameraShareActive
+    ? "Экран и камера в эфире"
+    : isCameraShareActive
+      ? "Камера в эфире"
+      : "Стрим запущен";
+  const normalizedFps = Number(fps) || 30;
+  const settingsOpen = isActive && showSettings;
+
+  if (!isActive) {
+    return null;
+  }
+
+  return (
+    <div className="profile__stream-banner">
+      <div className="profile__stream-banner-main">
+        <span className="profile__stream-live-dot" aria-hidden="true" />
+        <div className="profile__stream-copy">
+          <span className="profile__stream-title">{streamTitle}</span>
+          <span className="profile__stream-meta">{resolution} · {normalizedFps} FPS</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="profile__stream-settings-button ui-tooltip-anchor"
+        onClick={() => setShowSettings((previous) => !previous)}
+        aria-label="Качество стрима"
+        aria-expanded={settingsOpen}
+        data-tooltip="Качество стрима"
+      >
+        <span className="profile__quick-glyph profile__quick-glyph--settings" aria-hidden="true" />
+      </button>
+
+      {settingsOpen ? (
+        <div className="profile__stream-settings" role="group" aria-label="Настройки качества стрима">
+          <label className="profile__stream-field">
+            <span>Качество</span>
+            <select value={resolution} onChange={(event) => onResolutionChange(event.target.value)}>
+              {resolutionOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="profile__stream-field">
+            <span>FPS</span>
+            <select value={normalizedFps} onChange={(event) => onFpsChange(Number(event.target.value))}>
+              {fpsOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="profile__stream-preview" onClick={onOpenPreview}>
+            Предпросмотр
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const MicMenuPanel = ({
   audioInputDevices,
   selectedInputDeviceId,
   deviceInputLabel,
   noiseProfileOptions,
   noiseSuppressionMode,
-  noiseSuppressionStrength,
   activeNoiseProfile,
   echoCancellationEnabled,
   micVolume,
@@ -37,7 +109,6 @@ const MicMenuPanel = ({
   settingsIcon,
   onInputDeviceChange,
   onNoiseProfileChange,
-  onNoiseStrengthChange,
   onToggleEchoCancellation,
   onMicVolumeChange,
   onOpenVoiceSettings,
@@ -68,17 +139,6 @@ const MicMenuPanel = ({
         active={echoCancellationEnabled}
         title="Эхоподавление"
         onClick={onToggleEchoCancellation}
-      />
-    </div>
-
-    <div className="device-menu__slider">
-      <span>Сила шумоподавления</span>
-      <PercentageSlider
-        min={0}
-        max={100}
-        value={noiseSuppressionStrength}
-        onChange={(event) => onNoiseStrengthChange(Number(event.target.value))}
-        ariaLabel="Сила шумоподавления"
       />
     </div>
 
@@ -151,6 +211,10 @@ export default function MenuProfilePanel({
   isCurrentUserSpeaking,
   isScreenShareActive,
   isCameraShareActive,
+  streamResolution,
+  streamFps,
+  streamResolutionOptions,
+  streamFpsOptions,
   isMicMuted,
   isSoundMuted,
   showMicMenu,
@@ -173,7 +237,6 @@ export default function MenuProfilePanel({
   deviceOutputLabel,
   noiseProfileOptions,
   noiseSuppressionMode,
-  noiseSuppressionStrength,
   activeNoiseProfile,
   echoCancellationEnabled,
   micVolume,
@@ -184,6 +247,10 @@ export default function MenuProfilePanel({
   onOpenVoiceSettings,
   onScreenShareAction,
   onOpenCamera,
+  onStopCameraShare,
+  onOpenLocalSharePreview,
+  onStreamResolutionChange,
+  onStreamFpsChange,
   onLeaveVoiceChannel,
   onAvatarChange,
   onServerIconChange,
@@ -194,7 +261,6 @@ export default function MenuProfilePanel({
   onInputDeviceChange,
   onOutputDeviceChange,
   onNoiseProfileChange,
-  onNoiseStrengthChange,
   onToggleEchoCancellation,
   onMicVolumeChange,
   onAudioVolumeChange,
@@ -217,6 +283,18 @@ export default function MenuProfilePanel({
     <div className={wrapperClassName}>
       {currentVoiceChannel ? (
         <div className={`profile__voice-stack ${voiceCardClassName}`}>
+          <StreamStatusBanner
+            isScreenShareActive={isScreenShareActive}
+            isCameraShareActive={isCameraShareActive}
+            resolution={streamResolution}
+            fps={streamFps}
+            resolutionOptions={streamResolutionOptions}
+            fpsOptions={streamFpsOptions}
+            onOpenPreview={onOpenLocalSharePreview}
+            onResolutionChange={onStreamResolutionChange}
+            onFpsChange={onStreamFpsChange}
+          />
+
           <div className="profile__connection-card">
             <span
               className={`profile__ping-indicator ui-tooltip-anchor profile__ping-indicator--${pingTone}`}
@@ -257,11 +335,11 @@ export default function MenuProfilePanel({
             <button
               type="button"
               className={`profile__quick-button ui-tooltip-anchor ${isCameraShareActive ? "profile__quick-button--active" : ""}`}
-              onClick={onOpenCamera}
-              aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
-              data-tooltip={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
+              onClick={isCameraShareActive ? onStopCameraShare : onOpenCamera}
+              aria-label={isCameraShareActive ? "Остановить камеру" : "Открыть камеру"}
+              data-tooltip={isCameraShareActive ? "Остановить камеру" : "Открыть камеру"}
             >
-              <span className="profile__quick-glyph profile__quick-glyph--camera" aria-hidden="true" />
+              <span className={`profile__quick-glyph ${isCameraShareActive ? "profile__quick-glyph--close" : "profile__quick-glyph--camera"}`} aria-hidden="true" />
             </button>
             <button type="button" className="profile__quick-button profile__quick-button--danger ui-tooltip-anchor" onClick={onLeaveVoiceChannel} aria-label={leaveVoiceActionAriaLabel} data-tooltip={leaveVoiceActionLabel}>
               <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
@@ -286,24 +364,22 @@ export default function MenuProfilePanel({
               className="hidden-input"
               onChange={onServerIconChange}
             />
-            {!currentVoiceChannel ? (
-              <div className="profile__names">
-                <span className="profile__username">{displayName}</span>
-                {activityStatus ? (
-                  <span className="profile__activity-status">
-                    <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                      <path d="M10.5 2.25V10.1C10.5 11.42 9.28 12.5 7.78 12.5C6.57 12.5 5.75 11.9 5.75 11.02C5.75 10.1 6.68 9.38 7.9 9.38C8.43 9.38 8.9 9.5 9.25 9.72V4.25L13.75 5.38V7L10.5 6.18V10.1" />
-                    </svg>
-                    <span className="profile__activity-marquee" title={activityStatus}>
-                      <span key={activityStatus} className="profile__activity-track">
-                        <span className="profile__activity-text">{activityStatus}</span>
-                        <span className="profile__activity-text" aria-hidden="true">{activityStatus}</span>
-                      </span>
+            <div className="profile__names">
+              <span className="profile__username">{displayName}</span>
+              {activityStatus ? (
+                <span className="profile__activity-status">
+                  <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M10.5 2.25V10.1C10.5 11.42 9.28 12.5 7.78 12.5C6.57 12.5 5.75 11.9 5.75 11.02C5.75 10.1 6.68 9.38 7.9 9.38C8.43 9.38 8.9 9.5 9.25 9.72V4.25L13.75 5.38V7L10.5 6.18V10.1" />
+                  </svg>
+                  <span className="profile__activity-marquee" title={activityStatus}>
+                    <span key={activityStatus} className="profile__activity-track">
+                      <span className="profile__activity-text">{activityStatus}</span>
+                      <span className="profile__activity-text" aria-hidden="true">{activityStatus}</span>
                     </span>
                   </span>
-                ) : null}
-              </div>
-            ) : null}
+                </span>
+              ) : null}
+            </div>
           </button>
 
           <div className="profile__identity-controls">
@@ -333,7 +409,6 @@ export default function MenuProfilePanel({
                   deviceInputLabel={deviceInputLabel}
                   noiseProfileOptions={noiseProfileOptions}
                   noiseSuppressionMode={noiseSuppressionMode}
-                  noiseSuppressionStrength={noiseSuppressionStrength}
                   activeNoiseProfile={activeNoiseProfile}
                   echoCancellationEnabled={echoCancellationEnabled}
                   micVolume={micVolume}
@@ -341,7 +416,6 @@ export default function MenuProfilePanel({
                   settingsIcon={icons.settings}
                   onInputDeviceChange={onInputDeviceChange}
                   onNoiseProfileChange={onNoiseProfileChange}
-                  onNoiseStrengthChange={onNoiseStrengthChange}
                   onToggleEchoCancellation={onToggleEchoCancellation}
                   onMicVolumeChange={onMicVolumeChange}
                   onOpenVoiceSettings={onOpenVoiceSettings}

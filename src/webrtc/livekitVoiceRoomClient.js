@@ -51,6 +51,53 @@ const DEFAULT_CHANNEL_AUDIO_BITRATE_KBPS = 64;
 const MIN_CHANNEL_AUDIO_BITRATE_KBPS = 8;
 const MAX_CHANNEL_AUDIO_BITRATE_KBPS = 96;
 const CHANNEL_VIDEO_QUALITY_VALUES = new Set(["auto", "720p", "1080p", "1440p"]);
+const ADAPTIVE_MEDIA_PROFILES = {
+  excellent: {
+    audioScale: 1,
+    maxAudioKbps: 96,
+    localVideoQuality: VideoQuality.HIGH,
+    remoteFocusedQuality: VideoQuality.HIGH,
+    remoteBackgroundQuality: VideoQuality.LOW,
+    remoteFocusedScale: 1,
+    remoteBackgroundScale: 0.65,
+    remoteFocusedFps: 60,
+    remoteBackgroundFps: 15,
+  },
+  good: {
+    audioScale: 1,
+    maxAudioKbps: 64,
+    localVideoQuality: VideoQuality.HIGH,
+    remoteFocusedQuality: VideoQuality.HIGH,
+    remoteBackgroundQuality: VideoQuality.LOW,
+    remoteFocusedScale: 0.82,
+    remoteBackgroundScale: 0.52,
+    remoteFocusedFps: 30,
+    remoteBackgroundFps: 15,
+  },
+  constrained: {
+    audioScale: 0.56,
+    maxAudioKbps: 48,
+    localVideoQuality: VideoQuality.MEDIUM,
+    remoteFocusedQuality: VideoQuality.MEDIUM,
+    remoteBackgroundQuality: VideoQuality.LOW,
+    remoteFocusedScale: 0.58,
+    remoteBackgroundScale: 0.42,
+    remoteFocusedFps: 24,
+    remoteBackgroundFps: 12,
+  },
+  poor: {
+    audioScale: 0.34,
+    maxAudioKbps: 32,
+    localVideoQuality: VideoQuality.LOW,
+    remoteFocusedQuality: VideoQuality.LOW,
+    remoteBackgroundQuality: VideoQuality.LOW,
+    remoteFocusedScale: 0.42,
+    remoteBackgroundScale: 0.32,
+    remoteFocusedFps: 15,
+    remoteBackgroundFps: 10,
+  },
+};
+const ADAPTIVE_MEDIA_PROFILE_ORDER = ["poor", "constrained", "good", "excellent"];
 const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
@@ -180,6 +227,27 @@ function normalizeChannelAudioBitrateKbps(value = DEFAULT_CHANNEL_AUDIO_BITRATE_
   }
 
   return Math.min(MAX_CHANNEL_AUDIO_BITRATE_KBPS, Math.max(MIN_CHANNEL_AUDIO_BITRATE_KBPS, Math.round(numericValue)));
+}
+
+function getAdaptiveProfileConfig(profileName) {
+  return ADAPTIVE_MEDIA_PROFILES[profileName] || ADAPTIVE_MEDIA_PROFILES.good;
+}
+
+function getAdaptiveProfileRank(profileName) {
+  const index = ADAPTIVE_MEDIA_PROFILE_ORDER.indexOf(profileName);
+  return index >= 0 ? index : ADAPTIVE_MEDIA_PROFILE_ORDER.indexOf("good");
+}
+
+function getAdaptiveAudioBitrateKbps(channelBitrateKbps, profileName) {
+  const normalizedChannelBitrate = normalizeChannelAudioBitrateKbps(channelBitrateKbps);
+  const profile = getAdaptiveProfileConfig(profileName);
+  return normalizeChannelAudioBitrateKbps(
+    Math.min(profile.maxAudioKbps, Math.max(MIN_CHANNEL_AUDIO_BITRATE_KBPS, normalizedChannelBitrate * profile.audioScale))
+  );
+}
+
+function scaleVideoTarget(value, scale, minimum) {
+  return Math.max(minimum, Math.round(Number(value || 0) * Number(scale || 1)));
 }
 
 function normalizeChannelVideoQuality(value = "auto") {
@@ -356,16 +424,18 @@ export function createVoiceRoomClient({
   let localSpeakingMeter = null;
   let micVolume = 0.7;
   let remoteVolume = 0.7;
-  let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_TRANSPARENT;
-  let noiseSuppressionStrength = 100;
+  let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_BROADCAST;
+  let noiseSuppressionStrength = 85;
   let echoCancellationEnabled = true;
   let localScreenStream = null;
-  let localLiveShareMode = null;
+  let localCameraStream = null;
+  let localPreviewShareMode = "";
   let selectedInputDeviceId = "";
   let selectedOutputDeviceId = "";
   let hasDeviceChangeListener = false;
   let micPublication = null;
-  let localShareVideoPublication = null;
+  let localScreenVideoPublication = null;
+  let localCameraVideoPublication = null;
   let localShareAudioPublication = null;
   let localShareOperationPromise = null;
   let localShareOperationKey = "";
@@ -379,6 +449,11 @@ export function createVoiceRoomClient({
   let lastVoicePingMs = null;
   let lastVoiceRouteSnapshot = null;
   let lastVoiceRouteSignature = "";
+  let adaptiveMediaProfile = "good";
+  let pendingAdaptiveMediaProfile = "";
+  let pendingAdaptiveMediaProfileSamples = 0;
+  let appliedMicSenderBitrateKbps = 0;
+  let appliedLocalVideoQuality = "";
   let currentLiveKitServerUrl = "";
   let currentLiveKitRoomName = "";
   let currentVoiceChannelSettings = {
@@ -402,6 +477,12 @@ export function createVoiceRoomClient({
       roomName: currentLiveKitRoomName,
     },
     voiceRoute: lastVoiceRouteSnapshot,
+    adaptiveMedia: {
+      profile: adaptiveMediaProfile,
+      audioBitrateKbps: getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile),
+      appliedMicSenderBitrateKbps,
+      localVideoQuality: appliedLocalVideoQuality,
+    },
     localParticipant: {
       identity: room?.localParticipant?.identity || "",
       sid: room?.localParticipant?.sid || "",
@@ -471,6 +552,195 @@ export function createVoiceRoomClient({
     lastVoicePingMs = normalizedPing;
     onVoicePingChanged?.(normalizedPing);
   };
+  const getAdaptiveMediaProfileFromRoute = (routeSnapshot) => {
+    const routes = Array.isArray(routeSnapshot?.transports) ? routeSnapshot.transports : [];
+    const publisherRoute = routes.find((route) => route.label === "publisher") || routes[0] || null;
+    const rttMs = Number(routeSnapshot?.rttMs || publisherRoute?.rttMs || 0);
+    const outgoingBitrate = Number(publisherRoute?.availableOutgoingBitrate || 0);
+    const hasUsableSignal =
+      (Number.isFinite(rttMs) && rttMs > 0)
+      || (Number.isFinite(outgoingBitrate) && outgoingBitrate > 0);
+
+    if (!hasUsableSignal) {
+      return adaptiveMediaProfile;
+    }
+
+    if ((Number.isFinite(rttMs) && rttMs >= 650) || (outgoingBitrate > 0 && outgoingBitrate < 220_000)) {
+      return "poor";
+    }
+
+    if ((Number.isFinite(rttMs) && rttMs >= 340) || (outgoingBitrate > 0 && outgoingBitrate < 750_000)) {
+      return "constrained";
+    }
+
+    if ((Number.isFinite(rttMs) && rttMs >= 190) || (outgoingBitrate > 0 && outgoingBitrate < 1_500_000)) {
+      return "good";
+    }
+
+    return "excellent";
+  };
+  const setSenderMaxBitrate = async (sender, bitrateKbps) => {
+    if (!sender?.getParameters || !sender?.setParameters) {
+      return false;
+    }
+
+    const normalizedBitrate = Math.max(8_000, Math.round(Number(bitrateKbps || 0) * 1000));
+    const parameters = sender.getParameters();
+    if (!Array.isArray(parameters.encodings) || !parameters.encodings.length) {
+      return false;
+    }
+
+    parameters.encodings = parameters.encodings.map((encoding) => ({
+      ...encoding,
+      maxBitrate: normalizedBitrate,
+    }));
+    await sender.setParameters(parameters);
+    return true;
+  };
+  const updateVideoSenderEncoding = async (publication, encoding = {}) => {
+    const sender = publication?.track?.sender;
+    if (!sender?.getParameters || !sender?.setParameters) {
+      return false;
+    }
+
+    const maxBitrate = Math.round(Number(encoding.maxBitrate || 0));
+    const maxFramerate = Math.round(Number(encoding.maxFramerate || 0));
+    try {
+      const parameters = sender.getParameters();
+      if (!Array.isArray(parameters.encodings) || !parameters.encodings.length) {
+        return false;
+      }
+
+      parameters.encodings = parameters.encodings.map((currentEncoding, index, list) => {
+        const isTopLayer = index === list.length - 1;
+        const bitrateScale = isTopLayer ? 1 : index === 0 ? 0.18 : 0.38;
+        return {
+          ...currentEncoding,
+          ...(maxBitrate > 0 ? { maxBitrate: Math.max(160_000, Math.round(maxBitrate * bitrateScale)) } : {}),
+          ...(maxFramerate > 0 ? { maxFramerate } : {}),
+        };
+      });
+      await sender.setParameters(parameters);
+      return true;
+    } catch (error) {
+      logVoiceDebug("local-share:sender-quality-failed", {
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+      return false;
+    }
+  };
+  const applyTrackConstraintsSoft = async (track, constraints) => {
+    if (!track?.applyConstraints || !constraints) {
+      return false;
+    }
+
+    try {
+      await track.applyConstraints(constraints);
+      return true;
+    } catch (error) {
+      logVoiceDebug("local-share:constraints-failed", {
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+      return false;
+    }
+  };
+  const applyAdaptiveAudioProfile = async () => {
+    const nextAudioBitrateKbps = getAdaptiveAudioBitrateKbps(
+      currentVoiceChannelSettings.audioBitrateKbps,
+      adaptiveMediaProfile
+    );
+
+    if (appliedMicSenderBitrateKbps === nextAudioBitrateKbps) {
+      return;
+    }
+
+    try {
+      const applied = await setSenderMaxBitrate(micPublication?.track?.sender, nextAudioBitrateKbps);
+      if (applied) {
+        appliedMicSenderBitrateKbps = nextAudioBitrateKbps;
+      }
+    } catch (error) {
+      logVoiceDebug("adaptive-media:audio-bitrate-failed", {
+        profile: adaptiveMediaProfile,
+        bitrateKbps: nextAudioBitrateKbps,
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+    }
+  };
+  const applyAdaptiveLocalVideoProfile = () => {
+    const profile = getAdaptiveProfileConfig(adaptiveMediaProfile);
+    const nextQuality = profile.localVideoQuality;
+
+    if (appliedLocalVideoQuality === String(nextQuality || "")) {
+      return;
+    }
+
+    try {
+      localScreenVideoPublication?.track?.setPublishingQuality?.(nextQuality);
+      localCameraVideoPublication?.track?.setPublishingQuality?.(nextQuality);
+      appliedLocalVideoQuality = String(nextQuality || "");
+    } catch (error) {
+      logVoiceDebug("adaptive-media:local-video-quality-failed", {
+        profile: adaptiveMediaProfile,
+        quality: nextQuality,
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+    }
+  };
+  const applyAdaptiveMediaProfile = () => {
+    void applyAdaptiveAudioProfile();
+    applyAdaptiveLocalVideoProfile();
+    applyRemoteSharePreferences();
+  };
+  const updateAdaptiveMediaProfile = (routeSnapshot) => {
+    const nextProfile = getAdaptiveMediaProfileFromRoute(routeSnapshot);
+
+    if (nextProfile === adaptiveMediaProfile) {
+      pendingAdaptiveMediaProfile = "";
+      pendingAdaptiveMediaProfileSamples = 0;
+      applyAdaptiveMediaProfile();
+      return;
+    }
+
+    const isDowngrade = getAdaptiveProfileRank(nextProfile) < getAdaptiveProfileRank(adaptiveMediaProfile);
+    const requiredSamples = isDowngrade ? 1 : 3;
+    if (pendingAdaptiveMediaProfile === nextProfile) {
+      pendingAdaptiveMediaProfileSamples += 1;
+    } else {
+      pendingAdaptiveMediaProfile = nextProfile;
+      pendingAdaptiveMediaProfileSamples = 1;
+    }
+
+    if (pendingAdaptiveMediaProfileSamples < requiredSamples) {
+      return;
+    }
+
+    const previousProfile = adaptiveMediaProfile;
+    adaptiveMediaProfile = nextProfile;
+    pendingAdaptiveMediaProfile = "";
+    pendingAdaptiveMediaProfileSamples = 0;
+    appliedMicSenderBitrateKbps = 0;
+    appliedLocalVideoQuality = "";
+
+    logVoiceDebug("adaptive-media:profile-changed", {
+      previousProfile,
+      nextProfile,
+      rttMs: routeSnapshot?.rttMs ?? null,
+      availableOutgoingBitrate: routeSnapshot?.transports?.find?.((route) => route.label === "publisher")?.availableOutgoingBitrate ?? null,
+    });
+    applyAdaptiveMediaProfile();
+  };
+  const resetAdaptiveMediaProfile = () => {
+    adaptiveMediaProfile = "good";
+    pendingAdaptiveMediaProfile = "";
+    pendingAdaptiveMediaProfileSamples = 0;
+    appliedMicSenderBitrateKbps = 0;
+    appliedLocalVideoQuality = "";
+  };
   const clearVoicePingPolling = ({ reset = true } = {}) => {
     if (voicePingPollIntervalId) {
       window.clearInterval(voicePingPollIntervalId);
@@ -481,6 +751,7 @@ export function createVoiceRoomClient({
     if (reset) {
       emitVoicePing(null);
       emitVoiceRoute(null);
+      resetAdaptiveMediaProfile();
     }
   };
   const normalizeCandidateStats = (candidate) => {
@@ -615,7 +886,7 @@ export function createVoiceRoomClient({
 
       const routes = [publisherRoute, subscriberRoute].filter(Boolean);
       const samples = routes.map((route) => route.rttMs).filter((value) => Number.isFinite(Number(value)) && Number(value) > 0);
-      emitVoiceRoute({
+      const routeSnapshot = {
         routeType: routes.some((route) => route.routeType === "relay")
           ? "relay"
           : routes.some((route) => route.routeType === "direct")
@@ -626,6 +897,12 @@ export function createVoiceRoomClient({
         roomName: currentLiveKitRoomName,
         sampledAt: new Date().toISOString(),
         transports: routes,
+      };
+      updateAdaptiveMediaProfile(routeSnapshot);
+      emitVoiceRoute({
+        ...routeSnapshot,
+        adaptiveMediaProfile,
+        adaptiveAudioBitrateKbps: getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile),
       });
       emitVoicePing(samples.length ? Math.max(...samples) : null);
     } finally {
@@ -736,15 +1013,39 @@ export function createVoiceRoomClient({
   };
 
   const emitLocalScreenState = () => {
-    const isActive = Boolean(localScreenStream);
+    const isScreenActive = Boolean(localScreenStream);
+    const isCameraActive = Boolean(localCameraStream);
+    const isActive = isScreenActive || isCameraActive;
+    const liveMode = isScreenActive && isCameraActive
+      ? "both"
+      : isScreenActive
+        ? "screen"
+        : isCameraActive
+          ? "camera"
+          : "";
+    const previewMode =
+      localPreviewShareMode === "camera" && isCameraActive
+        ? "camera"
+        : localPreviewShareMode === "screen" && isScreenActive
+          ? "screen"
+          : isScreenActive
+            ? "screen"
+            : isCameraActive
+              ? "camera"
+              : "";
+    const previewStream = previewMode === "camera" ? localCameraStream : previewMode === "screen" ? localScreenStream : null;
     onLocalScreenShareChanged?.(isActive);
     onLocalLiveShareChanged?.({
       isActive,
-      mode: isActive ? localLiveShareMode || "screen" : "",
+      mode: liveMode,
+      screenActive: isScreenActive,
+      cameraActive: isCameraActive,
     });
     onLocalPreviewStreamChanged?.({
-      stream: localScreenStream || null,
-      mode: isActive ? localLiveShareMode || "screen" : "",
+      stream: previewStream || null,
+      mode: previewMode,
+      screenActive: isScreenActive,
+      cameraActive: isCameraActive,
     });
   };
 
@@ -1083,8 +1384,8 @@ const handleDeviceChange = () => {
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        highPassFrequency: 115,
-        highPassQ: 0.78,
+        highPassFrequency: 104,
+        highPassQ: 0.74,
         highPassStages: 2,
         lowBump: {
           triggerDb: 12,
@@ -1111,13 +1412,13 @@ const handleDeviceChange = () => {
           minRms: 0.0035,
         },
         compressor: {
-          threshold: -20,
+          threshold: -21,
           knee: 10,
-          ratio: 2.1,
-          attack: 0.018,
-          release: 0.14,
+          ratio: 2,
+          attack: 0.02,
+          release: 0.16,
         },
-        makeupGainDb: 6,
+        makeupGainDb: 5,
       };
     }
 
@@ -1179,15 +1480,15 @@ const handleDeviceChange = () => {
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        openThreshold: 0.02,
-        closeThreshold: 0.011,
-        floorGain: 0.055,
-        attackTime: 0.01,
-        releaseTime: 0.12,
-        holdMs: 150,
-        adaptiveOpenRatio: 2.15,
-        adaptiveCloseRatio: 1.35,
-        maxAdaptiveOpenThreshold: 0.064,
+        openThreshold: 0.018,
+        closeThreshold: 0.009,
+        floorGain: 0.05,
+        attackTime: 0.008,
+        releaseTime: 0.14,
+        holdMs: 180,
+        adaptiveOpenRatio: 2,
+        adaptiveCloseRatio: 1.32,
+        maxAdaptiveOpenThreshold: 0.058,
       };
     }
 
@@ -1494,34 +1795,34 @@ const handleDeviceChange = () => {
 
   const buildBroadcastVoiceChain = (sourceNode) => {
     return buildSpeechPolishChain(sourceNode, {
-      highPassFrequency: 88,
+      highPassFrequency: 102,
       highPassStages: 2,
-      mudCutFrequency: 250,
-      mudCutGain: -2.4,
+      mudCutFrequency: 245,
+      mudCutGain: -3,
       boxCutFrequency: 520,
-      boxCutGain: -1.4,
+      boxCutGain: -1.6,
       presenceFrequency: 2650,
-      presenceGain: 2.0,
-      airFrequency: 5400,
-      airGain: 0.35,
-      lowPassFrequency: 8000,
+      presenceGain: 2.3,
+      airFrequency: 6200,
+      airGain: 1.15,
+      lowPassFrequency: 11500,
       noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
       dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
     });
   };
 
   const buildTransparentVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 84,
+    highPassFrequency: 92,
     highPassStages: 2,
     mudCutFrequency: 235,
-    mudCutGain: -1.6,
+    mudCutGain: -2,
     boxCutFrequency: 520,
-    boxCutGain: -0.9,
+    boxCutGain: -1.1,
     presenceFrequency: 2650,
-    presenceGain: 1.6,
-    airFrequency: 5800,
-    airGain: 0.25,
-    lowPassFrequency: 9000,
+    presenceGain: 1.85,
+    airFrequency: 6400,
+    airGain: 0.75,
+    lowPassFrequency: 11000,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT),
     dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT),
   });
@@ -2046,7 +2347,8 @@ const handleDeviceChange = () => {
     publication.setVideoFPS(Math.max(15, Math.round(fps)));
   };
 
-  const applyRemoteSharePreferences = () => {
+  function applyRemoteSharePreferences() {
+    const adaptiveProfile = getAdaptiveProfileConfig(adaptiveMediaProfile);
     const activeVideoPublicationCount = Array.from(remoteParticipantMedia.values()).reduce(
       (count, state) => count + (state.screenVideoPublication || state.cameraPublication ? 1 : 0),
       0
@@ -2067,30 +2369,39 @@ const handleDeviceChange = () => {
 
       if (state.screenVideoPublication) {
         const focusedScreenTarget = getPublicationVideoTarget(state.screenVideoPublication, REMOTE_BACKGROUND_SHARE_TARGET);
+        const screenScale = isFocused ? adaptiveProfile.remoteFocusedScale : adaptiveProfile.remoteBackgroundScale;
+        const screenFps = isFocused ? adaptiveProfile.remoteFocusedFps : adaptiveProfile.remoteBackgroundFps;
+        const maxBackgroundWidth = Math.min(focusedScreenTarget.width, REMOTE_BACKGROUND_SHARE_TARGET.width);
+        const maxBackgroundHeight = Math.min(focusedScreenTarget.height, REMOTE_BACKGROUND_SHARE_TARGET.height);
         applyRemotePublicationPreferences(state.screenVideoPublication, {
           enabled: true,
           subscribed: true,
-          quality: isFocused ? VideoQuality.HIGH : VideoQuality.LOW,
-          width: isFocused ? focusedScreenTarget.width : Math.min(focusedScreenTarget.width, REMOTE_BACKGROUND_SHARE_TARGET.width),
-          height: isFocused ? focusedScreenTarget.height : Math.min(focusedScreenTarget.height, REMOTE_BACKGROUND_SHARE_TARGET.height),
-          fps: isFocused ? focusedScreenTarget.fps : Math.min(focusedScreenTarget.fps, REMOTE_BACKGROUND_SHARE_TARGET.fps),
+          quality: isFocused ? adaptiveProfile.remoteFocusedQuality : adaptiveProfile.remoteBackgroundQuality,
+          width: scaleVideoTarget(isFocused ? focusedScreenTarget.width : maxBackgroundWidth, screenScale, 320),
+          height: scaleVideoTarget(isFocused ? focusedScreenTarget.height : maxBackgroundHeight, screenScale, 180),
+          fps: Math.max(10, Math.min(focusedScreenTarget.fps, screenFps)),
         });
       }
 
       if (state.cameraPublication) {
         const focusedCameraTarget = getPublicationVideoTarget(state.cameraPublication, REMOTE_CAMERA_TARGET);
         const shouldSubscribeCamera = !isSpecificRemoteShareFocused;
+        const cameraIsPrimary = !hasScreenShare && isFocused;
+        const cameraScale = cameraIsPrimary ? adaptiveProfile.remoteFocusedScale : adaptiveProfile.remoteBackgroundScale;
+        const cameraFps = cameraIsPrimary ? adaptiveProfile.remoteFocusedFps : adaptiveProfile.remoteBackgroundFps;
+        const maxBackgroundWidth = Math.min(focusedCameraTarget.width, REMOTE_CAMERA_TARGET.width);
+        const maxBackgroundHeight = Math.min(focusedCameraTarget.height, REMOTE_CAMERA_TARGET.height);
         applyRemotePublicationPreferences(state.cameraPublication, {
           enabled: shouldSubscribeCamera,
           subscribed: shouldSubscribeCamera,
-          quality: !hasScreenShare && isFocused ? VideoQuality.HIGH : VideoQuality.LOW,
-          width: !hasScreenShare && isFocused ? focusedCameraTarget.width : Math.min(focusedCameraTarget.width, REMOTE_CAMERA_TARGET.width),
-          height: !hasScreenShare && isFocused ? focusedCameraTarget.height : Math.min(focusedCameraTarget.height, REMOTE_CAMERA_TARGET.height),
-          fps: !hasScreenShare && isFocused ? focusedCameraTarget.fps : Math.min(focusedCameraTarget.fps, REMOTE_CAMERA_TARGET.fps),
+          quality: cameraIsPrimary ? adaptiveProfile.remoteFocusedQuality : adaptiveProfile.remoteBackgroundQuality,
+          width: scaleVideoTarget(cameraIsPrimary ? focusedCameraTarget.width : maxBackgroundWidth, cameraScale, 320),
+          height: scaleVideoTarget(cameraIsPrimary ? focusedCameraTarget.height : maxBackgroundHeight, cameraScale, 180),
+          fps: Math.max(10, Math.min(focusedCameraTarget.fps, cameraFps)),
         });
       }
     });
-  };
+  }
 
   const syncRemoteShareForParticipant = (participant) => {
     if (!participant?.identity) {
@@ -2180,7 +2491,8 @@ const handleDeviceChange = () => {
     currentLiveKitServerUrl = "";
     currentLiveKitRoomName = "";
     micPublication = null;
-    localShareVideoPublication = null;
+    localScreenVideoPublication = null;
+    localCameraVideoPublication = null;
     localShareAudioPublication = null;
     roomActiveSpeakerIds.clear();
     emitSpeakingUsers();
@@ -2213,21 +2525,28 @@ const handleDeviceChange = () => {
     await signalConnection.invoke("UpdateScreenShareStatus", String(currentUser.id), Boolean(isSharing));
   };
 
+  const updateLocalLiveStatus = async () => {
+    await updateScreenShareStatus(Boolean(localScreenStream || localCameraStream)).catch(() => {});
+  };
+
   const stopScreenShareInternal = async () => {
-    if (room && localShareVideoPublication?.track) {
-      await room.localParticipant.unpublishTrack(localShareVideoPublication.track.mediaStreamTrack, false).catch(() => {});
+    if (room && localScreenVideoPublication?.track) {
+      await room.localParticipant.unpublishTrack(localScreenVideoPublication.track.mediaStreamTrack, false).catch(() => {});
     }
     if (room && localShareAudioPublication?.track) {
       await room.localParticipant.unpublishTrack(localShareAudioPublication.track.mediaStreamTrack, false).catch(() => {});
     }
 
-    localShareVideoPublication = null;
+    localScreenVideoPublication = null;
     localShareAudioPublication = null;
+    appliedLocalVideoQuality = "";
 
     if (!localScreenStream) {
-      localLiveShareMode = null;
+      if (localPreviewShareMode === "screen") {
+        localPreviewShareMode = localCameraStream ? "camera" : "";
+      }
       emitLocalScreenState();
-      await updateScreenShareStatus(false).catch(() => {});
+      await updateLocalLiveStatus();
       return;
     }
 
@@ -2240,10 +2559,51 @@ const handleDeviceChange = () => {
       }
     });
     localScreenStream = null;
-    localLiveShareMode = null;
+    if (localPreviewShareMode === "screen") {
+      localPreviewShareMode = localCameraStream ? "camera" : "";
+    }
 
     emitLocalScreenState();
-    await updateScreenShareStatus(false).catch(() => {});
+    await updateLocalLiveStatus();
+  };
+
+  const stopCameraShareInternal = async () => {
+    if (room && localCameraVideoPublication?.track) {
+      await room.localParticipant.unpublishTrack(localCameraVideoPublication.track.mediaStreamTrack, false).catch(() => {});
+    }
+
+    localCameraVideoPublication = null;
+    appliedLocalVideoQuality = "";
+
+    if (!localCameraStream) {
+      if (localPreviewShareMode === "camera") {
+        localPreviewShareMode = localScreenStream ? "screen" : "";
+      }
+      emitLocalScreenState();
+      await updateLocalLiveStatus();
+      return;
+    }
+
+    localCameraStream.getTracks().forEach((track) => {
+      track.onended = null;
+      try {
+        track.stop();
+      } catch {
+        // ignore local camera cleanup errors
+      }
+    });
+    localCameraStream = null;
+    if (localPreviewShareMode === "camera") {
+      localPreviewShareMode = localScreenStream ? "screen" : "";
+    }
+
+    emitLocalScreenState();
+    await updateLocalLiveStatus();
+  };
+
+  const stopAllLocalSharesInternal = async () => {
+    await stopScreenShareInternal();
+    await stopCameraShareInternal();
   };
 
   const runLocalShareOperation = async (operationKey, operation) => {
@@ -2337,6 +2697,8 @@ const handleDeviceChange = () => {
     if (micPublication?.track?.replaceTrack) {
       nextTrack.contentHint = "speech";
       await micPublication.track.replaceTrack(nextTrack, true);
+      appliedMicSenderBitrateKbps = 0;
+      await applyAdaptiveAudioProfile();
       await applyPublishedAudioState();
       logVoiceDebug("local-audio:track-replaced", {
         publicationSid: micPublication.trackSid,
@@ -2352,9 +2714,10 @@ const handleDeviceChange = () => {
       name: MICROPHONE_TRACK_NAME,
       ...getMicrophonePublishOptions(noiseSuppressionMode, {
         echoCancellation: echoCancellationEnabled,
-        audioBitrateKbps: currentVoiceChannelSettings.audioBitrateKbps,
+        audioBitrateKbps: getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile),
       }),
     });
+    appliedMicSenderBitrateKbps = getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile);
     await applyPublishedAudioState();
     logVoiceDebug("local-audio:published", {
       publicationSid: micPublication?.trackSid || "",
@@ -2378,6 +2741,8 @@ const handleDeviceChange = () => {
     if (nextTrack && micPublication?.track?.replaceTrack) {
       nextTrack.contentHint = "speech";
       await micPublication.track.replaceTrack(nextTrack, true);
+      appliedMicSenderBitrateKbps = 0;
+      await applyAdaptiveAudioProfile();
       logVoiceDebug("local-audio:rebuild-replaced-track", {
         track: getTrackDebugInfo(nextTrack),
       });
@@ -2388,9 +2753,10 @@ const handleDeviceChange = () => {
         name: MICROPHONE_TRACK_NAME,
         ...getMicrophonePublishOptions(noiseSuppressionMode, {
           echoCancellation: echoCancellationEnabled,
-          audioBitrateKbps: currentVoiceChannelSettings.audioBitrateKbps,
+          audioBitrateKbps: getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile),
         }),
       });
+      appliedMicSenderBitrateKbps = getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile);
       logVoiceDebug("local-audio:rebuild-published-track", {
         publicationSid: micPublication?.trackSid || "",
         track: getTrackDebugInfo(nextTrack),
@@ -2691,7 +3057,7 @@ const handleDeviceChange = () => {
         return;
       }
 
-      await runLocalShareOperation("stop-share", () => stopScreenShareInternal()).catch(() => {});
+      await runLocalShareOperation("stop-all-shares", () => stopAllLocalSharesInternal()).catch(() => {});
       clearVoicePingPolling();
       if (room === nextRoom) {
         room = null;
@@ -2701,7 +3067,8 @@ const handleDeviceChange = () => {
       currentLiveKitServerUrl = "";
       currentLiveKitRoomName = "";
       micPublication = null;
-      localShareVideoPublication = null;
+      localScreenVideoPublication = null;
+      localCameraVideoPublication = null;
       localShareAudioPublication = null;
       preferredRemoteShareUserId = "";
       clearRemoteScreens();
@@ -2894,7 +3261,7 @@ const handleDeviceChange = () => {
         );
       }
 
-      if (localScreenStream && currentUser?.id) {
+      if ((localScreenStream || localCameraStream) && currentUser?.id) {
         await updateScreenShareStatus(true).catch(() => {});
       }
     });
@@ -3140,7 +3507,7 @@ const handleDeviceChange = () => {
     },
 
     async leaveChannel({ preserveMic = false } = {}) {
-      await stopScreenShareInternal();
+      await stopAllLocalSharesInternal();
       await stopRoom({ preserveChannel: true });
 
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
@@ -3246,16 +3613,18 @@ const handleDeviceChange = () => {
       try {
         videoTrack.contentHint = "detail";
         videoTrack.onended = () => {
-          runLocalShareOperation("stop-share", () => stopScreenShareInternal())
+          runLocalShareOperation("stop-screen", () => stopScreenShareInternal())
             .catch((error) => console.error("Failed to stop screen share:", error));
         };
 
         const screenSharePublishOptions = getScreenSharePublishOptions(resolution, fps);
-        localShareVideoPublication = await room.localParticipant.publishTrack(videoTrack, {
+        localScreenVideoPublication = await room.localParticipant.publishTrack(videoTrack, {
           source: Track.Source.ScreenShare,
           name: SCREEN_VIDEO_TRACK_NAME,
           ...screenSharePublishOptions,
         });
+        appliedLocalVideoQuality = "";
+        applyAdaptiveLocalVideoProfile();
 
         const [audioTrack] = localScreenStream.getAudioTracks();
         if (audioTrack) {
@@ -3267,9 +3636,9 @@ const handleDeviceChange = () => {
           });
         }
 
-        localLiveShareMode = "screen";
+        localPreviewShareMode = "screen";
         emitLocalScreenState();
-        await updateScreenShareStatus(true);
+        await updateLocalLiveStatus();
       } catch (error) {
         await stopScreenShareInternal();
         throw error;
@@ -3287,12 +3656,8 @@ const handleDeviceChange = () => {
         throw new Error("Camera access is not available.");
       }
 
-      if (localScreenStream) {
-        if (localLiveShareMode === "camera") {
-          return;
-        }
-
-        await stopScreenShareInternal();
+      if (localCameraStream) {
+        return;
       }
 
       const channelVideoQuality = normalizeChannelVideoQuality(currentVoiceChannelSettings.videoQuality);
@@ -3303,43 +3668,79 @@ const handleDeviceChange = () => {
             ? channelVideoQuality
             : "720p";
 
-      localScreenStream = await navigator.mediaDevices.getUserMedia({
+      localCameraStream = await navigator.mediaDevices.getUserMedia({
         video: getCameraConstraints(deviceId, effectiveResolution, fps),
         audio: false,
       });
 
-      const [cameraTrack] = localScreenStream.getVideoTracks();
+      const [cameraTrack] = localCameraStream.getVideoTracks();
       if (!cameraTrack) {
-        await stopScreenShareInternal();
+        await stopCameraShareInternal();
         throw new Error("Camera access did not return a video track.");
       }
 
       try {
         cameraTrack.contentHint = "motion";
         cameraTrack.onended = () => {
-          runLocalShareOperation("stop-share", () => stopScreenShareInternal())
+          runLocalShareOperation("stop-camera", () => stopCameraShareInternal())
             .catch((error) => console.error("Failed to stop camera share:", error));
         };
 
         const cameraPublishOptions = getCameraPublishOptions(effectiveResolution, fps);
-        localShareVideoPublication = await room.localParticipant.publishTrack(cameraTrack, {
+        localCameraVideoPublication = await room.localParticipant.publishTrack(cameraTrack, {
           source: Track.Source.Camera,
           name: CAMERA_TRACK_NAME,
           ...cameraPublishOptions,
         });
+        appliedLocalVideoQuality = "";
+        applyAdaptiveLocalVideoProfile();
 
-        localLiveShareMode = "camera";
+        localPreviewShareMode = "camera";
         emitLocalScreenState();
-        await updateScreenShareStatus(true);
+        await updateLocalLiveStatus();
       } catch (error) {
-        await stopScreenShareInternal();
+        await stopCameraShareInternal();
         throw error;
       }
       });
     },
 
     async stopScreenShare() {
-      await runLocalShareOperation("stop-share", () => stopScreenShareInternal());
+      await runLocalShareOperation("stop-screen", () => stopScreenShareInternal());
+    },
+
+    async stopCameraShare() {
+      await runLocalShareOperation("stop-camera", () => stopCameraShareInternal());
+    },
+
+    async setLocalShareVideoQuality({ resolution = "1080p", fps = 30 } = {}) {
+      await runLocalShareOperation("quality", async () => {
+        const normalizedFps = normalizePublishFps(fps, 30);
+        const updates = [];
+
+        if (localScreenStream) {
+          const screenOptions = getScreenSharePublishOptions(resolution, normalizedFps);
+          updates.push(tuneDisplayStream(localScreenStream, resolution, normalizedFps));
+          updates.push(updateVideoSenderEncoding(localScreenVideoPublication, screenOptions.screenShareEncoding));
+        }
+
+        if (localCameraStream) {
+          const effectiveResolution = CAMERA_VIDEO_QUALITY_TARGETS[resolution] ? resolution : "720p";
+          const cameraOptions = getCameraPublishOptions(effectiveResolution, normalizedFps);
+          const [cameraTrack] = localCameraStream.getVideoTracks?.() || [];
+          updates.push(applyTrackConstraintsSoft(cameraTrack, getCameraConstraints("", effectiveResolution, normalizedFps)));
+          updates.push(updateVideoSenderEncoding(localCameraVideoPublication, cameraOptions.videoEncoding));
+        }
+
+        if (!updates.length) {
+          return;
+        }
+
+        await Promise.all(updates);
+        appliedLocalVideoQuality = "";
+        applyAdaptiveLocalVideoProfile();
+        emitLocalScreenState();
+      });
     },
 
     async requestScreenShare(targetUserId) {
@@ -3494,7 +3895,7 @@ const handleDeviceChange = () => {
     },
 
     async disconnect() {
-      await stopScreenShareInternal();
+      await stopAllLocalSharesInternal();
       await stopRoom({ preserveChannel: true });
       stopLocalMic();
       currentChannel = null;

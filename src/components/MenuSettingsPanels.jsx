@@ -686,7 +686,6 @@ export const VoiceSettingsPanel = ({
   isMicTestActive,
   noiseProfileOptions,
   noiseSuppressionMode,
-  noiseSuppressionStrength,
   echoCancellationEnabled,
   autoInputSensitivity,
   onInputDeviceChange,
@@ -695,7 +694,6 @@ export const VoiceSettingsPanel = ({
   onAudioVolumeChange,
   onToggleMicTest,
   onNoiseProfileChange,
-  onNoiseStrengthChange,
   onToggleEchoCancellation,
   onToggleAutoSensitivity,
 }) => (
@@ -783,18 +781,6 @@ export const VoiceSettingsPanel = ({
           </label>
         ))}
       </div>
-
-      <label className="voice-settings-field voice-settings-field--noise-strength">
-        <span>Сила шумоподавления</span>
-        <PercentageSlider
-          min={0}
-          max={100}
-          value={noiseSuppressionStrength}
-          onChange={(event) => onNoiseStrengthChange(Number(event.target.value))}
-          ariaLabel="Сила шумоподавления"
-        />
-        <span className="voice-settings-caption">0 — мягче и натуральнее, 100 — сильнее режет клавиатуру, мышь и удары по столу.</span>
-      </label>
 
       <div className="voice-toggle-row voice-toggle-row--compact">
         <div>

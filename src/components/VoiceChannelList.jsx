@@ -285,7 +285,7 @@ const VoiceChannelList = ({
                         }`}
                         onClick={() => onWatchStream?.(participant.userId)}
                       >
-                        LIVE
+                        Стрим
                       </button>
                     )}
                   </div>

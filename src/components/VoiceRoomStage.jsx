@@ -601,11 +601,6 @@ export default function VoiceRoomStage({
     () => stageCards.find((participant) => participant.isSpeaking) || null,
     [stageCards]
   );
-  const activeLiveParticipant = useMemo(
-    () => stageCards.find((participant) => participant.isLive && !participant.isSelf) || null,
-    [stageCards]
-  );
-
   const activeStage = useMemo(() => {
     if (isRemoteStage) {
       const fallbackParticipant = stageCards.find((participant) => String(participant.userId || "") === selectedUserId) || null;
@@ -814,7 +809,7 @@ export default function VoiceRoomStage({
                 <AnimatedAvatar className="voice-room-stage__strip-avatar" src={participant.avatar} alt={participant.name} />
               </div>
             )}
-            {participant.isLive ? <span className="voice-room-stage__strip-badge">В ЭФИРЕ</span> : null}
+            {participant.isLive ? <span className="voice-room-stage__strip-badge">LIVE</span> : null}
             {participant.share ? (
               <>
                 <div className="voice-room-stage__card-scrim" aria-hidden="true" />
@@ -904,14 +899,6 @@ export default function VoiceRoomStage({
         </div>
 
         <div className="voice-room-stage__toolbar-group">
-          {activeLiveParticipant
-            ? renderToolbarButton({
-                key: "focus-live",
-                icon: "live",
-                label: `Открыть эфир ${activeLiveParticipant.name || "участника"}`,
-                onClick: () => handleCardClick(activeLiveParticipant),
-              })
-            : null}
           {hasLocalSharePreview
             ? renderToolbarButton({
                 key: "preview",

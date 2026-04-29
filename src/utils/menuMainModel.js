@@ -19,6 +19,15 @@ export const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 export const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 export const MAX_PROFILE_NAME_LENGTH = 32;
 export const VOICE_INPUT_MODES = ["transparent", "broadcast", "hard_gate"];
+export const VOICE_INPUT_MODE_NOISE_STRENGTH = {
+  transparent: 55,
+  broadcast: 85,
+  hard_gate: 100,
+};
+export const DEFAULT_VOICE_INPUT_MODE = "broadcast";
+export const DEFAULT_NOISE_SUPPRESSION_STRENGTH = VOICE_INPUT_MODE_NOISE_STRENGTH[DEFAULT_VOICE_INPUT_MODE];
+export const getVoiceInputModeNoiseStrength = (mode) =>
+  VOICE_INPUT_MODE_NOISE_STRENGTH[mode] ?? DEFAULT_NOISE_SUPPRESSION_STRENGTH;
 export const DEFAULT_TEXT_CHANNELS = [
   { id: "1", name: "general" },
   { id: "2", name: "gaming" },
@@ -535,7 +544,8 @@ export const normalizeChannelCategories = (categories) => {
 };
 export const normalizeChannels = (channels, type) => {
   const fallback = type === "text" ? DEFAULT_TEXT_CHANNELS : DEFAULT_VOICE_CHANNELS;
-  if (!Array.isArray(channels) || channels.length === 0) return fallback.map((channel) => ({ ...channel }));
+  if (!Array.isArray(channels)) return fallback.map((channel) => ({ ...channel }));
+  if (channels.length === 0) return [];
   return channels.map((channel, index) => {
     const normalizedChannel = {
       ...channel,

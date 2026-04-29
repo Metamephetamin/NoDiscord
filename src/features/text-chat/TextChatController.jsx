@@ -1733,8 +1733,9 @@ export default function TextChat({
       return;
     }
 
-    const minHeight = 48;
-    const maxHeight = 140;
+    const computedStyle = window.getComputedStyle(textarea);
+    const minHeight = Number.parseFloat(computedStyle.minHeight) || 44;
+    const maxHeight = Number.parseFloat(computedStyle.maxHeight) || 140;
 
     textarea.style.height = `${minHeight}px`;
     const nextHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);

@@ -369,7 +369,7 @@ export const ScreenShareModal = ({
                 : "Подберите качество трансляции и запустите захват экрана."}
             </p>
           </div>
-          <button type="button" className="stream-modal__close" onClick={onClose}>x</button>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть" />
         </div>
 
         <label className="stream-modal__field">
@@ -440,7 +440,7 @@ export const CameraModal = ({
             <h3>Камера</h3>
             <p>Выберите веб-камеру или виртуальную камеру. Если установлен Camo, он появится здесь как обычное устройство.</p>
           </div>
-          <button type="button" className="stream-modal__close" onClick={onClose}>x</button>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть" />
         </div>
 
         <label className="camera-modal__field">
@@ -523,7 +523,7 @@ export const QrScannerModal = ({
             <h3>Подключить устройство</h3>
             <p>Наведите камеру на QR-код входа. После распознавания мы сразу подтвердим подключение.</p>
           </div>
-          <button type="button" className="stream-modal__close" onClick={onClose}>x</button>
+          <button type="button" className="stream-modal__close" onClick={onClose} aria-label="Закрыть" />
         </div>
 
         <label className="camera-modal__field">
