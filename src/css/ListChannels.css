@@ -248,19 +248,39 @@
 .participant-list {
   position: relative;
   margin-top: 4px;
-  padding: 0 0 12px 22px;
+  padding: 0 0 18px 28px;
+}
+
+.participant-list::before,
+.participant-list::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: -8px;
+  bottom: 29px;
+  width: 2px;
+  border-radius: 2px;
+  pointer-events: none;
 }
 
 .participant-list::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: -8px;
-  bottom: 24px;
-  width: 1px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(154, 166, 255, 0.46), rgba(154, 166, 255, 0.1));
-  pointer-events: none;
+  background: linear-gradient(180deg, rgba(23, 28, 42, 0.96), rgba(33, 39, 58, 0.84));
+  box-shadow: inset 0 0 0 1px rgba(117, 130, 174, 0.08), 0 0 10px rgba(8, 11, 18, 0.32);
+}
+
+.participant-list::after {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0,
+      rgba(69, 88, 142, 0) 20%,
+      rgba(83, 104, 164, 0.74) 48%,
+      rgba(54, 68, 108, 0) 78%,
+      transparent 100%
+    );
+  background-size: 100% 34px;
+  animation: participantSignalStreamY 1.45s linear infinite;
+  opacity: 0.9;
 }
 
 .participant-item {
@@ -282,23 +302,34 @@
 }
 
 .participant-item::before {
-  left: -14px;
-  top: 50%;
-  width: 14px;
-  height: 1px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(154, 166, 255, 0.5), rgba(154, 166, 255, 0.16));
+  left: -17px;
+  top: calc(50% - 1px);
+  width: 17px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(23, 28, 42, 0.98), rgba(33, 39, 58, 0.88));
+  box-shadow: inset 0 0 0 1px rgba(117, 130, 174, 0.08);
 }
 
 .participant-item::after {
-  left: -14px;
-  top: calc(50% - 2px);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #b9c4ff;
-  box-shadow: 0 0 8px rgba(154, 166, 255, 0.72);
-  animation: participantSignalFlow 1.8s linear infinite;
+  left: -17px;
+  top: calc(50% - 1px);
+  width: 17px;
+  height: 2px;
+  border-radius: 2px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0,
+      rgba(78, 98, 156, 0) 18%,
+      rgba(96, 119, 184, 0.88) 48%,
+      rgba(55, 71, 115, 0) 80%,
+      transparent 100%
+    );
+  background-size: 28px 100%;
+  box-shadow: 0 0 8px rgba(74, 94, 152, 0.24);
+  animation: participantSignalStreamX 1.15s linear infinite;
+  opacity: 0.9;
 }
 
 .participant-item:nth-child(2n)::after {
@@ -437,27 +468,30 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
-@keyframes participantSignalFlow {
+@keyframes participantSignalStreamX {
   0% {
-    opacity: 0;
-    transform: translateX(0) scale(0.7);
-  }
-
-  20%,
-  78% {
-    opacity: 1;
+    background-position: -28px 0;
   }
 
   100% {
-    opacity: 0;
-    transform: translateX(14px) scale(1);
+    background-position: 28px 0;
+  }
+}
+
+@keyframes participantSignalStreamY {
+  0% {
+    background-position: 0 -34px;
+  }
+
+  100% {
+    background-position: 0 34px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .participant-list::after,
   .participant-item::after {
     animation: none;
-    opacity: 0.72;
-    transform: translateX(7px);
+    opacity: 0.48;
   }
 }
