@@ -246,11 +246,25 @@
 }
 
 .participant-list {
-  margin-top: 10px;
-  padding-left: 2px;
+  position: relative;
+  margin-top: 4px;
+  padding: 0 0 12px 22px;
+}
+
+.participant-list::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -8px;
+  bottom: 24px;
+  width: 1px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(154, 166, 255, 0.46), rgba(154, 166, 255, 0.1));
+  pointer-events: none;
 }
 
 .participant-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -258,6 +272,41 @@
   --participant-role-color: #c8d0e2;
   color: #c8d0e2;
   font-size: 13px;
+}
+
+.participant-item::before,
+.participant-item::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.participant-item::before {
+  left: -14px;
+  top: 50%;
+  width: 14px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(154, 166, 255, 0.5), rgba(154, 166, 255, 0.16));
+}
+
+.participant-item::after {
+  left: -14px;
+  top: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #b9c4ff;
+  box-shadow: 0 0 8px rgba(154, 166, 255, 0.72);
+  animation: participantSignalFlow 1.8s linear infinite;
+}
+
+.participant-item:nth-child(2n)::after {
+  animation-delay: -0.6s;
+}
+
+.participant-item:nth-child(3n)::after {
+  animation-delay: -1.15s;
 }
 
 .participant-item__avatar-shell {
@@ -386,4 +435,29 @@
 
 .participant-live-badge--active {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+@keyframes participantSignalFlow {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(0.7);
+  }
+
+  20%,
+  78% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(14px) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .participant-item::after {
+    animation: none;
+    opacity: 0.72;
+    transform: translateX(7px);
+  }
 }

@@ -611,6 +611,7 @@ export const FriendsMain = ({
   onClearConversationStatus,
   onStartDirectCall,
   onOpenDirectActions,
+  onOpenDirectProfile,
   onCloseSelectedStream,
   onFriendRequestAction,
   onFriendSearchSubmit,
@@ -1550,7 +1551,34 @@ export const FriendsMain = ({
                     const actionDisabled = Boolean(friend?.isBlocked);
 
                     return (
-                      <div key={friend.id} className="friends-directory__row">
+                      <div
+                        key={friend.id}
+                        className="friends-directory__row friends-directory__row--interactive"
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                          if (event.target instanceof Element && event.target.closest(".friends-directory__action")) {
+                            return;
+                          }
+
+                          onOpenDirectProfile?.(friend);
+                        }}
+                        onContextMenu={(event) => {
+                          if (event.target instanceof Element && event.target.closest(".friends-directory__action")) {
+                            return;
+                          }
+
+                          onOpenDirectActions?.(event, friend);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          onOpenDirectProfile?.(friend);
+                        }}
+                      >
                         <div className="friends-directory__identity">
                           <span className="friends-directory__avatar-wrap">
                             <AnimatedAvatar className="friends-directory__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="lazy" decoding="async" />

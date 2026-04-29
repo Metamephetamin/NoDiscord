@@ -5337,6 +5337,33 @@ export default function MenuMain({
       hasClearableChat,
     });
   };
+  const openFriendListProfile = (friend) => {
+    if (!friend?.id) {
+      return;
+    }
+
+    const friendId = String(friend.id || "");
+    const isBlocked = Boolean(friend.isBlocked || blockedFriendIds.has(friendId));
+    const isIgnored = Boolean(friend.isIgnored || ignoredFriendIds.has(friendId));
+
+    setFriendListUserContextMenu(null);
+    setFriendListProfileModal({
+      userId: friendId,
+      username: getDisplayName(friend),
+      avatarUrl: String(friend.avatar || ""),
+      avatarFrame: friend.avatarFrame || null,
+      backgroundUrl: String(friend.profileBackgroundUrl || ""),
+      backgroundFrame: friend.profileBackgroundFrame || null,
+      isOnline: Boolean(friend.isOnline ?? friend.is_online ?? friend.online ?? false),
+      lastSeenAt: String(friend.lastSeenAt || friend.last_seen_at || friend.lastSeen || friend.last_seen || ""),
+      presence: friend.presence || friend.presenceStatus || friend.presence_status || "",
+      isSelf: Boolean(friend.isSelf),
+      isFriend: true,
+      isBlocked,
+      isIgnored,
+      canOpenDirectChat: !friend.isSelf && !isBlocked,
+    });
+  };
   const closeFriendListUserContextMenu = () => setFriendListUserContextMenu(null);
   const closeFriendListProfileModal = () => setFriendListProfileModal(null);
   const openFriendListProfileFromMenu = () => {
@@ -5733,6 +5760,7 @@ export default function MenuMain({
         onClearConversationStatus={() => setConversationActionStatus("")}
         onStartDirectCall={stableStartDirectCallWithUser}
         onOpenDirectActions={openFriendListUserContextMenu}
+        onOpenDirectProfile={openFriendListProfile}
         onCloseSelectedStream={closeSelectedStream}
         onFriendRequestAction={handleFriendRequestAction}
         onFriendSearchSubmit={handleFriendSearchSubmit}

@@ -3608,6 +3608,16 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   contain: layout paint;
 }
 
+.friends-directory__row--interactive {
+  cursor: pointer;
+}
+
+.friends-directory__row--interactive:focus-visible {
+  outline: none;
+  border-color: rgba(154, 166, 255, 0.34);
+  box-shadow: 0 0 0 2px rgba(91, 124, 255, 0.16);
+}
+
 .friends-directory__row--request {
   grid-template-columns: minmax(220px, 1fr) auto;
 }
@@ -9124,7 +9134,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .profile__mini-icon {
-  width: 30px;
+  width: 32px;
   min-height: 32px;
 }
 
@@ -9192,8 +9202,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .profile__mini-glyph {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   background-color: currentColor;
   opacity: 0.96;
   -webkit-mask-repeat: no-repeat;
@@ -9206,22 +9216,22 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .profile__mini-glyph--mic {
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   -webkit-mask-image: url("/icons/mic-panel.svg");
   mask-image: url("/icons/mic-panel.svg");
 }
 
 .profile__mini-glyph--headphones {
-  width: 19px;
-  height: 19px;
+  width: 21px;
+  height: 21px;
   -webkit-mask-image: url("/icons/headphones-fill-svgrepo-com.svg");
   mask-image: url("/icons/headphones-fill-svgrepo-com.svg");
 }
 
 .profile__mini-glyph--settings {
-  width: 22px;
-  height: 22px;
+  width: 25px;
+  height: 25px;
   -webkit-mask-image: url("/icons/settings.png");
   mask-image: url("/icons/settings.png");
 }
@@ -9236,7 +9246,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .profile__mini-icon--slashed::after {
   content: "";
   position: absolute;
-  width: 17px;
+  width: 18px;
   height: 2px;
   border-radius: 999px;
   background: #ff5b5b;
@@ -9333,6 +9343,101 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .device-menu--sound .device-menu__panel {
   left: -70px;
+}
+
+.device-menu--mic .device-menu__panel {
+  left: -54px;
+  bottom: calc(100% + 18px);
+  width: 270px;
+  padding: 10px;
+}
+
+.device-menu--mic .device-menu__group {
+  gap: 6px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.device-menu--mic .device-menu__field {
+  gap: 4px;
+}
+
+.device-menu--mic .device-menu__toggle {
+  min-height: 38px;
+  padding: 5px 7px 5px 10px;
+}
+
+.device-menu--mic .device-menu__toggle-switch {
+  width: 42px;
+  height: 22px;
+  padding: 3px;
+}
+
+.device-menu--mic .device-menu__toggle-switch span {
+  width: 16px;
+  height: 16px;
+}
+
+.device-menu--mic .device-menu__toggle--active .device-menu__toggle-switch span {
+  transform: translateX(20px);
+}
+
+.device-menu--mic .device-menu__label {
+  font-size: 13px;
+}
+
+.device-menu--mic .device-menu__value {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.device-menu--mic .device-menu__select {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+}
+
+.device-menu--mic .device-menu__slider {
+  gap: 5px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.device-menu--mic .device-menu__slider .slider-with-tooltip {
+  padding-top: 18px;
+}
+
+.device-menu--mic .device-menu__slider input::-webkit-slider-runnable-track {
+  height: 7px;
+}
+
+.device-menu--mic .device-menu__slider input::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -5.5px;
+}
+
+.device-menu--mic .device-menu__slider input::-moz-range-track {
+  height: 7px;
+}
+
+.device-menu--mic .device-menu__slider input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+}
+
+.device-menu--mic .device-menu__meter {
+  gap: 3px;
+}
+
+.device-menu--mic .device-menu__meter span {
+  height: 14px;
+}
+
+.device-menu--mic .device-menu__settings {
+  min-height: 32px;
+  padding: 0 6px;
 }
 
 .ui-tooltip-anchor {
