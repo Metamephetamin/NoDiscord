@@ -8,12 +8,12 @@ const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `$
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
 const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
-const PARTICIPANT_CONNECTOR_WIDTH = 44;
+const PARTICIPANT_CONNECTOR_WIDTH = 58;
 const PARTICIPANT_CONNECTOR_TOP_Y = 0.5;
 const PARTICIPANT_CONNECTOR_FIRST_Y = 38.5;
 const PARTICIPANT_CONNECTOR_STEP_Y = 34;
 const PARTICIPANT_CONNECTOR_STEM_X = 4.5;
-const PARTICIPANT_CONNECTOR_END_X = 38.5;
+const PARTICIPANT_CONNECTOR_END_X = 52.5;
 const PARTICIPANT_CONNECTOR_RADIUS = 6;
 
 const getVoiceDisplayName = (name) => {

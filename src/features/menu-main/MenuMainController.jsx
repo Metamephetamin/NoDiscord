@@ -4504,6 +4504,7 @@ export default function MenuMain({
     createChannelCategory,
     toggleChannelCategory,
     deleteChannelCategory,
+    deleteDefaultChannelCategory,
     reorderChannelCategories,
     moveServerChannel,
     createServerChannel,
@@ -5777,6 +5778,7 @@ export default function MenuMain({
       onCreateCategory={createChannelCategory}
       onToggleCategory={toggleChannelCategory}
       onDeleteCategory={deleteChannelCategory}
+      onDeleteDefaultCategory={deleteDefaultChannelCategory}
       onReorderCategories={reorderChannelCategories}
       onCreateChannel={createServerChannel}
       onMoveChannel={moveServerChannel}

@@ -10,6 +10,10 @@ import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentl
 const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
 const EMPTY_CHANNEL_LIST = Object.freeze([]);
+const DEFAULT_TEXT_CATEGORY_ID = "__default_text_channels";
+const DEFAULT_VOICE_CATEGORY_ID = "__default_voice_channels";
+const DEFAULT_TEXT_CATEGORY_NAME = "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
+const DEFAULT_VOICE_CATEGORY_NAME = "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
 
 function VoiceChannelPreview({ channel, participants = [], isJoining = false, onJoin }) {
   const participantCount = Array.isArray(participants) ? participants.length : 0;
@@ -1548,6 +1552,7 @@ export const ServersSidebar = memo(({
   onCreateCategory,
   onToggleCategory,
   onDeleteCategory,
+  onDeleteDefaultCategory,
   onReorderCategories,
   onCreateChannel,
   onMoveChannel,
@@ -1666,8 +1671,17 @@ export const ServersSidebar = memo(({
     setCategoryContextMenu({
       categoryId: String(category.id),
       name: category.name || "Категория",
+      defaultType: category.defaultType || "",
       x: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 228)),
       y: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 116)),
+    });
+  };
+  const openDefaultCategoryContextMenu = (event, type) => {
+    const normalizedType = String(type || "");
+    openCategoryContextMenu(event, {
+      id: normalizedType === "voice" ? DEFAULT_VOICE_CATEGORY_ID : DEFAULT_TEXT_CATEGORY_ID,
+      name: normalizedType === "voice" ? DEFAULT_VOICE_CATEGORY_NAME : DEFAULT_TEXT_CATEGORY_NAME,
+      defaultType: normalizedType === "voice" ? "voice" : "text",
     });
   };
   const deleteCategoryFromContextMenu = () => {
@@ -1677,6 +1691,11 @@ export const ServersSidebar = memo(({
     }
 
     setCategoryContextMenu(null);
+    if (categoryContextMenu?.defaultType) {
+      void onDeleteDefaultCategory?.(categoryContextMenu.defaultType);
+      return;
+    }
+
     onDeleteCategory?.(categoryId);
   };
   const channelCategories = useMemo(
@@ -2300,7 +2319,7 @@ export const ServersSidebar = memo(({
         <>
           {hasUncategorizedTextChannels ? (
             <div className="server-panel__section">
-              <div className="server-panel__header">
+              <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "text")}>
                 <span>Текстовые каналы</span>
                 <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
               </div>
@@ -2316,7 +2335,7 @@ export const ServersSidebar = memo(({
 
           {hasUncategorizedVoiceChannels ? (
             <div className="server-panel__section">
-              <div className="server-panel__header">
+              <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "voice")}>
                 <span>Голосовые каналы</span>
                 <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
               </div>

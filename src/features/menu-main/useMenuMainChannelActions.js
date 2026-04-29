@@ -196,6 +196,60 @@ export default function useMenuMainChannelActions({
     }));
   };
 
+  const deleteDefaultChannelCategory = async (type) => {
+    if (!canManageChannels || !activeServer) return;
+    const normalizedType = String(type || "");
+
+    if (normalizedType === "voice") {
+      const removedChannels = (activeServer.voiceChannels || []).filter((channel) => !String(channel.categoryId || ""));
+      if (!removedChannels.length) return;
+
+      const shouldLeaveVoice = removedChannels.some((channel) => {
+        const channelId = String(channel.id || "");
+        return currentVoiceChannel === channelId || currentVoiceChannel === getScopedVoiceChannelId(activeServer.id, channelId);
+      });
+
+      if (shouldLeaveVoice) {
+        await leaveVoiceChannel();
+      }
+
+      updateServer((server) => ({
+        ...server,
+        voiceChannels: (server.voiceChannels || []).filter((channel) => String(channel.categoryId || "")),
+      }));
+      setChannelSettingsState((previous) =>
+        previous?.type === "voice" && removedChannels.some((channel) => String(channel.id || "") === String(previous.channelId || ""))
+          ? null
+          : previous
+      );
+      return;
+    }
+
+    if (normalizedType !== "text") return;
+
+    const removedChannelIds = new Set(
+      (activeServer.textChannels || [])
+        .filter((channel) => !String(channel.categoryId || ""))
+        .map((channel) => String(channel.id || ""))
+    );
+    if (!removedChannelIds.size) return;
+
+    const nextChannels = (activeServer.textChannels || []).filter((channel) => String(channel.categoryId || ""));
+    updateServer((server) => ({
+      ...server,
+      textChannels: (server.textChannels || []).filter((channel) => String(channel.categoryId || "")),
+    }));
+
+    if (removedChannelIds.has(String(currentTextChannelId || ""))) {
+      setCurrentTextChannelId(nextChannels[0]?.id || "");
+    }
+    setChannelSettingsState((previous) =>
+      previous?.type === "text" && removedChannelIds.has(String(previous.channelId || ""))
+        ? null
+        : previous
+    );
+  };
+
   const reorderChannelCategories = (sourceCategoryId, targetCategoryId) => {
     if (!canManageChannels || !activeServer || !sourceCategoryId || !targetCategoryId) return;
 
@@ -350,6 +404,7 @@ export default function useMenuMainChannelActions({
     createChannelCategory,
     toggleChannelCategory,
     deleteChannelCategory,
+    deleteDefaultChannelCategory,
     reorderChannelCategories,
     moveServerChannel,
     createServerChannel,
