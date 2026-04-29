@@ -566,11 +566,8 @@ export function createVoiceRoomClient({
     const publisherRoute = routes.find((route) => route.label === "publisher") || routes[0] || null;
     const rttMs = Number(routeSnapshot?.rttMs || publisherRoute?.rttMs || 0);
     const outgoingBitrate = Number(publisherRoute?.availableOutgoingBitrate || 0);
-    const hasUsableSignal =
-      (Number.isFinite(rttMs) && rttMs > 0)
-      || (Number.isFinite(outgoingBitrate) && outgoingBitrate > 0);
 
-    if (!hasUsableSignal) {
+    if (!hasAdaptiveRouteSignal(routeSnapshot)) {
       return adaptiveMediaProfile;
     }
 
@@ -587,6 +584,28 @@ export function createVoiceRoomClient({
     }
 
     return "excellent";
+  };
+  const hasAdaptiveRouteSignal = (routeSnapshot) => {
+    const routes = Array.isArray(routeSnapshot?.transports) ? routeSnapshot.transports : [];
+    const publisherRoute = routes.find((route) => route.label === "publisher") || routes[0] || null;
+    const rttMs = Number(routeSnapshot?.rttMs || publisherRoute?.rttMs || 0);
+    const outgoingBitrate = Number(publisherRoute?.availableOutgoingBitrate || 0);
+
+    return (Number.isFinite(rttMs) && rttMs > 0)
+      || (Number.isFinite(outgoingBitrate) && outgoingBitrate > 0);
+  };
+  const hasStrongAdaptiveRecoverySignal = (routeSnapshot, nextProfile) => {
+    if (nextProfile !== "excellent" && nextProfile !== "good") {
+      return false;
+    }
+
+    const routes = Array.isArray(routeSnapshot?.transports) ? routeSnapshot.transports : [];
+    const publisherRoute = routes.find((route) => route.label === "publisher") || routes[0] || null;
+    const rttMs = Number(routeSnapshot?.rttMs || publisherRoute?.rttMs || 0);
+    const outgoingBitrate = Number(publisherRoute?.availableOutgoingBitrate || 0);
+
+    return Number.isFinite(rttMs) && rttMs > 0 && rttMs <= 80
+      && Number.isFinite(outgoingBitrate) && outgoingBitrate >= 4_000_000;
   };
   const setSenderMaxBitrate = async (sender, bitrateKbps) => {
     if (!sender?.getParameters || !sender?.setParameters) {
@@ -706,17 +725,20 @@ export function createVoiceRoomClient({
     applyRemoteSharePreferences();
   };
   const updateAdaptiveMediaProfile = (routeSnapshot) => {
+    const hasRouteSignal = hasAdaptiveRouteSignal(routeSnapshot);
     const nextProfile = getAdaptiveMediaProfileFromRoute(routeSnapshot);
 
     if (nextProfile === adaptiveMediaProfile) {
-      pendingAdaptiveMediaProfile = "";
-      pendingAdaptiveMediaProfileSamples = 0;
+      if (hasRouteSignal) {
+        pendingAdaptiveMediaProfile = "";
+        pendingAdaptiveMediaProfileSamples = 0;
+      }
       applyAdaptiveMediaProfile();
       return;
     }
 
     const isDowngrade = getAdaptiveProfileRank(nextProfile) < getAdaptiveProfileRank(adaptiveMediaProfile);
-    const requiredSamples = isDowngrade ? 2 : 4;
+    const requiredSamples = isDowngrade ? 2 : hasStrongAdaptiveRecoverySignal(routeSnapshot, nextProfile) ? 2 : 4;
     if (pendingAdaptiveMediaProfile === nextProfile) {
       pendingAdaptiveMediaProfileSamples += 1;
     } else {

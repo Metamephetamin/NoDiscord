@@ -4271,14 +4271,37 @@ export default function MenuMain({
     const isAlreadyInTargetChannel =
       String(currentVoiceChannelRef.current || "") === String(scopedChannelId)
       || clientVoiceChannelId === String(scopedChannelId);
+    const showSelectedVoicePane = ({ syncCurrentChannel = false } = {}) => {
+      const shouldSyncCurrentChannel =
+        syncCurrentChannel && String(currentVoiceChannelRef.current || "") !== String(scopedChannelId);
+      const shouldSwitchMobilePane =
+        isMobileViewport && (mobileSection !== "servers" || mobileServersPane !== "voice");
+
+      if (desktopServerPane === "voice" && !shouldSwitchMobilePane && !shouldSyncCurrentChannel) {
+        return;
+      }
+
+      pushNavigationHistory(() => {
+        setDesktopServerPane("voice");
+        if (shouldSyncCurrentChannel) {
+          setCurrentVoiceChannel(scopedChannelId);
+        }
+        if (isMobileViewport) {
+          setMobileSection("servers");
+          setMobileServersPane("voice");
+        }
+      });
+    };
 
     if (voiceJoinInFlightRef.current && pendingVoiceChannelTargetRef.current === scopedChannelId) {
+      showSelectedVoicePane();
       return;
     }
 
     if (isAlreadyInTargetChannel) {
       pendingLocalVoiceTransitionRef.current = null;
       setJoiningVoiceChannelId((previous) => (String(previous || "") === scopedChannelId ? "" : previous));
+      showSelectedVoicePane({ syncCurrentChannel: true });
       return;
     }
 
