@@ -195,8 +195,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
 
         return new SpeechPunctuationResult
         {
-            Text = ApplyConservativeSpeechPunctuation(normalizedInput),
-            Provider = "server-spoken-punctuation",
+            Text = ApplyHeuristicPunctuation(normalizedInput),
+            Provider = "server-heuristic-punctuation",
             UsedModel = false,
         };
     }

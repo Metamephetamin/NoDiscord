@@ -71,10 +71,11 @@ export const reorderById = (items = [], sourceId, targetId) => {
 
 const normalizeChannelCategoryId = (categoryId) => String(categoryId || "");
 
-export const moveChannelInList = (channels = [], { channelId, targetChannelId = "", targetCategoryId = "" } = {}) => {
+export const moveChannelInList = (channels = [], { channelId, targetChannelId = "", targetCategoryId = "", placement = "before" } = {}) => {
   const normalizedChannelId = String(channelId || "");
   const normalizedTargetChannelId = String(targetChannelId || "");
   const normalizedTargetCategoryId = normalizeChannelCategoryId(targetCategoryId);
+  const shouldInsertAfterTarget = String(placement || "before") === "after";
   const sourceIndex = channels.findIndex((channel) => String(channel?.id || "") === normalizedChannelId);
   if (sourceIndex === -1) {
     return channels;
@@ -87,6 +88,9 @@ export const moveChannelInList = (channels = [], { channelId, targetChannelId = 
 
   if (normalizedTargetChannelId) {
     insertIndex = nextChannels.findIndex((channel) => String(channel?.id || "") === normalizedTargetChannelId);
+    if (insertIndex !== -1 && shouldInsertAfterTarget) {
+      insertIndex += 1;
+    }
   }
 
   if (insertIndex === -1) {

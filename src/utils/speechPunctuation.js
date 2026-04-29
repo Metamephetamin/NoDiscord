@@ -10,7 +10,7 @@ function shouldUseServerTypedPunctuation(text) {
     return false;
   }
 
-  if (!/[а-яё]/i.test(normalizedText)) {
+  if (!/\p{Script=Cyrillic}/u.test(normalizedText)) {
     return false;
   }
 

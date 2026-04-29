@@ -39,6 +39,7 @@ const VoiceChannelList = ({
   onRenameSubmit,
   onRenameCancel,
   dragState,
+  dragOverState,
   categoryId = "",
   onChannelDragStart,
   onChannelDragOver,
@@ -67,6 +68,31 @@ const VoiceChannelList = ({
     () => new Map((serverMembers || []).map((member) => [String(member.userId), member.name || "Unknown"])),
     [serverMembers]
   );
+  const getDropKey = (targetChannelId = "", placement = "end") =>
+    `voice:${String(categoryId || "")}:${String(targetChannelId || "")}:${placement}`;
+  const renderDropPlaceholder = (targetChannelId = "", placement = "end") => {
+    const key = getDropKey(targetChannelId, placement);
+    if (dragOverState?.key !== key) {
+      return null;
+    }
+
+    const targetChannel = targetChannelId ? { id: targetChannelId } : null;
+    return (
+      <li
+        key={`voice-drop-placeholder-${key}`}
+        className="channel-drop-placeholder"
+        aria-hidden="true"
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => onChannelDrop?.(event, "voice", targetChannel, categoryId)}
+      >
+        <span />
+      </li>
+    );
+  };
 
   const normalizeParticipant = (participant = {}) => {
     const userId = participant.userId || participant.UserId || "";
@@ -88,7 +114,7 @@ const VoiceChannelList = ({
       onDragOver={(event) => onChannelDragOver?.(event, "voice", null, categoryId)}
       onDrop={(event) => onChannelDrop?.(event, "voice", null, categoryId)}
     >
-      {channels.map((channel) => {
+      {channels.flatMap((channel) => {
         const runtimeId = getChannelRuntimeId(serverId, channel.id);
         const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
@@ -120,7 +146,8 @@ const VoiceChannelList = ({
           }
         };
 
-        return (
+        return [
+          renderDropPlaceholder(channel.id, "before"),
           <li
             key={channel.id}
             className={`list__items ${canManageChannels && !isEditing ? "list__items--with-drag-handle" : ""} ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
@@ -149,8 +176,6 @@ const VoiceChannelList = ({
                   return;
                 }
 
-                event.preventDefault();
-                event.stopPropagation();
                 triggerPrewarm();
               }}
               onClick={handleRowJoin}
@@ -267,9 +292,11 @@ const VoiceChannelList = ({
                 ))}
               </div>
             )}
-          </li>
-        );
+          </li>,
+          renderDropPlaceholder(channel.id, "after"),
+        ].filter(Boolean);
       })}
+      {renderDropPlaceholder("", "end")}
     </ul>
   );
 };

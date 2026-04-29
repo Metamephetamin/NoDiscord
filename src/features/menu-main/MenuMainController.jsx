@@ -4457,6 +4457,7 @@ export default function MenuMain({
     addVoiceChannel,
     createChannelCategory,
     toggleChannelCategory,
+    deleteChannelCategory,
     reorderChannelCategories,
     moveServerChannel,
     createServerChannel,
@@ -5640,6 +5641,7 @@ export default function MenuMain({
       onAddVoiceChannel={addVoiceChannel}
       onCreateCategory={createChannelCategory}
       onToggleCategory={toggleChannelCategory}
+      onDeleteCategory={deleteChannelCategory}
       onReorderCategories={reorderChannelCategories}
       onCreateChannel={createServerChannel}
       onMoveChannel={moveServerChannel}

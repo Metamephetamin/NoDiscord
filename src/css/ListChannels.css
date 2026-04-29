@@ -6,8 +6,8 @@
 
 .list__items {
   position: relative;
-  padding: 10px 10px;
-  margin-bottom: 8px;
+  padding: 0 8px;
+  margin-bottom: 6px;
   border-radius: 13px;
   background: transparent;
   border: 1px solid transparent;
@@ -19,7 +19,7 @@
 }
 
 .list__items--dragging {
-  opacity: 0.48;
+  opacity: 0.72;
   border-color: rgba(124, 140, 255, 0.34);
   background: rgba(124, 140, 255, 0.08);
 }
@@ -41,6 +41,8 @@
 
 .voice-channel__row {
   position: relative;
+  width: 100%;
+  min-height: 42px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -52,6 +54,7 @@
 
 .voice-channel__button {
   flex: 1;
+  align-self: stretch;
   min-width: 0;
   width: 100%;
   display: flex;
@@ -187,7 +190,7 @@
 }
 
 .voice-channel__button {
-  padding-right: 38px;
+  padding-right: 34px;
 }
 
 .list__items:hover .voice-channel__row > .channel-edit-button,

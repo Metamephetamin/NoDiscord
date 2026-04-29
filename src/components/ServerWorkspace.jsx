@@ -405,6 +405,23 @@ const decodeChannelDragPayload = (event, fallback) => {
   }
 };
 
+const getChannelDropPlacement = (event, channel, previousPlacement = "") => {
+  if (!channel?.id || !event?.currentTarget?.getBoundingClientRect) {
+    return "end";
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const relativeY = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5;
+  if ((previousPlacement === "before" || previousPlacement === "after") && relativeY > 0.38 && relativeY < 0.62) {
+    return previousPlacement;
+  }
+
+  return relativeY > 0.5 ? "after" : "before";
+};
+
+const getChannelDropKey = (type, categoryId, targetChannelId = "", placement = "end") =>
+  `${type}:${getDragCategoryId(categoryId)}:${String(targetChannelId || "")}:${placement}`;
+
 const getChannelListIcon = (type) => {
   if (type === "voice") {
     return "◖";
@@ -1530,6 +1547,7 @@ export const ServersSidebar = memo(({
   onAddVoiceChannel,
   onCreateCategory,
   onToggleCategory,
+  onDeleteCategory,
   onReorderCategories,
   onCreateChannel,
   onMoveChannel,
@@ -1562,6 +1580,9 @@ export const ServersSidebar = memo(({
   const [createChannelDraft, setCreateChannelDraft] = useState(null);
   const [createChannelError, setCreateChannelError] = useState("");
   const [dragState, setDragState] = useState(null);
+  const [dragOverState, setDragOverState] = useState(null);
+  const [categoryContextMenu, setCategoryContextMenu] = useState(null);
+  const categoryContextMenuRef = useRef(null);
   const dragEndedRef = useRef(false);
 
   const updateServerMenuPosition = () => {
@@ -1603,12 +1624,60 @@ export const ServersSidebar = memo(({
     };
   }, [isServerMenuOpen]);
 
+  useEffect(() => {
+    if (!categoryContextMenu) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (categoryContextMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setCategoryContextMenu(null);
+    };
+    const closeMenu = () => setCategoryContextMenu(null);
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [categoryContextMenu]);
+
   const runServerMenuAction = (action) => {
     setIsServerMenuOpen(false);
     action?.();
   };
   const showUnavailableServerMenuAction = () => {
     onShowServerFeedback?.("Этот раздел пока не подключён.");
+  };
+  const openCategoryContextMenu = (event, category) => {
+    if (!canManageChannels || !category?.id) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsServerMenuOpen(false);
+    setCategoryContextMenu({
+      categoryId: String(category.id),
+      name: category.name || "Категория",
+      x: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 228)),
+      y: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 116)),
+    });
+  };
+  const deleteCategoryFromContextMenu = () => {
+    const categoryId = String(categoryContextMenu?.categoryId || "");
+    if (!categoryId) {
+      return;
+    }
+
+    setCategoryContextMenu(null);
+    onDeleteCategory?.(categoryId);
   };
   const channelCategories = useMemo(
     () => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : EMPTY_CHANNEL_LIST),
@@ -1628,6 +1697,7 @@ export const ServersSidebar = memo(({
   const endDrag = () => {
     dragEndedRef.current = true;
     setDragState(null);
+    setDragOverState(null);
     window.setTimeout(() => {
       dragEndedRef.current = false;
     }, 180);
@@ -1648,6 +1718,7 @@ export const ServersSidebar = memo(({
 
     const payload = { kind: "category", categoryId: String(category.id) };
     setDragState(payload);
+    setDragOverState(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-tend-channel-drag", encodeChannelDragPayload(payload));
   };
@@ -1657,6 +1728,7 @@ export const ServersSidebar = memo(({
     }
 
     if (dragState?.kind === "category" && dragState.categoryId !== category.id) {
+      setDragOverState(null);
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
       return;
@@ -1665,6 +1737,15 @@ export const ServersSidebar = memo(({
     if (dragState?.kind === "channel") {
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
+      const nextCategoryId = getDragCategoryId(category.id);
+      const nextDragOverState = {
+        type: dragState.type,
+        categoryId: nextCategoryId,
+        targetChannelId: "",
+        placement: "end",
+        key: getChannelDropKey(dragState.type, nextCategoryId, "", "end"),
+      };
+      setDragOverState((previous) => (previous?.key === nextDragOverState.key ? previous : nextDragOverState));
     }
   };
   const handleCategoryDrop = (event, category) => {
@@ -1701,8 +1782,14 @@ export const ServersSidebar = memo(({
       categoryId: getDragCategoryId(categoryId),
     };
     setDragState(payload);
+    setDragOverState(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-tend-channel-drag", encodeChannelDragPayload(payload));
+    const dragPreview = event.currentTarget?.closest?.(".channel-item, .list__items");
+    if (dragPreview?.getBoundingClientRect && event.dataTransfer?.setDragImage) {
+      const rect = dragPreview.getBoundingClientRect();
+      event.dataTransfer.setDragImage(dragPreview, event.clientX - rect.left, event.clientY - rect.top);
+    }
   };
   const handleChannelDragOver = (event, type, channel = null, categoryId = "") => {
     if (dragState?.kind !== "channel" || dragState.type !== type) {
@@ -1710,12 +1797,29 @@ export const ServersSidebar = memo(({
     }
 
     if (channel?.id && dragState.channelId === channel.id && dragState.categoryId === getDragCategoryId(categoryId)) {
+      setDragOverState(null);
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
+    const nextCategoryId = getDragCategoryId(categoryId);
+    const targetChannelId = channel?.id ? String(channel.id) : "";
+    const previousPlacement = dragOverState?.type === type
+      && dragOverState.categoryId === nextCategoryId
+      && dragOverState.targetChannelId === targetChannelId
+      ? dragOverState.placement
+      : "";
+    const placement = getChannelDropPlacement(event, channel, previousPlacement);
+    const nextDragOverState = {
+      type,
+      categoryId: nextCategoryId,
+      targetChannelId,
+      placement,
+      key: getChannelDropKey(type, nextCategoryId, targetChannelId, placement),
+    };
+    setDragOverState((previous) => (previous?.key === nextDragOverState.key ? previous : nextDragOverState));
   };
   const handleChannelDrop = (event, type, channel = null, categoryId = "") => {
     const payload = decodeChannelDragPayload(event, dragState);
@@ -1725,6 +1829,11 @@ export const ServersSidebar = memo(({
 
     const nextCategoryId = getDragCategoryId(categoryId);
     const targetChannelId = channel?.id ? String(channel.id) : "";
+    const placement = dragOverState?.type === type
+      && dragOverState.categoryId === nextCategoryId
+      && dragOverState.targetChannelId === targetChannelId
+      ? dragOverState.placement
+      : getChannelDropPlacement(event, channel);
     if (payload.channelId === targetChannelId && payload.categoryId === nextCategoryId) {
       return;
     }
@@ -1736,6 +1845,7 @@ export const ServersSidebar = memo(({
       channelId: payload.channelId,
       targetChannelId,
       targetCategoryId: nextCategoryId,
+      placement,
     });
     endDrag();
   };
@@ -1792,6 +1902,41 @@ export const ServersSidebar = memo(({
       name: nextName,
     });
     closeCreateChannelModal();
+  };
+  const renderChannelDropPlaceholder = (type, categoryId = "", targetChannelId = "", placement = "end") => {
+    const normalizedCategoryId = getDragCategoryId(categoryId);
+    const key = getChannelDropKey(type, normalizedCategoryId, targetChannelId, placement);
+    if (dragOverState?.key !== key) {
+      return null;
+    }
+
+    const targetChannel = targetChannelId ? { id: targetChannelId } : null;
+    return (
+      <li
+        key={`drop-placeholder-${key}`}
+        className="channel-drop-placeholder"
+        aria-hidden="true"
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => handleChannelDrop(event, type, targetChannel, normalizedCategoryId)}
+      >
+        <span />
+      </li>
+    );
+  };
+  const renderTextChannelListItems = (channels, categoryId = "") => {
+    const items = [];
+    channels.forEach((channel) => {
+      const channelId = String(channel.id || "");
+      items.push(renderChannelDropPlaceholder("text", categoryId, channelId, "before"));
+      items.push(renderTextChannelItem(channel, categoryId));
+      items.push(renderChannelDropPlaceholder("text", categoryId, channelId, "after"));
+    });
+    items.push(renderChannelDropPlaceholder("text", categoryId, "", "end"));
+    return items.filter(Boolean);
   };
   const renderTextChannelItem = (channel, categoryId = "") => {
     const kind = getTextChannelKind(channel);
@@ -1886,6 +2031,7 @@ export const ServersSidebar = memo(({
       onRenameSubmit={onSubmitChannelRename}
       onRenameCancel={onCancelChannelRename}
       dragState={dragState}
+      dragOverState={dragOverState}
       onChannelDragStart={startChannelDrag}
       onChannelDragOver={handleChannelDragOver}
       onChannelDrop={handleChannelDrop}
@@ -2126,6 +2272,19 @@ export const ServersSidebar = memo(({
               })()}
             </div>
           ) : null}
+
+          {categoryContextMenu ? (
+            <div ref={categoryContextMenuRef} className="member-role-menu member-role-menu--server-compact" style={{ left: categoryContextMenu.x, top: categoryContextMenu.y }}>
+              <div className="member-role-menu__title">{categoryContextMenu.name || "Категория"}</div>
+              <button
+                type="button"
+                className="member-role-menu__item member-role-menu__item--danger"
+                onClick={deleteCategoryFromContextMenu}
+              >
+                Удалить категорию
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="servers-empty-sidebar">
@@ -2147,7 +2306,7 @@ export const ServersSidebar = memo(({
               onDragOver={(event) => handleChannelDragOver(event, "text", null, "")}
               onDrop={(event) => handleChannelDrop(event, "text", null, "")}
             >
-              {uncategorizedTextChannels.map((channel) => renderTextChannelItem(channel, ""))}
+              {renderTextChannelListItems(uncategorizedTextChannels, "")}
             </ul>
           </div>
 
@@ -2173,7 +2332,7 @@ export const ServersSidebar = memo(({
                 onDragOver={(event) => handleCategoryDragOver(event, category)}
                 onDrop={(event) => handleCategoryDrop(event, category)}
               >
-                <div className="server-panel__header server-panel__header--category">
+                <div className="server-panel__header server-panel__header--category" onContextMenu={(event) => openCategoryContextMenu(event, category)}>
                   <button
                     type="button"
                     className="server-panel__category-toggle"
@@ -2181,6 +2340,7 @@ export const ServersSidebar = memo(({
                     onDragStart={(event) => startCategoryDrag(event, category)}
                     onDragEnd={endDrag}
                     onClick={(event) => handleCategoryClick(event, category.id)}
+                    onContextMenu={(event) => openCategoryContextMenu(event, category)}
                     aria-expanded={!isCollapsed}
                   >
                     <span className={`server-panel__category-caret ${isCollapsed ? "" : "is-open"}`} aria-hidden="true" />
@@ -2197,7 +2357,7 @@ export const ServersSidebar = memo(({
                         onDragOver={(event) => handleChannelDragOver(event, "text", null, category.id)}
                         onDrop={(event) => handleChannelDrop(event, "text", null, category.id)}
                       >
-                        {textChannels.map((channel) => renderTextChannelItem(channel, category.id))}
+                        {renderTextChannelListItems(textChannels, category.id)}
                       </ul>
                       {renderVoiceChannels(voiceChannels, category.id)}
                     </>

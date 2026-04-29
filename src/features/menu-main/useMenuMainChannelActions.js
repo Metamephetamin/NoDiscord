@@ -180,6 +180,22 @@ export default function useMenuMainChannelActions({
     }));
   };
 
+  const deleteChannelCategory = (categoryId) => {
+    if (!canManageChannels || !activeServer || !categoryId) return;
+    const normalizedCategoryId = String(categoryId || "");
+
+    updateServer((server) => ({
+      ...server,
+      channelCategories: (server.channelCategories || []).filter((category) => String(category.id || "") !== normalizedCategoryId),
+      textChannels: (server.textChannels || []).map((channel) =>
+        String(channel.categoryId || "") === normalizedCategoryId ? { ...channel, categoryId: "" } : channel
+      ),
+      voiceChannels: (server.voiceChannels || []).map((channel) =>
+        String(channel.categoryId || "") === normalizedCategoryId ? { ...channel, categoryId: "" } : channel
+      ),
+    }));
+  };
+
   const reorderChannelCategories = (sourceCategoryId, targetCategoryId) => {
     if (!canManageChannels || !activeServer || !sourceCategoryId || !targetCategoryId) return;
 
@@ -189,20 +205,20 @@ export default function useMenuMainChannelActions({
     }));
   };
 
-  const moveServerChannel = ({ type = "text", channelId = "", targetChannelId = "", targetCategoryId = "" } = {}) => {
+  const moveServerChannel = ({ type = "text", channelId = "", targetChannelId = "", targetCategoryId = "", placement = "before" } = {}) => {
     if (!canManageChannels || !activeServer || !channelId) return;
 
     if (String(type || "text") === "voice") {
       updateServer((server) => ({
         ...server,
-        voiceChannels: moveChannelInList(server.voiceChannels || [], { channelId, targetChannelId, targetCategoryId }),
+        voiceChannels: moveChannelInList(server.voiceChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
       }));
       return;
     }
 
     updateServer((server) => ({
       ...server,
-      textChannels: moveChannelInList(server.textChannels || [], { channelId, targetChannelId, targetCategoryId }),
+      textChannels: moveChannelInList(server.textChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
     }));
   };
 
@@ -333,6 +349,7 @@ export default function useMenuMainChannelActions({
     addVoiceChannel,
     createChannelCategory,
     toggleChannelCategory,
+    deleteChannelCategory,
     reorderChannelCategories,
     moveServerChannel,
     createServerChannel,

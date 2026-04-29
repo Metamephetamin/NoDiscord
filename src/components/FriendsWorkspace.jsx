@@ -1383,21 +1383,14 @@ export const FriendsMain = ({
                 />
               </form>
 
-              <div className="friends-directory__summary">
-                <span>
-                  {friendLookupLoading
-                    ? "Идёт поиск"
-                    : friendLookupPerformed
-                      ? `Найдено — ${friendLookupResults.length}`
-                      : "Поиск обновляется автоматически"}
-                </span>
-              </div>
+              {friendLookupLoading || friendLookupPerformed ? (
+                <div className="friends-directory__summary">
+                  <span>{friendLookupLoading ? "Идёт поиск" : `Найдено — ${friendLookupResults.length}`}</span>
+                </div>
+              ) : null}
 
               <div className="friends-directory__list friends-results--scroll">
                 {friendsError ? <div className="friends-panel__error">{friendsError}</div> : null}
-                {!friendsError && !friendEmail.trim() ? (
-                  <div className="friends-panel__empty">Введите часть имени, никнейма или email.</div>
-                ) : null}
                 {!friendsError && friendEmail.trim() && friendLookupLoading ? (
                   <div className="friends-panel__empty">Ищем пользователей...</div>
                 ) : null}

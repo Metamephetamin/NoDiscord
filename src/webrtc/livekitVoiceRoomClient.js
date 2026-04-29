@@ -260,6 +260,23 @@ function bytesToBase64(value) {
   return btoa(binary);
 }
 
+function isLocalVoiceHost() {
+  try {
+    const hostname = String(window.location?.hostname || "").toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+function isLocalVoicePreviewFallbackEnabled() {
+  try {
+    return isLocalVoiceHost() && window.localStorage?.getItem("ND_VOICE_LOCAL_FALLBACK") !== "0";
+  } catch {
+    return isLocalVoiceHost();
+  }
+}
+
 function isVoiceDebugEnabled() {
   try {
     return typeof window !== "undefined" && window.localStorage?.getItem("ND_VOICE_DEBUG") !== "0";
@@ -679,6 +696,43 @@ export function createVoiceRoomClient({
     });
 
     onRoomParticipantsChanged?.({ channel: currentChannel, participants });
+  };
+  const emitLocalPreviewRoomParticipants = (channelName, user, existingParticipants = []) => {
+    const currentUserId = String(user?.id || "");
+    const participantsById = new Map();
+
+    (Array.isArray(existingParticipants) ? existingParticipants : []).forEach((participant) => {
+      const userId = String(participant?.userId || participant?.UserId || participant?.id || participant?.Id || "");
+      if (!userId) {
+        return;
+      }
+
+      participantsById.set(userId, {
+        userId,
+        name: participant?.name || participant?.Name || "Участник",
+        avatar: participant?.avatar || participant?.Avatar || DEFAULT_AVATAR,
+        isMicMuted: Boolean(participant?.isMicMuted || participant?.IsMicMuted),
+        isDeafened: Boolean(participant?.isDeafened || participant?.IsDeafened),
+        isScreenSharing: Boolean(participant?.isScreenSharing || participant?.IsScreenSharing),
+      });
+    });
+
+    if (currentUserId) {
+      participantsById.set(currentUserId, {
+        ...(participantsById.get(currentUserId) || {}),
+        userId: currentUserId,
+        name: getDisplayName(user || {}) || "Вы",
+        avatar: getAvatar(user || {}) || DEFAULT_AVATAR,
+        isSelf: true,
+        isMicMuted: isSelfMicMuted,
+        isDeafened: isSelfDeafened,
+      });
+    }
+
+    onRoomParticipantsChanged?.({
+      channel: channelName,
+      participants: Array.from(participantsById.values()),
+    });
   };
 
   const emitLocalScreenState = () => {
@@ -2408,10 +2462,13 @@ const handleDeviceChange = () => {
       createdAt: Date.now(),
       value: nextSession,
     };
-    prepareLiveKitConnection(nextSession);
+    if (!isLocalVoicePreviewFallbackEnabled()) {
+      prepareLiveKitConnection(nextSession);
+    }
     logVoiceDebug("livekit-session:prewarmed", {
       channelName,
       userId: user.id || "",
+      prepared: !isLocalVoicePreviewFallbackEnabled(),
     });
     return nextSession;
   };
@@ -3050,6 +3107,22 @@ const handleDeviceChange = () => {
         onChannelChanged?.(channelName);
         publishVoiceDebugSnapshot("join:success");
       } catch (error) {
+        if (isLocalVoicePreviewFallbackEnabled()) {
+          logVoiceDebug("join:local-preview-fallback", {
+            channelName,
+            errorName: error?.name || "",
+            error: error?.message || String(error),
+          });
+          clearVoicePingPolling();
+          currentLiveKitServerUrl = "local-preview";
+          currentLiveKitRoomName = channelName;
+          currentChannel = channelName;
+          onChannelChanged?.(channelName);
+          emitLocalPreviewRoomParticipants(channelName, user, Array.isArray(joinResponse?.participants) ? joinResponse.participants : []);
+          publishVoiceDebugSnapshot("join:local-preview-fallback:snapshot");
+          return;
+        }
+
         logVoiceDebug("join:failed", {
           channelName,
           error: error?.message || String(error),
