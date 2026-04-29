@@ -329,20 +329,20 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   flex: 1 1 auto;
   width: 100%;
   margin: 0;
-  padding: 0 2px 104px;
+  padding: 0 3px 104px 1px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: auto;
-  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scrollbar-width: none;
   scrollbar-color: transparent transparent;
 }
 
 .sidebar__servers-list::-webkit-scrollbar {
-  width: 1px;
+  width: 2px;
 }
 
 .sidebar__servers-list::-webkit-scrollbar-track {
@@ -1347,10 +1347,12 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   display: inline-flex;
   align-items: flex-start;
   justify-content: center;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(-2px);
   cursor: grab;
-  opacity: 0.58;
+  opacity: 0;
+  pointer-events: none;
   touch-action: none;
+  transition: opacity 0.12s ease-out, transform 0.12s ease-out;
 }
 
 .channel-drag-handle::before {
@@ -1367,6 +1369,19 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .channel-drag-handle:hover,
 .channel-drag-handle:focus-visible {
   opacity: 0.95;
+}
+
+.channel-item:hover > .channel-drag-handle,
+.channel-item:focus-within > .channel-drag-handle,
+.channel-item--dragging > .channel-drag-handle,
+.channel-item--editing > .channel-drag-handle,
+.list__items:hover > .channel-drag-handle,
+.list__items:focus-within > .channel-drag-handle,
+.list__items--dragging > .channel-drag-handle,
+.list__items--editing > .channel-drag-handle {
+  opacity: 0.58;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
 }
 
 .channel-drag-handle:active {
@@ -1497,7 +1512,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   min-height: 42px;
   padding: 0;
   border: 0;
-  border-radius: 16px;
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.04);
   color: #9ea7bb;
   display: flex;
@@ -9076,13 +9091,14 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .profile__identity::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -4px -6px -4px 0;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 20px rgba(0, 0, 0, 0.12);
+  background:
+    linear-gradient(90deg, rgba(119, 128, 255, 0.16), rgba(255, 255, 255, 0.09) 54%, rgba(255, 255, 255, 0.035));
+  box-shadow: none;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.1s ease-out;
 }
 
 .profile__identity .avatar-shell,
@@ -9092,7 +9108,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .profile__identity .avatar-shell {
-  margin-left: -2px;
+  margin-left: 8px;
 }
 
 .profile__identity:hover {
@@ -16138,15 +16154,15 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .sidebar__servers-list::-webkit-scrollbar {
-  width: 1px;
+  width: 2px !important;
 }
 
 .sidebar__servers-list.is-scroll-active {
-  scrollbar-color: rgba(180, 190, 214, 0.36) transparent !important;
+  scrollbar-color: rgba(180, 190, 214, 0.28) transparent !important;
 }
 
 .sidebar__servers-list.is-scroll-active::-webkit-scrollbar-thumb {
-  background: rgba(180, 190, 214, 0.36) !important;
+  background: rgba(180, 190, 214, 0.28) !important;
 }
 
 :where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) :where(

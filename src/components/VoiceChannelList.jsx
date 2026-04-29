@@ -150,7 +150,7 @@ const VoiceChannelList = ({
           renderDropPlaceholder(channel.id, "before"),
           <li
             key={channel.id}
-            className={`list__items ${canManageChannels && !isEditing ? "list__items--with-drag-handle" : ""} ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
+            className={`list__items ${participants.length > 0 ? "list__items--has-participants" : ""} ${canManageChannels && !isEditing ? "list__items--with-drag-handle" : ""} ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
             onDragOver={(event) => onChannelDragOver?.(event, "voice", channel, categoryId)}
             onDrop={(event) => onChannelDrop?.(event, "voice", channel, categoryId)}
             onDragEnd={onChannelDragEnd}

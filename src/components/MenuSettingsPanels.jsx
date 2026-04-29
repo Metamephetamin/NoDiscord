@@ -426,6 +426,7 @@ export const PersonalProfileSettings = ({
   displayName,
   onChangeAvatar,
   onChangeBackground,
+  onResetCustomization,
 }) => {
   return (
     <div className="settings-shell__content">
@@ -468,6 +469,9 @@ export const PersonalProfileSettings = ({
             </button>
             <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
               Сменить аватар
+            </button>
+            <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onResetCustomization}>
+              Убрать всё
             </button>
           </div>
         </div>

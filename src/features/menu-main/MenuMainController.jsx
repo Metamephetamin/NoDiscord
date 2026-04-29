@@ -44,6 +44,7 @@ import {
   writeTextChatChannelClearedAt,
 } from "../../utils/textChatMessageCache";
 import {
+  createDefaultProfileCustomization,
   normalizeProfileCustomization,
   readProfileCustomization,
   writeProfileCustomization,
@@ -819,6 +820,9 @@ export default function MenuMain({
     setProfileCustomization(normalizedCustomization);
     writeProfileCustomization(user, normalizedCustomization);
   }, [user]);
+  const handleResetProfileCustomization = useCallback(() => {
+    handleProfileCustomizationChange(createDefaultProfileCustomization());
+  }, [handleProfileCustomizationChange]);
   const conversationTargets = useMemo(
     () => conversations.filter(Boolean),
     [conversations]
@@ -5037,6 +5041,7 @@ export default function MenuMain({
     avatarInputRef,
     profileBackgroundInputRef,
     serverIconInputRef,
+    handleResetProfileCustomization,
     handleProfileSave,
     updateProfileDraft,
     updateEmailChangeDraft,

@@ -794,7 +794,12 @@ export const FriendsMain = ({
       return { kind: "online", label: "В сети", detail: "" };
     }
 
-    return { kind: "offline", label: "Не в сети", detail: formatUserPresenceStatus(friend) };
+    const offlineDetail = formatUserPresenceStatus(friend);
+    return {
+      kind: "offline",
+      label: "Не в сети",
+      detail: offlineDetail.toLowerCase() === "не в сети" ? "" : offlineDetail,
+    };
   };
   const fallbackConversationRole = useMemo(() => {
     if (!currentConversationTarget) {

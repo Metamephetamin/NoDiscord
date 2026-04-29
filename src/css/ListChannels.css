@@ -39,6 +39,43 @@
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+.list__items--has-participants {
+  --voice-connector-color: rgba(65, 80, 124, 0.94);
+  --voice-connector-flow: rgba(126, 147, 214, 0.74);
+  overflow: hidden;
+}
+
+.list__items--has-participants::before,
+.list__items--has-participants::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 22px;
+  bottom: 31px;
+  width: 24px;
+  box-sizing: border-box;
+  border-top: 3px solid var(--voice-connector-color);
+  border-bottom: 3px solid var(--voice-connector-color);
+  border-left: 3px solid var(--voice-connector-color);
+  border-right: 0;
+  border-radius: 7px 0 0 7px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.list__items--has-participants::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(154, 171, 230, 0.1),
+    0 0 10px rgba(40, 56, 104, 0.2);
+}
+
+.list__items--has-participants::after {
+  border-color: var(--voice-connector-flow);
+  filter: drop-shadow(0 0 8px rgba(86, 108, 171, 0.26));
+  opacity: 0;
+  animation: participantConnectorGlow 2.2s ease-in-out infinite;
+}
+
 .voice-channel__row {
   position: relative;
   width: 100%;
@@ -46,6 +83,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  z-index: 1;
 }
 
 .voice-channel__row--interactive {
@@ -193,6 +231,10 @@
   padding-right: 34px;
 }
 
+.list__items--has-participants .voice-channel__button {
+  padding-left: 42px;
+}
+
 .list__items:hover .voice-channel__row > .channel-edit-button,
 .list__items:focus-within .voice-channel__row > .channel-edit-button,
 .list__items--editing .voice-channel__row > .channel-edit-button {
@@ -247,40 +289,14 @@
 
 .participant-list {
   position: relative;
-  margin-top: 4px;
-  padding: 0 0 18px 28px;
+  margin-top: 0;
+  padding: 0 0 18px 43px;
+  z-index: 1;
 }
 
 .participant-list::before,
 .participant-list::after {
-  content: "";
-  position: absolute;
-  left: 13px;
-  top: -8px;
-  bottom: 29px;
-  width: 2px;
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-.participant-list::before {
-  background: linear-gradient(180deg, rgba(23, 28, 42, 0.96), rgba(33, 39, 58, 0.84));
-  box-shadow: inset 0 0 0 1px rgba(117, 130, 174, 0.08), 0 0 10px rgba(8, 11, 18, 0.32);
-}
-
-.participant-list::after {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 0,
-      rgba(69, 88, 142, 0) 20%,
-      rgba(83, 104, 164, 0.74) 48%,
-      rgba(54, 68, 108, 0) 78%,
-      transparent 100%
-    );
-  background-size: 100% 34px;
-  animation: participantSignalStreamY 1.45s linear infinite;
-  opacity: 0.9;
+  content: none;
 }
 
 .participant-item {
@@ -296,48 +312,7 @@
 
 .participant-item::before,
 .participant-item::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.participant-item::before {
-  left: -17px;
-  top: calc(50% - 1px);
-  width: 17px;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, rgba(23, 28, 42, 0.98), rgba(33, 39, 58, 0.88));
-  box-shadow: inset 0 0 0 1px rgba(117, 130, 174, 0.08);
-}
-
-.participant-item::after {
-  left: -17px;
-  top: calc(50% - 1px);
-  width: 17px;
-  height: 2px;
-  border-radius: 2px;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0,
-      rgba(78, 98, 156, 0) 18%,
-      rgba(96, 119, 184, 0.88) 48%,
-      rgba(55, 71, 115, 0) 80%,
-      transparent 100%
-    );
-  background-size: 28px 100%;
-  box-shadow: 0 0 8px rgba(74, 94, 152, 0.24);
-  animation: participantSignalStreamX 1.15s linear infinite;
-  opacity: 0.9;
-}
-
-.participant-item:nth-child(2n)::after {
-  animation-delay: -0.6s;
-}
-
-.participant-item:nth-child(3n)::after {
-  animation-delay: -1.15s;
+  content: none;
 }
 
 .participant-item__avatar-shell {
@@ -468,30 +443,24 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
-@keyframes participantSignalStreamX {
+@keyframes participantConnectorGlow {
   0% {
-    background-position: -28px 0;
+    opacity: 0;
+  }
+
+  38%,
+  62% {
+    opacity: 0.74;
   }
 
   100% {
-    background-position: 28px 0;
-  }
-}
-
-@keyframes participantSignalStreamY {
-  0% {
-    background-position: 0 -34px;
-  }
-
-  100% {
-    background-position: 0 34px;
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .participant-list::after,
-  .participant-item::after {
+  .list__items--has-participants::after {
     animation: none;
-    opacity: 0.48;
+    opacity: 0.36;
   }
 }

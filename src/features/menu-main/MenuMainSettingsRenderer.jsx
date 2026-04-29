@@ -41,6 +41,7 @@ export function MenuMainSettingsContent({
   avatarInputRef,
   profileBackgroundInputRef,
   serverIconInputRef,
+  handleResetProfileCustomization,
   handleProfileSave,
   updateProfileDraft,
   updateEmailChangeDraft,
@@ -186,6 +187,7 @@ export function MenuMainSettingsContent({
           onSubmit={handleProfileSave}
           onChangeAvatar={() => avatarInputRef.current?.click()}
           onChangeBackground={() => profileBackgroundInputRef.current?.click()}
+          onResetCustomization={handleResetProfileCustomization}
           onUpdateDraft={updateProfileDraft}
           onTotpCodeChange={updateTotpCode}
           onStartTotpSetup={startTotpSetup}
