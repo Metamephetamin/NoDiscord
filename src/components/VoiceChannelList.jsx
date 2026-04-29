@@ -9,11 +9,11 @@ const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
 const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
 const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
 const PARTICIPANT_CONNECTOR_WIDTH = 44;
-const PARTICIPANT_CONNECTOR_TOP_Y = 0;
-const PARTICIPANT_CONNECTOR_FIRST_Y = 40;
+const PARTICIPANT_CONNECTOR_TOP_Y = 0.5;
+const PARTICIPANT_CONNECTOR_FIRST_Y = 38.5;
 const PARTICIPANT_CONNECTOR_STEP_Y = 34;
-const PARTICIPANT_CONNECTOR_STEM_X = 4;
-const PARTICIPANT_CONNECTOR_END_X = 38;
+const PARTICIPANT_CONNECTOR_STEM_X = 4.5;
+const PARTICIPANT_CONNECTOR_END_X = 38.5;
 const PARTICIPANT_CONNECTOR_RADIUS = 6;
 
 const getVoiceDisplayName = (name) => {
@@ -30,7 +30,7 @@ const formatVoiceLimitCount = (value) => String(Math.min(99, Math.max(0, Number(
 const buildParticipantConnectorPath = (participantCount) => {
   const count = Math.max(0, Number(participantCount) || 0);
   if (!count) {
-    return { height: 0, path: "" };
+    return { height: 0, path: "", flowPaths: [] };
   }
 
   const lastY = PARTICIPANT_CONNECTOR_FIRST_Y + PARTICIPANT_CONNECTOR_STEP_Y * (count - 1);
@@ -54,7 +54,21 @@ const buildParticipantConnectorPath = (participantCount) => {
     `H ${PARTICIPANT_CONNECTOR_END_X}`
   );
 
-  return { height, path: pathParts.join(" ") };
+  const flowPaths = Array.from({ length: count }, (_, index) => {
+    const y = PARTICIPANT_CONNECTOR_FIRST_Y + PARTICIPANT_CONNECTOR_STEP_Y * index;
+    const turnY = Math.max(PARTICIPANT_CONNECTOR_TOP_Y, y - PARTICIPANT_CONNECTOR_RADIUS);
+
+    return [
+      `M ${PARTICIPANT_CONNECTOR_END_X} ${PARTICIPANT_CONNECTOR_TOP_Y}`,
+      `H ${topCornerX}`,
+      `Q ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_TOP_Y} ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_RADIUS}`,
+      `V ${turnY}`,
+      `Q ${PARTICIPANT_CONNECTOR_STEM_X} ${y} ${topCornerX} ${y}`,
+      `H ${PARTICIPANT_CONNECTOR_END_X}`,
+    ].join(" ");
+  });
+
+  return { height, path: pathParts.join(" "), flowPaths };
 };
 
 const VoiceChannelList = ({
@@ -285,7 +299,14 @@ const VoiceChannelList = ({
                   focusable="false"
                 >
                   <path className="participant-list__connector-path" d={participantConnector.path} />
-                  <path className="participant-list__connector-path participant-list__connector-path--flow" d={participantConnector.path} />
+                  {participantConnector.flowPaths.map((flowPath, index) => (
+                    <path
+                      key={`participant-connector-flow-${index}`}
+                      className="participant-list__connector-path participant-list__connector-path--flow"
+                      d={flowPath}
+                      style={{ "--participant-flow-delay": `${index * 0.18}s` }}
+                    />
+                  ))}
                 </svg>
                 {participants.map((participant) => (
                   <div

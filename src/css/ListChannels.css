@@ -276,7 +276,7 @@
 .participant-list__connector {
   position: absolute;
   left: 5px;
-  top: -20px;
+  top: -18.5px;
   width: 44px;
   overflow: visible;
   color: var(--voice-connector-color);
@@ -296,9 +296,15 @@
 
 .participant-list__connector-path--flow {
   color: var(--voice-connector-flow);
-  opacity: 0;
+  opacity: 0.72;
+  stroke-width: 3.25;
+  stroke-dasharray: 9 22;
+  stroke-dashoffset: 31;
   filter: drop-shadow(0 0 6px rgba(86, 108, 171, 0.22));
-  animation: participantConnectorGlow 2.2s ease-in-out infinite;
+  animation:
+    participantConnectorFlow 1.35s linear infinite,
+    participantConnectorGlow 2.2s ease-in-out infinite;
+  animation-delay: var(--participant-flow-delay, 0s), var(--participant-flow-delay, 0s);
 }
 
 .participant-item {
@@ -447,24 +453,35 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
+@keyframes participantConnectorFlow {
+  from {
+    stroke-dashoffset: 31;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 @keyframes participantConnectorGlow {
   0% {
-    opacity: 0;
+    opacity: 0.18;
   }
 
   38%,
   62% {
-    opacity: 0.74;
+    opacity: 0.78;
   }
 
   100% {
-    opacity: 0;
+    opacity: 0.18;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .list__items--has-participants::after,
-  .participant-item::after {
+  .participant-item::after,
+  .participant-list__connector-path--flow {
     animation: none;
     opacity: 0.36;
   }
