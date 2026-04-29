@@ -24,11 +24,78 @@ const DeviceToggleButton = ({ active, title, onClick }) => (
   </button>
 );
 
+const STREAM_PROFILE_LABELS = {
+  excellent: "отлично",
+  good: "хорошо",
+  constrained: "сжато",
+  poor: "слабо",
+};
+
+const STREAM_LIMIT_LABELS = {
+  cpu: "Лимит CPU",
+  bandwidth: "Лимит сети",
+  other: "Лимит захвата",
+};
+
+const formatStreamBitrate = (value) => {
+  const bitrate = Number(value || 0);
+  if (!Number.isFinite(bitrate) || bitrate <= 0) {
+    return "";
+  }
+
+  return bitrate >= 1_000_000
+    ? `${(bitrate / 1_000_000).toFixed(1)} Мбит/с`
+    : `${Math.round(bitrate / 1000)} Кбит/с`;
+};
+
+const getStreamDiagnosticsItems = (diagnostics) => {
+  if (!diagnostics) {
+    return [];
+  }
+
+  const items = [];
+  if (Number.isFinite(Number(diagnostics.rttMs)) && Number(diagnostics.rttMs) > 0) {
+    items.push(`RTT ${Math.round(Number(diagnostics.rttMs))} мс`);
+  }
+
+  const outgoingBitrate = formatStreamBitrate(diagnostics.outgoingBitrateBps);
+  if (outgoingBitrate) {
+    items.push(`Аплинк ${outgoingBitrate}`);
+  }
+
+  if (Number.isFinite(Number(diagnostics.actualFps)) && Number(diagnostics.actualFps) > 0) {
+    items.push(`Факт ${Math.round(Number(diagnostics.actualFps))} FPS`);
+  }
+
+  if (diagnostics.qualityLimitationReason) {
+    items.push(STREAM_LIMIT_LABELS[diagnostics.qualityLimitationReason] || `Лимит ${diagnostics.qualityLimitationReason}`);
+  }
+
+  if (Number.isFinite(Number(diagnostics.videoRetransmitPercent)) && Number(diagnostics.videoRetransmitPercent) >= 1) {
+    items.push(`Повторы ${Number(diagnostics.videoRetransmitPercent).toFixed(1)}%`);
+  }
+
+  if (diagnostics.routeType && diagnostics.routeType !== "unknown") {
+    items.push(diagnostics.routeType === "relay" ? "Через TURN" : "Прямой маршрут");
+  }
+
+  if (diagnostics.profile) {
+    items.push(`Профиль ${STREAM_PROFILE_LABELS[diagnostics.profile] || diagnostics.profile}`);
+  }
+
+  if (Number.isFinite(Number(diagnostics.audioBitrateKbps)) && Number(diagnostics.audioBitrateKbps) > 0) {
+    items.push(`Голос ${Math.round(Number(diagnostics.audioBitrateKbps))} Кбит/с`);
+  }
+
+  return items;
+};
+
 const StreamStatusBanner = ({
   isScreenShareActive,
   isCameraShareActive,
   resolution,
   fps,
+  diagnostics = null,
   resolutionOptions = [],
   fpsOptions = [],
   onOpenPreview = () => {},
@@ -44,6 +111,11 @@ const StreamStatusBanner = ({
       : "Стрим запущен";
   const normalizedFps = Number(fps) || 30;
   const settingsOpen = isActive && showSettings;
+  const diagnosticsItems = getStreamDiagnosticsItems(diagnostics);
+  const latencyLabel =
+    Number.isFinite(Number(diagnostics?.rttMs)) && Number(diagnostics.rttMs) > 0
+      ? ` · ${Math.round(Number(diagnostics.rttMs))} мс`
+      : "";
 
   if (!isActive) {
     return null;
@@ -55,7 +127,7 @@ const StreamStatusBanner = ({
         <span className="profile__stream-live-dot" aria-hidden="true" />
         <div className="profile__stream-copy">
           <span className="profile__stream-title">{streamTitle}</span>
-          <span className="profile__stream-meta">{resolution} · {normalizedFps} FPS</span>
+          <span className="profile__stream-meta">{resolution} · {normalizedFps} FPS{latencyLabel}</span>
         </div>
       </div>
       <button
@@ -71,25 +143,48 @@ const StreamStatusBanner = ({
 
       {settingsOpen ? (
         <div className="profile__stream-settings" role="group" aria-label="Настройки качества стрима">
-          <label className="profile__stream-field">
+          <div className="profile__stream-field">
             <span>Качество</span>
-            <select value={resolution} onChange={(event) => onResolutionChange(event.target.value)}>
+            <div className="profile__stream-choice-row profile__stream-choice-row--quality">
               {resolutionOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`profile__stream-choice ${resolution === option.value ? "is-active" : ""}`}
+                  onClick={() => onResolutionChange(option.value)}
+                  aria-pressed={resolution === option.value}
+                >
+                  {option.label}
+                </button>
               ))}
-            </select>
-          </label>
-          <label className="profile__stream-field">
+            </div>
+          </div>
+          <div className="profile__stream-field">
             <span>FPS</span>
-            <select value={normalizedFps} onChange={(event) => onFpsChange(Number(event.target.value))}>
+            <div className="profile__stream-choice-row profile__stream-choice-row--fps">
               {fpsOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`profile__stream-choice ${normalizedFps === option.value ? "is-active" : ""}`}
+                  onClick={() => onFpsChange(option.value)}
+                  aria-pressed={normalizedFps === option.value}
+                >
+                  {option.value}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
           <button type="button" className="profile__stream-preview" onClick={onOpenPreview}>
             Предпросмотр
           </button>
+          {diagnosticsItems.length > 0 ? (
+            <div className="profile__stream-diagnostics" aria-label="Диагностика стрима">
+              {diagnosticsItems.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -213,6 +308,7 @@ export default function MenuProfilePanel({
   isCameraShareActive,
   streamResolution,
   streamFps,
+  streamDiagnostics,
   streamResolutionOptions,
   streamFpsOptions,
   isMicMuted,
@@ -288,6 +384,7 @@ export default function MenuProfilePanel({
             isCameraShareActive={isCameraShareActive}
             resolution={streamResolution}
             fps={streamFps}
+            diagnostics={streamDiagnostics}
             resolutionOptions={streamResolutionOptions}
             fpsOptions={streamFpsOptions}
             onOpenPreview={onOpenLocalSharePreview}

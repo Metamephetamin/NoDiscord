@@ -35,6 +35,7 @@ public class SpeechPunctuationServiceTests
     [InlineData("я блин не ожидал что так выйдет", "Я, блин, не ожидал, что так выйдет.")]
     [InlineData("я блядь не ожидал что так выйдет", "Я, блядь, не ожидал, что так выйдет.")]
     [InlineData("я не знаю похоже что нет", "Я не знаю, похоже, что нет.")]
+    [InlineData("а что у нас с запятыми по итогу исправили мы их или нет", "А что у нас с запятыми, по итогу, исправили мы их или нет?")]
     public void ApplyHeuristicPunctuation_AddsExpectedPunctuation(string input, string expected)
     {
         var result = SpeechPunctuationService.ApplyHeuristicPunctuation(input);

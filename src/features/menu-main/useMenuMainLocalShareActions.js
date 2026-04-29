@@ -167,11 +167,12 @@ export default function useMenuMainLocalShareActions({
     setIsLocalSharePreviewVisible(false);
   }, [setIsLocalSharePreviewVisible]);
 
-  const startCameraShare = useCallback(async () => {
+  const startCameraShare = useCallback(async (options = {}) => {
     if (!voiceClientRef.current || localShareActionInFlightRef.current) {
       return;
     }
 
+    const restorePreviewOnError = !options?.nativeEvent && options?.restorePreviewOnError === false ? false : true;
     localShareActionInFlightRef.current = true;
     setCameraError("");
     stopCameraPreview();
@@ -196,8 +197,12 @@ export default function useMenuMainLocalShareActions({
       setSelectedStreamUserId(null);
       setIsLocalSharePreviewVisible(true);
     } catch (error) {
-      setCameraError(error?.message || "Не удалось запустить трансляцию камеры.");
-      startCameraPreview(selectedVideoDeviceId).catch(() => {});
+      const message = error?.message || "Не удалось запустить трансляцию камеры.";
+      setCameraError(message);
+      showServerInviteFeedback(message);
+      if (restorePreviewOnError) {
+        startCameraPreview(selectedVideoDeviceId).catch(() => {});
+      }
     } finally {
       localShareActionInFlightRef.current = false;
     }
@@ -211,6 +216,7 @@ export default function useMenuMainLocalShareActions({
     setIsLocalSharePreviewVisible,
     setSelectedStreamUserId,
     setShowCameraModal,
+    showServerInviteFeedback,
     startCameraPreview,
     stopCameraPreview,
     voiceClientRef,

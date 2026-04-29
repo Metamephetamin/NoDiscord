@@ -10,11 +10,10 @@ export const COMPOSER_TRANSLATION_LANGUAGES = [
   { value: "it", label: "Italiano" },
   { value: "pt", label: "Português" },
   { value: "tr", label: "Türkçe" },
-  { value: "uk", label: "Українська" },
-  { value: "ja", label: "日本語" },
-  { value: "ko", label: "한국어" },
-  { value: "zh-CN", label: "中文" },
-  { value: "ar", label: "العربية" },
+  { value: "ja", label: "日本語 (яп.)" },
+  { value: "ko", label: "한국어 (кор.)" },
+  { value: "zh-CN", label: "中文 (кит.)" },
+  { value: "ar", label: "العربية (араб.)" },
 ];
 
 export async function translateComposerText(text, targetLanguage) {

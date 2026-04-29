@@ -404,7 +404,7 @@ export const ScreenShareModal = ({
         ) : null}
         {!currentVoiceChannel ? <div className="stream-modal__hint">Сначала подключитесь к голосовому каналу.</div> : null}
         {!isScreenShareSupported ? <div className="stream-modal__hint">На этом устройстве браузер не поддерживает захват экрана.</div> : null}
-        {isCameraShareActive ? <div className="stream-modal__hint">Сейчас у вас уже идет трансляция камеры. Запуск экрана заменит ее.</div> : null}
+        {isCameraShareActive ? <div className="stream-modal__hint">Камера уже в эфире. Экран можно запустить параллельно.</div> : null}
         {error ? <div className="stream-modal__error">{error}</div> : null}
       </div>
     </div>

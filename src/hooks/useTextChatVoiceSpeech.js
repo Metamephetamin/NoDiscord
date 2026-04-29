@@ -6,8 +6,8 @@ import {
   getSupportedVoiceRecordingMimeType,
   getVoiceRecordingExtension,
   MAX_VOICE_MESSAGE_DURATION_MS,
-  restoreRussianSpeechPunctuation,
 } from "../utils/voiceMessages";
+import { autocorrectUserText } from "../utils/textAutocorrect";
 import {
   getChatErrorMessage,
   getSpeechRecognitionConstructor,
@@ -57,6 +57,7 @@ export default function useTextChatVoiceSpeech({
   const voiceStreamRef = useRef(null);
   const voiceRecordingChunksRef = useRef([]);
   const voiceRecordingStartAtRef = useRef(0);
+  const voiceRecordingStartRequestRef = useRef({ id: 0, cancel: false, sendOnReady: false });
   const voicePointerStateRef = useRef({ pointerId: null, startX: 0, startY: 0, locked: false, canceled: false });
   const speechPointerStateRef = useRef({ pointerId: null, startX: 0, startY: 0, locked: false, canceled: false });
   const voiceAudioContextRef = useRef(null);
@@ -210,7 +211,7 @@ export default function useTextChatVoiceSpeech({
   };
 
   const formatSpeechTranscriptDraft = (transcriptText, finalize = false) =>
-    restoreRussianSpeechPunctuation(transcriptText, { finalize });
+    autocorrectUserText(String(transcriptText || "").trim(), { capitalize: finalize });
 
   const composeSpeechDraftMessage = (baseText, transcriptText) => {
     const normalizedBase = String(baseText || "").trim();
@@ -485,6 +486,22 @@ export default function useTextChatVoiceSpeech({
     new Promise((resolve, reject) => {
       const recorder = voiceRecorderRef.current;
       if (!recorder) {
+        const pendingStartRequest = voiceRecordingStartRequestRef.current;
+        if (pendingStartRequest.id) {
+          voiceRecordingStartRequestRef.current = {
+            ...pendingStartRequest,
+            cancel: !shouldSend,
+            sendOnReady: Boolean(shouldSend),
+          };
+          if (!shouldSend) {
+            cleanupVoiceRecordingResources();
+            setVoiceRecordingState("idle");
+            setVoiceRecordingDurationMs(0);
+          }
+          resolve();
+          return;
+        }
+
         cleanupVoiceRecordingResources();
         setVoiceRecordingState("idle");
         setVoiceRecordingDurationMs(0);
@@ -577,6 +594,18 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
+    const startRequestId = voiceRecordingStartRequestRef.current.id + 1;
+    voiceRecordingStartRequestRef.current = { id: startRequestId, cancel: false, sendOnReady: false };
+    voicePointerStateRef.current = {
+      pointerId: pointerEvent?.pointerId ?? null,
+      startX: pointerEvent?.clientX ?? 0,
+      startY: pointerEvent?.clientY ?? 0,
+      locked: false,
+      canceled: false,
+    };
+    setVoiceRecordingState("holding");
+    setVoiceRecordingDurationMs(0);
+
     try {
       setErrorMessage("");
       const inputStream = await navigator.mediaDevices.getUserMedia({
@@ -589,18 +618,33 @@ export default function useTextChatVoiceSpeech({
         },
       });
 
+      const currentStartRequest = voiceRecordingStartRequestRef.current;
+      if (currentStartRequest.id !== startRequestId || currentStartRequest.cancel) {
+        if (currentStartRequest.id === startRequestId) {
+          voiceRecordingStartRequestRef.current = { id: 0, cancel: false, sendOnReady: false };
+        }
+        inputStream.getTracks().forEach((track) => track.stop());
+        cleanupVoiceRecordingResources();
+        setVoiceRecordingState("idle");
+        setVoiceRecordingDurationMs(0);
+        return;
+      }
+
       voiceInputStreamRef.current = inputStream;
       voiceRecordingChunksRef.current = [];
       voiceLevelSamplesRef.current = [];
-      voicePointerStateRef.current = {
-        pointerId: pointerEvent?.pointerId ?? null,
-        startX: pointerEvent?.clientX ?? 0,
-        startY: pointerEvent?.clientY ?? 0,
-        locked: false,
-        canceled: false,
-      };
 
       const processedStream = await startMicrophoneAnalysis(inputStream);
+      const readyStartRequest = voiceRecordingStartRequestRef.current;
+      if (readyStartRequest.id !== startRequestId || readyStartRequest.cancel) {
+        if (readyStartRequest.id === startRequestId) {
+          voiceRecordingStartRequestRef.current = { id: 0, cancel: false, sendOnReady: false };
+        }
+        cleanupVoiceRecordingResources();
+        setVoiceRecordingState("idle");
+        setVoiceRecordingDurationMs(0);
+        return;
+      }
       voiceStreamRef.current = processedStream;
 
       const recorder = new MediaRecorder(processedStream, {
@@ -615,10 +659,15 @@ export default function useTextChatVoiceSpeech({
 
       voiceRecorderRef.current = recorder;
       voiceRecordingStartAtRef.current = Date.now();
-      setVoiceRecordingState("holding");
-      setVoiceRecordingDurationMs(0);
       recorder.start(220);
+      const sendOnReady = voiceRecordingStartRequestRef.current.id === startRequestId
+        && voiceRecordingStartRequestRef.current.sendOnReady;
+      voiceRecordingStartRequestRef.current = { id: 0, cancel: false, sendOnReady: false };
+      if (sendOnReady) {
+        void finalizeVoiceRecording(true);
+      }
     } catch (error) {
+      voiceRecordingStartRequestRef.current = { id: 0, cancel: false, sendOnReady: false };
       cleanupVoiceRecordingResources();
       setVoiceRecordingState("idle");
       setVoiceRecordingDurationMs(0);
@@ -653,21 +702,6 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    if (event.pointerType === "mouse") {
-      if (voiceRecordingState === "locked") {
-        void finalizeVoiceRecording(true);
-        return;
-      }
-
-      if (speechRecognitionActive) {
-        stopSpeechRecognition(true);
-        return;
-      }
-
-      startSpeechRecognition();
-      return;
-    }
-
     if (voiceRecordingState === "holding" || voiceRecordingState === "sending") {
       return;
     }
@@ -691,7 +725,8 @@ export default function useTextChatVoiceSpeech({
 
   const switchHeldVoiceRecordingToSpeechRecognition = async (event) => {
     const pointerState = voicePointerStateRef.current;
-    if (voiceRecordingState !== "holding" || pointerState.pointerId !== event.pointerId || pointerState.locked) {
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
+    if ((voiceRecordingState !== "holding" && !hasPendingVoiceStart) || pointerState.pointerId !== event.pointerId || pointerState.locked) {
       return;
     }
 
@@ -715,7 +750,8 @@ export default function useTextChatVoiceSpeech({
   };
 
   const handleSpeechRecognitionPointerMove = (event) => {
-    if (voiceRecordingState === "holding") {
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
+    if (voiceRecordingState === "holding" || voiceRecordingState === "canceling" || hasPendingVoiceStart) {
       const pointerState = voicePointerStateRef.current;
       if (pointerState.pointerId !== event.pointerId) {
         return;
@@ -726,6 +762,11 @@ export default function useTextChatVoiceSpeech({
         voicePointerStateRef.current = { ...pointerState, canceled: true };
         setVoiceRecordingState("canceling");
         return;
+      }
+
+      if (voiceRecordingState === "canceling" && cancelDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.5) {
+        voicePointerStateRef.current = { ...pointerState, canceled: false };
+        setVoiceRecordingState("holding");
       }
 
       if (pointerState.canceled) {
@@ -739,7 +780,7 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
-    if (speechCaptureState !== "holding") {
+    if (speechCaptureState !== "holding" && speechCaptureState !== "canceling") {
       return;
     }
 
@@ -755,6 +796,11 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
+    if (speechCaptureState === "canceling" && cancelDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.5) {
+      speechPointerStateRef.current = { ...pointerState, canceled: false };
+      setSpeechCaptureState("holding");
+    }
+
     if (pointerState.canceled) {
       return;
     }
@@ -768,12 +814,13 @@ export default function useTextChatVoiceSpeech({
 
   const handleSpeechRecognitionPointerUp = async (event) => {
     const voicePointerState = voicePointerStateRef.current;
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
     if (voiceRecordingState === "canceling" && voicePointerState.pointerId === event.pointerId) {
       await finalizeVoiceRecording(false);
       return;
     }
 
-    if (voiceRecordingState === "holding" && voicePointerState.pointerId === event.pointerId && !voicePointerState.locked) {
+    if ((voiceRecordingState === "holding" || hasPendingVoiceStart) && voicePointerState.pointerId === event.pointerId && !voicePointerState.locked) {
       await finalizeVoiceRecording(true);
       return;
     }
@@ -791,7 +838,8 @@ export default function useTextChatVoiceSpeech({
 
   const handleSpeechRecognitionPointerCancel = async (event) => {
     const voicePointerState = voicePointerStateRef.current;
-    if ((voiceRecordingState === "holding" || voiceRecordingState === "canceling") && voicePointerState.pointerId === event.pointerId && !voicePointerState.locked) {
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
+    if ((voiceRecordingState === "holding" || voiceRecordingState === "canceling" || hasPendingVoiceStart) && voicePointerState.pointerId === event.pointerId && !voicePointerState.locked) {
       await finalizeVoiceRecording(false);
       return;
     }
@@ -1033,7 +1081,8 @@ export default function useTextChatVoiceSpeech({
   };
 
   const handleVoiceRecordPointerMove = (event) => {
-    if (voiceRecordingState !== "holding" && voiceRecordingState !== "canceling") {
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
+    if (voiceRecordingState !== "holding" && voiceRecordingState !== "canceling" && !hasPendingVoiceStart) {
       return;
     }
 
@@ -1049,6 +1098,11 @@ export default function useTextChatVoiceSpeech({
       return;
     }
 
+    if (voiceRecordingState === "canceling" && cancelDistance < VOICE_CANCEL_DRAG_THRESHOLD_PX * 0.5) {
+      voicePointerStateRef.current = { ...pointerState, canceled: false };
+      setVoiceRecordingState("holding");
+    }
+
     if (pointerState.canceled) {
       return;
     }
@@ -1062,19 +1116,21 @@ export default function useTextChatVoiceSpeech({
 
   const handleVoiceRecordPointerUp = async (event) => {
     const pointerState = voicePointerStateRef.current;
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
     if (voiceRecordingState === "canceling" && pointerState.pointerId === event.pointerId) {
       await finalizeVoiceRecording(false);
       return;
     }
 
-    if (voiceRecordingState === "holding" && pointerState.pointerId === event.pointerId && !pointerState.locked) {
+    if ((voiceRecordingState === "holding" || hasPendingVoiceStart) && pointerState.pointerId === event.pointerId && !pointerState.locked) {
       await finalizeVoiceRecording(true);
     }
   };
 
   const handleVoiceRecordPointerCancel = async (event) => {
     const pointerState = voicePointerStateRef.current;
-    if ((voiceRecordingState === "holding" || voiceRecordingState === "canceling") && pointerState.pointerId === event.pointerId && !pointerState.locked) {
+    const hasPendingVoiceStart = Boolean(voiceRecordingStartRequestRef.current.id);
+    if ((voiceRecordingState === "holding" || voiceRecordingState === "canceling" || hasPendingVoiceStart) && pointerState.pointerId === event.pointerId && !pointerState.locked) {
       await finalizeVoiceRecording(false);
     }
   };

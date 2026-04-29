@@ -43,11 +43,14 @@ export const STREAM_RESOLUTION_OPTIONS = [
   { value: "720p", label: "720p" },
   { value: "1080p", label: "1080p" },
   { value: "1440p", label: "1440p" },
-  { value: "2160p", label: "2160p" },
+  { value: "2160p", label: "4K" },
 ];
 export const STREAM_FPS_OPTIONS = [
+  { value: 24, label: "24 FPS" },
   { value: 30, label: "30 FPS" },
   { value: 60, label: "60 FPS" },
+  { value: 90, label: "90 FPS" },
+  { value: 120, label: "120 FPS" },
 ];
 export const NOTIFICATION_SOUND_OPTIONS = [
   { id: "classic", label: "iPhone Classic", path: resolveStaticAssetUrl("/sounds/iphone-receive-w.mp3") },

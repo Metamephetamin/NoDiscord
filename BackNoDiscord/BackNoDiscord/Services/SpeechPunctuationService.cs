@@ -27,7 +27,10 @@ internal sealed class PythonSpeechPunctuationResponse
 public sealed class SpeechPunctuationService : ISpeechPunctuationService
 {
     private static readonly Regex QuestionStartRegex = new(
-        "^(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
+        "^(?:а\\s+)?(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex LeadingQuestionParticleCommaRegex = new(
+        "^(а),\\s+(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex QuestionEndRegex = new("\\bли\\b|(?:,\\s*)?(правда|верно)\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex QuestionTailRegex = new("(кто|что|где|куда|откуда|когда|почему|зачем|как|чего)\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -36,7 +39,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "^(привет|здравствуйте|спасибо|пожалуйста|срочно|осторожно|внимание|ура|класс|супер|отлично)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex IntroductoryPhrasesRegex = new(
-        "(^|[.!?]\\s+)(ну|в общем|короче|слушай|смотри|кстати|например)\\s+",
+        "(^|[.!?]\\s+)(ну|в общем|в итоге|по итогу|короче|слушай|смотри|кстати|например)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex GerundSuffixRegex = new(
         "(в|вши|вшись|я|ясь|учи|ючи|аясь|яясь|ившись|ыв|ывши|ывшись)$",
@@ -48,10 +51,10 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "^[а-яё-]+(?:л|ла|ло|ли|ет|ют|ут|ит|ат|ят|ем|им|ешь|ишь|ете|ите|ался|алась|алось|ались|ется|ются|утся|ится|ятся|будет|будут|был|была|было|были|можно|нужно|стоит|получится|выйдет)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex InlineParentheticalPhraseRegex = new(
-        "\\s+(к счастью|к сожалению|честно говоря|если честно|по правде говоря|между прочим|как ни странно|как правило|судя по всему|по сути|безусловно|разумеется|наверное|возможно|кажется|пожалуй|кстати|например|вообще-то|по моему мнению)\\s+",
+        "\\s+(к счастью|к сожалению|честно говоря|если честно|по правде говоря|между прочим|как ни странно|как правило|судя по всему|в итоге|по итогу|по сути|безусловно|разумеется|наверное|возможно|кажется|пожалуй|кстати|например|вообще-то|по моему мнению)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex SentenceOpeningParentheticalRegex = new(
-        "(^|[.!?]\\s+)(ну|в общем|короче|слушай|смотри|кстати|например|честно говоря|если честно|по правде говоря|к счастью|к сожалению|как ни странно|как правило|безусловно|разумеется|наверное|возможно|кажется|пожалуй|вообще-то)\\s+",
+        "(^|[.!?]\\s+)(ну|в общем|в итоге|по итогу|короче|слушай|смотри|кстати|например|честно говоря|если честно|по правде говоря|к счастью|к сожалению|как ни странно|как правило|безусловно|разумеется|наверное|возможно|кажется|пожалуй|вообще-то)\\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex SentenceOpeningInterjectionRegex = new(
         "(^|[.!?…]\\s+)(блин|бля|блядь|блинчик|капец|жесть|господи|чёрт|черт|ё-моё|ё мое|ёмаё|елки-палки|ёлки-палки|мда|ух|эх)\\s+",
@@ -110,6 +113,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         "во-первых",
         "во-вторых",
         "по-моему",
+        "в итоге",
+        "по итогу",
         "по сути",
         "как правило",
         "безусловно",
@@ -271,6 +276,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService
         normalizedText = InsertLeadingSubordinateClauseComma(normalizedText);
         normalizedText = InsertCompoundClauseCommas(normalizedText);
         normalizedText = InsertInitialGerundComma(normalizedText);
+        normalizedText = LeadingQuestionParticleCommaRegex.Replace(normalizedText, "$1 $2");
+        normalizedText = Regex.Replace(normalizedText, ",\\s+или\\s+нет$", " или нет", RegexOptions.IgnoreCase);
         normalizedText = NormalizeSpacing(normalizedText);
         normalizedText = CapitalizeSentences(normalizedText);
 

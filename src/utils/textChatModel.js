@@ -1,5 +1,5 @@
 import { getPollPreview, parsePollMessage } from "./pollMessages";
-import { formatVoiceMessageDuration, normalizeVoiceMessageMetadata, restoreRussianSpeechPunctuation } from "./voiceMessages";
+import { formatVoiceMessageDuration, normalizeVoiceMessageMetadata } from "./voiceMessages";
 import { autocorrectUserText } from "./textAutocorrect";
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 export const MESSAGE_SEND_COOLDOWN_MS = 0;
@@ -20,7 +20,7 @@ export const VOICE_LOW_PASS_FREQUENCY_HZ = 9800;
 export const VOICE_OUTPUT_GAIN = 1.08;
 export const SPEECH_RECOGNITION_RESTART_DELAY_MS = 240;
 export const AUTO_PUNCTUATE_TYPED_MESSAGES = false;
-export const ENABLE_VOICE_MESSAGE_BUTTON = false; // voice messages are disabled; keep only speech-to-text input
+export const ENABLE_VOICE_MESSAGE_BUTTON = true;
 export const ENABLE_SPEECH_INPUT_BUTTON = true; // flip to false to hide the speech-to-text mic button again
 
 const createEmojiOption = ([key, glyph, label]) => ({
@@ -579,12 +579,7 @@ export function shouldAutoPunctuateTypedText(text) {
 }
 
 export function formatTypedMessageText(text) {
-  const normalizedText = autocorrectUserText(String(text || "").trim());
-  if (!shouldAutoPunctuateTypedText(normalizedText)) {
-    return normalizedText;
-  }
-
-  return autocorrectUserText(restoreRussianSpeechPunctuation(normalizedText, { finalize: true }));
+  return autocorrectUserText(String(text || "").trim());
 }
 
 export function getChatErrorMessage(error, fallbackMessage) {

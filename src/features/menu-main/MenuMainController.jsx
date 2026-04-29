@@ -318,6 +318,7 @@ export default function MenuMain({
   const [isSoundForced, setIsSoundForced] = useState(false);
   const [pingMs, setPingMs] = useState(null);
   const [voicePingMs, setVoicePingMs] = useState(null);
+  const [voiceRouteSnapshot, setVoiceRouteSnapshot] = useState(null);
   const [selectedStreamUserId, setSelectedStreamUserId] = useState(null);
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
   const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
@@ -935,6 +936,36 @@ export default function MenuMain({
   const resolvedVoicePingMs = normalizeMeasuredPingMs(voicePingMs);
   const resolvedApiPingMs = normalizeMeasuredPingMs(pingMs);
   const activeLatencyMs = resolvedVoicePingMs ?? resolvedApiPingMs;
+  const streamDiagnostics = useMemo(() => {
+    if (!currentVoiceChannel || !voiceRouteSnapshot) {
+      return null;
+    }
+
+    const routes = Array.isArray(voiceRouteSnapshot.transports) ? voiceRouteSnapshot.transports : [];
+    const publisherRoute = routes.find((route) => route.label === "publisher") || routes[0] || null;
+    const outboundVideo = publisherRoute?.outbound?.video || null;
+    const rttMs = normalizeMeasuredPingMs(voiceRouteSnapshot.rttMs ?? publisherRoute?.rttMs ?? voicePingMs);
+    const outgoingBitrateBps = Number(publisherRoute?.availableOutgoingBitrate || 0);
+    const audioBitrateKbps = Number(voiceRouteSnapshot.adaptiveAudioBitrateKbps || 0);
+    const actualFps = Number(outboundVideo?.framesPerSecond || 0);
+    const videoPacketsSent = Number(outboundVideo?.packetsSent || 0);
+    const videoRetransmittedPackets = Number(outboundVideo?.retransmittedPacketsSent || 0);
+    const videoRetransmitPercent =
+      videoPacketsSent > 0 && videoRetransmittedPackets > 0
+        ? Math.min(100, (videoRetransmittedPackets / videoPacketsSent) * 100)
+        : 0;
+
+    return {
+      rttMs,
+      outgoingBitrateBps: Number.isFinite(outgoingBitrateBps) && outgoingBitrateBps > 0 ? outgoingBitrateBps : 0,
+      routeType: voiceRouteSnapshot.routeType || publisherRoute?.routeType || "unknown",
+      profile: voiceRouteSnapshot.adaptiveMediaProfile || "",
+      audioBitrateKbps: Number.isFinite(audioBitrateKbps) && audioBitrateKbps > 0 ? audioBitrateKbps : 0,
+      actualFps: Number.isFinite(actualFps) && actualFps > 0 ? actualFps : 0,
+      qualityLimitationReason: outboundVideo?.qualityLimitationReason || "",
+      videoRetransmitPercent,
+    };
+  }, [currentVoiceChannel, voicePingMs, voiceRouteSnapshot]);
   useEffect(() => {
     setDirectCallState((previous) => {
       if (previous.phase === "idle") {
@@ -3219,6 +3250,9 @@ export default function MenuMain({
           previousValue === normalizedPingMs ? previousValue : normalizedPingMs
         ));
       },
+      onVoiceRouteChanged: (nextRouteSnapshot) => {
+        setVoiceRouteSnapshot(nextRouteSnapshot || null);
+      },
       onIncomingDirectCall: ({ channelName, fromUserId, fromName, fromAvatar }) => {
         if (!channelName || !fromUserId) {
           return;
@@ -4602,6 +4636,23 @@ export default function MenuMain({
     setCameraError("");
     stopCameraPreview();
   };
+  const handleCameraAction = () => {
+    if (isMobileViewport) {
+      openCameraModal();
+      return;
+    }
+
+    if (isCameraShareActive) {
+      void stopCameraShare();
+      return;
+    }
+
+    setCameraError("");
+    setShowModal(false);
+    setScreenShareError("");
+    setShowNoiseMenu(false);
+    void startCameraShare({ restorePreviewOnError: false });
+  };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
     pushNavigationHistory(() => {
@@ -5207,6 +5258,7 @@ export default function MenuMain({
   const stableStopCameraShare = useStableEvent(stopCameraShare);
   const stableHandleScreenShareAction = useStableEvent(handleScreenShareAction);
   const stableOpenCameraModal = useStableEvent(openCameraModal);
+  const stableHandleCameraAction = useStableEvent(handleCameraAction);
   const stableLeaveVoiceChannel = useStableEvent(leaveVoiceChannel);
   const stableJoinVoiceChannel = useStableEvent(joinVoiceChannel);
   const stableCreateForumPost = useStableEvent(createForumPost);
@@ -5240,7 +5292,7 @@ export default function MenuMain({
     onToggleMic: stableToggleMicMute,
     onToggleSound: stableToggleSoundMute,
     onScreenShareAction: stableHandleScreenShareAction,
-    onOpenCamera: stableOpenCameraModal,
+    onOpenCamera: stableHandleCameraAction,
     onWatchPeerStream: () => stableHandleWatchStream(directCallState.peerUserId),
     onSelectInputDevice: setSelectedInputDeviceId,
     onSelectOutputDevice: setSelectedOutputDeviceId,
@@ -5259,6 +5311,7 @@ export default function MenuMain({
     isCameraShareActive,
     streamResolution: resolution,
     streamFps: fps,
+    streamDiagnostics,
     streamResolutionOptions: STREAM_RESOLUTION_OPTIONS,
     streamFpsOptions,
     isMicMuted,
@@ -5287,7 +5340,7 @@ export default function MenuMain({
     activeMicMenuBars,
     openSettingsPanel,
     handleScreenShareAction: stableHandleScreenShareAction,
-    openCameraModal: stableOpenCameraModal,
+    openCameraModal: stableHandleCameraAction,
     stopCameraShare: stableStopCameraShare,
     openLocalSharePreview,
     handleStreamResolutionChange,
@@ -5345,6 +5398,7 @@ export default function MenuMain({
     showMicMenu,
     showSoundMenu,
     stableStopCameraShare,
+    streamDiagnostics,
     streamFpsOptions,
     user,
   ]);
@@ -5888,7 +5942,7 @@ export default function MenuMain({
       onToggleSound={stableToggleSoundMute}
       onOpenTextChat={openDesktopTextChatPane}
       onScreenShareAction={stableHandleScreenShareAction}
-      onOpenCamera={stableOpenCameraModal}
+      onOpenCamera={stableHandleCameraAction}
       onLeave={stableLeaveVoiceChannel}
       onJoinVoiceChannel={stableJoinVoiceChannel}
       onCreateForumPost={stableCreateForumPost}

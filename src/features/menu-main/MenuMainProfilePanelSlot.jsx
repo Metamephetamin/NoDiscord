@@ -16,6 +16,7 @@ export default function MenuMainProfilePanelSlot({
   isCameraShareActive,
   streamResolution,
   streamFps,
+  streamDiagnostics,
   streamResolutionOptions,
   streamFpsOptions,
   isMicMuted,
@@ -79,6 +80,7 @@ export default function MenuMainProfilePanelSlot({
       isCameraShareActive={isCameraShareActive}
       streamResolution={streamResolution}
       streamFps={streamFps}
+      streamDiagnostics={streamDiagnostics}
       streamResolutionOptions={streamResolutionOptions}
       streamFpsOptions={streamFpsOptions}
       isMicMuted={isMicMuted}

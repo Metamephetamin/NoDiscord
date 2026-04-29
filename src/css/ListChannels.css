@@ -52,7 +52,7 @@
   left: 20px;
   top: 22px;
   bottom: 31px;
-  width: 24px;
+  width: 31px;
   box-sizing: border-box;
   border-top: 3px solid var(--voice-connector-color);
   border-bottom: 3px solid var(--voice-connector-color);
@@ -314,9 +314,9 @@
 .participant-item::after {
   content: "";
   position: absolute;
-  left: -23px;
+  left: -31px;
   top: 50%;
-  width: 22px;
+  width: 31px;
   height: 3px;
   border-radius: 999px;
   transform: translateY(-50%);

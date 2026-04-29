@@ -50,7 +50,7 @@ const MAX_PREFERRED_AUDIO_SAMPLE_SIZE = 32;
 const DEFAULT_CHANNEL_AUDIO_BITRATE_KBPS = 64;
 const MIN_CHANNEL_AUDIO_BITRATE_KBPS = 8;
 const MAX_CHANNEL_AUDIO_BITRATE_KBPS = 96;
-const CHANNEL_VIDEO_QUALITY_VALUES = new Set(["auto", "720p", "1080p", "1440p"]);
+const CHANNEL_VIDEO_QUALITY_VALUES = new Set(["auto", "720p", "1080p", "1440p", "2160p"]);
 const ADAPTIVE_MEDIA_PROFILES = {
   excellent: {
     audioScale: 1,
@@ -60,7 +60,7 @@ const ADAPTIVE_MEDIA_PROFILES = {
     remoteBackgroundQuality: VideoQuality.LOW,
     remoteFocusedScale: 1,
     remoteBackgroundScale: 0.65,
-    remoteFocusedFps: 60,
+    remoteFocusedFps: 120,
     remoteBackgroundFps: 15,
   },
   good: {
@@ -71,7 +71,7 @@ const ADAPTIVE_MEDIA_PROFILES = {
     remoteBackgroundQuality: VideoQuality.LOW,
     remoteFocusedScale: 0.82,
     remoteBackgroundScale: 0.52,
-    remoteFocusedFps: 30,
+    remoteFocusedFps: 60,
     remoteBackgroundFps: 15,
   },
   constrained: {
@@ -108,16 +108,16 @@ const LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const REMOTE_BACKGROUND_SHARE_TARGET = { width: 960, height: 540, fps: 15 };
 const REMOTE_CAMERA_TARGET = { width: 640, height: 360, fps: 15 };
 const CAMERA_VIDEO_QUALITY_TARGETS = {
-  "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000 } },
-  "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000 } },
-  "1440p": { width: 2560, height: 1440, bitrate: { 30: 7_500_000, 60: 11_500_000 } },
-  "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000 } },
+  "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000, 90: 5_600_000, 120: 7_000_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000, 90: 9_500_000, 120: 12_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 7_500_000, 60: 11_500_000, 90: 15_500_000, 120: 19_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 14_000_000, 60: 21_000_000, 90: 30_000_000, 120: 38_000_000 } },
 };
 const SCREEN_SHARE_QUALITY_TARGETS = {
-  "720p": { width: 1280, height: 720, bitrate: { 30: 5_500_000, 60: 8_000_000 } },
-  "1080p": { width: 1920, height: 1080, bitrate: { 30: 10_000_000, 60: 14_000_000 } },
-  "1440p": { width: 2560, height: 1440, bitrate: { 30: 14_000_000 } },
-  "2160p": { width: 3840, height: 2160, bitrate: { 30: 22_000_000 } },
+  "720p": { width: 1280, height: 720, bitrate: { 30: 5_500_000, 60: 8_000_000, 90: 10_500_000, 120: 13_000_000 } },
+  "1080p": { width: 1920, height: 1080, bitrate: { 30: 10_000_000, 60: 14_000_000, 90: 19_000_000, 120: 24_000_000 } },
+  "1440p": { width: 2560, height: 1440, bitrate: { 30: 14_000_000, 60: 22_000_000, 90: 30_000_000, 120: 38_000_000 } },
+  "2160p": { width: 3840, height: 2160, bitrate: { 30: 22_000_000, 60: 36_000_000, 90: 48_000_000, 120: 60_000_000 } },
 };
 const MAX_DEVICE_VOLUME_PERCENT = 200;
 
@@ -127,10 +127,18 @@ function normalizePublishFps(value, fallback = 30) {
     return fallback;
   }
 
-  return Math.max(15, Math.min(Math.round(numericValue), 60));
+  return Math.max(15, Math.min(Math.round(numericValue), 120));
 }
 
 function resolveBitrate(targets, fps) {
+  if (fps >= 120) {
+    return targets[120] || targets[90] || targets[60] || targets[30];
+  }
+
+  if (fps >= 90) {
+    return targets[90] || targets[60] || targets[30];
+  }
+
   if (fps >= 60) {
     return targets[60] || targets[30];
   }
@@ -179,7 +187,7 @@ function getCameraPublishOptions(resolution = "720p", fps = 30) {
 
   return {
     simulcast: true,
-    degradationPreference: "maintain-resolution",
+    degradationPreference: "maintain-framerate",
     videoEncoding,
     videoSimulcastLayers: [lowLayer, mediumLayer],
   };
@@ -392,6 +400,7 @@ export function createVoiceRoomClient({
   onMicLevelChanged,
   onAudioDevicesChanged,
   onVoicePingChanged,
+  onVoiceRouteChanged,
   onIncomingDirectCall,
   onDirectCallAccepted,
   onDirectCallDeclined,
@@ -707,7 +716,7 @@ export function createVoiceRoomClient({
     }
 
     const isDowngrade = getAdaptiveProfileRank(nextProfile) < getAdaptiveProfileRank(adaptiveMediaProfile);
-    const requiredSamples = isDowngrade ? 1 : 3;
+    const requiredSamples = isDowngrade ? 2 : 4;
     if (pendingAdaptiveMediaProfile === nextProfile) {
       pendingAdaptiveMediaProfileSamples += 1;
     } else {
@@ -806,6 +815,7 @@ export function createVoiceRoomClient({
         return window.__ndVoiceRoute || null;
       };
     }
+    onVoiceRouteChanged?.(normalizedSnapshot);
   };
   const readTransportRoute = async (transport, label) => {
     if (!transport?.getStats) {
@@ -818,6 +828,23 @@ export function createVoiceRoomClient({
     const candidatePairs = new Map();
     const localCandidates = new Map();
     const remoteCandidates = new Map();
+    const outbound = {
+      audio: {
+        bytesSent: 0,
+        packetsSent: 0,
+        retransmittedPacketsSent: 0,
+      },
+      video: {
+        bytesSent: 0,
+        packetsSent: 0,
+        retransmittedPacketsSent: 0,
+        framesEncoded: 0,
+        framesPerSecond: null,
+        frameWidth: null,
+        frameHeight: null,
+        qualityLimitationReason: "",
+      },
+    };
 
     stats?.forEach((stat) => {
       if (stat?.type === "transport" && stat.selectedCandidatePairId) {
@@ -830,6 +857,26 @@ export function createVoiceRoomClient({
         localCandidates.set(stat.id, stat);
       } else if (stat?.type === "remote-candidate") {
         remoteCandidates.set(stat.id, stat);
+      } else if (stat?.type === "outbound-rtp" && !stat.isRemote) {
+        const mediaKind = stat.kind || stat.mediaType || "";
+        const target = mediaKind === "video" ? outbound.video : mediaKind === "audio" ? outbound.audio : null;
+        if (target) {
+          target.bytesSent += Number.isFinite(Number(stat.bytesSent)) ? Number(stat.bytesSent) : 0;
+          target.packetsSent += Number.isFinite(Number(stat.packetsSent)) ? Number(stat.packetsSent) : 0;
+          target.retransmittedPacketsSent += Number.isFinite(Number(stat.retransmittedPacketsSent))
+            ? Number(stat.retransmittedPacketsSent)
+            : 0;
+
+          if (mediaKind === "video") {
+            target.framesEncoded += Number.isFinite(Number(stat.framesEncoded)) ? Number(stat.framesEncoded) : 0;
+            target.framesPerSecond = Number.isFinite(Number(stat.framesPerSecond)) ? Math.round(Number(stat.framesPerSecond)) : target.framesPerSecond;
+            target.frameWidth = Number.isFinite(Number(stat.frameWidth)) ? Math.round(Number(stat.frameWidth)) : target.frameWidth;
+            target.frameHeight = Number.isFinite(Number(stat.frameHeight)) ? Math.round(Number(stat.frameHeight)) : target.frameHeight;
+            if (stat.qualityLimitationReason && stat.qualityLimitationReason !== "none") {
+              target.qualityLimitationReason = String(stat.qualityLimitationReason);
+            }
+          }
+        }
       }
     });
 
@@ -868,6 +915,23 @@ export function createVoiceRoomClient({
         : null,
       bytesSent: Number.isFinite(Number(selectedCandidatePair.bytesSent)) ? Math.round(Number(selectedCandidatePair.bytesSent)) : null,
       bytesReceived: Number.isFinite(Number(selectedCandidatePair.bytesReceived)) ? Math.round(Number(selectedCandidatePair.bytesReceived)) : null,
+      outbound: {
+        audio: {
+          bytesSent: Math.round(outbound.audio.bytesSent),
+          packetsSent: Math.round(outbound.audio.packetsSent),
+          retransmittedPacketsSent: Math.round(outbound.audio.retransmittedPacketsSent),
+        },
+        video: {
+          bytesSent: Math.round(outbound.video.bytesSent),
+          packetsSent: Math.round(outbound.video.packetsSent),
+          retransmittedPacketsSent: Math.round(outbound.video.retransmittedPacketsSent),
+          framesEncoded: Math.round(outbound.video.framesEncoded),
+          framesPerSecond: outbound.video.framesPerSecond,
+          frameWidth: outbound.video.frameWidth,
+          frameHeight: outbound.video.frameHeight,
+          qualityLimitationReason: outbound.video.qualityLimitationReason,
+        },
+      },
     };
   };
   const sampleVoicePing = async () => {
