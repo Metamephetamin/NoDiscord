@@ -458,6 +458,7 @@ export function createVoiceRoomClient({
   let lastVoicePingMs = null;
   let lastVoiceRouteSnapshot = null;
   let lastVoiceRouteSignature = "";
+  const lastOutboundVideoSamplesByLabel = new Map();
   let adaptiveMediaProfile = "good";
   let pendingAdaptiveMediaProfile = "";
   let pendingAdaptiveMediaProfileSamples = 0;
@@ -845,6 +846,9 @@ export function createVoiceRoomClient({
     }
 
     const stats = await transport.getStats();
+    const sampledAtMs = typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
     let selectedCandidatePairId = "";
     let selectedCandidatePair = null;
     const candidatePairs = new Map();
@@ -861,9 +865,12 @@ export function createVoiceRoomClient({
         packetsSent: 0,
         retransmittedPacketsSent: 0,
         framesEncoded: 0,
+        framesDropped: 0,
         framesPerSecond: null,
         frameWidth: null,
         frameHeight: null,
+        totalEncodeTime: 0,
+        qpSum: 0,
         qualityLimitationReason: "",
       },
     };
@@ -891,9 +898,12 @@ export function createVoiceRoomClient({
 
           if (mediaKind === "video") {
             target.framesEncoded += Number.isFinite(Number(stat.framesEncoded)) ? Number(stat.framesEncoded) : 0;
+            target.framesDropped += Number.isFinite(Number(stat.framesDropped)) ? Number(stat.framesDropped) : 0;
             target.framesPerSecond = Number.isFinite(Number(stat.framesPerSecond)) ? Math.round(Number(stat.framesPerSecond)) : target.framesPerSecond;
             target.frameWidth = Number.isFinite(Number(stat.frameWidth)) ? Math.round(Number(stat.frameWidth)) : target.frameWidth;
             target.frameHeight = Number.isFinite(Number(stat.frameHeight)) ? Math.round(Number(stat.frameHeight)) : target.frameHeight;
+            target.totalEncodeTime += Number.isFinite(Number(stat.totalEncodeTime)) ? Number(stat.totalEncodeTime) : 0;
+            target.qpSum += Number.isFinite(Number(stat.qpSum)) ? Number(stat.qpSum) : 0;
             if (stat.qualityLimitationReason && stat.qualityLimitationReason !== "none") {
               target.qualityLimitationReason = String(stat.qualityLimitationReason);
             }
@@ -911,6 +921,18 @@ export function createVoiceRoomClient({
     if (!selectedCandidatePair) {
       return null;
     }
+
+    const previousOutboundVideoSample = lastOutboundVideoSamplesByLabel.get(label);
+    const outboundVideoBitrateBps =
+      previousOutboundVideoSample
+      && outbound.video.bytesSent >= previousOutboundVideoSample.bytesSent
+      && sampledAtMs > previousOutboundVideoSample.sampledAtMs
+        ? Math.round(((outbound.video.bytesSent - previousOutboundVideoSample.bytesSent) * 8 * 1000) / (sampledAtMs - previousOutboundVideoSample.sampledAtMs))
+        : null;
+    lastOutboundVideoSamplesByLabel.set(label, {
+      bytesSent: outbound.video.bytesSent,
+      sampledAtMs,
+    });
 
     const localCandidate = normalizeCandidateStats(localCandidates.get(selectedCandidatePair.localCandidateId));
     const remoteCandidate = normalizeCandidateStats(remoteCandidates.get(selectedCandidatePair.remoteCandidateId));
@@ -937,6 +959,7 @@ export function createVoiceRoomClient({
         : null,
       bytesSent: Number.isFinite(Number(selectedCandidatePair.bytesSent)) ? Math.round(Number(selectedCandidatePair.bytesSent)) : null,
       bytesReceived: Number.isFinite(Number(selectedCandidatePair.bytesReceived)) ? Math.round(Number(selectedCandidatePair.bytesReceived)) : null,
+      outboundVideoBitrateBps,
       outbound: {
         audio: {
           bytesSent: Math.round(outbound.audio.bytesSent),
@@ -948,9 +971,12 @@ export function createVoiceRoomClient({
           packetsSent: Math.round(outbound.video.packetsSent),
           retransmittedPacketsSent: Math.round(outbound.video.retransmittedPacketsSent),
           framesEncoded: Math.round(outbound.video.framesEncoded),
+          framesDropped: Math.round(outbound.video.framesDropped),
           framesPerSecond: outbound.video.framesPerSecond,
           frameWidth: outbound.video.frameWidth,
           frameHeight: outbound.video.frameHeight,
+          totalEncodeTime: outbound.video.totalEncodeTime,
+          qpSum: Math.round(outbound.video.qpSum),
           qualityLimitationReason: outbound.video.qualityLimitationReason,
         },
       },
@@ -2576,6 +2602,7 @@ const handleDeviceChange = () => {
     roomConnectPromise = null;
     currentLiveKitServerUrl = "";
     currentLiveKitRoomName = "";
+    lastOutboundVideoSamplesByLabel.clear();
     micPublication = null;
     localScreenVideoPublication = null;
     localCameraVideoPublication = null;

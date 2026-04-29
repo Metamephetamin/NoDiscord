@@ -223,6 +223,12 @@ contextBridge.exposeInMainWorld("electronPermissions", {
 
 contextBridge.exposeInMainWorld("electronRuntime", buildVoiceRuntimeConfig());
 
+contextBridge.exposeInMainWorld("electronMediaPerformance", {
+  async setStreamActive(active) {
+    return ipcRenderer.invoke("media-performance:set-stream-active", active === true);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronAppLinks", {
   onNavigate(callback) {
     if (typeof callback !== "function") {

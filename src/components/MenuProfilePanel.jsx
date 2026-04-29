@@ -37,6 +37,17 @@ const STREAM_LIMIT_LABELS = {
   other: "Лимит захвата",
 };
 
+const STREAM_PRESSURE_LABELS = {
+  healthy: "Ресурсы в норме",
+  cpu: "Душит CPU",
+  bandwidth: "Душит сеть",
+  "packet-loss": "Потери пакетов",
+  "app-profile": "Душит профиль",
+  "capture-or-encoder": "Душит захват",
+  "relay-route": "Длинный TURN",
+  latency: "Высокий RTT",
+};
+
 const formatStreamBitrate = (value) => {
   const bitrate = Number(value || 0);
   if (!Number.isFinite(bitrate) || bitrate <= 0) {
@@ -54,6 +65,16 @@ const getStreamDiagnosticsItems = (diagnostics) => {
   }
 
   const items = [];
+  const pressureReason = diagnostics.pressure?.reason || "";
+  if (pressureReason) {
+    items.push(STREAM_PRESSURE_LABELS[pressureReason] || pressureReason);
+  }
+
+  const outboundVideoBitrate = formatStreamBitrate(diagnostics.outboundVideoBitrateBps);
+  if (outboundVideoBitrate) {
+    items.push(`Видео ${outboundVideoBitrate}`);
+  }
+
   if (Number.isFinite(Number(diagnostics.rttMs)) && Number(diagnostics.rttMs) > 0) {
     items.push(`RTT ${Math.round(Number(diagnostics.rttMs))} мс`);
   }
@@ -73,6 +94,10 @@ const getStreamDiagnosticsItems = (diagnostics) => {
 
   if (Number.isFinite(Number(diagnostics.videoRetransmitPercent)) && Number(diagnostics.videoRetransmitPercent) >= 1) {
     items.push(`Повторы ${Number(diagnostics.videoRetransmitPercent).toFixed(1)}%`);
+  }
+
+  if (Number.isFinite(Number(diagnostics.encodeMsPerFrame)) && Number(diagnostics.encodeMsPerFrame) >= 8) {
+    items.push(`Кодек ${Number(diagnostics.encodeMsPerFrame).toFixed(1)} мс/кадр`);
   }
 
   if (diagnostics.routeType && diagnostics.routeType !== "unknown") {

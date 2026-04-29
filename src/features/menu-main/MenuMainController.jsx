@@ -50,6 +50,7 @@ import {
   writeProfileCustomization,
 } from "../../utils/profileCustomization";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
+import { buildStreamDiagnostics } from "../../webrtc/streamDiagnostics.mjs";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
 import useServerInviteActions from "../../hooks/useServerInviteActions";
 import useTransientScrollbars from "../../hooks/useTransientScrollbars";
@@ -936,36 +937,12 @@ export default function MenuMain({
   const resolvedVoicePingMs = normalizeMeasuredPingMs(voicePingMs);
   const resolvedApiPingMs = normalizeMeasuredPingMs(pingMs);
   const activeLatencyMs = resolvedVoicePingMs ?? resolvedApiPingMs;
-  const streamDiagnostics = useMemo(() => {
-    if (!currentVoiceChannel || !voiceRouteSnapshot) {
-      return null;
-    }
-
-    const routes = Array.isArray(voiceRouteSnapshot.transports) ? voiceRouteSnapshot.transports : [];
-    const publisherRoute = routes.find((route) => route.label === "publisher") || routes[0] || null;
-    const outboundVideo = publisherRoute?.outbound?.video || null;
-    const rttMs = normalizeMeasuredPingMs(voiceRouteSnapshot.rttMs ?? publisherRoute?.rttMs ?? voicePingMs);
-    const outgoingBitrateBps = Number(publisherRoute?.availableOutgoingBitrate || 0);
-    const audioBitrateKbps = Number(voiceRouteSnapshot.adaptiveAudioBitrateKbps || 0);
-    const actualFps = Number(outboundVideo?.framesPerSecond || 0);
-    const videoPacketsSent = Number(outboundVideo?.packetsSent || 0);
-    const videoRetransmittedPackets = Number(outboundVideo?.retransmittedPacketsSent || 0);
-    const videoRetransmitPercent =
-      videoPacketsSent > 0 && videoRetransmittedPackets > 0
-        ? Math.min(100, (videoRetransmittedPackets / videoPacketsSent) * 100)
-        : 0;
-
-    return {
-      rttMs,
-      outgoingBitrateBps: Number.isFinite(outgoingBitrateBps) && outgoingBitrateBps > 0 ? outgoingBitrateBps : 0,
-      routeType: voiceRouteSnapshot.routeType || publisherRoute?.routeType || "unknown",
-      profile: voiceRouteSnapshot.adaptiveMediaProfile || "",
-      audioBitrateKbps: Number.isFinite(audioBitrateKbps) && audioBitrateKbps > 0 ? audioBitrateKbps : 0,
-      actualFps: Number.isFinite(actualFps) && actualFps > 0 ? actualFps : 0,
-      qualityLimitationReason: outboundVideo?.qualityLimitationReason || "",
-      videoRetransmitPercent,
-    };
-  }, [currentVoiceChannel, voicePingMs, voiceRouteSnapshot]);
+  const streamDiagnostics = useMemo(() => buildStreamDiagnostics({
+    currentVoiceChannel,
+    targetFps: fps,
+    voicePingMs,
+    voiceRouteSnapshot,
+  }), [currentVoiceChannel, fps, voicePingMs, voiceRouteSnapshot]);
   useEffect(() => {
     setDirectCallState((previous) => {
       if (previous.phase === "idle") {
@@ -1101,6 +1078,19 @@ export default function MenuMain({
   const selectedStream = useMemo(() => remoteScreenShares.find((item) => String(item.userId) === String(selectedStreamUserId)) || null, [remoteScreenShares, selectedStreamUserId]);
   const isScreenShareActive = isSharingScreen && (localLiveShareMode === "screen" || localLiveShareMode === "both");
   const isCameraShareActive = isSharingScreen && (localLiveShareMode === "camera" || localLiveShareMode === "both");
+  const isLocalStreamActive = isScreenShareActive || isCameraShareActive;
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.electronMediaPerformance?.setStreamActive) {
+      return undefined;
+    }
+
+    void window.electronMediaPerformance.setStreamActive(isLocalStreamActive).catch(() => {});
+    return () => {
+      if (isLocalStreamActive) {
+        void window.electronMediaPerformance.setStreamActive(false).catch(() => {});
+      }
+    };
+  }, [isLocalStreamActive]);
   const hasLocalSharePreview = Boolean(localSharePreview?.stream);
   const streamFpsOptions = useMemo(
     () => STREAM_FPS_OPTIONS.filter((option) => getAllowedStreamFps(resolution).includes(option.value)),

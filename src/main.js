@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, nativeImage, safeStorage, session, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerSaveBlocker, safeStorage, session, shell, systemPreferences } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -112,6 +112,7 @@ const resolveRendererDevServerUrl = () => {
 const RENDERER_DEV_SERVER_URL = resolveRendererDevServerUrl();
 
 let mainWindow = null;
+let mediaPowerSaveBlockerId = null;
 let appTray = null;
 let pendingRendererRoute = "";
 let appUpdateCheckPromise = null;
@@ -147,6 +148,23 @@ const applyTitleBarOverlayVisibility = (visible = true) => {
     console.warn("Failed to toggle title bar overlay visibility", error);
     return false;
   }
+};
+
+const setMediaPerformanceMode = (active) => {
+  const shouldActivate = active === true;
+  if (shouldActivate && mediaPowerSaveBlockerId === null) {
+    mediaPowerSaveBlockerId = powerSaveBlocker.start("prevent-display-sleep");
+  } else if (!shouldActivate && mediaPowerSaveBlockerId !== null) {
+    if (powerSaveBlocker.isStarted(mediaPowerSaveBlockerId)) {
+      powerSaveBlocker.stop(mediaPowerSaveBlockerId);
+    }
+    mediaPowerSaveBlockerId = null;
+  }
+
+  return {
+    active: mediaPowerSaveBlockerId !== null,
+    powerSaveBlockerId: mediaPowerSaveBlockerId,
+  };
 };
 
 const appendPerfEvent = (event) => {
@@ -1661,6 +1679,7 @@ const createWindow = () => {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: false,
       allowRunningInsecureContent: false,
     },
   });
@@ -1896,6 +1915,8 @@ app.whenReady().then(async () => {
     receivedAt: new Date().toISOString(),
     payload: payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null,
   }));
+  ipcMain.handle("media-performance:set-stream-active", async (_event, active) =>
+    setMediaPerformanceMode(active === true));
   ipcMain.handle("attachments:open-picker", async (_event, payload) => {
     pruneAttachmentPickerFiles();
 
@@ -2251,6 +2272,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   isAppQuitting = true;
+  setMediaPerformanceMode(false);
 
   if (!shouldInstallDownloadedUpdateOnQuit || !appUpdateState.downloadPath || hasLaunchedDownloadedInstaller) {
     appTray?.destroy();
