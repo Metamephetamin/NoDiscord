@@ -121,6 +121,7 @@ const StreamStatusBanner = ({
   resolution,
   fps,
   diagnostics = null,
+  sourceTitle = "",
   resolutionOptions = [],
   fpsOptions = [],
   onOpenPreview = () => {},
@@ -129,11 +130,12 @@ const StreamStatusBanner = ({
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const isActive = isScreenShareActive || isCameraShareActive;
+  const normalizedSourceTitle = String(sourceTitle || "").trim();
   const streamTitle = isScreenShareActive && isCameraShareActive
-    ? "Экран и камера в эфире"
+    ? `${normalizedSourceTitle || "Экран"} + камера`
     : isCameraShareActive
       ? "Камера в эфире"
-      : "Стрим запущен";
+      : normalizedSourceTitle || "Экран в эфире";
   const normalizedFps = Number(fps) || 30;
   const settingsOpen = isActive && showSettings;
   const diagnosticsItems = getStreamDiagnosticsItems(diagnostics);
@@ -334,6 +336,7 @@ export default function MenuProfilePanel({
   streamResolution,
   streamFps,
   streamDiagnostics,
+  streamSourceTitle,
   streamResolutionOptions,
   streamFpsOptions,
   isMicMuted,
@@ -410,6 +413,7 @@ export default function MenuProfilePanel({
             resolution={streamResolution}
             fps={streamFps}
             diagnostics={streamDiagnostics}
+            sourceTitle={streamSourceTitle}
             resolutionOptions={streamResolutionOptions}
             fpsOptions={streamFpsOptions}
             onOpenPreview={onOpenLocalSharePreview}

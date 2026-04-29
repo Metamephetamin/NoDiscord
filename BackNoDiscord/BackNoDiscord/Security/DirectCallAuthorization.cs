@@ -55,6 +55,18 @@ public static class DirectCallAuthorization
             return false;
         }
 
+        var hasBlock = await context.UserBlocks
+            .AsNoTracking()
+            .AnyAsync(item =>
+                (item.BlockerUserId == lowUserId && item.BlockedUserId == highUserId) ||
+                (item.BlockerUserId == highUserId && item.BlockedUserId == lowUserId),
+                cancellationToken);
+
+        if (hasBlock)
+        {
+            return false;
+        }
+
         return await context.Friendships
             .AsNoTracking()
             .AnyAsync(item => item.UserLowId == lowUserId && item.UserHighId == highUserId, cancellationToken);

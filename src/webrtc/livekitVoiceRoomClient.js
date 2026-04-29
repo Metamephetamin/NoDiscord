@@ -8,7 +8,7 @@ import {
   VideoPreset,
   VideoQuality,
 } from "livekit-client";
-import { API_BASE_URL, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION } from "../config/runtime";
+import { API_BASE_URL, IS_DESKTOP_APP_RUNTIME, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION } from "../config/runtime";
 import {
   authFetch,
   getApiErrorMessage,
@@ -102,11 +102,28 @@ const HIGH_QUALITY_MIC_AUDIO_PRESET = AudioPresets.musicHighQuality;
 const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
 const VIDEO_ENCODING_PRIORITY = "high";
+const DESKTOP_SCREEN_SHARE_BITRATE_SCALE = 1.18;
 const LEGACY_NOISE_SUPPRESSION_MODE_KRISP = "krisp";
 const LEGACY_NOISE_SUPPRESSION_MODE_RNNOISE = "rnnoise";
 const LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const REMOTE_BACKGROUND_SHARE_TARGET = { width: 960, height: 540, fps: 15 };
 const REMOTE_CAMERA_TARGET = { width: 640, height: 360, fps: 15 };
+const WEB_ADAPTIVE_ROUTE_THRESHOLDS = {
+  poorRttMs: 650,
+  poorOutgoingBitrate: 220_000,
+  constrainedRttMs: 340,
+  constrainedOutgoingBitrate: 750_000,
+  goodRttMs: 190,
+  goodOutgoingBitrate: 1_500_000,
+};
+const DESKTOP_ADAPTIVE_ROUTE_THRESHOLDS = {
+  poorRttMs: 760,
+  poorOutgoingBitrate: 180_000,
+  constrainedRttMs: 430,
+  constrainedOutgoingBitrate: 620_000,
+  goodRttMs: 250,
+  goodOutgoingBitrate: 1_150_000,
+};
 const CAMERA_VIDEO_QUALITY_TARGETS = {
   "720p": { width: 1280, height: 720, bitrate: { 30: 2_500_000, 60: 4_200_000, 90: 5_600_000, 120: 7_000_000 } },
   "1080p": { width: 1920, height: 1080, bitrate: { 30: 4_500_000, 60: 7_000_000, 90: 9_500_000, 120: 12_000_000 } },
@@ -197,7 +214,10 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
   const normalizedResolution = SCREEN_SHARE_QUALITY_TARGETS[resolution] ? resolution : "1080p";
   const normalizedFps = normalizePublishFps(fps, 60);
   const target = SCREEN_SHARE_QUALITY_TARGETS[normalizedResolution];
-  const maxBitrate = resolveBitrate(target.bitrate, normalizedFps);
+  const resolvedBitrate = resolveBitrate(target.bitrate, normalizedFps);
+  const maxBitrate = IS_DESKTOP_APP_RUNTIME
+    ? Math.min(75_000_000, Math.round(resolvedBitrate * DESKTOP_SCREEN_SHARE_BITRATE_SCALE))
+    : resolvedBitrate;
   const screenShareEncoding = buildVideoEncodingOptions({
     width: target.width,
     height: target.height,
@@ -219,6 +239,14 @@ function getScreenSharePublishOptions(resolution = "1080p", fps = 60) {
     normalizedResolution === "720p"
       ? [lowLayer]
       : [lowLayer, mediumLayer];
+
+  if (IS_DESKTOP_APP_RUNTIME) {
+    return {
+      simulcast: false,
+      degradationPreference: "maintain-resolution",
+      screenShareEncoding,
+    };
+  }
 
   return {
     simulcast: true,
@@ -252,6 +280,10 @@ function getAdaptiveAudioBitrateKbps(channelBitrateKbps, profileName) {
   return normalizeChannelAudioBitrateKbps(
     Math.min(profile.maxAudioKbps, Math.max(MIN_CHANNEL_AUDIO_BITRATE_KBPS, normalizedChannelBitrate * profile.audioScale))
   );
+}
+
+function getAdaptiveRouteThresholds() {
+  return IS_DESKTOP_APP_RUNTIME ? DESKTOP_ADAPTIVE_ROUTE_THRESHOLDS : WEB_ADAPTIVE_ROUTE_THRESHOLDS;
 }
 
 function scaleVideoTarget(value, scale, minimum) {
@@ -489,6 +521,7 @@ export function createVoiceRoomClient({
     voiceRoute: lastVoiceRouteSnapshot,
     adaptiveMedia: {
       profile: adaptiveMediaProfile,
+      desktopOptimized: IS_DESKTOP_APP_RUNTIME,
       audioBitrateKbps: getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile),
       appliedMicSenderBitrateKbps,
       localVideoQuality: appliedLocalVideoQuality,
@@ -572,15 +605,26 @@ export function createVoiceRoomClient({
       return adaptiveMediaProfile;
     }
 
-    if ((Number.isFinite(rttMs) && rttMs >= 650) || (outgoingBitrate > 0 && outgoingBitrate < 220_000)) {
+    const thresholds = getAdaptiveRouteThresholds();
+
+    if (
+      (Number.isFinite(rttMs) && rttMs >= thresholds.poorRttMs)
+      || (outgoingBitrate > 0 && outgoingBitrate < thresholds.poorOutgoingBitrate)
+    ) {
       return "poor";
     }
 
-    if ((Number.isFinite(rttMs) && rttMs >= 340) || (outgoingBitrate > 0 && outgoingBitrate < 750_000)) {
+    if (
+      (Number.isFinite(rttMs) && rttMs >= thresholds.constrainedRttMs)
+      || (outgoingBitrate > 0 && outgoingBitrate < thresholds.constrainedOutgoingBitrate)
+    ) {
       return "constrained";
     }
 
-    if ((Number.isFinite(rttMs) && rttMs >= 190) || (outgoingBitrate > 0 && outgoingBitrate < 1_500_000)) {
+    if (
+      (Number.isFinite(rttMs) && rttMs >= thresholds.goodRttMs)
+      || (outgoingBitrate > 0 && outgoingBitrate < thresholds.goodOutgoingBitrate)
+    ) {
       return "good";
     }
 
@@ -1007,6 +1051,7 @@ export function createVoiceRoomClient({
         rttMs: samples.length ? Math.max(...samples) : null,
         serverUrl: currentLiveKitServerUrl,
         roomName: currentLiveKitRoomName,
+        desktopOptimized: IS_DESKTOP_APP_RUNTIME,
         sampledAt: new Date().toISOString(),
         transports: routes,
       };
@@ -1146,6 +1191,13 @@ export function createVoiceRoomClient({
               ? "camera"
               : "";
     const previewStream = previewMode === "camera" ? localCameraStream : previewMode === "screen" ? localScreenStream : null;
+    const previewVideoTrack = previewStream?.getVideoTracks?.()[0] || null;
+    const previewSourceTitle =
+      previewMode === "screen"
+        ? String(previewStream?.__ndDisplaySourceName || previewVideoTrack?.label || "Экран").trim()
+        : previewMode === "camera"
+          ? String(previewVideoTrack?.label || "Камера").trim()
+          : "";
     onLocalScreenShareChanged?.(isActive);
     onLocalLiveShareChanged?.({
       isActive,
@@ -1156,6 +1208,7 @@ export function createVoiceRoomClient({
     onLocalPreviewStreamChanged?.({
       stream: previewStream || null,
       mode: previewMode,
+      sourceTitle: previewSourceTitle,
       screenActive: isScreenActive,
       cameraActive: isCameraActive,
     });

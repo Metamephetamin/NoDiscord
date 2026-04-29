@@ -113,10 +113,10 @@
 .chat-pins,
 .chat-selection-bar {
   margin: 12px 0 0;
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.035);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
 }
 
 .chat-pins__header,
@@ -135,40 +135,71 @@
 .chat-pins__header strong,
 .chat-selection-bar__copy strong {
   color: #f8fafc;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .chat-pins__header span,
 .chat-selection-bar__copy span {
   color: #96a2ba;
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.chat-pins__header span {
+  min-width: 22px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(145, 164, 205, 0.1);
+  color: #aebbe0;
+  font-weight: 800;
 }
 
 .chat-pins__list {
-  margin-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  max-height: 148px;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(109, 119, 145, 0.7) transparent;
+}
+
+.chat-pins__list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-pins__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-pins__list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(109, 119, 145, 0.58);
 }
 
 .chat-pins__item {
   min-width: 0;
-  flex: 1 1 240px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 10px;
-  padding: 12px;
-  border: 0;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
   color: #edf2ff;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.18s ease, transform 0.18s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .chat-pins__item:hover {
-  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(145, 164, 205, 0.16);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .chat-pins__link {
@@ -185,19 +216,28 @@
 .chat-pins__meta {
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
 
 .chat-pins__meta strong {
   color: #f6f8ff;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-pins__meta small,
 .chat-pins__preview {
   color: #a7b1c6;
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.chat-pins__meta small {
+  flex: 0 0 auto;
+  color: #8792ad;
 }
 
 .chat-pins__preview {
@@ -205,17 +245,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.25;
 }
 
 .chat-pins__remove {
-  width: 28px;
-  height: 28px;
-  align-self: start;
+  width: 24px;
+  height: 24px;
+  align-self: center;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
   color: #dce3f3;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -8123,8 +8166,9 @@ body[data-ui-reduce-motion="true"] .media-preview__video {
 }
 
 @media (max-width: 768px) {
-  .chat-pins__item {
-    flex-basis: 100%;
+  .chat-pins__list {
+    grid-template-columns: 1fr;
+    max-height: 188px;
   }
 
   .chat-selection-bar {

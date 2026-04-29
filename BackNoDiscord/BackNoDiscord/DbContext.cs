@@ -341,6 +341,22 @@ public class FriendRequestRecord
     public DateTimeOffset? RespondedAt { get; set; }
 }
 
+[Table("user_blocks")]
+public class UserBlockRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("blocker_user_id")]
+    public int BlockerUserId { get; set; }
+
+    [Column("blocked_user_id")]
+    public int BlockedUserId { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 [Table("group_conversations")]
 public class GroupConversationRecord
 {
@@ -545,6 +561,7 @@ public class AppDbContext : DbContext
     public DbSet<ServerInviteRecordEntity> ServerInvites => Set<ServerInviteRecordEntity>();
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
     public DbSet<FriendRequestRecord> FriendRequests => Set<FriendRequestRecord>();
+    public DbSet<UserBlockRecord> UserBlocks => Set<UserBlockRecord>();
     public DbSet<GroupConversationRecord> GroupConversations => Set<GroupConversationRecord>();
     public DbSet<GroupConversationMemberRecord> GroupConversationMembers => Set<GroupConversationMemberRecord>();
     public DbSet<PhoneVerificationCodeRecord> PhoneVerificationCodes => Set<PhoneVerificationCodeRecord>();
@@ -668,6 +685,15 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.ReceiverUserId, x.Status, x.CreatedAt });
             entity.HasIndex(x => new { x.SenderUserId, x.Status, x.CreatedAt });
             entity.Property(x => x.Status).IsRequired();
+        });
+
+        modelBuilder.Entity<UserBlockRecord>(entity =>
+        {
+            entity.ToTable("user_blocks");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.BlockerUserId, x.BlockedUserId }).IsUnique();
+            entity.HasIndex(x => x.BlockerUserId);
+            entity.HasIndex(x => x.BlockedUserId);
         });
 
         modelBuilder.Entity<EmailVerificationCodeRecord>(entity =>

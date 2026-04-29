@@ -17,6 +17,7 @@ export default function MenuMainProfilePanelSlot({
   streamResolution,
   streamFps,
   streamDiagnostics,
+  streamSourceTitle,
   streamResolutionOptions,
   streamFpsOptions,
   isMicMuted,
@@ -81,6 +82,7 @@ export default function MenuMainProfilePanelSlot({
       streamResolution={streamResolution}
       streamFps={streamFps}
       streamDiagnostics={streamDiagnostics}
+      streamSourceTitle={streamSourceTitle}
       streamResolutionOptions={streamResolutionOptions}
       streamFpsOptions={streamFpsOptions}
       isMicMuted={isMicMuted}

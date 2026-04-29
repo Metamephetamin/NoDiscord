@@ -269,6 +269,7 @@ function areUserLikeEntriesEqual(previousEntries = [], nextEntries = []) {
       || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
       || Boolean(previousEntry?.isIgnored) !== Boolean(nextEntry?.isIgnored)
       || Boolean(previousEntry?.isBlocked) !== Boolean(nextEntry?.isBlocked)
+      || Boolean(previousEntry?.blockedYou) !== Boolean(nextEntry?.blockedYou)
       || Boolean(previousEntry?.isSelf) !== Boolean(nextEntry?.isSelf)
     ) {
       return false;
@@ -1669,6 +1670,7 @@ export const ServersSidebar = memo(({
     event.stopPropagation();
     setIsServerMenuOpen(false);
     setCategoryContextMenu({
+      mode: "category",
       categoryId: String(category.id),
       name: category.name || "Категория",
       defaultType: category.defaultType || "",
@@ -1684,7 +1686,41 @@ export const ServersSidebar = memo(({
       defaultType: normalizedType === "voice" ? "voice" : "text",
     });
   };
+  const openChannelContextMenu = (event, type, channel) => {
+    if (!canManageChannels || !channel?.id) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsServerMenuOpen(false);
+    setCategoryContextMenu({
+      mode: "channel",
+      channelId: String(channel.id),
+      channelType: String(type || "text") === "voice" ? "voice" : "text",
+      name: getChannelDisplayName(channel.name, type),
+      x: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 228)),
+      y: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 116)),
+    });
+  };
   const deleteCategoryFromContextMenu = () => {
+    if (categoryContextMenu?.mode === "channel") {
+      const channelId = String(categoryContextMenu.channelId || "");
+      const channelType = String(categoryContextMenu.channelType || "text");
+      if (!channelId) {
+        return;
+      }
+
+      setCategoryContextMenu(null);
+      if (channelType === "voice") {
+        void onDeleteVoiceChannel?.(channelId);
+        return;
+      }
+
+      onDeleteTextChannel?.(channelId);
+      return;
+    }
+
     const categoryId = String(categoryContextMenu?.categoryId || "");
     if (!categoryId) {
       return;
@@ -1974,6 +2010,7 @@ export const ServersSidebar = memo(({
         onDragOver={(event) => handleChannelDragOver(event, "text", channel, categoryId)}
         onDrop={(event) => handleChannelDrop(event, "text", channel, categoryId)}
         onDragEnd={endDrag}
+        onContextMenu={(event) => openChannelContextMenu(event, "text", channel)}
       >
         {isEditing ? (
           <input
@@ -2057,6 +2094,7 @@ export const ServersSidebar = memo(({
       onChannelDragOver={handleChannelDragOver}
       onChannelDrop={handleChannelDrop}
       onChannelDragEnd={endDrag}
+      onChannelContextMenu={openChannelContextMenu}
     />
   );
 
@@ -2296,8 +2334,21 @@ export const ServersSidebar = memo(({
 
           {categoryContextMenu ? (
             <div ref={categoryContextMenuRef} className="member-role-menu member-role-menu--server-compact" style={{ left: categoryContextMenu.x, top: categoryContextMenu.y }}>
+              {categoryContextMenu.mode === "channel" ? (
+                <div className="member-role-menu__title member-role-menu__title--channel">{categoryContextMenu.name || "Канал"}</div>
+              ) : null}
+              {categoryContextMenu.mode === "channel" ? (
+                <button
+                  type="button"
+                  className="member-role-menu__item member-role-menu__item--danger"
+                  onClick={deleteCategoryFromContextMenu}
+                >
+                  Удалить канал
+                </button>
+              ) : null}
               <div className="member-role-menu__title">{categoryContextMenu.name || "Категория"}</div>
               <button
+                hidden={categoryContextMenu.mode === "channel"}
                 type="button"
                 className="member-role-menu__item member-role-menu__item--danger"
                 onClick={deleteCategoryFromContextMenu}
@@ -2944,27 +2995,48 @@ export const MobileDirectChat = ({
   onTextChatNavigationIndexChange,
   onClearChannelSearch,
   onStartDirectCall,
-}) => (
-  <main className="chat__wrapper chat__wrapper--friends chat__wrapper--mobile-direct">
-    <div className="chat__box chat__box--servers">
-      <div className="chat__topbar chat__topbar--mobile-direct">
-        <div className="chat__topbar-title">
-          <div className="chat__topbar-copy">
-            <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{getDisplayName(currentDirectFriend)}</strong>
-            <span>{formatUserPresenceStatus(currentDirectFriend)}</span>
+}) => {
+  const directBlockNotice = currentDirectFriend?.blockedYou
+    ? {
+      title: "Пользователь ограничил общение с вами",
+      detail: "Сообщения, звонки и упоминания для этого контакта недоступны.",
+    }
+    : currentDirectFriend?.isBlocked
+      ? {
+        title: "Вы заблокировали этого пользователя",
+        detail: "Чат останется здесь, но отправка сообщений и звонки выключены до разблокировки.",
+      }
+      : null;
+
+  return (
+    <main className="chat__wrapper chat__wrapper--friends chat__wrapper--mobile-direct">
+      <div className="chat__box chat__box--servers">
+        <div className="chat__topbar chat__topbar--mobile-direct">
+          <div className="chat__topbar-title">
+            <div className="chat__topbar-copy">
+              <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{getDisplayName(currentDirectFriend)}</strong>
+              <span>{formatUserPresenceStatus(currentDirectFriend)}</span>
+            </div>
           </div>
         </div>
+        {directBlockNotice ? (
+          <div className="friends-direct-block-notice" role="status">
+            <strong>{directBlockNotice.title}</strong>
+            <span>{directBlockNotice.detail}</span>
+          </div>
+        ) : (
+          <TextChat
+            resolvedChannelId={currentDirectChannelId}
+            localMessageStateVersion={textChatLocalStateVersion}
+            user={user}
+            onClearSearchQuery={onClearChannelSearch}
+            directTargets={directConversationTargets}
+            navigationRequest={textChatNavigationRequest}
+            onNavigationIndexChange={onTextChatNavigationIndexChange}
+            onStartDirectCall={onStartDirectCall}
+          />
+        )}
       </div>
-      <TextChat
-        resolvedChannelId={currentDirectChannelId}
-        localMessageStateVersion={textChatLocalStateVersion}
-        user={user}
-        onClearSearchQuery={onClearChannelSearch}
-        directTargets={directConversationTargets}
-        navigationRequest={textChatNavigationRequest}
-        onNavigationIndexChange={onTextChatNavigationIndexChange}
-        onStartDirectCall={onStartDirectCall}
-      />
-    </div>
-  </main>
-);
+    </main>
+  );
+};

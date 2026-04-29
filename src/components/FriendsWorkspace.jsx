@@ -232,6 +232,24 @@ const getConversationMemberRole = (member, ownerUserId) => (
     : String(member?.role || "member").toLowerCase()
 );
 
+const getDirectBlockNotice = (friend) => {
+  if (friend?.blockedYou) {
+    return {
+      title: "Пользователь ограничил общение с вами",
+      detail: "Сообщения, звонки и упоминания для этого контакта недоступны.",
+    };
+  }
+
+  if (friend?.isBlocked) {
+    return {
+      title: "Вы заблокировали этого пользователя",
+      detail: "Чат останется здесь, но отправка сообщений и звонки выключены до разблокировки.",
+    };
+  }
+
+  return null;
+};
+
 export const FriendsSidebar = ({
   query,
   navItems,
@@ -644,6 +662,7 @@ export const FriendsMain = ({
   const [activeConversationMemberActionId, setActiveConversationMemberActionId] = useState("");
   const [friendDirectorySearch, setFriendDirectorySearch] = useState("");
   const [friendDirectoryFilter, setFriendDirectoryFilter] = useState("all");
+  const directBlockNotice = currentConversationTarget ? null : getDirectBlockNotice(currentDirectFriend);
   const activeDirectCall = directCallPanelProps?.call;
   const activeDirectCallPanelProps =
     !currentConversationTarget &&
@@ -728,8 +747,15 @@ export const FriendsMain = ({
     () => new Map((activeContacts || []).map((friend) => [String(friend?.id || ""), friend])),
     [activeContacts]
   );
+  const blockedDirectTargetIds = useMemo(
+    () => new Set((directConversationTargets || [])
+      .filter((friend) => friend?.isBlocked || friend?.blockedYou)
+      .map((friend) => String(friend?.id || ""))
+      .filter(Boolean)),
+    [directConversationTargets]
+  );
   const onlineFriendCount = useMemo(
-    () => friends.reduce((count, friend) => count + (!friend?.isBlocked && isUserCurrentlyOnline(friend) ? 1 : 0), 0),
+    () => friends.reduce((count, friend) => count + (!friend?.isBlocked && !friend?.blockedYou && isUserCurrentlyOnline(friend) ? 1 : 0), 0),
     [friends]
   );
   const friendDirectoryRows = useMemo(() => {
@@ -749,7 +775,7 @@ export const FriendsMain = ({
     };
 
     if (friendDirectoryFilter === "online") {
-      return friends.filter((friend) => !friend?.isBlocked && isUserCurrentlyOnline(friend) && matchesQuery(friend));
+      return friends.filter((friend) => !friend?.isBlocked && !friend?.blockedYou && isUserCurrentlyOnline(friend) && matchesQuery(friend));
     }
 
     if (friendDirectoryFilter === "blocked") {
@@ -765,6 +791,10 @@ export const FriendsMain = ({
   const getFriendDirectoryStatus = (friend) => {
     if (friend?.isBlocked) {
       return { kind: "blocked", label: "Заблокирован", detail: "Можно разблокировать через меню" };
+    }
+
+    if (friend?.blockedYou) {
+      return { kind: "blocked", label: "Общение ограничено", detail: "Сообщения и звонки недоступны" };
     }
 
     if (friend?.isIgnored) {
@@ -843,7 +873,7 @@ export const FriendsMain = ({
     () => (currentConversationTarget?.members || [])
       .map((member) => {
         const userId = String(member?.userId || member?.id || "").trim();
-        if (!userId) {
+        if (!userId || blockedDirectTargetIds.has(userId)) {
           return null;
         }
 
@@ -858,7 +888,7 @@ export const FriendsMain = ({
         };
       })
       .filter(Boolean),
-    [currentConversationTarget?.members, getDisplayName]
+    [blockedDirectTargetIds, currentConversationTarget?.members, getDisplayName]
   );
 
   useEffect(() => () => {
@@ -1316,6 +1346,7 @@ export const FriendsMain = ({
                     type="button"
                     className="chat__topbar-icon"
                     onClick={() => onStartDirectCall?.(currentDirectFriend.id)}
+                    disabled={Boolean(directBlockNotice)}
                     aria-label="Позвонить"
                     title="Позвонить"
                   >
@@ -1343,7 +1374,12 @@ export const FriendsMain = ({
               </div>
             ) : null}
 
-            {isWatchingCurrentDirectStream ? (
+            {directBlockNotice ? (
+              <div className="friends-direct-block-notice" role="status">
+                <strong>{directBlockNotice.title}</strong>
+                <span>{directBlockNotice.detail}</span>
+              </div>
+            ) : isWatchingCurrentDirectStream ? (
               <ScreenShareViewer
                 stream={selectedStream?.stream || null}
                 videoSrc={selectedStream?.videoSrc || ""}
@@ -1405,14 +1441,17 @@ export const FriendsMain = ({
                   const isFriend = friendshipStatus === "friend";
                   const isOutgoingPending = friendshipStatus === "pending_outgoing";
                   const isIncomingPending = friendshipStatus === "pending_incoming";
-                  const actionLabel = isFriend
-                    ? "Написать"
-                    : isOutgoingPending
-                      ? "Заявка отправлена"
-                      : isIncomingPending
-                        ? "Принять"
-                        : "Добавить";
-                  const isActionDisabled = isAddingFriend || isOutgoingPending;
+                  const isCandidateBlocked = Boolean(candidate?.isBlocked || candidate?.blockedYou);
+                  const actionLabel = isCandidateBlocked
+                    ? "Недоступно"
+                    : isFriend
+                      ? "Написать"
+                      : isOutgoingPending
+                        ? "Заявка отправлена"
+                        : isIncomingPending
+                          ? "Принять"
+                          : "Добавить";
+                  const isActionDisabled = isAddingFriend || isOutgoingPending || isCandidateBlocked;
 
                   return (
                     <div key={candidate.id} className="friends-directory__row">
@@ -1429,8 +1468,10 @@ export const FriendsMain = ({
                       <div className={`friends-directory__status friends-directory__status--${isUserCurrentlyOnline(candidate) ? "online" : "offline"}`}>
                         <span>
                           <strong>
-                            {isFriend
-                              ? "У вас в друзьях"
+                            {isCandidateBlocked
+                              ? "Общение ограничено"
+                              : isFriend
+                                ? "У вас в друзьях"
                               : isOutgoingPending
                                 ? "Ожидает ответа"
                                 : isIncomingPending
@@ -1553,7 +1594,7 @@ export const FriendsMain = ({
                 <div className="friends-directory__list friends-results--scroll">
                   {friendDirectoryRows.map((friend) => {
                     const status = getFriendDirectoryStatus(friend);
-                    const actionDisabled = Boolean(friend?.isBlocked);
+                    const actionDisabled = Boolean(friend?.isBlocked || friend?.blockedYou);
 
                     return (
                       <div
@@ -2168,7 +2209,13 @@ export const FriendsMain = ({
         {activeContacts.length ? (
           <div className="friends-contacts__list">
             {activeContacts.map((friend) => (
-              <button key={friend.id} type="button" className="friends-contacts__item" onClick={() => onOpenDirectChat(friend.id)}>
+              <button
+                key={friend.id}
+                type="button"
+                className="friends-contacts__item"
+                onClick={() => onOpenDirectProfile?.(friend)}
+                onContextMenu={(event) => onOpenDirectActions?.(event, friend)}
+              >
                 <span className="friends-contacts__avatar-wrap">
                   <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
                   <span className={`friends-contacts__presence friends-contacts__presence--${friend.activeStatusKind || "online"}`} aria-hidden="true" />

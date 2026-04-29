@@ -5,6 +5,10 @@ import Renderer from "./renderer";
 const container = document.getElementById("root");
 const root = createRoot(container);
 
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
+
 root.render(
   <BrowserRouter>
     <Renderer />

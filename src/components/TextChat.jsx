@@ -51,6 +51,7 @@ function areUserLikeEntriesEqual(previousEntries, nextEntries) {
       || Boolean(previousEntry?.isOnline) !== Boolean(nextEntry?.isOnline)
       || Boolean(previousEntry?.isIgnored) !== Boolean(nextEntry?.isIgnored)
       || Boolean(previousEntry?.isBlocked) !== Boolean(nextEntry?.isBlocked)
+      || Boolean(previousEntry?.blockedYou) !== Boolean(nextEntry?.blockedYou)
     ) {
       return false;
     }

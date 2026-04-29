@@ -962,6 +962,10 @@ export default function TextChat({
 
     const memberSuggestions = (serverMembers || [])
       .map((member) => {
+        if (member?.isBlocked || member?.blockedYou) {
+          return null;
+        }
+
         const handle = getMentionHandleForMember(member);
         const displayName = String(member?.name || "User").trim() || "User";
         const userId = String(member?.userId || member?.id || "").trim();
@@ -1254,8 +1258,10 @@ export default function TextChat({
       presence: matchedDirectTarget?.presence || matchedDirectTarget?.presenceStatus || matchedDirectTarget?.presence_status || "",
       isSelf: userId === currentUserId,
       isFriend: Boolean(matchedDirectTarget && !matchedDirectTarget?.isSelf),
+      isBlocked: Boolean(matchedDirectTarget?.isBlocked),
+      blockedYou: Boolean(matchedDirectTarget?.blockedYou),
       canOpenDirectChat: typeof onOpenDirectChat === "function" && userId !== currentUserId,
-      canInviteToServer: Boolean(serverId),
+      canInviteToServer: Boolean(serverId && !matchedDirectTarget?.isBlocked && !matchedDirectTarget?.blockedYou),
     });
   };
 
@@ -1292,7 +1298,7 @@ export default function TextChat({
   };
 
   const handleStartDirectCallFromUserMenu = () => {
-    if (!userContextMenu?.userId || typeof onStartDirectCall !== "function" || userContextMenu.isSelf) {
+    if (!userContextMenu?.userId || typeof onStartDirectCall !== "function" || userContextMenu.isSelf || userContextMenu.isBlocked || userContextMenu.blockedYou) {
       return;
     }
 
@@ -1312,7 +1318,7 @@ export default function TextChat({
   };
 
   const handleStartDirectCallFromProfileModal = () => {
-    if (!profileModal?.userId || typeof onStartDirectCall !== "function" || profileModal.isSelf) {
+    if (!profileModal?.userId || typeof onStartDirectCall !== "function" || profileModal.isSelf || profileModal.isBlocked || profileModal.blockedYou) {
       return;
     }
 
@@ -1419,6 +1425,8 @@ export default function TextChat({
       presence: userContextMenu.presence || "",
       isSelf: userContextMenu.isSelf,
       isFriend: userContextMenu.isFriend,
+      isBlocked: userContextMenu.isBlocked,
+      blockedYou: userContextMenu.blockedYou,
       canOpenDirectChat: userContextMenu.canOpenDirectChat,
     });
     setUserContextMenu(null);
@@ -1449,7 +1457,7 @@ export default function TextChat({
         id: "direct-call",
         label: "Позвонить",
         icon: "☎",
-        disabled: Boolean(userContextMenu?.isSelf || typeof onStartDirectCall !== "function"),
+        disabled: Boolean(userContextMenu?.isSelf || userContextMenu?.isBlocked || userContextMenu?.blockedYou || typeof onStartDirectCall !== "function"),
         onClick: handleStartDirectCallFromUserMenu,
       },
     ],
@@ -1617,6 +1625,10 @@ export default function TextChat({
     }
 
     const matchedMember = (serverMembers || []).find((member) => String(member?.userId || member?.id || "") === normalizedUserId);
+    if (matchedMember?.isBlocked || matchedMember?.blockedYou) {
+      return;
+    }
+
     const handle = getMentionHandleForMember(matchedMember || { name: displayName });
     if (!handle) {
       return;

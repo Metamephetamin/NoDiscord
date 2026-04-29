@@ -200,6 +200,7 @@ builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSen
 builder.Services.AddScoped<ServerInviteService>();
 builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddScoped<FriendRequestService>();
+builder.Services.AddScoped<UserBlockService>();
 builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationService>();
 builder.Services.AddSingleton<ITextTranslationService, TextTranslationService>();

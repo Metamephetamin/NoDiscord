@@ -55,6 +55,7 @@ public class ChatHub : Hub
     private readonly PushNotificationService _pushNotificationService;
     private readonly UserPresenceService _userPresenceService;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly UserBlockService _userBlockService;
 
     public ChatHub(
         AppDbContext context,
@@ -63,7 +64,8 @@ public class ChatHub : Hub
         ServerStateService serverState,
         PushNotificationService pushNotificationService,
         UserPresenceService userPresenceService,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        UserBlockService userBlockService)
     {
         _context = context;
         _crypto = crypto;
@@ -72,6 +74,7 @@ public class ChatHub : Hub
         _pushNotificationService = pushNotificationService;
         _userPresenceService = userPresenceService;
         _scopeFactory = scopeFactory;
+        _userBlockService = userBlockService;
     }
 
     public override async Task OnConnectedAsync()
@@ -151,6 +154,8 @@ public class ChatHub : Hub
                 throw new HubException("Forbidden");
             }
 
+            await EnsureDirectInteractionAllowedAsync(normalizedChannelId, currentUser);
+
             var currentDisplayName = await ResolveCurrentUserDisplayNameAsync(currentUser);
 
             GroupConversationRecord? currentConversation = null;
@@ -207,7 +212,7 @@ public class ChatHub : Hub
                 ReplyPreview = replyReference?.Preview,
                 ClientTempId = UploadPolicies.TrimToLength(clientTempId, 160),
                 Attachments = normalizedAttachments,
-                Mentions = NormalizeMentions(normalizedChannelId, mentions),
+                Mentions = await NormalizeMentionsAsync(normalizedChannelId, mentions, currentUser.UserId),
                 VoiceMessage = normalizedAttachments.FirstOrDefault(static item => item.VoiceMessage is not null)?.VoiceMessage
             };
 
@@ -519,6 +524,8 @@ public class ChatHub : Hub
             throw new HubException("Forbidden");
         }
 
+        await EnsureDirectInteractionAllowedAsync(msg.ChannelId, currentUser);
+
         var payload = DeserializePayload(GetRawPayload(msg));
         if (!string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
         {
@@ -534,7 +541,7 @@ public class ChatHub : Hub
 
         payload.Message = normalizedMessage;
         payload.Encryption = normalizedEncryption;
-        payload.Mentions = NormalizeMentions(msg.ChannelId, mentions);
+        payload.Mentions = await NormalizeMentionsAsync(msg.ChannelId, mentions, currentUser.UserId);
         payload.EditedAt = DateTime.UtcNow;
 
         msg.EncryptedContent = _crypto.Encrypt(SerializePayload(payload));
@@ -1418,6 +1425,28 @@ public class ChatHub : Hub
             .AnyAsync(item => item.UserLowId == lowId && item.UserHighId == highId, Context.ConnectionAborted);
     }
 
+    private async Task EnsureDirectInteractionAllowedAsync(string channelId, AuthenticatedUser currentUser)
+    {
+        if (!DirectMessageChannels.TryParse(channelId, out var firstUserId, out var secondUserId, out _) ||
+            firstUserId == secondUserId ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return;
+        }
+
+        var targetUserId = currentUserId == firstUserId ? secondUserId : firstUserId;
+        var blockState = await _userBlockService.GetBlockStateAsync(currentUserId, targetUserId, Context.ConnectionAborted);
+        if (blockState.CurrentUserBlockedTarget)
+        {
+            throw new HubException(UserBlockService.YouBlockedTargetMessage);
+        }
+
+        if (blockState.TargetBlockedCurrentUser)
+        {
+            throw new HubException(UserBlockService.BlockedByTargetMessage);
+        }
+    }
+
     private async Task<bool> CanAccessConversationChannelAsync(string currentUserId, int conversationId)
     {
         if (!int.TryParse(currentUserId, out var actorUserId) || actorUserId <= 0 || conversationId <= 0)
@@ -1685,7 +1714,7 @@ public class ChatHub : Hub
         return string.IsNullOrWhiteSpace(sanitized) ? "guest" : sanitized;
     }
 
-    private List<ChatMentionPayload> NormalizeMentions(string channelId, List<ChatMentionInput>? mentions)
+    private async Task<List<ChatMentionPayload>> NormalizeMentionsAsync(string channelId, List<ChatMentionInput>? mentions, string currentUserId)
     {
         if (mentions is null || mentions.Count == 0)
         {
@@ -1699,7 +1728,7 @@ public class ChatHub : Hub
 
         if (ConversationChannels.TryParseChatChannelId(channelId, out var conversationId))
         {
-            var memberLookup = _context.GroupConversationMembers
+            var members = await _context.GroupConversationMembers
                 .AsNoTracking()
                 .Where(item => item.ConversationId == conversationId && !item.IsBanned)
                 .Join(
@@ -1713,14 +1742,16 @@ public class ChatHub : Hub
                             ? $"{user.first_name} {user.last_name}".Trim()
                             : user.nickname.Trim()
                     })
-                .ToList()
+                .ToListAsync(Context.ConnectionAborted);
+
+            var memberLookup = members
                 .GroupBy(item => item.UserId, StringComparer.Ordinal)
                 .ToDictionary(
                     group => group.Key,
                     group => UploadPolicies.TrimToLength(group.First().DisplayName, MaxMentionDisplayNameLength),
                     StringComparer.Ordinal);
 
-            return mentions
+            var normalizedMentions = mentions
                 .Take(MaxMentionsPerMessage)
                 .Select(item =>
                 {
@@ -1740,6 +1771,8 @@ public class ChatHub : Hub
                 .GroupBy(item => item!.UserId, StringComparer.Ordinal)
                 .Select(group => group.First()!)
                 .ToList();
+
+            return await FilterBlockedMentionsAsync(normalizedMentions, currentUserId);
         }
 
         if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))
@@ -1755,7 +1788,7 @@ public class ChatHub : Hub
                 group => UploadPolicies.TrimToLength(group.First().Name, MaxMentionDisplayNameLength),
                 StringComparer.Ordinal);
 
-        return mentions
+        var serverMentions = mentions
             .Take(MaxMentionsPerMessage)
             .Select(item =>
             {
@@ -1774,6 +1807,31 @@ public class ChatHub : Hub
             .Where(item => item is not null)
             .GroupBy(item => item!.UserId, StringComparer.Ordinal)
             .Select(group => group.First()!)
+            .ToList();
+
+        return await FilterBlockedMentionsAsync(serverMentions, currentUserId);
+    }
+
+    private async Task<List<ChatMentionPayload>> FilterBlockedMentionsAsync(List<ChatMentionPayload> mentions, string currentUserId)
+    {
+        if (mentions.Count == 0 || !int.TryParse(currentUserId, out var senderUserId))
+        {
+            return mentions;
+        }
+
+        var targetUserIds = mentions
+            .Select(item => int.TryParse(item.UserId, out var userId) ? userId : 0)
+            .Where(item => item > 0)
+            .ToList();
+
+        var blockedMentionIds = await _userBlockService.GetBlockedMentionTargetIdsAsync(senderUserId, targetUserIds, Context.ConnectionAborted);
+        if (blockedMentionIds.Count == 0)
+        {
+            return mentions;
+        }
+
+        return mentions
+            .Where(item => !int.TryParse(item.UserId, out var userId) || !blockedMentionIds.Contains(userId))
             .ToList();
     }
 

@@ -140,6 +140,7 @@ const API_URL = resolveDefaultApiUrl();
 const API_BASE_URL = `${API_URL}/api`;
 const CHAT_HUB_URL = `${API_URL}/chatHub`;
 const VOICE_HUB_URL = `${API_URL}/voiceHub`;
+const IS_DESKTOP_APP_RUNTIME = Boolean(electronRuntime.isDesktopApp);
 const browserVoiceRtcConfig = buildBrowserVoiceRtcConfig();
 const VOICE_RTC_CONFIGURATION = {
   ...DEFAULT_VOICE_RTC_CONFIGURATION,
@@ -153,4 +154,4 @@ const VOICE_RTC_CONFIGURATION = {
       : DEFAULT_VOICE_RTC_CONFIGURATION.iceServers.map((server) => ({ ...server })),
 };
 
-export { API_URL, API_BASE_URL, CHAT_HUB_URL, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION };
+export { API_URL, API_BASE_URL, CHAT_HUB_URL, IS_DESKTOP_APP_RUNTIME, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION };

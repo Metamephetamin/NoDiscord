@@ -429,7 +429,7 @@ export const PersonalProfileSettings = ({
   onResetCustomization,
 }) => {
   return (
-    <div className="settings-shell__content">
+    <div className="settings-shell__content settings-shell__content--profile">
       <div className="settings-shell__content-header">
         <div>
           <h2>Личный профиль</h2>

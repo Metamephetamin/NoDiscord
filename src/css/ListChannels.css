@@ -206,7 +206,7 @@
 }
 
 .list__items--has-participants .voice-channel__button {
-  padding-left: 58px;
+  padding-left: 46px;
 }
 
 .list__items:hover .voice-channel__row > .channel-edit-button,
@@ -276,7 +276,7 @@
 .participant-list__connector {
   position: absolute;
   left: 5px;
-  top: -21px;
+  top: -20.5px;
   width: 58px;
   overflow: visible;
   color: var(--voice-connector-color);

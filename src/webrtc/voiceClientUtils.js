@@ -164,6 +164,11 @@ const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
     );
   }
 
+  if (stream && Object.isExtensible(stream)) {
+    stream.__ndDisplaySourceName = String(screenSource.name || "").trim();
+    stream.__ndDisplaySourceId = String(screenSource.id || "").trim();
+  }
+
   return tuneDisplayStream(stream, resolution, fps);
 };
 

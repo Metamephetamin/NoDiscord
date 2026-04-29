@@ -935,6 +935,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   text-transform: uppercase;
 }
 
+.member-role-menu__title--channel ~ .member-role-menu__title {
+  display: none;
+}
+
 .member-role-menu__item {
   width: 100%;
   display: flex;
@@ -3250,6 +3254,31 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   -webkit-overflow-scrolling: touch;
   scrollbar-color: rgba(91, 101, 122, 0.72) rgba(8, 10, 14, 0.92);
   scrollbar-width: thin;
+}
+
+.friends-direct-block-notice {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: rgba(222, 229, 244, 0.78);
+}
+
+.friends-direct-block-notice strong {
+  color: rgba(245, 248, 255, 0.92);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.friends-direct-block-notice span {
+  max-width: 420px;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .friends-main__content::-webkit-scrollbar {
@@ -10446,6 +10475,11 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   color: #a4adbf;
   font-size: 14px;
   line-height: 1.42;
+}
+
+.settings-shell__content--profile {
+  padding-left: 50px;
+  padding-right: 50px;
 }
 
 .voice-settings-card {

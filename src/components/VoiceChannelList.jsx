@@ -13,6 +13,7 @@ const PARTICIPANT_CONNECTOR_TOP_Y = 0.5;
 const PARTICIPANT_CONNECTOR_FIRST_Y = 38.5;
 const PARTICIPANT_CONNECTOR_STEP_Y = 34;
 const PARTICIPANT_CONNECTOR_STEM_X = 4.5;
+const PARTICIPANT_CONNECTOR_TITLE_END_X = 38.5;
 const PARTICIPANT_CONNECTOR_END_X = 52.5;
 const PARTICIPANT_CONNECTOR_RADIUS = 6;
 
@@ -38,7 +39,7 @@ const buildParticipantConnectorPath = (participantCount) => {
   const topCornerX = PARTICIPANT_CONNECTOR_STEM_X + PARTICIPANT_CONNECTOR_RADIUS;
   const finalTurnY = Math.max(PARTICIPANT_CONNECTOR_TOP_Y, lastY - PARTICIPANT_CONNECTOR_RADIUS);
   const pathParts = [
-    `M ${PARTICIPANT_CONNECTOR_END_X} ${PARTICIPANT_CONNECTOR_TOP_Y}`,
+    `M ${PARTICIPANT_CONNECTOR_TITLE_END_X} ${PARTICIPANT_CONNECTOR_TOP_Y}`,
     `H ${topCornerX}`,
     `Q ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_TOP_Y} ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_RADIUS}`,
   ];
@@ -59,7 +60,7 @@ const buildParticipantConnectorPath = (participantCount) => {
     const turnY = Math.max(PARTICIPANT_CONNECTOR_TOP_Y, y - PARTICIPANT_CONNECTOR_RADIUS);
 
     return [
-      `M ${PARTICIPANT_CONNECTOR_END_X} ${PARTICIPANT_CONNECTOR_TOP_Y}`,
+      `M ${PARTICIPANT_CONNECTOR_TITLE_END_X} ${PARTICIPANT_CONNECTOR_TOP_Y}`,
       `H ${topCornerX}`,
       `Q ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_TOP_Y} ${PARTICIPANT_CONNECTOR_STEM_X} ${PARTICIPANT_CONNECTOR_RADIUS}`,
       `V ${turnY}`,
@@ -95,6 +96,7 @@ const VoiceChannelList = ({
   onChannelDragOver,
   onChannelDrop,
   onChannelDragEnd,
+  onChannelContextMenu,
   liveUserIds = [],
   speakingUserIds = [],
   watchedStreamUserId = null,
@@ -205,6 +207,7 @@ const VoiceChannelList = ({
             onDragOver={(event) => onChannelDragOver?.(event, "voice", channel, categoryId)}
             onDrop={(event) => onChannelDrop?.(event, "voice", channel, categoryId)}
             onDragEnd={onChannelDragEnd}
+            onContextMenu={(event) => onChannelContextMenu?.(event, "voice", channel)}
           >
             {canManageChannels && !isEditing ? (
               <span

@@ -258,7 +258,7 @@ export default function TextChatProfileModal({
                 type="button"
                 className="chat-profile-modal__action"
                 onClick={onStartDirectCall}
-                disabled={!profile.canOpenDirectChat || !profile.isFriend || typeof onStartDirectCall !== "function"}
+                disabled={!profile.canOpenDirectChat || !profile.isFriend || profile.isBlocked || profile.blockedYou || typeof onStartDirectCall !== "function"}
               >
                 <ProfileIcon kind="call" className="chat-profile-modal__action-icon" />
                 Позвонить

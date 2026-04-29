@@ -814,6 +814,8 @@ export const normalizeFriend = (friend) => ({
   unreadCount: Math.max(0, Number(friend?.unreadCount ?? friend?.unread_count ?? 0) || 0),
   isOnline: isUserCurrentlyOnline(friend),
   isSelf: Boolean(friend?.isSelf),
+  isBlocked: Boolean(friend?.isBlocked ?? friend?.is_blocked),
+  blockedYou: Boolean(friend?.blockedYou ?? friend?.blocked_you),
 });
 export const normalizeConversationTarget = (conversation) => {
   const members = Array.isArray(conversation?.members)

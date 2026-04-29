@@ -12,6 +12,10 @@ if (started) {
   app.quit();
 }
 
+app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
+
 const SESSION_STORE_FILE_NAME = "session.secure.json";
 const SECURE_KEY_VALUE_STORE_FILE_NAME = "secure-store.json";
 const APP_UPDATE_CACHE_FILE_NAME = "app-update-cache.json";
@@ -110,9 +114,12 @@ const resolveRendererDevServerUrl = () => {
 };
 
 const RENDERER_DEV_SERVER_URL = resolveRendererDevServerUrl();
+const MEDIA_RENDERER_ACTIVE_FRAME_RATE = 120;
+const MEDIA_RENDERER_IDLE_FRAME_RATE = 60;
 
 let mainWindow = null;
-let mediaPowerSaveBlockerId = null;
+let mediaAppSuspensionBlockerId = null;
+let mediaDisplaySleepBlockerId = null;
 let appTray = null;
 let pendingRendererRoute = "";
 let appUpdateCheckPromise = null;
@@ -150,20 +157,53 @@ const applyTitleBarOverlayVisibility = (visible = true) => {
   }
 };
 
+const startPowerSaveBlocker = (type) => {
+  try {
+    return powerSaveBlocker.start(type);
+  } catch (error) {
+    console.warn(`Failed to start ${type} power save blocker`, error);
+    return null;
+  }
+};
+
+const stopPowerSaveBlocker = (blockerId) => {
+  if (blockerId === null) {
+    return;
+  }
+
+  try {
+    if (powerSaveBlocker.isStarted(blockerId)) {
+      powerSaveBlocker.stop(blockerId);
+    }
+  } catch (error) {
+    console.warn("Failed to stop media power save blocker", error);
+  }
+};
+
 const setMediaPerformanceMode = (active) => {
   const shouldActivate = active === true;
-  if (shouldActivate && mediaPowerSaveBlockerId === null) {
-    mediaPowerSaveBlockerId = powerSaveBlocker.start("prevent-display-sleep");
-  } else if (!shouldActivate && mediaPowerSaveBlockerId !== null) {
-    if (powerSaveBlocker.isStarted(mediaPowerSaveBlockerId)) {
-      powerSaveBlocker.stop(mediaPowerSaveBlockerId);
-    }
-    mediaPowerSaveBlockerId = null;
+  if (shouldActivate && mediaAppSuspensionBlockerId === null) {
+    mediaAppSuspensionBlockerId = startPowerSaveBlocker("prevent-app-suspension");
+  }
+  if (shouldActivate && mediaDisplaySleepBlockerId === null) {
+    mediaDisplaySleepBlockerId = startPowerSaveBlocker("prevent-display-sleep");
+  }
+  if (!shouldActivate) {
+    stopPowerSaveBlocker(mediaAppSuspensionBlockerId);
+    stopPowerSaveBlocker(mediaDisplaySleepBlockerId);
+    mediaAppSuspensionBlockerId = null;
+    mediaDisplaySleepBlockerId = null;
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed() && typeof mainWindow.webContents?.setFrameRate === "function") {
+    mainWindow.webContents.setFrameRate(shouldActivate ? MEDIA_RENDERER_ACTIVE_FRAME_RATE : MEDIA_RENDERER_IDLE_FRAME_RATE);
   }
 
   return {
-    active: mediaPowerSaveBlockerId !== null,
-    powerSaveBlockerId: mediaPowerSaveBlockerId,
+    active: mediaAppSuspensionBlockerId !== null || mediaDisplaySleepBlockerId !== null,
+    appSuspensionBlockerId: mediaAppSuspensionBlockerId,
+    displaySleepBlockerId: mediaDisplaySleepBlockerId,
+    rendererFrameRate: shouldActivate ? MEDIA_RENDERER_ACTIVE_FRAME_RATE : MEDIA_RENDERER_IDLE_FRAME_RATE,
   };
 };
 

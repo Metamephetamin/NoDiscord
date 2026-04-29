@@ -116,6 +116,7 @@ function buildVoiceRuntimeConfig() {
     publicAppUrl: process.env.ND_PUBLIC_APP_URL?.trim() || process.env.VITE_PUBLIC_APP_URL?.trim() || "",
     appProtocol: process.env.ND_APP_PROTOCOL?.trim() || DEFAULT_APP_PROTOCOL,
     appVersion: process.env.npm_package_version?.trim?.() || "",
+    isDesktopApp: true,
     isPackagedApp: isPackagedRuntime(),
     voiceRtcConfig: {
       iceServers: normalizedIceServers,

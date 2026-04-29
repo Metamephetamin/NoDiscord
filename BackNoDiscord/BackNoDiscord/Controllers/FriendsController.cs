@@ -17,6 +17,7 @@ public class FriendsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly FriendRequestService _friendRequestService;
+    private readonly UserBlockService _userBlockService;
     private readonly UserPresenceService _userPresenceService;
     private readonly CryptoService _crypto;
     private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
@@ -25,12 +26,14 @@ public class FriendsController : ControllerBase
         AppDbContext context,
         IHubContext<ChatHub> chatHubContext,
         FriendRequestService friendRequestService,
+        UserBlockService userBlockService,
         UserPresenceService userPresenceService,
         CryptoService crypto)
     {
         _context = context;
         _chatHubContext = chatHubContext;
         _friendRequestService = friendRequestService;
+        _userBlockService = userBlockService;
         _userPresenceService = userPresenceService;
         _crypto = crypto;
     }
@@ -60,6 +63,7 @@ public class FriendsController : ControllerBase
             .ToDictionaryAsync(item => item.id);
         var activityByUserId = await LoadActiveActivitiesAsync(friendIds);
         var unreadCountsByFriendId = await BuildDirectUnreadCountsAsync(currentUserId, friendIds);
+        var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, friendIds);
 
         var result = friendships
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
@@ -69,7 +73,8 @@ public class FriendsController : ControllerBase
                 users[friendId],
                 currentUserId,
                 activityByUserId,
-                unreadCountsByFriendId.TryGetValue(friendId, out var unreadCount) ? unreadCount : 0));
+                unreadCountsByFriendId.TryGetValue(friendId, out var unreadCount) ? unreadCount : 0,
+                blockStateByUserId.TryGetValue(friendId, out var blockState) ? blockState : null));
 
         return Ok(result);
     }
@@ -148,6 +153,7 @@ public class FriendsController : ControllerBase
             .ThenBy(item => item.last_name, StringComparer.OrdinalIgnoreCase)
             .Take(20)
             .ToList();
+        var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, result.Select(item => item.id));
 
         return Ok(result.Select(item => new
         {
@@ -161,6 +167,8 @@ public class FriendsController : ControllerBase
             is_online = _userPresenceService.IsOnline(item.id.ToString()),
             presence = _userPresenceService.IsOnline(item.id.ToString()) ? "online" : "offline",
             item.directChannelId,
+            isBlocked = blockStateByUserId.TryGetValue(item.id, out var blockState) && blockState.CurrentUserBlockedTarget,
+            blockedYou = blockStateByUserId.TryGetValue(item.id, out blockState) && blockState.TargetBlockedCurrentUser,
             friendshipStatus = existingFriendIds.Contains(item.id)
                 ? "friend"
                 : pendingRequestsByUserId.TryGetValue(item.id, out var pendingRequest)
@@ -196,6 +204,17 @@ public class FriendsController : ControllerBase
         if (friend.id == currentUserId)
         {
             return BadRequest(new { message = "Нельзя добавить самого себя." });
+        }
+
+        var blockState = await _userBlockService.GetBlockStateAsync(currentUserId, friend.id, HttpContext.RequestAborted);
+        if (blockState.CurrentUserBlockedTarget)
+        {
+            return BadRequest(new { message = UserBlockService.YouBlockedTargetMessage });
+        }
+
+        if (blockState.TargetBlockedCurrentUser)
+        {
+            return BadRequest(new { message = UserBlockService.BlockedByTargetMessage });
         }
 
         var result = await _friendRequestService.CreateOrAcceptRequestAsync(currentUserId, friend.id);
@@ -317,6 +336,91 @@ public class FriendsController : ControllerBase
         });
     }
 
+    [HttpGet("blocks")]
+    public async Task<IActionResult> GetBlocks(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var blocks = await _context.UserBlocks
+            .AsNoTracking()
+            .Where(item => item.BlockerUserId == currentUserId || item.BlockedUserId == currentUserId)
+            .Select(item => new { item.BlockerUserId, item.BlockedUserId })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            blockedIds = blocks
+                .Where(item => item.BlockerUserId == currentUserId)
+                .Select(item => item.BlockedUserId)
+                .Distinct()
+                .ToList(),
+            blockedByIds = blocks
+                .Where(item => item.BlockedUserId == currentUserId)
+                .Select(item => item.BlockerUserId)
+                .Distinct()
+                .ToList()
+        });
+    }
+
+    [HttpPost("{targetUserId:int}/block")]
+    public async Task<IActionResult> BlockUser([FromRoute] int targetUserId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        if (targetUserId <= 0 || targetUserId == currentUserId)
+        {
+            return BadRequest(new { message = "Нельзя заблокировать этого пользователя." });
+        }
+
+        var targetExists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(item => item.id == targetUserId, cancellationToken);
+        if (!targetExists)
+        {
+            return NotFound(new { message = "Пользователь не найден." });
+        }
+
+        var blockState = await _userBlockService.BlockAsync(currentUserId, targetUserId, cancellationToken);
+        await BroadcastFriendListUpdatedAsync(currentUserId, targetUserId);
+
+        return Ok(new
+        {
+            targetUserId,
+            isBlocked = blockState.CurrentUserBlockedTarget,
+            blockedYou = blockState.TargetBlockedCurrentUser
+        });
+    }
+
+    [HttpDelete("{targetUserId:int}/block")]
+    public async Task<IActionResult> UnblockUser([FromRoute] int targetUserId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        if (targetUserId <= 0 || targetUserId == currentUserId)
+        {
+            return BadRequest(new { message = "Нельзя разблокировать этого пользователя." });
+        }
+
+        var blockState = await _userBlockService.UnblockAsync(currentUserId, targetUserId, cancellationToken);
+        await BroadcastFriendListUpdatedAsync(currentUserId, targetUserId);
+
+        return Ok(new
+        {
+            targetUserId,
+            isBlocked = blockState.CurrentUserBlockedTarget,
+            blockedYou = blockState.TargetBlockedCurrentUser
+        });
+    }
+
     private bool TryGetCurrentUserId(out int currentUserId)
     {
         currentUserId = 0;
@@ -412,6 +516,33 @@ public class FriendsController : ControllerBase
         return counts;
     }
 
+    private async Task<Dictionary<int, UserBlockState>> LoadBlockStatesAsync(int currentUserId, IEnumerable<int> userIds)
+    {
+        var normalizedUserIds = userIds
+            .Where(item => item > 0 && item != currentUserId)
+            .Distinct()
+            .ToList();
+
+        if (normalizedUserIds.Count == 0)
+        {
+            return new Dictionary<int, UserBlockState>();
+        }
+
+        var blocks = await _context.UserBlocks
+            .AsNoTracking()
+            .Where(item =>
+                (item.BlockerUserId == currentUserId && normalizedUserIds.Contains(item.BlockedUserId)) ||
+                (item.BlockedUserId == currentUserId && normalizedUserIds.Contains(item.BlockerUserId)))
+            .Select(item => new { item.BlockerUserId, item.BlockedUserId })
+            .ToListAsync();
+
+        return normalizedUserIds.ToDictionary(
+            userId => userId,
+            userId => new UserBlockState(
+                blocks.Any(item => item.BlockerUserId == currentUserId && item.BlockedUserId == userId),
+                blocks.Any(item => item.BlockedUserId == currentUserId && item.BlockerUserId == userId)));
+    }
+
     private string GetRawPayload(string? content, string? encryptedContent)
     {
         if (string.IsNullOrWhiteSpace(encryptedContent))
@@ -455,7 +586,8 @@ public class FriendsController : ControllerBase
         User friend,
         int currentUserId,
         IReadOnlyDictionary<int, UserIntegrationRecord>? activityByUserId = null,
-        int unreadCount = 0)
+        int unreadCount = 0,
+        UserBlockState? blockState = null)
     {
         var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
         UserIntegrationRecord? activity = null;
@@ -473,7 +605,9 @@ public class FriendsController : ControllerBase
             last_seen_at = friend.last_seen_at,
             activity = BuildActivityPayload(activity),
             directChannelId = BuildDirectChannelId(currentUserId, friend.id),
-            unreadCount = Math.Clamp(unreadCount, 0, 999)
+            unreadCount = Math.Clamp(unreadCount, 0, 999),
+            isBlocked = blockState?.CurrentUserBlockedTarget ?? false,
+            blockedYou = blockState?.TargetBlockedCurrentUser ?? false
         };
     }
 
