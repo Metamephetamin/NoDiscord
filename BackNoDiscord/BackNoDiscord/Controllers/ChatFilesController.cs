@@ -1,77 +1,123 @@
 using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace BackNoDiscord.Controllers;
 
-public class UploadChatFileRequest
-{
-    public IFormFile? File { get; set; }
-}
-
 [ApiController]
 [Route("api/chat-files")]
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ChatFilesController : ControllerBase
 {
-    private const long MaxFileSizeBytes = 100L * 1024 * 1024;
+    private const long DefaultMaxFileSizeBytes = 100L * 1024 * 1024;
+    private const long DefaultMaxUserStorageBytes = 5L * 1024 * 1024 * 1024;
+    private const long DefaultMinFreeDiskBytes = 1L * 1024 * 1024 * 1024;
+    private const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
     private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
     private readonly UploadStoragePaths _uploadStoragePaths;
+    private readonly IConfiguration _configuration;
+    private readonly IChatFileUploadStorageMetrics _storageMetrics;
 
-    public ChatFilesController(UploadStoragePaths uploadStoragePaths)
+    public ChatFilesController(
+        UploadStoragePaths uploadStoragePaths,
+        IConfiguration configuration,
+        IChatFileUploadStorageMetrics storageMetrics)
     {
         _uploadStoragePaths = uploadStoragePaths;
+        _configuration = configuration;
+        _storageMetrics = storageMetrics;
     }
 
     [HttpPost("upload")]
     [EnableRateLimiting("chat-upload")]
-    [RequestSizeLimit(MaxFileSizeBytes)]
-    [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSizeBytes)]
-    public async Task<IActionResult> Upload([FromForm] UploadChatFileRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload(CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
             return Unauthorized();
         }
 
-        var file = request.File;
-        if (file == null || file.Length == 0)
-        {
-            return BadRequest(new { message = "File is required" });
-        }
-
-        if (file.Length > MaxFileSizeBytes)
-        {
-            return BadRequest(new { message = "File size must be less than or equal to 100 MB" });
-        }
-
-        if (!UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error))
-        {
-            return BadRequest(new { message = error });
-        }
-
+        var limits = ResolveUploadLimits();
+        ApplyRequestBodyLimit(limits);
         var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");
-        Directory.CreateDirectory(uploadsDirectory);
-
-        var fileName = $"chat-{UploadPolicies.SanitizeIdentifier(currentUser.UserId)}-{Guid.NewGuid():N}{extension}";
-        var filePath = Path.Combine(uploadsDirectory, fileName);
-
-        await using (var stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.SequentialScan))
+        try
         {
-            await file.CopyToAsync(stream, cancellationToken);
+            var upload = await StreamedChatFileUploadReader.UploadAsync(
+                Request,
+                uploadsDirectory,
+                currentUser.UserId,
+                limits,
+                _storageMetrics,
+                cancellationToken);
+
+            return Ok(new
+            {
+                fileUrl = upload.FileUrl,
+                fileName = upload.DisplayFileName,
+                size = upload.Size,
+                contentType = upload.ContentType
+            });
+        }
+        catch (StreamedChatFileUploadException exception)
+        {
+            var message = string.Equals(exception.Message, "File size limit exceeded.", StringComparison.Ordinal)
+                ? $"File size must be less than or equal to {FormatBytes(limits.MaxFileSizeBytes)}"
+                : exception.Message;
+            return BadRequest(new { message });
+        }
+    }
+
+    private StreamedChatFileUploadLimits ResolveUploadLimits()
+    {
+        var maxFileSizeBytes = GetConfiguredBytes("ChatFiles:MaxFileSizeBytes", DefaultMaxFileSizeBytes);
+        var maxUserStorageBytes = Math.Max(
+            maxFileSizeBytes,
+            GetConfiguredBytes("ChatFiles:MaxUserStorageBytes", DefaultMaxUserStorageBytes));
+        var minFreeDiskBytes = GetConfiguredBytes("ChatFiles:MinFreeDiskBytes", DefaultMinFreeDiskBytes);
+
+        return new StreamedChatFileUploadLimits(maxFileSizeBytes, maxUserStorageBytes, minFreeDiskBytes);
+    }
+
+    private long GetConfiguredBytes(string key, long fallback)
+    {
+        return long.TryParse(_configuration[key], out var configured) && configured > 0
+            ? configured
+            : fallback;
+    }
+
+    private void ApplyRequestBodyLimit(StreamedChatFileUploadLimits limits)
+    {
+        var feature = HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (feature is null || feature.IsReadOnly)
+        {
+            return;
         }
 
-        return Ok(new
+        feature.MaxRequestBodySize = checked(limits.MaxFileSizeBytes + MultipartRequestOverheadBytes);
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        const long gigabyte = 1024L * 1024 * 1024;
+        const long megabyte = 1024L * 1024;
+
+        if (bytes % gigabyte == 0)
         {
-            fileUrl = $"/chat-files/{fileName}",
-            fileName = UploadPolicies.SanitizeDisplayFileName(file.FileName),
-            size = file.Length,
-            contentType
-        });
+            return $"{bytes / gigabyte} GB";
+        }
+
+        if (bytes % megabyte == 0)
+        {
+            return $"{bytes / megabyte} MB";
+        }
+
+        return $"{bytes} bytes";
     }
 
     [HttpGet("/chat-files/{fileName}")]

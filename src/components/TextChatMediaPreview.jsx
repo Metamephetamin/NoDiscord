@@ -28,6 +28,7 @@ export default function TextChatMediaPreview({
     onZoom,
   });
   const [isDragging, setIsDragging] = useState(false);
+  const [imageLoadState, setImageLoadState] = useState({ url: "", failed: false });
   const zoom = Number(mediaPreview?.zoom) || 1;
   const hasGallery = (mediaPreview?.items?.length || 0) > 1;
   const canPan = zoom > 1;
@@ -35,6 +36,8 @@ export default function TextChatMediaPreview({
   const translateY = Number(mediaPreview?.panY) || 0;
   const isImagePreview = mediaPreview?.type === "image";
   const isPreviewOpen = Boolean(mediaPreview);
+  const imagePreviewUrl = isImagePreview ? String(mediaPreview?.url || "") : "";
+  const isImageReady = !isImagePreview || (imagePreviewUrl && imageLoadState.url === imagePreviewUrl);
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -203,6 +206,47 @@ export default function TextChatMediaPreview({
     };
   }, [isPreviewOpen]);
 
+  useEffect(() => {
+    if (!imagePreviewUrl) {
+      return undefined;
+    }
+
+    let isCanceled = false;
+    const image = new Image();
+    image.decoding = "async";
+    image.fetchPriority = "high";
+
+    const markReady = () => {
+      const decodePromise = typeof image.decode === "function"
+        ? image.decode().catch(() => null)
+        : Promise.resolve();
+
+      decodePromise.finally(() => {
+        if (!isCanceled) {
+          setImageLoadState({ url: imagePreviewUrl, failed: false });
+        }
+      });
+    };
+
+    image.onload = markReady;
+    image.onerror = () => {
+      if (!isCanceled) {
+        setImageLoadState({ url: imagePreviewUrl, failed: true });
+      }
+    };
+    image.src = imagePreviewUrl;
+
+    if (image.complete && image.naturalWidth > 0) {
+      markReady();
+    }
+
+    return () => {
+      isCanceled = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [imagePreviewUrl]);
+
   if (!mediaPreview) {
     return null;
   }
@@ -261,7 +305,11 @@ export default function TextChatMediaPreview({
             onPointerLeave={handlePointerEnd}
             onClick={handleViewportClick}
           >
-            {isImagePreview ? (
+            {isImagePreview && !isImageReady ? (
+              <div className="media-preview__image-loader" aria-hidden="true">
+                <span />
+              </div>
+            ) : isImagePreview ? (
               <img
                 className="media-preview__image"
                 src={mediaPreview.url}

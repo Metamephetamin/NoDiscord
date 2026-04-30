@@ -35,13 +35,16 @@ if (jwtKey.Length < 32)
 
 const string MediaAccessTokenCookieName = "tend_access_token";
 const long MaxChatFileUploadBytes = 100L * 1024 * 1024;
+const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = MaxChatFileUploadBytes;
+    options.MultipartBodyLengthLimit =
+        GetConfiguredPositiveLong(builder.Configuration, "ChatFiles:MaxFileSizeBytes", MaxChatFileUploadBytes) +
+        MultipartRequestOverheadBytes;
 });
 
 builder.Services.AddCors(options =>
@@ -212,6 +215,7 @@ builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
 builder.Services.AddScoped<PushNotificationService>();
 builder.Services.AddSingleton<UploadStoragePaths>();
+builder.Services.AddSingleton<IChatFileUploadStorageMetrics, LocalChatFileUploadStorageMetrics>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSender>();
 builder.Services.AddScoped<ServerInviteService>();
@@ -429,6 +433,13 @@ static IEnumerable<string> EnumerateDotEnvPaths(string startDirectory)
         yield return Path.Combine(directory.FullName, ".env");
         directory = directory.Parent;
     }
+}
+
+static long GetConfiguredPositiveLong(IConfiguration configuration, string key, long fallback)
+{
+    return long.TryParse(configuration[key], out var configured) && configured > 0
+        ? configured
+        : fallback;
 }
 
 static IReadOnlyCollection<IPAddress> GetConfiguredKnownProxies(IConfiguration configuration)

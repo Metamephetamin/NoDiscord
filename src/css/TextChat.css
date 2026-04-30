@@ -8419,6 +8419,23 @@ html[data-ui-density="compact"] .input-area {
   cursor: grabbing;
 }
 
+.media-preview__image-loader {
+  width: 54px;
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-preview__image-loader span {
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(232, 238, 249, 0.2);
+  border-top-color: rgba(232, 238, 249, 0.78);
+  border-radius: 50%;
+  animation: mediaPreviewLoaderSpin 0.7s linear infinite;
+}
+
 .media-preview__image,
 .media-preview__video {
   display: block;
@@ -8475,6 +8492,12 @@ html[data-ui-density="compact"] .input-area {
 
 .media-preview__nav--next {
   right: 22px;
+}
+
+@keyframes mediaPreviewLoaderSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 html[data-ui-reduce-motion="true"] .media-preview,
