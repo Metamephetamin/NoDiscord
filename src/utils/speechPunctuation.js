@@ -1,6 +1,5 @@
 import { API_URL } from "../config/runtime";
 import { authFetch } from "./auth";
-import { autocorrectUserText } from "./textAutocorrect";
 
 const TYPED_PUNCTUATION_TIMEOUT_MS = 3500;
 const COMPOSER_PUNCTUATION_TIMEOUT_MS = 8000;
@@ -30,21 +29,6 @@ function shouldUseServerTypedPunctuation(text) {
   }
 
   return false;
-}
-
-function normalizePunctuationSpacing(text) {
-  return String(text || "")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/[ \t]+([,.;:!?])/g, "$1")
-    .replace(/([,.;:!?])(?=[^\s.,;:!?])/g, (match, punctuation, offset, source) => {
-      const previousChar = source[offset - 1] || "";
-      const nextChar = source[offset + 1] || "";
-      return (punctuation === "," || punctuation === ".") && /\d/.test(previousChar) && /\d/.test(nextChar)
-        ? punctuation
-        : `${punctuation} `;
-    })
-    .replace(/\s+([.!?\u2026])$/u, "$1")
-    .trim();
 }
 
 function normalizeTextIdentity(text) {
@@ -103,14 +87,14 @@ export function formatServerPunctuationResult(result, fallbackText = "") {
   }
 
   if (isUnsafePunctuationResult(normalizedText, fallbackText)) {
-    return autocorrectUserText(normalizePunctuationSpacing(fallbackText));
+    return String(fallbackText || "").trim();
   }
 
-  return autocorrectUserText(normalizePunctuationSpacing(normalizedText));
+  return normalizedText;
 }
 
 export async function punctuateTypedMessageText(rawText) {
-  const normalizedText = autocorrectUserText(String(rawText || "").trim());
+  const normalizedText = String(rawText || "").trim();
   if (!shouldUseServerTypedPunctuation(normalizedText)) {
     return normalizedText;
   }
@@ -124,6 +108,9 @@ export async function punctuateTypedMessageText(rawText) {
     const result = await punctuateTextOnServer(normalizedText, {
       signal: controller?.signal,
     });
+    if (result?.usedModel !== true) {
+      throw new Error("Ollama недоступна.");
+    }
     return formatServerPunctuationResult(result, normalizedText);
   } catch {
     return normalizedText;
@@ -135,7 +122,7 @@ export async function punctuateTypedMessageText(rawText) {
 }
 
 export async function punctuateComposerText(rawText) {
-  const normalizedText = autocorrectUserText(String(rawText || "").trim());
+  const normalizedText = String(rawText || "").trim();
   if (!normalizedText) {
     return "";
   }
@@ -149,9 +136,10 @@ export async function punctuateComposerText(rawText) {
     const result = await punctuateTextOnServer(normalizedText, {
       signal: controller?.signal,
     });
+    if (result?.usedModel !== true) {
+      throw new Error("Ollama недоступна.");
+    }
     return formatServerPunctuationResult(result, normalizedText);
-  } catch {
-    return normalizedText;
   } finally {
     if (timeoutId) {
       globalThis.clearTimeout(timeoutId);

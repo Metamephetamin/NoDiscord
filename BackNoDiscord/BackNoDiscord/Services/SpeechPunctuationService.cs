@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,13 +14,6 @@ public sealed class SpeechPunctuationResult
 public interface ISpeechPunctuationService
 {
     Task<SpeechPunctuationResult> PunctuateAsync(string text, CancellationToken cancellationToken = default);
-}
-
-internal sealed class PythonSpeechPunctuationResponse
-{
-    public string? Text { get; set; }
-    public string? Provider { get; set; }
-    public bool UsedModel { get; set; }
 }
 
 internal sealed class OllamaGenerateResponse
@@ -176,23 +167,16 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
     };
 
     private readonly ILogger<SpeechPunctuationService> _logger;
-    private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly SemaphoreSlim _ollamaRequestLock;
-    private readonly SemaphoreSlim _pythonWorkerLock = new(1, 1);
-    private Process? _pythonWorkerProcess;
-    private StreamWriter? _pythonWorkerInput;
-    private StreamReader? _pythonWorkerOutput;
 
     public SpeechPunctuationService(
         ILogger<SpeechPunctuationService> logger,
-        IWebHostEnvironment environment,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _environment = environment;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
 
@@ -202,9 +186,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
 
     public void Dispose()
     {
-        StopPythonWorker();
         _ollamaRequestLock.Dispose();
-        _pythonWorkerLock.Dispose();
     }
 
     public async Task<SpeechPunctuationResult> PunctuateAsync(string text, CancellationToken cancellationToken = default)
@@ -220,22 +202,16 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
             };
         }
 
-        var modelResult = await TryPunctuateWithOllamaAsync(normalizedInput, cancellationToken)
-            ?? await TryPunctuateWithPythonModelAsync(normalizedInput, cancellationToken);
+        var modelResult = await TryPunctuateWithOllamaAsync(normalizedInput, cancellationToken);
         if (modelResult is not null)
         {
-            return new SpeechPunctuationResult
-            {
-                Text = PolishModelPunctuation(modelResult.Text, inferTerminalPunctuation: true),
-                Provider = modelResult.Provider,
-                UsedModel = true,
-            };
+            return modelResult;
         }
 
         return new SpeechPunctuationResult
         {
-            Text = ApplyHeuristicPunctuation(normalizedInput),
-            Provider = "server-heuristic-punctuation",
+            Text = normalizedInput,
+            Provider = "ollama-unavailable",
             UsedModel = false,
         };
     }
@@ -449,10 +425,16 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
 
     private static string CreateOllamaPrompt(string text) =>
         $"""
-        Исправь только пунктуацию, пробелы и заглавные буквы в начале предложений.
-        Не меняй слова, порядок слов, сленг, мат, эмодзи, ссылки, упоминания и смысл.
-        Не добавляй объяснений.
-        Верни только исправленный текст.
+        Ты редактор пунктуации русского текста.
+        Восстанови пропущенные знаки препинания: запятые, точки, вопросительные и восклицательные знаки, двоеточия, тире, кавычки, если они нужны.
+        Обязательно проверь запятые внутри предложения, а не только знак в конце.
+        Разрешено менять только пунктуацию, пробелы и заглавные буквы в начале предложений.
+        Запрещено менять слова, порядок слов, сленг, мат, эмодзи, ссылки, упоминания и смысл.
+        Верни только один исправленный вариант текста без объяснений.
+
+        Пример:
+        вход: ну да конечно я понял что ты хотел
+        выход: Ну, да, конечно, я понял, что ты хотел.
 
         Текст:
         {text}
@@ -488,161 +470,6 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         }
 
         return string.Equals(NormalizeIdentity(originalText), NormalizeIdentity(candidateText), StringComparison.Ordinal);
-    }
-
-    private async Task<SpeechPunctuationResult?> TryPunctuateWithPythonModelAsync(string normalizedText, CancellationToken cancellationToken)
-    {
-        if (!IsPythonModelEnabled())
-        {
-            return null;
-        }
-
-        var scriptPath = ResolvePythonScriptPath();
-        if (string.IsNullOrWhiteSpace(scriptPath) || !File.Exists(scriptPath))
-        {
-            return null;
-        }
-
-        var pythonExecutable = ResolvePythonExecutable();
-
-        var queueWait = TimeSpan.FromMilliseconds(GetPythonQueueWaitMilliseconds());
-        if (!await _pythonWorkerLock.WaitAsync(queueWait, cancellationToken))
-        {
-            return null;
-        }
-        try
-        {
-            var process = EnsurePythonWorkerProcess(scriptPath, pythonExecutable);
-            if (process is null || _pythonWorkerInput is null || _pythonWorkerOutput is null)
-            {
-                return null;
-            }
-
-            using var timeoutCts = new CancellationTokenSource();
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(GetTimeoutSeconds()));
-
-            var payload = JsonSerializer.Serialize(new { text = normalizedText });
-            await _pythonWorkerInput.WriteLineAsync(payload).WaitAsync(timeoutCts.Token);
-            await _pythonWorkerInput.FlushAsync().WaitAsync(timeoutCts.Token);
-
-            var stdout = await _pythonWorkerOutput.ReadLineAsync().WaitAsync(timeoutCts.Token);
-            if (string.IsNullOrWhiteSpace(stdout))
-            {
-                RestartPythonWorker();
-                return null;
-            }
-
-            var response = JsonSerializer.Deserialize<PythonSpeechPunctuationResponse>(stdout);
-            var punctuatedText = NormalizeInput(response?.Text);
-            if (string.IsNullOrWhiteSpace(punctuatedText) || response?.UsedModel != true)
-            {
-                return null;
-            }
-
-            return new SpeechPunctuationResult
-            {
-                Text = punctuatedText,
-                Provider = string.IsNullOrWhiteSpace(response.Provider) ? "python-model" : response.Provider!,
-                UsedModel = true,
-            };
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException or Win32Exception)
-        {
-            RestartPythonWorker();
-            _logger.LogWarning(exception, "Speech punctuation model is unavailable, using conservative fallback.");
-            return null;
-        }
-        finally
-        {
-            _pythonWorkerLock.Release();
-        }
-    }
-
-    private Process? EnsurePythonWorkerProcess(string scriptPath, string pythonExecutable)
-    {
-        if (_pythonWorkerProcess is { HasExited: false } && _pythonWorkerInput is not null && _pythonWorkerOutput is not null)
-        {
-            return _pythonWorkerProcess;
-        }
-
-        StopPythonWorker();
-
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = pythonExecutable,
-                WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? _environment.ContentRootPath,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            },
-            EnableRaisingEvents = true,
-        };
-
-        process.StartInfo.ArgumentList.Add(scriptPath);
-        process.StartInfo.ArgumentList.Add("--server");
-        process.ErrorDataReceived += (_, eventArgs) =>
-        {
-            if (!string.IsNullOrWhiteSpace(eventArgs.Data))
-            {
-                _logger.LogDebug("Speech punctuation worker stderr: {Message}", eventArgs.Data);
-            }
-        };
-        process.Exited += (_, _) =>
-        {
-            _logger.LogDebug("Speech punctuation worker exited.");
-        };
-
-        if (!process.Start())
-        {
-            process.Dispose();
-            return null;
-        }
-
-        process.BeginErrorReadLine();
-        _pythonWorkerProcess = process;
-        _pythonWorkerInput = process.StandardInput;
-        _pythonWorkerOutput = process.StandardOutput;
-        return process;
-    }
-
-    private void RestartPythonWorker()
-    {
-        StopPythonWorker();
-    }
-
-    private void StopPythonWorker()
-    {
-        var process = _pythonWorkerProcess;
-        _pythonWorkerProcess = null;
-        _pythonWorkerInput = null;
-        _pythonWorkerOutput = null;
-
-        if (process is null)
-        {
-            return;
-        }
-
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch
-        {
-            // ignore cleanup failures
-        }
-        finally
-        {
-            process.Dispose();
-        }
     }
 
     private bool IsOllamaEnabled()
@@ -693,64 +520,6 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         }
 
         return 1;
-    }
-
-    private bool IsPythonModelEnabled()
-    {
-        var rawValue = _configuration["SpeechPunctuation:EnablePythonModel"];
-        return string.IsNullOrWhiteSpace(rawValue) || !rawValue.Equals("false", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private int GetTimeoutSeconds()
-    {
-        if (int.TryParse(_configuration["SpeechPunctuation:TimeoutSeconds"], out var timeoutSeconds))
-        {
-            return Math.Clamp(timeoutSeconds, 3, 60);
-        }
-
-        return 15;
-    }
-
-    private int GetPythonQueueWaitMilliseconds()
-    {
-        if (int.TryParse(_configuration["SpeechPunctuation:PythonQueueWaitMilliseconds"], out var waitMilliseconds))
-        {
-            return Math.Clamp(waitMilliseconds, 0, 5000);
-        }
-
-        return 120;
-    }
-
-    private string ResolvePythonScriptPath()
-    {
-        var configuredPath = _configuration["SpeechPunctuation:ScriptPath"];
-        if (!string.IsNullOrWhiteSpace(configuredPath))
-        {
-            return Path.IsPathRooted(configuredPath)
-                ? configuredPath
-                : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, configuredPath));
-        }
-
-        return Path.Combine(_environment.ContentRootPath, "Punctuation", "speech_punctuate.py");
-    }
-
-    private string ResolvePythonExecutable()
-    {
-        var configuredExecutable = _configuration["SpeechPunctuation:PythonExecutable"];
-        if (!string.IsNullOrWhiteSpace(configuredExecutable))
-        {
-            return configuredExecutable;
-        }
-
-        var venvPython = OperatingSystem.IsWindows()
-            ? Path.Combine(_environment.ContentRootPath, ".venv", "Scripts", "python.exe")
-            : Path.Combine(_environment.ContentRootPath, ".venv", "bin", "python");
-        if (File.Exists(venvPython))
-        {
-            return venvPython;
-        }
-
-        return OperatingSystem.IsWindows() ? "python" : "python3";
     }
 
     private static string NormalizeInput(string? text)
