@@ -33,6 +33,8 @@ export function MenuMainSettingsContent({
   profileAccountName,
   profileDisplayName,
   profileStatus,
+  profileCustomization,
+  handleProfileCustomizationChange,
   emailChangeState,
   isTotpEnabled,
   totpSetup,
@@ -175,9 +177,9 @@ export function MenuMainSettingsContent({
           avatarSrc={user?.avatarUrl || user?.avatar}
           avatarFrame={getUserAvatarFrame(user)}
           displayName={profileDisplayName || getDisplayName(user)}
+          profileStatus={profileStatus}
           email={profileDraft.email}
           profileDraft={profileDraft}
-          profileStatus={profileStatus}
           isTotpEnabled={isTotpEnabled}
           totpSetup={totpSetup}
           maxProfileNameLength={MAX_PROFILE_NAME_LENGTH}
@@ -185,6 +187,8 @@ export function MenuMainSettingsContent({
           onSubmit={handleProfileSave}
           onChangeAvatar={() => avatarInputRef.current?.click()}
           onChangeBackground={() => profileBackgroundInputRef.current?.click()}
+          profileCustomization={profileCustomization}
+          onProfileCustomizationChange={handleProfileCustomizationChange}
           onResetCustomization={handleResetProfileCustomization}
           onUpdateDraft={updateProfileDraft}
           onTotpCodeChange={updateTotpCode}

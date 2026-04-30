@@ -6,6 +6,12 @@ import ServerInvitesPanel from "./ServerInvitesPanel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import PercentageSlider from "./PercentageSlider";
 import { formatIntegrationActivityStatus } from "../utils/integrations";
+import {
+  PROFILE_STORE_FEATURED_ITEMS,
+  applyProfileStoreItem,
+  getProfileCustomizationClassName,
+  getProfileStoreItemById,
+} from "../utils/profileCustomization";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -424,53 +430,150 @@ export const PersonalProfileSettings = ({
   avatarSrc,
   avatarFrame,
   displayName,
+  profileCustomization,
+  profileStatus,
+  onProfileCustomizationChange,
   onChangeAvatar,
   onChangeBackground,
   onResetCustomization,
 }) => {
+  const profileThemeClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
+  const appliedTheme = getProfileStoreItemById(profileCustomization?.appliedItemId);
+  const themeItems = PROFILE_STORE_FEATURED_ITEMS;
+  const applyTheme = (item) => {
+    onProfileCustomizationChange?.(applyProfileStoreItem(profileCustomization, item));
+  };
+
   return (
     <div className="settings-shell__content settings-shell__content--profile">
       <div className="settings-shell__content-header">
         <div>
           <h2>Личный профиль</h2>
-          <p>Настройте только внешний вид профиля. Имя, никнейм и почта теперь находятся в учётной записи.</p>
+          <p>Так выглядит ваш профиль для других.</p>
         </div>
       </div>
 
       <section className="voice-settings-card voice-settings-card--profile">
-        <div className="profile-settings-form">
-          <div className="profile-settings-form__preview-card">
-            <div className="profile-settings-form__cover">
+        <div className="profile-settings-form profile-settings-form--public">
+          <div className="profile-settings-form__public-preview">
+            <div className={`profile-settings-form__public-card ${profileThemeClassName}`.trim()}>
               {profileBackgroundSrc ? (
                 <AnimatedMedia
-                  className="profile-settings-form__cover-media"
+                  className="profile-settings-form__public-backdrop"
                   src={profileBackgroundSrc}
                   alt=""
                   frame={profileBackgroundFrame}
                 />
               ) : (
-                <div className="profile-settings-form__cover-fallback" aria-hidden="true" />
+                <div className="profile-settings-form__public-backdrop profile-settings-form__public-backdrop--fallback" aria-hidden="true" />
               )}
-            </div>
+              <div className="profile-settings-form__public-scrim" aria-hidden="true" />
 
-            <div className="profile-settings-form__preview-body">
-              <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={onChangeAvatar}>
-                <AnimatedAvatar className="profile-settings-form__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
-              </button>
-              <div className="profile-settings-form__identity">
-                <strong>{displayName}</strong>
+              <div className="profile-settings-form__public-hero">
+                <button type="button" className="profile-settings-form__avatar-wrap profile-settings-form__avatar-wrap--interactive" onClick={onChangeAvatar}>
+                  <AnimatedAvatar className="profile-settings-form__avatar" src={avatarSrc} alt={displayName} frame={avatarFrame} />
+                </button>
+                <div className="profile-settings-form__public-identity">
+                  <strong>{displayName}</strong>
+                  <div className="profile-settings-form__public-chips">
+                    <span>Друг</span>
+                    <span>Ваш ID</span>
+                  </div>
+                  <small>{appliedTheme?.title || "как вас видят друзья"}</small>
+                </div>
+              </div>
+
+              <div className="profile-settings-form__public-body">
+                <div className="profile-settings-form__public-main">
+                  <div className="profile-settings-form__public-grid" aria-hidden="true">
+                    <div><span>Активность</span><b>Сейчас в сети</b></div>
+                    <div><span>Связь</span><b>Сообщения и звонки</b></div>
+                    <div><span>ID</span><b>Ваш ID</b></div>
+                  </div>
+                  <div className="profile-settings-form__public-section">
+                    <span>О себе</span>
+                    <p>{displayName} пока ничего не рассказал о себе.</p>
+                  </div>
+                  <div className="profile-settings-form__public-section profile-settings-form__public-section--info">
+                    <span>Информация</span>
+                    <div className="profile-settings-form__public-info-list">
+                      <div>
+                        <em>Имя</em>
+                        <b>{displayName}</b>
+                      </div>
+                      <div>
+                        <em>Статус</em>
+                        <b>Друг</b>
+                      </div>
+                      <div>
+                        <em>Звонки</em>
+                        <b>Доступны</b>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="profile-settings-form__public-section">
+                    <span>Общее</span>
+                    <p>Ваши друзья видят этот профиль.</p>
+                  </div>
+                </div>
+
+                <div className="profile-settings-form__public-side" aria-hidden="true">
+                  <div className="profile-settings-form__public-actions">
+                    <div>Сообщение</div>
+                    <div>Позвонить</div>
+                    <div>Копировать ID</div>
+                  </div>
+                  <div className="profile-settings-form__public-widget">
+                    <strong>Общее</strong>
+                    <div>
+                      <span>Общие друзья</span>
+                      <b>видны друзьям</b>
+                    </div>
+                    <div>
+                      <span>Общие чаты</span>
+                      <b>по доступу</b>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="settings-shell__actions profile-settings-form__actions">
-            <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
-              Сменить фон профиля
-            </button>
-            <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
-              Сменить аватар
-            </button>
-            <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onResetCustomization}>
+          <div className="profile-settings-form__control-panel">
+            <div className="profile-settings-form__control-group">
+              <strong>Тема</strong>
+              <div className="profile-settings-form__theme-list">
+                {themeItems.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`profile-settings-form__theme-button ${profileCustomization?.appliedItemId === item.id ? "profile-settings-form__theme-button--active" : ""}`.trim()}
+                    onClick={() => applyTheme(item)}
+                  >
+                    <span className="profile-settings-form__theme-swatches" aria-hidden="true">
+                      {(item.colors || []).slice(0, 4).map((color) => <i key={color} style={{ backgroundColor: color }} />)}
+                    </span>
+                    <b>{item.title}</b>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="profile-settings-form__control-group profile-settings-form__control-group--media">
+              <strong>Медиа</strong>
+              <div className="profile-settings-form__actions">
+                <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
+                  Сменить аватар и рамку
+                </button>
+                <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
+                  Сменить фон и рамку
+                </button>
+              </div>
+            </div>
+
+            <div className="profile-settings-form__control-spacer" />
+            {profileStatus ? <div className="profile-settings-form__status profile-settings-form__status--inline">{profileStatus}</div> : null}
+            <button type="button" className="settings-inline-button settings-inline-button--danger profile-settings-form__reset-button" onClick={onResetCustomization}>
               Убрать всё
             </button>
           </div>

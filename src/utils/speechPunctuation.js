@@ -2,7 +2,8 @@ import { API_URL } from "../config/runtime";
 import { authFetch } from "./auth";
 import { autocorrectUserText } from "./textAutocorrect";
 
-const TYPED_PUNCTUATION_TIMEOUT_MS = 2200;
+const TYPED_PUNCTUATION_TIMEOUT_MS = 3500;
+const COMPOSER_PUNCTUATION_TIMEOUT_MS = 8000;
 
 function shouldUseServerTypedPunctuation(text) {
   const normalizedText = String(text || "").trim();
@@ -18,7 +19,17 @@ function shouldUseServerTypedPunctuation(text) {
     return false;
   }
 
-  return normalizedText.split(/\s+/).filter(Boolean).length >= 2;
+  const words = normalizedText.split(/\s+/).filter(Boolean);
+  if (words.length >= 3) {
+    return true;
+  }
+
+  if (words.length === 2) {
+    return /^(?:как|что|где|когда|почему|зачем|если|ну|да|нет|можно|надо|нужно)$/iu.test(words[0])
+      || /^(?:ли|что|если|когда|почему|зачем)$/iu.test(words[1]);
+  }
+
+  return false;
 }
 
 function normalizePunctuationSpacing(text) {
@@ -34,6 +45,27 @@ function normalizePunctuationSpacing(text) {
     })
     .replace(/\s+([.!?\u2026])$/u, "$1")
     .trim();
+}
+
+function normalizeTextIdentity(text) {
+  return String(text || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function isUnsafePunctuationResult(resultText, fallbackText) {
+  const normalizedResult = String(resultText || "").trim();
+  const normalizedFallback = String(fallbackText || "").trim();
+  if (!normalizedResult) {
+    return true;
+  }
+
+  if (/\p{Script=Cyrillic}/u.test(normalizedFallback) && /^[?\s.,;:!]+$/u.test(normalizedResult)) {
+    return true;
+  }
+
+  return normalizeTextIdentity(normalizedResult) !== normalizeTextIdentity(normalizedFallback);
 }
 
 export async function punctuateTextOnServer(rawText, options = {}) {
@@ -70,6 +102,10 @@ export function formatServerPunctuationResult(result, fallbackText = "") {
     return "";
   }
 
+  if (isUnsafePunctuationResult(normalizedText, fallbackText)) {
+    return autocorrectUserText(normalizePunctuationSpacing(fallbackText));
+  }
+
   return autocorrectUserText(normalizePunctuationSpacing(normalizedText));
 }
 
@@ -82,6 +118,31 @@ export async function punctuateTypedMessageText(rawText) {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutId = controller
     ? globalThis.setTimeout(() => controller.abort(), TYPED_PUNCTUATION_TIMEOUT_MS)
+    : 0;
+
+  try {
+    const result = await punctuateTextOnServer(normalizedText, {
+      signal: controller?.signal,
+    });
+    return formatServerPunctuationResult(result, normalizedText);
+  } catch {
+    return normalizedText;
+  } finally {
+    if (timeoutId) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
+}
+
+export async function punctuateComposerText(rawText) {
+  const normalizedText = autocorrectUserText(String(rawText || "").trim());
+  if (!normalizedText) {
+    return "";
+  }
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? globalThis.setTimeout(() => controller.abort(), COMPOSER_PUNCTUATION_TIMEOUT_MS)
     : 0;
 
   try {

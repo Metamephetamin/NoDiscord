@@ -14,6 +14,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using BackNoDiscord.Infrastructure;
 
 namespace BackNoDiscord;
@@ -927,6 +928,7 @@ public class AuthController : ControllerBase
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
             profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(user.profile_customization_json),
             token = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
@@ -953,6 +955,7 @@ public class AuthController : ControllerBase
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
             profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(user.profile_customization_json),
             token = authSession.AccessToken,
             accessToken = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
@@ -1007,8 +1010,26 @@ public class AuthController : ControllerBase
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
-            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(user.profile_customization_json)
         };
+    }
+
+    private static object? ParseProfileCustomization(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(rawValue);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user, bool ignoreResendCooldown = false)

@@ -167,6 +167,8 @@ function mapAuthUser(data) {
     profileBackground: data?.profile_background_url || data?.profileBackgroundUrl || "",
     profileBackgroundFrame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
     profile_background_frame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
+    profileCustomization: data?.profile_customization || data?.profileCustomization || null,
+    profile_customization: data?.profile_customization || data?.profileCustomization || null,
   };
 }
 

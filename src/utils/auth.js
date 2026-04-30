@@ -54,6 +54,8 @@ function mapLocalDevAuthUser(data) {
     profileBackground: data?.profile_background_url || data?.profileBackgroundUrl || "",
     profileBackgroundFrame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
     profile_background_frame: parseMediaFrame(data?.profile_background_frame, data?.profileBackgroundFrame),
+    profileCustomization: data?.profile_customization || data?.profileCustomization || null,
+    profile_customization: data?.profile_customization || data?.profileCustomization || null,
   };
 }
 
@@ -745,6 +747,8 @@ export async function refreshAccessToken() {
               sessionCache.user?.profileBackgroundFrame,
               sessionCache.user?.profile_background_frame
             ),
+            profileCustomization: data.profile_customization || data.profileCustomization || sessionCache.user?.profileCustomization || null,
+            profile_customization: data.profile_customization || data.profileCustomization || sessionCache.user?.profile_customization || null,
           }
         : sessionCache.user;
 

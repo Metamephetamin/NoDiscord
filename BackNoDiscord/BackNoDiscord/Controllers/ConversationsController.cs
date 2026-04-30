@@ -868,7 +868,8 @@ public sealed class ConversationsController : ControllerBase
                 Nickname = item.nickname,
                 Email = item.email,
                 AvatarUrl = item.avatar_url,
-                LastSeenAt = item.last_seen_at
+                LastSeenAt = item.last_seen_at,
+                ProfileCustomizationJson = item.profile_customization_json
             })
             .ToDictionaryAsync(item => item.Id, cancellationToken);
     }
@@ -1201,6 +1202,7 @@ public sealed class ConversationsController : ControllerBase
                     nickname = user?.Nickname ?? string.Empty,
                     email = user?.Email ?? string.Empty,
                     avatar_url = user?.AvatarUrl ?? string.Empty,
+                    profile_customization = ParseProfileCustomization(user?.ProfileCustomizationJson),
                     last_seen_at = user?.LastSeenAt,
                     is_online = isOnline,
                     presence = isOnline ? "online" : "offline",
@@ -1255,6 +1257,23 @@ public sealed class ConversationsController : ControllerBase
         return ConversationRolePermissions.ContainsKey(normalizedRole) ? normalizedRole : "member";
     }
 
+    private static object? ParseProfileCustomization(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(rawValue);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string[] GetConversationPermissions(string? role)
     {
         var normalizedRole = NormalizeConversationRole(role);
@@ -1299,6 +1318,7 @@ public sealed class ConversationsController : ControllerBase
         public string Nickname { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? AvatarUrl { get; set; }
+        public string? ProfileCustomizationJson { get; set; }
         public DateTimeOffset? LastSeenAt { get; set; }
     }
 

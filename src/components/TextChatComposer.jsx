@@ -15,6 +15,7 @@ import {
 } from "../utils/textChatModel";
 import { formatFileSize } from "../utils/textChatHelpers";
 import { COMPOSER_TRANSLATION_LANGUAGES, translateComposerText } from "../utils/textTranslation";
+import { punctuateComposerText } from "../utils/speechPunctuation";
 
 function normalizePendingUploadProgress(progressValue) {
   const numericProgress = Number(progressValue);
@@ -99,6 +100,7 @@ function TextChatComposer({
   const [locationPickerCurrentPosition, setLocationPickerCurrentPosition] = useState(null);
   const [translatorMenuOpen, setTranslatorMenuOpen] = useState(false);
   const [translationPending, setTranslationPending] = useState(false);
+  const [punctuationPending, setPunctuationPending] = useState(false);
   const [translationError, setTranslationError] = useState("");
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
@@ -351,9 +353,24 @@ function TextChatComposer({
     return onSendLocation(locationPayload);
   };
 
+  const applyComposerText = (nextText) => {
+    const normalizedNextText = String(nextText || "").trim();
+    if (!normalizedNextText) {
+      return;
+    }
+
+    onMessageChange(normalizedNextText);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus?.();
+      const nextPosition = normalizedNextText.length;
+      textareaRef.current?.setSelectionRange?.(nextPosition, nextPosition);
+      onSyncComposerSelection(textareaRef.current);
+    });
+  };
+
   const handleTranslateComposerText = async (targetLanguage) => {
     const sourceText = String(message || "").trim();
-    if (!sourceText || translationPending) {
+    if (!sourceText || translationPending || punctuationPending) {
       return;
     }
 
@@ -363,19 +380,35 @@ function TextChatComposer({
     try {
       const result = await translateComposerText(sourceText, targetLanguage);
       if (result.text) {
-        onMessageChange(result.text);
-        requestAnimationFrame(() => {
-          textareaRef.current?.focus?.();
-          const nextPosition = result.text.length;
-          textareaRef.current?.setSelectionRange?.(nextPosition, nextPosition);
-          onSyncComposerSelection(textareaRef.current);
-        });
+        applyComposerText(result.text);
       }
       setTranslatorMenuOpen(false);
     } catch (error) {
       setTranslationError(error?.message || "Не удалось перевести текст.");
     } finally {
       setTranslationPending(false);
+    }
+  };
+
+  const handlePunctuateComposerText = async () => {
+    const sourceText = String(message || "").trim();
+    if (!sourceText || translationPending || punctuationPending) {
+      return;
+    }
+
+    setPunctuationPending(true);
+    setTranslationError("");
+
+    try {
+      const result = await punctuateComposerText(sourceText);
+      if (result) {
+        applyComposerText(result);
+      }
+      setTranslatorMenuOpen(false);
+    } catch (error) {
+      setTranslationError(error?.message || "Не удалось исправить пунктуацию.");
+    } finally {
+      setPunctuationPending(false);
     }
   };
 
@@ -603,7 +636,7 @@ function TextChatComposer({
             <button
               ref={translatorButtonRef}
               type="button"
-              className={`composer-tool composer-tool--translator ${translatorMenuOpen ? "composer-tool--active" : ""}`}
+              className={`composer-tool composer-tool--text-tools ${translatorMenuOpen ? "composer-tool--active" : ""}`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onSyncComposerSelection();
@@ -611,39 +644,51 @@ function TextChatComposer({
                 setTranslationError("");
                 setTranslatorMenuOpen((previous) => !previous);
               }}
-              disabled={uploadingFile || voiceRecordingState === "sending" || translationPending || !String(message || "").trim()}
-              title="Перевести текст"
-              aria-label="Перевести текст"
+              disabled={uploadingFile || voiceRecordingState === "sending" || translationPending || punctuationPending}
+              title="Текстовые инструменты"
+              aria-label="Текстовые инструменты"
               aria-expanded={translatorMenuOpen}
             >
-              <span className="composer-tool__translator-icon" aria-hidden="true">
-                <span>文</span>
-                <span>A</span>
-              </span>
+              <span className="composer-tool__text-tools-icon" aria-hidden="true" />
             </button>
 
             {translatorMenuOpen ? (
-              <div ref={translatorMenuRef} className="composer-translator-menu" role="menu" aria-label="Выбор языка перевода">
-                <div className="composer-translator-menu__header">
-                  <strong>{translationPending ? "Переводим..." : "Перевести на"}</strong>
+              <div ref={translatorMenuRef} className="composer-text-tools-menu" role="menu" aria-label="Текстовые инструменты">
+                <button
+                  type="button"
+                  className="composer-text-tools-menu__action"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => void handlePunctuateComposerText()}
+                  disabled={translationPending || punctuationPending || !String(message || "").trim()}
+                  role="menuitem"
+                >
+                  <span className="composer-text-tools-menu__action-icon composer-text-tools-menu__action-icon--punctuation" aria-hidden="true" />
+                  <span>
+                    <b>{punctuationPending ? "Исправляем..." : "Исправить пунктуацию"}</b>
+                    <small>Запятые, точки, вопросы и пробелы</small>
+                  </span>
+                </button>
+
+                <div className="composer-text-tools-menu__header">
+                  <strong>{translationPending ? "Переводим..." : "Переводчик"}</strong>
                   <span>Исходный язык определится автоматически</span>
                 </div>
-                <div className="composer-translator-menu__list">
+                <div className="composer-text-tools-menu__list">
                   {COMPOSER_TRANSLATION_LANGUAGES.map((language) => (
                     <button
                       key={language.value}
                       type="button"
-                      className="composer-translator-menu__item"
+                      className="composer-text-tools-menu__item"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => void handleTranslateComposerText(language.value)}
-                      disabled={translationPending}
+                      disabled={translationPending || punctuationPending || !String(message || "").trim()}
                       role="menuitem"
                     >
                       {language.label}
                     </button>
                   ))}
                 </div>
-                {translationError ? <div className="composer-translator-menu__error">{translationError}</div> : null}
+                {translationError ? <div className="composer-text-tools-menu__error">{translationError}</div> : null}
               </div>
             ) : null}
 
@@ -657,6 +702,7 @@ function TextChatComposer({
                 const nextOpen = !composerEmojiPickerOpen;
                 if (nextOpen) {
                   setEmojiPreviewCount(8);
+                  setTranslatorMenuOpen(false);
                 }
                 onToggleEmojiPicker(nextOpen);
               }}

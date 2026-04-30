@@ -16,6 +16,7 @@ import {
   MESSAGE_SEND_COOLDOWN_MS,
 } from "../utils/textChatModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
+import { punctuateTypedMessageText } from "../utils/speechPunctuation";
 
 const LOCATION_MESSAGE_DEFAULT_ZOOM = 15;
 
@@ -371,7 +372,9 @@ export default function useTextChatSendActions({
       return;
     }
 
-    const messageText = rawMessageText;
+    const messageText = messageEditState?.messageId
+      ? rawMessageText
+      : await punctuateTypedMessageText(rawMessageText);
     if (!messageText && !filesToSend.length) {
       return;
     }

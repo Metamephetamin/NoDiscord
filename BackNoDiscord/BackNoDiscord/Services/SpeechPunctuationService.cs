@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -24,8 +25,19 @@ internal sealed class PythonSpeechPunctuationResponse
     public bool UsedModel { get; set; }
 }
 
+internal sealed class OllamaGenerateResponse
+{
+    public string? Response { get; set; }
+    public bool Done { get; set; }
+}
+
 public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     private static readonly Regex QuestionStartRegex = new(
         "^(?:а\\s+)?(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -166,21 +178,32 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
     private readonly ILogger<SpeechPunctuationService> _logger;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly SemaphoreSlim _ollamaRequestLock;
     private readonly SemaphoreSlim _pythonWorkerLock = new(1, 1);
     private Process? _pythonWorkerProcess;
     private StreamWriter? _pythonWorkerInput;
     private StreamReader? _pythonWorkerOutput;
 
-    public SpeechPunctuationService(ILogger<SpeechPunctuationService> logger, IWebHostEnvironment environment, IConfiguration configuration)
+    public SpeechPunctuationService(
+        ILogger<SpeechPunctuationService> logger,
+        IWebHostEnvironment environment,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _environment = environment;
         _configuration = configuration;
+        _httpClientFactory = httpClientFactory;
+
+        var ollamaMaxConcurrency = GetOllamaMaxConcurrency();
+        _ollamaRequestLock = new SemaphoreSlim(ollamaMaxConcurrency, ollamaMaxConcurrency);
     }
 
     public void Dispose()
     {
         StopPythonWorker();
+        _ollamaRequestLock.Dispose();
         _pythonWorkerLock.Dispose();
     }
 
@@ -197,7 +220,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
             };
         }
 
-        var modelResult = await TryPunctuateWithPythonModelAsync(normalizedInput, cancellationToken);
+        var modelResult = await TryPunctuateWithOllamaAsync(normalizedInput, cancellationToken)
+            ?? await TryPunctuateWithPythonModelAsync(normalizedInput, cancellationToken);
         if (modelResult is not null)
         {
             return new SpeechPunctuationResult
@@ -343,6 +367,129 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         return $"{normalizedText}.";
     }
 
+    private async Task<SpeechPunctuationResult?> TryPunctuateWithOllamaAsync(string normalizedText, CancellationToken cancellationToken)
+    {
+        if (!IsOllamaEnabled())
+        {
+            return null;
+        }
+
+        var model = GetOllamaModel();
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return null;
+        }
+
+        var queueWait = TimeSpan.FromMilliseconds(GetOllamaQueueWaitMilliseconds());
+        if (!await _ollamaRequestLock.WaitAsync(queueWait, cancellationToken))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(GetOllamaTimeoutSeconds()));
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = Timeout.InfiniteTimeSpan;
+
+            var payload = new
+            {
+                model,
+                prompt = CreateOllamaPrompt(normalizedText),
+                stream = false,
+                options = new
+                {
+                    temperature = 0,
+                    top_p = 0.2,
+                    num_predict = Math.Min(2048, Math.Max(128, normalizedText.Length + 64)),
+                },
+            };
+
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(GetOllamaGenerateEndpoint(), content, timeoutCts.Token);
+            var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("Ollama punctuation failed with status {StatusCode}: {Body}", response.StatusCode, responseBody);
+                return null;
+            }
+
+            var ollamaResponse = JsonSerializer.Deserialize<OllamaGenerateResponse>(responseBody, JsonOptions);
+            var candidate = NormalizeModelOutput(ollamaResponse?.Response);
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                return null;
+            }
+
+            if (!LooksLikePunctuationOnlyChange(normalizedText, candidate))
+            {
+                _logger.LogWarning("Ollama punctuation changed text content, using fallback.");
+                return null;
+            }
+
+            return new SpeechPunctuationResult
+            {
+                Text = candidate,
+                Provider = $"ollama:{model}",
+                UsedModel = true,
+            };
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(exception, "Ollama punctuation is unavailable, using fallback.");
+            return null;
+        }
+        finally
+        {
+            _ollamaRequestLock.Release();
+        }
+    }
+
+    private static string CreateOllamaPrompt(string text) =>
+        $"""
+        Исправь только пунктуацию, пробелы и заглавные буквы в начале предложений.
+        Не меняй слова, порядок слов, сленг, мат, эмодзи, ссылки, упоминания и смысл.
+        Не добавляй объяснений.
+        Верни только исправленный текст.
+
+        Текст:
+        {text}
+        """;
+
+    private static string NormalizeModelOutput(string? text)
+    {
+        var normalizedText = NormalizeInput(text);
+        if (string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return string.Empty;
+        }
+
+        normalizedText = Regex.Replace(normalizedText, "^```(?:text|txt|ru|russian)?\\s*", string.Empty, RegexOptions.IgnoreCase).Trim();
+        normalizedText = Regex.Replace(normalizedText, "\\s*```$", string.Empty, RegexOptions.IgnoreCase).Trim();
+        if (normalizedText.Length >= 2
+            && ((normalizedText[0] == '"' && normalizedText[^1] == '"')
+                || (normalizedText[0] == '«' && normalizedText[^1] == '»')
+                || (normalizedText[0] == '\'' && normalizedText[^1] == '\'')))
+        {
+            normalizedText = normalizedText[1..^1].Trim();
+        }
+
+        return normalizedText;
+    }
+
+    private static bool LooksLikePunctuationOnlyChange(string originalText, string candidateText)
+    {
+        static string NormalizeIdentity(string value)
+        {
+            var lowered = NormalizeInput(value).ToLowerInvariant();
+            return Regex.Replace(lowered, "[^\\p{L}\\p{Nd}]+", string.Empty);
+        }
+
+        return string.Equals(NormalizeIdentity(originalText), NormalizeIdentity(candidateText), StringComparison.Ordinal);
+    }
+
     private async Task<SpeechPunctuationResult?> TryPunctuateWithPythonModelAsync(string normalizedText, CancellationToken cancellationToken)
     {
         if (!IsPythonModelEnabled())
@@ -358,7 +505,11 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
 
         var pythonExecutable = ResolvePythonExecutable();
 
-        await _pythonWorkerLock.WaitAsync(cancellationToken);
+        var queueWait = TimeSpan.FromMilliseconds(GetPythonQueueWaitMilliseconds());
+        if (!await _pythonWorkerLock.WaitAsync(queueWait, cancellationToken))
+        {
+            return null;
+        }
         try
         {
             var process = EnsurePythonWorkerProcess(scriptPath, pythonExecutable);
@@ -395,7 +546,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
                 UsedModel = true,
             };
         }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException or Win32Exception)
         {
             RestartPythonWorker();
             _logger.LogWarning(exception, "Speech punctuation model is unavailable, using conservative fallback.");
@@ -494,6 +645,56 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         }
     }
 
+    private bool IsOllamaEnabled()
+    {
+        var rawValue = _configuration["SpeechPunctuation:EnableOllama"];
+        return string.IsNullOrWhiteSpace(rawValue) || !rawValue.Equals("false", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetOllamaModel()
+    {
+        var configuredModel = _configuration["SpeechPunctuation:OllamaModel"];
+        return string.IsNullOrWhiteSpace(configuredModel) ? "qwen2.5:3b" : configuredModel.Trim();
+    }
+
+    private string GetOllamaGenerateEndpoint()
+    {
+        var configuredEndpoint = _configuration["SpeechPunctuation:OllamaGenerateEndpoint"];
+        return string.IsNullOrWhiteSpace(configuredEndpoint)
+            ? "http://localhost:11434/api/generate"
+            : configuredEndpoint.Trim();
+    }
+
+    private int GetOllamaTimeoutSeconds()
+    {
+        if (int.TryParse(_configuration["SpeechPunctuation:OllamaTimeoutSeconds"], out var timeoutSeconds))
+        {
+            return Math.Clamp(timeoutSeconds, 1, 20);
+        }
+
+        return 2;
+    }
+
+    private int GetOllamaQueueWaitMilliseconds()
+    {
+        if (int.TryParse(_configuration["SpeechPunctuation:OllamaQueueWaitMilliseconds"], out var waitMilliseconds))
+        {
+            return Math.Clamp(waitMilliseconds, 0, 5000);
+        }
+
+        return 120;
+    }
+
+    private int GetOllamaMaxConcurrency()
+    {
+        if (int.TryParse(_configuration["SpeechPunctuation:OllamaMaxConcurrency"], out var maxConcurrency))
+        {
+            return Math.Clamp(maxConcurrency, 1, 4);
+        }
+
+        return 1;
+    }
+
     private bool IsPythonModelEnabled()
     {
         var rawValue = _configuration["SpeechPunctuation:EnablePythonModel"];
@@ -508,6 +709,16 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         }
 
         return 15;
+    }
+
+    private int GetPythonQueueWaitMilliseconds()
+    {
+        if (int.TryParse(_configuration["SpeechPunctuation:PythonQueueWaitMilliseconds"], out var waitMilliseconds))
+        {
+            return Math.Clamp(waitMilliseconds, 0, 5000);
+        }
+
+        return 120;
     }
 
     private string ResolvePythonScriptPath()

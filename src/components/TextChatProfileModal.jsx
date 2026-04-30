@@ -1,5 +1,6 @@
 import AnimatedAvatar from "./AnimatedAvatar";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { getProfileCustomizationClassName } from "../utils/profileCustomization";
 
 const PROFILE_ICON_PATHS = {
   about: (
@@ -89,12 +90,16 @@ const getRelationshipLabel = (profile) => {
   return profile?.isFriend ? "Друг" : "Открыт к общению";
 };
 
-const getCommonText = (profile) => {
+const getCommonText = (profile, canCall = false) => {
   if (profile?.isSelf) {
     return "Это ваш профиль.";
   }
 
-  return profile?.isFriend ? "Вы друзья." : "Вы пока не в друзьях.";
+  if (!profile?.isFriend) {
+    return "Вы пока не в друзьях.";
+  }
+
+  return canCall ? "Вы друзья. Можно писать и звонить." : "Вы друзья. Личный чат доступен.";
 };
 
 const formatLastSeen = (value) => {
@@ -128,21 +133,35 @@ export default function TextChatProfileModal({
     return null;
   }
 
-  const backgroundSrc = profile.backgroundUrl || profile.avatarUrl || "";
+  const backgroundSrc = profile.backgroundUrl || "";
   const displayName = profile.username || "User";
+  const profileThemeClassName = getProfileCustomizationClassName(profile.profileCustomization, "profileCard");
   const isOnline = isUserCurrentlyOnline(profile);
   const presenceLabel = profile.isSelf ? "Это вы" : formatUserPresenceStatus(profile);
   const relationshipLabel = getRelationshipLabel(profile);
+  const canAddFriend = !profile.isSelf && !profile.isFriend && typeof onAddFriend === "function";
+  const canCall = Boolean(profile.canOpenDirectChat && profile.isFriend && !profile.isBlocked && !profile.blockedYou && typeof onStartDirectCall === "function");
   const detailCards = [
     { id: "activity", icon: "activity", label: "Активность", value: presenceLabel },
-    { id: "contact", icon: "contact", label: "Контакт", value: profile.canOpenDirectChat ? "Личные сообщения" : "Недоступно" },
+    { id: "contact", icon: "contact", label: "Связь", value: profile.canOpenDirectChat ? (canCall ? "Сообщения и звонки" : "Личные сообщения") : "Недоступно" },
     { id: "id", icon: "id", label: "ID", value: profile.userId ? `#${profile.userId}` : "Не указан" },
   ];
+  const profileStats = Array.isArray(profile.socialStats)
+    ? profile.socialStats.filter((item) => item?.id && item?.label)
+    : [];
+  const visibleProfileStats = profileStats.length > 0
+    ? profileStats
+    : [
+      { id: "mutual-friends", label: "Общие друзья", value: "Нет данных" },
+      { id: "mutual-chats", label: "Общие чаты", value: "Нет данных" },
+      { id: "known-since", label: "Вы знакомы", value: "Неизвестно" },
+      { id: "last-dialog", label: "Последний диалог", value: "Нет данных" },
+    ];
 
   return (
     <div className="chat-profile-modal-backdrop" onClick={onClose}>
       <div
-        className="chat-profile-modal"
+        className={`chat-profile-modal ${profileThemeClassName}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-label={`Профиль ${displayName}`}
@@ -227,6 +246,10 @@ export default function TextChatProfileModal({
                     <b>{relationshipLabel}</b>
                   </div>
                   <div className="chat-profile-modal__info-row">
+                    <span>Звонки</span>
+                    <b>{canCall ? "Доступны" : "Недоступны"}</b>
+                  </div>
+                  <div className="chat-profile-modal__info-row">
                     <span>Последний визит</span>
                     <b>{isOnline ? "Сейчас в сети" : formatLastSeen(profile.lastSeenAt)}</b>
                   </div>
@@ -238,7 +261,7 @@ export default function TextChatProfileModal({
               <ProfileSectionIcon kind="common" />
               <div className="chat-profile-modal__section-copy">
                 <strong>Общее</strong>
-                <p>{getCommonText(profile)}</p>
+                <p>{getCommonText(profile, canCall)}</p>
               </div>
             </section>
           </div>
@@ -263,20 +286,35 @@ export default function TextChatProfileModal({
                 <ProfileIcon kind="call" className="chat-profile-modal__action-icon" />
                 Позвонить
               </button>
-              <button
-                type="button"
-                className="chat-profile-modal__action"
-                onClick={onAddFriend}
-                disabled={Boolean(profile.isSelf || profile.isFriend)}
-              >
-                <ProfileIcon kind="friend" className="chat-profile-modal__action-icon" />
-                {profile.isFriend ? "Уже в друзьях" : "Добавить в друзья"}
-              </button>
+              {canAddFriend ? (
+                <button
+                  type="button"
+                  className="chat-profile-modal__action"
+                  onClick={onAddFriend}
+                >
+                  <ProfileIcon kind="friend" className="chat-profile-modal__action-icon" />
+                  Добавить в друзья
+                </button>
+              ) : null}
               <button type="button" className="chat-profile-modal__action chat-profile-modal__action--ghost" onClick={onCopyUserId}>
                 <ProfileIcon kind="copy" className="chat-profile-modal__action-icon" />
                 Копировать ID
               </button>
             </div>
+            <section className="chat-profile-modal__side-widget" aria-label="Общая статистика">
+              <div className="chat-profile-modal__side-widget-header">
+                <ProfileIcon kind="info" className="chat-profile-modal__side-widget-icon" />
+                <span>Общее</span>
+              </div>
+              <div className="chat-profile-modal__side-widget-list">
+                {visibleProfileStats.map((item) => (
+                  <div key={item.id} className="chat-profile-modal__side-widget-row">
+                    <span>{item.label}</span>
+                    <b>{item.value}</b>
+                  </div>
+                ))}
+              </div>
+            </section>
           </aside>
         </div>
       </div>

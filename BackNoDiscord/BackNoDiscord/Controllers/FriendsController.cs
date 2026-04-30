@@ -63,7 +63,12 @@ public class FriendsController : ControllerBase
             .ToDictionaryAsync(item => item.id);
         var activityByUserId = await LoadActiveActivitiesAsync(friendIds);
         var unreadCountsByFriendId = await BuildDirectUnreadCountsAsync(currentUserId, friendIds);
+        var lastMessageAtByFriendId = await BuildDirectLastMessageTimestampsAsync(currentUserId, friendIds);
+        var mutualFriendCountsByFriendId = await BuildMutualFriendCountsAsync(currentUserId, friendIds);
         var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, friendIds);
+        var friendshipCreatedAtByFriendId = friendships
+            .GroupBy(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
+            .ToDictionary(group => group.Key, group => group.Max(item => item.CreatedAt));
 
         var result = friendships
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
@@ -74,6 +79,9 @@ public class FriendsController : ControllerBase
                 currentUserId,
                 activityByUserId,
                 unreadCountsByFriendId.TryGetValue(friendId, out var unreadCount) ? unreadCount : 0,
+                lastMessageAtByFriendId.TryGetValue(friendId, out var lastMessageAt) ? lastMessageAt : null,
+                mutualFriendCountsByFriendId.TryGetValue(friendId, out var mutualFriendCount) ? mutualFriendCount : 0,
+                friendshipCreatedAtByFriendId.TryGetValue(friendId, out var friendshipCreatedAt) ? friendshipCreatedAt : null,
                 blockStateByUserId.TryGetValue(friendId, out var blockState) ? blockState : null));
 
         return Ok(result);
@@ -124,6 +132,7 @@ public class FriendsController : ControllerBase
                 nickname = item.nickname,
                 email = item.email,
                 avatar_url = item.avatar_url ?? string.Empty,
+                profile_customization_json = item.profile_customization_json,
                 last_seen_at = item.last_seen_at,
                 directChannelId = BuildDirectChannelId(currentUserId, item.id)
             });
@@ -163,6 +172,7 @@ public class FriendsController : ControllerBase
             item.nickname,
             item.email,
             item.avatar_url,
+            profile_customization = ParseProfileCustomization(item.profile_customization_json),
             item.last_seen_at,
             is_online = _userPresenceService.IsOnline(item.id.ToString()),
             presence = _userPresenceService.IsOnline(item.id.ToString()) ? "online" : "offline",
@@ -466,16 +476,7 @@ public class FriendsController : ControllerBase
             return new Dictionary<int, int>();
         }
 
-        var channelFriendLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var friendId in friendIds)
-        {
-            var channelId = BuildDirectChannelId(currentUserId, friendId);
-            foreach (var equivalentChannelId in DirectMessageChannels.GetEquivalentChannelIds(channelId))
-            {
-                channelFriendLookup[equivalentChannelId] = friendId;
-            }
-        }
-
+        var channelFriendLookup = BuildDirectChannelFriendLookup(currentUserId, friendIds);
         if (channelFriendLookup.Count == 0)
         {
             return new Dictionary<int, int>();
@@ -514,6 +515,111 @@ public class FriendsController : ControllerBase
         }
 
         return counts;
+    }
+
+    private async Task<Dictionary<int, DateTime>> BuildDirectLastMessageTimestampsAsync(int currentUserId, IReadOnlyCollection<int> friendIds)
+    {
+        if (friendIds.Count == 0)
+        {
+            return new Dictionary<int, DateTime>();
+        }
+
+        var channelFriendLookup = BuildDirectChannelFriendLookup(currentUserId, friendIds);
+        if (channelFriendLookup.Count == 0)
+        {
+            return new Dictionary<int, DateTime>();
+        }
+
+        var channelIds = channelFriendLookup.Keys.ToArray();
+        var latestByChannel = await _context.Messages
+            .AsNoTracking()
+            .Where(message => channelIds.Contains(message.ChannelId) && !message.IsDeleted)
+            .GroupBy(message => message.ChannelId)
+            .Select(group => new
+            {
+                ChannelId = group.Key,
+                Timestamp = group.Max(message => message.Timestamp)
+            })
+            .ToListAsync();
+
+        var latestByFriend = new Dictionary<int, DateTime>();
+        foreach (var item in latestByChannel)
+        {
+            if (!channelFriendLookup.TryGetValue(item.ChannelId, out var friendId))
+            {
+                continue;
+            }
+
+            if (!latestByFriend.TryGetValue(friendId, out var previousTimestamp) || item.Timestamp > previousTimestamp)
+            {
+                latestByFriend[friendId] = item.Timestamp;
+            }
+        }
+
+        return latestByFriend;
+    }
+
+    private async Task<Dictionary<int, int>> BuildMutualFriendCountsAsync(int currentUserId, IReadOnlyCollection<int> friendIds)
+    {
+        var targetFriendIds = friendIds
+            .Where(item => item > 0 && item != currentUserId)
+            .Distinct()
+            .ToArray();
+        if (targetFriendIds.Length == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var targetFriendIdSet = targetFriendIds.ToHashSet();
+        var friendLinks = await _context.Friendships
+            .AsNoTracking()
+            .Where(item => targetFriendIds.Contains(item.UserLowId) || targetFriendIds.Contains(item.UserHighId))
+            .Select(item => new { item.UserLowId, item.UserHighId })
+            .ToListAsync();
+
+        var mutualFriendIdsByTarget = targetFriendIds.ToDictionary(
+            targetId => targetId,
+            _ => new HashSet<int>());
+
+        foreach (var link in friendLinks)
+        {
+            if (targetFriendIdSet.Contains(link.UserLowId))
+            {
+                AddMutualFriend(link.UserLowId, link.UserHighId);
+            }
+
+            if (targetFriendIdSet.Contains(link.UserHighId))
+            {
+                AddMutualFriend(link.UserHighId, link.UserLowId);
+            }
+        }
+
+        return mutualFriendIdsByTarget.ToDictionary(item => item.Key, item => item.Value.Count);
+
+        void AddMutualFriend(int targetId, int candidateFriendId)
+        {
+            if (candidateFriendId == currentUserId || candidateFriendId == targetId || !targetFriendIdSet.Contains(candidateFriendId))
+            {
+                return;
+            }
+
+            mutualFriendIdsByTarget[targetId].Add(candidateFriendId);
+        }
+    }
+
+    private static Dictionary<string, int> BuildDirectChannelFriendLookup(int currentUserId, IReadOnlyCollection<int> friendIds)
+    {
+        var channelFriendLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var friendId in friendIds)
+        {
+            var channelId = BuildDirectChannelId(currentUserId, friendId);
+            foreach (var equivalentChannelId in DirectMessageChannels.GetEquivalentChannelIds(channelId))
+            {
+                channelFriendLookup[equivalentChannelId] = friendId;
+            }
+        }
+
+        return channelFriendLookup;
     }
 
     private async Task<Dictionary<int, UserBlockState>> LoadBlockStatesAsync(int currentUserId, IEnumerable<int> userIds)
@@ -582,11 +688,31 @@ public class FriendsController : ControllerBase
         }
     }
 
+    private static object? ParseProfileCustomization(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(rawValue);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private object BuildFriendPayload(
         User friend,
         int currentUserId,
         IReadOnlyDictionary<int, UserIntegrationRecord>? activityByUserId = null,
         int unreadCount = 0,
+        DateTime? lastDirectMessageAt = null,
+        int mutualFriendsCount = 0,
+        DateTimeOffset? friendshipCreatedAt = null,
         UserBlockState? blockState = null)
     {
         var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
@@ -600,12 +726,16 @@ public class FriendsController : ControllerBase
             nickname = friend.nickname,
             email = friend.email,
             avatar_url = friend.avatar_url ?? string.Empty,
+            profile_customization = ParseProfileCustomization(friend.profile_customization_json),
             is_online = isOnline,
             presence = isOnline ? "online" : "offline",
             last_seen_at = friend.last_seen_at,
             activity = BuildActivityPayload(activity),
             directChannelId = BuildDirectChannelId(currentUserId, friend.id),
             unreadCount = Math.Clamp(unreadCount, 0, 999),
+            lastDirectMessageAt,
+            mutualFriendsCount = Math.Max(0, mutualFriendsCount),
+            friendshipCreatedAt,
             isBlocked = blockState?.CurrentUserBlockedTarget ?? false,
             blockedYou = blockState?.TargetBlockedCurrentUser ?? false
         };
@@ -645,6 +775,7 @@ public class FriendsController : ControllerBase
                 nickname = sender.nickname,
                 email = sender.email,
                 avatar_url = sender.avatar_url ?? string.Empty,
+                profile_customization = ParseProfileCustomization(sender.profile_customization_json),
                 is_online = isOnline,
                 presence = isOnline ? "online" : "offline",
                 last_seen_at = sender.last_seen_at

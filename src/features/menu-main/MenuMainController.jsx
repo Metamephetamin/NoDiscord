@@ -45,6 +45,7 @@ import {
 } from "../../utils/textChatMessageCache";
 import {
   createDefaultProfileCustomization,
+  getUserProfileCustomization,
   normalizeProfileCustomization,
   readProfileCustomization,
   writeProfileCustomization,
@@ -188,6 +189,112 @@ const normalizeStreamFpsForResolution = (value, resolution) => {
   const allowedFps = getAllowedStreamFps(resolution);
   const requestedFps = Math.round(Number(value) || allowedFps[0] || 30);
   return allowedFps.includes(requestedFps) ? requestedFps : allowedFps[0] || 30;
+};
+const getValidDate = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+const pluralRu = (value, one, few, many) => {
+  const number = Math.abs(Number(value) || 0);
+  const mod10 = number % 10;
+  const mod100 = number % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return one;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few;
+  }
+
+  return many;
+};
+const formatCountLabel = (value, zeroLabel, one, few, many) => {
+  const count = Math.max(0, Number(value) || 0);
+  if (count === 0) {
+    return zeroLabel;
+  }
+
+  return `${count} ${pluralRu(count, one, few, many)}`;
+};
+const formatKnownSinceLabel = (value) => {
+  const date = getValidDate(value);
+  if (!date) {
+    return "Неизвестно";
+  }
+
+  const now = new Date();
+  const options = date.getFullYear() === now.getFullYear()
+    ? { day: "numeric", month: "long" }
+    : { day: "numeric", month: "long", year: "numeric" };
+
+  return `с ${date.toLocaleDateString("ru-RU", options)}`;
+};
+const formatLastDialogLabel = (value) => {
+  const date = getValidDate(value);
+  if (!date) {
+    return "Сообщений нет";
+  }
+
+  const now = Date.now();
+  const diffMs = Math.max(0, now - date.getTime());
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) {
+    return "только что";
+  }
+
+  if (diffMs < hour) {
+    const minutes = Math.floor(diffMs / minute);
+    return `${minutes} ${pluralRu(minutes, "минуту", "минуты", "минут")} назад`;
+  }
+
+  if (diffMs < day) {
+    const hours = Math.floor(diffMs / hour);
+    return `${hours} ${pluralRu(hours, "час", "часа", "часов")} назад`;
+  }
+
+  const days = Math.floor(diffMs / day);
+  if (days === 1) {
+    return "вчера";
+  }
+
+  if (days < 31) {
+    return `${days} ${pluralRu(days, "день", "дня", "дней")} назад`;
+  }
+
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+};
+const getLatestCachedMessageAt = (currentUserId, channelId) => {
+  if (!currentUserId || !channelId) {
+    return "";
+  }
+
+  let latestTimestamp = 0;
+  readCachedTextChatMessages(currentUserId, channelId).forEach((messageItem) => {
+    const date = getValidDate(messageItem?.timestamp || messageItem?.Timestamp || messageItem?.createdAt || messageItem?.CreatedAt);
+    if (date && date.getTime() > latestTimestamp) {
+      latestTimestamp = date.getTime();
+    }
+  });
+
+  return latestTimestamp > 0 ? new Date(latestTimestamp).toISOString() : "";
+};
+const getLatestProfileDialogAt = (currentUserId, friend, directChannelId) => {
+  const backendDate = getValidDate(friend?.lastDirectMessageAt || friend?.last_direct_message_at);
+  const cachedDate = getValidDate(getLatestCachedMessageAt(currentUserId, directChannelId));
+
+  if (backendDate && cachedDate) {
+    return backendDate.getTime() >= cachedDate.getTime() ? backendDate.toISOString() : cachedDate.toISOString();
+  }
+
+  return backendDate?.toISOString() || cachedDate?.toISOString() || "";
 };
 let voiceRoomClientFactoryPromise = null;
 const MenuMainSettingsContent = lazy(() =>
@@ -850,6 +957,7 @@ export default function MenuMain({
       nickname: user?.nickname || "",
       email: user?.email || "",
       avatar_url: user?.avatarUrl || user?.avatar || "",
+      profile_customization: getUserProfileCustomization(user),
       directChannelId: buildDirectMessageChannelId(currentUserId, currentUserId),
       isSelf: true,
     });
@@ -870,12 +978,39 @@ export default function MenuMain({
   );
   useEffect(() => {
     setProfileCustomization(readProfileCustomization(user));
-  }, [user?.id]);
+  }, [user?.id, user?.profileCustomization, user?.profile_customization]);
   const handleProfileCustomizationChange = useCallback((nextCustomization) => {
     const normalizedCustomization = normalizeProfileCustomization(nextCustomization);
     setProfileCustomization(normalizedCustomization);
     writeProfileCustomization(user, normalizedCustomization);
-  }, [user]);
+    const nextUser = user
+      ? {
+        ...user,
+        profileCustomization: normalizedCustomization,
+        profile_customization: normalizedCustomization,
+      }
+      : user;
+
+    if (nextUser) {
+      setUser?.(nextUser);
+      void storeSession(nextUser, {
+        accessToken: getStoredToken(),
+        refreshToken: getStoredRefreshToken(),
+        accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+      });
+    }
+
+    if (user?.id) {
+      authFetch(`${API_BASE_URL}/user/profile-customization`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customization: normalizedCustomization }),
+      }).catch((error) => {
+        console.error("Ошибка сохранения темы профиля:", error);
+        setProfileStatus(error?.message || "Не удалось сохранить тему профиля.");
+      });
+    }
+  }, [setUser, user]);
   const handleResetProfileCustomization = useCallback(() => {
     handleProfileCustomizationChange(createDefaultProfileCustomization());
   }, [handleProfileCustomizationChange]);
@@ -2166,6 +2301,9 @@ export default function MenuMain({
         payload?.profile_background_frame,
         payload?.profileBackgroundFrame
       );
+      const nextProfileCustomization = normalizeProfileCustomization(
+        payload?.profile_customization || payload?.profileCustomization || null
+      );
       const nextEmail = String(payload?.email || "").trim();
       const nextDisplayName = nextNickname || `${nextFirstName} ${nextLastName}`.trim();
 
@@ -2177,6 +2315,10 @@ export default function MenuMain({
         name: nextDisplayName || friend.name || "",
         email: nextEmail || friend.email || "",
         avatar: nextAvatar || friend.avatar || "",
+        avatarFrame: nextAvatarFrame || friend.avatarFrame || null,
+        profileBackgroundUrl: nextProfileBackground || friend.profileBackgroundUrl || "",
+        profileBackgroundFrame: nextProfileBackgroundFrame || friend.profileBackgroundFrame || null,
+        profileCustomization: nextProfileCustomization,
       }));
       setDirectMessageToasts((previous) =>
         previous.map((toast) =>
@@ -2191,6 +2333,10 @@ export default function MenuMain({
                   name: nextDisplayName || toast.friend?.name || "",
                   email: nextEmail || toast.friend?.email || "",
                   avatar: nextAvatar || toast.friend?.avatar || "",
+                  avatarFrame: nextAvatarFrame || toast.friend?.avatarFrame || null,
+                  profileBackgroundUrl: nextProfileBackground || toast.friend?.profileBackgroundUrl || "",
+                  profileBackgroundFrame: nextProfileBackgroundFrame || toast.friend?.profileBackgroundFrame || null,
+                  profileCustomization: nextProfileCustomization,
                 },
               }
             : toast
@@ -2209,6 +2355,8 @@ export default function MenuMain({
                       ...member,
                       name: nextDisplayName || member.name || "",
                       avatar: nextAvatar || member.avatar || "",
+                      avatarFrame: nextAvatarFrame || member.avatarFrame || null,
+                      profileCustomization: nextProfileCustomization,
                     }
                   : member
               )
@@ -2227,6 +2375,8 @@ export default function MenuMain({
                         ...participant,
                         name: nextDisplayName || participant.name || participant.Name || "",
                         avatar: nextAvatar || participant.avatar || participant.Avatar || "",
+                        avatarFrame: nextAvatarFrame || participant.avatarFrame || participant.AvatarFrame || null,
+                        profileCustomization: nextProfileCustomization,
                       }
                     : participant
                 )
@@ -2256,8 +2406,12 @@ export default function MenuMain({
             nextProfileBackground || user.profileBackground || user.profileBackgroundUrl || user.profile_background_url || "",
           profileBackgroundFrame: nextProfileBackgroundFrame,
           profile_background_frame: nextProfileBackgroundFrame,
+          profileCustomization: nextProfileCustomization,
+          profile_customization: nextProfileCustomization,
         };
 
+        setProfileCustomization(nextProfileCustomization);
+        writeProfileCustomization(nextUser, nextProfileCustomization);
         setUser?.(nextUser);
         void storeSession(nextUser, {
           accessToken: getStoredToken(),
@@ -5202,6 +5356,8 @@ export default function MenuMain({
       last_name: profileDraft.lastName,
     }),
     profileStatus,
+    profileCustomization,
+    handleProfileCustomizationChange,
     emailChangeState,
     isTotpEnabled,
     totpSetup,
@@ -5484,6 +5640,38 @@ export default function MenuMain({
     user,
   ]);
   const renderProfilePanel = () => profilePanelElement;
+  const buildFriendProfileStats = (friend, directChannelId = "") => {
+    const friendId = String(friend?.id || friend?.userId || "").trim();
+    const sharedConversationCount = friendId
+      ? conversationTargets.reduce((count, conversation) => {
+        const members = Array.isArray(conversation?.members) ? conversation.members : [];
+        return members.some((member) => String(member?.id || member?.userId || "") === friendId) ? count + 1 : count;
+      }, 0)
+      : 0;
+
+    return [
+      {
+        id: "mutual-friends",
+        label: "Общие друзья",
+        value: formatCountLabel(friend?.mutualFriendsCount, "Нет общих друзей", "общий друг", "общих друга", "общих друзей"),
+      },
+      {
+        id: "mutual-chats",
+        label: "Общие чаты",
+        value: formatCountLabel(sharedConversationCount, "Нет общих чатов", "общий чат", "общих чата", "общих чатов"),
+      },
+      {
+        id: "known-since",
+        label: "Вы знакомы",
+        value: formatKnownSinceLabel(friend?.friendshipCreatedAt || friend?.friendship_created_at),
+      },
+      {
+        id: "last-dialog",
+        label: "Последний диалог",
+        value: formatLastDialogLabel(getLatestProfileDialogAt(currentUserId, friend, directChannelId)),
+      },
+    ];
+  };
   const openFriendListUserContextMenu = (event, friend) => {
     event.preventDefault();
     event.stopPropagation();
@@ -5515,6 +5703,7 @@ export default function MenuMain({
       avatarFrame: friend.avatarFrame || null,
       backgroundUrl: String(friend.profileBackgroundUrl || ""),
       backgroundFrame: friend.profileBackgroundFrame || null,
+      profileCustomization: friend.profileCustomization || null,
       isOnline: Boolean(friend.isOnline ?? friend.is_online ?? friend.online ?? false),
       lastSeenAt: String(friend.lastSeenAt || friend.last_seen_at || friend.lastSeen || friend.last_seen || ""),
       presence: friend.presence || friend.presenceStatus || friend.presence_status || "",
@@ -5526,6 +5715,7 @@ export default function MenuMain({
       canOpenDirectChat: !friend.isSelf,
       canInviteToServer: !isBlocked && !blockedYou && canInviteFriendToAnyServer(friendId),
       hasClearableChat,
+      socialStats: buildFriendProfileStats(friend, directChannelId),
     });
   };
   const openFriendListProfile = (friend) => {
@@ -5537,6 +5727,7 @@ export default function MenuMain({
     const isBlocked = Boolean(friend.isBlocked || blockedFriendIds.has(friendId));
     const blockedYou = Boolean(friend.blockedYou || blockedByFriendIds.has(friendId));
     const isIgnored = Boolean(friend.isIgnored || ignoredFriendIds.has(friendId));
+    const directChannelId = String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id));
 
     setFriendListUserContextMenu(null);
     setFriendListProfileModal({
@@ -5546,6 +5737,7 @@ export default function MenuMain({
       avatarFrame: friend.avatarFrame || null,
       backgroundUrl: String(friend.profileBackgroundUrl || ""),
       backgroundFrame: friend.profileBackgroundFrame || null,
+      profileCustomization: friend.profileCustomization || null,
       isOnline: Boolean(friend.isOnline ?? friend.is_online ?? friend.online ?? false),
       lastSeenAt: String(friend.lastSeenAt || friend.last_seen_at || friend.lastSeen || friend.last_seen || ""),
       presence: friend.presence || friend.presenceStatus || friend.presence_status || "",
@@ -5555,6 +5747,7 @@ export default function MenuMain({
       blockedYou,
       isIgnored,
       canOpenDirectChat: !friend.isSelf,
+      socialStats: buildFriendProfileStats(friend, directChannelId),
     });
   };
   const closeFriendListUserContextMenu = () => setFriendListUserContextMenu(null);
@@ -5564,6 +5757,7 @@ export default function MenuMain({
       return;
     }
 
+    const sourceFriend = directConversationTargets.find((friend) => String(friend?.id || "") === String(friendListUserContextMenu.userId || "")) || friendListUserContextMenu;
     setFriendListProfileModal({
       userId: friendListUserContextMenu.userId,
       username: friendListUserContextMenu.username,
@@ -5571,6 +5765,7 @@ export default function MenuMain({
       avatarFrame: friendListUserContextMenu.avatarFrame || null,
       backgroundUrl: friendListUserContextMenu.backgroundUrl || "",
       backgroundFrame: friendListUserContextMenu.backgroundFrame || null,
+      profileCustomization: friendListUserContextMenu.profileCustomization || sourceFriend?.profileCustomization || null,
       isOnline: friendListUserContextMenu.isOnline,
       lastSeenAt: friendListUserContextMenu.lastSeenAt || "",
       presence: friendListUserContextMenu.presence || "",
@@ -5580,6 +5775,7 @@ export default function MenuMain({
       blockedYou: friendListUserContextMenu.blockedYou,
       isIgnored: friendListUserContextMenu.isIgnored,
       canOpenDirectChat: friendListUserContextMenu.canOpenDirectChat,
+      socialStats: buildFriendProfileStats(sourceFriend, friendListUserContextMenu.directChannelId),
     });
     setFriendListUserContextMenu(null);
   };

@@ -253,6 +253,14 @@ export const createDefaultProfileCustomization = () => {
 
 export const normalizeProfileCustomization = (value) => {
   const defaults = createDefaultProfileCustomization();
+  if (typeof value === "string") {
+    try {
+      return normalizeProfileCustomization(JSON.parse(value));
+    } catch {
+      return defaults;
+    }
+  }
+
   if (!value || typeof value !== "object") {
     return defaults;
   }
@@ -264,12 +272,25 @@ export const normalizeProfileCustomization = (value) => {
   };
 };
 
+export const getUserProfileCustomization = (user) => (
+  user?.profileCustomization
+  || user?.profile_customization
+  || user?.profileCustomizationJson
+  || user?.profile_customization_json
+  || null
+);
+
 export const getProfileCustomizationStorageKey = (user) => {
   const userId = String(user?.id || user?.userId || "").trim();
   return userId ? `${PROFILE_CUSTOMIZATION_STORAGE_PREFIX}:${userId}` : "";
 };
 
 export const readProfileCustomization = (user) => {
+  const remoteCustomization = getUserProfileCustomization(user);
+  if (remoteCustomization) {
+    return normalizeProfileCustomization(remoteCustomization);
+  }
+
   const key = getProfileCustomizationStorageKey(user);
   if (!key || typeof window === "undefined") {
     return createDefaultProfileCustomization();

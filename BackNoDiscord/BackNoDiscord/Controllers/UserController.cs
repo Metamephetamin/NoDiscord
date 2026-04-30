@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.StaticFiles;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace BackNoDiscord.Controllers;
 
@@ -33,6 +34,11 @@ public class UpdateProfileRequest
     public MediaFrameData? ProfileBackgroundFrame { get; set; }
 }
 
+public class UpdateProfileCustomizationRequest
+{
+    public JsonElement? Customization { get; set; }
+}
+
 public class StartEmailChangeRequest
 {
     public string? Email { get; set; }
@@ -53,6 +59,7 @@ public class UserController : ControllerBase
 {
     private const long MaxAvatarSizeBytes = 50L * 1024 * 1024;
     private const long MaxProfileBackgroundSizeBytes = 60L * 1024 * 1024;
+    private const int MaxProfileCustomizationJsonLength = 8192;
     private const int MaxEmailVerificationAttempts = 5;
     private static readonly TimeSpan EmailChangeCodeLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailChangeResendCooldown = TimeSpan.FromSeconds(60);
@@ -145,7 +152,8 @@ public class UserController : ControllerBase
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
-            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(user.profile_customization_json)
         });
     }
 
@@ -336,7 +344,8 @@ public class UserController : ControllerBase
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
-            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(user.profile_customization_json)
         });
     }
 
@@ -395,6 +404,40 @@ public class UserController : ControllerBase
             avatarUrl,
             avatar_url = avatarUrl,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true)
+        });
+    }
+
+    [HttpPut("profile-customization")]
+    public async Task<IActionResult> UpdateProfileCustomization([FromBody] UpdateProfileCustomizationRequest request, CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var customizationJson = request.Customization.HasValue
+            ? JsonSerializer.Serialize(request.Customization.Value)
+            : "{}";
+        if (customizationJson.Length > MaxProfileCustomizationJsonLength)
+        {
+            return BadRequest(new { message = "Настройки профиля слишком большие." });
+        }
+
+        var user = await _dbContext.Users.FirstOrDefaultAsync(item => item.id == currentUserId, cancellationToken);
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        user.profile_customization_json = customizationJson;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await BroadcastProfileUpdatedAsync(user, cancellationToken);
+
+        return Ok(new
+        {
+            profile_customization = ParseProfileCustomization(user.profile_customization_json)
         });
     }
 
@@ -516,10 +559,28 @@ public class UserController : ControllerBase
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
-            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(user.profile_customization_json)
         };
 
         await _chatHubContext.Clients.Users(recipientIds.Distinct().Select(id => id.ToString()))
             .SendAsync("ProfileUpdated", payload, cancellationToken);
+    }
+
+    private static object? ParseProfileCustomization(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(rawValue);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
