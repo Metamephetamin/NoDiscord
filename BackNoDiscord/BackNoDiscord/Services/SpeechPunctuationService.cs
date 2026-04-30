@@ -28,6 +28,10 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
     {
         PropertyNameCaseInsensitive = true,
     };
+    private static readonly Regex NaturalTextCyrillicRegex = new("[А-Яа-яЁё]", RegexOptions.Compiled);
+    private static readonly Regex RepeatedCharacterRunRegex = new(@"(.)\1{12,}", RegexOptions.Compiled);
+    private static readonly Regex VeryLongTokenRegex = new(@"[\p{L}\p{Nd}]{80,}", RegexOptions.Compiled);
+    private static readonly Regex TextTokenRegex = new(@"[\p{L}\p{Nd}]+", RegexOptions.Compiled);
 
     private static readonly Regex QuestionStartRegex = new(
         "^(?:а\\s+)?(кто|что|где|куда|откуда|когда|почему|зачем|как|какой|какая|какое|какие|чей|чья|чьё|чьи|сколько|разве|неужели|можно ли|нужно ли|стоит ли|ли)\\b",
@@ -198,6 +202,16 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
             {
                 Text = string.Empty,
                 Provider = "empty",
+                UsedModel = false,
+            };
+        }
+
+        if (!ShouldUseModelPunctuation(normalizedInput))
+        {
+            return new SpeechPunctuationResult
+            {
+                Text = normalizedInput,
+                Provider = "skipped-non-natural-text",
                 UsedModel = false,
             };
         }
@@ -379,7 +393,8 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
                 {
                     temperature = 0,
                     top_p = 0.2,
-                    num_predict = Math.Min(2048, Math.Max(128, normalizedText.Length + 64)),
+                    num_ctx = Math.Min(8192, Math.Max(2048, normalizedText.Length * 3)),
+                    num_predict = Math.Min(4096, Math.Max(512, normalizedText.Length * 2)),
                 },
             };
 
@@ -399,10 +414,17 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
                 return null;
             }
 
-            if (!LooksLikePunctuationOnlyChange(normalizedText, candidate))
+            if (!LooksLikeSafeTextCorrection(normalizedText, candidate))
             {
-                _logger.LogWarning("Ollama punctuation changed text content, using fallback.");
-                return null;
+                var punctuationOnlyCandidate = TryProjectModelPunctuation(normalizedText, candidate);
+                if (string.IsNullOrWhiteSpace(punctuationOnlyCandidate) ||
+                    !LooksLikeSafeTextCorrection(normalizedText, punctuationOnlyCandidate))
+                {
+                    _logger.LogWarning("Ollama punctuation changed text content too much, using fallback.");
+                    return null;
+                }
+
+                candidate = punctuationOnlyCandidate;
             }
 
             return new SpeechPunctuationResult
@@ -428,8 +450,9 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         Ты редактор пунктуации русского текста.
         Восстанови пропущенные знаки препинания: запятые, точки, вопросительные и восклицательные знаки, двоеточия, тире, кавычки, если они нужны.
         Обязательно проверь запятые внутри предложения, а не только знак в конце.
-        Разрешено менять только пунктуацию, пробелы и заглавные буквы в начале предложений.
-        Запрещено менять слова, порядок слов, сленг, мат, эмодзи, ссылки, упоминания и смысл.
+        Разрешено менять только пунктуацию, пробелы, заглавные буквы в начале предложений и очевидные опечатки внутри слов.
+        Опечатки исправляй минимально: одна-две буквы, без замены слова на другое по смыслу.
+        Запрещено менять слова на синонимы, порядок слов, сленг, мат, эмодзи, ссылки, упоминания и смысл.
         Верни только один исправленный вариант текста без объяснений.
 
         Пример:
@@ -461,15 +484,214 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         return normalizedText;
     }
 
-    private static bool LooksLikePunctuationOnlyChange(string originalText, string candidateText)
+    public static bool LooksLikeSafeTextCorrection(string originalText, string candidateText)
     {
-        static string NormalizeIdentity(string value)
+        var originalTokens = GetIdentityTokens(originalText);
+        var candidateTokens = GetIdentityTokens(candidateText);
+        if (originalTokens.Count != candidateTokens.Count)
         {
-            var lowered = NormalizeInput(value).ToLowerInvariant();
-            return Regex.Replace(lowered, "[^\\p{L}\\p{Nd}]+", string.Empty);
+            return false;
         }
 
-        return string.Equals(NormalizeIdentity(originalText), NormalizeIdentity(candidateText), StringComparison.Ordinal);
+        for (var index = 0; index < originalTokens.Count; index++)
+        {
+            if (!LooksLikeSameOrTypoFixedToken(originalTokens[index], candidateTokens[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static string? TryProjectModelPunctuation(string originalText, string candidateText)
+    {
+        var normalizedOriginal = NormalizeInput(originalText);
+        var normalizedCandidate = NormalizeInput(candidateText);
+        if (string.IsNullOrWhiteSpace(normalizedOriginal) || string.IsNullOrWhiteSpace(normalizedCandidate))
+        {
+            return null;
+        }
+
+        var originalTokens = TextTokenRegex.Matches(normalizedOriginal);
+        var candidateTokens = TextTokenRegex.Matches(normalizedCandidate);
+        if (originalTokens.Count == 0 || originalTokens.Count != candidateTokens.Count)
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder(normalizedOriginal.Length + originalTokens.Count * 2);
+        for (var index = 0; index < originalTokens.Count; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append(' ');
+            }
+
+            var originalToken = originalTokens[index].Value;
+            var candidateToken = candidateTokens[index].Value;
+            builder.Append(ApplyCandidateCapitalization(originalToken, candidateToken));
+            builder.Append(ExtractCandidatePunctuationSuffix(normalizedCandidate, candidateTokens, index));
+        }
+
+        return NormalizeSpacing(builder.ToString()).Trim();
+    }
+
+    private static string ApplyCandidateCapitalization(string originalToken, string candidateToken)
+    {
+        if (string.IsNullOrEmpty(originalToken) || string.IsNullOrEmpty(candidateToken))
+        {
+            return originalToken;
+        }
+
+        if (char.IsUpper(candidateToken[0]) && char.IsLower(originalToken[0]))
+        {
+            return char.ToUpperInvariant(originalToken[0]) + originalToken[1..];
+        }
+
+        return originalToken;
+    }
+
+    private static string ExtractCandidatePunctuationSuffix(string candidateText, MatchCollection candidateTokens, int tokenIndex)
+    {
+        var token = candidateTokens[tokenIndex];
+        var suffixStart = token.Index + token.Length;
+        var suffixEnd = tokenIndex + 1 < candidateTokens.Count
+            ? candidateTokens[tokenIndex + 1].Index
+            : candidateText.Length;
+        if (suffixStart >= suffixEnd)
+        {
+            return string.Empty;
+        }
+
+        var suffix = candidateText[suffixStart..suffixEnd];
+        var builder = new StringBuilder();
+        foreach (var character in suffix)
+        {
+            if (character is '.' or ',' or '!' or '?' or ';' or ':' or '…')
+            {
+                builder.Append(character);
+                continue;
+            }
+
+            if (!char.IsWhiteSpace(character))
+            {
+                break;
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    public static bool ShouldUseModelPunctuation(string text)
+    {
+        var normalizedText = NormalizeInput(text);
+        if (normalizedText.Length < 4)
+        {
+            return false;
+        }
+
+        if (!NaturalTextCyrillicRegex.IsMatch(normalizedText))
+        {
+            return false;
+        }
+
+        if (RepeatedCharacterRunRegex.IsMatch(normalizedText) || VeryLongTokenRegex.IsMatch(normalizedText))
+        {
+            return false;
+        }
+
+        var tokens = GetIdentityTokens(normalizedText);
+        if (tokens.Count < 2)
+        {
+            return false;
+        }
+
+        var cyrillicTokens = tokens.Count(static token => NaturalTextCyrillicRegex.IsMatch(token));
+        if (cyrillicTokens < 2)
+        {
+            return false;
+        }
+
+        var averageTokenLength = tokens.Average(static token => token.Length);
+        if (averageTokenLength > 24)
+        {
+            return false;
+        }
+
+        if (normalizedText.Length >= 200 && tokens.Count < normalizedText.Length / 35)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static List<string> GetIdentityTokens(string value)
+    {
+        return TextTokenRegex.Matches(NormalizeInput(value).ToLowerInvariant())
+            .Select(static match => match.Value)
+            .ToList();
+    }
+
+    private static bool LooksLikeSameOrTypoFixedToken(string originalToken, string candidateToken)
+    {
+        if (string.Equals(originalToken, candidateToken, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (originalToken.Length <= 4 || candidateToken.Length <= 4)
+        {
+            return false;
+        }
+
+        var lengthDelta = Math.Abs(originalToken.Length - candidateToken.Length);
+        if (lengthDelta > 1)
+        {
+            return false;
+        }
+
+        var distance = CalculateLevenshteinDistance(originalToken, candidateToken);
+        var maxDistance = Math.Min(2, Math.Max(1, originalToken.Length / 5));
+        return distance <= maxDistance;
+    }
+
+    private static int CalculateLevenshteinDistance(string left, string right)
+    {
+        if (left.Length == 0)
+        {
+            return right.Length;
+        }
+
+        if (right.Length == 0)
+        {
+            return left.Length;
+        }
+
+        var previous = new int[right.Length + 1];
+        var current = new int[right.Length + 1];
+
+        for (var column = 0; column <= right.Length; column++)
+        {
+            previous[column] = column;
+        }
+
+        for (var row = 1; row <= left.Length; row++)
+        {
+            current[0] = row;
+            for (var column = 1; column <= right.Length; column++)
+            {
+                var substitutionCost = left[row - 1] == right[column - 1] ? 0 : 1;
+                current[column] = Math.Min(
+                    Math.Min(current[column - 1] + 1, previous[column] + 1),
+                    previous[column - 1] + substitutionCost);
+            }
+
+            (previous, current) = (current, previous);
+        }
+
+        return previous[right.Length];
     }
 
     private bool IsOllamaEnabled()

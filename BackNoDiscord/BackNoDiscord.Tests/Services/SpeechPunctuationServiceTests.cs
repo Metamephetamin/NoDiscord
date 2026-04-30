@@ -5,6 +5,43 @@ namespace BackNoDiscord.Tests.Services;
 public class SpeechPunctuationServiceTests
 {
     [Theory]
+    [InlineData("привет как дела я сегодня зайду если получится а ты пока напиши что там по серверу", true)]
+    [InlineData("я думаю что если мы завтра спокойно проверим весь этот длинный текст то модель должна поставить запятые во всех нужных местах", true)]
+    [InlineData("asedeeeeeefqegergaeaeaegaegegaasedeeeeeefqegergaeaeaegaegega", false)]
+    [InlineData("аааааааааааааааааааааааааааааа", false)]
+    [InlineData("слово aseedeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", false)]
+    public void ShouldUseModelPunctuation_SkipsGarbageButAllowsNaturalLongText(string input, bool expected)
+    {
+        var result = SpeechPunctuationService.ShouldUseModelPunctuation(input);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData("privet kak dela", "Privet, kak dela?", true)]
+    [InlineData("privet sevodnya zaydu", "Privet, segodnya zaydu.", true)]
+    [InlineData("privet ya zaydu", "Privet, ya zaglyanu.", false)]
+    [InlineData("privet kak dela", "Privet, kak u tebya dela?", false)]
+    [InlineData("ne znayu", "nu, znayu", false)]
+    public void LooksLikeSafeTextCorrection_AllowsOnlyPunctuationAndSmallTypos(string input, string candidate, bool expected)
+    {
+        var result = SpeechPunctuationService.LooksLikeSafeTextCorrection(input, candidate);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void TryProjectModelPunctuation_KeepsOriginalWordsWhenModelChangedUnsafeWords()
+    {
+        const string input = "Так значит ты машипенькая и можешь расставлять запетые только в легких предложения х а что тогда насчет такого думаю ты должна справиться";
+        const string candidate = "Так, значит, ты маленькая и можешь расставлять запятые только в лёгких предложения х, а что тогда насчёт такого? Думаю, ты должна справиться.";
+
+        var result = SpeechPunctuationService.TryProjectModelPunctuation(input, candidate);
+
+        Assert.Equal("Так, значит, ты машипенькая и можешь расставлять запетые только в легких предложения х, а что тогда насчет такого? Думаю, ты должна справиться.", result);
+    }
+
+    [Theory]
     [InlineData("я думаю что всё готово", "Я думаю что всё готово")]
     [InlineData("напиши мне запятая когда освободишься", "Напиши мне, когда освободишься")]
     [InlineData("привет точка как дела вопросительный знак", "Привет. Как дела?")]

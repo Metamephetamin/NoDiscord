@@ -38,7 +38,6 @@ public class ChatHub : Hub
     private static readonly TimeSpan MessageMutationCooldown = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan CooldownEntryMaxAge = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan CooldownCleanupInterval = TimeSpan.FromMinutes(5);
-    private static readonly Regex AsyncPunctuationCyrillicRegex = new("[А-Яа-яЁё]", RegexOptions.Compiled);
     private static readonly Regex AsyncPunctuationSkipRegex = new(
         @"https?://|www\.|```|^\s*[/>]|[\w.+-]+@[\w.-]+\.\w+|@\w|#\w|:[A-Za-z0-9_+-]+:",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -715,22 +714,12 @@ public class ChatHub : Hub
     private static bool ShouldUseAsyncServerPunctuation(string message)
     {
         var normalizedMessage = message.Trim();
-        if (normalizedMessage.Length < 4)
-        {
-            return false;
-        }
-
-        if (!AsyncPunctuationCyrillicRegex.IsMatch(normalizedMessage))
-        {
-            return false;
-        }
-
         if (AsyncPunctuationSkipRegex.IsMatch(normalizedMessage))
         {
             return false;
         }
 
-        return normalizedMessage.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length >= 2;
+        return SpeechPunctuationService.ShouldUseModelPunctuation(normalizedMessage);
     }
 
     private static MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)
