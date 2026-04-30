@@ -4,6 +4,7 @@ import "../css/Auth.css";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { getApiErrorMessage, getNetworkErrorMessage, parseApiResponse } from "../utils/auth";
 import { resolveStaticAssetUrl } from "../utils/media";
+import { APP_LOGO_CHANGE_EVENT, getCurrentAppLogoOption } from "../utils/appLogo";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import {
   areNamesUsingSameScript,
@@ -21,7 +22,6 @@ const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
-const AUTH_BRAND_LOGO_URL = resolveStaticAssetUrl("/image/image.png");
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
 const initialRegisterForm = {
   firstName: "",
@@ -268,6 +268,7 @@ export default function Auth({ onAuthSuccess }) {
   const [typedSloganLength, setTypedSloganLength] = useState(0);
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
+  const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
   const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
   const authMessageTone = useMemo(() => getAuthMessageTone(message), [message]);
@@ -369,6 +370,17 @@ export default function Auth({ onAuthSuccess }) {
       removeMediaListeners.forEach((removeListener) => removeListener());
       window.removeEventListener("resize", updateVisualMode);
       connection?.removeEventListener?.("change", updateVisualMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleLogoChange = (event) => {
+      setBrandLogoSrc(event?.detail?.src || getCurrentAppLogoOption().src);
+    };
+
+    window.addEventListener(APP_LOGO_CHANGE_EVENT, handleLogoChange);
+    return () => {
+      window.removeEventListener(APP_LOGO_CHANGE_EVENT, handleLogoChange);
     };
   }, []);
 
@@ -951,7 +963,7 @@ export default function Auth({ onAuthSuccess }) {
 
       <div className="auth-brand">
         <div className="auth-brand__badge">
-          <img className="auth-brand__logo" src={AUTH_BRAND_LOGO_URL} alt="MAX" />
+          <img className="auth-brand__logo" src={brandLogoSrc} alt="MAX" />
         </div>
         <div className="auth-brand__copy">
           <span className="auth-brand__name">
@@ -1210,7 +1222,7 @@ export default function Auth({ onAuthSuccess }) {
                   <>
                     <div className="auth-qr-login__svg" dangerouslySetInnerHTML={{ __html: qrLoginSvg }} />
                     <span className="auth-qr-login__logo" aria-hidden="true">
-                      <img src={AUTH_BRAND_LOGO_URL} alt="" />
+                      <img src={brandLogoSrc} alt="" />
                     </span>
                   </>
                 ) : (

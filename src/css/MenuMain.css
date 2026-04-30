@@ -10987,6 +10987,78 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   line-height: 1.45;
 }
 
+.app-logo-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-logo-picker__option {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 70px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #dce3f2;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.app-logo-picker__option:hover {
+  border-color: rgba(143, 158, 255, 0.28);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.app-logo-picker__option--active {
+  border-color: rgba(108, 99, 255, 0.72);
+  background: rgba(108, 99, 255, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(108, 99, 255, 0.22);
+}
+
+.app-logo-picker__preview {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+.app-logo-picker__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.app-logo-picker__copy strong,
+.app-logo-picker__copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-logo-picker__copy strong {
+  color: #f8f9ff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.app-logo-picker__copy span {
+  color: #9ea8bf;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .app-logo-picker {
+    grid-template-columns: 1fr;
+  }
+}
+
 .voice-toggle-row {
   display: flex;
   align-items: center;
@@ -13522,6 +13594,23 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.settings-section__header--compact {
+  align-items: flex-start;
+}
+
+.settings-section__header h4 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 16px;
+}
+
+.settings-section__header p {
+  margin: 4px 0 0;
+  color: #9ea8bf;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .settings-section__actions {

@@ -139,7 +139,7 @@ export async function punctuateComposerText(rawText) {
     if (result?.usedModel !== true) {
       throw new Error("Ollama недоступна.");
     }
-    return formatServerPunctuationResult(result, normalizedText);
+    return String(result?.text || normalizedText).trim() || normalizedText;
   } finally {
     if (timeoutId) {
       globalThis.clearTimeout(timeoutId);

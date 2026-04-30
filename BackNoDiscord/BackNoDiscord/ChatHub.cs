@@ -251,7 +251,6 @@ public class ChatHub : Hub
             await _context.SaveChangesAsync();
 
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
-            QueueAsyncPunctuationUpdate(msg.Id, normalizedChannelId, payload.AuthorUserId, payload.Message);
             LastMessageSentAtByUser[currentUser.UserId] = nowUtc;
             MarkServerChannelSlowModeSent(normalizedChannelId, currentUser.UserId);
             await SendDirectMessagePushIfNeededAsync(normalizedChannelId, currentUser, currentDisplayName, payload);

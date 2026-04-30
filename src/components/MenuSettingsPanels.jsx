@@ -12,6 +12,7 @@ import {
   getProfileCustomizationClassName,
   getProfileStoreItemById,
 } from "../utils/profileCustomization";
+import { APP_LOGO_OPTIONS } from "../utils/appLogo";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -1036,10 +1037,12 @@ export const AppearanceAccessibilitySettings = ({
   uiFontScale,
   uiReduceMotion,
   uiTouchTargetSize,
+  appLogoId,
   onDensityChange,
   onFontScaleChange,
   onReduceMotionChange,
   onTouchTargetSizeChange,
+  onAppLogoChange,
 }) => (
   <div className="settings-shell__content">
     <div className="settings-shell__content-header">
@@ -1108,6 +1111,33 @@ export const AppearanceAccessibilitySettings = ({
               <span>{option.description}</span>
             </span>
           </label>
+        ))}
+      </div>
+    </section>
+
+    <section className="voice-settings-card">
+      <div className="settings-section__header settings-section__header--compact">
+        <div>
+          <h4>Логотип приложения</h4>
+          <p>Выберите иконку для окна, вкладки и элементов приложения.</p>
+        </div>
+      </div>
+      <div className="app-logo-picker" role="radiogroup" aria-label="Логотип приложения">
+        {APP_LOGO_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`app-logo-picker__option ${appLogoId === option.id ? "app-logo-picker__option--active" : ""}`}
+            onClick={() => onAppLogoChange(option.id)}
+            role="radio"
+            aria-checked={appLogoId === option.id}
+          >
+            <img className="app-logo-picker__preview" src={option.src} alt="" />
+            <span className="app-logo-picker__copy">
+              <strong>{option.label}</strong>
+              <span>{option.description}</span>
+            </span>
+          </button>
         ))}
       </div>
     </section>

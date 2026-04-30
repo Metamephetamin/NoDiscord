@@ -68,13 +68,20 @@ public class UserController : ControllerBase
     private readonly IHubContext<ChatHub> _chatHubContext;
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly IEmailVerificationSender _emailVerificationSender;
+    private readonly CryptoService _crypto;
 
-    public UserController(AppDbContext dbContext, IHubContext<ChatHub> chatHubContext, UploadStoragePaths uploadStoragePaths, IEmailVerificationSender emailVerificationSender)
+    public UserController(
+        AppDbContext dbContext,
+        IHubContext<ChatHub> chatHubContext,
+        UploadStoragePaths uploadStoragePaths,
+        IEmailVerificationSender emailVerificationSender,
+        CryptoService crypto)
     {
         _dbContext = dbContext;
         _chatHubContext = chatHubContext;
         _uploadStoragePaths = uploadStoragePaths;
         _emailVerificationSender = emailVerificationSender;
+        _crypto = crypto;
     }
 
     [HttpPut("profile")]
@@ -271,7 +278,7 @@ public class UserController : ControllerBase
             return Unauthorized();
         }
 
-        if (user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, request?.TotpCode, DateTimeOffset.UtcNow))
+        if (user.is_totp_enabled && !VerifyUserTotpCode(user, request?.TotpCode, DateTimeOffset.UtcNow))
         {
             return BadRequest(new { message = "Введите корректный код из Google Authenticator.", requiresTotp = true });
         }
@@ -537,6 +544,30 @@ public class UserController : ControllerBase
     private static string GenerateEmailVerificationCode()
     {
         return RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+    }
+
+    private bool VerifyUserTotpCode(User user, string? code, DateTimeOffset now)
+    {
+        var secret = UnprotectTotpSecret(user.totp_secret);
+        return TotpService.VerifyCode(secret, code, now);
+    }
+
+    private string? UnprotectTotpSecret(string? protectedSecret)
+    {
+        if (string.IsNullOrWhiteSpace(protectedSecret))
+        {
+            return null;
+        }
+
+        try
+        {
+            return _crypto.Decrypt(protectedSecret);
+        }
+        catch
+        {
+            // Legacy rows stored the base32 TOTP secret as plain text.
+            return protectedSecret;
+        }
     }
 
     private async Task BroadcastProfileUpdatedAsync(User user, CancellationToken cancellationToken)

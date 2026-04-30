@@ -5,7 +5,12 @@ namespace BackNoDiscord.Security;
 
 public static class HubQueryTokenPolicy
 {
-    public static bool CanAcceptQueryToken(string? accessToken, PathString path, string? origin, IConfiguration configuration)
+    public static bool CanAcceptQueryToken(
+        string? accessToken,
+        PathString path,
+        string? origin,
+        IConfiguration configuration,
+        bool allowDevelopmentOrigins = false)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
         {
@@ -17,6 +22,6 @@ public static class HubQueryTokenPolicy
             return false;
         }
 
-        return FrontendOriginPolicy.IsAllowed(origin, configuration);
+        return FrontendOriginPolicy.IsAllowed(origin, configuration, allowDevelopmentOrigins);
     }
 }

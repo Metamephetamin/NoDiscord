@@ -117,10 +117,12 @@ export function MenuMainSettingsContent({
   uiFontScale,
   uiReduceMotion,
   uiTouchTargetSize,
+  appLogoId,
   setUiDensity,
   setUiFontScale,
   setUiReduceMotion,
   setUiTouchTargetSize,
+  handleAppLogoChange,
   activeServer,
   canManageServer,
   canInviteMembers,
@@ -263,10 +265,12 @@ export function MenuMainSettingsContent({
           uiFontScale={uiFontScale}
           uiReduceMotion={uiReduceMotion}
           uiTouchTargetSize={uiTouchTargetSize}
+          appLogoId={appLogoId}
           onDensityChange={setUiDensity}
           onFontScaleChange={setUiFontScale}
           onReduceMotionChange={setUiReduceMotion}
           onTouchTargetSizeChange={setUiTouchTargetSize}
+          onAppLogoChange={handleAppLogoChange}
         />
       );
     case "server":

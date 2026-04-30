@@ -16,6 +16,7 @@ import {
 import { formatFileSize } from "../utils/textChatHelpers";
 import { COMPOSER_TRANSLATION_LANGUAGES, translateComposerText } from "../utils/textTranslation";
 import { punctuateComposerText } from "../utils/speechPunctuation";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 function normalizePendingUploadProgress(progressValue) {
   const numericProgress = Number(progressValue);
@@ -102,6 +103,8 @@ function TextChatComposer({
   const [translationPending, setTranslationPending] = useState(false);
   const [punctuationPending, setPunctuationPending] = useState(false);
   const [translationError, setTranslationError] = useState("");
+  const [punctuationReview, setPunctuationReview] = useState(null);
+  const [punctuationCopyStatus, setPunctuationCopyStatus] = useState("");
   const composerHighlightRef = useRef(null);
   const messageComposerRef = useRef(null);
   const translatorButtonRef = useRef(null);
@@ -125,6 +128,9 @@ function TextChatComposer({
     [deferredMessage, serverMembers, serverRoles]
   );
   const shouldRenderComposerHighlight = composerMentionSegments.some((segment) => segment?.isMention);
+  const normalizedComposerText = String(message || "").trim();
+  const composerWordCount = normalizedComposerText ? normalizedComposerText.split(/\s+/).filter(Boolean).length : 0;
+  const canUsePunctuationTool = composerWordCount >= 2 || normalizedComposerText.length >= 12;
   const {
     mediaFileInputRef,
     documentFileInputRef,
@@ -191,6 +197,17 @@ function TextChatComposer({
       window.removeEventListener("keydown", handleEscape);
     };
   }, [translatorMenuOpen]);
+
+  useEffect(() => {
+    if (!punctuationReview) {
+      return;
+    }
+
+    if (String(message || "").trim() !== punctuationReview.sourceText) {
+      setPunctuationReview(null);
+      setPunctuationCopyStatus("");
+    }
+  }, [message, punctuationReview]);
 
   const clearAttachMenuCloseTimeout = () => {
     if (!attachMenuCloseTimeoutRef.current || typeof window === "undefined") {
@@ -396,25 +413,64 @@ function TextChatComposer({
       return;
     }
 
+    if (!canUsePunctuationTool) {
+      setTranslationError("Для исправления нужен текст хотя бы из пары слов.");
+      return;
+    }
+
     setPunctuationPending(true);
     setTranslationError("");
+    setPunctuationReview(null);
+    setPunctuationCopyStatus("");
 
     try {
       const result = await punctuateComposerText(sourceText);
       if (result) {
         if (result === sourceText) {
-          setTranslationError("Ollama не изменила текст. Проверьте, что модель запущена и подходит для русской пунктуации.");
+          setTranslationError("Ollama не предложила изменений для этого текста.");
           return;
         }
 
-        applyComposerText(result);
+        setPunctuationReview({
+          sourceText,
+          resultText: result,
+        });
+        setTranslatorMenuOpen(false);
       }
-      setTranslatorMenuOpen(false);
     } catch (error) {
-      setTranslationError(error?.message || "Не удалось исправить пунктуацию.");
+      setTranslationError(error?.message || "Не удалось исправить текст.");
     } finally {
       setPunctuationPending(false);
     }
+  };
+
+  const handleApplyPunctuationReview = () => {
+    if (!punctuationReview?.resultText) {
+      return;
+    }
+
+    applyComposerText(punctuationReview.resultText);
+    setPunctuationReview(null);
+    setPunctuationCopyStatus("");
+  };
+
+  const handleCopyPunctuationReview = async () => {
+    const resultText = String(punctuationReview?.resultText || "").trim();
+    if (!resultText) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(resultText);
+      setPunctuationCopyStatus("Скопировано");
+    } catch {
+      setPunctuationCopyStatus("Не удалось скопировать");
+    }
+  };
+
+  const handleCancelPunctuationReview = () => {
+    setPunctuationReview(null);
+    setPunctuationCopyStatus("");
   };
 
   const getPendingUploadStatusLabel = (selectedFile) => {
@@ -552,6 +608,39 @@ function TextChatComposer({
 
         <div className={`input-area__controls ${hasBatchUploadSheet ? "input-area__controls--batch" : ""}`}>
           <div ref={messageComposerRef} className="message-composer">
+            {punctuationReview ? (
+              <div className="composer-ai-review" role="dialog" aria-label="Предложение исправленного текста">
+                <div className="composer-ai-review__header">
+                  <div>
+                    <strong>Исправленный текст</strong>
+                    <span>Проверьте вариант перед заменой сообщения.</span>
+                  </div>
+                  <button type="button" className="composer-ai-review__close" onClick={handleCancelPunctuationReview} aria-label="Закрыть" />
+                </div>
+                <div className="composer-ai-review__body">
+                  <div className="composer-ai-review__text composer-ai-review__text--source">
+                    <span>Было</span>
+                    <p>{punctuationReview.sourceText}</p>
+                  </div>
+                  <div className="composer-ai-review__text composer-ai-review__text--result">
+                    <span>Стало</span>
+                    <p>{punctuationReview.resultText}</p>
+                  </div>
+                </div>
+                <div className="composer-ai-review__actions">
+                  {punctuationCopyStatus ? <span className="composer-ai-review__status">{punctuationCopyStatus}</span> : null}
+                  <button type="button" className="composer-ai-review__button composer-ai-review__button--ghost" onClick={handleCopyPunctuationReview}>
+                    Скопировать
+                  </button>
+                  <button type="button" className="composer-ai-review__button composer-ai-review__button--ghost" onClick={handleCancelPunctuationReview}>
+                    Отмена
+                  </button>
+                  <button type="button" className="composer-ai-review__button composer-ai-review__button--primary" onClick={handleApplyPunctuationReview}>
+                    Заменить
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div
               className="attach-menu-anchor"
               onPointerEnter={openAttachMenu}
@@ -664,13 +753,13 @@ function TextChatComposer({
                   className="composer-text-tools-menu__action"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => void handlePunctuateComposerText()}
-                  disabled={translationPending || punctuationPending || !String(message || "").trim()}
+                  disabled={translationPending || punctuationPending || !String(message || "").trim() || !canUsePunctuationTool}
                   role="menuitem"
                 >
                   <span className="composer-text-tools-menu__action-icon composer-text-tools-menu__action-icon--punctuation" aria-hidden="true" />
                   <span>
-                    <b>{punctuationPending ? "Исправляем..." : "Исправить пунктуацию"}</b>
-                    <small>Запятые, точки, вопросы и пробелы</small>
+                    <b>{punctuationPending ? "Исправляем..." : "Исправить текст"}</b>
+                    <small>Пунктуация, пробелы и легкие опечатки перед отправкой</small>
                   </span>
                 </button>
 

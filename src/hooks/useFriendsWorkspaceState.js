@@ -711,6 +711,7 @@ export default function useFriendsWorkspaceState({
             presence,
             status: presence,
             lastSeenAt: lastSeenAt || friend.lastSeenAt || "",
+            ...(isOnline ? {} : { activity: null, externalActivity: null }),
           }
           : friend
       );

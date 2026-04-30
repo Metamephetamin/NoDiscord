@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 
@@ -33,20 +34,24 @@ if (jwtKey.Length < 32)
 }
 
 const string MediaAccessTokenCookieName = "tend_access_token";
+const long MaxChatFileUploadBytes = 100L * 1024 * 1024;
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 5L * 1024 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = MaxChatFileUploadBytes;
 });
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin => FrontendOriginPolicy.IsAllowed(origin, builder.Configuration))
+        policy.SetIsOriginAllowed(origin => FrontendOriginPolicy.IsAllowed(
+                  origin,
+                  builder.Configuration,
+                  builder.Environment.IsDevelopment()))
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -58,6 +63,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
+    options.KnownProxies.Add(IPAddress.Loopback);
+    options.KnownProxies.Add(IPAddress.IPv6Loopback);
+
+    foreach (var proxy in GetConfiguredKnownProxies(builder.Configuration))
+    {
+        options.KnownProxies.Add(proxy);
+    }
 });
 
 builder.Services
@@ -88,7 +100,12 @@ builder.Services
                 var path = context.HttpContext.Request.Path;
                 var origin = context.Request.Headers.Origin.ToString();
 
-                if (HubQueryTokenPolicy.CanAcceptQueryToken(accessToken, path, origin, builder.Configuration))
+                if (HubQueryTokenPolicy.CanAcceptQueryToken(
+                        accessToken,
+                        path,
+                        origin,
+                        builder.Configuration,
+                        builder.Environment.IsDevelopment()))
                 {
                     context.Token = accessToken;
                 }
@@ -241,8 +258,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
-    context.Response.Headers["Content-Security-Policy"] =
-        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;";
+    context.Response.Headers["Content-Security-Policy"] = BuildContentSecurityPolicy(app.Environment.IsDevelopment(), app.Configuration);
     context.Response.Headers["Permissions-Policy"] =
         "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=(), serial=()";
 
@@ -413,6 +429,77 @@ static IEnumerable<string> EnumerateDotEnvPaths(string startDirectory)
         yield return Path.Combine(directory.FullName, ".env");
         directory = directory.Parent;
     }
+}
+
+static IReadOnlyCollection<IPAddress> GetConfiguredKnownProxies(IConfiguration configuration)
+{
+    var proxies = new List<IPAddress>();
+    foreach (var rawProxy in ReadSeparatedValues(configuration["ForwardedHeaders:KnownProxies"])
+                 .Concat(ReadSeparatedValues(configuration["ND_KNOWN_PROXIES"])))
+    {
+        if (IPAddress.TryParse(rawProxy, out var proxy))
+        {
+            proxies.Add(proxy);
+        }
+    }
+
+    return proxies;
+}
+
+static string BuildContentSecurityPolicy(bool isDevelopment, IConfiguration configuration)
+{
+    if (isDevelopment)
+    {
+        return "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:;";
+    }
+
+    var connectSources = new SortedSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "'self'"
+    };
+
+    foreach (var origin in FrontendOriginPolicy.GetConfiguredOrigins(configuration))
+    {
+        AddSecureCspOrigin(connectSources, origin);
+    }
+
+    AddSecureCspOrigin(connectSources, configuration["ND_API_URL"]);
+    AddSecureCspOrigin(connectSources, configuration["ND_PUBLIC_APP_URL"]);
+    AddSecureCspOrigin(connectSources, configuration["ND_LIVEKIT_URL"]);
+    AddSecureCspOrigin(connectSources, configuration["LiveKit:Url"]);
+
+    return "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
+           "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+           "media-src 'self' blob:; font-src 'self' data:; " +
+           $"connect-src {string.Join(' ', connectSources)}; " +
+           "worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests;";
+}
+
+static void AddSecureCspOrigin(ISet<string> target, string? value)
+{
+    if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+    {
+        return;
+    }
+
+    if (!uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+        !uri.Scheme.Equals("wss", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    var builder = new UriBuilder(uri.Scheme, uri.Host)
+    {
+        Port = uri.IsDefaultPort ? -1 : uri.Port
+    };
+    target.Add(builder.Uri.GetLeftPart(UriPartial.Authority));
+}
+
+static IEnumerable<string> ReadSeparatedValues(string? value)
+{
+    return string.IsNullOrWhiteSpace(value)
+        ? []
+        : value.Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 static bool CanAcceptMediaCookieToken(HttpRequest request, PathString path)

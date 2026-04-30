@@ -41,6 +41,13 @@ const MAX_PERF_EVENTS = 500;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
 const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 const ATTACHMENT_PICKER_PREVIEW_MAX_EDGE = 320;
+const DEFAULT_APP_ICON_ASSET = "app-icon.png";
+const APP_LOGO_ASSET_PATHS = new Set([
+  "app-logos/logo-mono-light.png",
+  "app-logos/logo-gradient-light.png",
+  "app-logos/logo-gradient-dark.png",
+  "app-logos/logo-white-dark.png",
+]);
 const PROD_RENDERER_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -91,10 +98,35 @@ const ATTACHMENT_PICKER_CONTENT_TYPES = {
   ".wav": "audio/wav",
   ".ogg": "audio/ogg",
 };
-const resolveAppIconPath = () =>
-  app.isPackaged
-    ? path.join(app.getAppPath(), "assets", "app-icon.png")
-    : path.resolve(__dirname, "../../assets/app-icon.png");
+let mainWindow = null;
+let appTray = null;
+let activeAppIconAsset = DEFAULT_APP_ICON_ASSET;
+
+const normalizeAppIconAsset = (value) => {
+  const normalizedValue = String(value || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  return APP_LOGO_ASSET_PATHS.has(normalizedValue) ? normalizedValue : DEFAULT_APP_ICON_ASSET;
+};
+
+const resolveAppIconPath = (assetPath = activeAppIconAsset) => {
+  const normalizedAsset = normalizeAppIconAsset(assetPath);
+  return app.isPackaged
+    ? path.join(app.getAppPath(), "assets", normalizedAsset)
+    : path.resolve(__dirname, "../../assets", normalizedAsset);
+};
+
+const applyAppIconAsset = (assetPath) => {
+  activeAppIconAsset = normalizeAppIconAsset(assetPath);
+  const nextIconPath = resolveAppIconPath(activeAppIconAsset);
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setIcon(nextIconPath);
+  }
+  if (appTray) {
+    appTray.setImage(nextIconPath);
+  }
+
+  return { assetPath: activeAppIconAsset };
+};
 
 const resolveRendererDevServerUrl = () => {
   if (!MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -117,10 +149,8 @@ const RENDERER_DEV_SERVER_URL = resolveRendererDevServerUrl();
 const MEDIA_RENDERER_ACTIVE_FRAME_RATE = 120;
 const MEDIA_RENDERER_IDLE_FRAME_RATE = 60;
 
-let mainWindow = null;
 let mediaAppSuspensionBlockerId = null;
 let mediaDisplaySleepBlockerId = null;
-let appTray = null;
 let pendingRendererRoute = "";
 let appUpdateCheckPromise = null;
 let appUpdateDownloadPromise = null;
@@ -1935,6 +1965,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("desktop-notifications:show", async (_event, payload) =>
     showDesktopNotification(payload && typeof payload === "object" ? payload : {}));
+  ipcMain.handle("app-logo:set", async (_event, assetPath) => applyAppIconAsset(assetPath));
   ipcMain.handle("permissions:get-media-status", async (_event, mediaType) => getMediaAccessStatus(mediaType));
   ipcMain.handle("permissions:request-media-access", async (_event, mediaType) => requestMediaAccess(mediaType));
   ipcMain.handle("perf:record", async (_event, payload) => {

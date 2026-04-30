@@ -414,18 +414,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
                 return null;
             }
 
-            if (!LooksLikeSafeTextCorrection(normalizedText, candidate))
-            {
-                var punctuationOnlyCandidate = TryProjectModelPunctuation(normalizedText, candidate);
-                if (string.IsNullOrWhiteSpace(punctuationOnlyCandidate) ||
-                    !LooksLikeSafeTextCorrection(normalizedText, punctuationOnlyCandidate))
-                {
-                    _logger.LogWarning("Ollama punctuation changed text content too much, using fallback.");
-                    return null;
-                }
-
-                candidate = punctuationOnlyCandidate;
-            }
+            candidate = ChooseModelPunctuationCandidate(normalizedText, candidate);
 
             return new SpeechPunctuationResult
             {
@@ -502,6 +491,12 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
         }
 
         return true;
+    }
+
+    public static string ChooseModelPunctuationCandidate(string originalText, string candidateText)
+    {
+        var normalizedCandidate = NormalizeInput(candidateText);
+        return normalizedCandidate;
     }
 
     public static string? TryProjectModelPunctuation(string originalText, string candidateText)

@@ -50,6 +50,10 @@ import {
   readProfileCustomization,
   writeProfileCustomization,
 } from "../../utils/profileCustomization";
+import {
+  applyAppLogoPreference,
+  getStoredAppLogoId,
+} from "../../utils/appLogo";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import { buildStreamDiagnostics } from "../../webrtc/streamDiagnostics.mjs";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
@@ -557,6 +561,7 @@ export default function MenuMain({
   const [uiFontScale, setUiFontScale] = useState("md");
   const [uiReduceMotion, setUiReduceMotion] = useState(false);
   const [uiTouchTargetSize, setUiTouchTargetSize] = useState("standard");
+  const [appLogoId, setAppLogoId] = useState(() => getStoredAppLogoId());
 
   const popupRef = useRef(null);
   const serverMembersRef = useRef(null);
@@ -1112,6 +1117,10 @@ export default function MenuMain({
     uiTouchTargetSize,
     uiTouchTargetStorageKey,
   ]);
+  const handleAppLogoChange = useCallback((nextLogoId) => {
+    const nextLogo = applyAppLogoPreference(nextLogoId);
+    setAppLogoId(nextLogo.id);
+  }, []);
   useEffect(() => {
     currentVoiceChannelRef.current = currentVoiceChannel;
   }, [currentVoiceChannel]);
@@ -5440,10 +5449,12 @@ export default function MenuMain({
     uiFontScale,
     uiReduceMotion,
     uiTouchTargetSize,
+    appLogoId,
     setUiDensity,
     setUiFontScale,
     setUiReduceMotion,
     setUiTouchTargetSize,
+    handleAppLogoChange,
     activeServer,
     canManageServer,
     canInviteMembers,

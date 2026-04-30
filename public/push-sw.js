@@ -18,8 +18,8 @@ self.addEventListener("push", (event) => {
 
     const title = String(payload?.title || "Tend");
     const body = String(payload?.body || "").trim();
-    const icon = String(payload?.icon || "/image/image.png").trim();
-    const badge = String(payload?.badge || icon || "/image/image.png").trim();
+    const icon = String(payload?.icon || "/image/app-logos/logo-gradient-dark.png").trim();
+    const badge = String(payload?.badge || icon || "/image/app-logos/logo-gradient-dark.png").trim();
     const tag = String(payload?.tag || "").trim();
     const url = String(payload?.url || "/").trim() || "/";
 

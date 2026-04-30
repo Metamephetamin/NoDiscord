@@ -31,6 +31,17 @@ public class SpeechPunctuationServiceTests
     }
 
     [Fact]
+    public void ChooseModelPunctuationCandidate_UsesModelTextWhenProjectionCannotPreserveWords()
+    {
+        const string input = "nu tak vot a v chem problema byla togda v predyduschem v predlozhenii postavit tak zapyatye hochesh skazat chto predlozhenie dlya tebya slishkom bolshoe ili chto ya chto ne pisat bukvy";
+        const string candidate = "Nu tak vot, a v chem problema byla togda v predyduschem predlozhenii: postavit tak zapyatye? Hochesh skazat, chto predlozhenie dlya tebya slishkom bolshoe ili chto ya chto-to ne pishu bukvy?";
+
+        var result = SpeechPunctuationService.ChooseModelPunctuationCandidate(input, candidate);
+
+        Assert.Equal(candidate, result);
+    }
+
+    [Fact]
     public void TryProjectModelPunctuation_KeepsOriginalWordsWhenModelChangedUnsafeWords()
     {
         const string input = "Так значит ты машипенькая и можешь расставлять запетые только в легких предложения х а что тогда насчет такого думаю ты должна справиться";

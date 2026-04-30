@@ -12,6 +12,10 @@ const getParticipantUserId = (participant) =>
   String(participant?.userId || participant?.UserId || participant?.identity || participant?.Identity || "").trim();
 
 const getActivityStatus = (friend) => {
+  if (!isUserCurrentlyOnline(friend)) {
+    return null;
+  }
+
   const activity = friend?.activity || friend?.externalActivity || null;
   const label = formatIntegrationActivityStatus(activity);
   if (!label) {

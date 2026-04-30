@@ -17,8 +17,14 @@ public class HubQueryTokenPolicyTests
             .Build();
 
         Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/chatHub"), "https://tendsec.ru", configuration));
-        Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/voiceHub"), "http://localhost:5173", configuration));
-        Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/voiceHub"), "null", configuration));
+        Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/voiceHub"), "http://localhost:5173", configuration));
+        Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/voiceHub"), "null", configuration));
+        Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken(
+            "token",
+            new PathString("/voiceHub"),
+            "http://localhost:5173",
+            configuration,
+            allowDevelopmentOrigins: true));
     }
 
     [Fact]

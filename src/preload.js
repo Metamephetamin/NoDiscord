@@ -213,6 +213,12 @@ contextBridge.exposeInMainWorld("electronDesktopNotifications", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronAppLogo", {
+  async set(assetPath) {
+    return ipcRenderer.invoke("app-logo:set", assetPath);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronPermissions", {
   async getMediaStatus(mediaType) {
     return ipcRenderer.invoke("permissions:get-media-status", mediaType);

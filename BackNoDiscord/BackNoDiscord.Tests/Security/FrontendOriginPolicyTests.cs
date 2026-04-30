@@ -6,14 +6,23 @@ namespace BackNoDiscord.Tests.Security;
 public class FrontendOriginPolicyTests
 {
     [Fact]
-    public void IsAllowed_AllowsLoopbackAndNullOrigins()
+    public void IsAllowed_AllowsEmptyOriginButRejectsNullOrigin()
     {
         var configuration = BuildConfiguration();
 
         Assert.True(FrontendOriginPolicy.IsAllowed(null, configuration));
-        Assert.True(FrontendOriginPolicy.IsAllowed("null", configuration));
-        Assert.True(FrontendOriginPolicy.IsAllowed("http://localhost:5173", configuration));
-        Assert.True(FrontendOriginPolicy.IsAllowed("https://127.0.0.1:3000", configuration));
+        Assert.False(FrontendOriginPolicy.IsAllowed("null", configuration));
+    }
+
+    [Fact]
+    public void IsAllowed_AllowsLoopbackOnlyWhenDevelopmentOriginsAreEnabled()
+    {
+        var configuration = BuildConfiguration();
+
+        Assert.False(FrontendOriginPolicy.IsAllowed("http://localhost:5173", configuration));
+        Assert.False(FrontendOriginPolicy.IsAllowed("https://127.0.0.1:3000", configuration));
+        Assert.True(FrontendOriginPolicy.IsAllowed("http://localhost:5173", configuration, allowDevelopmentOrigins: true));
+        Assert.True(FrontendOriginPolicy.IsAllowed("https://127.0.0.1:3000", configuration, allowDevelopmentOrigins: true));
     }
 
     [Fact]

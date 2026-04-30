@@ -730,7 +730,7 @@ public class FriendsController : ControllerBase
             is_online = isOnline,
             presence = isOnline ? "online" : "offline",
             last_seen_at = friend.last_seen_at,
-            activity = BuildActivityPayload(activity),
+            activity = isOnline ? BuildActivityPayload(activity) : null,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id),
             unreadCount = Math.Clamp(unreadCount, 0, 999),
             lastDirectMessageAt,

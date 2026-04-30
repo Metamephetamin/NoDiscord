@@ -45,5 +45,4 @@ Deploy rules:
 - if deploy is requested:
   1. ensure changes are committed;
   2. push to origin master;
-  3. monitor Deploy workflow;
-  4. verify health endpoint.
+

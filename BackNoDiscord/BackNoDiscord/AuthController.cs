@@ -34,18 +34,21 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _config;
     private readonly IEmailVerificationSender _emailVerificationSender;
     private readonly IWebHostEnvironment _environment;
+    private readonly CryptoService _crypto;
     private readonly PasswordHasher<User> _passwordHasher;
 
     public AuthController(
         AppDbContext context,
         IConfiguration config,
         IEmailVerificationSender emailVerificationSender,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        CryptoService crypto)
     {
         _context = context;
         _config = config;
         _emailVerificationSender = emailVerificationSender;
         _environment = environment;
+        _crypto = crypto;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -183,7 +186,7 @@ public class AuthController : ControllerBase
         }
 
         var wasEmailVerified = user.is_email_verified;
-        if (wasEmailVerified && user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, dto.totpCode, now))
+        if (wasEmailVerified && user.is_totp_enabled && !VerifyUserTotpCode(user, dto.totpCode, now))
         {
             return BadRequest(new
             {
@@ -232,7 +235,7 @@ public class AuthController : ControllerBase
         }
 
         var secret = TotpService.GenerateSecret();
-        user.totp_secret = secret;
+        user.totp_secret = ProtectTotpSecret(secret);
         user.is_totp_enabled = false;
         user.totp_enabled_at = null;
         await _context.SaveChangesAsync();
@@ -261,7 +264,7 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        if (!TotpService.VerifyCode(user.totp_secret, dto.code, DateTimeOffset.UtcNow))
+        if (!VerifyUserTotpCode(user, dto.code, DateTimeOffset.UtcNow))
         {
             return BadRequest(new { message = "Неверный код из Google Authenticator." });
         }
@@ -284,7 +287,7 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        if (user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, dto.code, DateTimeOffset.UtcNow))
+        if (user.is_totp_enabled && !VerifyUserTotpCode(user, dto.code, DateTimeOffset.UtcNow))
         {
             return BadRequest(new { message = "Неверный код из Google Authenticator." });
         }
@@ -711,7 +714,7 @@ public class AuthController : ControllerBase
             }
         }
 
-        if (user.is_totp_enabled && !TotpService.VerifyCode(user.totp_secret, dto.totpCode, DateTimeOffset.UtcNow))
+        if (user.is_totp_enabled && !VerifyUserTotpCode(user, dto.totpCode, DateTimeOffset.UtcNow))
         {
             return BadRequest(CreateTotpRequiredError());
         }
@@ -1187,6 +1190,35 @@ public class AuthController : ControllerBase
         var host = HttpContext.Request.Host.Host;
         return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
                || string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ProtectTotpSecret(string secret)
+    {
+        return _crypto.Encrypt(secret);
+    }
+
+    private bool VerifyUserTotpCode(User user, string? code, DateTimeOffset now)
+    {
+        var secret = UnprotectTotpSecret(user.totp_secret);
+        return TotpService.VerifyCode(secret, code, now);
+    }
+
+    private string? UnprotectTotpSecret(string? protectedSecret)
+    {
+        if (string.IsNullOrWhiteSpace(protectedSecret))
+        {
+            return null;
+        }
+
+        try
+        {
+            return _crypto.Decrypt(protectedSecret);
+        }
+        catch
+        {
+            // Legacy rows stored the base32 TOTP secret as plain text.
+            return protectedSecret;
+        }
     }
 
     private async Task<User?> GetCurrentUserAsync()

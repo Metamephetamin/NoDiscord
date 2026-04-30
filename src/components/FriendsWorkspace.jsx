@@ -368,7 +368,8 @@ export const FriendsSidebar = ({
                   ? liveUnreadCount
                   : serverUnreadCount;
               const hasDraft = Boolean(chatDraftPresence[directChannelId]);
-              const activityStatus = formatIntegrationActivityStatus(friend.activity || friend.externalActivity);
+              const friendIsOnline = isUserCurrentlyOnline(friend);
+              const activityStatus = friendIsOnline ? formatIntegrationActivityStatus(friend.activity || friend.externalActivity) : "";
 
               return (
                 <button
@@ -395,7 +396,7 @@ export const FriendsSidebar = ({
                 >
                   <AnimatedAvatar className="friends-directs__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="lazy" decoding="async" />
                   <span className="friends-directs__meta">
-                    <span className={`friends-directs__name ${isUserCurrentlyOnline(friend) ? "friends-directs__name--online" : ""}`}>{getDisplayName(friend)}</span>
+                    <span className={`friends-directs__name ${friendIsOnline ? "friends-directs__name--online" : ""}`}>{getDisplayName(friend)}</span>
                     {hasDraft ? <span className="friends-directs__draft">Черновик</span> : null}
                     {!hasDraft && activityStatus ? <span className="friends-directs__status">{activityStatus}</span> : null}
                   </span>
@@ -789,6 +790,8 @@ export const FriendsMain = ({
     return friends.filter((friend) => !friend?.isBlocked && matchesQuery(friend));
   }, [friendDirectoryFilter, friendDirectorySearch, friends, getDisplayName]);
   const getFriendDirectoryStatus = (friend) => {
+    const friendIsOnline = isUserCurrentlyOnline(friend);
+
     if (friend?.isBlocked) {
       return { kind: "blocked", label: "Заблокирован", detail: "Можно разблокировать через меню" };
     }
@@ -803,14 +806,17 @@ export const FriendsMain = ({
 
     const activeContact = activeContactById.get(String(friend?.id || ""));
     if (activeContact?.activeStatus) {
-      return {
-        kind: activeContact.activeStatusKind || "activity",
-        label: activeContact.activeStatus,
-        detail: activeContact.activeVoiceChannelName || activeContact.activeVoiceServerName || "",
-      };
+      const activeStatusKind = activeContact.activeStatusKind || "activity";
+      if (activeStatusKind === "voice" || friendIsOnline) {
+        return {
+          kind: activeStatusKind,
+          label: activeContact.activeStatus,
+          detail: activeContact.activeVoiceChannelName || activeContact.activeVoiceServerName || "",
+        };
+      }
     }
 
-    const activityLabel = formatIntegrationActivityStatus(friend?.activity || friend?.externalActivity);
+    const activityLabel = friendIsOnline ? formatIntegrationActivityStatus(friend?.activity || friend?.externalActivity) : "";
     if (activityLabel) {
       const activityKind = String((friend?.activity || friend?.externalActivity)?.kind || "activity").toLowerCase();
       return {
@@ -820,7 +826,7 @@ export const FriendsMain = ({
       };
     }
 
-    if (isUserCurrentlyOnline(friend)) {
+    if (friendIsOnline) {
       return { kind: "online", label: "В сети", detail: "" };
     }
 

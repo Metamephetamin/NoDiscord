@@ -6,11 +6,16 @@ public static class FrontendOriginPolicy
 {
     private static readonly char[] ValueSeparators = [',', ';', '\n', '\r'];
 
-    public static bool IsAllowed(string? origin, IConfiguration configuration)
+    public static bool IsAllowed(string? origin, IConfiguration configuration, bool allowDevelopmentOrigins = false)
     {
-        if (string.IsNullOrWhiteSpace(origin) || string.Equals(origin, "null", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(origin))
         {
             return true;
+        }
+
+        if (string.Equals(origin, "null", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
 
         if (!TryNormalizeOrigin(origin, out var normalizedOrigin))
@@ -20,7 +25,7 @@ public static class FrontendOriginPolicy
 
         if (IsLoopbackOrigin(normalizedOrigin))
         {
-            return true;
+            return allowDevelopmentOrigins;
         }
 
         foreach (var configuredOrigin in GetConfiguredOrigins(configuration))
