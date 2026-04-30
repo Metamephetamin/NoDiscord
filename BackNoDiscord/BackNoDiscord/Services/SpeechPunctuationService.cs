@@ -496,20 +496,20 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
     {
         if (int.TryParse(_configuration["SpeechPunctuation:OllamaTimeoutSeconds"], out var timeoutSeconds))
         {
-            return Math.Clamp(timeoutSeconds, 1, 20);
+            return Math.Clamp(timeoutSeconds, 1, 60);
         }
 
-        return 12;
+        return 60;
     }
 
     private int GetOllamaQueueWaitMilliseconds()
     {
         if (int.TryParse(_configuration["SpeechPunctuation:OllamaQueueWaitMilliseconds"], out var waitMilliseconds))
         {
-            return Math.Clamp(waitMilliseconds, 0, 5000);
+            return Math.Clamp(waitMilliseconds, 0, 60000);
         }
 
-        return 1000;
+        return 60000;
     }
 
     private int GetOllamaMaxConcurrency()
