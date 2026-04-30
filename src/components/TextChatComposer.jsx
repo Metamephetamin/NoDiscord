@@ -402,6 +402,11 @@ function TextChatComposer({
     try {
       const result = await punctuateComposerText(sourceText);
       if (result) {
+        if (result === sourceText) {
+          setTranslationError("Ollama не изменила текст. Проверьте, что модель запущена и подходит для русской пунктуации.");
+          return;
+        }
+
         applyComposerText(result);
       }
       setTranslatorMenuOpen(false);
