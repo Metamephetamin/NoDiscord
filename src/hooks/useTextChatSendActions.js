@@ -13,6 +13,7 @@ import { createPollMessagePayload } from "../utils/pollMessages";
 import {
   getChatErrorMessage,
   MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_LABEL,
   MESSAGE_SEND_COOLDOWN_MS,
 } from "../utils/textChatModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
@@ -840,14 +841,14 @@ export default function useTextChatSendActions({
     if (!validFiles.length) {
       setErrorMessage(hasUnsupportedFile
         ? "Этот тип файла нельзя отправить."
-        : "Размер файла не должен быть больше 100 МБ.");
+        : `Размер файла не должен быть больше ${MAX_FILE_SIZE_LABEL}.`);
       return;
     }
 
     if (hasOversizedFile && hasUnsupportedFile) {
-      setErrorMessage("Некоторые файлы пропущены: неподдерживаемый тип или размер больше 100 МБ.");
+      setErrorMessage(`Некоторые файлы пропущены: неподдерживаемый тип или размер больше ${MAX_FILE_SIZE_LABEL}.`);
     } else if (hasOversizedFile) {
-      setErrorMessage("Некоторые файлы пропущены: размер файла не должен быть больше 100 МБ.");
+      setErrorMessage(`Некоторые файлы пропущены: размер файла не должен быть больше ${MAX_FILE_SIZE_LABEL}.`);
     } else if (hasUnsupportedFile) {
       setErrorMessage("Некоторые файлы пропущены: неподдерживаемый тип файла.");
     } else {

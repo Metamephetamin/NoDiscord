@@ -499,7 +499,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
             return Math.Clamp(timeoutSeconds, 1, 20);
         }
 
-        return 2;
+        return 12;
     }
 
     private int GetOllamaQueueWaitMilliseconds()
@@ -509,7 +509,7 @@ public sealed class SpeechPunctuationService : ISpeechPunctuationService, IDispo
             return Math.Clamp(waitMilliseconds, 0, 5000);
         }
 
-        return 120;
+        return 1000;
     }
 
     private int GetOllamaMaxConcurrency()

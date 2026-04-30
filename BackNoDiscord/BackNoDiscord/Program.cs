@@ -39,7 +39,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
+    options.MultipartBodyLengthLimit = 5L * 1024 * 1024 * 1024;
 });
 
 builder.Services.AddCors(options =>
