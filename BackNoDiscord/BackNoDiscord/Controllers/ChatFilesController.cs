@@ -23,15 +23,18 @@ public class ChatFilesController : ControllerBase
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly IConfiguration _configuration;
     private readonly IChatFileUploadStorageMetrics _storageMetrics;
+    private readonly ILogger<ChatFilesController> _logger;
 
     public ChatFilesController(
         UploadStoragePaths uploadStoragePaths,
         IConfiguration configuration,
-        IChatFileUploadStorageMetrics storageMetrics)
+        IChatFileUploadStorageMetrics storageMetrics,
+        ILogger<ChatFilesController> logger)
     {
         _uploadStoragePaths = uploadStoragePaths;
         _configuration = configuration;
         _storageMetrics = storageMetrics;
+        _logger = logger;
     }
 
     [HttpPost("upload")]
@@ -66,6 +69,12 @@ public class ChatFilesController : ControllerBase
         }
         catch (StreamedChatFileUploadException exception)
         {
+            if (exception.IsStorageFailure)
+            {
+                _logger.LogError(exception, "Chat file upload storage failed for user {UserId}", currentUser.UserId);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = exception.Message });
+            }
+
             var message = string.Equals(exception.Message, "File size limit exceeded.", StringComparison.Ordinal)
                 ? $"File size must be less than or equal to {FormatBytes(limits.MaxFileSizeBytes)}"
                 : exception.Message;

@@ -7,8 +7,20 @@ namespace BackNoDiscord.Services;
 
 public sealed class StreamedChatFileUploadException : Exception
 {
+    public bool IsStorageFailure { get; }
+
     public StreamedChatFileUploadException(string message) : base(message)
     {
+    }
+
+    public StreamedChatFileUploadException(string message, Exception innerException, bool isStorageFailure = false) : base(message, innerException)
+    {
+        IsStorageFailure = isStorageFailure;
+    }
+
+    public StreamedChatFileUploadException(string message, bool isStorageFailure) : base(message)
+    {
+        IsStorageFailure = isStorageFailure;
     }
 }
 
@@ -85,27 +97,41 @@ public static class StreamedChatFileUploadReader
             throw new StreamedChatFileUploadException("Multipart boundary is required.");
         }
 
-        Directory.CreateDirectory(uploadsDirectory);
-
-        var reader = new MultipartReader(boundary, request.Body);
-        while (await reader.ReadNextSectionAsync(cancellationToken) is { } section)
+        try
         {
-            if (!TryGetFileDisposition(section, out var originalFileName))
+            Directory.CreateDirectory(uploadsDirectory);
+
+            var reader = new MultipartReader(boundary, request.Body);
+            while (await reader.ReadNextSectionAsync(cancellationToken) is { } section)
             {
-                continue;
+                if (!TryGetFileDisposition(section, out var originalFileName))
+                {
+                    continue;
+                }
+
+                return await StoreFileSectionAsync(
+                    section,
+                    uploadsDirectory,
+                    userId,
+                    originalFileName,
+                    limits,
+                    storageMetrics,
+                    cancellationToken);
             }
 
-            return await StoreFileSectionAsync(
-                section,
-                uploadsDirectory,
-                userId,
-                originalFileName,
-                limits,
-                storageMetrics,
-                cancellationToken);
+            throw new StreamedChatFileUploadException("File is required.");
         }
-
-        throw new StreamedChatFileUploadException("File is required.");
+        catch (StreamedChatFileUploadException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            throw new StreamedChatFileUploadException(
+                "Chat file storage is temporarily unavailable.",
+                exception,
+                isStorageFailure: true);
+        }
     }
 
     private static async Task<StreamedChatFileUploadResult> StoreFileSectionAsync(
@@ -248,5 +274,10 @@ public static class StreamedChatFileUploadReader
         {
             // Best-effort cleanup; the upload has already failed.
         }
+    }
+
+    private static bool IsStorageException(Exception exception)
+    {
+        return exception is IOException or UnauthorizedAccessException;
     }
 }

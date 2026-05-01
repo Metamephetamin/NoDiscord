@@ -105,6 +105,29 @@ public class StreamedChatFileUploadReaderTests : IDisposable
         Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
     }
 
+    [Fact]
+    public async Task UploadAsync_WrapsStorageMetricFailuresAsUploadException()
+    {
+        var request = BuildMultipartRequest("upload.txt", "text/plain", Encoding.UTF8.GetBytes("hello"));
+
+        var exception = await Assert.ThrowsAsync<StreamedChatFileUploadException>(() =>
+            StreamedChatFileUploadReader.UploadAsync(
+                request,
+                _tempDirectory,
+                userId: "42",
+                limits: new StreamedChatFileUploadLimits(
+                    MaxFileSizeBytes: 1024,
+                    MaxUserStorageBytes: 1024,
+                    MinFreeDiskBytes: 0),
+                storageMetrics: new ThrowingStorageMetrics(),
+                CancellationToken.None));
+
+        Assert.Equal("Chat file storage is temporarily unavailable.", exception.Message);
+        Assert.True(exception.IsStorageFailure);
+        Assert.IsType<IOException>(exception.InnerException);
+        Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))
@@ -156,6 +179,19 @@ public class StreamedChatFileUploadReaderTests : IDisposable
         public long GetAvailableBytes(string uploadsDirectory)
         {
             return _availableBytes;
+        }
+    }
+
+    private sealed class ThrowingStorageMetrics : IChatFileUploadStorageMetrics
+    {
+        public long GetUserStoredBytes(string uploadsDirectory, string userId)
+        {
+            throw new IOException("Storage metrics failed.");
+        }
+
+        public long GetAvailableBytes(string uploadsDirectory)
+        {
+            throw new IOException("Storage metrics failed.");
         }
     }
 }
