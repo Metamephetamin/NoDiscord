@@ -30,10 +30,14 @@ jobs:
             exit 1
           fi
 
-  build-artifacts:
-    name: Build Release Artifacts
+  deploy:
+    name: Deploy to Server
     runs-on: ubuntu-latest
     needs: guard-master
+    environment: production
+    timeout-minutes: 40
+    outputs:
+      deploy_ready: ${{ steps.validate.outputs.ready }}
 
     steps:
       - name: Checkout
@@ -62,7 +66,7 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
-      - name: Measure frontend artifact
+      - name: Measure frontend package
         shell: bash
         run: |
           set -euo pipefail
@@ -75,47 +79,12 @@ jobs:
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --no-restore --output ./artifacts/backend
 
-      - name: Measure backend artifact
+      - name: Measure backend package
         shell: bash
         run: |
           set -euo pipefail
           echo "Backend publish directory size:"
           du -sh ./artifacts/backend
-
-      - name: Upload frontend dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: dist/
-
-      - name: Upload backend publish
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-publish
-          path: artifacts/backend/
-
-  deploy:
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-    needs:
-      - build-artifacts
-    environment: production
-    timeout-minutes: 40
-    outputs:
-      deploy_ready: ${{ steps.validate.outputs.ready }}
-
-    steps:
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend-package
-
-      - name: Download backend publish
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-publish
-          path: backend-package
 
       - name: Validate deploy secrets
         id: validate
@@ -214,7 +183,7 @@ jobs:
           FRONTEND_PATH="${FRONTEND_DEPLOY_PATH:-/var/www/tend-app/current}"
           FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          FRONTEND_SOURCE="./frontend-package"
+          FRONTEND_SOURCE="./dist"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Frontend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH"
@@ -259,7 +228,7 @@ jobs:
           STORAGE_PATH="${BACKEND_STORAGE_PATH:-/opt/nodiscord/.deploy/storage}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
-          BACKEND_SOURCE="./backend-package"
+          BACKEND_SOURCE="./artifacts/backend"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Backend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_PATH"
