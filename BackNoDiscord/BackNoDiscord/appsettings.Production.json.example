@@ -50,6 +50,9 @@
       "https://api.your-domain.example"
     ]
   },
+  "Storage": {
+    "Root": "/opt/nodiscord/.deploy/storage"
+  },
   "ClientUpdates": {
     "LatestVersion": "1.0.1",
     "MinimumVersion": "1.0.0",

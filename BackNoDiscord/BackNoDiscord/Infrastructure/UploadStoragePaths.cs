@@ -30,8 +30,14 @@ public sealed class UploadStoragePaths
 
         if (string.IsNullOrWhiteSpace(storageRoot))
         {
-            var webRoot = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-            return Path.Combine(webRoot, normalizedName);
+            if (string.Equals(_environment.EnvironmentName, "Production", StringComparison.OrdinalIgnoreCase))
+            {
+                storageRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "storage"));
+            }
+            else
+            {
+                storageRoot = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            }
         }
 
         return Path.Combine(storageRoot, normalizedName);

@@ -249,12 +249,14 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
           BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
+          BACKEND_STORAGE_PATH: ${{ vars.BACKEND_STORAGE_PATH }}
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
           BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
+          STORAGE_PATH="${BACKEND_STORAGE_PATH:-/opt/nodiscord/.deploy/storage}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
           BACKEND_SOURCE="./backend-package"
@@ -301,6 +303,7 @@ jobs:
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 15m bash -lc '
             set -e
             BACKEND_PATH='$BACKEND_PATH'
+            STORAGE_PATH='$STORAGE_PATH'
             TEMP_ROOT='$TEMP_ROOT'
             TEMP_ENV_FILE='$TEMP_ENV_FILE'
             BACKEND_OWNER='$BACKEND_OWNER'
@@ -308,6 +311,13 @@ jobs:
               /opt/nodiscord/*) ;;
               *)
                 echo \"Unsafe backend deploy path: \$BACKEND_PATH\" >&2
+                exit 1
+                ;;
+            esac
+            case \"\$STORAGE_PATH\" in
+              /opt/nodiscord/*) ;;
+              *)
+                echo \"Unsafe backend storage path: \$STORAGE_PATH\" >&2
                 exit 1
                 ;;
             esac
@@ -319,6 +329,17 @@ jobs:
               echo \"Set BACKEND_ENV_FILE to the full production .env before deploying.\" >&2
               exit 1
             else
+              mkdir -p \"\$STORAGE_PATH\"
+              for directory in avatars profile-backgrounds server-icons chat-files; do
+                mkdir -p \"\$STORAGE_PATH/\$directory\"
+                if [ -d \"\$BACKEND_PATH/wwwroot/\$directory\" ]; then
+                  find \"\$BACKEND_PATH/wwwroot/\$directory\" -mindepth 1 -maxdepth 1 -exec cp -a -n {} \"\$STORAGE_PATH/\$directory/\" \\;
+                fi
+              done
+              if ! grep -Eq \"^(Storage__Root|Storage:Root|ND_STORAGE_ROOT)=\" \"\$BACKEND_PATH/.env\"; then
+                printf \"\\nStorage__Root=%s\\n\" \"\$STORAGE_PATH\" >> \"\$BACKEND_PATH/.env\"
+              fi
+              chown -R \"\$BACKEND_OWNER\" \"\$STORAGE_PATH\"
               chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
             fi
