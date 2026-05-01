@@ -83,6 +83,7 @@ public sealed class LocalChatFileUploadStorageMetrics : IChatFileUploadStorageMe
 public static class StreamedChatFileUploadReader
 {
     private const int BufferSize = 81920;
+    private const long MinimumEffectiveDiskReserveBytes = 64L * 1024 * 1024;
 
     public static async Task<StreamedChatFileUploadResult> UploadAsync(
         HttpRequest request,
@@ -150,7 +151,7 @@ public static class StreamedChatFileUploadReader
         }
 
         var availableBytes = Math.Max(0, storageMetrics.GetAvailableBytes(uploadsDirectory));
-        var writableBytesBeforeReserve = availableBytes - Math.Max(0, limits.MinFreeDiskBytes);
+        var writableBytesBeforeReserve = availableBytes - ResolveEffectiveDiskReserveBytes(availableBytes, limits.MinFreeDiskBytes);
         if (writableBytesBeforeReserve <= 0)
         {
             throw new StreamedChatFileUploadException("Not enough free disk space.", isStorageFailure: true);
@@ -243,6 +244,18 @@ public static class StreamedChatFileUploadReader
 
         boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).Value ?? string.Empty;
         return !string.IsNullOrWhiteSpace(boundary);
+    }
+
+    private static long ResolveEffectiveDiskReserveBytes(long availableBytes, long configuredReserveBytes)
+    {
+        var normalizedReserveBytes = Math.Max(0, configuredReserveBytes);
+        if (normalizedReserveBytes == 0 || availableBytes <= 0)
+        {
+            return normalizedReserveBytes;
+        }
+
+        var adaptiveReserveBytes = Math.Max(MinimumEffectiveDiskReserveBytes, availableBytes / 10);
+        return Math.Min(normalizedReserveBytes, adaptiveReserveBytes);
     }
 
     private static bool TryGetFileDisposition(MultipartSection section, out string fileName)
