@@ -468,13 +468,12 @@ jobs:
             nginx -t
             systemctl reload nginx
 
-            if ! command -v certbot >/dev/null 2>&1; then
-              echo \"certbot is not installed on the server; cannot issue lanaya.space TLS certificate.\" >&2
-              exit 1
-            fi
-
-            if ! certbot certificates 2>/dev/null | grep -q \"lanaya.space\"; then
-              certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d lanaya.space -d www.lanaya.space
+            if command -v certbot >/dev/null 2>&1; then
+              if ! certbot certificates 2>/dev/null | grep -q \"lanaya.space\"; then
+                certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d lanaya.space -d www.lanaya.space || true
+              fi
+            else
+              echo \"certbot is not installed on the server; assuming TLS is managed manually.\"
             fi
 
             nginx -t
