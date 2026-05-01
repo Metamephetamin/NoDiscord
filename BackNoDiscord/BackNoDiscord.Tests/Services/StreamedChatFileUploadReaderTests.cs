@@ -85,25 +85,23 @@ public class StreamedChatFileUploadReaderTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadAsync_RejectsFileWhenFreeDiskReserveWouldBeExceeded()
+    public async Task UploadAsync_DoesNotRejectFileBeforeWriteWhenConfiguredDiskReserveWouldBeExceeded()
     {
-        var request = BuildMultipartRequest("space.txt", "text/plain", Encoding.UTF8.GetBytes("space"));
+        var fileBytes = Encoding.UTF8.GetBytes("space");
+        var request = BuildMultipartRequest("space.txt", "text/plain", fileBytes);
 
-        var exception = await Assert.ThrowsAsync<StreamedChatFileUploadException>(() =>
-            StreamedChatFileUploadReader.UploadAsync(
-                request,
-                _tempDirectory,
-                userId: "42",
-                limits: new StreamedChatFileUploadLimits(
-                    MaxFileSizeBytes: 1024,
-                    MaxUserStorageBytes: 1024,
-                    MinFreeDiskBytes: 10),
-                storageMetrics: new TestStorageMetrics(availableBytes: 12),
-                CancellationToken.None));
+        var result = await StreamedChatFileUploadReader.UploadAsync(
+            request,
+            _tempDirectory,
+            userId: "42",
+            limits: new StreamedChatFileUploadLimits(
+                MaxFileSizeBytes: 1024,
+                MaxUserStorageBytes: 1024,
+                MinFreeDiskBytes: 10),
+            storageMetrics: new TestStorageMetrics(availableBytes: 12),
+            CancellationToken.None);
 
-        Assert.Equal("Not enough free disk space.", exception.Message);
-        Assert.True(exception.IsStorageFailure);
-        Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
+        Assert.Equal(fileBytes.Length, result.Size);
     }
 
     [Fact]

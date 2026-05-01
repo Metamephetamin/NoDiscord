@@ -318,17 +318,35 @@ jobs:
               echo \"Set BACKEND_ENV_FILE to the full production .env before deploying.\" >&2
               exit 1
             else
+              previous_storage_root=\$(grep -E \"^(Storage__Root|Storage:Root|ND_STORAGE_ROOT)=\" \"\$BACKEND_PATH/.env\" | tail -n 1 | cut -d= -f2- || true)
               mkdir -p \"\$STORAGE_PATH\"
-              for directory in avatars profile-backgrounds server-icons chat-files; do
-                mkdir -p \"\$STORAGE_PATH/\$directory\"
-                if [ -d \"\$BACKEND_PATH/wwwroot/\$directory\" ]; then
-                  find \"\$BACKEND_PATH/wwwroot/\$directory\" -mindepth 1 -maxdepth 1 -exec cp -a -n {} \"\$STORAGE_PATH/\$directory/\" \\;
+              legacy_roots=\"\$BACKEND_PATH/wwwroot /opt/nodiscord/storage /opt/nodiscord/.deploy/backend/wwwroot\"
+              if [ -n \"\$previous_storage_root\" ]; then
+                legacy_roots=\"\$previous_storage_root \$legacy_roots\"
+              fi
+              for source_root in \$legacy_roots; do
+                if [ -z \"\$source_root\" ] || [ \"\$source_root\" = \"\$STORAGE_PATH\" ]; then
+                  continue
                 fi
+                case \"\$source_root\" in
+                  /opt/nodiscord/*) ;;
+                  *)
+                    echo \"Skipping unsafe legacy storage root: \$source_root\"
+                    continue
+                    ;;
+                esac
+                for directory in avatars profile-backgrounds server-icons chat-files; do
+                  mkdir -p \"\$STORAGE_PATH/\$directory\"
+                  if [ -d \"\$source_root/\$directory\" ]; then
+                    echo \"Migrating existing files from \$source_root/\$directory\"
+                    find \"\$source_root/\$directory\" -mindepth 1 -maxdepth 1 -exec cp -a -n {} \"\$STORAGE_PATH/\$directory/\" \\;
+                  fi
+                done
               done
               find \"\$STORAGE_PATH/chat-files\" -maxdepth 1 -type f -name \"upload-*.tmp\" -mmin +60 -delete 2>/dev/null || true
-              if ! grep -Eq \"^(Storage__Root|Storage:Root|ND_STORAGE_ROOT)=\" \"\$BACKEND_PATH/.env\"; then
-                printf \"\\nStorage__Root=%s\\n\" \"\$STORAGE_PATH\" >> \"\$BACKEND_PATH/.env\"
-              fi
+              sed -i.bak -E \"/^(Storage__Root|Storage:Root|ND_STORAGE_ROOT)=/d\" \"\$BACKEND_PATH/.env\"
+              printf \"\\nStorage__Root=%s\\n\" \"\$STORAGE_PATH\" >> \"\$BACKEND_PATH/.env\"
+              echo \"Production storage root forced to: \$STORAGE_PATH\"
               chown -R \"\$BACKEND_OWNER\" \"\$STORAGE_PATH\"
               chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
@@ -344,6 +362,10 @@ jobs:
               fi
               df -h \"\$STORAGE_PATH\" \"\$STORAGE_PATH/chat-files\" || true
               df -B1 \"\$STORAGE_PATH\" \"\$STORAGE_PATH/chat-files\" || true
+              for directory in avatars profile-backgrounds server-icons chat-files; do
+                count=\$(find \"\$STORAGE_PATH/\$directory\" -maxdepth 1 -type f 2>/dev/null | wc -l)
+                echo \"Storage file count \$directory: \$count\"
+              done
             fi
             echo \"Backend environment apply completed\"
           '"

@@ -83,7 +83,6 @@ public sealed class LocalChatFileUploadStorageMetrics : IChatFileUploadStorageMe
 public static class StreamedChatFileUploadReader
 {
     private const int BufferSize = 81920;
-    private const long MinimumEffectiveDiskReserveBytes = 8L * 1024 * 1024;
 
     public static async Task<StreamedChatFileUploadResult> UploadAsync(
         HttpRequest request,
@@ -150,13 +149,6 @@ public static class StreamedChatFileUploadReader
             throw new StreamedChatFileUploadException("User storage quota exceeded.");
         }
 
-        var availableBytes = Math.Max(0, storageMetrics.GetAvailableBytes(uploadsDirectory));
-        var writableBytesBeforeReserve = availableBytes - ResolveEffectiveDiskReserveBytes(availableBytes, limits.MinFreeDiskBytes);
-        if (writableBytesBeforeReserve <= 0)
-        {
-            throw new StreamedChatFileUploadException("Not enough free disk space.", isStorageFailure: true);
-        }
-
         var tempFilePath = Path.Combine(uploadsDirectory, $"upload-{Guid.NewGuid():N}.tmp");
         var totalBytes = 0L;
 
@@ -182,11 +174,6 @@ public static class StreamedChatFileUploadReader
                     if (userStoredBytes + totalBytes > limits.MaxUserStorageBytes)
                     {
                         throw new StreamedChatFileUploadException("User storage quota exceeded.");
-                    }
-
-                    if (totalBytes > writableBytesBeforeReserve)
-                    {
-                        throw new StreamedChatFileUploadException("Not enough free disk space.", isStorageFailure: true);
                     }
 
                     await output.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
@@ -244,18 +231,6 @@ public static class StreamedChatFileUploadReader
 
         boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).Value ?? string.Empty;
         return !string.IsNullOrWhiteSpace(boundary);
-    }
-
-    private static long ResolveEffectiveDiskReserveBytes(long availableBytes, long configuredReserveBytes)
-    {
-        var normalizedReserveBytes = Math.Max(0, configuredReserveBytes);
-        if (normalizedReserveBytes == 0 || availableBytes <= 0)
-        {
-            return normalizedReserveBytes;
-        }
-
-        var adaptiveReserveBytes = Math.Max(MinimumEffectiveDiskReserveBytes, availableBytes / 10);
-        return Math.Min(normalizedReserveBytes, adaptiveReserveBytes);
     }
 
     private static bool TryGetFileDisposition(MultipartSection section, out string fileName)
