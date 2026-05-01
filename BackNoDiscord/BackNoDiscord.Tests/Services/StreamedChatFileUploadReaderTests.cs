@@ -43,6 +43,33 @@ public class StreamedChatFileUploadReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadAsync_StoresBufferedFormFileToStorage()
+    {
+        var fileBytes = Encoding.UTF8.GetBytes("hello from buffered upload");
+        var file = BuildFormFile("upload.txt", "text/plain", fileBytes);
+
+        var result = await StreamedChatFileUploadReader.UploadAsync(
+            file,
+            _tempDirectory,
+            userId: "42",
+            limits: new StreamedChatFileUploadLimits(
+                MaxFileSizeBytes: 1024,
+                MaxUserStorageBytes: 1024,
+                MinFreeDiskBytes: 0),
+            storageMetrics: new TestStorageMetrics(),
+            CancellationToken.None);
+
+        Assert.Equal("upload.txt", result.DisplayFileName);
+        Assert.Equal(fileBytes.Length, result.Size);
+        Assert.Equal("text/plain", result.ContentType);
+
+        var storedFileName = Path.GetFileName(result.FileUrl);
+        var storedPath = Path.Combine(_tempDirectory, storedFileName);
+        Assert.True(File.Exists(storedPath));
+        Assert.Equal(fileBytes, await File.ReadAllBytesAsync(storedPath));
+    }
+
+    [Fact]
     public async Task UploadAsync_RejectsOversizedFileAndDeletesTemporaryFile()
     {
         var request = BuildMultipartRequest("large.txt", "text/plain", Encoding.UTF8.GetBytes("too large"));
@@ -191,6 +218,15 @@ public class StreamedChatFileUploadReaderTests : IDisposable
         context.Request.ContentLength = body.Length;
         context.Request.Body = new MemoryStream(body.ToArray());
         return context.Request;
+    }
+
+    private static IFormFile BuildFormFile(string fileName, string contentType, byte[] fileBytes)
+    {
+        return new FormFile(new MemoryStream(fileBytes), 0, fileBytes.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = contentType
+        };
     }
 
     private static void WriteAscii(Stream stream, string value)

@@ -85,6 +85,43 @@ public static class StreamedChatFileUploadReader
     private const int BufferSize = 81920;
 
     public static async Task<StreamedChatFileUploadResult> UploadAsync(
+        IFormFile? file,
+        string uploadsDirectory,
+        string userId,
+        StreamedChatFileUploadLimits limits,
+        IChatFileUploadStorageMetrics storageMetrics,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length <= 0)
+        {
+            throw new StreamedChatFileUploadException("File is required.");
+        }
+
+        try
+        {
+            Directory.CreateDirectory(uploadsDirectory);
+            return await StoreBufferedFileAsync(
+                file,
+                uploadsDirectory,
+                userId,
+                limits,
+                storageMetrics,
+                cancellationToken);
+        }
+        catch (StreamedChatFileUploadException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsStorageException(exception))
+        {
+            throw new StreamedChatFileUploadException(
+                "Chat file storage is temporarily unavailable.",
+                exception,
+                isStorageFailure: true);
+        }
+    }
+
+    public static async Task<StreamedChatFileUploadResult> UploadAsync(
         HttpRequest request,
         string uploadsDirectory,
         string userId,
@@ -131,6 +168,58 @@ public static class StreamedChatFileUploadReader
                 "Chat file storage is temporarily unavailable.",
                 exception,
                 isStorageFailure: true);
+        }
+    }
+
+    private static async Task<StreamedChatFileUploadResult> StoreBufferedFileAsync(
+        IFormFile file,
+        string uploadsDirectory,
+        string userId,
+        StreamedChatFileUploadLimits limits,
+        IChatFileUploadStorageMetrics storageMetrics,
+        CancellationToken cancellationToken)
+    {
+        var userStoredBytes = Math.Max(0, storageMetrics.GetUserStoredBytes(uploadsDirectory, userId));
+        if (userStoredBytes >= limits.MaxUserStorageBytes ||
+            userStoredBytes + file.Length > limits.MaxUserStorageBytes)
+        {
+            throw new StreamedChatFileUploadException("User storage quota exceeded.");
+        }
+
+        if (file.Length > limits.MaxFileSizeBytes)
+        {
+            throw new StreamedChatFileUploadException("File size limit exceeded.");
+        }
+
+        if (!UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error))
+        {
+            throw new StreamedChatFileUploadException(error);
+        }
+
+        var fileName = $"chat-{UploadPolicies.SanitizeIdentifier(userId)}-{Guid.NewGuid():N}{extension}";
+        var tempFilePath = Path.Combine(uploadsDirectory, $"upload-{Guid.NewGuid():N}.tmp");
+        var finalFilePath = Path.Combine(uploadsDirectory, fileName);
+
+        try
+        {
+            await using (var input = file.OpenReadStream())
+            await using (var output = new FileStream(tempFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, FileOptions.SequentialScan))
+            {
+                await input.CopyToAsync(output, BufferSize, cancellationToken);
+            }
+
+            File.Move(tempFilePath, finalFilePath);
+
+            return new StreamedChatFileUploadResult(
+                FileUrl: $"/chat-files/{fileName}",
+                DisplayFileName: UploadPolicies.SanitizeDisplayFileName(file.FileName),
+                Size: file.Length,
+                ContentType: contentType);
+        }
+        catch
+        {
+            TryDeleteFile(tempFilePath);
+            throw;
         }
     }
 
