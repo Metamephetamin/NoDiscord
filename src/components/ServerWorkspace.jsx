@@ -1078,7 +1078,7 @@ function ChannelSettingsModal({
 
     try {
       const link = await onCreateServerInviteLink?.();
-      const inviteLink = link || `https://tendsec.ru/invite/${getInviteCodeFromLink(link)}`;
+      const inviteLink = link || `https://lanaya.space/invite/${getInviteCodeFromLink(link)}`;
       const invite = {
         id: createId("channel-invite"),
         inviter: "Вы",
@@ -1122,7 +1122,7 @@ function ChannelSettingsModal({
         {
           id: createId("webhook"),
           name: `Вебхук ${webhooks.length + 1}`,
-          url: `https://tendsec.ru/webhooks/${createId("hook")}`,
+          url: `https://lanaya.space/webhooks/${createId("hook")}`,
         },
       ],
     });

@@ -12,12 +12,12 @@
   },
   "Email": {
     "Mode": "smtp",
-    "FromAddress": "code@tendsec.ru",
+    "FromAddress": "code@lanaya.space",
     "FromName": "MAX",
     "Smtp": {
       "Host": "smtp.beget.com",
       "Port": 465,
-      "Username": "code@tendsec.ru",
+      "Username": "code@lanaya.space",
       "Password": "REPLACE_WITH_SMTP_PASSWORD",
       "EnableSsl": true
     }
@@ -28,12 +28,12 @@
   "Spotify": {
     "ClientId": "REPLACE_WITH_SPOTIFY_CLIENT_ID",
     "ClientSecret": "REPLACE_WITH_SPOTIFY_CLIENT_SECRET",
-    "RedirectUri": "https://tendsec.ru/api/integrations/spotify/callback"
+    "RedirectUri": "https://lanaya.space/api/integrations/spotify/callback"
   },
   "GitHub": {
     "ClientId": "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID",
     "ClientSecret": "REPLACE_WITH_GITHUB_OAUTH_CLIENT_SECRET",
-    "RedirectUri": "https://tendsec.ru/api/integrations/github/callback"
+    "RedirectUri": "https://lanaya.space/api/integrations/github/callback"
   },
   "Steam": {
     "ApiKey": "REPLACE_WITH_STEAM_WEB_API_KEY"
@@ -41,7 +41,7 @@
   "BattleNet": {
     "ClientId": "REPLACE_WITH_BATTLENET_CLIENT_ID",
     "ClientSecret": "REPLACE_WITH_BATTLENET_CLIENT_SECRET",
-    "RedirectUri": "https://tendsec.ru/api/integrations/battlenet/callback",
+    "RedirectUri": "https://lanaya.space/api/integrations/battlenet/callback",
     "Region": "eu"
   },
   "Cors": {
@@ -77,5 +77,5 @@
       "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
     }
   },
-  "AllowedHosts": "tendsec.ru;www.tendsec.ru"
+  "AllowedHosts": "lanaya.space;www.lanaya.space"
 }

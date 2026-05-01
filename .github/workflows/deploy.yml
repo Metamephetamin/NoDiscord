@@ -425,6 +425,62 @@ jobs:
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "chmod +x '$BACKEND_PATH/install-punctuation-env.sh' && bash -lc 'setsid env BACKEND_PATH=\"'$BACKEND_PATH'\" BACKEND_OWNER=\"'$BACKEND_OWNER'\" bash \"'$BACKEND_PATH'/install-punctuation-env.sh\" > \"'$BACKEND_PATH'/punctuation-install.log\" 2>&1 < /dev/null & disown || true'"
           echo "Speech punctuation dependency install started in background"
 
+      - name: Ensure production domain on server
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
+          TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          NGINX_SOURCE="./infra/nginx/lanaya.space.conf"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+
+          if [ ! -f "$NGINX_SOURCE" ]; then
+            echo "Nginx domain template is missing: $NGINX_SOURCE" >&2
+            exit 1
+          fi
+
+          rsync -az --checksum -e "ssh $SSH_OPTS" "$NGINX_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/lanaya.space.conf"
+
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 10m bash -lc '
+            set -e
+            BACKEND_PATH='$BACKEND_PATH'
+            TEMP_ROOT='$TEMP_ROOT'
+            NGINX_SITE=/etc/nginx/sites-available/lanaya.space.conf
+            NGINX_ENABLED=/etc/nginx/sites-enabled/lanaya.space.conf
+
+            if [ ! -f \"\$NGINX_SITE\" ]; then
+              cp \"\$TEMP_ROOT/lanaya.space.conf\" \"\$NGINX_SITE\"
+            fi
+
+            ln -sfn \"\$NGINX_SITE\" \"\$NGINX_ENABLED\"
+
+            if [ -f \"\$BACKEND_PATH/.env\" ]; then
+              sed -i.bak -E \"s/tendsec\\.ru/lanaya.space/g\" \"\$BACKEND_PATH/.env\"
+            fi
+
+            nginx -t
+            systemctl reload nginx
+
+            if ! command -v certbot >/dev/null 2>&1; then
+              echo \"certbot is not installed on the server; cannot issue lanaya.space TLS certificate.\" >&2
+              exit 1
+            fi
+
+            if ! certbot certificates 2>/dev/null | grep -q \"lanaya.space\"; then
+              certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d lanaya.space -d www.lanaya.space
+            fi
+
+            nginx -t
+            echo \"Production domain lanaya.space is configured on nginx\"
+          '"
+
       - name: Restart backend and reload nginx
         if: steps.validate.outputs.ready == 'true'
         shell: bash
@@ -468,7 +524,8 @@ jobs:
           HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          HEALTHCHECK="${HEALTHCHECK_URL:-http://${DEPLOY_HOST}}"
+          HEALTHCHECK="${HEALTHCHECK_URL:-https://lanaya.space}"
+          HEALTHCHECK="${HEALTHCHECK//tendsec.ru/lanaya.space}"
           API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
           CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
           VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"

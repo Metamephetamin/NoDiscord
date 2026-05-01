@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 
 const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
 const DEFAULT_LOCAL_LIVEKIT_URL = "wss://localhost:5173/livekit";
-const DEFAULT_PACKAGED_API_URL = "https://tendsec.ru";
-const DEFAULT_PACKAGED_LIVEKIT_URL = "wss://tendsec.ru/livekit";
+const DEFAULT_PACKAGED_API_URL = "https://lanaya.space";
+const DEFAULT_PACKAGED_LIVEKIT_URL = "wss://lanaya.space/livekit";
 const DEFAULT_APP_PROTOCOL = "nodiscord";
 
 function isPackagedRuntime() {

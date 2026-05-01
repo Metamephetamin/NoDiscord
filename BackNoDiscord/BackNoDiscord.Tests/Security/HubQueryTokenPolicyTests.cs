@@ -12,11 +12,11 @@ public class HubQueryTokenPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Cors:AllowedOrigins"] = "https://tendsec.ru"
+                ["Cors:AllowedOrigins"] = "https://lanaya.space"
             })
             .Build();
 
-        Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/chatHub"), "https://tendsec.ru", configuration));
+        Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/chatHub"), "https://lanaya.space", configuration));
         Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/voiceHub"), "http://localhost:5173", configuration));
         Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/voiceHub"), "null", configuration));
         Assert.True(HubQueryTokenPolicy.CanAcceptQueryToken(
@@ -33,12 +33,12 @@ public class HubQueryTokenPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Cors:AllowedOrigins"] = "https://tendsec.ru"
+                ["Cors:AllowedOrigins"] = "https://lanaya.space"
             })
             .Build();
 
-        Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("", new PathString("/chatHub"), "https://tendsec.ru", configuration));
-        Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/api/user"), "https://tendsec.ru", configuration));
+        Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("", new PathString("/chatHub"), "https://lanaya.space", configuration));
+        Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/api/user"), "https://lanaya.space", configuration));
         Assert.False(HubQueryTokenPolicy.CanAcceptQueryToken("token", new PathString("/chatHub"), "https://evil.example.com", configuration));
     }
 }

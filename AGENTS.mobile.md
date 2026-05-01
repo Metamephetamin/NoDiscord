@@ -27,7 +27,7 @@ Navigation: React Navigation or Expo Router, depending on the app structure
 Backend: ASP.NET Core 8 + SignalR
 Database: PostgreSQL via Npgsql / EF Core
 Realtime: SignalR for app events, LiveKit React Native for voice/video if available
-Production domain: https://tendsec.ru
+Production domain: https://lanaya.space
 
 The mobile app should keep feature parity where it matters, but mobile UX should be native, compact, and touch-first rather than a direct desktop copy.
 
@@ -593,8 +593,8 @@ For auth/security changes, consider:
 - mobile production builds should be created from an intentional release branch/tag
 - GitHub remote origin = https://github.com/Metamephetamin/NoDiscord.git
 - gitflic is not the production deploy remote
-- production domain: https://tendsec.ru
-- health endpoint: https://tendsec.ru/api/ping
+- production domain: https://lanaya.space
+- health endpoint: https://lanaya.space/api/ping
 
 Deploy safety:
 - never ship risky unverified changes directly to production

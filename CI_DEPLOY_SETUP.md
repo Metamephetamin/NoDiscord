@@ -9,8 +9,8 @@
 - Deploy workflow: `.github/workflows/deploy.yml`
 - Landing deploy workflow: `.github/workflows/deploy-landing.yml`
 - Production infra templates:
-  - `infra/nginx/tendsec.ru.conf`
-  - `infra/nginx/land.tendsec.ru.conf`
+  - `infra/nginx/lanaya.space.conf`
+  - `infra/nginx/land.lanaya.space.conf`
   - `infra/systemd/nodiscord-backend.service`
 
 ## How deploy works now
@@ -24,9 +24,10 @@ On every push to `master` or `main`, GitHub Actions will:
 5. upload artifacts to the production server
 6. sync frontend to `/var/www/tend-app/current`
 7. sync backend to `/opt/nodiscord/.deploy/backend`
-8. restart `nodiscord-backend.service`
-9. reload `nginx`
-10. run a healthcheck against `https://tendsec.ru`
+8. ensure the `lanaya.space` Nginx host exists and issue TLS with `certbot` when needed
+9. restart `nodiscord-backend.service`
+10. reload `nginx`
+11. run a healthcheck against `https://lanaya.space`
 
 Important:
 
@@ -47,7 +48,7 @@ On every push that changes `landing/**`, GitHub Actions will:
 1. sync `landing/` to `/var/www/tend-land/current`
 2. keep the existing `Tend Setup.exe` file on the server
 3. reload `nginx`
-4. run a healthcheck against `https://land.tendsec.ru`
+4. run a healthcheck against `https://land.lanaya.space`
 
 ## GitHub Secrets required
 
@@ -87,10 +88,10 @@ Only needed if you want to override the defaults:
 - `BACKEND_SERVICE_NAME` default `nodiscord-backend.service`
 - `FRONTEND_DEPLOY_OWNER` default `www-data:www-data`
 - `BACKEND_DEPLOY_OWNER` default `nodiscord:nodiscord`
-- `HEALTHCHECK_URL` default `http://185.233.193.162`
+- `HEALTHCHECK_URL` default `https://lanaya.space`
 - `LANDING_DEPLOY_PATH` default `/var/www/tend-land/current`
 - `LANDING_DEPLOY_OWNER` default `www-data:www-data`
-- `LANDING_HEALTHCHECK_URL` default `https://land.tendsec.ru`
+- `LANDING_HEALTHCHECK_URL` default `https://land.lanaya.space`
 
 ## One-command deploy secrets setup
 

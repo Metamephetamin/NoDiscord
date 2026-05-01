@@ -5,7 +5,7 @@ Frontend: Electron + React + Vite
 Backend: ASP.NET Core 8 + SignalR
 Database: PostgreSQL via Npgsql / EF Core
 Realtime: LiveKit client on frontend + backend voice hub integration
-Production domain: https://tendsec.ru
+Production domain: https://lanaya.space
 
 # Structure
 
@@ -37,7 +37,7 @@ Backend:
 - GitHub remote origin = https://github.com/Metamephetamin/NoDiscord.git
 - gitflic is not the production deploy remote
 - GitHub Actions workflow Deploy handles production deployment from master
-- health endpoint: https://tendsec.ru/api/ping
+- health endpoint: https://lanaya.space/api/ping
 
 Deploy rules:
 - never deploy from dev;

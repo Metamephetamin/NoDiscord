@@ -1,14 +1,14 @@
 # Production Infrastructure Templates
 
-This directory contains the production deployment templates that are not applied by GitHub Actions automatically, but are part of the real server setup for `tendsec.ru`.
+This directory contains the production deployment templates for `lanaya.space`.
 
 Included templates:
 
-- `nginx/tendsec.ru.conf`
+- `nginx/lanaya.space.conf`
   - main web app host
   - serves frontend from `/var/www/tend-app/current`
   - proxies backend routes to `127.0.0.1:7031`
-- `nginx/land.tendsec.ru.conf`
+- `nginx/land.lanaya.space.conf`
   - landing host
   - serves static landing from `/var/www/tend-land/current`
 - `systemd/nodiscord-backend.service`
@@ -17,7 +17,8 @@ Included templates:
 
 Notes:
 
-- These files are templates for the current production topology.
+- The main app Nginx host is installed by the production deploy workflow if it is missing on the server.
+- Landing Nginx is still a server-side template unless the landing deploy workflow is extended to manage it.
 - Real TLS certificates are still issued on the server via `certbot`.
 - Secrets must stay out of git and continue living in:
   - GitHub Actions Secrets
