@@ -71,8 +71,18 @@ public class ChatFilesController : ControllerBase
         {
             if (exception.IsStorageFailure)
             {
-                _logger.LogError(exception, "Chat file upload storage failed for user {UserId}", currentUser.UserId);
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = exception.Message });
+                var diagnostics = BuildStorageDiagnostics(uploadsDirectory, exception);
+                _logger.LogError(
+                    exception,
+                    "Chat file upload storage failed for user {UserId}. {Diagnostics}",
+                    currentUser.UserId,
+                    diagnostics.Summary);
+                Response.Headers["X-Upload-Storage-Diagnostics"] = diagnostics.Summary;
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = $"{exception.Message} {diagnostics.Summary}",
+                    storage = diagnostics
+                });
             }
 
             var message = string.Equals(exception.Message, "File size limit exceeded.", StringComparison.Ordinal)
@@ -128,6 +138,84 @@ public class ChatFilesController : ControllerBase
 
         return $"{bytes} bytes";
     }
+
+    private StorageDiagnostics BuildStorageDiagnostics(string uploadsDirectory, Exception exception)
+    {
+        var parentDirectory = Path.GetDirectoryName(uploadsDirectory) ?? string.Empty;
+        var directoryExists = Directory.Exists(uploadsDirectory);
+        var parentExists = !string.IsNullOrWhiteSpace(parentDirectory) && Directory.Exists(parentDirectory);
+        long? availableBytes = null;
+        string? availableBytesError = null;
+        var writable = false;
+        string? writeError = null;
+
+        try
+        {
+            availableBytes = _storageMetrics.GetAvailableBytes(uploadsDirectory);
+        }
+        catch (Exception metricException)
+        {
+            availableBytesError = $"{metricException.GetType().Name}: {metricException.Message}";
+        }
+
+        try
+        {
+            Directory.CreateDirectory(uploadsDirectory);
+            var probePath = Path.Combine(uploadsDirectory, $".upload-diagnostic-{Guid.NewGuid():N}.tmp");
+            System.IO.File.WriteAllText(probePath, "ok");
+            System.IO.File.Delete(probePath);
+            writable = true;
+            directoryExists = true;
+        }
+        catch (Exception writeException)
+        {
+            writeError = $"{writeException.GetType().Name}: {writeException.Message}";
+        }
+
+        var rootException = exception.InnerException ?? exception;
+        var rootError = $"{rootException.GetType().Name}: {rootException.Message}";
+        var summary =
+            $"storageDirectory={uploadsDirectory}; " +
+            $"exists={directoryExists}; " +
+            $"parentExists={parentExists}; " +
+            $"writable={writable}; " +
+            $"availableBytes={availableBytes?.ToString() ?? "unknown"}; " +
+            $"rootError={rootError}";
+
+        if (!string.IsNullOrWhiteSpace(availableBytesError))
+        {
+            summary += $"; availableBytesError={availableBytesError}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(writeError))
+        {
+            summary += $"; writeProbeError={writeError}";
+        }
+
+        return new StorageDiagnostics(
+            Directory: uploadsDirectory,
+            Exists: directoryExists,
+            ParentDirectory: parentDirectory,
+            ParentExists: parentExists,
+            Writable: writable,
+            AvailableBytes: availableBytes,
+            RootError: rootError,
+            AvailableBytesError: availableBytesError,
+            WriteProbeError: writeError,
+            Summary: summary);
+    }
+
+    private sealed record StorageDiagnostics(
+        string Directory,
+        bool Exists,
+        string ParentDirectory,
+        bool ParentExists,
+        bool Writable,
+        long? AvailableBytes,
+        string RootError,
+        string? AvailableBytesError,
+        string? WriteProbeError,
+        string Summary);
 
     [HttpGet("/chat-files/{fileName}")]
     [HttpHead("/chat-files/{fileName}")]
