@@ -15,7 +15,7 @@ namespace BackNoDiscord.Controllers;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ChatFilesController : ControllerBase
 {
-    private const long DefaultMaxFileSizeBytes = 100L * 1024 * 1024;
+    private const long DefaultMaxFileSizeBytes = 500L * 1024 * 1024;
     private const long DefaultMaxUserStorageBytes = 5L * 1024 * 1024 * 1024;
     private const long DefaultMinFreeDiskBytes = 1L * 1024 * 1024 * 1024;
     private const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;

@@ -34,17 +34,23 @@ if (jwtKey.Length < 32)
 }
 
 const string MediaAccessTokenCookieName = "tend_access_token";
-const long MaxChatFileUploadBytes = 100L * 1024 * 1024;
+const long MaxChatFileUploadBytes = 500L * 1024 * 1024;
 const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
+var maxChatFileUploadRequestBytes = checked(
+    GetConfiguredPositiveLong(builder.Configuration, "ChatFiles:MaxFileSizeBytes", MaxChatFileUploadBytes) +
+    MultipartRequestOverheadBytes);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = maxChatFileUploadRequestBytes;
+});
+
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit =
-        GetConfiguredPositiveLong(builder.Configuration, "ChatFiles:MaxFileSizeBytes", MaxChatFileUploadBytes) +
-        MultipartRequestOverheadBytes;
+    options.MultipartBodyLengthLimit = maxChatFileUploadRequestBytes;
 });
 
 builder.Services.AddCors(options =>
