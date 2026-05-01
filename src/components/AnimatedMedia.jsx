@@ -23,11 +23,12 @@ function getMediaSourceFailureExpiry(value) {
 function markMediaSourceFailed(value) {
   const normalizedValue = String(value || "").trim();
   if (!normalizedValue) {
-    return;
+    return false;
   }
 
-  markMediaUrlMissing(normalizedValue);
+  const isCachedMissingMedia = markMediaUrlMissing(normalizedValue);
   failedMediaSourceExpiryMap.set(normalizedValue, Date.now() + MEDIA_SOURCE_FAILURE_COOLDOWN_MS);
+  return isCachedMissingMedia;
 }
 
 function clearMediaSourceFailure(value) {
@@ -301,9 +302,16 @@ export default function AnimatedMedia({
       onError={(event) => {
         recordPerfEvent("media", "animated-media:image-error", mediaDebugPayload);
         if (optimizedImageSrc && optimizedImageSrc !== resolvedSrc) {
+          const isCachedMissingMedia = markMediaSourceFailed(resolvedSrc);
+          setFailedOptimizedImageSrc(resolvedSrc);
+          if (isCachedMissingMedia) {
+            setMediaFailureClock(Date.now());
+            setMediaFailureVersion((current) => current + 1);
+            return;
+          }
+
           optimizedMediaEndpointDisabled = true;
           failedOptimizedMediaSourceSet.add(resolvedSrc);
-          setFailedOptimizedImageSrc(resolvedSrc);
           if (!isVideoSource && resolvedSrc && event.currentTarget.src !== resolvedSrc) {
             event.currentTarget.src = resolvedSrc;
             return;

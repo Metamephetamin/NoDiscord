@@ -144,13 +144,14 @@ function getCacheableMissingMediaPath(value) {
 export function markMediaUrlMissing(value) {
   const internalPath = getCacheableMissingMediaPath(value);
   if (!internalPath) {
-    return;
+    return false;
   }
 
   const cache = readMissingInternalMediaCache();
   const expiresAt = Date.now() + MISSING_MEDIA_CACHE_TTL_MS;
   cache.set(internalPath, expiresAt);
   writeMissingInternalMediaCache(cache);
+  return true;
 }
 
 export function isMediaUrlKnownMissing(value) {
