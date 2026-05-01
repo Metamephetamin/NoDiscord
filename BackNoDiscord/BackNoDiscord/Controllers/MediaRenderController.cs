@@ -99,6 +99,10 @@ public sealed class MediaRenderController : ControllerBase
         {
             return NotFound();
         }
+        catch (InvalidImageContentException)
+        {
+            return NotFound();
+        }
 
         using (image)
         {
