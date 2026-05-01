@@ -1207,7 +1207,15 @@ export default function Auth({ onAuthSuccess }) {
         </div>
 
         {mode === "login" && isQrLoginOpen ? (
-          <aside className="auth-card__side auth-card__side--qr">
+          <aside className="auth-card__side auth-card__side--qr" aria-label="Вход по QR-коду">
+            <button
+              type="button"
+              className="auth-qr-login__close"
+              onClick={() => setIsQrLoginOpen(false)}
+              aria-label="Закрыть QR-код"
+            >
+              ×
+            </button>
             <div className="auth-qr-login" aria-live="polite">
               <div className="auth-qr-login__title">
                 <span>Отсканируйте QR-код</span>

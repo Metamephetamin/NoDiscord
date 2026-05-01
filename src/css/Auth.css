@@ -1088,12 +1088,17 @@
 }
 
 .auth-card__side--qr {
+  position: relative;
   justify-content: center;
   padding: 12px 14px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.42);
   border-color: rgba(137, 150, 174, 0.2);
   box-shadow: 0 12px 24px rgba(21, 32, 51, 0.05);
+}
+
+.auth-qr-login__close {
+  display: none;
 }
 
 .auth-qr-login {
@@ -2112,6 +2117,56 @@
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
+  }
+
+  .auth-page--login .auth-card.auth-card--login:has(.auth-card__side--qr) {
+    width: min(100%, 350px);
+    max-width: calc(100vw - 20px);
+  }
+
+  .auth-page--login .auth-card__side--qr {
+    position: fixed;
+    left: 50%;
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    z-index: 6;
+    width: min(calc(100vw - 28px), 320px);
+    box-sizing: border-box;
+    display: flex;
+    padding: 20px 18px 18px;
+    border-radius: 20px;
+    background: rgba(249, 251, 255, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.64);
+    box-shadow: 0 22px 56px rgba(2, 9, 22, 0.34);
+    transform: translateX(-50%);
+    backdrop-filter: blur(18px);
+  }
+
+  .auth-page--login .auth-qr-login__close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 999px;
+    background: rgba(137, 150, 174, 0.16);
+    color: #2b3548;
+    font-size: 21px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .auth-page--login .auth-qr-login__code {
+    width: 172px;
+    height: 172px;
+  }
+
+  .auth-page--login .auth-qr-login__svg,
+  .auth-page--login .auth-qr-login__svg svg {
+    width: 148px;
+    height: 148px;
   }
 
   .auth-page--login .auth-card--login .auth-card__heading,
