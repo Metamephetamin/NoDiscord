@@ -356,11 +356,13 @@
 .profile__names {
   min-width: 0;
   flex: 1;
+  min-height: 38px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 3px;
-  padding-top: 0;
+  padding-top: 1px;
+  box-sizing: border-box;
 }
 
 .profile__username {

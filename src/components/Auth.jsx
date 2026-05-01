@@ -138,14 +138,12 @@ function shouldUseLiteAuthVisualMode() {
 
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const usesCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-  const compactViewport = window.matchMedia("(max-width: 900px)").matches;
   const saveData = Boolean(connection?.saveData);
   const slowConnection = SLOW_CONNECTION_TYPES.has(connection?.effectiveType || "");
   const lowCpu = Number.isFinite(navigator.hardwareConcurrency) && navigator.hardwareConcurrency <= 4;
   const lowMemory = Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory <= 4;
 
-  return prefersReducedMotion || usesCoarsePointer || compactViewport || saveData || slowConnection || lowCpu || lowMemory;
+  return prefersReducedMotion || saveData || slowConnection || lowCpu || lowMemory;
 }
 
 function mapAuthUser(data) {
@@ -347,8 +345,6 @@ export default function Auth({ onAuthSuccess }) {
 
     const mediaQueries = [
       window.matchMedia("(prefers-reduced-motion: reduce)"),
-      window.matchMedia("(pointer: coarse)"),
-      window.matchMedia("(max-width: 900px)"),
     ];
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     const addMediaListener = (mediaQuery) => {
