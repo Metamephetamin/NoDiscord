@@ -33,8 +33,17 @@ jobs:
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "bash -lc '
             echo \"=== systemctl status ===\"
             systemctl status \"$BACKEND_SERVICE\" --no-pager || true
-            echo \"=== recent auth/mail logs ===\"
-            journalctl -u \"$BACKEND_SERVICE\" --since \"20 minutes ago\" --no-pager | grep -Ei \"auth/register|email|smtp|mailkit|verification|failed|exception|ошиб|код|почт\" || true
+            echo \"=== upload storage df ===\"
+            df -h /opt/nodiscord/.deploy/storage /opt/nodiscord/.deploy/backend 2>/dev/null || true
+            echo \"=== upload storage inodes ===\"
+            df -ih /opt/nodiscord/.deploy/storage /opt/nodiscord/.deploy/backend 2>/dev/null || true
+            echo \"=== upload storage permissions ===\"
+            ls -ld /opt/nodiscord /opt/nodiscord/.deploy /opt/nodiscord/.deploy/storage /opt/nodiscord/.deploy/storage/chat-files 2>/dev/null || true
+            echo \"=== upload storage size ===\"
+            find /opt/nodiscord/.deploy/storage/chat-files -maxdepth 1 -type f 2>/dev/null | wc -l || true
+            du -sh /opt/nodiscord/.deploy/storage/chat-files 2>/dev/null || true
+            echo \"=== recent upload/storage logs ===\"
+            journalctl -u \"$BACKEND_SERVICE\" --since \"2 hours ago\" --no-pager | grep -Ei \"chat file upload|chat-files|storage|IOException|UnauthorizedAccessException|No space|permission|temporarily unavailable|failed|exception\" || true
             echo \"=== journalctl tail ===\"
             journalctl -u \"$BACKEND_SERVICE\" -n 240 --no-pager || true
           '"

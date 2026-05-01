@@ -342,6 +342,16 @@ jobs:
               chown -R \"\$BACKEND_OWNER\" \"\$STORAGE_PATH\"
               chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
+              backend_user=\"\${BACKEND_OWNER%%:*}\"
+              write_probe=\"\$STORAGE_PATH/chat-files/.write-test\"
+              if command -v runuser >/dev/null 2>&1 && id \"\$backend_user\" >/dev/null 2>&1; then
+                runuser -u \"\$backend_user\" -- touch \"\$write_probe\"
+                runuser -u \"\$backend_user\" -- rm -f \"\$write_probe\"
+              else
+                touch \"\$write_probe\"
+                rm -f \"\$write_probe\"
+              fi
+              df -h \"\$STORAGE_PATH\" \"\$STORAGE_PATH/chat-files\" || true
             fi
             echo \"Backend environment apply completed\"
           '"

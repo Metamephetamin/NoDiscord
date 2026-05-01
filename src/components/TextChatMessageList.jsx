@@ -10,6 +10,7 @@ import { DEFAULT_SERVER_ICON, resolveMediaUrl, resolveOptimizedMediaUrl } from "
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
+import { getTelegramUploadOverlayState } from "../utils/textChatUploadOverlay.mjs";
 import {
   getAttachmentCacheKey,
   getMessagePoll,
@@ -348,44 +349,27 @@ function LocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) 
 }
 
 function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) {
-  const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
-  const normalizedStatus = String(attachmentItem?.localEchoStatus || "uploading").trim();
-  const isTerminalFailureState = normalizedStatus === "failed" || normalizedStatus === "canceled";
-  const resolvedStatusLabel = getLocalEchoUploadStatusLabel(normalizedStatus);
-  const primaryAction = isTerminalFailureState ? onRetry : onCancel;
-  const primaryActionLabel = isTerminalFailureState ? "Повторить загрузку" : "Отменить загрузку";
-  const footerTitle = String(attachmentItem?.localEchoError || "").trim() || resolvedStatusLabel;
-  const footerLabel = isTerminalFailureState
-    ? footerTitle
-    : `${resolvedStatusLabel} ${normalizedProgress}%`;
+  const overlayState = getTelegramUploadOverlayState(attachmentItem);
+  const primaryAction = overlayState.primaryAction === "retry" ? onRetry : onCancel;
 
-  if (normalizedStatus === "sent") {
+  if (!overlayState.visible) {
     return null;
   }
 
   return (
-    <span className={`message-media__upload-overlay-simple ${isTerminalFailureState ? "message-media__upload-overlay-simple--failed" : ""}`}>
-      <span
-        className={`message-media__upload-action ${isTerminalFailureState ? "message-media__upload-action--retry" : "message-media__upload-action--loading"}`}
-        role="button"
-        tabIndex={0}
-        aria-label={primaryActionLabel}
+    <span className={`message-media__upload-overlay-simple ${overlayState.failed ? "message-media__upload-overlay-simple--failed" : ""}`}>
+      <button
+        type="button"
+        className={`message-media__upload-action ${overlayState.failed ? "message-media__upload-action--retry" : "message-media__upload-action--loading"}`}
+        aria-label={overlayState.ariaLabel}
+        style={{ "--message-media-upload-progress": `${overlayState.progress}%` }}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
           primaryAction?.();
         }}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") {
-            return;
-          }
-
-          event.preventDefault();
-          event.stopPropagation();
-          primaryAction?.();
-        }}
       >
-        {isTerminalFailureState ? (
+        {overlayState.failed ? (
           <span className="message-media__upload-retry-icon" aria-hidden="true">↻</span>
         ) : (
           <span className="message-media__upload-loader" aria-hidden="true">
@@ -393,22 +377,24 @@ function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, on
             <span className="message-media__upload-loader-core" />
           </span>
         )}
-      </span>
-      <span
+      </button>
+      <button
+        type="button"
         className="message-media__upload-footer-simple"
-        title={footerTitle}
+        title={overlayState.label}
+        aria-label={overlayState.failed ? "Убрать неотправленное вложение" : overlayState.label}
         onClick={(event) => {
-          if (!isTerminalFailureState) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!overlayState.failed) {
             return;
           }
 
-          event.preventDefault();
-          event.stopPropagation();
           onRemove?.();
         }}
       >
-        <span className="message-media__upload-status-simple">{footerLabel}</span>
-      </span>
+        <span className="message-media__upload-status-simple">{overlayState.label}</span>
+      </button>
     </span>
   );
 }
@@ -1153,6 +1139,13 @@ function MessageAttachmentCard({
 
     openAttachmentMediaPreview();
   };
+  const handlePreviewKeyDown = (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    handlePreviewClick(event);
+  };
 
   if (attachmentItem.isVoice) {
     return (
@@ -1206,10 +1199,12 @@ function MessageAttachmentCard({
 
     if (attachmentItem.isImage) {
       return (
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           className={`message-media message-media--button ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
+          onKeyDown={handlePreviewKeyDown}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <MessageMediaImage
@@ -1227,16 +1222,18 @@ function MessageAttachmentCard({
               onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
           ) : null}
-        </button>
+        </div>
       );
     }
 
     if (attachmentItem.isVideo) {
       return (
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           className={`message-media message-media--video message-media--button ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
+          onKeyDown={handlePreviewKeyDown}
           aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <MessageMediaVideo
@@ -1252,7 +1249,7 @@ function MessageAttachmentCard({
               onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
           ) : <span className="message-media__play" aria-hidden="true" />}
-        </button>
+        </div>
       );
     }
 

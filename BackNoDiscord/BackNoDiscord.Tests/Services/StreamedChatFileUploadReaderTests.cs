@@ -102,6 +102,7 @@ public class StreamedChatFileUploadReaderTests : IDisposable
                 CancellationToken.None));
 
         Assert.Equal("Not enough free disk space.", exception.Message);
+        Assert.True(exception.IsStorageFailure);
         Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
     }
 

@@ -153,7 +153,7 @@ public static class StreamedChatFileUploadReader
         var writableBytesBeforeReserve = availableBytes - Math.Max(0, limits.MinFreeDiskBytes);
         if (writableBytesBeforeReserve <= 0)
         {
-            throw new StreamedChatFileUploadException("Not enough free disk space.");
+            throw new StreamedChatFileUploadException("Not enough free disk space.", isStorageFailure: true);
         }
 
         var tempFilePath = Path.Combine(uploadsDirectory, $"upload-{Guid.NewGuid():N}.tmp");
@@ -185,7 +185,7 @@ public static class StreamedChatFileUploadReader
 
                     if (totalBytes > writableBytesBeforeReserve)
                     {
-                        throw new StreamedChatFileUploadException("Not enough free disk space.");
+                        throw new StreamedChatFileUploadException("Not enough free disk space.", isStorageFailure: true);
                     }
 
                     await output.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);

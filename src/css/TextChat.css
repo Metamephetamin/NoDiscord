@@ -2782,10 +2782,12 @@
 .message-media__upload-action {
   width: 54px;
   height: 54px;
+  padding: 0;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font: inherit;
   background: rgba(24, 30, 40, 0.34);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
@@ -2805,7 +2807,10 @@
 }
 
 .message-media__upload-action--loading {
-  background: rgba(16, 21, 29, 0.24);
+  background:
+    linear-gradient(rgba(16, 21, 29, 0.58), rgba(16, 21, 29, 0.58)) padding-box,
+    conic-gradient(rgba(255, 255, 255, 0.94) var(--message-media-upload-progress, 0%), rgba(255, 255, 255, 0.2) 0) border-box;
+  border-color: transparent;
 }
 
 .message-media__upload-action--loading:hover,
@@ -2868,11 +2873,17 @@
   display: inline-flex;
   align-items: center;
   gap: 0;
+  font: inherit;
   background: rgba(9, 12, 18, 0.64);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #f3f7ff;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+  cursor: default;
   transition: background-color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.message-media__upload-overlay-simple--failed .message-media__upload-footer-simple {
+  cursor: pointer;
 }
 
 .message-media__upload-status-simple,

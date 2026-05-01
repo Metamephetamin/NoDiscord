@@ -1,0 +1,52 @@
+const STATUS_LABELS = {
+  pending: "\u041e\u0436\u0438\u0434\u0430\u043d\u0438\u0435",
+  preparing: "\u041f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u043a\u0430",
+  uploading: "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430",
+  processing: "\u041e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430",
+  failed: "\u041e\u0448\u0438\u0431\u043a\u0430",
+  canceled: "\u041e\u0442\u043c\u0435\u043d\u0435\u043d\u043e",
+  sent: "\u041e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e",
+};
+
+const FAILURE_STATUSES = new Set(["failed", "canceled"]);
+const ACTIVE_STATUSES = new Set(["pending", "preparing", "uploading", "processing"]);
+
+const RETRY_LABEL = "\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443";
+const CANCEL_LABEL = "\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443";
+
+export function getTelegramUploadOverlayState(attachmentItem = {}) {
+  const status = String(attachmentItem?.localEchoStatus || "uploading").trim() || "uploading";
+  const progress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
+
+  if (status === "sent") {
+    return {
+      visible: false,
+      failed: false,
+      active: false,
+      status,
+      progress,
+      label: "",
+      primaryAction: "",
+      ariaLabel: "",
+    };
+  }
+
+  const failed = FAILURE_STATUSES.has(status);
+  const active = ACTIVE_STATUSES.has(status) || !failed;
+  const statusLabel = STATUS_LABELS[status] || STATUS_LABELS.uploading;
+  const errorLabel = String(attachmentItem?.localEchoError || "").trim();
+  const label = failed
+    ? (errorLabel || statusLabel)
+    : `${statusLabel} ${progress}%`;
+
+  return {
+    visible: true,
+    failed,
+    active,
+    status,
+    progress,
+    label,
+    primaryAction: failed ? "retry" : "cancel",
+    ariaLabel: failed ? RETRY_LABEL : CANCEL_LABEL,
+  };
+}
