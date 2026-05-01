@@ -26,6 +26,72 @@ const VoiceSwitch = ({ active, onClick, label }) => (
   </button>
 );
 
+const PROFILE_PREVIEW_ICON_PATHS = {
+  about: (
+    <>
+      <path d="M8 9.2h8" />
+      <path d="M8 13h5.5" />
+      <path d="M6.5 19.5h11a2 2 0 0 0 2-2v-11a2 2 0 0 0-2-2h-11a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2Z" />
+    </>
+  ),
+  info: (
+    <>
+      <path d="M12 10.5v5" />
+      <path d="M12 7.4h.01" />
+      <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </>
+  ),
+  common: (
+    <>
+      <path d="M8.5 11.2a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z" />
+      <path d="M15.8 10.5a2.7 2.7 0 1 0 0-5.4" />
+      <path d="M3.7 19.1c.7-2.8 2.4-4.2 4.8-4.2s4.1 1.4 4.8 4.2" />
+      <path d="M13.9 15.2c2.3.2 3.8 1.5 4.4 3.9" />
+    </>
+  ),
+  activity: <path d="M4 13.2h4.1l2.2-6.4 3.4 10.4 2.1-4h4.2" />,
+  contact: (
+    <>
+      <path d="M5 7.8 12 12l7-4.2" />
+      <path d="M5.8 6h12.4A1.8 1.8 0 0 1 20 7.8v8.4a1.8 1.8 0 0 1-1.8 1.8H5.8A1.8 1.8 0 0 1 4 16.2V7.8A1.8 1.8 0 0 1 5.8 6Z" />
+    </>
+  ),
+  id: (
+    <>
+      <path d="M9 7.5 7.8 16.5" />
+      <path d="M16.2 7.5 15 16.5" />
+      <path d="M6.8 10h11" />
+      <path d="M6 14h11" />
+    </>
+  ),
+  message: (
+    <>
+      <path d="M6.5 17.5 4 20V6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5V15a2.5 2.5 0 0 1-2.5 2.5h-11Z" />
+      <path d="M8 9h8" />
+      <path d="M8 12.5h5.5" />
+    </>
+  ),
+  call: <path d="M7.2 4.8 9.5 7c.6.6.7 1.5.2 2.2l-.8 1.1a10.5 10.5 0 0 0 4.8 4.8l1.1-.8c.7-.5 1.6-.4 2.2.2l2.2 2.3c.5.5.6 1.3.2 1.9-.7 1.1-1.9 1.8-3.2 1.5C10 19 5 14 3.8 7.8c-.3-1.3.4-2.5 1.5-3.2.6-.4 1.4-.3 1.9.2Z" />,
+  copy: (
+    <>
+      <path d="M8 8.5V6.8A2.8 2.8 0 0 1 10.8 4h6.4A2.8 2.8 0 0 1 20 6.8v6.4a2.8 2.8 0 0 1-2.8 2.8h-1.7" />
+      <path d="M6.8 8h6.4A2.8 2.8 0 0 1 16 10.8v6.4A2.8 2.8 0 0 1 13.2 20H6.8A2.8 2.8 0 0 1 4 17.2v-6.4A2.8 2.8 0 0 1 6.8 8Z" />
+    </>
+  ),
+};
+
+const ProfilePreviewIcon = ({ kind, className = "" }) => (
+  <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {PROFILE_PREVIEW_ICON_PATHS[kind] || PROFILE_PREVIEW_ICON_PATHS.info}
+  </svg>
+);
+
+const ProfilePreviewSectionIcon = ({ kind }) => (
+  <span className={`profile-settings-form__public-section-icon profile-settings-form__public-section-icon--${kind}`} aria-hidden="true">
+    <ProfilePreviewIcon kind={kind} className="profile-settings-form__public-section-svg" />
+  </span>
+);
+
 const IntegrationBrandIcon = ({ provider, className = "" }) => {
   const providerId = provider?.id || "";
   const tone = provider?.meta?.tone || "#8b95ad";
@@ -487,52 +553,90 @@ export const PersonalProfileSettings = ({
               <div className="profile-settings-form__public-body">
                 <div className="profile-settings-form__public-main">
                   <div className="profile-settings-form__public-grid" aria-hidden="true">
-                    <div><span>Активность</span><b>Сейчас в сети</b></div>
-                    <div><span>Связь</span><b>Сообщения и звонки</b></div>
-                    <div><span>ID</span><b>Ваш ID</b></div>
+                    <div>
+                      <ProfilePreviewIcon kind="activity" className="profile-settings-form__public-quick-icon" />
+                      <span>Активность</span>
+                      <b>Сейчас в сети</b>
+                    </div>
+                    <div>
+                      <ProfilePreviewIcon kind="contact" className="profile-settings-form__public-quick-icon" />
+                      <span>Связь</span>
+                      <b>Сообщения и звонки</b>
+                    </div>
+                    <div>
+                      <ProfilePreviewIcon kind="id" className="profile-settings-form__public-quick-icon" />
+                      <span>ID</span>
+                      <b>Ваш ID</b>
+                    </div>
                   </div>
                   <div className="profile-settings-form__public-section">
-                    <span>О себе</span>
-                    <p>{displayName} пока ничего не рассказал о себе.</p>
+                    <ProfilePreviewSectionIcon kind="about" />
+                    <div className="profile-settings-form__public-section-copy">
+                      <strong>О себе</strong>
+                      <p>{displayName} пока ничего не рассказал о себе.</p>
+                    </div>
                   </div>
                   <div className="profile-settings-form__public-section profile-settings-form__public-section--info">
-                    <span>Информация</span>
-                    <div className="profile-settings-form__public-info-list">
-                      <div>
-                        <em>Имя</em>
-                        <b>{displayName}</b>
-                      </div>
-                      <div>
-                        <em>Статус</em>
-                        <b>Друг</b>
-                      </div>
-                      <div>
-                        <em>Звонки</em>
-                        <b>Доступны</b>
+                    <ProfilePreviewSectionIcon kind="info" />
+                    <div className="profile-settings-form__public-section-copy">
+                      <strong>Информация</strong>
+                      <div className="profile-settings-form__public-info-list">
+                        <div>
+                          <em>Имя</em>
+                          <b>{displayName}</b>
+                        </div>
+                        <div>
+                          <em>Статус</em>
+                          <b>Друг</b>
+                        </div>
+                        <div>
+                          <em>Звонки</em>
+                          <b>Доступны</b>
+                        </div>
+                        <div>
+                          <em>Последний визит</em>
+                          <b>Сегодня</b>
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div className="profile-settings-form__public-section">
-                    <span>Общее</span>
-                    <p>Ваши друзья видят этот профиль.</p>
+                    <ProfilePreviewSectionIcon kind="common" />
+                    <div className="profile-settings-form__public-section-copy">
+                      <strong>Общее</strong>
+                      <p>Вы друзья. Можно писать и звонить.</p>
+                    </div>
                   </div>
                 </div>
 
                 <div className="profile-settings-form__public-side" aria-hidden="true">
                   <div className="profile-settings-form__public-actions">
-                    <div>Сообщение</div>
-                    <div>Позвонить</div>
-                    <div>Копировать ID</div>
+                    <div><ProfilePreviewIcon kind="message" className="profile-settings-form__public-action-icon" />Сообщение</div>
+                    <div><ProfilePreviewIcon kind="call" className="profile-settings-form__public-action-icon" />Позвонить</div>
+                    <div><ProfilePreviewIcon kind="copy" className="profile-settings-form__public-action-icon" />Копировать ID</div>
                   </div>
                   <div className="profile-settings-form__public-widget">
-                    <strong>Общее</strong>
-                    <div>
-                      <span>Общие друзья</span>
-                      <b>видны друзьям</b>
+                    <div className="profile-settings-form__public-widget-header">
+                      <ProfilePreviewIcon kind="info" className="profile-settings-form__public-widget-icon" />
+                      <strong>Общее</strong>
                     </div>
-                    <div>
-                      <span>Общие чаты</span>
-                      <b>по доступу</b>
+                    <div className="profile-settings-form__public-widget-list">
+                      <div>
+                        <span>Общие друзья</span>
+                        <b>1 общий друг</b>
+                      </div>
+                      <div>
+                        <span>Общие чаты</span>
+                        <b>2 общих чата</b>
+                      </div>
+                      <div>
+                        <span>Вы знакомы</span>
+                        <b>с 24 апреля</b>
+                      </div>
+                      <div>
+                        <span>Последний диалог</span>
+                        <b>вчера</b>
+                      </div>
                     </div>
                   </div>
                 </div>
