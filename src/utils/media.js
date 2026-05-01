@@ -24,8 +24,35 @@ export function resolveStaticAssetUrl(value) {
   return `${STATIC_ASSET_BASE_URL}${value.slice(1)}`;
 }
 
-export const DEFAULT_AVATAR = resolveStaticAssetUrl("/image/avatar.jpg");
+export const DEFAULT_AVATAR = "";
 export const DEFAULT_SERVER_ICON = resolveStaticAssetUrl("/image/image.png");
+
+const LEGACY_DEFAULT_AVATAR_PATHS = new Set([
+  "/image/avatar.jpg",
+  "/image/avatar.jpeg",
+  "/image/avatar.png",
+  "image/avatar.jpg",
+  "image/avatar.jpeg",
+  "image/avatar.png",
+]);
+
+function isLegacyDefaultAvatarUrl(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase().split(/[?#]/, 1)[0];
+  if (!normalizedValue) {
+    return false;
+  }
+
+  if (LEGACY_DEFAULT_AVATAR_PATHS.has(normalizedValue)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(normalizedValue, typeof window !== "undefined" ? window.location.origin : API_URL);
+    return LEGACY_DEFAULT_AVATAR_PATHS.has(String(parsed.pathname || "").toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 const INTERNAL_MEDIA_PREFIXES = [
   "/avatars/",
@@ -60,6 +87,10 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
 
   const normalizedValue = String(value).trim();
   if (!normalizedValue) {
+    return fallback;
+  }
+
+  if (isLegacyDefaultAvatarUrl(normalizedValue)) {
     return fallback;
   }
 
