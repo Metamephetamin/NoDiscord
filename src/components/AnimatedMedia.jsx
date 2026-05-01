@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAnimatedAvatarUrl, isVideoAvatarUrl } from "../utils/avatarMedia";
 import { getMediaFrameStyle } from "../utils/mediaFrames";
-import { resolveMediaUrl, resolveOptimizedMediaUrl } from "../utils/media";
+import { markMediaUrlMissing, resolveMediaUrl, resolveOptimizedMediaUrl } from "../utils/media";
 import { recordPerfEvent } from "../utils/perf";
 
 let optimizedMediaEndpointDisabled = false;
@@ -26,6 +26,7 @@ function markMediaSourceFailed(value) {
     return;
   }
 
+  markMediaUrlMissing(normalizedValue);
   failedMediaSourceExpiryMap.set(normalizedValue, Date.now() + MEDIA_SOURCE_FAILURE_COOLDOWN_MS);
 }
 

@@ -1,6 +1,9 @@
 import { API_URL } from "../config/runtime";
 
 const STATIC_ASSET_BASE_URL = import.meta.env.BASE_URL || "/";
+const MISSING_MEDIA_CACHE_KEY = "nodiscord.missing-internal-media.v1";
+const MISSING_MEDIA_CACHE_TTL_MS = 30 * 60_000;
+let missingInternalMediaCache = null;
 
 export function resolveStaticAssetUrl(value) {
   if (!value) {
@@ -62,6 +65,13 @@ const INTERNAL_MEDIA_PREFIXES = [
   "/chat-files/",
 ];
 
+const CACHEABLE_MISSING_MEDIA_PREFIXES = [
+  "/avatars/",
+  "/profile-backgrounds/",
+  "/api/profile-backgrounds/",
+  "/server-icons/",
+];
+
 function getInternalMediaPath(value) {
   const normalizedValue = String(value || "").trim();
   if (!normalizedValue) {
@@ -82,6 +92,87 @@ function getInternalMediaPath(value) {
   }
 }
 
+function readMissingInternalMediaCache() {
+  if (missingInternalMediaCache instanceof Map) {
+    return missingInternalMediaCache;
+  }
+
+  missingInternalMediaCache = new Map();
+  if (typeof window === "undefined") {
+    return missingInternalMediaCache;
+  }
+
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(MISSING_MEDIA_CACHE_KEY) || "{}");
+    Object.entries(parsed || {}).forEach(([path, expiresAt]) => {
+      const normalizedPath = String(path || "").trim();
+      const normalizedExpiresAt = Number(expiresAt || 0);
+      if (normalizedPath && normalizedExpiresAt > Date.now()) {
+        missingInternalMediaCache.set(normalizedPath, normalizedExpiresAt);
+      }
+    });
+  } catch {
+    // Ignore cache parse failures.
+  }
+
+  return missingInternalMediaCache;
+}
+
+function writeMissingInternalMediaCache(cache) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(MISSING_MEDIA_CACHE_KEY, JSON.stringify(Object.fromEntries(cache)));
+  } catch {
+    // Ignore storage quota/privacy-mode failures.
+  }
+}
+
+function getCacheableMissingMediaPath(value) {
+  const internalPath = getInternalMediaPath(value);
+  if (!internalPath) {
+    return "";
+  }
+
+  return CACHEABLE_MISSING_MEDIA_PREFIXES.some((prefix) => internalPath.startsWith(prefix))
+    ? internalPath
+    : "";
+}
+
+export function markMediaUrlMissing(value) {
+  const internalPath = getCacheableMissingMediaPath(value);
+  if (!internalPath) {
+    return;
+  }
+
+  const cache = readMissingInternalMediaCache();
+  const expiresAt = Date.now() + MISSING_MEDIA_CACHE_TTL_MS;
+  cache.set(internalPath, expiresAt);
+  writeMissingInternalMediaCache(cache);
+}
+
+export function isMediaUrlKnownMissing(value) {
+  const internalPath = getCacheableMissingMediaPath(value);
+  if (!internalPath) {
+    return false;
+  }
+
+  const cache = readMissingInternalMediaCache();
+  const expiresAt = Number(cache.get(internalPath) || 0);
+  if (expiresAt > Date.now()) {
+    return true;
+  }
+
+  if (expiresAt) {
+    cache.delete(internalPath);
+    writeMissingInternalMediaCache(cache);
+  }
+
+  return false;
+}
+
 export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   if (!value) return fallback;
 
@@ -91,6 +182,10 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   }
 
   if (isLegacyDefaultAvatarUrl(normalizedValue)) {
+    return fallback;
+  }
+
+  if (isMediaUrlKnownMissing(normalizedValue)) {
     return fallback;
   }
 
@@ -143,6 +238,10 @@ export function resolveOptimizedMediaUrl(
   const internalPath = getInternalMediaPath(value);
   if (!internalPath) {
     return resolveMediaUrl(value, "");
+  }
+
+  if (isMediaUrlKnownMissing(internalPath)) {
+    return "";
   }
 
   const params = new URLSearchParams();
