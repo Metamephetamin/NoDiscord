@@ -127,6 +127,26 @@ public class StreamedChatFileUploadReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadAsync_AllowsSmallFileWhenDiskHasOnlyTensOfMegabytesFree()
+    {
+        var fileBytes = Encoding.UTF8.GetBytes("small file");
+        var request = BuildMultipartRequest("small.txt", "text/plain", fileBytes);
+
+        var result = await StreamedChatFileUploadReader.UploadAsync(
+            request,
+            _tempDirectory,
+            userId: "42",
+            limits: new StreamedChatFileUploadLimits(
+                MaxFileSizeBytes: 1024,
+                MaxUserStorageBytes: 1024,
+                MinFreeDiskBytes: 1024L * 1024 * 1024),
+            storageMetrics: new TestStorageMetrics(availableBytes: 32L * 1024 * 1024),
+            CancellationToken.None);
+
+        Assert.Equal(fileBytes.Length, result.Size);
+    }
+
+    [Fact]
     public async Task UploadAsync_WrapsStorageMetricFailuresAsUploadException()
     {
         var request = BuildMultipartRequest("upload.txt", "text/plain", Encoding.UTF8.GetBytes("hello"));

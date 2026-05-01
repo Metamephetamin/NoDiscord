@@ -83,7 +83,7 @@ public sealed class LocalChatFileUploadStorageMetrics : IChatFileUploadStorageMe
 public static class StreamedChatFileUploadReader
 {
     private const int BufferSize = 81920;
-    private const long MinimumEffectiveDiskReserveBytes = 64L * 1024 * 1024;
+    private const long MinimumEffectiveDiskReserveBytes = 8L * 1024 * 1024;
 
     public static async Task<StreamedChatFileUploadResult> UploadAsync(
         HttpRequest request,

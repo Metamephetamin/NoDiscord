@@ -325,6 +325,7 @@ jobs:
                   find \"\$BACKEND_PATH/wwwroot/\$directory\" -mindepth 1 -maxdepth 1 -exec cp -a -n {} \"\$STORAGE_PATH/\$directory/\" \\;
                 fi
               done
+              find \"\$STORAGE_PATH/chat-files\" -maxdepth 1 -type f -name \"upload-*.tmp\" -mmin +60 -delete 2>/dev/null || true
               if ! grep -Eq \"^(Storage__Root|Storage:Root|ND_STORAGE_ROOT)=\" \"\$BACKEND_PATH/.env\"; then
                 printf \"\\nStorage__Root=%s\\n\" \"\$STORAGE_PATH\" >> \"\$BACKEND_PATH/.env\"
               fi
@@ -333,14 +334,16 @@ jobs:
               chmod 600 \"\$BACKEND_PATH/.env\"
               backend_user=\"\${BACKEND_OWNER%%:*}\"
               write_probe=\"\$STORAGE_PATH/chat-files/.write-test\"
+              probe_size_mb=8
               if command -v runuser >/dev/null 2>&1 && id \"\$backend_user\" >/dev/null 2>&1; then
-                runuser -u \"\$backend_user\" -- touch \"\$write_probe\"
+                runuser -u \"\$backend_user\" -- dd if=/dev/zero of=\"\$write_probe\" bs=1M count=\"\$probe_size_mb\" conv=fsync status=none
                 runuser -u \"\$backend_user\" -- rm -f \"\$write_probe\"
               else
-                touch \"\$write_probe\"
+                dd if=/dev/zero of=\"\$write_probe\" bs=1M count=\"\$probe_size_mb\" conv=fsync status=none
                 rm -f \"\$write_probe\"
               fi
               df -h \"\$STORAGE_PATH\" \"\$STORAGE_PATH/chat-files\" || true
+              df -B1 \"\$STORAGE_PATH\" \"\$STORAGE_PATH/chat-files\" || true
             fi
             echo \"Backend environment apply completed\"
           '"
