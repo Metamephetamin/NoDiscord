@@ -288,9 +288,13 @@ export default function AnimatedMedia({
       draggable={false}
       loading={loading}
       decoding={decoding}
-      onLoad={() => {
-        clearMediaSourceFailure(resolvedSrc);
-        setMediaFailureClock(Date.now());
+      onLoad={(event) => {
+        const loadedSrc = String(event.currentTarget.currentSrc || event.currentTarget.src || "");
+        const loadedOriginalSource = loadedSrc === resolvedSrc || loadedSrc === optimizedImageSrc;
+        if (loadedOriginalSource) {
+          clearMediaSourceFailure(resolvedSrc);
+          setMediaFailureClock(Date.now());
+        }
         recordPerfEvent("media", "animated-media:image-loaded", mediaDebugPayload);
       }}
       onError={(event) => {
