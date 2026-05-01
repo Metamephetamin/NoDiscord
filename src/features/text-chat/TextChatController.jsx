@@ -4,7 +4,7 @@ import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/TextChat.css";
 import { readIncomingMessageText } from "../../security/chatPayloadCrypto";
 import { uploadChatAttachment } from "../../utils/chatAttachmentUpload";
-import { revokePendingUploadPreviews } from "../../utils/chatPendingUploads";
+import { revokePendingUploadPreviews, scheduleObjectUrlRevoke } from "../../utils/chatPendingUploads";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
 import { isDirectMessageChannelId, normalizeDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
@@ -71,6 +71,7 @@ const BATCH_UPLOAD_PREFERENCES_KEY = "textchat-batch-upload-preferences";
 const EMPTY_DECRYPTED_ATTACHMENTS_BY_MESSAGE_ID = Object.freeze({});
 const TEXT_CHAT_DEBUG_FLAG_PREFIX = "nodiscord.debug.textchat.";
 const LOCAL_ECHO_ID_PREFIX = "local-echo:";
+const LOCAL_ECHO_OBJECT_URL_REVOKE_DELAY_MS = 15_000;
 const TEXT_CHAT_HISTORY_PAGE_SIZE = 50;
 const MAX_ACTIVE_CHANNEL_MESSAGES = 1600;
 const MAX_BACKGROUND_CHANNEL_MESSAGES = 160;
@@ -539,6 +540,7 @@ export default function TextChat({
   const composerDropDepthRef = useRef(0);
   const selectedFilesRef = useRef([]);
   const localEchoObjectUrlsByMessageIdRef = useRef(new Map());
+  const localEchoObjectUrlRevokeTimersRef = useRef(new Map());
   const markLocalEchoReconciledRef = useRef(null);
   const scopedChannelId = useMemo(() => {
     const normalizedResolvedChannelId = normalizeDirectMessageChannelId(resolvedChannelId);
@@ -759,10 +761,15 @@ export default function TextChat({
         return;
       }
 
-      try {
-        URL.revokeObjectURL(objectUrl);
-      } catch {
-        // Ignore local preview revocation failures.
+      if (localEchoObjectUrlRevokeTimersRef.current.has(objectUrl)) {
+        return;
+      }
+
+      const timerId = scheduleObjectUrlRevoke(objectUrl, LOCAL_ECHO_OBJECT_URL_REVOKE_DELAY_MS, () => {
+        localEchoObjectUrlRevokeTimersRef.current.delete(objectUrl);
+      });
+      if (timerId !== null) {
+        localEchoObjectUrlRevokeTimersRef.current.set(objectUrl, timerId);
       }
     });
     localEchoObjectUrlsByMessageIdRef.current.delete(normalizedMessageId);
@@ -772,6 +779,15 @@ export default function TextChat({
     Array.from(localEchoObjectUrlsByMessageIdRef.current.keys()).forEach((messageId) => {
       revokeLocalEchoObjectUrls(messageId);
     });
+    localEchoObjectUrlRevokeTimersRef.current.forEach((timerId, objectUrl) => {
+      if (typeof window !== "undefined") {
+        window.clearTimeout(timerId);
+      } else {
+        clearTimeout(timerId);
+      }
+      scheduleObjectUrlRevoke(objectUrl, 0);
+    });
+    localEchoObjectUrlRevokeTimersRef.current.clear();
   }, [revokeLocalEchoObjectUrls]);
 
   const patchLocalEchoMessage = useCallback((channelId, messageId, patchOrUpdater) => {

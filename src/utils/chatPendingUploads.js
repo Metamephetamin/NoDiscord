@@ -132,14 +132,39 @@ export function createPendingUploadPreview(fileOrUpload) {
   return URL.createObjectURL(file);
 }
 
+const PENDING_UPLOAD_PREVIEW_REVOKE_DELAY_MS = 15_000;
+
+export function scheduleObjectUrlRevoke(url, delayMs = PENDING_UPLOAD_PREVIEW_REVOKE_DELAY_MS, onRevoke = null) {
+  const objectUrl = String(url || "");
+  if (!objectUrl.startsWith("blob:")) {
+    return null;
+  }
+
+  const revoke = () => {
+    try {
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // Ignore revocation failures.
+    } finally {
+      if (typeof onRevoke === "function") {
+        onRevoke(objectUrl);
+      }
+    }
+  };
+
+  const normalizedDelayMs = Math.max(0, Number(delayMs) || 0);
+  if (typeof window === "undefined" || normalizedDelayMs <= 0) {
+    revoke();
+    return null;
+  }
+
+  return window.setTimeout(revoke, normalizedDelayMs);
+}
+
 export function revokePendingUploadPreview(upload) {
   Array.from(new Set([upload?.previewUrl, upload?.thumbnailUrl].filter(Boolean)))
     .forEach((url) => {
-      try {
-        URL.revokeObjectURL(url);
-      } catch {
-        // Ignore revocation failures.
-      }
+      scheduleObjectUrlRevoke(url);
     });
 }
 
