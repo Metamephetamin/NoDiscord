@@ -11662,7 +11662,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   --profile-preview-accent-2: #5898ff;
   position: relative;
   min-height: 0;
-  height: 520px;
+  height: 500px;
   overflow: hidden;
   border-radius: 24px;
   border: 1px solid rgba(119, 137, 174, 0.34);
@@ -11706,7 +11706,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-backdrop {
   position: absolute;
   inset: 0 0 auto;
-  height: 204px;
+  height: 178px;
   width: 100%;
   display: block;
   object-fit: cover;
@@ -11738,18 +11738,18 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-hero {
   position: relative;
   z-index: 2;
-  min-height: 178px;
+  min-height: 146px;
   display: flex;
   align-items: center;
-  gap: 22px;
-  padding: 30px 34px 28px;
+  gap: 18px;
+  padding: 22px 30px 20px;
 }
 
 .profile-settings-form__public-hero .profile-settings-form__avatar-wrap {
-  width: 92px;
-  height: 92px;
-  flex-basis: 92px;
-  border-radius: 23px;
+  width: 78px;
+  height: 78px;
+  flex-basis: 78px;
+  border-radius: 20px;
   box-shadow:
     0 24px 48px rgba(0, 0, 0, 0.38),
     0 0 0 2px color-mix(in srgb, var(--profile-preview-accent) 46%, rgba(255, 255, 255, 0.18)),
@@ -11765,7 +11765,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-identity strong {
   color: #ffffff;
-  font-size: clamp(30px, 3.6vw, 38px);
+  font-size: clamp(27px, 3vw, 34px);
   line-height: 1;
   font-weight: 900;
   text-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
@@ -11776,7 +11776,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-identity small {
   color: rgba(225, 232, 247, 0.78);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -11787,15 +11787,15 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .profile-settings-form__public-chips span {
-  min-height: 28px;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
-  padding: 0 13px;
+  padding: 0 11px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--profile-preview-accent) 42%, rgba(255, 255, 255, 0.08));
   background: rgba(18, 24, 39, 0.58);
   color: #dfe7ff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -11803,11 +11803,11 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 246px;
+  grid-template-columns: minmax(0, 1fr) 226px;
   align-items: start;
-  gap: 14px;
-  margin-top: -24px;
-  padding: 14px 20px 20px;
+  gap: 12px;
+  margin-top: -18px;
+  padding: 12px 18px 16px;
   border-radius: 24px 24px 0 0;
   border-top: 1px solid rgba(143, 159, 196, 0.2);
   background:
@@ -11821,7 +11821,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   position: relative;
   z-index: 1;
 }
@@ -11829,7 +11829,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .profile-settings-form__public-grid > div,
@@ -11842,18 +11842,18 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .profile-settings-form__public-grid > div {
-  min-height: 66px;
+  min-height: 52px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-content: center;
-  column-gap: 10px;
-  row-gap: 3px;
-  padding: 9px 12px;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 7px 10px;
 }
 
 .profile-settings-form__public-grid span {
   color: rgba(210, 219, 242, 0.62);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
   overflow: hidden;
@@ -11864,7 +11864,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-grid b {
   min-width: 0;
   color: #f6f8ff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.22;
   display: -webkit-box;
@@ -11877,8 +11877,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-quick-icon {
   grid-row: 1 / 3;
   align-self: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: #9fb0ff;
   stroke-width: 2;
@@ -11887,12 +11887,12 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .profile-settings-form__public-section {
-  min-height: 68px;
+  min-height: 52px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
-  padding: 11px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   border-color: rgba(126, 139, 170, 0.22);
   background: linear-gradient(135deg, rgba(26, 31, 45, 0.86), rgba(13, 17, 27, 0.88));
   box-shadow:
@@ -11901,8 +11901,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .profile-settings-form__public-section-icon {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border-radius: 999px;
@@ -11913,8 +11913,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .profile-settings-form__public-section-svg {
-  width: 19px;
-  height: 19px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: #9fb0ff;
   stroke-width: 2;
@@ -11928,22 +11928,22 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-section-copy > strong {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   color: #f6f8ff;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.15;
 }
 
 .profile-settings-form__public-section p {
   margin: 0;
   color: rgba(230, 236, 250, 0.82);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.42;
 }
 
 .profile-settings-form__public-info-list {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   margin-top: 0;
 }
 
@@ -11951,14 +11951,14 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   color: rgba(214, 222, 241, 0.78);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .profile-settings-form__public-info-list > div + div {
-  padding-top: 6px;
+  padding-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -11970,7 +11970,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-info-list b {
   min-width: 0;
   color: #f6f8ff;
-  font-size: 13px;
+  font-size: 12px;
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11981,7 +11981,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   align-self: stretch;
   position: relative;
   z-index: 1;
@@ -11990,18 +11990,18 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .profile-settings-form__public-actions > div {
-  min-height: 44px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 16px;
   color: #eef2ff;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -12012,8 +12012,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .profile-settings-form__public-action-icon {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   display: block;
   fill: none;
   stroke: currentColor;
@@ -12026,8 +12026,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-widget {
   flex: 1 1 auto;
-  min-height: 150px;
-  padding: 12px 14px;
+  min-height: 120px;
+  padding: 9px 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -12036,16 +12036,16 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 .profile-settings-form__public-widget-header {
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin-bottom: 8px;
+  gap: 7px;
+  margin-bottom: 5px;
   color: #f6f8ff;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .profile-settings-form__public-widget-icon {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: #9fb0ff;
   stroke-width: 2;
@@ -12063,8 +12063,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-widget-list > div {
   display: grid;
-  gap: 4px;
-  padding: 7px 0;
+  gap: 2px;
+  padding: 4px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -12079,7 +12079,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-widget-list span {
   color: rgba(210, 219, 242, 0.6);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1.15;
   overflow: hidden;
@@ -12089,7 +12089,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .profile-settings-form__public-widget-list b {
   color: #f6f8ff;
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.18;
   overflow: hidden;
   text-overflow: ellipsis;
