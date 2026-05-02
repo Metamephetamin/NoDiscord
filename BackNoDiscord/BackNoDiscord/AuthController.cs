@@ -338,6 +338,90 @@ public class AuthController : ControllerBase
         });
     }
 
+    [HttpPost("qr-login/account-session")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> CreateQrAccountLoginSession()
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var sessionId = GeneratePublicToken(16);
+        var browserToken = GenerateVerificationToken();
+        var scannerToken = GenerateVerificationToken();
+
+        await _context.QrLoginSessions
+            .Where(item =>
+                item.ExpiresAt < now.AddMinutes(-10) ||
+                (item.ConsumedAt.HasValue && item.ConsumedAt < now.AddMinutes(-10)) ||
+                (item.CanceledAt.HasValue && item.CanceledAt < now.AddMinutes(-10)))
+            .ExecuteDeleteAsync();
+
+        _context.QrLoginSessions.Add(new QrLoginSessionRecord
+        {
+            SessionId = sessionId,
+            BrowserTokenHash = AuthInputPolicies.HashSecret(browserToken),
+            ScannerTokenHash = AuthInputPolicies.HashSecret(scannerToken),
+            CreatedAt = now,
+            ExpiresAt = now.Add(QrLoginLifetime),
+            ApprovedAt = now,
+            ApprovedUserId = user.id,
+            RequestedIp = GetClientIp(),
+            RequestedUserAgent = GetUserAgent(),
+            ApprovedIp = GetClientIp(),
+            ApprovedUserAgent = GetUserAgent()
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            sessionId,
+            scannerToken,
+            expiresAt = now.Add(QrLoginLifetime).ToString("O")
+        });
+    }
+
+    [HttpPost("qr-login/consume")]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> ConsumeQrAccountLoginSession([FromBody] QrLoginApproveDto dto)
+    {
+        var normalizedSessionId = NormalizeQrLoginToken(dto.sessionId);
+        var normalizedScannerToken = NormalizeQrLoginToken(dto.scannerToken);
+        if (string.IsNullOrWhiteSpace(normalizedSessionId) || string.IsNullOrWhiteSpace(normalizedScannerToken))
+        {
+            return BadRequest(new { status = "invalid", message = "QR-сессия не найдена." });
+        }
+
+        var scannerTokenHash = AuthInputPolicies.HashSecret(normalizedScannerToken);
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.QrLoginSessions
+            .Include(item => item.ApprovedUser)
+            .FirstOrDefaultAsync(item =>
+                item.SessionId == normalizedSessionId &&
+                item.ScannerTokenHash == scannerTokenHash &&
+                item.ExpiresAt > now &&
+                item.ApprovedAt.HasValue &&
+                item.ApprovedUserId.HasValue &&
+                !item.ConsumedAt.HasValue &&
+                !item.CanceledAt.HasValue);
+
+        if (record?.ApprovedUser == null)
+        {
+            return BadRequest(new { status = "invalid", message = "QR-код устарел или уже использован." });
+        }
+
+        record.ConsumedAt = now;
+        var authSession = await IssueAuthSessionAsync(record.ApprovedUser);
+        await _context.SaveChangesAsync();
+
+        return Ok(BuildQrAuthResponse(record.ApprovedUser, authSession));
+    }
+
     [HttpGet("qr-login/session/{sessionId}")]
     [EnableRateLimiting("qr-login-poll")]
     public async Task<IActionResult> GetQrLoginSessionStatus([FromRoute] string sessionId, [FromQuery] string? browserToken)

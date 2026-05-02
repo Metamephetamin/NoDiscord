@@ -6,6 +6,7 @@ import { getApiErrorMessage, getNetworkErrorMessage, parseApiResponse } from "..
 import { resolveStaticAssetUrl } from "../utils/media";
 import { APP_LOGO_CHANGE_EVENT, getCurrentAppLogoOption } from "../utils/appLogo";
 import { parseMediaFrame } from "../utils/mediaFrames";
+import { parseQrLoginPayload } from "../features/menu-main/menuMainControllerUtils";
 import {
   areNamesUsingSameScript,
   detectNameScript,
@@ -146,6 +147,14 @@ function shouldUseLiteAuthVisualMode() {
   return prefersReducedMotion || saveData || slowConnection || lowCpu || lowMemory;
 }
 
+function shouldPreferQrCameraLogin() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.matchMedia("(max-width: 640px), (pointer: coarse)").matches;
+}
+
 function mapAuthUser(data) {
   return {
     id: data?.id,
@@ -262,12 +271,20 @@ export default function Auth({ onAuthSuccess }) {
   const [qrLoginError, setQrLoginError] = useState("");
   const [qrLoginRefreshIndex, setQrLoginRefreshIndex] = useState(0);
   const [isQrLoginOpen, setIsQrLoginOpen] = useState(false);
+  const [isQrCameraPreferred, setIsQrCameraPreferred] = useState(() => shouldPreferQrCameraLogin());
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [qrScannerStatus, setQrScannerStatus] = useState("");
+  const [qrScannerError, setQrScannerError] = useState("");
   const [activeSloganWordIndex, setActiveSloganWordIndex] = useState(0);
   const [typedSloganLength, setTypedSloganLength] = useState(0);
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
+  const qrScannerVideoRef = useRef(null);
+  const qrScannerStreamRef = useRef(null);
+  const qrScannerFrameRef = useRef(0);
+  const qrScannerBusyRef = useRef(false);
   const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
   const authMessageTone = useMemo(() => getAuthMessageTone(message), [message]);
 
@@ -370,6 +387,20 @@ export default function Auth({ onAuthSuccess }) {
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px), (pointer: coarse)");
+    const updateQrMode = () => setIsQrCameraPreferred(shouldPreferQrCameraLogin());
+
+    updateQrMode();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateQrMode);
+      return () => mediaQuery.removeEventListener("change", updateQrMode);
+    }
+
+    mediaQuery.addListener(updateQrMode);
+    return () => mediaQuery.removeListener(updateQrMode);
+  }, []);
+
+  useEffect(() => {
     const handleLogoChange = (event) => {
       setBrandLogoSrc(event?.detail?.src || getCurrentAppLogoOption().src);
     };
@@ -423,7 +454,7 @@ export default function Auth({ onAuthSuccess }) {
   }, [emailVerificationModal.open, emailVerificationModal.resendAvailableAt]);
 
   useEffect(() => {
-    if (mode !== "login") {
+    if (mode !== "login" || isQrCameraPreferred) {
       setQrLoginSession(null);
       setQrLoginSvg("");
       setQrLoginStatus("idle");
@@ -476,7 +507,7 @@ export default function Auth({ onAuthSuccess }) {
     return () => {
       disposed = true;
     };
-  }, [mode, qrLoginRefreshIndex]);
+  }, [isQrCameraPreferred, mode, qrLoginRefreshIndex]);
 
   useEffect(() => {
     if (mode !== "login" || !qrLoginSession?.sessionId || !qrLoginSession?.browserToken || qrLoginStatus !== "pending") {
@@ -539,6 +570,10 @@ export default function Auth({ onAuthSuccess }) {
       window.clearInterval(intervalId);
     };
   }, [mode, onAuthSuccess, qrLoginSession, qrLoginStatus]);
+
+  useEffect(() => () => {
+    stopQrScanner();
+  }, []);
 
   const handleRegisterFieldChange = (field) => (event) => {
     let nextValue = event.target.value;
@@ -893,10 +928,143 @@ export default function Auth({ onAuthSuccess }) {
     }
   };
 
+  function stopQrScanner() {
+    if (qrScannerFrameRef.current) {
+      window.cancelAnimationFrame(qrScannerFrameRef.current);
+      qrScannerFrameRef.current = 0;
+    }
+
+    qrScannerBusyRef.current = false;
+    qrScannerStreamRef.current?.getTracks?.().forEach((track) => {
+      try {
+        track.stop();
+      } catch {
+        // ignore camera shutdown failures
+      }
+    });
+    qrScannerStreamRef.current = null;
+
+    if (qrScannerVideoRef.current) {
+      qrScannerVideoRef.current.srcObject = null;
+    }
+  }
+
+  function closeQrScanner() {
+    setIsQrScannerOpen(false);
+    setQrScannerStatus("");
+    setQrScannerError("");
+    stopQrScanner();
+  }
+
+  async function handleQrScannerPayload(payload) {
+    setQrScannerStatus("Подключаем аккаунт...");
+    const data = await submitAuthRequest(
+      "/auth/qr-login/consume",
+      payload,
+      "Не удалось войти по QR-коду."
+    );
+    closeQrScanner();
+    onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
+  }
+
+  function startQrScannerLoop() {
+    const BarcodeDetectorClass = typeof window !== "undefined" ? window.BarcodeDetector : undefined;
+    if (typeof BarcodeDetectorClass !== "function") {
+      setQrScannerStatus("");
+      setQrScannerError("Этот браузер пока не умеет считывать QR-коды через камеру.");
+      return;
+    }
+
+    const detector = new BarcodeDetectorClass({ formats: ["qr_code"] });
+    const tick = async () => {
+      const video = qrScannerVideoRef.current;
+      if (!video || video.readyState < 2) {
+        qrScannerFrameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      if (qrScannerBusyRef.current) {
+        qrScannerFrameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      qrScannerBusyRef.current = true;
+      try {
+        const results = await detector.detect(video);
+        const rawValue = String(results?.[0]?.rawValue || "").trim();
+        if (rawValue) {
+          const payload = parseQrLoginPayload(rawValue);
+          if (payload) {
+            setQrScannerStatus("QR-код считан.");
+            await handleQrScannerPayload(payload);
+            return;
+          }
+
+          setQrScannerError("Это не QR-код входа Lanaya.");
+        }
+      } catch (error) {
+        console.error("Ошибка распознавания QR-кода:", error);
+        setQrScannerError("Не удалось распознать QR-код. Попробуйте ещё раз.");
+      } finally {
+        qrScannerBusyRef.current = false;
+      }
+
+      qrScannerFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    qrScannerFrameRef.current = window.requestAnimationFrame(tick);
+  }
+
+  async function openQrScanner() {
+    setIsQrLoginOpen(false);
+    setIsQrScannerOpen(true);
+    setQrScannerError("");
+    setQrScannerStatus("Открываем камеру...");
+    stopQrScanner();
+
+    if (typeof window.BarcodeDetector !== "function") {
+      setQrScannerStatus("");
+      setQrScannerError("Этот браузер пока не умеет считывать QR-коды через камеру.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setQrScannerStatus("");
+      setQrScannerError("На этом устройстве нет доступа к камере.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      qrScannerStreamRef.current = stream;
+      if (qrScannerVideoRef.current) {
+        qrScannerVideoRef.current.srcObject = stream;
+        qrScannerVideoRef.current.muted = true;
+        await qrScannerVideoRef.current.play().catch(() => {});
+      }
+
+      setQrScannerStatus("Наведите камеру на QR-код входа.");
+      startQrScannerLoop();
+    } catch (error) {
+      console.error("Ошибка запуска QR-сканера:", error);
+      setQrScannerStatus("");
+      setQrScannerError("Не удалось открыть камеру для QR-кода.");
+    }
+  }
+
   const switchMode = (nextMode) => {
     setMode(nextMode);
     setLoginMethod("code");
     setIsQrLoginOpen(false);
+    closeQrScanner();
     setMessage("");
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
@@ -909,6 +1077,7 @@ export default function Auth({ onAuthSuccess }) {
   const switchLoginMethod = () => {
     setLoginMethod((previous) => (previous === "code" ? "password" : "code"));
     setIsQrLoginOpen(false);
+    closeQrScanner();
     setMessage("");
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
@@ -917,6 +1086,15 @@ export default function Auth({ onAuthSuccess }) {
 
   const refreshQrLoginSession = () => {
     setQrLoginRefreshIndex((previous) => previous + 1);
+  };
+
+  const handleQrLoginEntryClick = () => {
+    if (isQrCameraPreferred) {
+      openQrScanner();
+      return;
+    }
+
+    setIsQrLoginOpen((previous) => !previous);
   };
 
   const handleAuthSubmit = (event) => {
@@ -1169,11 +1347,11 @@ export default function Auth({ onAuthSuccess }) {
               <button
                 type="button"
                 className="auth-qr-entry"
-                onClick={() => setIsQrLoginOpen((previous) => !previous)}
-                aria-expanded={isQrLoginOpen}
+                onClick={handleQrLoginEntryClick}
+                aria-expanded={isQrCameraPreferred ? isQrScannerOpen : isQrLoginOpen}
               >
                 <span className="auth-qr-entry__icon" aria-hidden="true" />
-                <span>Войти по QR-коду</span>
+                <span>{isQrCameraPreferred ? "Сканировать QR-код" : "Войти по QR-коду"}</span>
                 <span className="auth-qr-entry__arrow" aria-hidden="true" />
               </button>
             </>
@@ -1253,6 +1431,28 @@ export default function Auth({ onAuthSuccess }) {
         ) : null}
 
       </form>
+
+      {isQrScannerOpen ? (
+        <div className="auth-qr-scanner" role="dialog" aria-modal="true" aria-label="Сканирование QR-кода">
+          <div className="auth-qr-scanner__panel">
+            <div className="auth-qr-scanner__header">
+              <div>
+                <strong>Сканировать QR-код</strong>
+                <span>Откройте QR входа в аккаунте на ПК.</span>
+              </div>
+              <button type="button" className="auth-qr-scanner__close" onClick={closeQrScanner} aria-label="Закрыть камеру">
+                ×
+              </button>
+            </div>
+            <div className="auth-qr-scanner__preview">
+              <video ref={qrScannerVideoRef} className="auth-qr-scanner__video" autoPlay muted playsInline />
+              <span className="auth-qr-scanner__frame" aria-hidden="true" />
+            </div>
+            {qrScannerStatus ? <div className="auth-qr-scanner__status">{qrScannerStatus}</div> : null}
+            {qrScannerError ? <div className="auth-qr-scanner__error">{qrScannerError}</div> : null}
+          </div>
+        </div>
+      ) : null}
 
       {emailVerificationModal.open && !isLoginEmailVerification ? (
         <div className="auth-verify-modal__backdrop">

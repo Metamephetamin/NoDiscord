@@ -13932,6 +13932,70 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   line-height: 1.45;
 }
 
+.device-connect-guide__item .settings-inline-button {
+  justify-self: start;
+  margin-top: 8px;
+}
+
+.device-login-qr {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.device-login-qr__code {
+  width: 172px;
+  height: 172px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.device-login-qr__code svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.device-login-qr__copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.device-login-qr__copy strong {
+  color: #ffffff;
+  font-size: 15px;
+}
+
+.device-login-qr__copy span {
+  color: #c4cde0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .device-login-qr {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .device-login-qr__code {
+    width: min(100%, 220px);
+    height: auto;
+    aspect-ratio: 1;
+    justify-self: center;
+  }
+}
+
 .device-session-card {
   display: grid;
   gap: 12px;
