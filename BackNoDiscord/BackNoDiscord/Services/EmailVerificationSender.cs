@@ -24,7 +24,7 @@ public sealed class EmailOptions
 {
     public string Mode { get; set; } = "smtp";
     public string FromAddress { get; set; } = string.Empty;
-    public string FromName { get; set; } = "MAX";
+    public string FromName { get; set; } = "Lanaya";
     public EmailSmtpOptions Smtp { get; set; } = new();
 }
 
@@ -88,10 +88,39 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
             throw new EmailDeliveryException("Email:Smtp:Password is not configured.");
         }
 
-        var subject = "Код MAX";
         var expiresLocal = expiresAt.ToLocalTime().ToString("HH:mm");
+        var message = BuildVerificationMessage(options, email, verificationCode, expiresLocal);
+
+        using var client = new MailKit.Net.Smtp.SmtpClient();
+
+        try
+        {
+            var socketOptions = ResolveSocketOptions(options.Smtp.Port, options.Smtp.EnableSsl);
+            await ConnectUsingPreferredAddressAsync(client, options.Smtp.Host, options.Smtp.Port, socketOptions, cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(options.Smtp.Username))
+            {
+                await client.AuthenticateAsync(options.Smtp.Username, options.Smtp.Password, cancellationToken);
+            }
+
+            await client.SendAsync(message, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+
+            _logger.LogInformation("Email verification message sent to {Email}.", email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send email verification message to {Email}.", email);
+            throw new EmailDeliveryException("Не удалось отправить письмо с кодом подтверждения.", ex);
+        }
+    }
+
+    public static MimeMessage BuildVerificationMessage(EmailOptions options, string email, string verificationCode, string expiresLocal)
+    {
+        var brandName = ResolveBrandName(options.FromName);
+        const string subject = "Код входа";
         var plainTextBody =
-            $"Код MAX: {verificationCode}{Environment.NewLine}" +
+            $"Ваш код: {verificationCode}{Environment.NewLine}" +
             $"Действует до {expiresLocal}.{Environment.NewLine}{Environment.NewLine}" +
             "Если вы не запрашивали код, просто проигнорируйте письмо.";
 
@@ -124,12 +153,12 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
               </style>
             </head>
             <body style="margin:0;padding:0;">
-              <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Код MAX: {{verificationCode}}</div>
+              <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Ваш код: {{verificationCode}}</div>
               <div class="mail-bg" style="font-family:Arial,Helvetica,sans-serif;background:#eef2f9;color:#101827;padding:34px 18px;">
                 <div class="mail-card" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:22px;padding:0;border:1px solid #dce3f0;box-shadow:0 24px 70px rgba(31,42,68,0.14);overflow:hidden;">
                   <div class="mail-code" style="height:7px;background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%);"></div>
                   <div style="padding:30px;">
-                  <div class="mail-brand" style="font-size:13px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#5a48ea;margin-bottom:18px;">MAX</div>
+                  <div class="mail-brand" style="font-size:13px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#5a48ea;margin-bottom:18px;">{{brandName}}</div>
                   <h1 class="mail-title" style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#121827;">Ваш код</h1>
                   <p class="mail-text" style="margin:0 0 20px;color:#3d4659;font-size:15px;line-height:1.55;">Введите его в приложении, чтобы продолжить.</p>
                   <div class="mail-code" style="margin:0 0 18px;padding:20px 18px;border-radius:18px;background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%);color:#ffffff;font-size:36px;font-weight:800;letter-spacing:0.28em;text-align:center;">
@@ -145,7 +174,7 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
             """;
 
         var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(options.FromName, options.FromAddress));
+        message.From.Add(new MailboxAddress(brandName, options.FromAddress));
         message.To.Add(MailboxAddress.Parse(email));
         message.Subject = subject;
 
@@ -156,29 +185,17 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         };
 
         message.Body = bodyBuilder.ToMessageBody();
+        return message;
+    }
 
-        using var client = new MailKit.Net.Smtp.SmtpClient();
-
-        try
-        {
-            var socketOptions = ResolveSocketOptions(options.Smtp.Port, options.Smtp.EnableSsl);
-            await ConnectUsingPreferredAddressAsync(client, options.Smtp.Host, options.Smtp.Port, socketOptions, cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(options.Smtp.Username))
-            {
-                await client.AuthenticateAsync(options.Smtp.Username, options.Smtp.Password, cancellationToken);
-            }
-
-            await client.SendAsync(message, cancellationToken);
-            await client.DisconnectAsync(true, cancellationToken);
-
-            _logger.LogInformation("Email verification message sent to {Email}.", email);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send email verification message to {Email}.", email);
-            throw new EmailDeliveryException("Не удалось отправить письмо с кодом подтверждения.", ex);
-        }
+    private static string ResolveBrandName(string? configuredName)
+    {
+        var trimmedName = (configuredName ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(trimmedName) ||
+               string.Equals(trimmedName, "MAX", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trimmedName, "Tend", StringComparison.OrdinalIgnoreCase)
+            ? "Lanaya"
+            : trimmedName;
     }
 
     private static SecureSocketOptions ResolveSocketOptions(int port, bool enableSsl)

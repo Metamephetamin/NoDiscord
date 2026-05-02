@@ -285,6 +285,7 @@ export default function Auth({ onAuthSuccess }) {
   const qrScannerStreamRef = useRef(null);
   const qrScannerFrameRef = useRef(0);
   const qrScannerBusyRef = useRef(false);
+  const emailAutoSubmitKeyRef = useRef("");
   const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
   const authMessageTone = useMemo(() => getAuthMessageTone(message), [message]);
 
@@ -890,7 +891,7 @@ export default function Auth({ onAuthSuccess }) {
   };
 
   const handleVerifyEmailCode = async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
 
     if (!emailVerificationModal.email || !emailVerificationModal.verificationToken) {
       setMessage("Сессия подтверждения почты не найдена. Зарегистрируйтесь снова.");
@@ -927,6 +928,39 @@ export default function Auth({ onAuthSuccess }) {
       setIsVerifyingEmailCode(false);
     }
   };
+
+  useEffect(() => {
+    if (!emailVerificationModal.open || isVerifyingEmailCode) {
+      return;
+    }
+
+    const normalizedCode = emailVerificationCode.trim();
+    const normalizedTotpCode = emailVerificationTotpCode.trim();
+    if (normalizedCode.length !== 6 || (emailVerificationModal.requiresTotp && normalizedTotpCode.length !== 6)) {
+      emailAutoSubmitKeyRef.current = "";
+      return;
+    }
+
+    const submitKey = [
+      emailVerificationModal.verificationToken,
+      normalizedCode,
+      emailVerificationModal.requiresTotp ? normalizedTotpCode : "",
+    ].join(":");
+    if (emailAutoSubmitKeyRef.current === submitKey) {
+      return;
+    }
+
+    emailAutoSubmitKeyRef.current = submitKey;
+    void handleVerifyEmailCode();
+  }, [
+    emailVerificationCode,
+    emailVerificationModal.open,
+    emailVerificationModal.requiresTotp,
+    emailVerificationModal.verificationToken,
+    emailVerificationTotpCode,
+    handleVerifyEmailCode,
+    isVerifyingEmailCode,
+  ]);
 
   function stopQrScanner() {
     if (qrScannerFrameRef.current) {

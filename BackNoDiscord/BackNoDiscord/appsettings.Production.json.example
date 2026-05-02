@@ -13,7 +13,7 @@
   "Email": {
     "Mode": "smtp",
     "FromAddress": "code@lanaya.space",
-    "FromName": "MAX",
+    "FromName": "Lanaya",
     "Smtp": {
       "Host": "smtp.beget.com",
       "Port": 465,
