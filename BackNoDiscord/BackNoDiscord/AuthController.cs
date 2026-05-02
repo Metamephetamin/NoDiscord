@@ -553,7 +553,16 @@ public class AuthController : ControllerBase
 
         try
         {
-            var payload = await CreateEmailVerificationAsync(user, ignoreResendCooldown: true);
+            var payload = await CreateEmailVerificationAsync(user);
+            if (payload.IsRateLimited)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    message = "Повторно отправить код можно через 60 секунд.",
+                    resendAvailableAt = payload.ResendAvailableAt
+                });
+            }
+
             return Ok(payload.ToResponse());
         }
         catch (EmailDeliveryException)
