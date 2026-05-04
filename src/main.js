@@ -23,7 +23,7 @@ const DOWNLOAD_PREFERENCES_STORE_KEY = "downloads.preferences";
 const BACKGROUND_PREFERENCES_STORE_KEY = "app.background.preferences";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
-const MAX_ELECTRON_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_ELECTRON_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 const MAX_ELECTRON_FETCH_BYTES = 25 * 1024 * 1024;
 const APP_PROTOCOL = "nodiscord";
 const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
@@ -39,7 +39,7 @@ const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const MAX_PERF_EVENTS = 500;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
-const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = MAX_ELECTRON_DOWNLOAD_BYTES;
 const ATTACHMENT_PICKER_PREVIEW_MAX_EDGE = 320;
 const DEFAULT_APP_ICON_ASSET = "app-icon.png";
 const APP_LOGO_ASSET_PATHS = new Set([
