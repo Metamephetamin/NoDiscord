@@ -701,7 +701,7 @@
   position: absolute;
   inset: -3px 8px;
   z-index: -1;
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid rgba(137, 177, 255, 0.22);
   background:
     linear-gradient(90deg, rgba(95, 145, 255, 0.12), rgba(137, 177, 255, 0.16), rgba(95, 145, 255, 0.12));
@@ -791,7 +791,7 @@
   align-self: flex-end;
   margin-top: 0;
   padding: 7px 12px 6px;
-  border-radius: 20px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(27, 35, 48, 0.9);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
@@ -809,7 +809,7 @@
   height: 18px;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom-left-radius: 16px;
+  border-bottom-left-radius: 12px;
   background: rgba(27, 35, 48, 0.9);
   clip-path: polygon(52% 0, 100% 0, 100% 100%, 0 100%, 23% 78%, 38% 42%);
   pointer-events: none;
@@ -823,7 +823,7 @@
 .msg-content--dm-own {
   align-self: flex-end;
   border-color: rgba(255, 255, 255, 0.08);
-  border-bottom-left-radius: 20px;
+  border-bottom-left-radius: 14px;
   background: rgba(27, 35, 48, 0.9);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
 }
@@ -847,7 +847,7 @@
 }
 
 .message-item--dm-incoming .msg-content--dm {
-  border-bottom-left-radius: 20px;
+  border-bottom-left-radius: 14px;
 }
 
 .message-author {
@@ -2655,7 +2655,7 @@
   min-height: 180px;
   padding: 14px;
   aspect-ratio: 16 / 9;
-  border-radius: 18px;
+  border-radius: 14px;
   overflow: hidden;
   background:
     radial-gradient(circle at top right, rgba(88, 104, 138, 0.16), transparent 38%),
