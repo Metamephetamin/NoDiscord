@@ -1,4 +1,5 @@
 ﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
@@ -396,6 +397,22 @@ function loadVoiceRoomClientFactory() {
   return voiceRoomClientFactoryPromise;
 }
 
+const buildNotificationRoute = (toast) => {
+  if (!toast || typeof toast !== "object") {
+    return "/";
+  }
+
+  if ((toast.kind === "direct" || toast.kind === "conversation") && toast.channelId) {
+    return `/?chat=${encodeURIComponent(toast.channelId)}`;
+  }
+
+  if (toast.kind === "server" && toast.serverId && toast.channelId) {
+    return `/?server=${encodeURIComponent(toast.serverId)}&channel=${encodeURIComponent(toast.channelId)}`;
+  }
+
+  return "/";
+};
+
 export default function MenuMain({
   user,
   setUser,
@@ -403,6 +420,7 @@ export default function MenuMain({
   pendingImportedServer = null,
   onPendingImportedServerHandled,
 }) {
+  const location = useLocation();
   const [servers, setServers] = useState(() => readStoredServers(user));
   const latestServersRef = useRef(servers);
   const pendingServerSyncFingerprintsRef = useRef(new Map());
@@ -607,6 +625,7 @@ export default function MenuMain({
   const micLevelUiActiveRef = useRef(false);
   const lastServerSyncFingerprintRef = useRef("");
   const leaveVoiceChannelRef = useRef(null);
+  const lastAppliedNotificationRouteRef = useRef("");
 
   useTransientScrollbars();
 
@@ -1891,6 +1910,76 @@ export default function MenuMain({
     dismissServerToast(toast.id);
   };
 
+  useEffect(() => {
+    const normalizedSearch = String(location.search || "").trim();
+    if (!normalizedSearch || lastAppliedNotificationRouteRef.current === normalizedSearch) {
+      return;
+    }
+
+    const params = new URLSearchParams(normalizedSearch);
+    const chatChannelId = String(params.get("chat") || "").trim();
+    if (chatChannelId) {
+      const directFriend = directChannelFriendMap.get(chatChannelId);
+      if (directFriend) {
+        setActiveDirectFriendId(String(directFriend.id || ""));
+        setActiveConversationId("");
+        setWorkspaceMode("friends");
+        setFriendsPageSection("friends");
+        setSelectedStreamUserId(null);
+        if (isMobileViewport) {
+          setMobileSection("friends");
+        }
+        lastAppliedNotificationRouteRef.current = normalizedSearch;
+        return;
+      }
+
+      const conversation = conversationChannelMap.get(chatChannelId);
+      if (conversation) {
+        setActiveDirectFriendId("");
+        setActiveConversationId(String(conversation.conversationId || conversation.id || ""));
+        setWorkspaceMode("friends");
+        setFriendsPageSection("conversations");
+        setSelectedStreamUserId(null);
+        if (isMobileViewport) {
+          setMobileSection("friends");
+        }
+        lastAppliedNotificationRouteRef.current = normalizedSearch;
+      }
+      return;
+    }
+
+    const serverId = String(params.get("server") || "").trim();
+    const channelId = String(params.get("channel") || "").trim();
+    if (!serverId || !channelId) {
+      return;
+    }
+
+    const targetServer = servers.find((server) => String(server.id) === serverId);
+    const targetChannel = targetServer?.textChannels?.find((channel) => String(channel.id) === channelId);
+    if (!targetServer || !targetChannel) {
+      return;
+    }
+
+    setWorkspaceMode("servers");
+    setActiveDirectFriendId("");
+    setActiveConversationId("");
+    setActiveServerId(serverId);
+    setCurrentTextChannelId(channelId);
+    setDesktopServerPane("text");
+    setSelectedStreamUserId(null);
+    if (isMobileViewport) {
+      setMobileSection("servers");
+      setMobileServersPane("chat");
+    }
+    lastAppliedNotificationRouteRef.current = normalizedSearch;
+  }, [
+    conversationChannelMap,
+    directChannelFriendMap,
+    isMobileViewport,
+    location.search,
+    servers,
+  ]);
+
   const closeQuickSwitcher = () => {
     setQuickSwitcherOpen(false);
     setQuickSwitcherQuery("");
@@ -2132,7 +2221,7 @@ export default function MenuMain({
     setFriendActionStatus("");
   }, [friendActionStatus, pushWorkspaceStatusToast, setFriendActionStatus]);
 
-  const showElectronDesktopNotification = ({ title, body }) => {
+  const showElectronDesktopNotification = ({ title, body, route = "/" }) => {
     if (!window?.electronDesktopNotifications?.show) {
       return;
     }
@@ -2144,7 +2233,7 @@ export default function MenuMain({
     window.electronDesktopNotifications.show({
       title: String(title || "Tend"),
       body: String(body || "").trim(),
-      route: "/",
+      route,
     }).catch(() => {});
   };
 
@@ -2839,7 +2928,7 @@ export default function MenuMain({
         channelId,
         scope: "direct",
       });
-      pushDirectToast({
+      const toast = {
         id: createDirectToastId(),
         kind: "direct",
         channelId,
@@ -2847,10 +2936,12 @@ export default function MenuMain({
         avatarSrc: getUserAvatar(friend),
         friend,
         preview,
-      });
+      };
+      pushDirectToast(toast);
       showElectronDesktopNotification({
         title: getDisplayName(friend) || "Новое сообщение",
         body: preview,
+        route: buildNotificationRoute(toast),
       });
     };
 
@@ -2898,7 +2989,7 @@ export default function MenuMain({
       const preview = await resolveIncomingMessagePreview(messageItem, user, {
         fallbackText: "Новое сообщение",
       });
-      pushDirectToast({
+      const toast = {
         id: createDirectToastId(),
         kind: "conversation",
         channelId,
@@ -2906,10 +2997,12 @@ export default function MenuMain({
         avatarSrc: String(conversation?.avatar || ""),
         friend: conversation,
         preview,
-      });
+      };
+      pushDirectToast(toast);
       showElectronDesktopNotification({
         title: String(conversation?.title || "Беседа"),
         body: `${String(messageItem?.username || "User")}: ${preview}`,
+        route: buildNotificationRoute(toast),
       });
     };
 
@@ -2982,7 +3075,7 @@ export default function MenuMain({
         channelId: scopedChannelId,
         scope: "text",
       });
-      pushServerToast({
+      const toast = {
         id: createServerToastId(),
         channelKey: scopedChannelId,
         scopedChannelId,
@@ -2994,10 +3087,12 @@ export default function MenuMain({
         preview: currentUserMentioned
           ? `Вас упомянули: ${messagePreview}`
           : messagePreview,
-      });
+      };
+      pushServerToast(toast);
       showElectronDesktopNotification({
         title: `${channelInfo.serverName} · ${channelInfo.channelName}`,
         body: `${String(messageItem?.username || "User")}: ${currentUserMentioned ? `Вас упомянули: ${messagePreview}` : messagePreview}`,
+        route: buildNotificationRoute(toast),
       });
     };
 
@@ -3496,6 +3591,10 @@ export default function MenuMain({
         showElectronDesktopNotification({
           title: "Входящий звонок",
           body: `Вам звонит ${String(fromName || "пользователь")}.`,
+          route: buildNotificationRoute({
+            kind: "direct",
+            channelId: channelName,
+          }),
         });
       },
       onDirectCallAccepted: ({ channelName, fromUserId, fromName, fromAvatar }) => {
