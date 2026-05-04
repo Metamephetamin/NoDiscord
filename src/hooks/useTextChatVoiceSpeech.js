@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
 import { formatServerPunctuationResult, punctuateTextOnServer } from "../utils/speechPunctuation";
+import { shouldApplySpeechDraftUpdate } from "../utils/speechDraftLifecycle.mjs";
 import {
   buildVoiceWaveform,
   getSupportedVoiceRecordingMimeType,
@@ -249,6 +250,13 @@ export default function useTextChatVoiceSpeech({
 
     const punctuationResult = await punctuateTextOnServer(normalizedTranscript);
     return formatServerPunctuationResult(punctuationResult, normalizedTranscript);
+  };
+
+  const clearSpeechDraftState = () => {
+    speechFinalTranscriptRef.current = "";
+    speechDraftBaseRef.current = "";
+    speechDisplayedTranscriptRef.current = "";
+    speechPunctuationRequestIdRef.current += 1;
   };
 
   const sampleVoiceLevel = () => {
@@ -708,14 +716,32 @@ export default function useTextChatVoiceSpeech({
     }
 
     recognition.__shouldFinalize = shouldFinalize;
+    if (!shouldFinalize) {
+      clearSpeechDraftState();
+      recognition.onresult = null;
+    }
     try {
-      recognition.stop();
+      if (!shouldFinalize && typeof recognition.abort === "function") {
+        recognition.abort();
+      } else {
+        recognition.stop();
+      }
     } catch (error) {
       console.error("Speech recognition stop error:", error);
       setSpeechRecognitionActive(false);
       speechRecognitionRef.current = null;
       cleanupSpeechMeterResources();
     }
+  };
+
+  const discardSpeechRecognitionDraft = () => {
+    if (speechRecognitionRef.current) {
+      stopSpeechRecognition(false);
+      return;
+    }
+
+    clearSpeechDraftState();
+    setSpeechRecognitionActive(false);
   };
 
   const handleSpeechRecognitionPointerDown = (event) => {
@@ -1028,12 +1054,14 @@ export default function useTextChatVoiceSpeech({
 
         void punctuateSpeechTranscriptOnServer(finalTranscriptRaw)
           .then((punctuatedTranscript) => {
-            if (speechPunctuationRequestIdRef.current !== requestId) {
-              return;
-            }
-
             const nextCurrentValue = String(textareaRef.current?.value || message || "").trim();
-            if (nextCurrentValue && nextCurrentValue !== rawDraftValue && nextCurrentValue !== displayedDraftValue) {
+            if (!shouldApplySpeechDraftUpdate({
+              requestId,
+              currentRequestId: speechPunctuationRequestIdRef.current,
+              currentValue: nextCurrentValue,
+              rawDraftValue,
+              displayedDraftValue,
+            })) {
               return;
             }
 
@@ -1045,7 +1073,13 @@ export default function useTextChatVoiceSpeech({
           .catch((error) => {
             console.error("Speech punctuation error:", error);
             const nextCurrentValue = String(textareaRef.current?.value || message || "").trim();
-            if (!nextCurrentValue || nextCurrentValue === rawDraftValue || nextCurrentValue === displayedDraftValue) {
+            if (shouldApplySpeechDraftUpdate({
+              requestId,
+              currentRequestId: speechPunctuationRequestIdRef.current,
+              currentValue: nextCurrentValue,
+              rawDraftValue,
+              displayedDraftValue,
+            })) {
               setMessage(rawDraftValue);
             }
           });
@@ -1204,6 +1238,7 @@ export default function useTextChatVoiceSpeech({
     speechMicLevel,
     speechCaptureState,
     stopSpeechRecognition,
+    discardSpeechRecognitionDraft,
     handleVoiceRecordPointerDown,
     handleVoiceRecordPointerMove,
     handleVoiceRecordPointerUp,

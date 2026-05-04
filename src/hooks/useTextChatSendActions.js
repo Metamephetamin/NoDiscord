@@ -51,6 +51,7 @@ export default function useTextChatSendActions({
   sendMessagesCompat,
   playDirectMessageSound,
   startOptimisticAttachmentSend,
+  discardSpeechRecognitionDraft,
 }) {
   const pendingUploadPatchQueueRef = useRef(new Map());
   const pendingUploadPatchFrameRef = useRef(0);
@@ -391,6 +392,9 @@ export default function useTextChatSendActions({
     const postSendResetUiState = () => {
       lastSendAtRef.current = Date.now();
       clearChatDraft(user, scopedChannelId);
+      if (typeof discardSpeechRecognitionDraft === "function") {
+        discardSpeechRecognitionDraft();
+      }
 
       flushSync(() => {
         setMessage("");

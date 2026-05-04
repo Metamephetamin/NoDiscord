@@ -2273,6 +2273,7 @@ export default function TextChat({
     speechMicLevel,
     speechCaptureState,
     stopSpeechRecognition,
+    discardSpeechRecognitionDraft,
     handleVoiceRecordPointerDown,
     handleVoiceRecordPointerMove,
     handleVoiceRecordPointerUp,
@@ -2593,6 +2594,7 @@ export default function TextChat({
     onRemoveLocalEchoMessages: removeLocalEchoMessages,
     onUpdateLocalEchoUploads: updateLocalEchoUploadProgress,
     startOptimisticAttachmentSend,
+    discardSpeechRecognitionDraft,
   });
 
   const toggleBatchUploadGrouping = (value) => {
