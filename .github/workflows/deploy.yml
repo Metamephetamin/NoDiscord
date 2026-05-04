@@ -133,7 +133,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
 
-      - name: Debug deploy SSH identity
+      - name: SSH preflight
         if: steps.validate.outputs.ready == 'true'
         shell: bash
         env:
@@ -143,31 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
-          echo "Resolved deploy target: ${DEPLOY_USER}@${DEPLOY_HOST}:${PORT}"
-          echo "Deploy key fingerprint:"
-          ssh-keygen -lf "$HOME/.ssh/deploy_key"
-          if [ "$DEPLOY_USER" = "root" ]; then
-            echo "DEPLOY_USER matches expected root: yes"
-          else
-            echo "DEPLOY_USER matches expected root: no"
-          fi
-          if [ "$DEPLOY_HOST" = "185.233.193.162" ]; then
-            echo "DEPLOY_HOST matches expected 185.233.193.162: yes"
-          else
-            echo "DEPLOY_HOST matches expected 185.233.193.162: no"
-          fi
-
-      - name: Debug SSH preflight
-        if: steps.validate.outputs.ready == 'true'
-        shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-        run: |
-          set -euo pipefail
-          PORT="${DEPLOY_PORT:-22}"
-          SSH_OPTS="-vvv -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "true"
 
       - name: Sync frontend dist to server
