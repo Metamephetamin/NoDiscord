@@ -6,6 +6,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
 import { performance } from "node:perf_hooks";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import started from "electron-squirrel-startup";
 
 if (started) {
@@ -1337,6 +1339,45 @@ const readDownloadResponseBuffer = async (response, maxBytes = MAX_ELECTRON_DOWN
   return buffer;
 };
 
+const streamDownloadResponseToFile = async (response, filePath, maxBytes = MAX_ELECTRON_DOWNLOAD_BYTES) => {
+  const contentLength = Number.parseInt(response.headers.get("content-length") || "0", 10);
+  if (contentLength > maxBytes) {
+    throw new Error("Download is too large.");
+  }
+
+  if (!response.body) {
+    const buffer = await readDownloadResponseBuffer(response, maxBytes);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, buffer);
+    return buffer.length;
+  }
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  let totalBytes = 0;
+
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body),
+      async function* enforceDownloadByteLimit(source) {
+        for await (const chunk of source) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          totalBytes += buffer.length;
+          if (totalBytes > maxBytes) {
+            throw new Error("Download is too large.");
+          }
+          yield buffer;
+        }
+      },
+      createWriteStream(filePath, { flags: "w" })
+    );
+  } catch (error) {
+    await fs.rm(filePath, { force: true }).catch(() => {});
+    throw error;
+  }
+
+  return totalBytes;
+};
+
 const readDownloadPreferences = async () => {
   const secureStore = await readSecureKeyValueStore();
   const value = secureStore[DOWNLOAD_PREFERENCES_STORE_KEY];
@@ -2243,9 +2284,7 @@ app.whenReady().then(async () => {
       return { canceled: true, filePath: "", directoryPath: "", usedDialog };
     }
 
-    const buffer = await readDownloadResponseBuffer(response);
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, buffer);
+    await streamDownloadResponseToFile(response, filePath);
     return {
       canceled: false,
       filePath,
@@ -2289,9 +2328,7 @@ app.whenReady().then(async () => {
       // eslint-disable-next-line no-await-in-loop
       const nextFilePath = await buildUniqueDownloadPath(directorySelection.directoryPath, item?.defaultFileName);
       // eslint-disable-next-line no-await-in-loop
-      const buffer = await readDownloadResponseBuffer(response);
-      // eslint-disable-next-line no-await-in-loop
-      await fs.writeFile(nextFilePath, buffer);
+      await streamDownloadResponseToFile(response, nextFilePath);
       savedFiles.push(nextFilePath);
     }
 
