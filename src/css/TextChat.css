@@ -800,11 +800,23 @@
   -webkit-backdrop-filter: blur(14px);
 }
 
-.msg-content--dm::before {
-  content: none;
+.msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments)::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  bottom: -1px;
+  width: 18px;
+  height: 18px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-left-radius: 16px;
+  background: rgba(27, 35, 48, 0.9);
+  clip-path: polygon(52% 0, 100% 0, 100% 100%, 0 100%, 23% 78%, 38% 42%);
+  pointer-events: none;
 }
 
-.msg-content--dm::after {
+.msg-content--dm::after,
+.message-item--forward-group-follow .msg-content--dm::before {
   content: none;
 }
 
