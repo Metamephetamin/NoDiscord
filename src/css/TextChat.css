@@ -8595,6 +8595,11 @@ body[data-ui-reduce-motion="true"] .media-preview__video {
   transition: none;
 }
 
+html[data-ui-reduce-motion="true"] .message-attachment__upload-spinner,
+body[data-ui-reduce-motion="true"] .message-attachment__upload-spinner {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .media-preview,
   .media-preview__dialog {
@@ -8604,6 +8609,10 @@ body[data-ui-reduce-motion="true"] .media-preview__video {
   .media-preview__image,
   .media-preview__video {
     transition: none;
+  }
+
+  .message-attachment__upload-spinner {
+    animation: none;
   }
 }
 

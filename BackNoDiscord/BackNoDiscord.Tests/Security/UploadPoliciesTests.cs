@@ -91,6 +91,22 @@ public class UploadPoliciesTests
     }
 
     [Fact]
+    public void TryValidateChatFile_RejectsExecutableFiles()
+    {
+        using var stream = new MemoryStream(new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", "installer.exe")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/vnd.microsoft.portable-executable"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out _, out _, out var error);
+
+        Assert.False(success);
+        Assert.Equal("This file type is not allowed.", error);
+    }
+
+    [Fact]
     public void TryValidateChatFile_AcceptsImageWhenSafeImageExtensionDiffersFromContent()
     {
         var bytes = new byte[]
