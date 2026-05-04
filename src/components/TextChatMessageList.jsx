@@ -10,7 +10,7 @@ import { DEFAULT_SERVER_ICON, resolveMediaUrl, resolveOptimizedMediaUrl } from "
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
-import { getTelegramUploadOverlayState } from "../utils/textChatUploadOverlay.mjs";
+import { getDocumentUploadCardState, getTelegramUploadOverlayState } from "../utils/textChatUploadOverlay.mjs";
 import {
   getAttachmentCacheKey,
   getMessagePoll,
@@ -400,29 +400,25 @@ function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, on
 }
 
 function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) {
-  const normalizedStatus = String(attachmentItem?.localEchoStatus || "pending").trim();
-  const normalizedProgress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
-  const totalBytes = Math.max(0, Number(attachmentItem?.localEchoTotalBytes || attachmentItem?.attachmentSize) || 0);
-  const uploadedBytes = Math.max(
-    0,
-    Number(attachmentItem?.localEchoUploadedBytes) || (
-      totalBytes > 0 ? Math.round((totalBytes * normalizedProgress) / 100) : 0
-    )
-  );
-  const isTerminalFailureState = normalizedStatus === "failed" || normalizedStatus === "canceled";
-  const statusLabel = getLocalEchoUploadStatusLabel(normalizedStatus);
-  const progressLabel = totalBytes > 0
-    ? `${formatFileSize(uploadedBytes)} / ${formatFileSize(totalBytes)}`
-    : `${normalizedProgress}%`;
+  const uploadState = getDocumentUploadCardState(attachmentItem);
 
   return (
     <>
-      <span className="message-attachment__size">
-        {isTerminalFailureState ? (attachmentItem?.localEchoError || statusLabel) : progressLabel}
+      <span className={`message-attachment__upload-row ${uploadState.failed ? "message-attachment__upload-row--failed" : ""}`}>
+        <span className="message-attachment__size message-attachment__size--upload">
+          {uploadState.progressLabel}
+        </span>
+        {uploadState.showSpinner ? (
+          <span
+            className="message-attachment__upload-spinner"
+            style={{ "--message-attachment-upload-progress": `${uploadState.progress}%` }}
+            aria-hidden="true"
+          />
+        ) : null}
       </span>
-      <span className="message-attachment__open-with">{statusLabel}</span>
+      <span className="message-attachment__open-with message-attachment__open-with--upload">{uploadState.statusLabel}</span>
       <span className="message-attachment__local-echo-actions">
-        {isTerminalFailureState ? (
+        {uploadState.failed ? (
           <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -430,7 +426,7 @@ function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) 
           }}>
             Повторить
           </button>
-        ) : normalizedStatus === "sent" ? null : (
+        ) : uploadState.status === "sent" ? null : (
           <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -1258,7 +1254,7 @@ function MessageAttachmentCard({
 
     return (
       <a
-        className={`message-attachment ${isDocumentAttachment ? "message-attachment--document" : ""}`}
+        className={`message-attachment ${isDocumentAttachment ? "message-attachment--document" : ""} ${showLocalEchoOverlay ? "message-attachment--local-echo" : ""}`}
         href={attachmentItem.attachmentUrl}
         target="_blank"
         rel="noreferrer"

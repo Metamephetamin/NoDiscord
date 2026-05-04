@@ -1464,6 +1464,18 @@
   box-shadow: none;
 }
 
+.message-attachment--document.message-attachment--local-echo {
+  width: min(100%, 280px);
+  min-width: min(100%, 246px);
+  min-height: 72px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(22, 25, 34, 0.92);
+}
+
 .message-attachment--pending {
   cursor: default;
   opacity: 0.88;
@@ -3194,6 +3206,13 @@
   padding-top: 4px;
 }
 
+.message-attachment--local-echo .message-attachment__meta {
+  gap: 4px;
+  justify-content: center;
+  padding-top: 0;
+  padding-right: 2px;
+}
+
 .message-attachment__name {
   font-size: 13px;
   font-weight: 700;
@@ -3211,6 +3230,10 @@
   max-width: 250px;
 }
 
+.message-attachment--local-echo .message-attachment__name {
+  max-width: 174px;
+}
+
 .message-attachment__size {
   color: #98a3bc;
   font-size: 12px;
@@ -3223,6 +3246,39 @@
   font-size: 12px;
 }
 
+.message-attachment__size--upload {
+  color: rgba(184, 194, 214, 0.86);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-attachment__upload-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.message-attachment__upload-row--failed .message-attachment__size--upload {
+  color: rgba(255, 165, 165, 0.92);
+}
+
+.message-attachment__upload-spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background:
+    conic-gradient(#8ea3ff var(--message-attachment-upload-progress, 0%), rgba(142, 163, 255, 0.22) 0),
+    rgba(255, 255, 255, 0.06);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: messageAttachmentUploadSpin 0.85s linear infinite;
+}
+
 .message-attachment__open-with {
   margin-top: auto;
   color: rgba(203, 229, 255, 0.72);
@@ -3232,10 +3288,18 @@
   letter-spacing: 0.02em;
 }
 
+.message-attachment__open-with--upload {
+  margin-top: 0;
+  color: rgba(224, 231, 255, 0.84);
+  font-size: 12px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
 .message-attachment__local-echo-actions {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -3255,6 +3319,12 @@
 .message-attachment__local-echo-action:focus-visible {
   color: #ffffff;
   outline: none;
+}
+
+@keyframes messageAttachmentUploadSpin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 .voice-message {
@@ -7158,10 +7228,26 @@
   -webkit-text-fill-color: #f8fafc;
 }
 
+.input-area textarea:focus {
+  animation: composerCaretSoftBlink 1.08s ease-in-out infinite;
+}
+
 .input-area textarea[data-highlight-active="true"] {
   color: transparent;
   caret-color: #f8fafc;
   -webkit-text-fill-color: transparent;
+}
+
+@keyframes composerCaretSoftBlink {
+  0%,
+  42% {
+    caret-color: rgba(248, 250, 252, 1);
+  }
+
+  58%,
+  100% {
+    caret-color: rgba(248, 250, 252, 0.18);
+  }
 }
 
 .input-area textarea::-webkit-scrollbar {
