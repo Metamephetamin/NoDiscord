@@ -30,7 +30,7 @@ jobs:
           mode="light"
 
           if [ "$EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "master" ]; then
-            mode="skip"
+            mode="light"
           elif [ "$EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" = "dev" ]; then
             mode="heavy"
           elif [ "$EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "dev" ]; then
