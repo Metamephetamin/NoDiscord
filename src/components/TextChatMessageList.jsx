@@ -10,6 +10,7 @@ import { DEFAULT_SERVER_ICON, resolveMediaUrl, resolveOptimizedMediaUrl } from "
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
+import { shouldUseInlineDirectMessageFooter } from "../utils/textChatMessageLayout.mjs";
 import { getDocumentUploadCardState, getTelegramUploadOverlayState } from "../utils/textChatUploadOverlay.mjs";
 import {
   getAttachmentCacheKey,
@@ -1803,15 +1804,15 @@ function TextChatMessageList({
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;
-          const useInlineFooter = isDirectChat
-            && Boolean(messageText.trim())
-            && !messagePoll
-            && !hasRenderableAttachments
-            && !reactions.length
-            && !messageItem.forwardedFromUsername
-            && !messageItem.replyToMessageId
-            && !messageText.includes("\n")
-            && messageText.trim().length <= 14;
+          const useInlineFooter = shouldUseInlineDirectMessageFooter({
+            isDirectChat,
+            messageText,
+            hasMessagePoll: Boolean(messagePoll),
+            hasRenderableAttachments,
+            hasReactions: Boolean(reactions.length),
+            hasForwardedFromUsername: Boolean(messageItem.forwardedFromUsername),
+            hasReplyToMessageId: Boolean(messageItem.replyToMessageId),
+          });
           const isEmojiOnlyTextMessage = emojiOnlyMessageMeta.isEmojiOnly
             && !hasRenderableAttachments
             && !messagePoll

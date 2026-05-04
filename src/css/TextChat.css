@@ -790,7 +790,7 @@
   min-width: 0;
   align-self: flex-end;
   margin-top: 0;
-  padding: 10px 14px 8px;
+  padding: 7px 12px 6px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(27, 35, 48, 0.9);
@@ -908,7 +908,7 @@
 .message-footer {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin-top: 0;
   align-self: flex-end;
   justify-content: flex-end;
@@ -1089,11 +1089,12 @@
 }
 
 .message-text {
-  margin-top: 2px;
+  margin-top: 1px;
   color: #dbe2f0;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.38;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: var(--font-body);
   font-weight: 450;
   font-style: normal;
@@ -1150,20 +1151,22 @@
 }
 
 .message-text-row {
-  margin-top: 4px;
+  margin-top: 1px;
   display: inline-flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
   max-width: 100%;
 }
 
 .message-text-row .message-text {
+  min-width: 0;
   margin-top: 0;
 }
 
 .message-footer--inline {
   margin-top: 0;
+  margin-bottom: 1px;
   width: auto;
   align-self: flex-end;
   flex: 0 0 auto;
