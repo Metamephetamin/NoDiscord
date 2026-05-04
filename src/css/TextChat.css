@@ -7228,26 +7228,10 @@
   -webkit-text-fill-color: #f8fafc;
 }
 
-.input-area textarea:focus {
-  animation: composerCaretSoftBlink 1.08s ease-in-out infinite;
-}
-
 .input-area textarea[data-highlight-active="true"] {
   color: transparent;
   caret-color: #f8fafc;
   -webkit-text-fill-color: transparent;
-}
-
-@keyframes composerCaretSoftBlink {
-  0%,
-  42% {
-    caret-color: rgba(248, 250, 252, 1);
-  }
-
-  58%,
-  100% {
-    caret-color: rgba(248, 250, 252, 0.18);
-  }
 }
 
 .input-area textarea::-webkit-scrollbar {
