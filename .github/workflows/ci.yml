@@ -68,6 +68,9 @@ jobs:
       - name: Test encoding guard
         run: npm run test:encoding
 
+      - name: Run chat visual smoke checks
+        run: npm run test:visual:chat
+
       - name: Check formatting if configured
         if: needs.determine-scope.outputs.mode == 'heavy'
         run: npm run format:check --if-present
