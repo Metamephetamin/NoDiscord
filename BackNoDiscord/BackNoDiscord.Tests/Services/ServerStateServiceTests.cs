@@ -57,6 +57,40 @@ public class ServerStateServiceTests
     }
 
     [Fact]
+    public void UpsertSnapshot_ReplacesExistingChannelWhenIncomingChannelHasSameId()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            TextChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "general", Name = "General", Topic = "Old topic" }
+            }
+        }, "owner-1");
+
+        var merged = service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            TextChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "general", Name = "Announcements", Topic = "New topic" }
+            }
+        }, "owner-1");
+
+        var channel = Assert.Single(merged.TextChannels);
+        Assert.Equal("general", channel.Id);
+        Assert.Equal("Announcements", channel.Name);
+        Assert.Equal("New topic", channel.Topic);
+    }
+
+    [Fact]
     public void GetSnapshot_ResolvesLegacyScopedServerIdToCanonicalId()
     {
         using var context = CreateContext();

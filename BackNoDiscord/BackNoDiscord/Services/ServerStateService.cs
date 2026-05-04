@@ -227,8 +227,8 @@ public class ServerStateService
         merged.Roles = MergeRoles(normalizedExisting.Roles, merged.Roles);
         merged.Members = MergeMembers(normalizedExisting.Members, merged.Members, merged.OwnerId);
         merged.ChannelCategories = CloneCategories(merged.ChannelCategories);
-        merged.TextChannels = CloneChannels(merged.TextChannels);
-        merged.VoiceChannels = CloneChannels(merged.VoiceChannels);
+        merged.TextChannels = MergeChannels(normalizedExisting.TextChannels, merged.TextChannels);
+        merged.VoiceChannels = MergeChannels(normalizedExisting.VoiceChannels, merged.VoiceChannels);
 
         return NormalizeSnapshot(merged, merged.OwnerId);
     }
@@ -310,6 +310,29 @@ public class ServerStateService
                     Avatar = string.Empty,
                     RoleId = "owner"
                 };
+            }
+        }
+
+        return result.Values.ToList();
+    }
+
+    private static List<ChannelSnapshot> MergeChannels(List<ChannelSnapshot>? existing, List<ChannelSnapshot>? incoming)
+    {
+        var result = new Dictionary<string, ChannelSnapshot>(StringComparer.Ordinal);
+
+        foreach (var channel in existing ?? Enumerable.Empty<ChannelSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(channel.Id))
+            {
+                result[channel.Id] = CloneChannel(channel);
+            }
+        }
+
+        foreach (var channel in incoming ?? Enumerable.Empty<ChannelSnapshot>())
+        {
+            if (!string.IsNullOrWhiteSpace(channel.Id))
+            {
+                result[channel.Id] = CloneChannel(channel);
             }
         }
 
