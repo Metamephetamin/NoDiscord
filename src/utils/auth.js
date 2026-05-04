@@ -241,10 +241,6 @@ function writeTransientSession(payload) {
   writeSessionToStorage(getWebSessionStorage(), payload);
 }
 
-function writePersistentSession(payload) {
-  writeSessionToStorage(getWebPersistentStorage(), payload);
-}
-
 function readLegacySession() {
   return readSessionFromStorage(getWebPersistentStorage());
 }
@@ -387,7 +383,7 @@ export async function hydrateStoredSession() {
     applySessionCache(resolvedSession);
     if (resolvedSession.accessToken || resolvedSession.user) {
       writeTransientSession(resolvedSession);
-      writePersistentSession(resolvedSession);
+      clearLegacySession();
     }
     return resolvedSession;
   }
@@ -512,7 +508,7 @@ export async function storeSession(user, tokenOrSession, refreshToken = "", acce
 
   if (!isElectronSecureSessionAvailable()) {
     writeTransientSession(nextSession);
-    writePersistentSession(nextSession);
+    clearLegacySession();
     return;
   }
 
