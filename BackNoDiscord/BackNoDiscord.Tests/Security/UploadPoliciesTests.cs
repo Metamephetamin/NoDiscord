@@ -91,6 +91,24 @@ public class UploadPoliciesTests
     }
 
     [Fact]
+    public void TryValidateChatFile_AllowsZipArchive()
+    {
+        using var stream = new MemoryStream(new byte[] { 0x50, 0x4B, 0x03, 0x04 });
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", "archive.zip")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/zip"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(".zip", extension);
+        Assert.StartsWith("application/", contentType, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(error));
+    }
+
+    [Fact]
     public void TryValidateChatFile_RejectsExecutableFiles()
     {
         using var stream = new MemoryStream(new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
@@ -104,6 +122,38 @@ public class UploadPoliciesTests
 
         Assert.False(success);
         Assert.Equal("This file type is not allowed.", error);
+    }
+
+    [Fact]
+    public void TryValidateChatFile_RejectsDangerousSignatureMismatch()
+    {
+        using var stream = new MemoryStream(new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", "invoice.pdf")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/pdf"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out _, out _, out var error);
+
+        Assert.False(success);
+        Assert.Equal("File content does not match the selected file type.", error);
+    }
+
+    [Fact]
+    public void TryValidateChatFile_RejectsZeroByteTextFile()
+    {
+        using var stream = new MemoryStream(Array.Empty<byte>());
+        IFormFile file = new FormFile(stream, 0, 0, "file", "empty.txt")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "text/plain"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out _, out _, out var error);
+
+        Assert.False(success);
+        Assert.Equal("File content does not match the selected file type.", error);
     }
 
     [Fact]

@@ -70,6 +70,72 @@ public class StreamedChatFileUploadReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadAsync_RejectsZeroByteBufferedFileBeforeStorageWrite()
+    {
+        var file = BuildFormFile("empty.txt", "text/plain", Array.Empty<byte>());
+
+        var exception = await Assert.ThrowsAsync<StreamedChatFileUploadException>(() =>
+            StreamedChatFileUploadReader.UploadAsync(
+                file,
+                _tempDirectory,
+                userId: "42",
+                limits: new StreamedChatFileUploadLimits(
+                    MaxFileSizeBytes: 1024,
+                    MaxUserStorageBytes: 1024,
+                    MinFreeDiskBytes: 0),
+                storageMetrics: new TestStorageMetrics(),
+                CancellationToken.None));
+
+        Assert.Equal("File is required.", exception.Message);
+        Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
+    }
+
+    [Fact]
+    public async Task UploadAsync_RejectsOversizedBufferedFileBeforeStorageWrite()
+    {
+        var file = BuildFormFile("large.txt", "text/plain", Encoding.UTF8.GetBytes("too large"));
+
+        var exception = await Assert.ThrowsAsync<StreamedChatFileUploadException>(() =>
+            StreamedChatFileUploadReader.UploadAsync(
+                file,
+                _tempDirectory,
+                userId: "42",
+                limits: new StreamedChatFileUploadLimits(
+                    MaxFileSizeBytes: 4,
+                    MaxUserStorageBytes: 1024,
+                    MinFreeDiskBytes: 0),
+                storageMetrics: new TestStorageMetrics(),
+                CancellationToken.None));
+
+        Assert.Equal("File size limit exceeded.", exception.Message);
+        Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
+    }
+
+    [Fact]
+    public async Task UploadAsync_RejectsBlockedExtensionWithoutFinalStorageWrite()
+    {
+        var file = BuildFormFile(
+            "installer.exe",
+            "application/vnd.microsoft.portable-executable",
+            new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
+
+        var exception = await Assert.ThrowsAsync<StreamedChatFileUploadException>(() =>
+            StreamedChatFileUploadReader.UploadAsync(
+                file,
+                _tempDirectory,
+                userId: "42",
+                limits: new StreamedChatFileUploadLimits(
+                    MaxFileSizeBytes: 1024,
+                    MaxUserStorageBytes: 1024,
+                    MinFreeDiskBytes: 0),
+                storageMetrics: new TestStorageMetrics(),
+                CancellationToken.None));
+
+        Assert.Equal("This file type is not allowed.", exception.Message);
+        Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
+    }
+
+    [Fact]
     public async Task UploadAsync_RejectsOversizedFileAndDeletesTemporaryFile()
     {
         var request = BuildMultipartRequest("large.txt", "text/plain", Encoding.UTF8.GetBytes("too large"));
