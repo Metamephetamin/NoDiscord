@@ -49,13 +49,84 @@ public class CryptoServiceTests
         Assert.Equal("raw key secret", decrypted);
     }
 
+    [Fact]
+    public void Encrypt_UsesActiveKeyIdWhenKeyRingIsConfigured()
+    {
+        var activeKey = RandomNumberGenerator.GetBytes(32);
+        var legacyKey = RandomNumberGenerator.GetBytes(32);
+        var service = CreateService(new Dictionary<string, string?>
+        {
+            ["Crypto:Key"] = $"base64:{Convert.ToBase64String(legacyKey)}",
+            ["Crypto:ActiveKeyId"] = "2026-05",
+            ["Crypto:Keys:2026-05"] = $"base64:{Convert.ToBase64String(activeKey)}",
+            ["Crypto:Keys:2026-01"] = $"base64:{Convert.ToBase64String(legacyKey)}"
+        });
+
+        var cipherText = service.Encrypt("rotated secret");
+        var decrypted = service.Decrypt(cipherText);
+
+        Assert.StartsWith("v3:2026-05:", cipherText);
+        Assert.Equal("rotated secret", decrypted);
+    }
+
+    [Fact]
+    public void Decrypt_SupportsV2PayloadWithLegacyKeyWhenKeyRingIsConfigured()
+    {
+        var legacyKey = RandomNumberGenerator.GetBytes(32);
+        var activeKey = RandomNumberGenerator.GetBytes(32);
+        var service = CreateService(new Dictionary<string, string?>
+        {
+            ["Crypto:Key"] = $"base64:{Convert.ToBase64String(legacyKey)}",
+            ["Crypto:ActiveKeyId"] = "2026-05",
+            ["Crypto:Keys:2026-05"] = $"base64:{Convert.ToBase64String(activeKey)}",
+            ["Crypto:Keys:2026-01"] = $"base64:{Convert.ToBase64String(legacyKey)}"
+        });
+        var cipherText = EncryptV2WithRawKey("legacy v2 secret", legacyKey);
+
+        var decrypted = service.Decrypt(cipherText);
+
+        Assert.Equal("legacy v2 secret", decrypted);
+    }
+
+    [Fact]
+    public void Decrypt_SupportsV3PayloadAfterActiveKeyRotates()
+    {
+        var oldActiveKey = RandomNumberGenerator.GetBytes(32);
+        var nextActiveKey = RandomNumberGenerator.GetBytes(32);
+        var originalService = CreateService(new Dictionary<string, string?>
+        {
+            ["Crypto:Key"] = $"base64:{Convert.ToBase64String(oldActiveKey)}",
+            ["Crypto:ActiveKeyId"] = "2026-05",
+            ["Crypto:Keys:2026-05"] = $"base64:{Convert.ToBase64String(oldActiveKey)}",
+            ["Crypto:Keys:2026-06"] = $"base64:{Convert.ToBase64String(nextActiveKey)}"
+        });
+        var rotatedService = CreateService(new Dictionary<string, string?>
+        {
+            ["Crypto:Key"] = $"base64:{Convert.ToBase64String(oldActiveKey)}",
+            ["Crypto:ActiveKeyId"] = "2026-06",
+            ["Crypto:Keys:2026-05"] = $"base64:{Convert.ToBase64String(oldActiveKey)}",
+            ["Crypto:Keys:2026-06"] = $"base64:{Convert.ToBase64String(nextActiveKey)}"
+        });
+        var cipherText = originalService.Encrypt("v3 survives rotation");
+
+        var decrypted = rotatedService.Decrypt(cipherText);
+
+        Assert.StartsWith("v3:2026-05:", cipherText);
+        Assert.Equal("v3 survives rotation", decrypted);
+    }
+
     private static CryptoService CreateService()
     {
+        return CreateService(new Dictionary<string, string?>
+        {
+            ["Crypto:Key"] = "0123456789abcdef0123456789abcdef"
+        });
+    }
+
+    private static CryptoService CreateService(Dictionary<string, string?> values)
+    {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Crypto:Key"] = "0123456789abcdef0123456789abcdef"
-            })
+            .AddInMemoryCollection(values)
             .Build();
 
         return new CryptoService(configuration);

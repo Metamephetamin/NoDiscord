@@ -5,20 +5,55 @@ namespace BackNoDiscord.Services
 {
     public class CryptoService
     {
-        private const string VersionPrefix = "v2:";
+        private const string Version2Prefix = "v2:";
+        private const string Version3Prefix = "v3:";
         private const string Base64KeyPrefix = "base64:";
-        private readonly byte[] _key;
+        private readonly byte[] _legacyKey;
+        private readonly byte[] _activeKey;
+        private readonly string _activeKeyId;
+        private readonly IReadOnlyDictionary<string, byte[]> _keys;
 
         public CryptoService(IConfiguration configuration)
         {
             var keyString = configuration["Crypto:Key"]?.Trim();
+            var activeKeyId = configuration["Crypto:ActiveKeyId"]?.Trim() ?? string.Empty;
+            var configuredKeys = configuration
+                .GetSection("Crypto:Keys")
+                .GetChildren()
+                .Where(section => !string.IsNullOrWhiteSpace(section.Key) && !string.IsNullOrWhiteSpace(section.Value))
+                .ToDictionary(
+                    section => section.Key.Trim(),
+                    section => ResolveKey(section.Value!.Trim()),
+                    StringComparer.Ordinal);
 
-            if (string.IsNullOrWhiteSpace(keyString))
+            if (string.IsNullOrWhiteSpace(keyString) && configuredKeys.Count == 0)
             {
-                throw new InvalidOperationException("Crypto:Key is not configured. Set it via .env, environment variables, or appsettings.");
+                throw new InvalidOperationException("Crypto:Key or Crypto:Keys is not configured. Set it via .env, environment variables, or appsettings.");
             }
 
-            _key = ResolveKey(keyString);
+            if (configuredKeys.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(activeKeyId))
+                {
+                    throw new InvalidOperationException("Crypto:ActiveKeyId is required when Crypto:Keys is configured.");
+                }
+
+                if (!configuredKeys.TryGetValue(activeKeyId, out var activeKey))
+                {
+                    throw new InvalidOperationException("Crypto:ActiveKeyId must match one configured Crypto:Keys entry.");
+                }
+
+                _keys = configuredKeys;
+                _activeKeyId = activeKeyId;
+                _activeKey = activeKey;
+                _legacyKey = string.IsNullOrWhiteSpace(keyString) ? activeKey : ResolveKey(keyString);
+                return;
+            }
+
+            _legacyKey = ResolveKey(keyString!);
+            _activeKey = _legacyKey;
+            _activeKeyId = string.Empty;
+            _keys = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         }
 
         private static byte[] ResolveKey(string keyString)
@@ -63,7 +98,7 @@ namespace BackNoDiscord.Services
             var tag = new byte[16];
             var cipherBytes = new byte[plainBytes.Length];
 
-            using var aes = new AesGcm(_key, 16);
+            using var aes = new AesGcm(_activeKey, 16);
             aes.Encrypt(nonce, plainBytes, cipherBytes, tag);
 
             var result = new byte[nonce.Length + tag.Length + cipherBytes.Length];
@@ -71,7 +106,10 @@ namespace BackNoDiscord.Services
             Buffer.BlockCopy(tag, 0, result, nonce.Length, tag.Length);
             Buffer.BlockCopy(cipherBytes, 0, result, nonce.Length + tag.Length, cipherBytes.Length);
 
-            return $"{VersionPrefix}{Convert.ToBase64String(result)}";
+            var payload = Convert.ToBase64String(result);
+            return string.IsNullOrWhiteSpace(_activeKeyId)
+                ? $"{Version2Prefix}{payload}"
+                : $"{Version3Prefix}{_activeKeyId}:{payload}";
         }
 
         public string Decrypt(string cipherText)
@@ -79,12 +117,34 @@ namespace BackNoDiscord.Services
             if (string.IsNullOrWhiteSpace(cipherText))
                 return string.Empty;
 
-            return cipherText.StartsWith(VersionPrefix, StringComparison.Ordinal)
-                ? DecryptV2(cipherText[VersionPrefix.Length..])
+            if (cipherText.StartsWith(Version3Prefix, StringComparison.Ordinal))
+            {
+                return DecryptV3(cipherText[Version3Prefix.Length..]);
+            }
+
+            return cipherText.StartsWith(Version2Prefix, StringComparison.Ordinal)
+                ? DecryptAesGcm(cipherText[Version2Prefix.Length..], _legacyKey)
                 : DecryptLegacy(cipherText);
         }
 
-        private string DecryptV2(string cipherText)
+        private string DecryptV3(string cipherText)
+        {
+            var separatorIndex = cipherText.IndexOf(':', StringComparison.Ordinal);
+            if (separatorIndex <= 0 || separatorIndex == cipherText.Length - 1)
+            {
+                throw new InvalidOperationException("Crypto v3 payload is malformed.");
+            }
+
+            var keyId = cipherText[..separatorIndex];
+            if (!_keys.TryGetValue(keyId, out var key))
+            {
+                throw new InvalidOperationException("Crypto v3 key id is not configured.");
+            }
+
+            return DecryptAesGcm(cipherText[(separatorIndex + 1)..], key);
+        }
+
+        private static string DecryptAesGcm(string cipherText, byte[] key)
         {
             var fullCipher = Convert.FromBase64String(cipherText);
             var nonce = fullCipher[..12];
@@ -92,7 +152,7 @@ namespace BackNoDiscord.Services
             var cipher = fullCipher[28..];
             var plainBytes = new byte[cipher.Length];
 
-            using var aes = new AesGcm(_key, 16);
+            using var aes = new AesGcm(key, 16);
             aes.Decrypt(nonce, cipher, tag, plainBytes);
             return Encoding.UTF8.GetString(plainBytes);
         }
@@ -102,7 +162,7 @@ namespace BackNoDiscord.Services
             var fullCipher = Convert.FromBase64String(cipherText);
 
             using var aes = Aes.Create();
-            aes.Key = _key;
+            aes.Key = _legacyKey;
 
             var iv = new byte[16];
             var cipher = new byte[fullCipher.Length - 16];

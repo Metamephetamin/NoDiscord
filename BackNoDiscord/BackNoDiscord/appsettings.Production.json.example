@@ -8,7 +8,10 @@
     "Audience": "BackNoDiscordUsers"
   },
   "Crypto": {
-    "Key": "base64:REPLACE_WITH_32_RANDOM_BYTES_BASE64"
+    "Key": "base64:REPLACE_WITH_32_RANDOM_BYTES_BASE64",
+    "ActiveKeyId": "",
+    "Keys": {
+    }
   },
   "Email": {
     "Mode": "smtp",
