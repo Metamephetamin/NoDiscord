@@ -33,6 +33,7 @@ import {
   tuneDisplayStream,
 } from "./voiceClientUtils";
 import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
+import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
 
 const RTC_CONFIGURATION = {
   ...VOICE_RTC_CONFIGURATION,
@@ -484,7 +485,7 @@ export function createVoiceRoomClient({
   let isSelfMicMuted = false;
   let isSelfDeafened = false;
   let preferredRemoteShareUserId = "";
-  let prewarmedSession = null;
+  const prewarmedSessionCache = createVoiceSessionPrewarmCache({ ttlMs: PREWARMED_SESSION_TTL_MS });
   let voicePingPollIntervalId = 0;
   let voicePingPollInFlight = false;
   let lastVoicePingMs = null;
@@ -2936,21 +2937,7 @@ const handleDeviceChange = () => {
   };
 
   const getCachedPrewarmedSession = (channelName, user) => {
-    if (!prewarmedSession) {
-      return null;
-    }
-
-    const isExpired = Date.now() - prewarmedSession.createdAt > PREWARMED_SESSION_TTL_MS;
-    const sameChannel = prewarmedSession.channelName === channelName;
-    const sameUser = prewarmedSession.userId === String(user?.id || "");
-    if (isExpired || !sameChannel || !sameUser) {
-      prewarmedSession = null;
-      return null;
-    }
-
-    const cachedValue = prewarmedSession.value;
-    prewarmedSession = null;
-    return cachedValue;
+    return prewarmedSessionCache.take(channelName, user);
   };
 
   const fetchLiveKitSession = async (channelName, user, { preferPrewarmed = true } = {}) => {
@@ -2988,12 +2975,7 @@ const handleDeviceChange = () => {
     }
 
     const nextSession = await fetchLiveKitSession(channelName, user, { preferPrewarmed: false });
-    prewarmedSession = {
-      channelName,
-      userId: String(user.id || ""),
-      createdAt: Date.now(),
-      value: nextSession,
-    };
+    prewarmedSessionCache.store(channelName, user, nextSession);
     if (!isLocalVoicePreviewFallbackEnabled()) {
       prepareLiveKitConnection(nextSession);
     }
@@ -3609,14 +3591,17 @@ const handleDeviceChange = () => {
         await this.leaveChannel({ preserveMic: true });
       }
 
-      const sessionPrewarmPromise = prewarmLiveKitSession(channelName, user).catch((error) => {
-        logVoiceDebug("livekit-session:prewarm-on-join-failed", {
-          channelName,
-          errorName: error?.name || "",
-          error: error?.message || String(error),
+      const hasReusablePrewarmedSession = prewarmedSessionCache.isReusable(channelName, user);
+      const sessionPrewarmPromise = hasReusablePrewarmedSession
+        ? Promise.resolve(null)
+        : prewarmLiveKitSession(channelName, user).catch((error) => {
+          logVoiceDebug("livekit-session:prewarm-on-join-failed", {
+            channelName,
+            errorName: error?.name || "",
+            error: error?.message || String(error),
+          });
+          return null;
         });
-        return null;
-      });
       void ensureAudioPipeline().catch((error) => {
         logVoiceDebug("local-audio:prewarm-on-join-failed", {
           channelName,

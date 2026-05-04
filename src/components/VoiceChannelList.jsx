@@ -273,7 +273,6 @@ const VoiceChannelList = ({
                       <span>{formatVoiceLimitCount(userLimit)}</span>
                     </span>
                   ) : null}
-                  {isJoining ? <span className="voice-channel__status">Подключаемся...</span> : null}
                 </button>
               )}
 

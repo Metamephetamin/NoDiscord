@@ -1050,16 +1050,6 @@ export default function VoiceRoomStage({
             );
           })}
         </div>
-      ) : isJoining ? (
-        <div className="voice-room-stage__empty voice-room-stage__empty--pending">
-          <AnimatedAvatar
-            className="voice-room-stage__hero-empty-avatar"
-            src={pendingParticipant?.avatar || ""}
-            alt={pendingParticipant?.name || "Вы"}
-          />
-          <strong>Подключаемся к каналу...</strong>
-          <span>Сцена откроется сразу, как только сервер подтвердит подключение.</span>
-        </div>
       ) : (
         <div className="voice-room-stage__empty">
           <strong>Пока никого нет</strong>

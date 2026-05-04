@@ -21,12 +21,10 @@ function VoiceChannelPreview({ channel, participants = [], isJoining = false, on
   const resolvedParticipantText = participantCount > 0
     ? `\u0421\u0435\u0439\u0447\u0430\u0441 \u0432 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c \u043a\u0430\u043d\u0430\u043b\u0435: ${participantCount}`
     : "\u0421\u0435\u0439\u0447\u0430\u0441 \u0432 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c \u0447\u0430\u0442\u0435 \u043d\u0438\u043a\u043e\u0433\u043e \u043d\u0435\u0442";
-  const resolvedJoinButtonText = isJoining
-    ? "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u043c\u0441\u044f..."
-    : "\u041f\u0440\u0438\u0441\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u044c\u0441\u044f \u043a \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c\u0443 \u043a\u0430\u043d\u0430\u043b\u0443";
+  const resolvedJoinButtonText = "\u041f\u0440\u0438\u0441\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u044c\u0441\u044f \u043a \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u043c\u0443 \u043a\u0430\u043d\u0430\u043b\u0443";
   const safeChannelName = channel?.name || "Голосовой канал";
   const participantText = participantCount > 0 ? `Сейчас в голосовом канале: ${participantCount}` : "Сейчас в голосовом чате никого нет";
-  const joinButtonText = isJoining ? "Подключаемся..." : "Присоединиться к голосовому каналу";
+  const joinButtonText = "Присоединиться к голосовому каналу";
   const channelName = channel?.name || "Голосовой канал";
 
   const legacyPreviewText = [safeChannelName, participantText, joinButtonText, channelName];
@@ -51,7 +49,7 @@ function VoiceChannelPreview({ channel, participants = [], isJoining = false, on
         <p>{participantCount > 0 ? `Сейчас в голосовом канале: ${participantCount}` : "Сейчас в голосовом чате никого нет"}</p>
         <button type="button" onClick={() => onJoin?.(channel)} disabled={isJoining || !channel?.id}>
           <span className="voice-channel-preview__join-text">{resolvedJoinButtonText}</span>
-          {isJoining ? "Подключаемся..." : "Присоединиться к голосовому каналу"}
+          Присоединиться к голосовому каналу
         </button>
       </div>
     </section>
@@ -59,10 +57,8 @@ function VoiceChannelPreview({ channel, participants = [], isJoining = false, on
 }
 
 function VoiceStageModuleFallback({ channelName = "" }) {
-  const resolvedFallbackTitle = channelName
-    ? `\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u043c ${channelName}`
-    : "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u0435\u043c \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0439 \u043a\u0430\u043d\u0430\u043b";
-  const resolvedFallbackText = "\u0413\u043e\u0442\u043e\u0432\u0438\u043c \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u0443\u044e \u0441\u0446\u0435\u043d\u0443 \u0431\u0435\u0437 \u043f\u043e\u043b\u043d\u043e\u0439 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430.";
+  const resolvedFallbackTitle = channelName || "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u043e\u0439 \u043a\u0430\u043d\u0430\u043b";
+  const resolvedFallbackText = "";
   const fallbackTitle = channelName ? `Подключаем ${channelName}` : "Подключаем голосовой канал";
   const fallbackText = "Готовим голосовую сцену без полной перезагрузки интерфейса.";
 
@@ -2587,6 +2583,12 @@ function ServerMainComponent({
           onOpen: onOpenLocalSharePreview,
         }
       : null;
+
+  useEffect(() => {
+    if (desktopServerPane === "voice" && (selectedVoiceChannel?.id || currentVoiceChannelName)) {
+      void loadVoiceRoomStage();
+    }
+  }, [currentVoiceChannelName, desktopServerPane, selectedVoiceChannel?.id]);
 
   return (
     <main className="chat__wrapper chat__wrapper--servers">
