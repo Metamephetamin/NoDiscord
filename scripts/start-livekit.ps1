@@ -71,7 +71,8 @@ if ($livekitCommand) {
 } elseif (Test-Path $bundledBinary) {
     $livekitExecutable = $bundledBinary
 } else {
-    Write-Error "livekit-server not found. Install it into PATH or place livekit-server.exe in src\\livekit\\."
+    Write-Error "LiveKit server binary is not present. Install livekit-server into PATH, download it locally into src\\livekit\\livekit-server.exe, or use npm run start:livekit:docker."
+    exit 1
 }
 
 if (-not $env:LIVEKIT_KEYS) {

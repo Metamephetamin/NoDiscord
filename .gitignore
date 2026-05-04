@@ -125,6 +125,9 @@ BackNoDiscord/BackNoDiscord/wwwroot/server-icons/
 BackNoDiscord/BackNoDiscord/appsettings.Production.json
 BackNoDiscord/BackNoDiscord/appsettings.Local.json
 src/livekit/livekit-keys.txt
+src/livekit/livekit-server.exe
+src/livekit/livekit-server
+src/livekit/*.zip
 certs/
 src/livekit/livekit_certs/
 .tools/
