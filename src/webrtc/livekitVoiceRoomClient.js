@@ -34,6 +34,7 @@ import {
 } from "./voiceClientUtils";
 import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
 import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
+import { getReusableVideoTrack } from "./localShareStreamReuse.mjs";
 
 const RTC_CONFIGURATION = {
   ...VOICE_RTC_CONFIGURATION,
@@ -3797,7 +3798,7 @@ const handleDeviceChange = () => {
       });
     },
 
-    async startCameraShare({ deviceId = "", resolution = "auto", fps = 30 } = {}) {
+    async startCameraShare({ deviceId = "", resolution = "auto", fps = 30, previewStream = null } = {}) {
       return runLocalShareOperation("start-camera", async () => {
       if (!currentChannel || !room) {
         throw new Error("Join a voice channel first.");
@@ -3819,10 +3820,13 @@ const handleDeviceChange = () => {
             ? channelVideoQuality
             : "720p";
 
-      localCameraStream = await navigator.mediaDevices.getUserMedia({
-        video: getCameraConstraints(deviceId, effectiveResolution, fps),
-        audio: false,
-      });
+      const reusableCameraTrack = getReusableVideoTrack(previewStream, deviceId);
+      localCameraStream = reusableCameraTrack
+        ? previewStream
+        : await navigator.mediaDevices.getUserMedia({
+          video: getCameraConstraints(deviceId, effectiveResolution, fps),
+          audio: false,
+        });
 
       const [cameraTrack] = localCameraStream.getVideoTracks();
       if (!cameraTrack) {

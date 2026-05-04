@@ -26,6 +26,7 @@ export default function useMenuMainLocalShareActions({
   showServerInviteFeedback,
   stopCameraPreview,
   startCameraPreview,
+  consumeCameraPreviewStream,
   pendingLocalScreenShareToneRef,
   clearScreenShareStartToneTimeout,
   scheduleScreenShareStartTone,
@@ -175,7 +176,10 @@ export default function useMenuMainLocalShareActions({
     const restorePreviewOnError = !options?.nativeEvent && options?.restorePreviewOnError === false ? false : true;
     localShareActionInFlightRef.current = true;
     setCameraError("");
-    stopCameraPreview();
+    const previewStream = consumeCameraPreviewStream?.(selectedVideoDeviceId);
+    if (!previewStream) {
+      stopCameraPreview();
+    }
 
     try {
       const currentChannelConfig = servers
@@ -192,6 +196,7 @@ export default function useMenuMainLocalShareActions({
         deviceId: selectedVideoDeviceId,
         resolution: effectiveResolution,
         fps,
+        previewStream,
       });
       setShowCameraModal(false);
       setSelectedStreamUserId(null);
@@ -218,6 +223,7 @@ export default function useMenuMainLocalShareActions({
     setShowCameraModal,
     showServerInviteFeedback,
     startCameraPreview,
+    consumeCameraPreviewStream,
     stopCameraPreview,
     voiceClientRef,
   ]);

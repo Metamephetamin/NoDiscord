@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { canReuseVideoStream } from "../../webrtc/localShareStreamReuse.mjs";
 
 export default function useMenuMainCameraPreview() {
   const cameraPreviewRef = useRef(null);
@@ -106,6 +107,20 @@ export default function useMenuMainCameraPreview() {
     }
   }, [loadCameraDevices, selectedVideoDeviceId, stopCameraPreview]);
 
+  const consumeCameraPreviewStream = useCallback((deviceId = selectedVideoDeviceId) => {
+    const stream = cameraStreamRef.current;
+    if (!canReuseVideoStream(stream, deviceId)) {
+      return null;
+    }
+
+    cameraStreamRef.current = null;
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = null;
+    }
+    setHasCameraPreview(false);
+    return stream;
+  }, [selectedVideoDeviceId]);
+
   const resetCameraPreviewState = useCallback(() => {
     stopCameraPreview();
     setCameraDevices([]);
@@ -123,6 +138,7 @@ export default function useMenuMainCameraPreview() {
     cameraPreviewRef,
     loadCameraDevices,
     startCameraPreview,
+    consumeCameraPreviewStream,
     stopCameraPreview,
     resetCameraPreviewState,
   };

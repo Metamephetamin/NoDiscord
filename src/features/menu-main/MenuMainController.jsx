@@ -708,6 +708,7 @@ export default function MenuMain({
     cameraPreviewRef,
     loadCameraDevices,
     startCameraPreview,
+    consumeCameraPreviewStream,
     stopCameraPreview,
     resetCameraPreviewState,
   } = useMenuMainCameraPreview();
@@ -4841,6 +4842,7 @@ export default function MenuMain({
     showServerInviteFeedback,
     stopCameraPreview,
     startCameraPreview,
+    consumeCameraPreviewStream,
     pendingLocalScreenShareToneRef,
     clearScreenShareStartToneTimeout,
     scheduleScreenShareStartTone,
@@ -4897,6 +4899,8 @@ export default function MenuMain({
   };
   const handleWatchStream = (userId) => {
     const normalizedUserId = String(userId);
+    voiceClientRef.current?.setFocusedRemoteShareUser?.(normalizedUserId);
+    voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
     pushNavigationHistory(() => {
       setIsLocalSharePreviewVisible(false);
       setDesktopServerPane("voice");
@@ -4905,7 +4909,6 @@ export default function MenuMain({
         setMobileServersPane("voice");
       }
     });
-    voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
   };
   const handlePreviewStream = (userId) => {
     const normalizedUserId = String(userId || "").trim();
@@ -4913,6 +4916,7 @@ export default function MenuMain({
       return;
     }
 
+    voiceClientRef.current?.setFocusedRemoteShareUser?.(normalizedUserId);
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Screen share preview request failed:", error));
   };
   const handleImportServer = (snapshot) => {
