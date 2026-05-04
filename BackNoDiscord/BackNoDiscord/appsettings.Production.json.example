@@ -8,7 +8,7 @@
     "Audience": "BackNoDiscordUsers"
   },
   "Crypto": {
-    "Key": "REPLACE_WITH_A_SEPARATE_LONG_RANDOM_SECRET_AT_LEAST_32_CHARACTERS"
+    "Key": "base64:REPLACE_WITH_32_RANDOM_BYTES_BASE64"
   },
   "Email": {
     "Mode": "smtp",

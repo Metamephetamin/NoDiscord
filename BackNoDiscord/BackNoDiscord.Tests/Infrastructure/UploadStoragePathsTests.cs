@@ -25,6 +25,27 @@ public sealed class UploadStoragePathsTests
     }
 
     [Fact]
+    public void ResolveDirectory_DoesNotPlaceUploadsUnderWebRootByDefaultInDevelopment()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var webRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        var environment = new TestWebHostEnvironment
+        {
+            EnvironmentName = "Development",
+            WebRootPath = webRootPath
+        };
+        var paths = new UploadStoragePaths(configuration, environment);
+
+        var directory = paths.ResolveDirectory("chat-files");
+
+        var expected = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "storage", "chat-files"));
+        Assert.Equal(expected, directory);
+        Assert.False(
+            Path.GetFullPath(directory).StartsWith(Path.GetFullPath(webRootPath), StringComparison.OrdinalIgnoreCase),
+            "Chat files must not be placed under webroot by default because static file middleware can bypass authorization.");
+    }
+
+    [Fact]
     public void ResolveDirectory_PrefersConfiguredStorageRoot()
     {
         var storageRoot = Path.Combine(Path.GetTempPath(), $"nodiscord-storage-{Guid.NewGuid():N}");

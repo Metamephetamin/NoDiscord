@@ -31,6 +31,24 @@ public class CryptoServiceTests
         Assert.Equal(secret, decrypted);
     }
 
+    [Fact]
+    public void Decrypt_UsesRawBytesWhenKeyHasBase64Prefix()
+    {
+        var rawKey = RandomNumberGenerator.GetBytes(32);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Crypto:Key"] = $"base64:{Convert.ToBase64String(rawKey)}"
+            })
+            .Build();
+        var service = new CryptoService(configuration);
+        var cipherText = EncryptV2WithRawKey("raw key secret", rawKey);
+
+        var decrypted = service.Decrypt(cipherText);
+
+        Assert.Equal("raw key secret", decrypted);
+    }
+
     private static CryptoService CreateService()
     {
         var configuration = new ConfigurationBuilder()
@@ -61,5 +79,23 @@ public class CryptoServiceTests
         Buffer.BlockCopy(encryptedBytes, 0, result, aes.IV.Length, encryptedBytes.Length);
 
         return Convert.ToBase64String(result);
+    }
+
+    private static string EncryptV2WithRawKey(string plainText, byte[] key)
+    {
+        var plainBytes = Encoding.UTF8.GetBytes(plainText);
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var tag = new byte[16];
+        var cipherBytes = new byte[plainBytes.Length];
+
+        using var aes = new AesGcm(key, 16);
+        aes.Encrypt(nonce, plainBytes, cipherBytes, tag);
+
+        var result = new byte[nonce.Length + tag.Length + cipherBytes.Length];
+        Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
+        Buffer.BlockCopy(tag, 0, result, nonce.Length, tag.Length);
+        Buffer.BlockCopy(cipherBytes, 0, result, nonce.Length + tag.Length, cipherBytes.Length);
+
+        return $"v2:{Convert.ToBase64String(result)}";
     }
 }

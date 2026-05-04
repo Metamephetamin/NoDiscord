@@ -6,15 +6,42 @@ namespace BackNoDiscord.Services
     public class CryptoService
     {
         private const string VersionPrefix = "v2:";
+        private const string Base64KeyPrefix = "base64:";
         private readonly byte[] _key;
 
         public CryptoService(IConfiguration configuration)
         {
-            var keyString = configuration["Crypto:Key"];
+            var keyString = configuration["Crypto:Key"]?.Trim();
 
             if (string.IsNullOrWhiteSpace(keyString))
             {
                 throw new InvalidOperationException("Crypto:Key is not configured. Set it via .env, environment variables, or appsettings.");
+            }
+
+            _key = ResolveKey(keyString);
+        }
+
+        private static byte[] ResolveKey(string keyString)
+        {
+            if (keyString.StartsWith(Base64KeyPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var encodedKey = keyString[Base64KeyPrefix.Length..].Trim();
+                byte[] rawKey;
+                try
+                {
+                    rawKey = Convert.FromBase64String(encodedKey);
+                }
+                catch (FormatException exception)
+                {
+                    throw new InvalidOperationException("Crypto:Key base64 value is invalid.", exception);
+                }
+
+                if (rawKey.Length != 32)
+                {
+                    throw new InvalidOperationException("Crypto:Key base64 value must decode to exactly 32 bytes.");
+                }
+
+                return rawKey;
             }
 
             if (keyString.Length < 32)
@@ -23,7 +50,7 @@ namespace BackNoDiscord.Services
             }
 
             using var sha = SHA256.Create();
-            _key = sha.ComputeHash(Encoding.UTF8.GetBytes(keyString));
+            return sha.ComputeHash(Encoding.UTF8.GetBytes(keyString));
         }
 
         public string Encrypt(string plainText)
