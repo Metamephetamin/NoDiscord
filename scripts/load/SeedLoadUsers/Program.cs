@@ -30,6 +30,7 @@ var accessTokenMinutes = ReadPositiveInt("Jwt__AccessTokenMinutes", ReadPositive
 var outputFile = Environment.GetEnvironmentVariable("LOAD_TEST_OUTPUT") ?? "scripts/load/.tokens.json";
 var targetServerId = Environment.GetEnvironmentVariable("LOAD_TEST_SERVER_ID")
     ?? TryGetServerIdFromVoiceChannel(Environment.GetEnvironmentVariable("LOAD_TEST_VOICE_CHANNEL"));
+var matchedServerSnapshot = false;
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
@@ -115,6 +116,7 @@ await dbContext.SaveChangesAsync();
 if (!string.IsNullOrWhiteSpace(targetServerId))
 {
     var serverState = new ServerStateService(dbContext);
+    matchedServerSnapshot = serverState.GetSnapshot(targetServerId) is not null;
     foreach (var user in users)
     {
         try
@@ -167,6 +169,7 @@ Console.WriteLine(JsonSerializer.Serialize(new
     updated,
     unchanged,
     addedToServer,
+    matchedServerSnapshot,
     resetPassword,
     tokenCount = tokens.Count,
     outputFile = tokens.Count > 0 ? outputFile : string.Empty,

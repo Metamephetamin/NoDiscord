@@ -7,6 +7,7 @@ const channel = String(process.env.LOAD_TEST_VOICE_CHANNEL || "").trim();
 const durationMs = Math.max(1, Number(process.env.LOAD_TEST_DURATION_SECONDS || 30)) * 1000;
 const connectDelayMs = Math.max(0, Number(process.env.LOAD_TEST_CONNECT_DELAY_MS || 100));
 const requestedConnections = Math.max(0, Number(process.env.LOAD_TEST_CONNECTIONS || 0));
+const expectedServerId = channel.includes("::") ? channel.slice(0, channel.indexOf("::")) : "";
 
 const readTokensFile = (filePath) => {
   if (!filePath) {
@@ -53,9 +54,46 @@ const percentile = (values, percent) => {
   return sorted[index];
 };
 
+const inspectFirstTokenMembership = async () => {
+  if (!expectedServerId || !tokens[0]) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/server-memberships`, {
+      headers: {
+        authorization: `Bearer ${tokens[0]}`,
+      },
+    });
+    const text = await response.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+
+    const servers = Array.isArray(data) ? data : [];
+    return {
+      status: response.status,
+      expectedServerId,
+      serverCount: servers.length,
+      matchingServer: servers.some((server) => String(server?.id || server?.Id || "") === expectedServerId),
+      firstServerIds: servers.slice(0, 5).map((server) => String(server?.id || server?.Id || "")),
+    };
+  } catch (error) {
+    return {
+      status: "network-error",
+      expectedServerId,
+      error: error?.message || String(error),
+    };
+  }
+};
+
 const connections = [];
 const connectSamples = [];
 const joinSamples = [];
+const membershipInspection = await inspectFirstTokenMembership();
 let updateEvents = 0;
 let failures = 0;
 
@@ -118,6 +156,7 @@ await Promise.all(connections.map(async (connection) => {
 console.log(JSON.stringify({
   baseUrl,
   channel,
+  membershipInspection,
   requestedConnections: tokens.length,
   activeConnections: connections.length,
   durationSeconds: durationMs / 1000,
