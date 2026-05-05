@@ -802,7 +802,7 @@
   -webkit-backdrop-filter: blur(14px);
 }
 
-.msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments)::before {
+.msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
   content: "";
   position: absolute;
   left: -9px;
@@ -1190,13 +1190,13 @@
   display: inline-flex;
   align-items: center;
   min-height: 0;
-  font-size: 42px;
+  font-size: 36px;
   line-height: 1;
   letter-spacing: 0.01em;
 }
 
 .message-text--emoji-only.message-text--emoji-only-multi {
-  font-size: 34px;
+  font-size: 30px;
 }
 
 .message-text::selection,
