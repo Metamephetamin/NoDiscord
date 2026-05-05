@@ -118,6 +118,16 @@ builder.Services
                 {
                     context.Token = accessToken;
                 }
+                else if (HubCookieTokenPolicy.CanAcceptCookieToken(
+                             path,
+                             origin,
+                             builder.Configuration,
+                             builder.Environment.IsDevelopment()) &&
+                         context.Request.Cookies.TryGetValue(MediaAccessTokenCookieName, out var hubAccessToken) &&
+                         !string.IsNullOrWhiteSpace(hubAccessToken))
+                {
+                    context.Token = hubAccessToken;
+                }
                 else if (CanAcceptMediaCookieToken(context.Request, path) &&
                          context.Request.Cookies.TryGetValue(MediaAccessTokenCookieName, out var mediaAccessToken) &&
                          !string.IsNullOrWhiteSpace(mediaAccessToken))

@@ -3452,7 +3452,7 @@ const handleDeviceChange = () => {
   const createSignalConnection = () => {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(VOICE_HUB_URL, {
-        accessTokenFactory: () => getStoredToken(),
+        withCredentials: true,
       })
       .configureLogging(signalR.LogLevel.Error)
       .withAutomaticReconnect([0, 1000, 3000, 5000])

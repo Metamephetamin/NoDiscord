@@ -477,6 +477,11 @@ const parseRendererRouteFromDeepLink = (rawUrl) => {
   }
 };
 
+const redactSensitiveLogText = (value) => String(value || "")
+  .replace(/([?&](?:access_token|refresh_token|token|scannerToken|sid)=)[^&\s)]+/gi, "$1[redacted]")
+  .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+  .replace(/\b(tend_access_token=)[^;\s)]+/gi, "$1[redacted]");
+
 const deliverPendingRendererRoute = () => {
   if (!pendingRendererRoute || !mainWindow || mainWindow.isDestroyed()) {
     return;
@@ -1862,11 +1867,11 @@ const createWindow = () => {
         return;
       }
 
-      console[levelName](`[renderer:${levelName}] ${message} (${sourceId}:${line})`);
+      console[levelName](`[renderer:${levelName}] ${redactSensitiveLogText(message)} (${redactSensitiveLogText(sourceId)}:${line})`);
     });
 
     mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-      console.error(`[renderer:load-failed] ${errorCode} ${errorDescription} ${validatedURL}`);
+      console.error(`[renderer:load-failed] ${errorCode} ${redactSensitiveLogText(errorDescription)} ${redactSensitiveLogText(validatedURL)}`);
     });
 
     mainWindow.webContents.on("render-process-gone", (_event, details) => {

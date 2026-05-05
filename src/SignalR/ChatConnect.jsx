@@ -4,7 +4,7 @@ import { getStoredToken, isUnauthorizedError, notifyUnauthorizedSession } from "
 
 const chatConnection = new signalR.HubConnectionBuilder()
   .withUrl(CHAT_HUB_URL, {
-    accessTokenFactory: () => getStoredToken(),
+    withCredentials: true,
   })
   .configureLogging(signalR.LogLevel.Error)
   .withAutomaticReconnect([0, 2000, 5000, 10000])
