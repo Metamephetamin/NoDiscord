@@ -1099,6 +1099,13 @@
   flex: 1 1 auto;
 }
 
+.message-item--dm .msg-content--file-only {
+  width: fit-content;
+  min-width: min(100%, 260px);
+  max-width: min(100%, 320px);
+  flex: 0 1 auto;
+}
+
 .message-item--selectable {
   cursor: pointer;
 }
