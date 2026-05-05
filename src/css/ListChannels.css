@@ -464,6 +464,78 @@
   }
 }
 
+html[data-ui-theme="light"] .list__items {
+  border-color: transparent;
+  background: transparent;
+}
+
+html[data-ui-theme="light"] .list__items:hover {
+  border-color: #d9e0ec;
+  background: #f3f6fb;
+}
+
+html[data-ui-theme="light"] .list__items--active,
+html[data-ui-theme="light"] .list__items--joining {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+}
+
+html[data-ui-theme="light"] .list__items--has-participants {
+  --voice-connector-color: rgba(86, 101, 132, 0.58);
+  --voice-connector-flow: rgba(88, 103, 232, 0.64);
+}
+
+html[data-ui-theme="light"] .voice-channel__button,
+html[data-ui-theme="light"] .voice-channel__title {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .list__items--active .voice-channel__title {
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .voice-channel__count {
+  background: rgba(88, 103, 232, 0.12);
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .participant-item {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .participant-item__name {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .participant-item__role-dot {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
+html[data-ui-theme="light"] .participant-item--speaking .participant-item__avatar-shell::after {
+  border-color: #ffffff;
+}
+
+html[data-ui-theme="light"] .channel-inline-input {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .channel-inline-input::selection {
+  background: rgba(88, 103, 232, 0.18);
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .channel-edit-button {
+  background: #f3f6fb;
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .channel-edit-button:hover {
+  background: #eef3ff;
+  color: #2637c7;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .list__items--has-participants::after,
   .participant-item::after,
