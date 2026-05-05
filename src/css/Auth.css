@@ -247,6 +247,7 @@
   margin-left: 0.08em;
   border-radius: 999px;
   background: currentColor;
+  transform: translateY(-0.04em);
   animation: authTypewriterCaretBlink 1s steps(1, end) infinite;
 }
 
