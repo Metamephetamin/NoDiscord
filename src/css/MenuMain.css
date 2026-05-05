@@ -17931,6 +17931,19 @@ html[data-ui-theme="light"] .friends-main__tab {
   color: #5f6b82;
 }
 
+html[data-ui-theme="light"] .friends-conversation-card__preview strong {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+html[data-ui-theme="light"] .friends-conversation-card__preview span:last-child {
+  color: #566277;
+}
+
+html[data-ui-theme="light"] .friends-conversation-card__preview--empty {
+  color: #6b7688;
+}
+
 html[data-ui-theme="light"] .friends-search-input,
 html[data-ui-theme="light"] .friends-hero__form input,
 html[data-ui-theme="light"] .friends-directory__search,
@@ -17980,7 +17993,7 @@ html[data-ui-theme="light"] .friends-contacts__item:hover,
 html[data-ui-theme="light"] .friends-directs__item:hover,
 html[data-ui-theme="light"] .friends-directs__item--active {
   border-color: #cbd7ff;
-  background: #f3f6fb;
+  background: #ffffff;
 }
 
 html[data-ui-theme="light"] .friends-directory__action,
