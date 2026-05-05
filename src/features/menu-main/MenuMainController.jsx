@@ -6377,6 +6377,7 @@ export default function MenuMain({
       workspaceMode={workspaceMode}
       activeServer={activeServer}
       activeDirectCall={directCallState.phase !== "idle" ? directCallState : null}
+      incomingFriendRequestCount={incomingFriendRequestCount}
       participantsMap={participantsMap}
       defaultServerIcon={DEFAULT_SERVER_ICON}
       smsIcon={SMS_ICON_URL}

@@ -1561,6 +1561,27 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   cursor: inherit;
 }
 
+.workspace-switch__badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #0b0d12;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff6d8d, #e6466c);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(230, 70, 108, 0.32);
+  pointer-events: none;
+}
+
 .workspace-switch--active {
   background: linear-gradient(180deg, rgba(94, 86, 255, 0.88), rgba(100, 134, 255, 0.76));
   box-shadow: 0 14px 28px rgba(68, 83, 226, 0.28);

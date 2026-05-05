@@ -2831,6 +2831,7 @@ export const DesktopServerRail = ({
   workspaceMode,
   activeServer,
   activeDirectCall = null,
+  incomingFriendRequestCount = 0,
   participantsMap = {},
   defaultServerIcon,
   smsIcon,
@@ -2845,6 +2846,7 @@ export const DesktopServerRail = ({
   getServerIconFrame,
 }) => {
   const [serverTooltip, setServerTooltip] = useState(null);
+  const normalizedFriendRequestCount = Math.max(0, Number(incomingFriendRequestCount) || 0);
   const serverVoiceActivityIds = useMemo(
     () => getServerVoiceActivityIds(servers, participantsMap),
     [participantsMap, servers]
@@ -2864,6 +2866,11 @@ export const DesktopServerRail = ({
   <aside className="sidebar__servers">
     <button type="button" className={`workspace-switch ${workspaceMode === "friends" ? "workspace-switch--active" : ""}`} onClick={onOpenFriendsWorkspace} aria-label="Друзья">
       <img src={smsIcon} alt="" />
+      {normalizedFriendRequestCount > 0 ? (
+        <span className="workspace-switch__badge" aria-label={`Входящих заявок в друзья: ${normalizedFriendRequestCount}`}>
+          {normalizedFriendRequestCount > 9 ? "9+" : normalizedFriendRequestCount}
+        </span>
+      ) : null}
       <span>Друзья</span>
     </button>
     {activeDirectCall ? (
