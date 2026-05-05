@@ -57,7 +57,6 @@ export function MenuMainSettingsContent({
   deviceSessions,
   deviceSessionsLoading,
   deviceSessionsError,
-  refreshDeviceSessions,
   openQrDeviceScanner,
   integrations,
   integrationsLoading,
@@ -206,7 +205,6 @@ export function MenuMainSettingsContent({
           deviceSessions={deviceSessions}
           deviceSessionsLoading={deviceSessionsLoading}
           deviceSessionsError={deviceSessionsError}
-          onRefreshSessions={refreshDeviceSessions}
           onOpenQrScanner={openQrDeviceScanner}
         />
       );

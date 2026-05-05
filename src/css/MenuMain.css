@@ -13937,6 +13937,18 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   margin-top: 8px;
 }
 
+.device-connect-guide__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.device-connect-guide__actions .settings-inline-button {
+  margin-top: 0;
+}
+
 .device-login-qr {
   display: flex;
   align-items: center;
@@ -14120,6 +14132,10 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .modal-backdrop--camera {
   z-index: 4200;
+}
+
+.modal-backdrop--qr-scanner {
+  z-index: 7600;
 }
 
 .stream-modal {

@@ -709,7 +709,6 @@ export const DevicesSettings = ({
   deviceSessions,
   deviceSessionsLoading,
   deviceSessionsError,
-  onRefreshSessions,
   onOpenQrScanner,
 }) => {
   const [accountQrState, setAccountQrState] = useState({
@@ -773,14 +772,6 @@ export const DevicesSettings = ({
           <h2>Устройства</h2>
           <p>Подключайте новые устройства по QR-коду и проверяйте, где сейчас открыт ваш аккаунт.</p>
         </div>
-        <div className="settings-shell__actions">
-          <button type="button" className="settings-inline-button" onClick={onRefreshSessions} disabled={deviceSessionsLoading}>
-            {deviceSessionsLoading ? "Обновляем..." : "Обновить"}
-          </button>
-          <button type="button" className="settings-inline-button device-connect-button" onClick={createAccountQr} disabled={accountQrState.loading}>
-            {accountQrState.loading ? "Создаём..." : "Показать QR для входа"}
-          </button>
-        </div>
       </div>
 
       <section className="voice-settings-card">
@@ -793,9 +784,14 @@ export const DevicesSettings = ({
           <div className="device-connect-guide__item">
             <strong>Подтвердить вход на ПК</strong>
             <span>Если QR открыт на другом устройстве, можно отсканировать его из приложения.</span>
-            <button type="button" className="settings-inline-button" onClick={onOpenQrScanner}>
-              Сканировать QR
-            </button>
+            <div className="device-connect-guide__actions">
+              <button type="button" className="settings-inline-button" onClick={onOpenQrScanner}>
+                Сканировать QR
+              </button>
+              <button type="button" className="settings-inline-button device-connect-button" onClick={createAccountQr} disabled={accountQrState.loading}>
+                {accountQrState.loading ? "Создаём..." : "Показать QR для входа"}
+              </button>
+            </div>
           </div>
         </div>
 

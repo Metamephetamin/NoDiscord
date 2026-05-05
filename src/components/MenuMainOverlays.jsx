@@ -516,7 +516,7 @@ export const QrScannerModal = ({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop modal-backdrop--qr-scanner" onClick={onClose}>
       <div className="camera-modal qr-scanner-modal" onClick={(event) => event.stopPropagation()}>
         <div className="camera-modal__header">
           <div>
