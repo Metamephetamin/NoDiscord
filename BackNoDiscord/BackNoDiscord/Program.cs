@@ -489,7 +489,7 @@ static string BuildContentSecurityPolicy(bool isDevelopment, IConfiguration conf
     AddSecureCspOrigin(connectSources, configuration["LiveKit:Url"]);
 
     return "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
-           "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+           "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mt0.google.com https://mt1.google.com https://mt2.google.com https://mt3.google.com; " +
            "media-src 'self' blob:; font-src 'self' data:; " +
            $"connect-src {string.Join(' ', connectSources)}; " +
            "worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests;";

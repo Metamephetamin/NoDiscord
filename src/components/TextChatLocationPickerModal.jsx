@@ -9,9 +9,10 @@ const DEFAULT_CENTER = {
 };
 
 const MIN_ZOOM = 3;
-const MAX_ZOOM = 18;
+const MAX_ZOOM = 20;
 const DEFAULT_ZOOM = 15;
 const DEGREE_SYMBOL = "\u00B0";
+const GOOGLE_MAP_TILE_URL = "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}";
 
 function clampLatitude(value) {
   return Math.max(-85.05112878, Math.min(85.05112878, Number(value) || 0));
@@ -83,10 +84,10 @@ export default function TextChatLocationPickerModal({
       setZoom(nextZoom);
     };
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      subdomains: ["a", "b", "c"],
+    L.tileLayer(GOOGLE_MAP_TILE_URL, {
+      subdomains: ["0", "1", "2", "3"],
       minZoom: MIN_ZOOM,
-      maxZoom: 19,
+      maxZoom: MAX_ZOOM,
       crossOrigin: true,
     }).addTo(map);
 
@@ -211,9 +212,7 @@ export default function TextChatLocationPickerModal({
             <h3>Отправить локацию</h3>
             <p>Нажмите по карте, чтобы точно отметить точку.</p>
           </div>
-          <button type="button" className="location-picker-modal__close" onClick={handleClose} aria-label="Закрыть">
-            ×
-          </button>
+          <button type="button" className="location-picker-modal__close" onClick={handleClose} aria-label="Закрыть" />
         </div>
 
         <div className="location-picker-modal__toolbar">

@@ -764,8 +764,8 @@ export default function useTextChatSendActions({
 
     const normalizedLatitude = Number(numericLatitude.toFixed(6));
     const normalizedLongitude = Number(numericLongitude.toFixed(6));
-    const normalizedZoom = Math.max(3, Math.min(18, Math.round(Number(zoom) || LOCATION_MESSAGE_DEFAULT_ZOOM)));
-    const locationUrl = `https://www.openstreetmap.org/?mlat=${normalizedLatitude}&mlon=${normalizedLongitude}#map=${normalizedZoom}/${normalizedLatitude}/${normalizedLongitude}`;
+    const normalizedZoom = Math.max(3, Math.min(20, Math.round(Number(zoom) || LOCATION_MESSAGE_DEFAULT_ZOOM)));
+    const locationUrl = `https://www.google.com/maps?q=${normalizedLatitude},${normalizedLongitude}&z=${normalizedZoom}`;
     const avatar = user?.avatarUrl || user?.avatar || "";
     let sendSucceeded = false;
 

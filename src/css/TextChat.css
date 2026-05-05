@@ -5310,6 +5310,41 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.location-picker-modal__close {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: transparent;
+  color: #aeb4c2;
+  font-size: 0;
+}
+
+.location-picker-modal__close::before,
+.location-picker-modal__close::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 16px;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.location-picker-modal__close::before {
+  transform: rotate(45deg);
+}
+
+.location-picker-modal__close::after {
+  transform: rotate(-45deg);
+}
+
+.location-picker-modal__close:hover {
+  background: transparent;
+  color: #ffffff;
+}
+
 .location-picker-modal__toolbar-button,
 .location-picker-modal__button {
   min-height: 38px;
@@ -5376,18 +5411,21 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 22px;
-  height: 22px;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
   border-radius: 999px 999px 999px 0;
-  background: linear-gradient(180deg, #ff735d, #ff4f6d);
-  box-shadow: 0 8px 16px rgba(255, 80, 100, 0.28);
+  border: 3px solid #ffffff;
+  background: linear-gradient(180deg, #f05245, #d93025);
+  box-shadow: 0 10px 22px rgba(217, 48, 37, 0.32), 0 0 0 4px rgba(217, 48, 37, 0.18);
+  pointer-events: none;
   transform: translate(-50%, -100%) rotate(-45deg);
 }
 
 .location-picker-map__marker::after {
   content: "";
   position: absolute;
-  inset: 5px;
+  inset: 7px;
   border-radius: 999px;
   background: #ffffff;
 }
