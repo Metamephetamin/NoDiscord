@@ -10749,7 +10749,14 @@ html[data-ui-theme="light"] .desktop-app-topbar__title-copy strong,
 html[data-ui-theme="light"] .desktop-app-topbar__title-icon,
 html[data-ui-theme="light"] .desktop-app-topbar__window-button,
 html[data-ui-theme="light"] .desktop-app-topbar__nav {
-  color: #172033;
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .desktop-app-topbar__title-icon svg,
+html[data-ui-theme="light"] .desktop-app-topbar__window-glyph {
+  color: #0f172a;
+  stroke: currentColor;
+  fill: currentColor;
 }
 
 html[data-ui-theme="light"] .desktop-app-topbar__window-button:hover,
@@ -18294,15 +18301,18 @@ html[data-ui-theme="light"] .menu__profile-wrapper--voice-connected .profile__id
 }
 
 html[data-ui-theme="light"] .profile__stream-title,
-html[data-ui-theme="light"] .profile__connection-channel {
+html[data-ui-theme="light"] .profile__connection-channel,
+html[data-ui-theme="light"] .profile__username {
   color: #172033;
 }
 
 html[data-ui-theme="light"] .profile__stream-meta,
+html[data-ui-theme="light"] .profile__activity-status,
+html[data-ui-theme="light"] .profile__activity-text,
 html[data-ui-theme="light"] .profile__quick-button,
 html[data-ui-theme="light"] .profile__mini-icon,
 html[data-ui-theme="light"] .profile__mini-arrow {
-  color: #5f6b82;
+  color: #172033;
 }
 
 html[data-ui-theme="light"] .profile__quick-button,
@@ -18316,8 +18326,22 @@ html[data-ui-theme="light"] .profile__quick-button:hover,
 html[data-ui-theme="light"] .profile__mini-icon:hover,
 html[data-ui-theme="light"] .profile__mini-arrow:hover {
   background: #eef3ff;
-  color: #2637c7;
+  color: #0f172a;
   box-shadow: none;
+}
+
+html[data-ui-theme="light"] .profile__quick-glyph,
+html[data-ui-theme="light"] .profile__mini-glyph,
+html[data-ui-theme="light"] .profile__mini-chevron,
+html[data-ui-theme="light"] .settings-shell__content .settings-shell__nav-icon,
+html[data-ui-theme="light"] .settings-shell__content svg {
+  color: #0f172a;
+  stroke: currentColor;
+  fill: currentColor;
+}
+
+html[data-ui-theme="light"] .profile__mini-icon--slashed {
+  color: #b4232e;
 }
 
 html[data-ui-theme="light"] .profile__stream-banner,
