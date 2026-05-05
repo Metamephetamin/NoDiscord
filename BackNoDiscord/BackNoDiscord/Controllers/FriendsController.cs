@@ -40,7 +40,7 @@ public class FriendsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetFriends()
+    public async Task<IActionResult> GetFriends(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
         {
@@ -51,7 +51,7 @@ public class FriendsController : ControllerBase
             .AsNoTracking()
             .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
             .OrderByDescending(item => item.CreatedAt)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var friendIds = friendships
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
@@ -61,12 +61,12 @@ public class FriendsController : ControllerBase
         var users = await _context.Users
             .AsNoTracking()
             .Where(item => friendIds.Contains(item.id))
-            .ToDictionaryAsync(item => item.id);
-        var activityByUserId = await LoadActiveActivitiesAsync(friendIds);
-        var unreadCountsByFriendId = await BuildDirectUnreadCountsAsync(currentUserId, friendIds);
-        var lastMessageAtByFriendId = await BuildDirectLastMessageTimestampsAsync(currentUserId, friendIds);
-        var mutualFriendCountsByFriendId = await BuildMutualFriendCountsAsync(currentUserId, friendIds);
-        var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, friendIds);
+            .ToDictionaryAsync(item => item.id, cancellationToken);
+        var activityByUserId = await LoadActiveActivitiesAsync(friendIds, cancellationToken);
+        var unreadCountsByFriendId = await BuildDirectUnreadCountsAsync(currentUserId, friendIds, cancellationToken);
+        var lastMessageAtByFriendId = await BuildDirectLastMessageTimestampsAsync(currentUserId, friendIds, cancellationToken);
+        var mutualFriendCountsByFriendId = await BuildMutualFriendCountsAsync(currentUserId, friendIds, cancellationToken);
+        var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, friendIds, cancellationToken);
         var friendshipCreatedAtByFriendId = friendships
             .GroupBy(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .ToDictionary(group => group.Key, group => group.Max(item => item.CreatedAt));
@@ -170,7 +170,7 @@ public class FriendsController : ControllerBase
             .ThenBy(item => item.last_name, StringComparer.OrdinalIgnoreCase)
             .Take(20)
             .ToList();
-        var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, result.Select(item => item.id));
+        var blockStateByUserId = await LoadBlockStatesAsync(currentUserId, result.Select(item => item.id), cancellationToken);
 
         return Ok(result.Select(item => new
         {
@@ -276,19 +276,19 @@ public class FriendsController : ControllerBase
     }
 
     [HttpGet("requests")]
-    public async Task<IActionResult> GetIncomingFriendRequests()
+    public async Task<IActionResult> GetIncomingFriendRequests(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
         {
             return Unauthorized();
         }
 
-        var requests = await _friendRequestService.GetIncomingPendingRequestsAsync(currentUserId);
+        var requests = await _friendRequestService.GetIncomingPendingRequestsAsync(currentUserId, cancellationToken);
         var senderIds = requests.Select(item => item.SenderUserId).Distinct().ToList();
         var senders = await _context.Users
             .AsNoTracking()
             .Where(item => senderIds.Contains(item.id))
-            .ToDictionaryAsync(item => item.id);
+            .ToDictionaryAsync(item => item.id, cancellationToken);
 
         var result = requests
             .Where(item => senders.ContainsKey(item.SenderUserId))
@@ -451,7 +451,7 @@ public class FriendsController : ControllerBase
         return DirectMessageChannels.BuildChannelId(firstUserId, secondUserId);
     }
 
-    private async Task<Dictionary<int, UserIntegrationRecord>> LoadActiveActivitiesAsync(IEnumerable<int> userIds)
+    private async Task<Dictionary<int, UserIntegrationRecord>> LoadActiveActivitiesAsync(IEnumerable<int> userIds, CancellationToken cancellationToken)
     {
         var normalizedUserIds = userIds.Distinct().ToList();
         if (normalizedUserIds.Count == 0)
@@ -466,7 +466,7 @@ public class FriendsController : ControllerBase
                 item.DisplayInProfile &&
                 item.UseAsStatus &&
                 item.ActivityTitle != string.Empty)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return records
             .GroupBy(item => item.UserId)
@@ -477,7 +477,7 @@ public class FriendsController : ControllerBase
                     .First());
     }
 
-    private async Task<Dictionary<int, int>> BuildDirectUnreadCountsAsync(int currentUserId, IReadOnlyCollection<int> friendIds)
+    private async Task<Dictionary<int, int>> BuildDirectUnreadCountsAsync(int currentUserId, IReadOnlyCollection<int> friendIds, CancellationToken cancellationToken)
     {
         if (friendIds.Count == 0)
         {
@@ -505,7 +505,7 @@ public class FriendsController : ControllerBase
                 message.Content,
                 message.EncryptedContent
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var counts = new Dictionary<int, int>();
         var currentUserKey = currentUserId.ToString();
@@ -533,7 +533,7 @@ public class FriendsController : ControllerBase
         return counts;
     }
 
-    private async Task<Dictionary<int, DateTime>> BuildDirectLastMessageTimestampsAsync(int currentUserId, IReadOnlyCollection<int> friendIds)
+    private async Task<Dictionary<int, DateTime>> BuildDirectLastMessageTimestampsAsync(int currentUserId, IReadOnlyCollection<int> friendIds, CancellationToken cancellationToken)
     {
         if (friendIds.Count == 0)
         {
@@ -556,7 +556,7 @@ public class FriendsController : ControllerBase
                 ChannelId = group.Key,
                 Timestamp = group.Max(message => message.Timestamp)
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var latestByFriend = new Dictionary<int, DateTime>();
         foreach (var item in latestByChannel)
@@ -575,7 +575,7 @@ public class FriendsController : ControllerBase
         return latestByFriend;
     }
 
-    private async Task<Dictionary<int, int>> BuildMutualFriendCountsAsync(int currentUserId, IReadOnlyCollection<int> friendIds)
+    private async Task<Dictionary<int, int>> BuildMutualFriendCountsAsync(int currentUserId, IReadOnlyCollection<int> friendIds, CancellationToken cancellationToken)
     {
         var targetFriendIds = friendIds
             .Where(item => item > 0 && item != currentUserId)
@@ -591,7 +591,7 @@ public class FriendsController : ControllerBase
             .AsNoTracking()
             .Where(item => targetFriendIds.Contains(item.UserLowId) || targetFriendIds.Contains(item.UserHighId))
             .Select(item => new { item.UserLowId, item.UserHighId })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var mutualFriendIdsByTarget = targetFriendIds.ToDictionary(
             targetId => targetId,
@@ -638,7 +638,7 @@ public class FriendsController : ControllerBase
         return channelFriendLookup;
     }
 
-    private async Task<Dictionary<int, UserBlockState>> LoadBlockStatesAsync(int currentUserId, IEnumerable<int> userIds)
+    private async Task<Dictionary<int, UserBlockState>> LoadBlockStatesAsync(int currentUserId, IEnumerable<int> userIds, CancellationToken cancellationToken)
     {
         var normalizedUserIds = userIds
             .Where(item => item > 0 && item != currentUserId)
@@ -656,7 +656,7 @@ public class FriendsController : ControllerBase
                 (item.BlockerUserId == currentUserId && normalizedUserIds.Contains(item.BlockedUserId)) ||
                 (item.BlockedUserId == currentUserId && normalizedUserIds.Contains(item.BlockerUserId)))
             .Select(item => new { item.BlockerUserId, item.BlockedUserId })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return normalizedUserIds.ToDictionary(
             userId => userId,

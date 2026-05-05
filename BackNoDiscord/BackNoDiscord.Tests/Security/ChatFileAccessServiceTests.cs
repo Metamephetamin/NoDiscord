@@ -109,6 +109,70 @@ public sealed class ChatFileAccessServiceTests
         Assert.False(allowed);
     }
 
+    [Fact]
+    public async Task CanAccessFileAsync_AllowsConversationParticipantForBoundFile()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        context.GroupConversationMembers.Add(new GroupConversationMemberRecord
+        {
+            ConversationId = 17,
+            UserId = 84,
+            Role = "member",
+            JoinedAt = DateTimeOffset.UtcNow,
+            IsBanned = false
+        });
+        context.ChatFileUploads.Add(new ChatFileUploadRecord
+        {
+            FileName = "chat-42-group.png",
+            OwnerUserId = "42",
+            DisplayFileName = "group.png",
+            ContentType = "image/png",
+            Size = 12,
+            ChannelId = ConversationChannels.BuildChatChannelId(17),
+            MessageId = 123,
+            CreatedAt = DateTimeOffset.UtcNow,
+            BoundAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-group.png", User("84"), CancellationToken.None);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public async Task CanAccessFileAsync_DeniesBannedConversationParticipantForBoundFile()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        context.GroupConversationMembers.Add(new GroupConversationMemberRecord
+        {
+            ConversationId = 17,
+            UserId = 84,
+            Role = "member",
+            JoinedAt = DateTimeOffset.UtcNow,
+            IsBanned = true
+        });
+        context.ChatFileUploads.Add(new ChatFileUploadRecord
+        {
+            FileName = "chat-42-group.png",
+            OwnerUserId = "42",
+            DisplayFileName = "group.png",
+            ContentType = "image/png",
+            Size = 12,
+            ChannelId = ConversationChannels.BuildChatChannelId(17),
+            MessageId = 123,
+            CreatedAt = DateTimeOffset.UtcNow,
+            BoundAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-group.png", User("84"), CancellationToken.None);
+
+        Assert.False(allowed);
+    }
+
     private static ChatFileAccessService CreateService(AppDbContext context)
     {
         return new ChatFileAccessService(context, new ServerStateService(context));

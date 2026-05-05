@@ -622,6 +622,12 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.ChannelId, x.Timestamp });
             entity.HasIndex(x => new { x.ChannelId, x.Id });
+            entity.HasIndex(x => new { x.ChannelId, x.Timestamp })
+                .HasDatabaseName("ix_chatmessages_active_channelid_timestamp")
+                .HasFilter("is_deleted = false");
+            entity.HasIndex(x => new { x.ChannelId, x.Id })
+                .HasDatabaseName("ix_chatmessages_active_channelid_id")
+                .HasFilter("is_deleted = false");
             entity.HasIndex(x => new { x.ChannelId, x.ReadAt, x.AuthorUserId });
             entity.HasIndex(x => x.Timestamp);
         });
@@ -644,6 +650,7 @@ public class AppDbContext : DbContext
             entity.ToTable("message_reactions");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.MessageId, x.ReactionKey });
+            entity.HasIndex(x => new { x.MessageId, x.CreatedAt });
             entity.HasIndex(x => new { x.ChannelId, x.CreatedAt });
             entity.HasIndex(x => new { x.MessageId, x.ReactorUserId, x.ReactionKey }).IsUnique();
             entity.Property(x => x.ChannelId).IsRequired();
@@ -703,6 +710,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ActivityDetails).IsRequired();
             entity.Property(x => x.AccessTokenEncrypted).IsRequired();
             entity.Property(x => x.RefreshTokenEncrypted).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.DisplayInProfile, x.UseAsStatus, x.ActivityUpdatedAt });
         });
 
 
@@ -740,6 +748,8 @@ public class AppDbContext : DbContext
                 .HasFilter("status = 'pending'");
             entity.HasIndex(x => new { x.ReceiverUserId, x.Status, x.CreatedAt });
             entity.HasIndex(x => new { x.SenderUserId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.UserLowId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.UserHighId, x.Status, x.CreatedAt });
             entity.Property(x => x.Status).IsRequired();
         });
 
@@ -834,6 +844,8 @@ public class AppDbContext : DbContext
             entity.ToTable("friendships");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.UserLowId, x.UserHighId }).IsUnique();
+            entity.HasIndex(x => new { x.UserLowId, x.CreatedAt });
+            entity.HasIndex(x => new { x.UserHighId, x.CreatedAt });
             entity.HasIndex(x => x.CreatedAt);
         });
     }

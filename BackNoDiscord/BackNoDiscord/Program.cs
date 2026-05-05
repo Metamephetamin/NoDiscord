@@ -227,8 +227,10 @@ builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSen
 builder.Services.AddScoped<ServerInviteService>();
 builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddScoped<ChatFileAccessService>();
+builder.Services.AddScoped<ChatFileMetadataRepairService>();
 builder.Services.AddScoped<FriendRequestService>();
 builder.Services.AddScoped<UserBlockService>();
+builder.Services.AddHostedService<ChatFileMetadataRepairHostedService>();
 builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationService>();
 builder.Services.AddSingleton<ITextTranslationService, TextTranslationService>();
