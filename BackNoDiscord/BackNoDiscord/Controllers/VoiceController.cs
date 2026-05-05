@@ -89,7 +89,7 @@ public class VoiceController : ControllerBase
             Avatar = UploadPolicies.SanitizeRelativeAssetUrl(dto.Avatar, "/avatars/")
         });
 
-        await _hub.Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        await _hub.Clients.All.SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(normalizedChannel));
         return Ok();
     }
 
@@ -104,7 +104,7 @@ public class VoiceController : ControllerBase
         var removed = _channels.LeaveChannel(currentUser.UserId);
         if (removed.VoiceStateChanged)
         {
-            await _hub.Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await _hub.Clients.All.SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(removed.ChannelName));
         }
         return Ok();
     }
@@ -175,5 +175,18 @@ public class VoiceController : ControllerBase
             .GetSnapshot(serverId);
 
         return ServerChannelAuthorization.CanAccessServer(serverId, currentUserSnapshot, serverSnapshot);
+    }
+
+    private Dictionary<string, List<Participant>> BuildChannelUpdateSnapshot(string? channelName)
+    {
+        if (string.IsNullOrWhiteSpace(channelName))
+        {
+            return new Dictionary<string, List<Participant>>(StringComparer.Ordinal);
+        }
+
+        return new Dictionary<string, List<Participant>>(StringComparer.Ordinal)
+        {
+            [channelName] = _channels.GetParticipantsInChannel(channelName)
+        };
     }
 }

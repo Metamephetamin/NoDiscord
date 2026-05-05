@@ -20,7 +20,6 @@ export default function TextChatMediaPreview({
   const pendingPanDeltaRef = useRef({ x: 0, y: 0 });
   const pendingPanFrameRef = useRef(0);
   const lastWheelNavigationAtRef = useRef(0);
-  const previewRootRef = useRef(null);
   const viewportRef = useRef(null);
   const latestStateRef = useRef({
     hasGallery: false,
@@ -172,8 +171,7 @@ export default function TextChatMediaPreview({
   }, [hasGallery, onNavigate, onPan, onZoom]);
 
   useEffect(() => {
-    const previewRootNode = previewRootRef.current;
-    if (!previewRootNode) {
+    if (!isPreviewOpen || typeof window === "undefined") {
       return undefined;
     }
 
@@ -181,11 +179,11 @@ export default function TextChatMediaPreview({
       handleWheelAction(event);
     };
 
-    previewRootNode.addEventListener("wheel", handleNativeWheel, { passive: false });
+    window.addEventListener("wheel", handleNativeWheel, { passive: false, capture: true });
     return () => {
-      previewRootNode.removeEventListener("wheel", handleNativeWheel);
+      window.removeEventListener("wheel", handleNativeWheel, { capture: true });
     };
-  }, [handleWheelAction]);
+  }, [handleWheelAction, isPreviewOpen]);
 
   useEffect(() => () => {
     if (pendingPanFrameRef.current && typeof window !== "undefined") {
@@ -253,7 +251,7 @@ export default function TextChatMediaPreview({
   }
 
   return (
-    <div ref={previewRootRef} className="media-preview" onClick={onClose} role="presentation">
+    <div className="media-preview" onClick={onClose} role="presentation">
       <div className="media-preview__dialog" role="dialog" aria-modal="true" aria-label="Предпросмотр файла">
         <div className="media-preview__header">
           <div className="media-preview__meta" onClick={stopEvent}>

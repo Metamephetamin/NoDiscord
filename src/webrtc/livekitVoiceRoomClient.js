@@ -492,6 +492,7 @@ export function createVoiceRoomClient({
   let lastVoicePingMs = null;
   let lastVoiceRouteSnapshot = null;
   let lastVoiceRouteSignature = "";
+  let participantsMapSnapshot = {};
   const lastOutboundVideoSamplesByLabel = new Map();
   let adaptiveMediaProfile = "good";
   let pendingAdaptiveMediaProfile = "";
@@ -1102,7 +1103,21 @@ export function createVoiceRoomClient({
   };
 
   const emitParticipants = (data) => {
-    onParticipantsMapChanged?.(normalizeParticipantsMap(data));
+    participantsMapSnapshot = normalizeParticipantsMap(data);
+    onParticipantsMapChanged?.(participantsMapSnapshot);
+  };
+
+  const emitParticipantChannelUpdates = (data) => {
+    const channelUpdates = normalizeParticipantsMap(data);
+    if (!Object.keys(channelUpdates).length) {
+      return;
+    }
+
+    participantsMapSnapshot = {
+      ...participantsMapSnapshot,
+      ...channelUpdates,
+    };
+    onParticipantsMapChanged?.(participantsMapSnapshot);
   };
 
   const emitRemoteScreens = () => {
@@ -3345,6 +3360,10 @@ const handleDeviceChange = () => {
   const bindSignalConnectionEvents = (connection) => {
     connection.on("voice:update", (data) => {
       emitParticipants(data);
+    });
+
+    connection.on("voice:channel-update", (data) => {
+      emitParticipantChannelUpdates(data);
     });
 
     connection.on("voice:self-state", (payload) => {

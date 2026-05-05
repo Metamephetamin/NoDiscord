@@ -108,7 +108,7 @@ public class VoiceHub : Hub
         }
         else
         {
-            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await BroadcastChannelUpdatesAsync(previousChannel, normalizedChannelName);
         }
         await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
 
@@ -147,7 +147,7 @@ public class VoiceHub : Hub
         var removed = _channels.LeaveChannel(currentUser.UserId);
         if (removed.VoiceStateChanged)
         {
-            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await BroadcastChannelUpdatesAsync(removed.ChannelName ?? currentChannel);
             await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
         }
     }
@@ -270,7 +270,7 @@ public class VoiceHub : Hub
             return;
         }
 
-        await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+        await BroadcastChannelUpdatesAsync(_channels.GetChannelForUser(currentUser.UserId));
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
     }
 
@@ -319,7 +319,7 @@ public class VoiceHub : Hub
 
         if (voiceStateChanged)
         {
-            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await BroadcastChannelUpdatesAsync(_channels.GetChannelForUser(targetUserId));
         }
 
         if (voiceStateChanged && _channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
@@ -493,7 +493,7 @@ public class VoiceHub : Hub
 
         if (removed.VoiceStateChanged)
         {
-            await Clients.All.SendAsync("voice:update", _channels.GetAllChannels());
+            await BroadcastChannelUpdatesAsync(removed.ChannelName);
             await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
         }
         await base.OnDisconnectedAsync(exception);
@@ -525,6 +525,26 @@ public class VoiceHub : Hub
 
         return !string.IsNullOrWhiteSpace(firstChannel) &&
                string.Equals(firstChannel, secondChannel, StringComparison.Ordinal);
+    }
+
+    private Task BroadcastChannelUpdatesAsync(params string?[] channelNames)
+    {
+        var channelUpdates = BuildChannelUpdateSnapshot(channelNames);
+        return channelUpdates.Count == 0
+            ? Task.CompletedTask
+            : Clients.All.SendAsync("voice:channel-update", channelUpdates);
+    }
+
+    private Dictionary<string, List<Participant>> BuildChannelUpdateSnapshot(IEnumerable<string?> channelNames)
+    {
+        return channelNames
+            .Where(channelName => !string.IsNullOrWhiteSpace(channelName))
+            .Select(channelName => channelName!)
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(
+                channelName => channelName,
+                channelName => _channels.GetParticipantsInChannel(channelName),
+                StringComparer.Ordinal);
     }
 
     private ServerSnapshot? ResolveServerSnapshot(string channelName)

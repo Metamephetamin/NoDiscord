@@ -32,6 +32,8 @@
     "test:media-preview": "node ./scripts/media-preview-smoke.mjs",
     "test:realtime": "node ./scripts/realtime-smoke.mjs",
     "test:visual:chat": "node ./scripts/visual-smoke-chat.mjs",
+    "load:http": "node ./scripts/load/http-smoke.mjs",
+    "load:voice": "node ./scripts/load/voice-signalr.mjs",
     "audit:public-assets": "node ./scripts/audit-public-assets.mjs",
     "audit:perf": "node ./scripts/perf-audit.mjs"
   },
