@@ -130,6 +130,7 @@ src/livekit/livekit-server
 src/livekit/*.zip
 scripts/load/.tokens*.json
 scripts/load/.tokens*.txt
+scripts/load/.seed-users*.sql
 certs/
 src/livekit/livekit_certs/
 .tools/

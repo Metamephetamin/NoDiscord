@@ -28,18 +28,25 @@ var jwtAudience = Environment.GetEnvironmentVariable("Jwt__Audience")
     ?? Environment.GetEnvironmentVariable("Jwt:Audience");
 var accessTokenMinutes = ReadPositiveInt("Jwt__AccessTokenMinutes", ReadPositiveInt("Jwt:AccessTokenMinutes", 120));
 var outputFile = Environment.GetEnvironmentVariable("LOAD_TEST_OUTPUT") ?? "scripts/load/.tokens.json";
+var sqlOutputFile = Environment.GetEnvironmentVariable("LOAD_TEST_SQL_OUTPUT") ?? string.Empty;
 var targetServerId = Environment.GetEnvironmentVariable("LOAD_TEST_SERVER_ID")
     ?? TryGetServerIdFromVoiceChannel(Environment.GetEnvironmentVariable("LOAD_TEST_VOICE_CHANNEL"));
 var matchedServerSnapshot = false;
 
-if (string.IsNullOrWhiteSpace(connectionString))
-{
-    throw new InvalidOperationException("Set LOAD_TEST_CONNECTION_STRING or ConnectionStrings__DefaultConnection.");
-}
-
 if (password.Trim().Length < 6)
 {
     throw new InvalidOperationException("Set LOAD_TEST_PASSWORD to at least 6 characters.");
+}
+
+if (!string.IsNullOrWhiteSpace(sqlOutputFile))
+{
+    WriteSeedSql(sqlOutputFile, emailPrefix, emailDomain, startIndex, userCount, password, targetServerId);
+    return;
+}
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException("Set LOAD_TEST_CONNECTION_STRING or ConnectionStrings__DefaultConnection.");
 }
 
 var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -191,6 +198,131 @@ static string BuildNickname(string prefix, string suffix)
     }
 
     return $"{normalizedPrefix}{suffix}"[..Math.Min(50, normalizedPrefix.Length + suffix.Length)];
+}
+
+static void WriteSeedSql(
+    string outputFile,
+    string emailPrefix,
+    string emailDomain,
+    int startIndex,
+    int userCount,
+    string password,
+    string? targetServerId)
+{
+    if (string.IsNullOrWhiteSpace(targetServerId))
+    {
+        throw new InvalidOperationException("Set LOAD_TEST_VOICE_CHANNEL or LOAD_TEST_SERVER_ID before writing seed SQL.");
+    }
+
+    var passwordHasher = new PasswordHasher<User>();
+    var values = new List<string>();
+    for (var offset = 0; offset < userCount; offset += 1)
+    {
+        var index = startIndex + offset;
+        var suffix = index.ToString("D3");
+        var email = $"{emailPrefix}{suffix}@{emailDomain}".ToLowerInvariant();
+        var nickname = BuildNickname(emailPrefix, suffix);
+        var user = new User
+        {
+            first_name = "Load",
+            last_name = "Test",
+            nickname = nickname,
+            email = email,
+            is_email_verified = true,
+            is_phone_verified = false,
+        };
+        user.password_hash = passwordHasher.HashPassword(user, password);
+
+        values.Add(
+            $"  ({SqlQuote(user.first_name)}, {SqlQuote(user.last_name)}, {SqlQuote(user.nickname)}, {SqlQuote(user.email)}, {SqlQuote(user.password_hash)})");
+    }
+
+    var sql = $"""
+BEGIN;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM shared_server_snapshots WHERE server_id = {SqlQuote(targetServerId)}) THEN
+    RAISE EXCEPTION 'shared_server_snapshots row not found for server_id=%', {SqlQuote(targetServerId)};
+  END IF;
+END $$;
+
+WITH input_users(first_name, last_name, nickname, email, password_hash) AS (
+VALUES
+{string.Join(",\n", values)}
+),
+upserted AS (
+  INSERT INTO users(first_name, last_name, nickname, email, is_email_verified, is_phone_verified, password_hash)
+  SELECT first_name, last_name, nickname, email, TRUE, FALSE, password_hash
+  FROM input_users
+  ON CONFLICT (email) DO UPDATE SET
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    nickname = EXCLUDED.nickname,
+    is_email_verified = TRUE,
+    is_phone_verified = FALSE,
+    password_hash = EXCLUDED.password_hash
+  RETURNING id, email, nickname
+),
+target_snapshot AS (
+  SELECT id, snapshot_json::jsonb AS snapshot
+  FROM shared_server_snapshots
+  WHERE server_id = {SqlQuote(targetServerId)}
+  FOR UPDATE
+),
+next_snapshot AS (
+  SELECT
+    target_snapshot.id,
+    jsonb_set(
+      target_snapshot.snapshot,
+      ARRAY['members'],
+      COALESCE((
+        SELECT jsonb_agg(existing_member)
+        FROM jsonb_array_elements(COALESCE(target_snapshot.snapshot->'members', '[]'::jsonb)) AS existing_member
+        WHERE NOT EXISTS (
+          SELECT 1 FROM upserted WHERE existing_member->>'userId' = upserted.id::text
+        )
+      ), '[]'::jsonb)
+      ||
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'userId', upserted.id::text,
+          'name', upserted.nickname,
+          'avatar', '',
+          'roleId', 'member'
+        ))
+        FROM upserted
+      ), '[]'::jsonb),
+      TRUE
+    ) AS snapshot
+  FROM target_snapshot
+)
+UPDATE shared_server_snapshots
+SET snapshot_json = next_snapshot.snapshot::text,
+    updated_at = NOW()
+FROM next_snapshot
+WHERE shared_server_snapshots.id = next_snapshot.id;
+
+COMMIT;
+""";
+
+    Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? ".");
+    File.WriteAllText(outputFile, sql);
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        outputFile,
+        emailPrefix,
+        emailDomain,
+        startIndex,
+        userCount,
+        targetServerId,
+        mode = "sql"
+    }, new JsonSerializerOptions { WriteIndented = true }));
+}
+
+static string SqlQuote(string? value)
+{
+    return $"'{(value ?? string.Empty).Replace("'", "''", StringComparison.Ordinal)}'";
 }
 
 static string? TryGetServerIdFromVoiceChannel(string? voiceChannel)
