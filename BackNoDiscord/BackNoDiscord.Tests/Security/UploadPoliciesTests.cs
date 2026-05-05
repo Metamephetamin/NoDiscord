@@ -200,6 +200,35 @@ public class UploadPoliciesTests
         Assert.Equal(string.Empty, error);
     }
 
+    [Theory]
+    [InlineData("voice.m4a", ".m4a")]
+    [InlineData("camera.mov", ".mov")]
+    [InlineData("photo.heic", ".heic")]
+    [InlineData("photo.heif", ".heif")]
+    public void TryValidateChatFile_AcceptsIosMediaFormats(string fileName, string expectedExtension)
+    {
+        var bytes = new byte[]
+        {
+            0x00, 0x00, 0x00, 0x18,
+            (byte)'f', (byte)'t', (byte)'y', (byte)'p',
+            (byte)'i', (byte)'s', (byte)'o', (byte)'m',
+            0x00
+        };
+        using var stream = new MemoryStream(bytes);
+        IFormFile file = new FormFile(stream, 0, bytes.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/octet-stream"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(expectedExtension, extension);
+        Assert.False(string.IsNullOrWhiteSpace(contentType));
+        Assert.Equal(string.Empty, error);
+    }
+
     [Fact]
     public void SanitizeRelativeAssetUrl_AllowsOnlyExpectedPrefix()
     {

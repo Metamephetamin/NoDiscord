@@ -51,6 +51,8 @@ public static class UploadPolicies
         ".png",
         ".webp",
         ".gif",
+        ".heif",
+        ".heic",
         ".bmp",
         ".pdf",
         ".txt",
@@ -60,9 +62,11 @@ public static class UploadPolicies
         ".rar",
         ".7z",
         ".mp3",
+        ".m4a",
         ".wav",
         ".ogg",
         ".mp4",
+        ".mov",
         ".webm"
     };
 
@@ -426,7 +430,7 @@ public static class UploadPolicies
             ".mp3" => StartsWithAscii(header, "ID3") || StartsWith(header, 0xFF, 0xFB) || StartsWith(header, 0xFF, 0xF3) || StartsWith(header, 0xFF, 0xF2),
             ".wav" => StartsWithAscii(header, "RIFF") && HasAsciiAt(header, 8, "WAVE"),
             ".ogg" => StartsWithAscii(header, "OggS"),
-            ".mp4" => HasAsciiAt(header, 4, "ftyp"),
+            ".mp4" or ".m4a" or ".mov" => HasAsciiAt(header, 4, "ftyp"),
             ".webm" => StartsWith(header, 0x1A, 0x45, 0xDF, 0xA3),
             ".txt" or ".md" => LooksLikeText(header),
             ".bin" => true,
