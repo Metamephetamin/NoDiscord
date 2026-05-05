@@ -819,8 +819,9 @@
 }
 
 .msg-content--dm.msg-content--emoji-only-text {
-  align-items: flex-start;
-  gap: 3px;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -836,16 +837,55 @@
 
 .msg-content--emoji-only-text .message-bottom-row {
   margin-top: 0;
-  align-self: flex-start;
+  align-self: center;
+  align-items: center;
+  width: auto;
 }
 
 .msg-content--emoji-only-text .message-footer {
-  align-self: flex-start;
-  padding-left: 2px;
+  align-self: center;
+  padding-left: 0;
 }
 
 .msg-content--emoji-only-text .message-read-status {
   display: none;
+}
+
+.message-item--dm.message-item--emoji-only-text {
+  align-items: center;
+}
+
+.message-item--emoji-only-text .msg-avatar {
+  align-self: center;
+}
+
+.msg-content--dm.msg-content--file-only {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  width: min(100%, 420px);
+  max-width: min(100%, 520px);
+  min-height: 60px;
+  padding: 8px 12px 8px 10px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #356d9e 0%, #2b5f8d 100%);
+  box-shadow: 0 10px 24px rgba(18, 42, 74, 0.2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.msg-content--dm.msg-content--file-only::before {
+  content: none;
+}
+
+.message-item--dm.message-item--file-only {
+  align-items: center;
+}
+
+.message-item--file-only .msg-avatar {
+  align-self: center;
 }
 
 .msg-content--dm::after,
@@ -1149,9 +1189,9 @@
   margin-top: 0;
   display: inline-flex;
   align-items: center;
-  min-height: 48px;
+  min-height: 0;
   font-size: 42px;
-  line-height: 1.08;
+  line-height: 1;
   letter-spacing: 0.01em;
 }
 
@@ -2409,6 +2449,34 @@
   align-self: flex-start;
 }
 
+.msg-content--file-only > .message-attachment,
+.msg-content--file-only > .message-attachments-stack,
+.msg-content--file-only .message-attachment-list {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  margin-top: 0;
+}
+
+.msg-content--file-only .message-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-content--file-only .message-bottom-row--file {
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  margin: 0;
+  align-self: center;
+  justify-content: flex-end;
+}
+
+.msg-content--file-only .message-bottom-row--file .message-footer {
+  align-self: center;
+}
+
 .message-reactions-wrap {
   position: relative;
   display: inline-flex;
@@ -3238,6 +3306,67 @@
   background: linear-gradient(135deg, #7c6cff, #5298ff);
   -webkit-mask: url("/icons/plus.png") center / contain no-repeat;
   mask: url("/icons/plus.png") center / contain no-repeat;
+}
+
+.msg-content--file-only .message-attachment--document {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 0;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #f2f7ff;
+  box-shadow: none;
+}
+
+.msg-content--file-only .message-attachment__icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #5db4f0;
+  -webkit-mask: none;
+  mask: none;
+}
+
+.msg-content--file-only .message-attachment__icon::before {
+  content: "";
+  width: 17px;
+  height: 20px;
+  border-radius: 4px;
+  background: #ffffff;
+  clip-path: polygon(0 0, 68% 0, 100% 30%, 100% 100%, 0 100%);
+}
+
+.msg-content--file-only .message-attachment--document .message-attachment__meta {
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 0;
+}
+
+.msg-content--file-only .message-attachment--document .message-attachment__name {
+  max-width: 240px;
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.16;
+}
+
+.msg-content--file-only .message-attachment--document .message-attachment__size {
+  color: rgba(209, 229, 248, 0.78);
+  font-size: 12px;
+}
+
+.msg-content--file-only .message-attachment__open-with {
+  display: none;
 }
 
 .message-attachment__meta {

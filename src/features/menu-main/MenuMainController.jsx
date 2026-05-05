@@ -4,6 +4,7 @@ import VoiceChannelList from "../../components/VoiceChannelList";
 import TextChat from "../../components/TextChat";
 import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
+import AnimatedAvatar from "../../components/AnimatedAvatar";
 import ServerRailContextLayer from "../../components/ServerRailContextLayer";
 import {
   DesktopServerRail,
@@ -6595,10 +6596,13 @@ export default function MenuMain({
       <div className="desktop-app-topbar__center">
         <div className="desktop-app-topbar__title">
           {desktopTitlebarContext.iconType === "image" && desktopTitlebarContext.iconSrc ? (
-            <img
+            <AnimatedAvatar
               className="desktop-app-topbar__title-icon desktop-app-topbar__title-icon--image"
               src={desktopTitlebarContext.iconSrc}
               alt={desktopTitlebarContext.iconAlt || desktopTitlebarContext.title}
+              fallback=""
+              loading="lazy"
+              decoding="async"
             />
           ) : (
             <span className="desktop-app-topbar__title-icon" aria-hidden="true">

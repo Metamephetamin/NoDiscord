@@ -85,7 +85,7 @@ function ChatSystemEventMessage({ systemEvent }) {
     <div className="chat-system-event">
       <div className="chat-system-event__text">{text}</div>
       {resolvedAvatarUrl ? (
-        <img
+        <AnimatedAvatar
           className="chat-system-event__image"
           src={resolvedAvatarUrl}
           alt=""
@@ -1789,6 +1789,11 @@ function TextChatMessageList({
               Boolean(attachmentItem?.attachmentAsFile)
               || (!attachmentItem?.isVoice && !attachmentItem?.isImage && !attachmentItem?.isVideo)
             ));
+          const hasOnlyFileLikeAttachments = hasRenderableAttachments
+            && attachments.every((attachmentItem) => (
+              Boolean(attachmentItem?.attachmentAsFile)
+              || (!attachmentItem?.isVoice && !attachmentItem?.isImage && !attachmentItem?.isVideo)
+            ));
           const isMediaOnlyMessage =
             !hasFileLikeAttachments
             && !messageText.trim()
@@ -1808,6 +1813,15 @@ function TextChatMessageList({
             && !hasRenderableAttachments
             && !messagePoll
             && !inviteCode
+            && !reactions.length
+            && !messageItem.forwardedFromUsername
+            && !messageItem.replyToMessageId;
+          const isFileOnlyMessage =
+            isDirectChat
+            && hasOnlyFileLikeAttachments
+            && !messageText.trim()
+            && !inviteCode
+            && !messagePoll
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
@@ -1861,7 +1875,7 @@ function TextChatMessageList({
             <div
               key={messageRenderKey}
               ref={(node) => registerMessageNode(messageItem.id, node)}
-              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
+              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
               onClick={handleMessageClick}
             >
@@ -1895,7 +1909,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {
