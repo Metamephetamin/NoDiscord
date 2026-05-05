@@ -17472,6 +17472,272 @@ html[data-ui-density="compact"] .quick-switcher__badge {
   }
 }
 
+/* Theme surface corrections */
+html[data-ui-theme="light"] .settings-shell__content,
+html[data-ui-theme="purple"] .settings-shell__content {
+  color: var(--app-text);
+  scrollbar-color: rgba(150, 160, 184, 0.42) transparent;
+}
+
+html[data-ui-theme="light"] .settings-shell__search-wrap .settings-shell__search,
+html[data-ui-theme="purple"] .settings-shell__search-wrap .settings-shell__search {
+  border: 1px solid var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .settings-shell__search-wrap::after,
+html[data-ui-theme="light"] .settings-shell__search-empty,
+html[data-ui-theme="purple"] .settings-shell__search-wrap::after,
+html[data-ui-theme="purple"] .settings-shell__search-empty {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .settings-shell__search-icon,
+html[data-ui-theme="purple"] .settings-shell__search-icon {
+  background: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-wrap .settings-shell__search,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__search-wrap .settings-shell__search {
+  border-color: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.035);
+  color: #d7dbea;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-wrap::after,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__search-wrap::after {
+  color: #858a98;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-icon,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__search-icon {
+  background: #b7bbc7;
+}
+
+html[data-ui-theme="light"] .settings-shell__nav-group,
+html[data-ui-theme="purple"] .settings-shell__nav-group {
+  border-color: var(--app-border);
+}
+
+html[data-ui-theme="light"] .settings-shell__nav-label,
+html[data-ui-theme="purple"] .settings-shell__nav-label {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .settings-shell__nav-item,
+html[data-ui-theme="purple"] .settings-shell__nav-item {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .settings-shell__nav-item:hover,
+html[data-ui-theme="light"] .settings-shell__nav-item--active,
+html[data-ui-theme="purple"] .settings-shell__nav-item:hover,
+html[data-ui-theme="purple"] .settings-shell__nav-item--active {
+  background: var(--app-selected-bg);
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-group,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__nav-group {
+  border-color: rgba(255, 255, 255, 0.055);
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-label,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__nav-label {
+  color: #969ba8;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__nav-item {
+  color: #a9adba;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item:hover,
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item--active,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__nav-item:hover,
+html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__nav-item--active {
+  background: rgba(255, 255, 255, 0.075);
+  color: #ffffff;
+}
+
+html[data-ui-theme="light"] .settings-shell__content-header h2,
+html[data-ui-theme="light"] .settings-empty-state h3,
+html[data-ui-theme="purple"] .settings-shell__content-header h2,
+html[data-ui-theme="purple"] .settings-empty-state h3 {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .settings-shell__content-header p,
+html[data-ui-theme="light"] .settings-empty-state p,
+html[data-ui-theme="purple"] .settings-shell__content-header p,
+html[data-ui-theme="purple"] .settings-empty-state p {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .account-settings-panel,
+html[data-ui-theme="purple"] .account-settings-panel {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .account-settings-panel__avatar {
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.96);
+}
+
+html[data-ui-theme="purple"] .account-settings-panel__avatar {
+  box-shadow: 0 0 0 6px rgba(28, 20, 42, 0.96);
+}
+
+html[data-ui-theme="light"] .account-settings-panel__name strong,
+html[data-ui-theme="light"] .account-settings-field > span,
+html[data-ui-theme="light"] .account-settings-card__actions strong,
+html[data-ui-theme="light"] .account-settings-row__copy strong,
+html[data-ui-theme="light"] .account-settings-card__row strong,
+html[data-ui-theme="light"] .account-settings-section__copy strong,
+html[data-ui-theme="light"] .account-settings-section h3,
+html[data-ui-theme="light"] .totp-settings-card__title h3,
+html[data-ui-theme="purple"] .account-settings-panel__name strong,
+html[data-ui-theme="purple"] .account-settings-field > span,
+html[data-ui-theme="purple"] .account-settings-card__actions strong,
+html[data-ui-theme="purple"] .account-settings-row__copy strong,
+html[data-ui-theme="purple"] .account-settings-card__row strong,
+html[data-ui-theme="purple"] .account-settings-section__copy strong,
+html[data-ui-theme="purple"] .account-settings-section h3,
+html[data-ui-theme="purple"] .totp-settings-card__title h3 {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .account-settings-panel__name span,
+html[data-ui-theme="light"] .account-settings-card__actions span,
+html[data-ui-theme="light"] .account-settings-row-editor__actions span,
+html[data-ui-theme="light"] .account-settings-card__row span,
+html[data-ui-theme="light"] .account-settings-section__copy span,
+html[data-ui-theme="light"] .account-settings-section p,
+html[data-ui-theme="light"] .totp-settings-card__title span,
+html[data-ui-theme="light"] .totp-settings-card__summary p,
+html[data-ui-theme="light"] .totp-settings-card__setup-body > span,
+html[data-ui-theme="purple"] .account-settings-panel__name span,
+html[data-ui-theme="purple"] .account-settings-card__actions span,
+html[data-ui-theme="purple"] .account-settings-row-editor__actions span,
+html[data-ui-theme="purple"] .account-settings-card__row span,
+html[data-ui-theme="purple"] .account-settings-section__copy span,
+html[data-ui-theme="purple"] .account-settings-section p,
+html[data-ui-theme="purple"] .totp-settings-card__title span,
+html[data-ui-theme="purple"] .totp-settings-card__summary p,
+html[data-ui-theme="purple"] .totp-settings-card__setup-body > span {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .account-settings-row__copy span,
+html[data-ui-theme="purple"] .account-settings-row__copy span {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .account-settings-card,
+html[data-ui-theme="light"] .account-settings-card--rows,
+html[data-ui-theme="purple"] .account-settings-card,
+html[data-ui-theme="purple"] .account-settings-card--rows {
+  background: var(--app-surface-2);
+}
+
+html[data-ui-theme="light"] .account-settings-row + .account-settings-row,
+html[data-ui-theme="light"] .account-settings-row-editor,
+html[data-ui-theme="light"] .account-settings-section,
+html[data-ui-theme="light"] .totp-settings-card,
+html[data-ui-theme="light"] .totp-settings-card__setup,
+html[data-ui-theme="purple"] .account-settings-row + .account-settings-row,
+html[data-ui-theme="purple"] .account-settings-row-editor,
+html[data-ui-theme="purple"] .account-settings-section,
+html[data-ui-theme="purple"] .totp-settings-card,
+html[data-ui-theme="purple"] .totp-settings-card__setup {
+  border-color: var(--app-border);
+}
+
+html[data-ui-theme="light"] .totp-settings-card,
+html[data-ui-theme="purple"] .totp-settings-card {
+  background: var(--app-surface-2);
+  box-shadow: none;
+}
+
+html[data-ui-theme="light"] .settings-inline-button,
+html[data-ui-theme="light"] .account-settings-card__row button,
+html[data-ui-theme="purple"] .settings-inline-button,
+html[data-ui-theme="purple"] .account-settings-card__row button {
+  border-color: var(--app-border);
+  background: var(--app-surface-3);
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .settings-inline-button:hover:not(:disabled),
+html[data-ui-theme="light"] .account-settings-card__row button:hover,
+html[data-ui-theme="purple"] .settings-inline-button:hover:not(:disabled),
+html[data-ui-theme="purple"] .account-settings-card__row button:hover {
+  background: var(--app-hover-bg);
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .settings-popup__close::before,
+html[data-ui-theme="light"] .settings-popup__close::after,
+html[data-ui-theme="purple"] .settings-popup__close::before,
+html[data-ui-theme="purple"] .settings-popup__close::after {
+  background: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .server-summary,
+html[data-ui-theme="purple"] .server-summary {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+}
+
+html[data-ui-theme="light"] .server-summary__name,
+html[data-ui-theme="light"] .channel-item__label,
+html[data-ui-theme="purple"] .server-summary__name,
+html[data-ui-theme="purple"] .channel-item__label {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .server-summary__subtitle,
+html[data-ui-theme="light"] .channel-item__icon,
+html[data-ui-theme="light"] .server-summary__caret,
+html[data-ui-theme="purple"] .server-summary__subtitle,
+html[data-ui-theme="purple"] .channel-item__icon,
+html[data-ui-theme="purple"] .server-summary__caret {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .channel-item,
+html[data-ui-theme="purple"] .channel-item {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .channel-item:hover,
+html[data-ui-theme="light"] .channel-item.active-channel,
+html[data-ui-theme="purple"] .channel-item:hover,
+html[data-ui-theme="purple"] .channel-item.active-channel {
+  background: var(--app-selected-bg);
+}
+
+html[data-ui-theme="light"] .channel-item.active-channel .channel-item__label,
+html[data-ui-theme="light"] .channel-item.active-channel .channel-item__icon,
+html[data-ui-theme="purple"] .channel-item.active-channel .channel-item__label,
+html[data-ui-theme="purple"] .channel-item.active-channel .channel-item__icon {
+  color: var(--app-accent-strong);
+}
+
+html[data-ui-theme="light"] .chat__topbar-search,
+html[data-ui-theme="purple"] .chat__topbar-search {
+  border-color: var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .chat__topbar-search::placeholder,
+html[data-ui-theme="purple"] .chat__topbar-search::placeholder {
+  color: var(--app-text-subtle);
+}
+
 :where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) * {
   scrollbar-color: transparent transparent !important;
 }

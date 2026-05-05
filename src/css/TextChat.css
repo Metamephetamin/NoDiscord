@@ -9393,6 +9393,122 @@ html[data-ui-density="compact"] .message-composer {
   }
 }
 
+/* Theme surface corrections */
+html[data-ui-theme="light"] .messages-floating-date,
+html[data-ui-theme="purple"] .messages-floating-date {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .message-item:not(.message-item--dm),
+html[data-ui-theme="purple"] .message-item:not(.message-item--dm) {
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-ui-theme="light"] .message-author,
+html[data-ui-theme="light"] .message-author__name,
+html[data-ui-theme="purple"] .message-author,
+html[data-ui-theme="purple"] .message-author__name {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .message-text,
+html[data-ui-theme="light"] .message-text-row,
+html[data-ui-theme="light"] .message-bottom-row,
+html[data-ui-theme="purple"] .message-text,
+html[data-ui-theme="purple"] .message-text-row,
+html[data-ui-theme="purple"] .message-bottom-row {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .message-time,
+html[data-ui-theme="light"] .message-edited-badge,
+html[data-ui-theme="light"] .message-forwarded,
+html[data-ui-theme="purple"] .message-time,
+html[data-ui-theme="purple"] .message-edited-badge,
+html[data-ui-theme="purple"] .message-forwarded {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .message-text__link {
+  color: #2563eb;
+}
+
+html[data-ui-theme="light"] .message-text__link:hover {
+  color: #1d4ed8;
+}
+
+html[data-ui-theme="purple"] .message-text__link {
+  color: #d7b6ff;
+}
+
+html[data-ui-theme="purple"] .message-text__link:hover {
+  color: #f0dcff;
+}
+
+html[data-ui-theme="light"] .msg-content,
+html[data-ui-theme="light"] .msg-content--dm,
+html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
+html[data-ui-theme="purple"] .msg-content,
+html[data-ui-theme="purple"] .msg-content--dm,
+html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
+html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
+html[data-ui-theme="purple"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
+html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
+  border-color: var(--app-border);
+  background: var(--app-message-bg);
+}
+
+html[data-ui-theme="light"] .message-composer,
+html[data-ui-theme="purple"] .message-composer {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 10px 24px var(--app-shadow);
+}
+
+html[data-ui-theme="light"] .composer-textarea-highlight,
+html[data-ui-theme="purple"] .composer-textarea-highlight {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .input-area textarea,
+html[data-ui-theme="purple"] .input-area textarea {
+  color: var(--app-text);
+  caret-color: var(--app-text);
+  -webkit-text-fill-color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .input-area textarea[data-highlight-active="true"],
+html[data-ui-theme="purple"] .input-area textarea[data-highlight-active="true"] {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-ui-theme="light"] .input-area textarea::placeholder,
+html[data-ui-theme="purple"] .input-area textarea::placeholder {
+  color: var(--app-text-subtle);
+  -webkit-text-fill-color: var(--app-text-subtle);
+}
+
+html[data-ui-theme="light"] .composer-tool,
+html[data-ui-theme="light"] .attach-button,
+html[data-ui-theme="purple"] .composer-tool,
+html[data-ui-theme="purple"] .attach-button {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .composer-tool:hover,
+html[data-ui-theme="light"] .attach-button:hover,
+html[data-ui-theme="purple"] .composer-tool:hover,
+html[data-ui-theme="purple"] .attach-button:hover {
+  color: var(--app-text-strong);
+}
+
 :where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) * {
   scrollbar-color: transparent transparent !important;
 }
