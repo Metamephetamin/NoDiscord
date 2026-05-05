@@ -26,12 +26,30 @@ Increase only one dimension at a time: duration, then concurrency, then endpoint
 
 This checks voice hub connect/register/join/leave behavior. For real participant fan-out, use tokens from separate test accounts.
 
-Generate tokens for dedicated load-test users:
+Seed dedicated load-test users directly through backend tooling when you need many accounts. Run this only with an explicit database connection string:
+
+```powershell
+$env:LOAD_TEST_CONNECTION_STRING="Host=...;Port=5432;Database=...;Username=...;Password=..."
+$env:LOAD_TEST_EMAIL_PREFIX="tendload"
+$env:LOAD_TEST_EMAIL_DOMAIN="gmail.com"
+$env:LOAD_TEST_PASSWORD="shared-test-password"
+$env:LOAD_TEST_USER_COUNT="100"
+npm run load:seed-users
+```
+
+If the users already exist but you need to reset their password:
+
+```powershell
+$env:LOAD_TEST_RESET_PASSWORD="true"
+npm run load:seed-users
+```
+
+Then generate tokens for those users:
 
 ```powershell
 $env:LOAD_TEST_BASE_URL="https://lanaya.space"
-$env:LOAD_TEST_EMAIL_PREFIX="tend-load"
-$env:LOAD_TEST_EMAIL_DOMAIN="load.local"
+$env:LOAD_TEST_EMAIL_PREFIX="tendload"
+$env:LOAD_TEST_EMAIL_DOMAIN="gmail.com"
 $env:LOAD_TEST_PASSWORD="shared-test-password"
 $env:LOAD_TEST_USER_COUNT="100"
 npm run load:auth-tokens

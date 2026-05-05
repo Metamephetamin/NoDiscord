@@ -34,6 +34,7 @@
     "test:visual:chat": "node ./scripts/visual-smoke-chat.mjs",
     "load:auth-tokens": "node ./scripts/load/auth-tokens.mjs",
     "load:http": "node ./scripts/load/http-smoke.mjs",
+    "load:seed-users": "dotnet run --project scripts/load/SeedLoadUsers/SeedLoadUsers.csproj --configuration Release",
     "load:voice": "node ./scripts/load/voice-signalr.mjs",
     "audit:public-assets": "node ./scripts/audit-public-assets.mjs",
     "audit:perf": "node ./scripts/perf-audit.mjs"
