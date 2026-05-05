@@ -16,7 +16,7 @@ self.addEventListener("push", (event) => {
       payload = {};
     }
 
-    const title = String(payload?.title || "Tend");
+    const title = String(payload?.title || "Lanaya");
     const body = String(payload?.body || "").trim();
     const icon = String(payload?.icon || "/image/app-logos/logo-mono-light.png").trim();
     const badge = String(payload?.badge || icon || "/image/app-logos/logo-mono-light.png").trim();

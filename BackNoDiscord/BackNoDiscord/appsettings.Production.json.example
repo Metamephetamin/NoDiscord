@@ -63,7 +63,7 @@
     "ReleaseNotes": "Фоновое обновление клиента и улучшения стабильности.",
     "Windows": {
       "X64": {
-        "DownloadUrl": "https://downloads.your-domain.example/Tend%20Setup%201.0.1.exe",
+        "DownloadUrl": "https://downloads.your-domain.example/Lanaya%20Setup%201.0.1.exe",
         "Sha256": "REPLACE_WITH_SHA256_OF_THE_INSTALLER"
       }
     }

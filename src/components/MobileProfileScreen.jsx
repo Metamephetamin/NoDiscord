@@ -52,7 +52,7 @@ export default function MobileProfileScreen({
           </button>
           <div className="mobile-profile-screen__identity">
             <h1>{displayName}</h1>
-            <p>{email || "Ваш аккаунт Tend"}</p>
+            <p>{email || "Ваш аккаунт Lanaya"}</p>
           </div>
         </div>
         <div className="mobile-profile-screen__hero-actions">

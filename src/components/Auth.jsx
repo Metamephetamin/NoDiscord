@@ -54,7 +54,7 @@ const initialEmailVerificationModal = {
   resendAvailableAt: "",
 };
 
-const AUTH_BRAND_NAME = "Tend";
+const AUTH_BRAND_NAME = "Lanaya";
 const sloganWords = ["общения", "голоса", "своих", "роста"];
 const SLOGAN_SPECIAL_PAUSE_WORD = "своих";
 const SLOGAN_SPECIAL_PAUSE_LENGTH = 3;

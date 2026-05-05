@@ -29,7 +29,7 @@ const MAX_ELECTRON_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 const MAX_ELECTRON_FETCH_BYTES = 25 * 1024 * 1024;
 const APP_PROTOCOL = "nodiscord";
 const TRUSTED_DEV_HOSTS = new Set(["localhost", "127.0.0.1"]);
-const APP_DISPLAY_NAME = "Tend";
+const APP_DISPLAY_NAME = "Lanaya";
 const DEFAULT_LOCAL_API_URL = "http://localhost:7031";
 const DEFAULT_PACKAGED_API_URL = "https://lanaya.space";
 const DESKTOP_TITLE_BAR_HEIGHT = 28;
@@ -429,7 +429,7 @@ const createTray = () => {
   });
   appTray.setContextMenu(Menu.buildFromTemplate([
     {
-      label: "Открыть Tend",
+      label: "Открыть Lanaya",
       click: () => focusMainWindow(),
     },
     {
@@ -670,7 +670,7 @@ const fileExists = async (targetPath) => {
   }
 };
 
-const toSafeFileName = (value, fallback = "Tend-Setup.exe") => {
+const toSafeFileName = (value, fallback = "Lanaya-Setup.exe") => {
   const normalized = Array.from(String(value || ""))
     .filter((character) => {
       const code = character.charCodeAt(0);
@@ -686,9 +686,9 @@ const getInstallerFileNameFromUrl = (downloadUrl, version) => {
   try {
     const parsed = new URL(String(downloadUrl || "").trim());
     const fileName = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "");
-    return toSafeFileName(fileName, `Tend-Setup-${version || "latest"}.exe`);
+    return toSafeFileName(fileName, `Lanaya-Setup-${version || "latest"}.exe`);
   } catch {
-    return `Tend-Setup-${version || "latest"}.exe`;
+    return `Lanaya-Setup-${version || "latest"}.exe`;
   }
 };
 

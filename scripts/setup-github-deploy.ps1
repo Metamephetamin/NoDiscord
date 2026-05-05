@@ -125,7 +125,7 @@ $userValue = Ask-Required -Prompt "DEPLOY_USER (ssh user)"
 $portValue = Read-Host "DEPLOY_PORT (optional, default 22)"
 $backendEnvPath = Read-Host "Path to backend .env file (optional, recommended)"
 
-$defaultKeyPath = "$HOME\.ssh\github_actions_tendsec_deploy"
+$defaultKeyPath = "$HOME\.ssh\github_actions_lanaya_deploy"
 $keyPath = Ask-Required -Prompt "Path to private SSH key" -Default $defaultKeyPath
 if (-not (Test-Path $keyPath)) {
   throw "SSH key file not found: $keyPath"

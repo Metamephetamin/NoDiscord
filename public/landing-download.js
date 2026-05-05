@@ -1,7 +1,7 @@
 (() => {
   const NOTE_CLASS = "landing-beta-note";
   const HERO_CLASS = "landing-hero-shell";
-  const WINDOWS_DOWNLOAD_URL = "./Tend%20Setup.exe";
+  const WINDOWS_DOWNLOAD_URL = "./Lanaya%20Setup.exe";
   const MACOS_DOWNLOAD_URL = "";
 
   const ensureHeroShellWidth = (actionContainer) => {

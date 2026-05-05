@@ -107,7 +107,7 @@ public class PushNotificationsController : ControllerBase
             [currentUserId],
             new PushNotificationPayload
             {
-                Title = "Tend",
+                Title = "Lanaya",
                 Body = "Тестовое push-уведомление работает.",
                 Tag = $"push-test:{currentUserId}",
                 Url = "/",

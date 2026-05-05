@@ -192,8 +192,7 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
     {
         var trimmedName = (configuredName ?? string.Empty).Trim();
         return string.IsNullOrWhiteSpace(trimmedName) ||
-               string.Equals(trimmedName, "MAX", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(trimmedName, "Tend", StringComparison.OrdinalIgnoreCase)
+               string.Equals(trimmedName, "MAX", StringComparison.OrdinalIgnoreCase)
             ? "Lanaya"
             : trimmedName;
     }

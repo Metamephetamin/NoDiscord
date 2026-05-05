@@ -440,10 +440,6 @@ jobs:
 
             ln -sfn \"\$NGINX_SITE\" \"\$NGINX_ENABLED\"
 
-            if [ -f \"\$BACKEND_PATH/.env\" ]; then
-              sed -i.bak -E \"s/tendsec\\.ru/lanaya.space/g\" \"\$BACKEND_PATH/.env\"
-            fi
-
             nginx -t
             systemctl reload nginx
 
@@ -503,7 +499,6 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           HEALTHCHECK="${HEALTHCHECK_URL:-https://lanaya.space}"
-          HEALTHCHECK="${HEALTHCHECK//tendsec.ru/lanaya.space}"
           API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
           CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
           VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"

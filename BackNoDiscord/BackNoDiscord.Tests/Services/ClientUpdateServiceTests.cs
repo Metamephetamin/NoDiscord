@@ -12,7 +12,7 @@ public class ClientUpdateServiceTests
         {
             ["ClientUpdates:LatestVersion"] = "1.3.0",
             ["ClientUpdates:MinimumVersion"] = "1.2.0",
-            ["ClientUpdates:Windows:X64:DownloadUrl"] = "https://example.com/Tend-1.3.0.exe",
+            ["ClientUpdates:Windows:X64:DownloadUrl"] = "https://example.com/Lanaya-1.3.0.exe",
             ["ClientUpdates:Windows:X64:Sha256"] = new string('a', 64)
         });
 
@@ -24,7 +24,7 @@ public class ClientUpdateServiceTests
         Assert.False(descriptor.Required);
         Assert.True(descriptor.IsCompatible);
         Assert.True(descriptor.DownloadAvailable);
-        Assert.Equal("https://example.com/Tend-1.3.0.exe", descriptor.DownloadUrl);
+        Assert.Equal("https://example.com/Lanaya-1.3.0.exe", descriptor.DownloadUrl);
         Assert.Equal(new string('a', 64), descriptor.Sha256);
     }
 
@@ -35,7 +35,7 @@ public class ClientUpdateServiceTests
         {
             ["ClientUpdates:LatestVersion"] = "1.3.0",
             ["ClientUpdates:MinimumVersion"] = "1.2.0",
-            ["ClientUpdates:Windows:X64:DownloadUrl"] = "https://example.com/Tend-1.3.0.exe"
+            ["ClientUpdates:Windows:X64:DownloadUrl"] = "https://example.com/Lanaya-1.3.0.exe"
         });
 
         var descriptor = service.GetDescriptor("1.2.5", "win32", "x64");

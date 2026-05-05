@@ -348,7 +348,7 @@ public class UserIntegrationsController : ControllerBase
             await _context.SaveChangesAsync(cancellationToken);
             await BroadcastActivityUpdatedAsync(stateRecord.UserId, cancellationToken);
 
-            return Content(BuildCallbackHtml("Spotify подключен", "Можно закрыть это окно и вернуться в Tend."), "text/html; charset=utf-8");
+            return Content(BuildCallbackHtml("Spotify подключен", "Можно закрыть это окно и вернуться в Lanaya."), "text/html; charset=utf-8");
         }
         catch
         {
@@ -699,7 +699,7 @@ public class UserIntegrationsController : ControllerBase
     }
 
     private ContentResult IntegrationCallbackSuccess(string providerName) =>
-        Content(BuildCallbackHtml($"{providerName} подключён", "Можно закрыть это окно и вернуться в Tend."), "text/html; charset=utf-8");
+        Content(BuildCallbackHtml($"{providerName} подключён", "Можно закрыть это окно и вернуться в Lanaya."), "text/html; charset=utf-8");
 
     private ContentResult IntegrationCallbackError(string providerName, string message) =>
         Content(BuildCallbackHtml($"{providerName} не подключён", message), "text/html; charset=utf-8");
@@ -989,7 +989,7 @@ public class UserIntegrationsController : ControllerBase
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "user");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.UserAgent.ParseAdd("TendMessenger/1.0");
+        request.Headers.UserAgent.ParseAdd("LanayaMessenger/1.0");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         using var response = await client.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();

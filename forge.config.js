@@ -7,7 +7,7 @@ const shouldEnableFuses = npmLifecycleEvent !== "start";
 module.exports = {
   packagerConfig: {
     asar: true,
-    executableName: "Tend",
+    executableName: "Lanaya",
     icon: "./assets/app-icon",
   },
   rebuildConfig: {},
@@ -15,8 +15,8 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "Tend",
-        setupExe: "Tend Setup.exe",
+        name: "Lanaya",
+        setupExe: "Lanaya Setup.exe",
         setupIcon: "./assets/app-icon.ico",
       },
     },

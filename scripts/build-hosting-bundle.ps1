@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$bundleRoot = Join-Path $projectRoot "out\hosting\Tend-hosting"
+$bundleRoot = Join-Path $projectRoot "out\hosting\Lanaya-hosting"
 $appRoot = Join-Path $bundleRoot "app"
 $bundleLiveKitRoot = Join-Path $bundleRoot "livekit"
 $publishWebRoot = Join-Path $appRoot "wwwroot"
@@ -81,7 +81,7 @@ Jwt__RefreshTokenDays=14
 Crypto__Key=REPLACE_WITH_A_SEPARATE_LONG_RANDOM_SECRET_AT_LEAST_32_CHARACTERS
 Email__Mode=smtp
 Email__FromAddress=no-reply@example.com
-Email__FromName=Tend
+Email__FromName=Lanaya
 Email__Smtp__Host=smtp.example.com
 Email__Smtp__Port=465
 Email__Smtp__Username=YOUR_SMTP_LOGIN
@@ -97,7 +97,7 @@ LIVEKIT_KEYS=devkey: REPLACE_WITH_YOUR_OWN_LIVEKIT_SECRET
 ClientUpdates__LatestVersion=1.0.0
 ClientUpdates__MinimumVersion=1.0.0
 ClientUpdates__AutoInstallOnQuit=true
-# ClientUpdates__Windows__X64__DownloadUrl=https://downloads.example.com/Tend%20Setup%201.0.0.exe
+# ClientUpdates__Windows__X64__DownloadUrl=https://downloads.example.com/Lanaya%20Setup%201.0.0.exe
 # ClientUpdates__Windows__X64__Sha256=REPLACE_WITH_INSTALLER_SHA256
 '@
 
@@ -115,7 +115,7 @@ exec dotnet BackNoDiscord.dll
 
 $readmePath = Join-Path $bundleRoot "README.txt"
 @'
-Tend hosting bundle
+Lanaya hosting bundle
 
 Structure:
 - app/       published ASP.NET backend + web frontend in wwwroot
@@ -124,7 +124,7 @@ Structure:
 - appsettings.Production.json.example
 
 What to upload:
-- upload the whole Tend-hosting folder to the server
+- upload the whole Lanaya-hosting folder to the server
 
 How to run backend:
 1. create app/.env from ../.env.example or set environment variables

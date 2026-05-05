@@ -657,7 +657,7 @@ export function getNetworkErrorMessage(error, fallbackMessage = "Не удало
   }
 
   if (message.includes("failed to fetch") || message.includes("networkerror") || message.includes("load failed")) {
-    return "Не удалось связаться с сервером. Проверьте интернет, VPN/прокси и доступность Tend.";
+    return "Не удалось связаться с сервером. Проверьте интернет, VPN/прокси и доступность Lanaya.";
   }
 
   return fallbackMessage;

@@ -84,7 +84,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           LANDING_PATH="${LANDING_DEPLOY_PATH:-/var/www/tend-land/current}"
           LANDING_OWNER="${LANDING_DEPLOY_OWNER:-www-data:www-data}"
-          HEALTHCHECK="${LANDING_HEALTHCHECK_URL:-https://land.tendsec.ru}"
+          HEALTHCHECK="${LANDING_HEALTHCHECK_URL:-https://land.lanaya.space}"
           TEMP_ROOT="/tmp/tend-landing-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           SSH_OPTS="-p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 
@@ -104,7 +104,7 @@ jobs:
                 exit 1
                 ;;
             esac
-            rsync -az --delete --exclude 'Tend Setup.exe' \"\$TEMP_ROOT/landing/\" \"\$LANDING_PATH/\"
+            rsync -az --delete --exclude 'Lanaya Setup.exe' \"\$TEMP_ROOT/landing/\" \"\$LANDING_PATH/\"
             chown -R \"\$LANDING_OWNER\" \"\$LANDING_PATH\"
             systemctl reload nginx
             rm -rf \"\$TEMP_ROOT\"

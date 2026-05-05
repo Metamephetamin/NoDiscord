@@ -2232,7 +2232,7 @@ export default function MenuMain({
     }
 
     window.electronDesktopNotifications.show({
-      title: String(title || "Tend"),
+      title: String(title || "Lanaya"),
       body: String(body || "").trim(),
       route,
     }).catch(() => {});
@@ -6549,7 +6549,7 @@ export default function MenuMain({
     }
 
     return {
-      title: "Tend",
+      title: "Lanaya",
       iconType: "glyph",
       iconGlyph: "T",
     };

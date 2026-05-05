@@ -1562,7 +1562,7 @@ export const MobileSettingsShell = ({
       <AnimatedAvatar className="settings-mobile-shell__avatar" src={userAvatarSrc} alt={displayName} frame={userAvatarFrame} />
       <div className="settings-mobile-shell__profile-copy">
         <strong>{displayName}</strong>
-        <span>{email || "Ваш аккаунт Tend"}</span>
+        <span>{email || "Ваш аккаунт Lanaya"}</span>
       </div>
     </div>
 
