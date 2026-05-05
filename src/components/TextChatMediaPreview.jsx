@@ -20,6 +20,7 @@ export default function TextChatMediaPreview({
   const pendingPanDeltaRef = useRef({ x: 0, y: 0 });
   const pendingPanFrameRef = useRef(0);
   const lastWheelNavigationAtRef = useRef(0);
+  const previewRootRef = useRef(null);
   const viewportRef = useRef(null);
   const latestStateRef = useRef({
     hasGallery: false,
@@ -44,7 +45,7 @@ export default function TextChatMediaPreview({
   };
 
   const buildZoomAnchor = useCallback((event) => {
-    const rect = (event?.currentTarget || viewportRef.current)?.getBoundingClientRect?.();
+    const rect = viewportRef.current?.getBoundingClientRect?.();
     if (!rect?.width || !rect?.height) {
       return null;
     }
@@ -171,8 +172,8 @@ export default function TextChatMediaPreview({
   }, [hasGallery, onNavigate, onPan, onZoom]);
 
   useEffect(() => {
-    const viewportNode = viewportRef.current;
-    if (!viewportNode) {
+    const previewRootNode = previewRootRef.current;
+    if (!previewRootNode) {
       return undefined;
     }
 
@@ -180,9 +181,9 @@ export default function TextChatMediaPreview({
       handleWheelAction(event);
     };
 
-    viewportNode.addEventListener("wheel", handleNativeWheel, { passive: false });
+    previewRootNode.addEventListener("wheel", handleNativeWheel, { passive: false });
     return () => {
-      viewportNode.removeEventListener("wheel", handleNativeWheel);
+      previewRootNode.removeEventListener("wheel", handleNativeWheel);
     };
   }, [handleWheelAction]);
 
@@ -252,7 +253,7 @@ export default function TextChatMediaPreview({
   }
 
   return (
-    <div className="media-preview" onClick={onClose} role="presentation">
+    <div ref={previewRootRef} className="media-preview" onClick={onClose} role="presentation">
       <div className="media-preview__dialog" role="dialog" aria-modal="true" aria-label="Предпросмотр файла">
         <div className="media-preview__header">
           <div className="media-preview__meta" onClick={stopEvent}>
