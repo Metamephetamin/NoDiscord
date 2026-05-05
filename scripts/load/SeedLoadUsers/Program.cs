@@ -2,8 +2,11 @@ using BackNoDiscord;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+LoadDotEnv();
+
 var connectionString = Environment.GetEnvironmentVariable("LOAD_TEST_CONNECTION_STRING")
-    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection");
 var password = Environment.GetEnvironmentVariable("LOAD_TEST_PASSWORD") ?? string.Empty;
 var emailPrefix = Environment.GetEnvironmentVariable("LOAD_TEST_EMAIL_PREFIX") ?? "tendload";
 var emailDomain = Environment.GetEnvironmentVariable("LOAD_TEST_EMAIL_DOMAIN") ?? "gmail.com";
@@ -115,4 +118,57 @@ static string BuildNickname(string prefix, string suffix)
     }
 
     return $"{normalizedPrefix}{suffix}"[..Math.Min(50, normalizedPrefix.Length + suffix.Length)];
+}
+
+static void LoadDotEnv()
+{
+    var searchRoots = new[]
+        {
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory,
+        }
+        .Where(directory => !string.IsNullOrWhiteSpace(directory))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    var envFile = searchRoots
+        .SelectMany(EnumerateDotEnvPaths)
+        .FirstOrDefault(File.Exists);
+    if (string.IsNullOrWhiteSpace(envFile))
+    {
+        return;
+    }
+
+    foreach (var rawLine in File.ReadAllLines(envFile))
+    {
+        var line = rawLine.Trim();
+        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        var separatorIndex = line.IndexOf('=');
+        if (separatorIndex <= 0)
+        {
+            continue;
+        }
+
+        var key = line[..separatorIndex].Trim();
+        var value = line[(separatorIndex + 1)..].Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(key) || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
+        {
+            continue;
+        }
+
+        Environment.SetEnvironmentVariable(key, value);
+    }
+}
+
+static IEnumerable<string> EnumerateDotEnvPaths(string startDirectory)
+{
+    var directory = new DirectoryInfo(startDirectory);
+    while (directory is not null)
+    {
+        yield return Path.Combine(directory.FullName, ".env");
+        directory = directory.Parent;
+    }
 }
