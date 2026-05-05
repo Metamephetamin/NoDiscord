@@ -1,5 +1,6 @@
 using BackNoDiscord.Security;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Net.Http.Headers;
 
@@ -129,6 +130,17 @@ public static class StreamedChatFileUploadReader
         IChatFileUploadStorageMetrics storageMetrics,
         CancellationToken cancellationToken)
     {
+        if (TryGetAlreadyParsedFormFile(request, out var parsedFile))
+        {
+            return await UploadAsync(
+                parsedFile,
+                uploadsDirectory,
+                userId,
+                limits,
+                storageMetrics,
+                cancellationToken);
+        }
+
         if (!TryGetBoundary(request.ContentType, out var boundary))
         {
             throw new StreamedChatFileUploadException("Multipart boundary is required.");
@@ -320,6 +332,19 @@ public static class StreamedChatFileUploadReader
 
         boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).Value ?? string.Empty;
         return !string.IsNullOrWhiteSpace(boundary);
+    }
+
+    private static bool TryGetAlreadyParsedFormFile(HttpRequest request, out IFormFile? file)
+    {
+        file = null;
+        var form = request.HttpContext.Features.Get<IFormFeature>()?.Form;
+        if (form is null || form.Files.Count == 0)
+        {
+            return false;
+        }
+
+        file = form.Files.FirstOrDefault(item => item.Length > 0) ?? form.Files[0];
+        return true;
     }
 
     private static bool TryGetFileDisposition(MultipartSection section, out string fileName)
