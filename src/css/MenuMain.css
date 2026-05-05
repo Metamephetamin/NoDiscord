@@ -17561,6 +17561,67 @@ html[data-ui-theme="purple"] .settings-shell__sidebar .settings-shell__nav-item-
   color: #ffffff;
 }
 
+html[data-ui-theme="light"] .menu__main {
+  background: #f4f7fb;
+}
+
+html[data-ui-theme="light"] .sidebar__servers,
+html[data-ui-theme="light"] .sidebar__channels,
+html[data-ui-theme="light"] .chat__wrapper,
+html[data-ui-theme="light"] .settings-popup,
+html[data-ui-theme="light"] .settings-shell,
+html[data-ui-theme="light"] .settings-shell__sidebar,
+html[data-ui-theme="light"] .settings-shell__main,
+html[data-ui-theme="light"] .settings-shell__content {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.12);
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar {
+  background: #f8fafc;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__profile strong,
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item--active {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__profile span,
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item,
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-label {
+  color: #566277;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-group {
+  border-color: #e3e8f1;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-wrap .settings-shell__search {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-wrap::after {
+  color: #6b7688;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-icon {
+  background: #6b7688;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item:hover,
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item--active {
+  background: #e9eefb;
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item--active .settings-shell__nav-icon {
+  color: #5867e8;
+}
+
 html[data-ui-theme="light"] .settings-shell__content-header h2,
 html[data-ui-theme="light"] .settings-empty-state h3,
 html[data-ui-theme="purple"] .settings-shell__content-header h2,
@@ -17580,6 +17641,11 @@ html[data-ui-theme="purple"] .account-settings-panel {
   border-color: var(--app-border);
   background: var(--app-surface);
   color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .account-settings-panel {
+  border-color: #d9e0ec;
+  background: #ffffff;
 }
 
 html[data-ui-theme="light"] .account-settings-panel__avatar {
@@ -17642,6 +17708,11 @@ html[data-ui-theme="purple"] .account-settings-card--rows {
   background: var(--app-surface-2);
 }
 
+html[data-ui-theme="light"] .account-settings-card,
+html[data-ui-theme="light"] .account-settings-card--rows {
+  background: #f5f7fb;
+}
+
 html[data-ui-theme="light"] .account-settings-row + .account-settings-row,
 html[data-ui-theme="light"] .account-settings-row-editor,
 html[data-ui-theme="light"] .account-settings-section,
@@ -17659,6 +17730,10 @@ html[data-ui-theme="light"] .totp-settings-card,
 html[data-ui-theme="purple"] .totp-settings-card {
   background: var(--app-surface-2);
   box-shadow: none;
+}
+
+html[data-ui-theme="light"] .totp-settings-card {
+  background: #f8fafc;
 }
 
 html[data-ui-theme="light"] .settings-inline-button,
@@ -17691,11 +17766,22 @@ html[data-ui-theme="purple"] .server-summary {
   background: var(--app-surface);
 }
 
+html[data-ui-theme="light"] .server-summary {
+  border: 1px solid #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+}
+
 html[data-ui-theme="light"] .server-summary__name,
 html[data-ui-theme="light"] .channel-item__label,
 html[data-ui-theme="purple"] .server-summary__name,
 html[data-ui-theme="purple"] .channel-item__label {
   color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .server-summary__main:hover .server-summary__name,
+html[data-ui-theme="light"] .channel-item:hover .channel-item__label {
+  color: #0f172a;
 }
 
 html[data-ui-theme="light"] .server-summary__subtitle,
@@ -17719,6 +17805,16 @@ html[data-ui-theme="purple"] .channel-item.active-channel {
   background: var(--app-selected-bg);
 }
 
+html[data-ui-theme="light"] .channel-item:hover {
+  border-color: #d9e0ec;
+  background: #f3f6fb;
+}
+
+html[data-ui-theme="light"] .channel-item.active-channel {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+}
+
 html[data-ui-theme="light"] .channel-item.active-channel .channel-item__label,
 html[data-ui-theme="light"] .channel-item.active-channel .channel-item__icon,
 html[data-ui-theme="purple"] .channel-item.active-channel .channel-item__label,
@@ -17733,9 +17829,305 @@ html[data-ui-theme="purple"] .chat__topbar-search {
   color: var(--app-text);
 }
 
+html[data-ui-theme="light"] .chat__topbar {
+  border-bottom-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .chat__topbar-title,
+html[data-ui-theme="light"] .chat__topbar-copy strong {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .chat__topbar-symbol,
+html[data-ui-theme="light"] .chat__topbar-copy span {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .chat__topbar-search-wrap {
+  border-color: #d9e0ec;
+  background: #f8fafc;
+}
+
+html[data-ui-theme="light"] .chat__topbar-search {
+  background: transparent;
+  color: #172033;
+}
+
 html[data-ui-theme="light"] .chat__topbar-search::placeholder,
 html[data-ui-theme="purple"] .chat__topbar-search::placeholder {
   color: var(--app-text-subtle);
+}
+
+html[data-ui-theme="light"] .friends-layout,
+html[data-ui-theme="light"] .friends-main,
+html[data-ui-theme="light"] .friends-main__content,
+html[data-ui-theme="light"] .friends-main__chat,
+html[data-ui-theme="light"] .friends-hero,
+html[data-ui-theme="light"] .friends-discovery,
+html[data-ui-theme="light"] .friends-contacts,
+html[data-ui-theme="light"] .friends-directory {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: none;
+}
+
+html[data-ui-theme="light"] .friends-hero h1,
+html[data-ui-theme="light"] .friends-add-inline h2,
+html[data-ui-theme="light"] .friends-discovery h2,
+html[data-ui-theme="light"] .friends-directory__title h1,
+html[data-ui-theme="light"] .friends-requests__header h2,
+html[data-ui-theme="light"] .friends-contacts h3,
+html[data-ui-theme="light"] .friends-results__meta strong,
+html[data-ui-theme="light"] .friends-directory__copy strong,
+html[data-ui-theme="light"] .friends-conversation-card__title,
+html[data-ui-theme="light"] .friends-directs__name,
+html[data-ui-theme="light"] .friends-nav__item--active,
+html[data-ui-theme="light"] .friends-main__tab--active {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .friends-hero p,
+html[data-ui-theme="light"] .friends-discovery p,
+html[data-ui-theme="light"] .friends-directory__title p,
+html[data-ui-theme="light"] .friends-directory__summary,
+html[data-ui-theme="light"] .friends-results__meta span,
+html[data-ui-theme="light"] .friends-directory__copy span,
+html[data-ui-theme="light"] .friends-directory__status,
+html[data-ui-theme="light"] .friends-conversation-card__members,
+html[data-ui-theme="light"] .friends-conversation-card__preview,
+html[data-ui-theme="light"] .friends-conversation-card__meta,
+html[data-ui-theme="light"] .friends-directs__draft,
+html[data-ui-theme="light"] .friends-nav__item,
+html[data-ui-theme="light"] .friends-main__tab {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .friends-search-input,
+html[data-ui-theme="light"] .friends-hero__form input,
+html[data-ui-theme="light"] .friends-directory__search,
+html[data-ui-theme="light"] .friends-directory__search input,
+html[data-ui-theme="light"] .friends-directory-search,
+html[data-ui-theme="light"] .friends-directory-search input {
+  border-color: #d9e0ec;
+  background: #f8fafc;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .friends-search-input::placeholder,
+html[data-ui-theme="light"] .friends-hero__form input::placeholder,
+html[data-ui-theme="light"] .friends-directory__search input::placeholder,
+html[data-ui-theme="light"] .friends-directory-search input::placeholder {
+  color: #7c8799;
+}
+
+html[data-ui-theme="light"] .friends-nav__item:hover,
+html[data-ui-theme="light"] .friends-nav__item--active,
+html[data-ui-theme="light"] .friends-main__tab:hover,
+html[data-ui-theme="light"] .friends-main__tab--active,
+html[data-ui-theme="light"] .friends-directory__filter:hover,
+html[data-ui-theme="light"] .friends-directory__filter--active {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .friends-directory__row,
+html[data-ui-theme="light"] .friends-results__item,
+html[data-ui-theme="light"] .friends-conversation-card,
+html[data-ui-theme="light"] .friends-contacts__item,
+html[data-ui-theme="light"] .friends-directs__item,
+html[data-ui-theme="light"] .friends-discovery__card {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: none;
+}
+
+html[data-ui-theme="light"] .friends-directory__row:hover,
+html[data-ui-theme="light"] .friends-results__item:hover,
+html[data-ui-theme="light"] .friends-conversation-card:hover,
+html[data-ui-theme="light"] .friends-conversation-card--active,
+html[data-ui-theme="light"] .friends-contacts__item:hover,
+html[data-ui-theme="light"] .friends-directs__item:hover,
+html[data-ui-theme="light"] .friends-directs__item--active {
+  border-color: #cbd7ff;
+  background: #f3f6fb;
+}
+
+html[data-ui-theme="light"] .friends-directory__action,
+html[data-ui-theme="light"] .friends-results__action,
+html[data-ui-theme="light"] .friends-results__icon-action,
+html[data-ui-theme="light"] .friends-hero__form button,
+html[data-ui-theme="light"] .friends-create-button {
+  border-color: #d9e0ec;
+  background: #f8fafc;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .friends-directory__action:hover:not(:disabled),
+html[data-ui-theme="light"] .friends-results__action:hover:not(:disabled),
+html[data-ui-theme="light"] .friends-results__icon-action:hover:not(:disabled),
+html[data-ui-theme="light"] .friends-create-button:hover:not(:disabled) {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .friends-directory__action--accept,
+html[data-ui-theme="light"] .friends-results__action--accept,
+html[data-ui-theme="light"] .friends-main__tab--accent,
+html[data-ui-theme="light"] .friends-nav__item--accent {
+  border-color: transparent;
+  background: #6b6cff;
+  color: #ffffff;
+}
+
+html[data-ui-theme="light"] .voice-settings-card,
+html[data-ui-theme="light"] .voice-settings-card--voice,
+html[data-ui-theme="light"] .settings-section,
+html[data-ui-theme="light"] .settings-card,
+html[data-ui-theme="light"] .settings-list__row {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: none;
+}
+
+html[data-ui-theme="light"] .voice-settings-card--voice {
+  border: 0;
+  border-bottom: 1px solid #d9e0ec;
+  background: transparent;
+}
+
+html[data-ui-theme="light"] .voice-settings-card__title,
+html[data-ui-theme="light"] .voice-settings-field > span,
+html[data-ui-theme="light"] .voice-toggle-row strong,
+html[data-ui-theme="light"] .voice-profile-option__copy strong,
+html[data-ui-theme="light"] .settings-section h4,
+html[data-ui-theme="light"] .settings-section__header h4 {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .voice-settings-caption,
+html[data-ui-theme="light"] .voice-settings-help,
+html[data-ui-theme="light"] .voice-toggle-row span,
+html[data-ui-theme="light"] .voice-profile-option__copy span,
+html[data-ui-theme="light"] .settings-section__header p,
+html[data-ui-theme="light"] .settings-role-description,
+html[data-ui-theme="light"] .settings-member-name {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .voice-settings-select,
+html[data-ui-theme="light"] .voice-settings-card--voice .voice-settings-select,
+html[data-ui-theme="light"] .settings-input {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .slider-with-tooltip__input::-webkit-slider-runnable-track,
+html[data-ui-theme="light"] .voice-settings-card--voice .slider-with-tooltip__input::-webkit-slider-runnable-track,
+html[data-ui-theme="light"] .voice-settings-field input[type="range"]::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(90deg, #6b6cff 0 var(--slider-progress-position), #3f4658 var(--slider-progress-position) 100%);
+}
+
+html[data-ui-theme="light"] .slider-with-tooltip__input::-moz-range-track,
+html[data-ui-theme="light"] .voice-settings-card--voice .slider-with-tooltip__input::-moz-range-track,
+html[data-ui-theme="light"] .voice-settings-field input[type="range"]::-moz-range-track {
+  background:
+    linear-gradient(90deg, #6b6cff 0 var(--slider-progress-position), #3f4658 var(--slider-progress-position) 100%);
+}
+
+html[data-ui-theme="light"] .voice-settings-meter__bars span {
+  background: #e3e8f1;
+}
+
+html[data-ui-theme="light"] .voice-settings-meter__bars span.is-active {
+  background: #6b6cff;
+}
+
+html[data-ui-theme="light"] .voice-switch {
+  background: #d9e0ec;
+}
+
+html[data-ui-theme="light"] .voice-switch--active {
+  background: #6b6cff;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-card {
+  border-color: #d9e0ec;
+  background:
+    radial-gradient(circle at 22% 8%, rgba(104, 127, 255, 0.1), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 20px 54px rgba(15, 23, 42, 0.14);
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-scrim {
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.42) 0%, rgba(15, 23, 42, 0.08) 52%, rgba(15, 23, 42, 0.36) 100%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.08) 0%, rgba(248, 250, 252, 0.7) 74%, rgba(248, 250, 252, 0) 100%);
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-body {
+  border-top-color: #d9e0ec;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), #ffffff);
+  box-shadow: 0 -18px 44px rgba(15, 23, 42, 0.08);
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-grid > div,
+html[data-ui-theme="light"] .profile-settings-form__public-section,
+html[data-ui-theme="light"] .profile-settings-form__public-actions > div,
+html[data-ui-theme="light"] .profile-settings-form__public-widget,
+html[data-ui-theme="light"] .profile-settings-form__control-panel,
+html[data-ui-theme="light"] .profile-settings-form__theme-button {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: none;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-identity strong,
+html[data-ui-theme="light"] .profile-settings-form__public-grid b,
+html[data-ui-theme="light"] .profile-settings-form__public-section-copy > strong,
+html[data-ui-theme="light"] .profile-settings-form__public-info-list b,
+html[data-ui-theme="light"] .profile-settings-form__public-widget-header,
+html[data-ui-theme="light"] .profile-settings-form__public-widget-list b,
+html[data-ui-theme="light"] .profile-settings-form__control-group > strong,
+html[data-ui-theme="light"] .profile-settings-form__theme-button b {
+  color: #0f172a;
+  text-shadow: none;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-identity small,
+html[data-ui-theme="light"] .profile-settings-form__public-grid span,
+html[data-ui-theme="light"] .profile-settings-form__public-section p,
+html[data-ui-theme="light"] .profile-settings-form__public-info-list > div,
+html[data-ui-theme="light"] .profile-settings-form__public-info-list em,
+html[data-ui-theme="light"] .profile-settings-form__public-widget-list span,
+html[data-ui-theme="light"] .profile-settings-form__status--inline {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__public-chips span {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__theme-button:hover,
+html[data-ui-theme="light"] .profile-settings-form__theme-button--active {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__reset-button {
+  background: #f8fafc;
+  color: #172033;
 }
 
 :where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) * {

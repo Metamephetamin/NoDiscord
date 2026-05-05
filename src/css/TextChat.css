@@ -9456,11 +9456,17 @@ html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
 }
 
 html[data-ui-theme="light"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
-html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
 html[data-ui-theme="purple"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
-html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
+html[data-ui-theme="purple"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text) {
   border-color: var(--app-border);
   background: var(--app-message-bg);
+}
+
+html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
+html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 html[data-ui-theme="light"] .message-composer,
