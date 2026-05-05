@@ -5,6 +5,11 @@ namespace BackNoDiscord.Security;
 public static class FrontendOriginPolicy
 {
     private static readonly char[] ValueSeparators = [',', ';', '\n', '\r'];
+    private static readonly string[] ProductionDefaultOrigins =
+    [
+        "https://lanaya.space",
+        "https://www.lanaya.space"
+    ];
 
     public static bool IsAllowed(string? origin, IConfiguration configuration, bool allowDevelopmentOrigins = false)
     {
@@ -43,6 +48,7 @@ public static class FrontendOriginPolicy
     {
         var configuredOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        AddConfiguredOrigins(configuredOrigins, ProductionDefaultOrigins);
         AddConfiguredOrigins(configuredOrigins, configuration["Cors:AllowedOrigins"]);
         AddConfiguredOrigins(configuredOrigins, configuration["ND_ALLOWED_ORIGINS"]);
         AddConfiguredOrigins(configuredOrigins, configuration["ND_PUBLIC_APP_URL"]);
@@ -63,6 +69,14 @@ public static class FrontendOriginPolicy
             {
                 target.Add(normalizedOrigin);
             }
+        }
+    }
+
+    private static void AddConfiguredOrigins(ISet<string> target, IEnumerable<string> rawValues)
+    {
+        foreach (var rawValue in rawValues)
+        {
+            AddConfiguredOrigins(target, rawValue);
         }
     }
 

@@ -41,6 +41,18 @@ public class FrontendOriginPolicyTests
     }
 
     [Fact]
+    public void IsAllowed_AllowsProductionDefaultOrigin()
+    {
+        var configuration = BuildConfiguration(new Dictionary<string, string?>
+        {
+            ["Cors:AllowedOrigins"] = "https://tendsec.ru"
+        });
+
+        Assert.True(FrontendOriginPolicy.IsAllowed("https://lanaya.space", configuration));
+        Assert.True(FrontendOriginPolicy.IsAllowed("https://www.lanaya.space", configuration));
+    }
+
+    [Fact]
     public void GetConfiguredOrigins_NormalizesAndFiltersValues()
     {
         var configuration = BuildConfiguration(new Dictionary<string, string?>
