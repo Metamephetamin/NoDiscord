@@ -565,6 +565,22 @@
   gap: 12px;
 }
 
+.auth-section--registration-code {
+  gap: 12px;
+}
+
+.auth-registration-code__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.auth-registration-code__actions .auth-inline-code__resend {
+  margin-left: auto;
+}
+
 .auth-field {
   display: flex;
   flex-direction: column;

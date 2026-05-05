@@ -309,6 +309,8 @@ export default function Auth({ onAuthSuccess }) {
     [activeSloganWordIndex]
   );
   const isLoginEmailVerification = emailVerificationModal.purpose === "login";
+  const isRegistrationEmailVerification = emailVerificationModal.purpose === "registration";
+  const shouldShowRegistrationCodeStep = mode === "register" && isRegistrationEmailVerification && emailVerificationModal.open;
 
   const resetEmailVerificationModal = () => {
     setEmailVerificationCode("");
@@ -316,6 +318,13 @@ export default function Auth({ onAuthSuccess }) {
     setEmailResendSecondsLeft(0);
     setEmailResendAttemptCount(0);
     setEmailVerificationModal(initialEmailVerificationModal);
+  };
+
+  const returnToRegistrationForm = () => {
+    resetEmailVerificationModal();
+    setMessage("");
+    setIsVerifyingEmailCode(false);
+    setIsResendingEmailCode(false);
   };
 
   useEffect(() => {
@@ -1134,6 +1143,11 @@ export default function Auth({ onAuthSuccess }) {
 
   const handleAuthSubmit = (event) => {
     if (mode !== "login") {
+      if (shouldShowRegistrationCodeStep) {
+        handleVerifyEmailCode(event);
+        return;
+      }
+
       handleRegister(event);
       return;
     }
@@ -1210,6 +1224,8 @@ export default function Auth({ onAuthSuccess }) {
           <div className="auth-card__heading">
             {mode === "login" ? (
               <h2 className="auth-card__title auth-card__title--login">Вход</h2>
+            ) : shouldShowRegistrationCodeStep ? (
+              <h2 className="auth-card__title">Подтвердите почту</h2>
             ) : (
               <h2 className="auth-card__title">Регистрация</h2>
             )}
@@ -1302,6 +1318,50 @@ export default function Auth({ onAuthSuccess }) {
                 </>
               ) : null}
             </div>
+          ) : shouldShowRegistrationCodeStep ? (
+            <div className="auth-section auth-section--registration-code">
+              <p className="auth-inline-code__text">
+                Код отправлен на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы завершить регистрацию.
+              </p>
+              {emailVerificationModal.deliveryMode === "mock" && emailVerificationModal.debugCode ? (
+                <div className="auth-hint">Тестовый код: <span className="auth-hint__code">{emailVerificationModal.debugCode}</span></div>
+              ) : null}
+              <input
+                className="auth-input"
+                placeholder="Код из письма"
+                value={emailVerificationCode}
+                onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                maxLength={6}
+                inputMode="numeric"
+                autoFocus
+              />
+              {emailVerificationModal.requiresTotp ? (
+                <input
+                  className="auth-input"
+                  placeholder="Код Google Authenticator"
+                  inputMode="numeric"
+                  value={emailVerificationTotpCode}
+                  onChange={(event) => setEmailVerificationTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6}
+                />
+              ) : null}
+              <div className="auth-registration-code__actions">
+                <button type="button" className="auth-switch-link" onClick={returnToRegistrationForm}>
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  className="auth-switch-link auth-inline-code__resend"
+                  onClick={handleResendEmailCode}
+                  disabled={!canResendEmailCode}
+                >
+                  <span>Отправить код снова</span>
+                  <span className="auth-inline-code__timer">
+                    {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? formatCooldown(emailResendSecondsLeft) : "доступно"}
+                  </span>
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="auth-section">
               <div className="auth-section__title">Основные данные</div>
@@ -1369,6 +1429,10 @@ export default function Auth({ onAuthSuccess }) {
                 : isSubmitting
                   ? "Входим..."
                   : "Войти"
+              : shouldShowRegistrationCodeStep
+                ? isVerifyingEmailCode
+                  ? "Проверяем..."
+                  : "Подтвердить"
               : isSubmitting
                 ? "Создаём аккаунт..."
                 : "Зарегистрироваться"}
@@ -1489,52 +1553,6 @@ export default function Auth({ onAuthSuccess }) {
         </div>
       ) : null}
 
-      {emailVerificationModal.open && !isLoginEmailVerification ? (
-        <div className="auth-verify-modal__backdrop">
-          <form className="auth-verify-modal" onSubmit={handleVerifyEmailCode}>
-            <div className="auth-verify-modal__header">
-              <h3>{isLoginEmailVerification ? "Код входа" : "Подтвердите почту"}</h3>
-              <button type="button" className="auth-verify-modal__close" onClick={resetEmailVerificationModal}>
-                ×
-              </button>
-            </div>
-            <p className="auth-verify-modal__text">
-              Мы отправили код на <strong>{emailVerificationModal.email}</strong>. Введите его, чтобы {isLoginEmailVerification ? "войти в аккаунт" : "завершить регистрацию"}. Если письма нет, проверьте папку со спамом.
-            </p>
-            {emailVerificationModal.deliveryMode === "mock" && emailVerificationModal.debugCode ? (
-              <div className="auth-hint">Тестовый код: <span className="auth-hint__code">{emailVerificationModal.debugCode}</span></div>
-            ) : null}
-            <input
-              className="auth-input"
-              placeholder="Код из письма"
-              value={emailVerificationCode}
-              onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              autoFocus
-            />
-            {emailVerificationModal.requiresTotp ? (
-              <input
-                className="auth-input"
-                placeholder="Код Google Authenticator"
-                inputMode="numeric"
-                value={emailVerificationTotpCode}
-                onChange={(event) => setEmailVerificationTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                maxLength={6}
-              />
-            ) : null}
-            <div className="auth-verify-modal__actions">
-              <button className="auth-submit auth-submit--secondary" type="button" onClick={handleResendEmailCode} disabled={!canResendEmailCode}>
-                <span>Отправить код снова</span>
-                <span className="auth-inline-code__timer">
-                  {isResendingEmailCode ? "Отправляем..." : emailResendSecondsLeft > 0 ? formatCooldown(emailResendSecondsLeft) : "доступно"}
-                </span>
-              </button>
-              <button className="auth-submit" type="submit" disabled={isVerifyingEmailCode}>
-                {isVerifyingEmailCode ? "Проверяем..." : "Подтвердить"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
     </div>
   );
 }
