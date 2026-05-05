@@ -1804,15 +1804,6 @@ function TextChatMessageList({
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;
-          const useInlineFooter = shouldUseInlineDirectMessageFooter({
-            isDirectChat,
-            messageText,
-            hasMessagePoll: Boolean(messagePoll),
-            hasRenderableAttachments,
-            hasReactions: Boolean(reactions.length),
-            hasForwardedFromUsername: Boolean(messageItem.forwardedFromUsername),
-            hasReplyToMessageId: Boolean(messageItem.replyToMessageId),
-          });
           const isEmojiOnlyTextMessage = emojiOnlyMessageMeta.isEmojiOnly
             && !hasRenderableAttachments
             && !messagePoll
@@ -1820,6 +1811,15 @@ function TextChatMessageList({
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
+          const useInlineFooter = shouldUseInlineDirectMessageFooter({
+            isDirectChat,
+            messageText: isEmojiOnlyTextMessage ? "" : messageText,
+            hasMessagePoll: Boolean(messagePoll),
+            hasRenderableAttachments,
+            hasReactions: Boolean(reactions.length),
+            hasForwardedFromUsername: Boolean(messageItem.forwardedFromUsername),
+            hasReplyToMessageId: Boolean(messageItem.replyToMessageId),
+          });
           const authorRoleColor = !isDirectChat
             ? authorRoleColorByUserId.get(String(messageItem.authorUserId || "")) || ""
             : "";
@@ -1895,7 +1895,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {

@@ -818,6 +818,36 @@
   pointer-events: none;
 }
 
+.msg-content--dm.msg-content--emoji-only-text {
+  align-items: flex-start;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.msg-content--dm.msg-content--emoji-only-text::before {
+  content: none;
+}
+
+.msg-content--emoji-only-text .message-bottom-row {
+  margin-top: 0;
+  align-self: flex-start;
+}
+
+.msg-content--emoji-only-text .message-footer {
+  align-self: flex-start;
+  padding-left: 2px;
+}
+
+.msg-content--emoji-only-text .message-read-status {
+  display: none;
+}
+
 .msg-content--dm::after,
 .message-item--forward-group-follow .msg-content--dm::before {
   content: none;
@@ -1119,14 +1149,14 @@
   margin-top: 0;
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
-  font-size: 32px;
+  min-height: 48px;
+  font-size: 42px;
   line-height: 1.08;
   letter-spacing: 0.01em;
 }
 
 .message-text--emoji-only.message-text--emoji-only-multi {
-  font-size: 26px;
+  font-size: 34px;
 }
 
 .message-text::selection,

@@ -11,6 +11,7 @@ const requiredSelectors = [
   ".message-read-status__check",
   ".message-attachment--document.message-attachment--local-echo",
   ".message-attachment__upload-spinner",
+  ".msg-content--dm.msg-content--emoji-only-text",
 ];
 
 for (const selector of requiredSelectors) {
@@ -19,5 +20,7 @@ for (const selector of requiredSelectors) {
 
 assert(css.includes("isolation: isolate"), "DM bubble tail must stay in an isolated stacking context.");
 assert(css.includes("z-index: -1"), "DM bubble tail must remain behind the bubble.");
+assert(css.includes(".msg-content--dm.msg-content--emoji-only-text::before"), "Emoji-only DM messages must not render a bubble tail.");
+assert(css.includes("background: transparent"), "Emoji-only DM messages must not render a bubble background.");
 
 console.log("Chat visual smoke checks passed.");
