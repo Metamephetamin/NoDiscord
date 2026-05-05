@@ -12,6 +12,8 @@
   --auth-brand-shift-y: -200px;
   --auth-card-shift-x: -18px;
   --auth-card-shift-y: 0px;
+  --auth-submit-gradient: linear-gradient(135deg, #9b8cf2 0%, #c7a8f4 52%, #efb3d4 100%);
+  --auth-submit-shadow: rgba(139, 116, 224, 0.2);
 }
 
 .auth-page::before,
@@ -91,8 +93,8 @@
 .auth-brand__name {
   position: relative;
   display: inline-block;
-  flex: 0 0 3.45ch;
-  width: 3.45ch;
+  flex: 0 0 4.25ch;
+  width: 4.25ch;
   font-size: clamp(40px, 4.5vw, 72px);
   line-height: 0.92;
   letter-spacing: 0.05em;
@@ -388,8 +390,8 @@
   min-height: 44px;
   border-radius: 12px;
   margin-top: 4px;
-  background: linear-gradient(135deg, #6438f0 0%, #cf4be7 100%);
-  box-shadow: 0 12px 24px rgba(100, 56, 240, 0.2);
+  background: var(--auth-submit-gradient);
+  box-shadow: 0 12px 24px var(--auth-submit-shadow);
 }
 
 .auth-card--register .auth-card__links {
@@ -692,9 +694,7 @@
   border: none;
   outline: none;
   border-radius: 16px;
-  background:
-    linear-gradient(135deg, rgba(111, 44, 255, 0.5) 0%, rgba(177, 62, 246, 0.42) 48%, rgba(255, 77, 184, 0.5) 100%),
-    rgba(255, 255, 255, 0.08);
+  background: var(--auth-submit-gradient);
   color: #ffffff;
   font-size: 15px;
   font-weight: 800;
@@ -708,11 +708,11 @@
   min-height: 44px;
   margin-top: 0;
   border-radius: 8px;
-  background: linear-gradient(135deg, #6438f0 0%, #8d5cf4 100%);
+  background: var(--auth-submit-gradient);
   color: #ffffff;
   font-size: 14px;
   font-weight: 800;
-  box-shadow: 0 14px 28px rgba(100, 56, 240, 0.22);
+  box-shadow: 0 14px 28px var(--auth-submit-shadow);
   backdrop-filter: none;
 }
 

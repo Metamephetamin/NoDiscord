@@ -2,7 +2,7 @@ import { resolveStaticAssetUrl } from "./media";
 
 export const APP_LOGO_STORAGE_KEY = "nd:app-logo";
 export const APP_LOGO_CHANGE_EVENT = "tend:app-logo-change";
-export const DEFAULT_APP_LOGO_ID = "gradient-dark";
+export const DEFAULT_APP_LOGO_ID = "mono-light";
 
 export const APP_LOGO_OPTIONS = [
   {

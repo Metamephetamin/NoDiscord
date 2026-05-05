@@ -25,6 +25,7 @@
     "check:encoding:fix": "node ./scripts/check-encoding.mjs --fix",
     "check:release": "npm run check:encoding && npm run test:encoding && npm run lint:ci && npm run build:frontend && npm run audit:public-assets && npm run audit:perf",
     "test:auth-storage": "node --test src/utils/__tests__/authStoragePolicy.test.mjs",
+    "test:auth-branding": "node ./scripts/auth-branding-smoke.mjs",
     "test:attachment-descriptors": "node --test src/utils/__tests__/textChatAttachmentDescriptorPolicy.test.mjs",
     "test:electron-downloads": "node --test src/utils/__tests__/electronDownloadStreamingPolicy.test.mjs",
     "test:file-size-policy": "node --test src/utils/__tests__/chatFileSizePolicy.test.mjs",

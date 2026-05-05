@@ -54,7 +54,8 @@ const initialEmailVerificationModal = {
   resendAvailableAt: "",
 };
 
-const sloganWords = ["жизни", "связи", "своих", "роста"];
+const AUTH_BRAND_NAME = "Tend";
+const sloganWords = ["общения", "голоса", "своих", "роста"];
 const SLOGAN_SPECIAL_PAUSE_WORD = "своих";
 const SLOGAN_SPECIAL_PAUSE_LENGTH = 3;
 const SLOGAN_SPECIAL_PAUSE_MS = 2400;
@@ -1171,19 +1172,19 @@ export default function Auth({ onAuthSuccess }) {
 
       <div className="auth-brand">
         <div className="auth-brand__badge">
-          <img className="auth-brand__logo" src={brandLogoSrc} alt="MAX" />
+          <img className="auth-brand__logo" src={brandLogoSrc} alt={AUTH_BRAND_NAME} />
         </div>
         <div className="auth-brand__copy">
           <span className="auth-brand__name">
-            <span className="auth-brand__name-base">MAX</span>
+            <span className="auth-brand__name-base">{AUTH_BRAND_NAME}</span>
             {!isLiteVisualMode ? (
-              <span className="auth-brand__name-overlay auth-brand__name-overlay--glitch" data-text="MAX" aria-hidden="true">
-                MAX
+              <span className="auth-brand__name-overlay auth-brand__name-overlay--glitch" data-text={AUTH_BRAND_NAME} aria-hidden="true">
+                {AUTH_BRAND_NAME}
               </span>
             ) : null}
           </span>
           <h1 className="auth-brand__title">
-            <span className="auth-brand__title-static">- симум возможностей для</span>
+            <span className="auth-brand__title-static">пространство для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">
               <span className={`auth-brand__title-typewriter ${isDeletingSlogan ? "auth-brand__title-typewriter--deleting" : ""}`}>
                 <span className="auth-brand__title-typewriter-sizer" aria-hidden="true">
