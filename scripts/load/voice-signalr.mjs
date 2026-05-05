@@ -1,21 +1,42 @@
 import * as signalR from "@microsoft/signalr";
+import { readFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 
 const baseUrl = String(process.env.LOAD_TEST_BASE_URL || "http://localhost:5000").replace(/\/+$/, "");
 const channel = String(process.env.LOAD_TEST_VOICE_CHANNEL || "").trim();
 const durationMs = Math.max(1, Number(process.env.LOAD_TEST_DURATION_SECONDS || 30)) * 1000;
 const connectDelayMs = Math.max(0, Number(process.env.LOAD_TEST_CONNECT_DELAY_MS || 100));
-const tokens = String(process.env.LOAD_TEST_TOKENS || process.env.LOAD_TEST_TOKEN || "")
+const requestedConnections = Math.max(0, Number(process.env.LOAD_TEST_CONNECTIONS || 0));
+
+const readTokensFile = (filePath) => {
+  if (!filePath) {
+    return [];
+  }
+
+  const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+  const rawTokens = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.tokens)
+      ? parsed.tokens
+      : [];
+
+  return rawTokens.map((item) => String(item || "").trim()).filter(Boolean);
+};
+
+const envTokens = String(process.env.LOAD_TEST_TOKENS || process.env.LOAD_TEST_TOKEN || "")
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);
+const fileTokens = readTokensFile(process.env.LOAD_TEST_TOKENS_FILE || "");
+const allTokens = [...envTokens, ...fileTokens];
+const tokens = requestedConnections > 0 ? allTokens.slice(0, requestedConnections) : allTokens;
 
 if (!channel) {
   throw new Error("Set LOAD_TEST_VOICE_CHANNEL to the exact voice channel id/name.");
 }
 
 if (!tokens.length) {
-  throw new Error("Set LOAD_TEST_TOKEN or LOAD_TEST_TOKENS. Use test accounts, not a personal production session.");
+  throw new Error("Set LOAD_TEST_TOKEN, LOAD_TEST_TOKENS, or LOAD_TEST_TOKENS_FILE. Use test accounts, not a personal production session.");
 }
 
 const sleep = (ms) => new Promise((resolve) => {

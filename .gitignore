@@ -128,6 +128,8 @@ src/livekit/livekit-keys.txt
 src/livekit/livekit-server.exe
 src/livekit/livekit-server
 src/livekit/*.zip
+scripts/load/.tokens*.json
+scripts/load/.tokens*.txt
 certs/
 src/livekit/livekit_certs/
 .tools/

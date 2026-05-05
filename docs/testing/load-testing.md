@@ -26,10 +26,31 @@ Increase only one dimension at a time: duration, then concurrency, then endpoint
 
 This checks voice hub connect/register/join/leave behavior. For real participant fan-out, use tokens from separate test accounts.
 
+Generate tokens for dedicated load-test users:
+
+```powershell
+$env:LOAD_TEST_BASE_URL="https://lanaya.space"
+$env:LOAD_TEST_EMAIL_PREFIX="tend-load"
+$env:LOAD_TEST_EMAIL_DOMAIN="load.local"
+$env:LOAD_TEST_PASSWORD="shared-test-password"
+$env:LOAD_TEST_USER_COUNT="100"
+npm run load:auth-tokens
+```
+
+This writes `scripts/load/.tokens.json`, which is ignored by git. By default the script only logs in existing users. To let it create missing users too:
+
+```powershell
+$env:LOAD_TEST_CREATE_USERS="true"
+npm run load:auth-tokens
+```
+
+If production registration requires email verification, automatic creation will not produce tokens. In that case seed verified test users through staging/admin DB tooling, then run `load:auth-tokens` in login-only mode.
+
 ```powershell
 $env:LOAD_TEST_BASE_URL="https://lanaya.space"
 $env:LOAD_TEST_VOICE_CHANNEL="server:1:voice:1"
-$env:LOAD_TEST_TOKENS="token-user-1,token-user-2,token-user-3"
+$env:LOAD_TEST_TOKENS_FILE="scripts/load/.tokens.json"
+$env:LOAD_TEST_CONNECTIONS="100"
 $env:LOAD_TEST_DURATION_SECONDS="60"
 npm run load:voice
 ```
