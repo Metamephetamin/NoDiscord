@@ -329,6 +329,16 @@ jobs:
               sed -i.bak -E \"/^(ChatFiles__MaxFileSizeBytes|ChatFiles:MaxFileSizeBytes)=/d\" \"\$BACKEND_PATH/.env\"
               printf \"ChatFiles__MaxFileSizeBytes=524288000\\n\" >> \"\$BACKEND_PATH/.env\"
               echo \"Production chat upload limit forced to: 524288000 bytes\"
+              sed -i.bak -E \"/^(Cors__AllowedOrigins|Cors:AllowedOrigins|ND_ALLOWED_ORIGINS|ND_PUBLIC_APP_URL|ND_API_URL|ND_LIVEKIT_URL|LiveKit__Url)=/d\" \"\$BACKEND_PATH/.env\"
+              {
+                printf \"Cors__AllowedOrigins=https://lanaya.space;https://www.lanaya.space\\n\"
+                printf \"ND_ALLOWED_ORIGINS=https://lanaya.space;https://www.lanaya.space\\n\"
+                printf \"ND_PUBLIC_APP_URL=https://lanaya.space\\n\"
+                printf \"ND_API_URL=https://lanaya.space\\n\"
+                printf \"ND_LIVEKIT_URL=wss://lanaya.space/livekit\\n\"
+                printf \"LiveKit__Url=wss://lanaya.space/livekit\\n\"
+              } >> \"\$BACKEND_PATH/.env\"
+              echo \"Production public origins forced to lanaya.space\"
               chown -R \"\$BACKEND_OWNER\" \"\$STORAGE_PATH\"
               chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
@@ -508,6 +518,13 @@ jobs:
 
           echo "Running backend API healthcheck: $API_HEALTHCHECK"
           curl --fail --silent --show-error --location "$API_HEALTHCHECK" > /dev/null
+          api_headers="$(mktemp)"
+          curl --fail --silent --show-error --location --dump-header "$api_headers" --output /dev/null "$API_HEALTHCHECK"
+          if ! grep -iq "content-security-policy:.*wss://lanaya.space" "$api_headers"; then
+            echo "Backend CSP does not allow lanaya.space websocket connections." >&2
+            cat "$api_headers" >&2
+            exit 1
+          fi
 
           echo "Running chat negotiate healthcheck: $CHAT_NEGOTIATE_HEALTHCHECK"
           chat_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$CHAT_NEGOTIATE_HEALTHCHECK")"
