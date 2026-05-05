@@ -255,7 +255,7 @@ upserted AS (
   INSERT INTO users(first_name, last_name, nickname, email, is_email_verified, is_phone_verified, password_hash)
   SELECT first_name, last_name, nickname, email, TRUE, FALSE, password_hash
   FROM input_users
-  ON CONFLICT (email) DO UPDATE SET
+  ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
     first_name = EXCLUDED.first_name,
     last_name = EXCLUDED.last_name,
     nickname = EXCLUDED.nickname,
