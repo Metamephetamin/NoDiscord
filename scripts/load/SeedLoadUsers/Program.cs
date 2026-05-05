@@ -1,6 +1,12 @@
 using BackNoDiscord;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 
 LoadDotEnv();
 
@@ -13,6 +19,17 @@ var emailDomain = Environment.GetEnvironmentVariable("LOAD_TEST_EMAIL_DOMAIN") ?
 var startIndex = ReadPositiveInt("LOAD_TEST_START_INDEX", 1);
 var userCount = ReadPositiveInt("LOAD_TEST_USER_COUNT", 100);
 var resetPassword = string.Equals(Environment.GetEnvironmentVariable("LOAD_TEST_RESET_PASSWORD"), "true", StringComparison.OrdinalIgnoreCase);
+var jwtKey = Environment.GetEnvironmentVariable("Jwt__Key")
+    ?? Environment.GetEnvironmentVariable("Jwt:Key")
+    ?? string.Empty;
+var jwtIssuer = Environment.GetEnvironmentVariable("Jwt__Issuer")
+    ?? Environment.GetEnvironmentVariable("Jwt:Issuer");
+var jwtAudience = Environment.GetEnvironmentVariable("Jwt__Audience")
+    ?? Environment.GetEnvironmentVariable("Jwt:Audience");
+var accessTokenMinutes = ReadPositiveInt("Jwt__AccessTokenMinutes", ReadPositiveInt("Jwt:AccessTokenMinutes", 120));
+var outputFile = Environment.GetEnvironmentVariable("LOAD_TEST_OUTPUT") ?? "scripts/load/.tokens.json";
+var targetServerId = Environment.GetEnvironmentVariable("LOAD_TEST_SERVER_ID")
+    ?? TryGetServerIdFromVoiceChannel(Environment.GetEnvironmentVariable("LOAD_TEST_VOICE_CHANNEL"));
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
@@ -33,6 +50,8 @@ var passwordHasher = new PasswordHasher<User>();
 var created = 0;
 var updated = 0;
 var unchanged = 0;
+var addedToServer = 0;
+var users = new List<User>();
 
 for (var offset = 0; offset < userCount; offset += 1)
 {
@@ -55,6 +74,7 @@ for (var offset = 0; offset < userCount; offset += 1)
         };
         user.password_hash = passwordHasher.HashPassword(user, password);
         dbContext.Users.Add(user);
+        users.Add(user);
         created += 1;
         continue;
     }
@@ -86,11 +106,58 @@ for (var offset = 0; offset < userCount; offset += 1)
     {
         unchanged += 1;
     }
+
+    users.Add(user);
 }
 
 await dbContext.SaveChangesAsync();
 
-Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+if (!string.IsNullOrWhiteSpace(targetServerId))
+{
+    var serverState = new ServerStateService(dbContext);
+    foreach (var user in users)
+    {
+        try
+        {
+            serverState.AddMember(
+                targetServerId,
+                user.id.ToString(),
+                string.IsNullOrWhiteSpace(user.nickname) ? user.email ?? $"Load {user.id}" : user.nickname,
+                user.avatar_url ?? string.Empty);
+            addedToServer += 1;
+        }
+        catch (KeyNotFoundException)
+        {
+            Console.Error.WriteLine($"[load-seed] server snapshot not found: {targetServerId}");
+            break;
+        }
+    }
+}
+
+var tokens = string.IsNullOrWhiteSpace(jwtKey)
+    ? new List<string>()
+    : users.Select(user => GenerateJwtToken(user, jwtKey, jwtIssuer, jwtAudience, accessTokenMinutes)).ToList();
+
+if (tokens.Count > 0)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? ".");
+    File.WriteAllText(outputFile, $"{JsonSerializer.Serialize(new
+    {
+        baseUrl = Environment.GetEnvironmentVariable("LOAD_TEST_BASE_URL") ?? string.Empty,
+        generatedAt = DateTimeOffset.UtcNow.ToString("O"),
+        requestedUsers = users.Count,
+        tokenCount = tokens.Count,
+        tokens,
+        users = users.Select(user => new
+        {
+            email = user.email ?? string.Empty,
+            nickname = user.nickname,
+            status = "ok"
+        })
+    }, new JsonSerializerOptions { WriteIndented = true })}\n");
+}
+
+Console.WriteLine(JsonSerializer.Serialize(new
 {
     emailPrefix,
     emailDomain,
@@ -99,8 +166,11 @@ Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
     created,
     updated,
     unchanged,
+    addedToServer,
     resetPassword,
-}, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    tokenCount = tokens.Count,
+    outputFile = tokens.Count > 0 ? outputFile : string.Empty,
+}, new JsonSerializerOptions { WriteIndented = true }));
 
 static int ReadPositiveInt(string key, int fallback)
 {
@@ -118,6 +188,47 @@ static string BuildNickname(string prefix, string suffix)
     }
 
     return $"{normalizedPrefix}{suffix}"[..Math.Min(50, normalizedPrefix.Length + suffix.Length)];
+}
+
+static string? TryGetServerIdFromVoiceChannel(string? voiceChannel)
+{
+    var normalized = (voiceChannel ?? string.Empty).Trim();
+    var separatorIndex = normalized.IndexOf("::", StringComparison.Ordinal);
+    return separatorIndex > 0 ? normalized[..separatorIndex] : null;
+}
+
+static string GenerateJwtToken(User user, string jwtKey, string? issuer, string? audience, int accessTokenMinutes)
+{
+    if (jwtKey.Length < 32)
+    {
+        throw new InvalidOperationException("Jwt:Key must be at least 32 characters to generate load-test tokens.");
+    }
+
+    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+    var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+    var claims = new List<Claim>
+    {
+        new(JwtRegisteredClaimNames.Sub, user.id.ToString()),
+        new(ClaimTypes.NameIdentifier, user.id.ToString()),
+        new("nickname", user.nickname),
+        new("first_name", user.first_name),
+        new("last_name", user.last_name)
+    };
+
+    if (!string.IsNullOrWhiteSpace(user.email))
+    {
+        claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.email));
+        claims.Add(new Claim(ClaimTypes.Email, user.email));
+    }
+
+    var token = new JwtSecurityToken(
+        issuer: issuer,
+        audience: audience,
+        claims: claims,
+        expires: DateTime.UtcNow.AddMinutes(accessTokenMinutes),
+        signingCredentials: credentials);
+
+    return new JwtSecurityTokenHandler().WriteToken(token);
 }
 
 static void LoadDotEnv()
