@@ -377,12 +377,13 @@ function TextChatBatchUploadSheet({
   const activeFile = selectedFiles.find((item) => String(item?.id || "") === String(activeFileId || "")) || selectedFiles[0] || null;
   const resolvedActiveFileId = String(activeFile?.id || "");
   const sendAsDocumentsEnabled = Boolean(batchOptions?.sendAsDocuments);
-  const hasImageOnlySelection = fileCount > 0 && selectedFiles.every((item) => item?.kind === "image");
+  const hasMediaOnlySelection = fileCount > 0 && selectedFiles.every((item) => item?.kind === "image" || item?.kind === "video");
   const showPendingShell = fileCount < 1 && pendingFileCount > 0;
   const layoutMode = showPendingShell
     ? pendingLayoutMode
-    : (sendAsDocumentsEnabled || !hasImageOnlySelection ? "document" : "media");
+    : (sendAsDocumentsEnabled || !hasMediaOnlySelection ? "document" : "media");
   const useDocumentLayout = layoutMode === "document";
+  const showSendAsDocumentsOption = !showPendingShell && hasMediaOnlySelection;
   const controlsDisabled = uploadingFile || showPendingShell;
   const visibleFiles = selectedFiles.slice(0, visibleItemCount);
   const resolvedGridCount = Math.min(resolvedFileCount, 6);
@@ -626,13 +627,15 @@ function TextChatBatchUploadSheet({
             Сгруппировать
           </BatchUploadToggle>
 
-          <BatchUploadToggle
-            checked={sendAsDocumentsEnabled}
-            onChange={onToggleSendAsDocuments}
-            disabled={controlsDisabled}
-          >
-            {resolvedFileCount === 1 ? "Отправить как файл" : "Отправить как файлы"}
-          </BatchUploadToggle>
+          {showSendAsDocumentsOption ? (
+            <BatchUploadToggle
+              checked={sendAsDocumentsEnabled}
+              onChange={onToggleSendAsDocuments}
+              disabled={controlsDisabled}
+            >
+              {resolvedFileCount === 1 ? "Отправить как файл" : "Отправить как файлы"}
+            </BatchUploadToggle>
+          ) : null}
 
           <BatchUploadToggle
             checked={Boolean(batchOptions.rememberChoice)}

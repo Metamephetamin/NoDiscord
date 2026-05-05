@@ -361,16 +361,19 @@ export default function useTextChatAttachmentPickerFlow({
       0
     );
     const selectedFromDocumentPicker = attachPickerKindRef.current === "document";
-    const allSelectedAreImages = selectedInputFiles.length > 0
-      && selectedInputFiles.every((file) => String(file?.type || "").startsWith("image/"));
-    const shouldPreferSendAsDocuments = selectedFromDocumentPicker || !allSelectedAreImages;
+    const allSelectedAreMedia = selectedInputFiles.length > 0
+      && selectedInputFiles.every((file) => {
+        const fileType = String(file?.type || "");
+        return fileType.startsWith("image/") || fileType.startsWith("video/");
+      });
+    const shouldPreferSendAsDocuments = selectedFromDocumentPicker || !allSelectedAreMedia;
     const shouldOpenPendingBatchSheet = selectedInputFiles.length > 0
       && typeof onQueueFiles === "function";
 
     logUploadDiagnostic("input-change-start", {
       selectedFileCount: selectedInputFiles.length,
       selectedFromDocumentPicker,
-      allSelectedAreImages,
+      allSelectedAreMedia,
       shouldPreferSendAsDocuments,
       shouldOpenPendingBatchSheet,
       msSincePickerOpen: pickerOpenedAt ? inputChangeStartedAt - pickerOpenedAt : 0,
@@ -388,7 +391,7 @@ export default function useTextChatAttachmentPickerFlow({
     recordPerfEvent("text-chat", "file-picker:input-change", {
       selectedFileCount: selectedInputFiles.length,
       selectedFromDocumentPicker,
-      allSelectedAreImages,
+      allSelectedAreMedia,
       shouldPreferSendAsDocuments,
       shouldOpenPendingBatchSheet,
       msSincePickerOpen: pickerOpenedAt ? inputChangeStartedAt - pickerOpenedAt : 0,

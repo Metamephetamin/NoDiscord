@@ -37,7 +37,8 @@ export default function TextChatMediaPreview({
   const isImagePreview = mediaPreview?.type === "image";
   const isPreviewOpen = Boolean(mediaPreview);
   const imagePreviewUrl = isImagePreview ? String(mediaPreview?.url || "") : "";
-  const isImageReady = !isImagePreview || (imagePreviewUrl && imageLoadState.url === imagePreviewUrl);
+  const isImageReady = !isImagePreview || (imagePreviewUrl && imageLoadState.url === imagePreviewUrl && !imageLoadState.failed);
+  const imageLoadFailed = isImagePreview && imagePreviewUrl && imageLoadState.url === imagePreviewUrl && imageLoadState.failed;
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -205,47 +206,6 @@ export default function TextChatMediaPreview({
     };
   }, [isPreviewOpen]);
 
-  useEffect(() => {
-    if (!imagePreviewUrl) {
-      return undefined;
-    }
-
-    let isCanceled = false;
-    const image = new Image();
-    image.decoding = "async";
-    image.fetchPriority = "high";
-
-    const markReady = () => {
-      const decodePromise = typeof image.decode === "function"
-        ? image.decode().catch(() => null)
-        : Promise.resolve();
-
-      decodePromise.finally(() => {
-        if (!isCanceled) {
-          setImageLoadState({ url: imagePreviewUrl, failed: false });
-        }
-      });
-    };
-
-    image.onload = markReady;
-    image.onerror = () => {
-      if (!isCanceled) {
-        setImageLoadState({ url: imagePreviewUrl, failed: true });
-      }
-    };
-    image.src = imagePreviewUrl;
-
-    if (image.complete && image.naturalWidth > 0) {
-      markReady();
-    }
-
-    return () => {
-      isCanceled = true;
-      image.onload = null;
-      image.onerror = null;
-    };
-  }, [imagePreviewUrl]);
-
   if (!mediaPreview) {
     return null;
   }
@@ -304,19 +264,29 @@ export default function TextChatMediaPreview({
             onPointerLeave={handlePointerEnd}
             onClick={handleViewportClick}
           >
-            {isImagePreview && !isImageReady ? (
-              <div className="media-preview__image-loader" aria-hidden="true">
-                <span />
-              </div>
+            {imageLoadFailed ? (
+              <div className="media-preview__image-fallback">Не удалось загрузить изображение</div>
             ) : isImagePreview ? (
-              <img
-                className="media-preview__image"
-                src={mediaPreview.url}
-                alt=""
-                decoding="async"
-                fetchPriority="high"
-                style={{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})` }}
-              />
+              <>
+                {!isImageReady ? (
+                  <div className="media-preview__image-loader" aria-hidden="true">
+                    <span />
+                  </div>
+                ) : null}
+                <img
+                  className="media-preview__image"
+                  src={mediaPreview.url}
+                  alt=""
+                  decoding="async"
+                  fetchPriority="high"
+                  style={{
+                    opacity: isImageReady ? 1 : 0,
+                    transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})`,
+                  }}
+                  onLoad={() => setImageLoadState({ url: imagePreviewUrl, failed: false })}
+                  onError={() => setImageLoadState({ url: imagePreviewUrl, failed: true })}
+                />
+              </>
             ) : (
               <video
                 ref={videoRef}

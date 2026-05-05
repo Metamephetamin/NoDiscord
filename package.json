@@ -32,6 +32,7 @@
     "test:media-missing": "node ./scripts/media-missing-smoke.mjs",
     "test:media-preview": "node ./scripts/media-preview-smoke.mjs",
     "test:realtime": "node ./scripts/realtime-smoke.mjs",
+    "test:upload-ui": "node ./scripts/upload-ui-smoke.mjs",
     "test:visual:chat": "node ./scripts/visual-smoke-chat.mjs",
     "load:auth-tokens": "node ./scripts/load/auth-tokens.mjs",
     "load:http": "node ./scripts/load/http-smoke.mjs",

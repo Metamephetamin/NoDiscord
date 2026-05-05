@@ -864,8 +864,9 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 12px;
-  width: min(100%, 420px);
-  max-width: min(100%, 520px);
+  width: fit-content;
+  min-width: min(100%, 260px);
+  max-width: min(100%, 400px);
   min-height: 60px;
   padding: 8px 12px 8px 10px;
   border: 0;
@@ -3352,7 +3353,7 @@
 }
 
 .msg-content--file-only .message-attachment--document .message-attachment__name {
-  max-width: 240px;
+  max-width: 210px;
   color: #ffffff;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
@@ -8678,11 +8679,25 @@ html[data-ui-density="compact"] .input-area {
 }
 
 .media-preview__image-loader {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
   width: 54px;
   height: 54px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.media-preview__image-fallback {
+  max-width: min(420px, 86vw);
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(18, 22, 31, 0.82);
+  color: rgba(238, 243, 255, 0.86);
+  font-size: 14px;
 }
 
 .media-preview__image-loader span {

@@ -15,5 +15,13 @@ assert(
   source.includes("window.removeEventListener(\"wheel\", handleNativeWheel, { capture: true })"),
   "Media preview must remove the capture-level wheel listener when the preview closes."
 );
+assert(
+  !source.includes("const image = new Image();"),
+  "Image preview must not preload through a second Image object before rendering the visible image."
+);
+assert(
+  source.includes("onLoad={() => setImageLoadState({ url: imagePreviewUrl, failed: false })}"),
+  "Image preview must mark readiness from the visible image load event."
+);
 
 console.log("Media preview smoke checks passed.");

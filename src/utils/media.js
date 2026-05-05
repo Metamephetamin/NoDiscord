@@ -4,6 +4,7 @@ const STATIC_ASSET_BASE_URL = import.meta.env.BASE_URL || "/";
 const MISSING_MEDIA_CACHE_KEY = "nodiscord.missing-internal-media.v1";
 export const MISSING_MEDIA_EVENT = "nodiscord:missing-internal-media";
 const MISSING_MEDIA_CACHE_TTL_MS = 30 * 60_000;
+const MISSING_CHAT_FILE_CACHE_TTL_MS = 2 * 60_000;
 let missingInternalMediaCache = null;
 
 export function resolveStaticAssetUrl(value) {
@@ -71,6 +72,7 @@ const CACHEABLE_MISSING_MEDIA_PREFIXES = [
   "/profile-backgrounds/",
   "/api/profile-backgrounds/",
   "/server-icons/",
+  "/chat-files/",
 ];
 
 function getInternalMediaPath(value) {
@@ -142,6 +144,12 @@ function getCacheableMissingMediaPath(value) {
     : "";
 }
 
+function getMissingMediaCacheTtlMs(internalPath) {
+  return String(internalPath || "").startsWith("/chat-files/")
+    ? MISSING_CHAT_FILE_CACHE_TTL_MS
+    : MISSING_MEDIA_CACHE_TTL_MS;
+}
+
 export function markMediaUrlMissing(value) {
   const internalPath = getCacheableMissingMediaPath(value);
   if (!internalPath) {
@@ -149,7 +157,7 @@ export function markMediaUrlMissing(value) {
   }
 
   const cache = readMissingInternalMediaCache();
-  const expiresAt = Date.now() + MISSING_MEDIA_CACHE_TTL_MS;
+  const expiresAt = Date.now() + getMissingMediaCacheTtlMs(internalPath);
   cache.set(internalPath, expiresAt);
   writeMissingInternalMediaCache(cache);
   if (typeof window !== "undefined") {
@@ -195,7 +203,7 @@ export function resolveMediaUrl(value, fallback = DEFAULT_AVATAR) {
   }
 
   if (isMediaUrlKnownMissing(normalizedValue)) {
-    return fallback;
+    return fallback === normalizedValue ? "" : fallback;
   }
 
   if (

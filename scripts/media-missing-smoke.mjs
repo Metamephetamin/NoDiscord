@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const mediaSource = readFileSync("src/utils/media.js", "utf8");
 const animatedMediaSource = readFileSync("src/components/AnimatedMedia.jsx", "utf8");
+const messageListSource = readFileSync("src/components/TextChatMessageList.jsx", "utf8");
 
 assert(
   mediaSource.includes('export const MISSING_MEDIA_EVENT = "nodiscord:missing-internal-media"'),
@@ -32,6 +33,18 @@ assert(
 assert(
   !animatedMediaSource.includes("return markMediaUrlMissing(resolvedSrc);"),
   "AnimatedMedia must not mark sources missing while only checking cache state."
+);
+assert(
+  mediaSource.includes('"/chat-files/"'),
+  "Missing chat file URLs must be cacheable so deleted attachments do not retry forever."
+);
+assert(
+  messageListSource.includes("markMediaUrlMissing(directSourceUrl"),
+  "Message media cards must mark failed chat-file URLs as missing."
+);
+assert(
+  messageListSource.includes("window.addEventListener(MISSING_MEDIA_EVENT"),
+  "Message media cards must react when another instance marks the same file missing."
 );
 
 console.log("Missing media smoke checks passed.");

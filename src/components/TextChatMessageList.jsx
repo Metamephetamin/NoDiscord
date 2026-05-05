@@ -6,7 +6,14 @@ import useMobileLongPress from "../hooks/useMobileLongPress";
 import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { segmentMessageTextByMentions } from "../utils/messageMentions";
-import { DEFAULT_SERVER_ICON, resolveMediaUrl, resolveOptimizedMediaUrl } from "../utils/media";
+import {
+  DEFAULT_SERVER_ICON,
+  MISSING_MEDIA_EVENT,
+  isMediaUrlKnownMissing,
+  markMediaUrlMissing,
+  resolveMediaUrl,
+  resolveOptimizedMediaUrl,
+} from "../utils/media";
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
@@ -457,10 +464,15 @@ const MessageMediaImage = memo(function MessageMediaImage({
   priorityMedia = false,
 }) {
   const directSourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const [missingMediaVersion, setMissingMediaVersion] = useState(0);
   const sourceCandidates = useMemo(() => {
     const sourceUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "").trim();
     const candidates = [];
     const isLocalPreview = /^(?:blob:|data:|file:)/i.test(directSourceUrl);
+
+    if (!isLocalPreview && (isMediaUrlKnownMissing(sourceUrl) || isMediaUrlKnownMissing(directSourceUrl))) {
+      return [];
+    }
 
     if (sourceUrl && !isLocalPreview) {
       const optimizedUrl = resolveOptimizedMediaUrl(sourceUrl, {
@@ -483,7 +495,7 @@ const MessageMediaImage = memo(function MessageMediaImage({
     }
 
     return Array.from(new Set(candidates));
-  }, [attachmentItem?.attachmentSourceUrl, attachmentItem?.attachmentUrl, directSourceUrl]);
+  }, [attachmentItem?.attachmentSourceUrl, attachmentItem?.attachmentUrl, directSourceUrl, missingMediaVersion]);
   const sourceKey = sourceCandidates.join("\n");
   const [sourceState, setSourceState] = useState({
     sourceKey,
@@ -493,6 +505,21 @@ const MessageMediaImage = memo(function MessageMediaImage({
   const sourceIndex = sourceState.sourceKey === sourceKey ? sourceState.sourceIndex : 0;
   const isUnavailable = sourceState.sourceKey === sourceKey ? sourceState.isUnavailable : false;
   const resolvedSourceUrl = sourceCandidates[sourceIndex] || "";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleMissingMedia = () => {
+      setMissingMediaVersion((current) => current + 1);
+    };
+
+    window.addEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    return () => {
+      window.removeEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    };
+  }, []);
 
   const handleError = useCallback(() => {
     if (sourceIndex < sourceCandidates.length - 1) {
@@ -504,12 +531,13 @@ const MessageMediaImage = memo(function MessageMediaImage({
       return;
     }
 
+    markMediaUrlMissing(directSourceUrl || attachmentItem?.attachmentSourceUrl || resolvedSourceUrl);
     setSourceState({
       sourceKey,
       sourceIndex,
       isUnavailable: true,
     });
-  }, [sourceCandidates.length, sourceIndex, sourceKey]);
+  }, [attachmentItem?.attachmentSourceUrl, directSourceUrl, resolvedSourceUrl, sourceCandidates.length, sourceIndex, sourceKey]);
 
   if (!resolvedSourceUrl || isUnavailable) {
     return (
@@ -543,6 +571,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
   const preparedSourceUrlRef = useRef("");
   const previewSeekRequestedRef = useRef(false);
   const [node, setNode] = useState(null);
+  const [missingMediaVersion, setMissingMediaVersion] = useState(0);
   const [hasStartedLoading, setHasStartedLoading] = useState(() => (
     priorityMedia || typeof IntersectionObserver !== "function"
   ));
@@ -617,10 +646,28 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
   }, [sourceUrl]);
 
   const handleVideoError = useCallback(() => {
+    markMediaUrlMissing(sourceUrl);
+    setMissingMediaVersion((current) => current + 1);
     setFailedSourceUrl(sourceUrl);
   }, [sourceUrl]);
 
-  const isUnavailable = !sourceUrl || failedSourceUrl === sourceUrl;
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleMissingMedia = () => {
+      setMissingMediaVersion((current) => current + 1);
+    };
+
+    window.addEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    return () => {
+      window.removeEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    };
+  }, []);
+
+  const isSourceKnownMissing = missingMediaVersion >= 0 && isMediaUrlKnownMissing(sourceUrl);
+  const isUnavailable = !sourceUrl || failedSourceUrl === sourceUrl || isSourceKnownMissing;
 
   if (!sourceUrl || isUnavailable) {
     return (
@@ -1251,7 +1298,7 @@ function MessageAttachmentCard({
     }
 
     const isDocumentAttachment = Boolean(attachmentItem.attachmentAsFile);
-    const showDocumentPreview = isDocumentAttachment && isImageLikeDocumentAttachment(attachmentItem);
+    const showDocumentPreview = false;
 
     return (
       <a
