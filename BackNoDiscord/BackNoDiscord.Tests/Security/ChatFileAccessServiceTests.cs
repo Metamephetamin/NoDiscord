@@ -58,6 +58,34 @@ public sealed class ChatFileAccessServiceTests
     }
 
     [Fact]
+    public async Task CanAccessFileAsync_AllowsDirectFriendForLegacyMessageAttachmentWithoutMetadata()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var channelId = DirectMessageChannels.BuildChannelId(42, 84);
+        context.Friendships.Add(new FriendshipRecord
+        {
+            UserLowId = 42,
+            UserHighId = 84,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.Messages.Add(new Message
+        {
+            Id = 123,
+            ChannelId = channelId,
+            Username = "owner",
+            Content = "__CHAT_PAYLOAD__:{\"authorUserId\":\"42\",\"attachments\":[{\"attachmentUrl\":\"/chat-files/chat-42-legacy.png\"}]}",
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-legacy.png", User("84"), CancellationToken.None);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
     public async Task CanAccessFileAsync_DeniesUnrelatedUserForBoundDirectFile()
     {
         await using var context = CreateContext();

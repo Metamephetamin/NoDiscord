@@ -485,10 +485,15 @@ public class FriendsController : ControllerBase
         var channelIds = channelFriendLookup.Keys.ToArray();
         var unreadMessages = await _context.Messages
             .AsNoTracking()
-            .Where(message => channelIds.Contains(message.ChannelId) && !message.IsDeleted && message.ReadAt == null)
+            .Where(message =>
+                channelIds.Contains(message.ChannelId) &&
+                !message.IsDeleted &&
+                message.ReadAt == null &&
+                (message.AuthorUserId == null || message.AuthorUserId != currentUserId.ToString()))
             .Select(message => new
             {
                 message.ChannelId,
+                message.AuthorUserId,
                 message.Content,
                 message.EncryptedContent
             })
@@ -503,10 +508,13 @@ public class FriendsController : ControllerBase
                 continue;
             }
 
-            var payload = DeserializePayload(GetRawPayload(message.Content, message.EncryptedContent));
-            if (string.Equals(payload.AuthorUserId, currentUserKey, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(message.AuthorUserId))
             {
-                continue;
+                var payload = DeserializePayload(GetRawPayload(message.Content, message.EncryptedContent));
+                if (string.Equals(payload.AuthorUserId, currentUserKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
             }
 
             counts[friendId] = counts.TryGetValue(friendId, out var count)

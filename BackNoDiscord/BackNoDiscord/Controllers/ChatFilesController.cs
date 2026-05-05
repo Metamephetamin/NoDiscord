@@ -43,7 +43,7 @@ public class ChatFilesController : ControllerBase
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
     [EnableRateLimiting("chat-upload")]
-    public async Task<IActionResult> Upload([FromForm(Name = "file")] IFormFile? file, CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload(CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
@@ -56,7 +56,7 @@ public class ChatFilesController : ControllerBase
         try
         {
             var upload = await StreamedChatFileUploadReader.UploadAsync(
-                file,
+                Request,
                 uploadsDirectory,
                 currentUser.UserId,
                 limits,

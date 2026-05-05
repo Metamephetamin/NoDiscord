@@ -128,7 +128,12 @@ public sealed class ChatFileAccessService
             .FirstOrDefaultAsync(item => item.FileName == safeFileName, cancellationToken);
         if (record is null)
         {
-            return IsOwnerFromFileName(safeFileName, currentUser.UserId);
+            if (IsOwnerFromFileName(safeFileName, currentUser.UserId))
+            {
+                return true;
+            }
+
+            return await TryAuthorizeLegacyMessageAttachmentAsync(safeFileName, currentUser, cancellationToken);
         }
 
         if (string.Equals(record.OwnerUserId, currentUser.UserId, StringComparison.Ordinal))
@@ -142,6 +147,48 @@ public sealed class ChatFileAccessService
         }
 
         return await CanAccessChannelAsync(record.ChannelId, currentUser, cancellationToken);
+    }
+
+    private async Task<bool> TryAuthorizeLegacyMessageAttachmentAsync(
+        string fileName,
+        AuthenticatedUser currentUser,
+        CancellationToken cancellationToken)
+    {
+        var attachmentPath = $"/chat-files/{fileName}";
+        var legacyMessage = await _context.Messages
+            .AsNoTracking()
+            .Where(message => !message.IsDeleted && message.Content != null && message.Content.Contains(attachmentPath))
+            .OrderByDescending(message => message.Id)
+            .Select(message => new
+            {
+                message.Id,
+                message.ChannelId
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (legacyMessage is null || !await CanAccessChannelAsync(legacyMessage.ChannelId, currentUser, cancellationToken))
+        {
+            return false;
+        }
+
+        if (!await _context.ChatFileUploads.AnyAsync(item => item.FileName == fileName, cancellationToken))
+        {
+            _context.ChatFileUploads.Add(new ChatFileUploadRecord
+            {
+                FileName = fileName,
+                OwnerUserId = ExtractOwnerUserIdFromFileName(fileName),
+                DisplayFileName = fileName,
+                ContentType = string.Empty,
+                Size = 0,
+                ChannelId = legacyMessage.ChannelId,
+                MessageId = legacyMessage.Id,
+                CreatedAt = DateTimeOffset.UtcNow,
+                BoundAt = DateTimeOffset.UtcNow
+            });
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return true;
     }
 
     private async Task<bool> CanAccessChannelAsync(string channelId, AuthenticatedUser currentUser, CancellationToken cancellationToken)
@@ -196,6 +243,19 @@ public sealed class ChatFileAccessService
     {
         var expectedPrefix = $"chat-{UploadPolicies.SanitizeIdentifier(currentUserId)}-";
         return fileName.StartsWith(expectedPrefix, StringComparison.Ordinal);
+    }
+
+    private static string ExtractOwnerUserIdFromFileName(string fileName)
+    {
+        const string prefix = "chat-";
+        if (!fileName.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        var remaining = fileName[prefix.Length..];
+        var separatorIndex = remaining.IndexOf('-', StringComparison.Ordinal);
+        return separatorIndex <= 0 ? string.Empty : remaining[..separatorIndex];
     }
 
     private static bool TryGetServerIdFromChatChannelId(string? channelId, out string serverId)

@@ -842,12 +842,19 @@ public class AuthController : ControllerBase
         }
 
         var now = DateTimeOffset.UtcNow;
-        storedToken.RevokedAt = now;
-        storedToken.LastUsedAt = now;
-        storedToken.LastIp = GetClientIp();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
         var authSession = await IssueAuthSessionAsync(storedToken.User);
-        storedToken.ReplacedByTokenHash = HashToken(authSession.RefreshToken);
-        await _context.SaveChangesAsync();
+        var revoked = await RevokeRefreshTokenForRotationAsync(
+            storedToken.Id,
+            authSession.RefreshToken,
+            now);
+        if (!revoked)
+        {
+            await transaction.RollbackAsync();
+            return Unauthorized(new { message = "Refresh token has expired." });
+        }
+
+        await transaction.CommitAsync();
 
         return Ok(BuildAuthResponse(storedToken.User, authSession));
     }
@@ -1004,6 +1011,41 @@ public class AuthController : ControllerBase
             AccessTokenExpiresAt = accessTokenExpiresAt,
             RefreshTokenExpiresAt = refreshTokenExpiresAt
         };
+    }
+
+    private async Task<bool> RevokeRefreshTokenForRotationAsync(int refreshTokenId, string replacementRefreshToken, DateTimeOffset revokedAt)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            var storedToken = await _context.RefreshTokens.FirstOrDefaultAsync(item =>
+                item.Id == refreshTokenId &&
+                item.RevokedAt == null &&
+                item.ExpiresAt > revokedAt);
+            if (storedToken is null)
+            {
+                return false;
+            }
+
+            storedToken.RevokedAt = revokedAt;
+            storedToken.LastUsedAt = revokedAt;
+            storedToken.LastIp = GetClientIp();
+            storedToken.ReplacedByTokenHash = HashToken(replacementRefreshToken);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        var updatedRows = await _context.RefreshTokens
+            .Where(item =>
+                item.Id == refreshTokenId &&
+                item.RevokedAt == null &&
+                item.ExpiresAt > revokedAt)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.RevokedAt, revokedAt)
+                .SetProperty(item => item.LastUsedAt, revokedAt)
+                .SetProperty(item => item.LastIp, GetClientIp())
+                .SetProperty(item => item.ReplacedByTokenHash, HashToken(replacementRefreshToken)));
+
+        return updatedRows == 1;
     }
 
     private object BuildAuthResponse(User user, AuthSessionResult authSession)

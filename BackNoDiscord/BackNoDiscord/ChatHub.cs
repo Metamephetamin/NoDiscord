@@ -237,6 +237,7 @@ public class ChatHub : Hub
                 Content = null,
                 EncryptedContent = encrypted,
                 PhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(photoUrl, "/avatars/"),
+                AuthorUserId = currentUser.UserId,
                 Timestamp = DateTime.UtcNow,
                 IsDeleted = false
             };
@@ -362,6 +363,7 @@ public class ChatHub : Hub
                 Content = null,
                 EncryptedContent = _crypto.Encrypt(SerializePayload(payload)),
                 PhotoUrl = authorPhotoUrl,
+                AuthorUserId = currentUser.UserId,
                 Timestamp = timestampBase.AddMilliseconds(forwardedMessages.Count),
                 IsDeleted = false
             };
@@ -1485,12 +1487,17 @@ public class ChatHub : Hub
 
         var unreadMessages = await _context.Messages
             .AsNoTracking()
-            .Where(message => message.ChannelId == channelId && !message.IsDeleted && message.ReadAt == null)
+            .Where(message =>
+                message.ChannelId == channelId &&
+                !message.IsDeleted &&
+                message.ReadAt == null &&
+                (message.AuthorUserId == null || message.AuthorUserId != currentUser.UserId))
             .OrderBy(message => message.Timestamp)
             .Select(message => new
             {
                 message.Id,
                 message.ChannelId,
+                message.AuthorUserId,
                 message.Content,
                 message.EncryptedContent
             })
@@ -1504,6 +1511,15 @@ public class ChatHub : Hub
         var readMessageIds = new List<int>();
         foreach (var unreadMessage in unreadMessages)
         {
+            if (!string.IsNullOrWhiteSpace(unreadMessage.AuthorUserId))
+            {
+                if (!string.Equals(unreadMessage.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
+                {
+                    readMessageIds.Add(unreadMessage.Id);
+                }
+                continue;
+            }
+
             var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
             if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
             {
@@ -1546,12 +1562,17 @@ public class ChatHub : Hub
 
         var unreadMessages = await _context.Messages
             .AsNoTracking()
-            .Where(message => equivalentChannelIds.Contains(message.ChannelId) && !message.IsDeleted && message.ReadAt == null)
+            .Where(message =>
+                equivalentChannelIds.Contains(message.ChannelId) &&
+                !message.IsDeleted &&
+                message.ReadAt == null &&
+                (message.AuthorUserId == null || message.AuthorUserId != currentUser.UserId))
             .OrderBy(message => message.Timestamp)
             .Select(message => new
             {
                 message.Id,
                 message.ChannelId,
+                message.AuthorUserId,
                 message.Content,
                 message.EncryptedContent
             })
@@ -1567,6 +1588,15 @@ public class ChatHub : Hub
 
         foreach (var unreadMessage in unreadMessages)
         {
+            if (!string.IsNullOrWhiteSpace(unreadMessage.AuthorUserId))
+            {
+                if (!string.Equals(unreadMessage.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
+                {
+                    readMessageIds.Add(unreadMessage.Id);
+                }
+                continue;
+            }
+
             var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
             if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
             {

@@ -1100,10 +1100,12 @@ public sealed class ConversationsController : ControllerBase
             .AsNoTracking()
             .Where(message => channelIds.Contains(message.ChannelId)
                 && !message.IsDeleted
-                && message.Timestamp > minCutoffUtc)
+                && message.Timestamp > minCutoffUtc
+                && (message.AuthorUserId == null || message.AuthorUserId != currentUserId.ToString()))
             .Select(message => new
             {
                 message.ChannelId,
+                message.AuthorUserId,
                 message.Content,
                 message.EncryptedContent,
                 message.Timestamp
@@ -1125,10 +1127,13 @@ public sealed class ConversationsController : ControllerBase
                 continue;
             }
 
-            var payload = DeserializePayload(GetRawPayload(message.Content, message.EncryptedContent));
-            if (string.Equals(payload.AuthorUserId, currentUserKey, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(message.AuthorUserId))
             {
-                continue;
+                var payload = DeserializePayload(GetRawPayload(message.Content, message.EncryptedContent));
+                if (string.Equals(payload.AuthorUserId, currentUserKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
             }
 
             counts[state.ConversationId] = counts.TryGetValue(state.ConversationId, out var count)

@@ -24,6 +24,9 @@ public class Message
     [Column("photourl")]
     public string? PhotoUrl { get; set; }
 
+    [Column("author_user_id")]
+    public string? AuthorUserId { get; set; }
+
     [Column("timestamp")]
     public DateTime Timestamp { get; set; }
 
@@ -619,6 +622,7 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.ChannelId, x.Timestamp });
             entity.HasIndex(x => new { x.ChannelId, x.Id });
+            entity.HasIndex(x => new { x.ChannelId, x.ReadAt, x.AuthorUserId });
             entity.HasIndex(x => x.Timestamp);
         });
 
