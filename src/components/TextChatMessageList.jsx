@@ -1855,6 +1855,10 @@ function TextChatMessageList({
             && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
+          const isVoiceOnlyMessage = isDirectChat
+            && isMediaOnlyMessage
+            && attachments.length > 0
+            && attachments.every((attachmentItem) => attachmentItem?.isVoice);
           const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;
           const isEmojiOnlyTextMessage = emojiOnlyMessageMeta.isEmojiOnly
             && !hasRenderableAttachments
@@ -1922,7 +1926,7 @@ function TextChatMessageList({
             <div
               key={messageRenderKey}
               ref={(node) => registerMessageNode(messageItem.id, node)}
-              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
+              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${isVoiceOnlyMessage ? "message-item--voice-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
               onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
               onClick={handleMessageClick}
             >
@@ -1956,7 +1960,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {
@@ -2088,7 +2092,7 @@ function TextChatMessageList({
                 />
 
                 {((isDirectChat && !useInlineFooter && !showAttachmentOverlayFooter) || reactions.length) ? (
-                  <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""}`}>
+                  <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
                         <div className="message-reactions">
