@@ -99,12 +99,10 @@ public class ChatHub : Hub
         {
             try
             {
-                var user = await _context.Users.FirstOrDefaultAsync(item => item.id == disconnectedUserId);
-                if (user is not null)
-                {
-                    user.last_seen_at = lastSeenAt;
-                    await _context.SaveChangesAsync();
-                }
+                await _context.Users
+                    .Where(user => user.id == disconnectedUserId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(user => user.last_seen_at, lastSeenAt));
             }
             catch (Exception ex)
             {
@@ -610,7 +608,8 @@ public class ChatHub : Hub
                 .Where(item => item.MessageId == messageId && item.ReactorUserId == currentUser.UserId)
                 .OrderBy(item => item.CreatedAt)
                 .ThenBy(item => item.Id)
-                .ToListAsync();
+                .Take(MaxReactionsPerMessageByUser)
+                .ToListAsync(Context.ConnectionAborted);
 
             if (userReactions.Count >= MaxReactionsPerMessageByUser)
             {
@@ -628,7 +627,7 @@ public class ChatHub : Hub
             });
         }
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(Context.ConnectionAborted);
 
         _logger.LogInformation("User {UserId} toggled reaction {ReactionKey} for message {MessageId} in channel {ChannelId}", currentUser.UserId, normalizedReactionKey, messageId, message.ChannelId);
         var reactionsByMessageId = await BuildReactionMapAsync([messageId]);
@@ -1483,51 +1482,10 @@ public class ChatHub : Hub
         }
 
         member.LastReadAt = DateTimeOffset.UtcNow;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(Context.ConnectionAborted);
 
-        var unreadMessages = await _context.Messages
-            .AsNoTracking()
-            .Where(message =>
-                message.ChannelId == channelId &&
-                !message.IsDeleted &&
-                message.ReadAt == null &&
-                (message.AuthorUserId == null || message.AuthorUserId != currentUser.UserId))
-            .OrderBy(message => message.Timestamp)
-            .Select(message => new
-            {
-                message.Id,
-                message.ChannelId,
-                message.AuthorUserId,
-                message.Content,
-                message.EncryptedContent
-            })
-            .ToListAsync();
-
-        if (unreadMessages.Count == 0)
-        {
-            return;
-        }
-
-        var readMessageIds = new List<int>();
-        foreach (var unreadMessage in unreadMessages)
-        {
-            if (!string.IsNullOrWhiteSpace(unreadMessage.AuthorUserId))
-            {
-                if (!string.Equals(unreadMessage.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
-                {
-                    readMessageIds.Add(unreadMessage.Id);
-                }
-                continue;
-            }
-
-            var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
-            if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            readMessageIds.Add(unreadMessage.Id);
-        }
+        var readMessageIds = await LoadUnreadModernMessageIdsAsync([channelId], currentUser);
+        readMessageIds.AddRange(await LoadUnreadLegacyMessageIdsAsync([channelId], currentUser));
 
         if (readMessageIds.Count == 0)
         {
@@ -1539,7 +1497,7 @@ public class ChatHub : Hub
             .Where(message => readMessageIds.Contains(message.Id))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(message => message.ReadAt, readAtUtc)
-                .SetProperty(message => message.ReadByUserId, currentUser.UserId));
+                .SetProperty(message => message.ReadByUserId, currentUser.UserId), Context.ConnectionAborted);
 
         await Clients.Group(channelId).SendAsync("MessagesRead", new MessageReadReceiptDto
         {
@@ -1560,51 +1518,9 @@ public class ChatHub : Hub
 
         var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
 
-        var unreadMessages = await _context.Messages
-            .AsNoTracking()
-            .Where(message =>
-                equivalentChannelIds.Contains(message.ChannelId) &&
-                !message.IsDeleted &&
-                message.ReadAt == null &&
-                (message.AuthorUserId == null || message.AuthorUserId != currentUser.UserId))
-            .OrderBy(message => message.Timestamp)
-            .Select(message => new
-            {
-                message.Id,
-                message.ChannelId,
-                message.AuthorUserId,
-                message.Content,
-                message.EncryptedContent
-            })
-            .ToListAsync();
-
-        if (unreadMessages.Count == 0)
-        {
-            return;
-        }
-
         var readAtUtc = DateTime.UtcNow;
-        var readMessageIds = new List<int>();
-
-        foreach (var unreadMessage in unreadMessages)
-        {
-            if (!string.IsNullOrWhiteSpace(unreadMessage.AuthorUserId))
-            {
-                if (!string.Equals(unreadMessage.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
-                {
-                    readMessageIds.Add(unreadMessage.Id);
-                }
-                continue;
-            }
-
-            var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
-            if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            readMessageIds.Add(unreadMessage.Id);
-        }
+        var readMessageIds = await LoadUnreadModernMessageIdsAsync(equivalentChannelIds, currentUser);
+        readMessageIds.AddRange(await LoadUnreadLegacyMessageIdsAsync(equivalentChannelIds, currentUser));
 
         if (readMessageIds.Count == 0)
         {
@@ -1615,7 +1531,7 @@ public class ChatHub : Hub
             .Where(message => readMessageIds.Contains(message.Id))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(message => message.ReadAt, readAtUtc)
-                .SetProperty(message => message.ReadByUserId, currentUser.UserId));
+                .SetProperty(message => message.ReadByUserId, currentUser.UserId), Context.ConnectionAborted);
 
         await Clients.Group(normalizedChannelId).SendAsync("MessagesRead", new MessageReadReceiptDto
         {
@@ -1624,6 +1540,57 @@ public class ChatHub : Hub
             MessageIds = readMessageIds,
             ReadAt = readAtUtc
         });
+    }
+
+    private async Task<List<int>> LoadUnreadModernMessageIdsAsync(IReadOnlyCollection<string> channelIds, AuthenticatedUser currentUser)
+    {
+        return await _context.Messages
+            .AsNoTracking()
+            .Where(message =>
+                channelIds.Contains(message.ChannelId) &&
+                !message.IsDeleted &&
+                message.ReadAt == null &&
+                message.AuthorUserId != null &&
+                message.AuthorUserId != currentUser.UserId)
+            .OrderBy(message => message.Timestamp)
+            .Select(message => message.Id)
+            .ToListAsync(Context.ConnectionAborted);
+    }
+
+    private async Task<List<int>> LoadUnreadLegacyMessageIdsAsync(IReadOnlyCollection<string> channelIds, AuthenticatedUser currentUser)
+    {
+        var unreadLegacyMessages = await _context.Messages
+            .AsNoTracking()
+            .Where(message =>
+                channelIds.Contains(message.ChannelId) &&
+                !message.IsDeleted &&
+                message.ReadAt == null &&
+                message.AuthorUserId == null)
+            .OrderBy(message => message.Timestamp)
+            .Select(message => new
+            {
+                message.Id,
+                message.ChannelId,
+                message.AuthorUserId,
+                message.Content,
+                message.EncryptedContent
+            })
+            .ToListAsync(Context.ConnectionAborted);
+
+        var readMessageIds = new List<int>();
+
+        foreach (var unreadMessage in unreadLegacyMessages)
+        {
+            var payload = DeserializePayload(GetRawPayload(unreadMessage.Content, unreadMessage.EncryptedContent, unreadMessage.Id, unreadMessage.ChannelId));
+            if (string.Equals(payload.AuthorUserId, currentUser.UserId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            readMessageIds.Add(unreadMessage.Id);
+        }
+
+        return readMessageIds;
     }
 
     private string GetRawPayload(string? content, string? encryptedContent, int messageId, string channelId)

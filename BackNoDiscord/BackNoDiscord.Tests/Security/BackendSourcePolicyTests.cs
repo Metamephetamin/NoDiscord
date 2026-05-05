@@ -67,6 +67,54 @@ public sealed class BackendSourcePolicyTests
     }
 
     [Fact]
+    public void ChatHubReadReceiptsAvoidPayloadReadsForModernMessages()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "ChatHub.cs"));
+
+        Assert.Contains("LoadUnreadModernMessageIdsAsync", source);
+        Assert.Contains("LoadUnreadLegacyMessageIdsAsync", source);
+        Assert.Contains("message.AuthorUserId != null", source);
+        Assert.Contains("message.AuthorUserId == null", source);
+        Assert.Contains(".Select(message => message.Id)", source);
+    }
+
+    [Fact]
+    public void ChatHubReactionLimitQueryIsBounded()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "ChatHub.cs"));
+
+        Assert.Contains(".Take(MaxReactionsPerMessageByUser)", source);
+        Assert.Contains("ToListAsync(Context.ConnectionAborted)", source);
+    }
+
+    [Fact]
+    public void ChatHubPresenceDisconnectUsesSetBasedLastSeenUpdate()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "ChatHub.cs"));
+
+        Assert.Contains("SetProperty(user => user.last_seen_at, lastSeenAt)", source);
+        Assert.DoesNotContain("user.last_seen_at = lastSeenAt;", source);
+    }
+
+    [Fact]
     public void FriendSearchCapsDatabaseCandidatesBeforeInMemoryRanking()
     {
         var source = File.ReadAllText(Path.Combine(
