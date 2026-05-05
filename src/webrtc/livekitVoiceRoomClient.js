@@ -389,9 +389,9 @@ function isLocalVoicePreviewFallbackEnabled() {
 
 function isVoiceDebugEnabled() {
   try {
-    return typeof window !== "undefined" && window.localStorage?.getItem("ND_VOICE_DEBUG") !== "0";
+    return typeof window !== "undefined" && window.localStorage?.getItem("ND_VOICE_DEBUG") === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -881,7 +881,9 @@ export function createVoiceRoomClient({
     if (typeof window !== "undefined") {
       window.__ndVoiceRoute = normalizedSnapshot;
       window.__ndVoiceRouteDump = () => {
-        console.info(`${VOICE_DEBUG_PREFIX} route`, window.__ndVoiceRoute || null);
+        if (isVoiceDebugEnabled()) {
+          console.info(`${VOICE_DEBUG_PREFIX} route`, window.__ndVoiceRoute || null);
+        }
         return window.__ndVoiceRoute || null;
       };
     }
