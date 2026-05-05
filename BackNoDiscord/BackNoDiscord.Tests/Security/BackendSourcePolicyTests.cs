@@ -65,4 +65,38 @@ public sealed class BackendSourcePolicyTests
         Assert.Contains("AuthorUserId = currentUser.UserId", chatHubSource);
         Assert.Contains("message.AuthorUserId != currentUser.UserId", chatHubSource);
     }
+
+    [Fact]
+    public void FriendSearchCapsDatabaseCandidatesBeforeInMemoryRanking()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Controllers",
+            "FriendsController.cs"));
+
+        Assert.Contains("const int FriendSearchCandidateLimit", source);
+        Assert.Contains(".Take(FriendSearchCandidateLimit)", source);
+        Assert.Contains("ToListAsync(cancellationToken)", source);
+    }
+
+    [Fact]
+    public void PushNotificationsSendWithBoundedParallelism()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Services",
+            "PushNotificationService.cs"));
+
+        Assert.Contains("MaxConcurrentPushSends", source);
+        Assert.Contains("SemaphoreSlim", source);
+        Assert.Contains("Task.WhenAll", source);
+    }
 }

@@ -36,6 +36,8 @@ public sealed class PushSubscriptionUpsertRequest
 
 public sealed class PushNotificationService
 {
+    private const int MaxConcurrentPushSends = 4;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -158,41 +160,70 @@ public sealed class PushNotificationService
         var vapidDetails = new VapidDetails(_options.Subject, _options.PublicKey, _options.PrivateKey);
         var deliveredCount = 0;
         var now = DateTimeOffset.UtcNow;
+        using var sendGate = new SemaphoreSlim(MaxConcurrentPushSends);
 
-        foreach (var subscriptionRecord in subscriptions)
+        var sendTasks = subscriptions.Select(async subscriptionRecord =>
         {
-            var pushSubscription = new PushSubscription(
-                subscriptionRecord.Endpoint,
-                subscriptionRecord.P256dhKey,
-                subscriptionRecord.AuthKey);
-
+            await sendGate.WaitAsync(cancellationToken);
             try
             {
-                await _client.SendNotificationAsync(pushSubscription, serializedPayload, vapidDetails, cancellationToken: cancellationToken);
-                subscriptionRecord.LastSuccessAt = now;
-                subscriptionRecord.LastFailureAt = null;
-                subscriptionRecord.LastFailureReason = null;
-                subscriptionRecord.UpdatedAt = now;
-                subscriptionRecord.IsActive = true;
-                deliveredCount += 1;
+                if (await SendToSubscriptionAsync(subscriptionRecord, serializedPayload, vapidDetails, now, cancellationToken))
+                {
+                    Interlocked.Increment(ref deliveredCount);
+                }
             }
-            catch (WebPushException error) when (error.StatusCode == HttpStatusCode.Gone || error.StatusCode == HttpStatusCode.NotFound)
+            finally
             {
-                subscriptionRecord.IsActive = false;
-                subscriptionRecord.LastFailureAt = now;
-                subscriptionRecord.LastFailureReason = $"push endpoint expired: {(int)error.StatusCode}";
-                subscriptionRecord.UpdatedAt = now;
+                sendGate.Release();
             }
-            catch (Exception error)
-            {
-                subscriptionRecord.LastFailureAt = now;
-                subscriptionRecord.LastFailureReason = UploadPolicies.TrimToLength(error.Message, 500);
-                subscriptionRecord.UpdatedAt = now;
-                _logger.LogWarning(error, "Failed to send web push notification to user {UserId}", subscriptionRecord.UserId);
-            }
-        }
+        }).ToArray();
 
+        await Task.WhenAll(sendTasks);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return deliveredCount;
+    }
+
+    private async Task<bool> SendToSubscriptionAsync(
+        PushSubscriptionRecord subscriptionRecord,
+        string serializedPayload,
+        VapidDetails vapidDetails,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var pushSubscription = new PushSubscription(
+            subscriptionRecord.Endpoint,
+            subscriptionRecord.P256dhKey,
+            subscriptionRecord.AuthKey);
+
+        try
+        {
+            await _client.SendNotificationAsync(pushSubscription, serializedPayload, vapidDetails, cancellationToken: cancellationToken);
+            subscriptionRecord.LastSuccessAt = now;
+            subscriptionRecord.LastFailureAt = null;
+            subscriptionRecord.LastFailureReason = null;
+            subscriptionRecord.UpdatedAt = now;
+            subscriptionRecord.IsActive = true;
+            return true;
+        }
+        catch (WebPushException error) when (error.StatusCode == HttpStatusCode.Gone || error.StatusCode == HttpStatusCode.NotFound)
+        {
+            subscriptionRecord.IsActive = false;
+            subscriptionRecord.LastFailureAt = now;
+            subscriptionRecord.LastFailureReason = $"push endpoint expired: {(int)error.StatusCode}";
+            subscriptionRecord.UpdatedAt = now;
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            subscriptionRecord.LastFailureAt = now;
+            subscriptionRecord.LastFailureReason = UploadPolicies.TrimToLength(error.Message, 500);
+            subscriptionRecord.UpdatedAt = now;
+            _logger.LogWarning(error, "Failed to send web push notification to user {UserId}", subscriptionRecord.UserId);
+            return false;
+        }
     }
 }

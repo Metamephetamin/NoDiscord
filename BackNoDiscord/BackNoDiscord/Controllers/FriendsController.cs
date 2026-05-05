@@ -21,6 +21,7 @@ public class FriendsController : ControllerBase
     private readonly UserPresenceService _userPresenceService;
     private readonly CryptoService _crypto;
     private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
+    private const int FriendSearchCandidateLimit = 200;
 
     public FriendsController(
         AppDbContext context,
@@ -88,7 +89,7 @@ public class FriendsController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<IActionResult> SearchFriends([FromQuery] string? q, [FromQuery] string? mode)
+    public async Task<IActionResult> SearchFriends([FromQuery] string? q, [FromQuery] string? mode, CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
         {
@@ -110,14 +111,14 @@ public class FriendsController : ControllerBase
             .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
             .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .Distinct()
-            .ToListAsync())
+            .ToListAsync(cancellationToken))
             .ToHashSet();
         var pendingRequestsByUserId = (await _context.FriendRequests
             .AsNoTracking()
             .Where(item =>
                 item.Status == FriendRequestStatuses.Pending &&
                 (item.UserLowId == currentUserId || item.UserHighId == currentUserId))
-            .ToListAsync())
+            .ToListAsync(cancellationToken))
             .GroupBy(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.CreatedAt).First());
 
@@ -140,7 +141,10 @@ public class FriendsController : ControllerBase
         var candidates = parsedSearch.Mode == FriendSearchMode.Email
             ? await usersQuery
                 .Where(item => (item.email ?? string.Empty).ToLower().Contains(normalizedQuery))
-                .ToListAsync()
+                .OrderBy(item => item.email)
+                .ThenBy(item => item.id)
+                .Take(FriendSearchCandidateLimit)
+                .ToListAsync(cancellationToken)
             : await usersQuery
                 .Where(item =>
                     item.nickname.ToLower().Contains(normalizedQuery) ||
@@ -152,7 +156,11 @@ public class FriendsController : ControllerBase
                     (item.last_name + " " + item.first_name).ToLower().Contains(normalizedQuery) ||
                     (item.first_name + item.last_name).ToLower().Contains(condensedQuery) ||
                     (!string.IsNullOrWhiteSpace(reversedQuery) && (item.last_name + " " + item.first_name).ToLower().Contains(reversedQuery)))
-                .ToListAsync();
+                .OrderBy(item => item.first_name)
+                .ThenBy(item => item.last_name)
+                .ThenBy(item => item.id)
+                .Take(FriendSearchCandidateLimit)
+                .ToListAsync(cancellationToken);
 
         var result = candidates
             .OrderBy(item => parsedSearch.Mode == FriendSearchMode.Email
