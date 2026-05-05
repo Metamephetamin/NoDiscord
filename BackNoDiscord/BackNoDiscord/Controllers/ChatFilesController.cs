@@ -23,17 +23,20 @@ public class ChatFilesController : ControllerBase
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly IConfiguration _configuration;
     private readonly IChatFileUploadStorageMetrics _storageMetrics;
+    private readonly ChatFileAccessService _chatFileAccess;
     private readonly ILogger<ChatFilesController> _logger;
 
     public ChatFilesController(
         UploadStoragePaths uploadStoragePaths,
         IConfiguration configuration,
         IChatFileUploadStorageMetrics storageMetrics,
+        ChatFileAccessService chatFileAccess,
         ILogger<ChatFilesController> logger)
     {
         _uploadStoragePaths = uploadStoragePaths;
         _configuration = configuration;
         _storageMetrics = storageMetrics;
+        _chatFileAccess = chatFileAccess;
         _logger = logger;
     }
 
@@ -59,6 +62,7 @@ public class ChatFilesController : ControllerBase
                 limits,
                 _storageMetrics,
                 cancellationToken);
+            await _chatFileAccess.TrackUploadAsync(upload, currentUser.UserId, cancellationToken);
 
             return Ok(new
             {
@@ -220,13 +224,23 @@ public class ChatFilesController : ControllerBase
 
     [HttpGet("/chat-files/{fileName}")]
     [HttpHead("/chat-files/{fileName}")]
-    public IActionResult Download([FromRoute] string fileName)
+    public async Task<IActionResult> Download([FromRoute] string fileName, CancellationToken cancellationToken)
     {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
         var safeFileName = Path.GetFileName(fileName ?? string.Empty);
         if (string.IsNullOrWhiteSpace(safeFileName) ||
             !string.Equals(safeFileName, fileName, StringComparison.Ordinal))
         {
             return NotFound();
+        }
+
+        if (!await _chatFileAccess.CanAccessFileAsync(safeFileName, currentUser, cancellationToken))
+        {
+            return Forbid();
         }
 
         var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");

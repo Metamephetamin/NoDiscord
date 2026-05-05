@@ -37,6 +37,40 @@ public class Message
     public bool IsDeleted { get; set; }
 }
 
+[Table("chat_file_uploads")]
+public class ChatFileUploadRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("file_name")]
+    public string FileName { get; set; } = string.Empty;
+
+    [Column("owner_user_id")]
+    public string OwnerUserId { get; set; } = string.Empty;
+
+    [Column("display_file_name")]
+    public string DisplayFileName { get; set; } = string.Empty;
+
+    [Column("content_type")]
+    public string ContentType { get; set; } = string.Empty;
+
+    [Column("size")]
+    public long Size { get; set; }
+
+    [Column("channel_id")]
+    public string? ChannelId { get; set; }
+
+    [Column("message_id")]
+    public int? MessageId { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("bound_at")]
+    public DateTimeOffset? BoundAt { get; set; }
+}
+
 [Table("users")]
 public class User
 {
@@ -558,6 +592,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<ChatFileUploadRecord> ChatFileUploads => Set<ChatFileUploadRecord>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
     public DbSet<SharedServerSnapshotRecord> SharedServerSnapshots => Set<SharedServerSnapshotRecord>();
@@ -585,6 +620,19 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.ChannelId, x.Timestamp });
             entity.HasIndex(x => new { x.ChannelId, x.Id });
             entity.HasIndex(x => x.Timestamp);
+        });
+
+        modelBuilder.Entity<ChatFileUploadRecord>(entity =>
+        {
+            entity.ToTable("chat_file_uploads");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.FileName).IsUnique();
+            entity.HasIndex(x => new { x.OwnerUserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.ChannelId, x.MessageId });
+            entity.Property(x => x.FileName).IsRequired();
+            entity.Property(x => x.OwnerUserId).IsRequired();
+            entity.Property(x => x.DisplayFileName).IsRequired();
+            entity.Property(x => x.ContentType).IsRequired();
         });
 
         modelBuilder.Entity<MessageReactionRecord>(entity =>

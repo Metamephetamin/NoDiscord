@@ -55,6 +55,7 @@ public class ChatHub : Hub
     private readonly UserPresenceService _userPresenceService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly UserBlockService _userBlockService;
+    private readonly ChatFileAccessService _chatFileAccess;
 
     public ChatHub(
         AppDbContext context,
@@ -64,7 +65,8 @@ public class ChatHub : Hub
         PushNotificationService pushNotificationService,
         UserPresenceService userPresenceService,
         IServiceScopeFactory scopeFactory,
-        UserBlockService userBlockService)
+        UserBlockService userBlockService,
+        ChatFileAccessService chatFileAccess)
     {
         _context = context;
         _crypto = crypto;
@@ -74,6 +76,7 @@ public class ChatHub : Hub
         _userPresenceService = userPresenceService;
         _scopeFactory = scopeFactory;
         _userBlockService = userBlockService;
+        _chatFileAccess = chatFileAccess;
     }
 
     public override async Task OnConnectedAsync()
@@ -238,6 +241,7 @@ public class ChatHub : Hub
                 IsDeleted = false
             };
 
+            await using var transaction = await _context.Database.BeginTransactionAsync(Context.ConnectionAborted);
             _context.Messages.Add(msg);
             if (currentConversation is not null)
             {
@@ -248,7 +252,9 @@ public class ChatHub : Hub
                     currentConversationMember.LastReadAt = sentAt;
                 }
             }
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(Context.ConnectionAborted);
+            await _chatFileAccess.BindMessageAttachmentsAsync(normalizedChannelId, msg.Id, payload.Attachments, currentUser, Context.ConnectionAborted);
+            await transaction.CommitAsync(Context.ConnectionAborted);
 
             await Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", ToMessageDto(msg, payload));
             LastMessageSentAtByUser[currentUser.UserId] = nowUtc;

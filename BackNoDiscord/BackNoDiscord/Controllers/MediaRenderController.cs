@@ -1,4 +1,6 @@
 using BackNoDiscord.Infrastructure;
+using BackNoDiscord.Security;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -32,10 +34,12 @@ public sealed class MediaRenderController : ControllerBase
     };
 
     private readonly UploadStoragePaths _uploadStoragePaths;
+    private readonly ChatFileAccessService _chatFileAccess;
 
-    public MediaRenderController(UploadStoragePaths uploadStoragePaths)
+    public MediaRenderController(UploadStoragePaths uploadStoragePaths, ChatFileAccessService chatFileAccess)
     {
         _uploadStoragePaths = uploadStoragePaths;
+        _chatFileAccess = chatFileAccess;
     }
 
     [HttpGet("render")]
@@ -48,10 +52,18 @@ public sealed class MediaRenderController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var normalizedSource = StringFromUrlPath(src);
-        if (normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase) &&
-            User.Identity?.IsAuthenticated != true)
+        if (normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase))
         {
-            return Unauthorized();
+            if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+            {
+                return Unauthorized();
+            }
+
+            var fileName = Path.GetFileName(normalizedSource["/chat-files/".Length..]);
+            if (!await _chatFileAccess.CanAccessFileAsync(fileName, currentUser, cancellationToken))
+            {
+                return Forbid();
+            }
         }
 
         if (!TryResolveAllowedAsset(src, out var filePath, out var extension))

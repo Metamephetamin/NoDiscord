@@ -1,0 +1,102 @@
+using BackNoDiscord.Security;
+using BackNoDiscord.Services;
+using Microsoft.EntityFrameworkCore;
+
+namespace BackNoDiscord.Tests.Security;
+
+public sealed class ChatFileAccessServiceTests
+{
+    [Fact]
+    public async Task CanAccessFileAsync_AllowsOwnerForUnboundUpload()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        context.ChatFileUploads.Add(new ChatFileUploadRecord
+        {
+            FileName = "chat-42-owner.png",
+            OwnerUserId = "42",
+            DisplayFileName = "owner.png",
+            ContentType = "image/png",
+            Size = 12,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-owner.png", User("42"), CancellationToken.None);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public async Task CanAccessFileAsync_AllowsDirectFriendAfterFileIsBoundToMessageChannel()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        context.Friendships.Add(new FriendshipRecord
+        {
+            UserLowId = 42,
+            UserHighId = 84,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.ChatFileUploads.Add(new ChatFileUploadRecord
+        {
+            FileName = "chat-42-shared.png",
+            OwnerUserId = "42",
+            DisplayFileName = "shared.png",
+            ContentType = "image/png",
+            Size = 12,
+            ChannelId = DirectMessageChannels.BuildChannelId(42, 84),
+            MessageId = 123,
+            CreatedAt = DateTimeOffset.UtcNow,
+            BoundAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-shared.png", User("84"), CancellationToken.None);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public async Task CanAccessFileAsync_DeniesUnrelatedUserForBoundDirectFile()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        context.ChatFileUploads.Add(new ChatFileUploadRecord
+        {
+            FileName = "chat-42-private.png",
+            OwnerUserId = "42",
+            DisplayFileName = "private.png",
+            ContentType = "image/png",
+            Size = 12,
+            ChannelId = DirectMessageChannels.BuildChannelId(42, 84),
+            MessageId = 123,
+            CreatedAt = DateTimeOffset.UtcNow,
+            BoundAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-private.png", User("126"), CancellationToken.None);
+
+        Assert.False(allowed);
+    }
+
+    private static ChatFileAccessService CreateService(AppDbContext context)
+    {
+        return new ChatFileAccessService(context, new ServerStateService(context));
+    }
+
+    private static AuthenticatedUser User(string userId)
+    {
+        return new AuthenticatedUser(userId, $"{userId}@example.com", $"user-{userId}", "", "");
+    }
+
+    private static AppDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+
+        return new AppDbContext(options);
+    }
+}

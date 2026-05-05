@@ -1,9 +1,12 @@
 using System.Security.Claims;
+using BackNoDiscord;
 using BackNoDiscord.Controllers;
 using BackNoDiscord.Infrastructure;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 
@@ -21,7 +24,7 @@ public sealed class MediaRenderControllerTests : IDisposable
     [Fact]
     public async Task Render_ReturnsNotFoundForCorruptKnownImageInsteadOfThrowing()
     {
-        var filePath = Path.Combine(_storageRoot, "chat-files", "broken.png");
+        var filePath = Path.Combine(_storageRoot, "chat-files", "chat-42-broken.png");
         await File.WriteAllBytesAsync(filePath, [
             0x89, 0x50, 0x4E, 0x47,
             0x0D, 0x0A, 0x1A, 0x0A,
@@ -30,7 +33,7 @@ public sealed class MediaRenderControllerTests : IDisposable
         ]);
         var controller = BuildController();
 
-        var result = await controller.Render("/chat-files/broken.png", 128, 128, "contain", "false", CancellationToken.None);
+        var result = await controller.Render("/chat-files/chat-42-broken.png", 128, 128, "contain", "false", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }
@@ -51,7 +54,10 @@ public sealed class MediaRenderControllerTests : IDisposable
                 ["Storage:Root"] = _storageRoot
             })
             .Build();
-        var controller = new MediaRenderController(new UploadStoragePaths(configuration, new TestWebHostEnvironment()))
+        var dbContext = CreateContext();
+        var controller = new MediaRenderController(
+            new UploadStoragePaths(configuration, new TestWebHostEnvironment()),
+            new ChatFileAccessService(dbContext, new ServerStateService(dbContext)))
         {
             ControllerContext = new ControllerContext
             {
@@ -63,6 +69,15 @@ public sealed class MediaRenderControllerTests : IDisposable
         };
 
         return controller;
+    }
+
+    private static AppDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+
+        return new AppDbContext(options);
     }
 
     private sealed class TestWebHostEnvironment : IWebHostEnvironment
