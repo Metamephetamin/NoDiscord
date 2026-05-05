@@ -1,7 +1,8 @@
 .menu-shell {
   min-height: 100vh;
   background:
-    linear-gradient(180deg, #0d0f13 0%, #11151c 100%);
+    linear-gradient(180deg, var(--app-bg) 0%, var(--app-bg-soft) 100%);
+  color: var(--app-text);
 }
 
 .menu-shell__content {
@@ -13,7 +14,7 @@
 .modal-backdrop select,
 .channel-settings-shell select,
 .server-invite-modal select {
-  color-scheme: dark;
+  color-scheme: inherit;
 }
 
 .menu-shell select option,
@@ -27,7 +28,7 @@
 .channel-settings-shell select optgroup,
 .server-invite-modal select optgroup {
   background-color: #0f1118;
-  color: #f7f8fb;
+  color: var(--app-text);
 }
 
 .menu-shell select option:checked,
@@ -10608,6 +10609,298 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   line-height: 1.4;
 }
 
+.theme-choice-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-choice {
+  min-height: calc(86px * var(--ui-touch-target-multiplier));
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.theme-choice:hover {
+  border-color: var(--app-border-strong);
+  background: var(--app-hover-bg);
+}
+
+.theme-choice--active {
+  border-color: color-mix(in srgb, var(--app-accent) 62%, transparent);
+  background: var(--app-selected-bg);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 14%, transparent);
+}
+
+.theme-choice__swatch {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  grid-template-rows: 1fr 1fr;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: #11151c;
+}
+
+.theme-choice__swatch span:nth-child(1) {
+  grid-row: 1 / span 2;
+  background: #0f1115;
+}
+
+.theme-choice__swatch span:nth-child(2) {
+  background: #24283a;
+}
+
+.theme-choice__swatch span:nth-child(3) {
+  background: #8b7cff;
+}
+
+.theme-choice--light .theme-choice__swatch {
+  background: #f6f8fc;
+}
+
+.theme-choice--light .theme-choice__swatch span:nth-child(1) {
+  background: #ffffff;
+}
+
+.theme-choice--light .theme-choice__swatch span:nth-child(2) {
+  background: #dfe5f0;
+}
+
+.theme-choice--light .theme-choice__swatch span:nth-child(3) {
+  background: #5867e8;
+}
+
+.theme-choice--purple .theme-choice__swatch {
+  background: #151020;
+}
+
+.theme-choice--purple .theme-choice__swatch span:nth-child(1) {
+  background: #211734;
+}
+
+.theme-choice--purple .theme-choice__swatch span:nth-child(2) {
+  background: #3a275a;
+}
+
+.theme-choice--purple .theme-choice__swatch span:nth-child(3) {
+  background: #e074ff;
+}
+
+.theme-choice__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.theme-choice__copy strong {
+  color: var(--app-text-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.theme-choice__copy span {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+html[data-ui-theme="light"] .menu-shell,
+html[data-ui-theme="light"] .settings-backdrop,
+html[data-ui-theme="light"] .modal-backdrop,
+html[data-ui-theme="light"] .channel-settings-shell,
+html[data-ui-theme="light"] .server-invite-modal,
+html[data-ui-theme="purple"] .menu-shell,
+html[data-ui-theme="purple"] .settings-backdrop,
+html[data-ui-theme="purple"] .modal-backdrop,
+html[data-ui-theme="purple"] .channel-settings-shell,
+html[data-ui-theme="purple"] .server-invite-modal {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .desktop-app-topbar,
+html[data-ui-theme="purple"] .desktop-app-topbar {
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--app-accent) 12%, transparent), transparent 30%),
+    linear-gradient(90deg, var(--app-bg) 0%, var(--app-bg-soft) 50%, var(--app-bg) 100%);
+  border-bottom-color: var(--app-border);
+  box-shadow: 0 8px 18px var(--app-shadow);
+}
+
+html[data-ui-theme="light"] .menu__main,
+html[data-ui-theme="purple"] .menu__main {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--app-accent) 10%, transparent), transparent 26%),
+    linear-gradient(180deg, var(--app-bg) 0%, var(--app-bg-soft) 100%);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .sidebar__servers,
+html[data-ui-theme="light"] .sidebar__channels,
+html[data-ui-theme="light"] .chat__wrapper,
+html[data-ui-theme="light"] .settings-popup,
+html[data-ui-theme="light"] .settings-shell,
+html[data-ui-theme="light"] .settings-shell__sidebar,
+html[data-ui-theme="light"] .channel-settings-shell,
+html[data-ui-theme="light"] .channel-settings-shell__sidebar,
+html[data-ui-theme="light"] .channel-settings-shell__content,
+html[data-ui-theme="purple"] .sidebar__servers,
+html[data-ui-theme="purple"] .sidebar__channels,
+html[data-ui-theme="purple"] .chat__wrapper,
+html[data-ui-theme="purple"] .settings-popup,
+html[data-ui-theme="purple"] .settings-shell,
+html[data-ui-theme="purple"] .settings-shell__sidebar,
+html[data-ui-theme="purple"] .channel-settings-shell,
+html[data-ui-theme="purple"] .channel-settings-shell__sidebar,
+html[data-ui-theme="purple"] .channel-settings-shell__content {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 18px 46px var(--app-shadow);
+}
+
+html[data-ui-theme="light"] .voice-settings-card,
+html[data-ui-theme="light"] .settings-section,
+html[data-ui-theme="light"] .settings-card,
+html[data-ui-theme="light"] .server-settings-card,
+html[data-ui-theme="light"] .totp-settings-card,
+html[data-ui-theme="light"] .device-session-card,
+html[data-ui-theme="light"] .integration-card,
+html[data-ui-theme="light"] .app-logo-picker__option,
+html[data-ui-theme="purple"] .voice-settings-card,
+html[data-ui-theme="purple"] .settings-section,
+html[data-ui-theme="purple"] .settings-card,
+html[data-ui-theme="purple"] .server-settings-card,
+html[data-ui-theme="purple"] .totp-settings-card,
+html[data-ui-theme="purple"] .device-session-card,
+html[data-ui-theme="purple"] .integration-card,
+html[data-ui-theme="purple"] .app-logo-picker__option {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .settings-shell__content-header h2,
+html[data-ui-theme="light"] .settings-section__header h4,
+html[data-ui-theme="light"] .voice-settings-card__title,
+html[data-ui-theme="light"] .voice-settings-field > span,
+html[data-ui-theme="light"] .voice-toggle-row strong,
+html[data-ui-theme="light"] .voice-profile-option__copy strong,
+html[data-ui-theme="light"] .settings-checkbox,
+html[data-ui-theme="light"] .account-settings-field > span,
+html[data-ui-theme="light"] .settings-field span,
+html[data-ui-theme="purple"] .settings-shell__content-header h2,
+html[data-ui-theme="purple"] .settings-section__header h4,
+html[data-ui-theme="purple"] .voice-settings-card__title,
+html[data-ui-theme="purple"] .voice-settings-field > span,
+html[data-ui-theme="purple"] .voice-toggle-row strong,
+html[data-ui-theme="purple"] .voice-profile-option__copy strong,
+html[data-ui-theme="purple"] .settings-checkbox,
+html[data-ui-theme="purple"] .account-settings-field > span,
+html[data-ui-theme="purple"] .settings-field span {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .settings-shell__content-header p,
+html[data-ui-theme="light"] .settings-section__header p,
+html[data-ui-theme="light"] .voice-toggle-row span,
+html[data-ui-theme="light"] .voice-profile-option__copy span,
+html[data-ui-theme="light"] .voice-settings-caption,
+html[data-ui-theme="purple"] .settings-shell__content-header p,
+html[data-ui-theme="purple"] .settings-section__header p,
+html[data-ui-theme="purple"] .voice-toggle-row span,
+html[data-ui-theme="purple"] .voice-profile-option__copy span,
+html[data-ui-theme="purple"] .voice-settings-caption {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .settings-input,
+html[data-ui-theme="light"] .voice-settings-select,
+html[data-ui-theme="light"] .settings-shell__search input,
+html[data-ui-theme="light"] .channel-settings-field input,
+html[data-ui-theme="light"] .channel-settings-field textarea,
+html[data-ui-theme="light"] .channel-settings-field select,
+html[data-ui-theme="purple"] .settings-input,
+html[data-ui-theme="purple"] .voice-settings-select,
+html[data-ui-theme="purple"] .settings-shell__search input,
+html[data-ui-theme="purple"] .channel-settings-field input,
+html[data-ui-theme="purple"] .channel-settings-field textarea,
+html[data-ui-theme="purple"] .channel-settings-field select {
+  border-color: var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .settings-input::placeholder,
+html[data-ui-theme="light"] .settings-shell__search input::placeholder,
+html[data-ui-theme="purple"] .settings-input::placeholder,
+html[data-ui-theme="purple"] .settings-shell__search input::placeholder {
+  color: var(--app-text-subtle);
+}
+
+html[data-ui-theme="light"] .settings-inline-button,
+html[data-ui-theme="light"] .channel-add-button,
+html[data-ui-theme="light"] .settings-shell__nav button,
+html[data-ui-theme="light"] .channel-settings-shell__nav button,
+html[data-ui-theme="purple"] .settings-inline-button,
+html[data-ui-theme="purple"] .channel-add-button,
+html[data-ui-theme="purple"] .settings-shell__nav button,
+html[data-ui-theme="purple"] .channel-settings-shell__nav button {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .settings-inline-button:hover:not(:disabled),
+html[data-ui-theme="light"] .channel-add-button:hover:not(:disabled),
+html[data-ui-theme="light"] .settings-shell__nav button:hover,
+html[data-ui-theme="light"] .settings-shell__nav button.is-active,
+html[data-ui-theme="light"] .channel-settings-shell__nav button:hover,
+html[data-ui-theme="light"] .channel-settings-shell__nav button.is-active,
+html[data-ui-theme="purple"] .settings-inline-button:hover:not(:disabled),
+html[data-ui-theme="purple"] .channel-add-button:hover:not(:disabled),
+html[data-ui-theme="purple"] .settings-shell__nav button:hover,
+html[data-ui-theme="purple"] .settings-shell__nav button.is-active,
+html[data-ui-theme="purple"] .channel-settings-shell__nav button:hover,
+html[data-ui-theme="purple"] .channel-settings-shell__nav button.is-active {
+  border-color: color-mix(in srgb, var(--app-accent) 44%, var(--app-border));
+  background: var(--app-selected-bg);
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .chat__topbar,
+html[data-ui-theme="purple"] .chat__topbar {
+  border-bottom-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .chat__topbar-title,
+html[data-ui-theme="light"] .chat__topbar-copy strong,
+html[data-ui-theme="purple"] .chat__topbar-title,
+html[data-ui-theme="purple"] .chat__topbar-copy strong {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .chat__topbar-symbol,
+html[data-ui-theme="light"] .chat__topbar-copy span,
+html[data-ui-theme="purple"] .chat__topbar-symbol,
+html[data-ui-theme="purple"] .chat__topbar-copy span {
+  color: var(--app-text-muted);
+}
+
 .integrations-list {
   display: flex;
   flex-direction: column;
@@ -15589,6 +15882,10 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   .channel-heading {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .theme-choice-list {
+    grid-template-columns: 1fr;
   }
 
   .voice-settings-field-grid {

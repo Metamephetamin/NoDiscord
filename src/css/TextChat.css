@@ -7474,6 +7474,130 @@
   line-height: inherit;
 }
 
+html[data-ui-theme="light"] .textchat-container,
+html[data-ui-theme="purple"] .textchat-container {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .message-search-panel,
+html[data-ui-theme="light"] .chat-pins,
+html[data-ui-theme="light"] .chat-selection-bar,
+html[data-ui-theme="light"] .message-composer,
+html[data-ui-theme="light"] .composer-emoji-picker,
+html[data-ui-theme="light"] .composer-text-tools-menu,
+html[data-ui-theme="light"] .composer-ai-review,
+html[data-ui-theme="purple"] .message-search-panel,
+html[data-ui-theme="purple"] .chat-pins,
+html[data-ui-theme="purple"] .chat-selection-bar,
+html[data-ui-theme="purple"] .message-composer,
+html[data-ui-theme="purple"] .composer-emoji-picker,
+html[data-ui-theme="purple"] .composer-text-tools-menu,
+html[data-ui-theme="purple"] .composer-ai-review {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+  box-shadow: 0 10px 24px var(--app-shadow);
+}
+
+html[data-ui-theme="light"] .message-search-panel__header strong,
+html[data-ui-theme="light"] .chat-pins__header strong,
+html[data-ui-theme="light"] .chat__topbar,
+html[data-ui-theme="light"] .message-author,
+html[data-ui-theme="light"] .message-author__name,
+html[data-ui-theme="light"] .message-text,
+html[data-ui-theme="light"] .message-search-panel__item span,
+html[data-ui-theme="light"] .composer-status__copy strong,
+html[data-ui-theme="light"] .composer-text-tools-menu__header strong,
+html[data-ui-theme="purple"] .message-search-panel__header strong,
+html[data-ui-theme="purple"] .chat-pins__header strong,
+html[data-ui-theme="purple"] .chat__topbar,
+html[data-ui-theme="purple"] .message-author,
+html[data-ui-theme="purple"] .message-author__name,
+html[data-ui-theme="purple"] .message-text,
+html[data-ui-theme="purple"] .message-search-panel__item span,
+html[data-ui-theme="purple"] .composer-status__copy strong,
+html[data-ui-theme="purple"] .composer-text-tools-menu__header strong {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .message-search-panel__header span,
+html[data-ui-theme="light"] .message-search-panel__item small,
+html[data-ui-theme="light"] .message-search-panel__empty,
+html[data-ui-theme="light"] .message-time,
+html[data-ui-theme="light"] .message-footer,
+html[data-ui-theme="light"] .message-forwarded,
+html[data-ui-theme="light"] .composer-status__copy span,
+html[data-ui-theme="light"] .composer-text-tools-menu__header span,
+html[data-ui-theme="purple"] .message-search-panel__header span,
+html[data-ui-theme="purple"] .message-search-panel__item small,
+html[data-ui-theme="purple"] .message-search-panel__empty,
+html[data-ui-theme="purple"] .message-time,
+html[data-ui-theme="purple"] .message-footer,
+html[data-ui-theme="purple"] .message-forwarded,
+html[data-ui-theme="purple"] .composer-status__copy span,
+html[data-ui-theme="purple"] .composer-text-tools-menu__header span {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .message-search-panel__item,
+html[data-ui-theme="light"] .msg-content--dm,
+html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
+html[data-ui-theme="light"] .message-reply-chip,
+html[data-ui-theme="purple"] .message-search-panel__item,
+html[data-ui-theme="purple"] .msg-content--dm,
+html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content,
+html[data-ui-theme="purple"] .message-reply-chip {
+  border-color: var(--app-border);
+  background: var(--app-message-bg);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .message-item--dm-own .msg-content--dm,
+html[data-ui-theme="purple"] .message-item--dm-own .msg-content--dm {
+  background: var(--app-own-message-bg);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .input-area textarea,
+html[data-ui-theme="purple"] .input-area textarea {
+  color: var(--app-text);
+  caret-color: var(--app-text);
+  -webkit-text-fill-color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .input-area textarea[data-highlight-active="true"],
+html[data-ui-theme="purple"] .input-area textarea[data-highlight-active="true"] {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-ui-theme="light"] .input-area textarea::placeholder,
+html[data-ui-theme="purple"] .input-area textarea::placeholder {
+  color: var(--app-text-subtle);
+  -webkit-text-fill-color: var(--app-text-subtle);
+}
+
+html[data-ui-theme="light"] .composer-tool,
+html[data-ui-theme="light"] .composer-text-tools-menu__action,
+html[data-ui-theme="light"] .composer-text-tools-menu__item,
+html[data-ui-theme="purple"] .composer-tool,
+html[data-ui-theme="purple"] .composer-text-tools-menu__action,
+html[data-ui-theme="purple"] .composer-text-tools-menu__item {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .composer-tool:hover,
+html[data-ui-theme="light"] .composer-text-tools-menu__action:hover:not(:disabled),
+html[data-ui-theme="light"] .composer-text-tools-menu__item:hover:not(:disabled),
+html[data-ui-theme="purple"] .composer-tool:hover,
+html[data-ui-theme="purple"] .composer-text-tools-menu__action:hover:not(:disabled),
+html[data-ui-theme="purple"] .composer-text-tools-menu__item:hover:not(:disabled) {
+  background: var(--app-hover-bg);
+  color: var(--app-text-strong);
+}
+
 .composer-textarea-highlight {
   position: absolute;
   inset: 0;

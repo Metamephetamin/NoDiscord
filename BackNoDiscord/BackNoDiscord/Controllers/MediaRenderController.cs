@@ -2,6 +2,7 @@ using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using SixLabors.ImageSharp;
@@ -35,11 +36,16 @@ public sealed class MediaRenderController : ControllerBase
 
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly ChatFileAccessService _chatFileAccess;
+    private readonly IWebHostEnvironment _environment;
 
-    public MediaRenderController(UploadStoragePaths uploadStoragePaths, ChatFileAccessService chatFileAccess)
+    public MediaRenderController(
+        UploadStoragePaths uploadStoragePaths,
+        ChatFileAccessService chatFileAccess,
+        IWebHostEnvironment environment)
     {
         _uploadStoragePaths = uploadStoragePaths;
         _chatFileAccess = chatFileAccess;
+        _environment = environment;
     }
 
     [HttpGet("render")]
@@ -79,7 +85,12 @@ public sealed class MediaRenderController : ControllerBase
         var fileInfo = new FileInfo(filePath);
         if (!fileInfo.Exists)
         {
-            return NotFound();
+            if (!TryResolveMissingServerIconFallback(src, out filePath, out extension))
+            {
+                return NotFound();
+            }
+
+            fileInfo = new FileInfo(filePath);
         }
 
         if (fileInfo.Length > MaxSourceBytes ||
@@ -156,6 +167,30 @@ public sealed class MediaRenderController : ControllerBase
     private static bool SupportsTransparentOutput(string extension) =>
         string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)
         || string.Equals(extension, ".webp", StringComparison.OrdinalIgnoreCase);
+
+    private bool TryResolveMissingServerIconFallback(string? rawSource, out string filePath, out string extension)
+    {
+        filePath = string.Empty;
+        extension = ".png";
+
+        var normalizedSource = StringFromUrlPath(rawSource);
+        if (!normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var webRootPath = !string.IsNullOrWhiteSpace(_environment.WebRootPath)
+            ? _environment.WebRootPath
+            : Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var fallbackPath = Path.Combine(webRootPath, "image", "image.png");
+        if (!System.IO.File.Exists(fallbackPath))
+        {
+            return false;
+        }
+
+        filePath = fallbackPath;
+        return true;
+    }
 
     private FileContentResult BuildFileResult(MemoryStream outputStream, string contentType)
     {

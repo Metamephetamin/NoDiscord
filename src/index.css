@@ -108,6 +108,81 @@
   --font-slogan: "Rubik Glitch", "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
   --ui-font-size-base: 16px;
   --ui-touch-target-multiplier: 1;
+  --app-bg: #0f1115;
+  --app-bg-soft: #11151c;
+  --app-surface: rgba(16, 21, 31, 0.98);
+  --app-surface-2: rgba(255, 255, 255, 0.06);
+  --app-surface-3: rgba(255, 255, 255, 0.1);
+  --app-text: #f8fafc;
+  --app-text-strong: #ffffff;
+  --app-text-muted: #9ea7bb;
+  --app-text-subtle: #7e8799;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-strong: rgba(255, 255, 255, 0.14);
+  --app-accent: #8b7cff;
+  --app-accent-strong: #c86aff;
+  --app-accent-soft: rgba(139, 124, 255, 0.14);
+  --app-danger: #ff9aa5;
+  --app-success: #65d695;
+  --app-shadow: rgba(0, 0, 0, 0.38);
+  --app-input-bg: rgba(255, 255, 255, 0.05);
+  --app-hover-bg: rgba(255, 255, 255, 0.08);
+  --app-selected-bg: rgba(139, 124, 255, 0.16);
+  --app-message-bg: rgba(255, 255, 255, 0.055);
+  --app-own-message-bg: rgba(108, 114, 255, 0.24);
+  color-scheme: dark;
+}
+
+html[data-ui-theme="light"] {
+  --app-bg: #f6f8fc;
+  --app-bg-soft: #ffffff;
+  --app-surface: rgba(255, 255, 255, 0.96);
+  --app-surface-2: rgba(15, 23, 42, 0.055);
+  --app-surface-3: rgba(15, 23, 42, 0.09);
+  --app-text: #182033;
+  --app-text-strong: #0f172a;
+  --app-text-muted: #5f6b82;
+  --app-text-subtle: #7c8799;
+  --app-border: rgba(24, 32, 51, 0.12);
+  --app-border-strong: rgba(24, 32, 51, 0.2);
+  --app-accent: #5867e8;
+  --app-accent-strong: #6d5dfc;
+  --app-accent-soft: rgba(88, 103, 232, 0.12);
+  --app-danger: #b83246;
+  --app-success: #178755;
+  --app-shadow: rgba(30, 41, 59, 0.16);
+  --app-input-bg: rgba(255, 255, 255, 0.88);
+  --app-hover-bg: rgba(15, 23, 42, 0.065);
+  --app-selected-bg: rgba(88, 103, 232, 0.13);
+  --app-message-bg: rgba(255, 255, 255, 0.84);
+  --app-own-message-bg: rgba(88, 103, 232, 0.15);
+  color-scheme: light;
+}
+
+html[data-ui-theme="purple"] {
+  --app-bg: #151020;
+  --app-bg-soft: #1c142a;
+  --app-surface: rgba(28, 20, 42, 0.98);
+  --app-surface-2: rgba(232, 215, 255, 0.07);
+  --app-surface-3: rgba(232, 215, 255, 0.12);
+  --app-text: #fbf7ff;
+  --app-text-strong: #ffffff;
+  --app-text-muted: #c8b8de;
+  --app-text-subtle: #9d8db4;
+  --app-border: rgba(232, 215, 255, 0.11);
+  --app-border-strong: rgba(232, 215, 255, 0.2);
+  --app-accent: #b780ff;
+  --app-accent-strong: #e074ff;
+  --app-accent-soft: rgba(183, 128, 255, 0.16);
+  --app-danger: #ff9ab7;
+  --app-success: #71e0b0;
+  --app-shadow: rgba(7, 4, 12, 0.5);
+  --app-input-bg: rgba(232, 215, 255, 0.06);
+  --app-hover-bg: rgba(232, 215, 255, 0.09);
+  --app-selected-bg: rgba(183, 128, 255, 0.2);
+  --app-message-bg: rgba(232, 215, 255, 0.065);
+  --app-own-message-bg: rgba(183, 128, 255, 0.24);
+  color-scheme: dark;
 }
 
 *,
@@ -139,8 +214,8 @@ html {
 
 body {
   font-family: var(--font-body);
-  background: #0f1115;
-  color: #f8fafc;
+  background: var(--app-bg);
+  color: var(--app-text);
   touch-action: manipulation;
 }
 

@@ -19,6 +19,7 @@ public sealed class MediaRenderControllerTests : IDisposable
     public MediaRenderControllerTests()
     {
         Directory.CreateDirectory(Path.Combine(_storageRoot, "chat-files"));
+        Directory.CreateDirectory(Path.Combine(_storageRoot, "server-icons"));
     }
 
     [Fact]
@@ -38,6 +39,22 @@ public sealed class MediaRenderControllerTests : IDisposable
         Assert.IsType<NotFoundResult>(result);
     }
 
+    [Fact]
+    public async Task Render_ReturnsDefaultIconForMissingServerIcon()
+    {
+        var webRootPath = Path.Combine(_storageRoot, "wwwroot");
+        var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(defaultIconPath)!);
+        await File.WriteAllBytesAsync(defaultIconPath, OnePixelPng);
+        var controller = BuildController(webRootPath);
+
+        var result = await controller.Render("/server-icons/missing-server-icon.png", 60, 60, "cover", "false", CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", fileResult.ContentType);
+        Assert.NotEmpty(fileResult.FileContents);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_storageRoot))
@@ -46,7 +63,7 @@ public sealed class MediaRenderControllerTests : IDisposable
         }
     }
 
-    private MediaRenderController BuildController()
+    private MediaRenderController BuildController(string webRootPath = "")
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -57,7 +74,8 @@ public sealed class MediaRenderControllerTests : IDisposable
         var dbContext = CreateContext();
         var controller = new MediaRenderController(
             new UploadStoragePaths(configuration, new TestWebHostEnvironment()),
-            new ChatFileAccessService(dbContext, new ServerStateService(dbContext)))
+            new ChatFileAccessService(dbContext, new ServerStateService(dbContext)),
+            new TestWebHostEnvironment { WebRootPath = webRootPath })
         {
             ControllerContext = new ControllerContext
             {
@@ -79,6 +97,19 @@ public sealed class MediaRenderControllerTests : IDisposable
 
         return new AppDbContext(options);
     }
+
+    private static readonly byte[] OnePixelPng =
+    [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+        0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41,
+        0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0,
+        0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0x89, 0x99,
+        0x3D, 0x1D, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+        0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+    ];
 
     private sealed class TestWebHostEnvironment : IWebHostEnvironment
     {

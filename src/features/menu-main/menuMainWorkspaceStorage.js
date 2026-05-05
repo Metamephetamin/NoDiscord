@@ -37,6 +37,7 @@ const getUiDensityStorageKey = (user) => `nd:ui-density:${getCurrentUserId(user)
 const getUiFontScaleStorageKey = (user) => `nd:ui-font-scale:${getCurrentUserId(user) || "guest"}`;
 const getUiReduceMotionStorageKey = (user) => `nd:ui-reduce-motion:${getCurrentUserId(user) || "guest"}`;
 const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUserId(user) || "guest"}`;
+const getUiThemeStorageKey = (user) => `nd:ui-theme:${getCurrentUserId(user) || "guest"}`;
 
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
@@ -176,5 +177,6 @@ export function useMenuMainStorageKeys(user) {
     uiFontScaleStorageKey: getUiFontScaleStorageKey(user),
     uiReduceMotionStorageKey: getUiReduceMotionStorageKey(user),
     uiTouchTargetStorageKey: getUiTouchTargetStorageKey(user),
+    uiThemeStorageKey: getUiThemeStorageKey(user),
   };
 }

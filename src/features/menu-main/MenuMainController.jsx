@@ -56,6 +56,7 @@ import {
   applyAppLogoPreference,
   getStoredAppLogoId,
 } from "../../utils/appLogo";
+import { applyUiThemePreference, normalizeUiTheme } from "../../utils/uiTheme.mjs";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import { buildStreamDiagnostics } from "../../webrtc/streamDiagnostics.mjs";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
@@ -580,6 +581,7 @@ export default function MenuMain({
   const [uiFontScale, setUiFontScale] = useState("md");
   const [uiReduceMotion, setUiReduceMotion] = useState(false);
   const [uiTouchTargetSize, setUiTouchTargetSize] = useState("standard");
+  const [uiTheme, setUiTheme] = useState("dark");
   const [appLogoId, setAppLogoId] = useState(() => getStoredAppLogoId());
 
   const popupRef = useRef(null);
@@ -664,6 +666,7 @@ export default function MenuMain({
     uiFontScaleStorageKey,
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
+    uiThemeStorageKey,
   } = useMenuMainStorageKeys(user);
   const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {
@@ -1102,12 +1105,14 @@ export default function MenuMain({
     const nextFontScale = localStorage.getItem(uiFontScaleStorageKey) || "md";
     const nextReduceMotion = localStorage.getItem(uiReduceMotionStorageKey) === "true";
     const nextTouchTargetSize = localStorage.getItem(uiTouchTargetStorageKey) || "standard";
+    const nextTheme = localStorage.getItem(uiThemeStorageKey) || "dark";
 
     setUiDensity(nextDensity === "compact" ? "compact" : "standard");
     setUiFontScale(["sm", "md", "lg"].includes(nextFontScale) ? nextFontScale : "md");
     setUiReduceMotion(nextReduceMotion);
     setUiTouchTargetSize(nextTouchTargetSize === "large" ? "large" : "standard");
-  }, [uiDensityStorageKey, uiFontScaleStorageKey, uiReduceMotionStorageKey, uiTouchTargetStorageKey]);
+    setUiTheme(normalizeUiTheme(nextTheme));
+  }, [uiDensityStorageKey, uiFontScaleStorageKey, uiReduceMotionStorageKey, uiThemeStorageKey, uiTouchTargetStorageKey]);
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -1117,6 +1122,7 @@ export default function MenuMain({
     localStorage.setItem(uiFontScaleStorageKey, uiFontScale);
     localStorage.setItem(uiReduceMotionStorageKey, String(uiReduceMotion));
     localStorage.setItem(uiTouchTargetStorageKey, uiTouchTargetSize);
+    localStorage.setItem(uiThemeStorageKey, normalizeUiTheme(uiTheme));
 
     const root = document.documentElement;
     const body = document.body;
@@ -1124,6 +1130,7 @@ export default function MenuMain({
     root.dataset.uiFontScale = uiFontScale;
     root.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
     root.dataset.uiTouchTargets = uiTouchTargetSize;
+    applyUiThemePreference(uiTheme, { root, body });
     body.dataset.uiDensity = uiDensity;
     body.dataset.uiFontScale = uiFontScale;
     body.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
@@ -1135,6 +1142,8 @@ export default function MenuMain({
     uiFontScaleStorageKey,
     uiReduceMotion,
     uiReduceMotionStorageKey,
+    uiTheme,
+    uiThemeStorageKey,
     uiTouchTargetSize,
     uiTouchTargetStorageKey,
   ]);
@@ -5557,11 +5566,13 @@ export default function MenuMain({
     uiFontScale,
     uiReduceMotion,
     uiTouchTargetSize,
+    uiTheme,
     appLogoId,
     setUiDensity,
     setUiFontScale,
     setUiReduceMotion,
     setUiTouchTargetSize,
+    setUiTheme,
     handleAppLogoChange,
     activeServer,
     canManageServer,

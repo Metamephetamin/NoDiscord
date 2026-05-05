@@ -1,9 +1,11 @@
 ﻿import * as signalR from "@microsoft/signalr";
 import {
   AudioPresets,
+  LogLevel,
   Room,
   RoomEvent,
   ScreenSharePresets,
+  setLogLevel,
   Track,
   VideoPreset,
   VideoQuality,
@@ -40,6 +42,7 @@ const RTC_CONFIGURATION = {
   ...VOICE_RTC_CONFIGURATION,
   iceServers: (VOICE_RTC_CONFIGURATION.iceServers || []).map((server) => ({ ...server })),
 };
+setLogLevel(LogLevel.error);
 const MICROPHONE_TRACK_NAME = "microphone";
 const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";

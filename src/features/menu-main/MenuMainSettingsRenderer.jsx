@@ -116,11 +116,13 @@ export function MenuMainSettingsContent({
   uiFontScale,
   uiReduceMotion,
   uiTouchTargetSize,
+  uiTheme,
   appLogoId,
   setUiDensity,
   setUiFontScale,
   setUiReduceMotion,
   setUiTouchTargetSize,
+  setUiTheme,
   handleAppLogoChange,
   activeServer,
   canManageServer,
@@ -263,11 +265,13 @@ export function MenuMainSettingsContent({
           uiFontScale={uiFontScale}
           uiReduceMotion={uiReduceMotion}
           uiTouchTargetSize={uiTouchTargetSize}
+          uiTheme={uiTheme}
           appLogoId={appLogoId}
           onDensityChange={setUiDensity}
           onFontScaleChange={setUiFontScale}
           onReduceMotionChange={setUiReduceMotion}
           onTouchTargetSizeChange={setUiTouchTargetSize}
+          onThemeChange={setUiTheme}
           onAppLogoChange={handleAppLogoChange}
         />
       );

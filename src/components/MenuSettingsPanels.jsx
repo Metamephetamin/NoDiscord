@@ -13,6 +13,7 @@ import {
   getProfileStoreItemById,
 } from "../utils/profileCustomization";
 import { APP_LOGO_OPTIONS } from "../utils/appLogo";
+import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
@@ -1213,11 +1214,13 @@ export const AppearanceAccessibilitySettings = ({
   uiFontScale,
   uiReduceMotion,
   uiTouchTargetSize,
+  uiTheme,
   appLogoId,
   onDensityChange,
   onFontScaleChange,
   onReduceMotionChange,
   onTouchTargetSizeChange,
+  onThemeChange,
   onAppLogoChange,
 }) => (
   <div className="settings-shell__content">
@@ -1227,6 +1230,32 @@ export const AppearanceAccessibilitySettings = ({
         <p>Настройте плотность интерфейса, размер шрифта, размеры зон попадания и уровень анимаций под свой ритм работы.</p>
       </div>
     </div>
+
+    <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Тема интерфейса</div>
+      <div className="theme-choice-list" role="radiogroup" aria-label="Тема интерфейса">
+        {UI_THEME_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`theme-choice theme-choice--${option.id} ${uiTheme === option.id ? "theme-choice--active" : ""}`}
+            onClick={() => onThemeChange(option.id)}
+            role="radio"
+            aria-checked={uiTheme === option.id}
+          >
+            <span className="theme-choice__swatch" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="theme-choice__copy">
+              <strong>{option.title}</strong>
+              <span>{option.description}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
 
     <section className="voice-settings-card">
       <div className="voice-settings-card__title">Плотность интерфейса</div>
