@@ -2877,6 +2877,10 @@ export default function MenuMain({
       }
 
       for (const channelId of Array.from(desiredChannelIds)) {
+        if (joinedChannels.has(channelId)) {
+          continue;
+        }
+
         try {
           await chatConnection.invoke("JoinChannel", channelId);
           joinedChannels.add(channelId);

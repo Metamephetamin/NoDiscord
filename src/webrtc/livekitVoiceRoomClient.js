@@ -3398,20 +3398,28 @@ const handleDeviceChange = () => {
         return;
       }
 
-      await registerCurrentUser(currentUser);
+      try {
+        await registerCurrentUser(currentUser);
 
-      if (currentChannel && connection.state === signalR.HubConnectionState.Connected) {
-        await connection.invoke(
-          "JoinChannel",
+        if (currentChannel && connection.state === signalR.HubConnectionState.Connected) {
+          await connection.invoke(
+            "JoinChannel",
+            currentChannel,
+            String(currentUser.id),
+            getDisplayName(currentUser),
+            getAvatar(currentUser)
+          );
+        }
+
+        if ((localScreenStream || localCameraStream) && currentUser?.id) {
+          await updateScreenShareStatus(true).catch(() => {});
+        }
+      } catch (error) {
+        logVoiceDebug("signal:reconnected-recovery-failed", {
           currentChannel,
-          String(currentUser.id),
-          getDisplayName(currentUser),
-          getAvatar(currentUser)
-        );
-      }
-
-      if ((localScreenStream || localCameraStream) && currentUser?.id) {
-        await updateScreenShareStatus(true).catch(() => {});
+          errorName: error?.name || "",
+          error: error?.message || String(error),
+        });
       }
     });
 

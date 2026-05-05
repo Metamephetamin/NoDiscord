@@ -530,6 +530,7 @@ export default function TextChat({
   const contextMenuRef = useRef(null);
   const userContextMenuRef = useRef(null);
   const mediaPreviewVideoRef = useRef(null);
+  const messageEditStateRef = useRef(null);
   const joinedChannelRef = useRef("");
   const activeChannelRef = useRef("");
   const messageRefs = useRef(new Map());
@@ -552,6 +553,11 @@ export default function TextChat({
   }, [channelId, resolvedChannelId, serverId]);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
+
+  useEffect(() => {
+    messageEditStateRef.current = messageEditState;
+  }, [messageEditState]);
+
   const channelSlowModeMs = getSlowModeDurationMs(channelSlowMode);
   const getSlowModeRemainingMs = useCallback((targetChannelId = scopedChannelId) => {
     if (isDirectChat || channelSlowModeMs <= 0 || String(targetChannelId || "") !== scopedChannelId) {
@@ -1988,7 +1994,7 @@ export default function TextChat({
 
     const handleMessageDeleted = (deletedId) => {
       const normalizedDeletedId = String(deletedId || "");
-      if (String(messageEditState?.messageId || "") === String(deletedId)) {
+      if (String(messageEditStateRef.current?.messageId || "") === String(deletedId)) {
         stopEditingMessage();
       }
 
@@ -2189,7 +2195,7 @@ export default function TextChat({
       chatConnection.off("MessagesRead", handleMessagesRead);
       chatConnection.off("MessageReactionsUpdated", handleMessageReactionsUpdated);
     };
-  }, [currentUserId, isDirectChat, messageEditState?.messageId, revokeLocalEchoObjectUrls, scopedChannelId]);
+  }, [currentUserId, isDirectChat, revokeLocalEchoObjectUrls, scopedChannelId]);
 
   useEffect(() => {
     const handleProfileUpdated = (payload) => {
