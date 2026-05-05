@@ -2,6 +2,7 @@ import { API_URL } from "../config/runtime";
 
 const STATIC_ASSET_BASE_URL = import.meta.env.BASE_URL || "/";
 const MISSING_MEDIA_CACHE_KEY = "nodiscord.missing-internal-media.v1";
+export const MISSING_MEDIA_EVENT = "nodiscord:missing-internal-media";
 const MISSING_MEDIA_CACHE_TTL_MS = 30 * 60_000;
 let missingInternalMediaCache = null;
 
@@ -151,6 +152,13 @@ export function markMediaUrlMissing(value) {
   const expiresAt = Date.now() + MISSING_MEDIA_CACHE_TTL_MS;
   cache.set(internalPath, expiresAt);
   writeMissingInternalMediaCache(cache);
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new CustomEvent(MISSING_MEDIA_EVENT, { detail: { path: internalPath, expiresAt } }));
+    } catch {
+      // Ignore event dispatch failures in restricted runtimes.
+    }
+  }
   return true;
 }
 

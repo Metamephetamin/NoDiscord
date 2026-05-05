@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isAnimatedAvatarUrl, isVideoAvatarUrl } from "../utils/avatarMedia";
 import { getMediaFrameStyle } from "../utils/mediaFrames";
-import { markMediaUrlMissing, resolveMediaUrl, resolveOptimizedMediaUrl } from "../utils/media";
+import {
+  MISSING_MEDIA_EVENT,
+  isMediaUrlKnownMissing,
+  markMediaUrlMissing,
+  resolveMediaUrl,
+  resolveOptimizedMediaUrl,
+} from "../utils/media";
 import { recordPerfEvent } from "../utils/perf";
 
 let optimizedMediaEndpointDisabled = false;
@@ -62,7 +68,7 @@ export default function AnimatedMedia({
   const [isVisible, setIsVisible] = useState(() => loading === "eager");
   const [failedOptimizedImageSrc, setFailedOptimizedImageSrc] = useState("");
   const [mediaFailureClock, setMediaFailureClock] = useState(() => Date.now());
-  const [, setMediaFailureVersion] = useState(0);
+  const [mediaFailureVersion, setMediaFailureVersion] = useState(0);
   const resolvedFallback = resolveMediaUrl(fallback, "");
   const safeFallbackSrc = resolvedFallback && resolvedFallback !== resolvedSrc ? resolvedFallback : "";
   const normalizedMediaType = String(mediaType || "").toLowerCase().trim();
@@ -71,7 +77,15 @@ export default function AnimatedMedia({
     && (shouldPreferVideo || isVideoAvatarUrl(resolvedSrc));
   const failedMediaExpiry = getMediaSourceFailureExpiry(resolvedSrc);
   const isMediaSourceCoolingDown = failedMediaExpiry > mediaFailureClock;
-  const shouldRenderVideo = isVideoSource && !isMediaSourceCoolingDown;
+  const isResolvedSourceKnownMissing = useMemo(() => {
+    if (!resolvedSrc || !mediaFailureVersion) {
+      return false;
+    }
+
+    return isMediaUrlKnownMissing(resolvedSrc);
+  }, [mediaFailureVersion, resolvedSrc]);
+  const shouldSuppressSource = isMediaSourceCoolingDown || isResolvedSourceKnownMissing;
+  const shouldRenderVideo = isVideoSource && !shouldSuppressSource;
   const mediaStyle = useMemo(() => getMediaFrameStyle(frame, style), [frame, style]);
   const isVideoReady = readyVideoSrc === resolvedSrc;
   const shouldTrackVisibility = loading !== "eager" && typeof IntersectionObserver === "function";
@@ -81,8 +95,8 @@ export default function AnimatedMedia({
     && !failedOptimizedMediaSourceSet.has(resolvedSrc)
     && failedOptimizedImageSrc !== resolvedSrc
     && !isVideoSource
-    && !isMediaSourceCoolingDown;
-  const isAnimatedImage = !isVideoSource && !isMediaSourceCoolingDown && isAnimatedAvatarUrl(resolvedSrc);
+    && !shouldSuppressSource;
+  const isAnimatedImage = !isVideoSource && !shouldSuppressSource && isAnimatedAvatarUrl(resolvedSrc);
   const minOptimizedEdge = shouldUseAvatarQualityFloor ? MIN_OPTIMIZED_AVATAR_EDGE : 32;
   const targetWidth = Math.max(minOptimizedEdge, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
   const targetHeight = Math.max(minOptimizedEdge, Math.min(MAX_OPTIMIZED_MEDIA_EDGE, Math.round((bounds.height || bounds.width || 48) * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1))));
@@ -111,7 +125,7 @@ export default function AnimatedMedia({
     [resolvedFallback, targetHeight, targetWidth]
   );
   const imageSrc = useMemo(() => {
-    if (isMediaSourceCoolingDown) {
+    if (shouldSuppressSource) {
       return safeFallbackSrc;
     }
 
@@ -120,7 +134,7 @@ export default function AnimatedMedia({
     }
 
     return optimizedImageSrc || safeFallbackSrc || resolvedSrc;
-  }, [isMediaSourceCoolingDown, isVideoSource, optimizedImageSrc, resolvedSrc, safeFallbackSrc]);
+  }, [isVideoSource, optimizedImageSrc, resolvedSrc, safeFallbackSrc, shouldSuppressSource]);
   const hasVisualSource = Boolean((shouldRenderVideo ? resolvedSrc : imageSrc) || safeFallbackSrc);
   const mediaDebugPayload = useMemo(() => ({
     src: resolvedSrc,
@@ -140,6 +154,22 @@ export default function AnimatedMedia({
   useEffect(() => {
     readyVideoSrcRef.current = readyVideoSrc;
   }, [readyVideoSrc]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleMissingMedia = () => {
+      setMediaFailureClock(Date.now());
+      setMediaFailureVersion((current) => current + 1);
+    };
+
+    window.addEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    return () => {
+      window.removeEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !failedMediaExpiry) {
