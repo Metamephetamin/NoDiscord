@@ -59,7 +59,7 @@ public static class DatabaseSchemaInitializer
                 actor_user_id text NOT NULL,
                 action_type character varying(80) NOT NULL,
                 target_id text NOT NULL DEFAULT '',
-                metadata_json text NOT NULL DEFAULT '{}',
+                metadata_json text NOT NULL DEFAULT '{{}}',
                 created_at timestamptz NOT NULL
             );
             CREATE INDEX IF NOT EXISTS ix_server_audit_logs_server_id_created_at
