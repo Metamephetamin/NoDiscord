@@ -73,6 +73,56 @@ public sealed class MediaRenderControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Render_ReturnsDefaultIconForMissingOwnedHeicChatImage()
+    {
+        var webRootPath = Path.Combine(_storageRoot, "wwwroot");
+        var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(defaultIconPath)!);
+        await File.WriteAllBytesAsync(defaultIconPath, OnePixelPng);
+        var controller = BuildController(webRootPath);
+
+        var result = await controller.Render("/chat-files/chat-42-missing.heic", 160, 120, "contain", "false", CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", fileResult.ContentType);
+        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
+        Assert.NotEmpty(fileResult.FileContents);
+    }
+
+    [Fact]
+    public async Task Render_UsesAppBaseWwwrootFallbackWhenEnvironmentWebRootIsUnavailable()
+    {
+        var appBaseFallbackPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "image", "image.png");
+        var hadExistingFallback = File.Exists(appBaseFallbackPath);
+        byte[]? existingFallback = hadExistingFallback ? await File.ReadAllBytesAsync(appBaseFallbackPath) : null;
+        Directory.CreateDirectory(Path.GetDirectoryName(appBaseFallbackPath)!);
+        await File.WriteAllBytesAsync(appBaseFallbackPath, OnePixelPng);
+
+        try
+        {
+            var missingContentRoot = Path.Combine(_storageRoot, "missing-content-root");
+            var controller = BuildController(webRootPath: "", contentRootPath: missingContentRoot);
+
+            var result = await controller.Render("/avatars/missing-avatar.png", 68, 68, "cover", "false", CancellationToken.None);
+
+            var fileResult = Assert.IsType<FileContentResult>(result);
+            Assert.Equal("image/png", fileResult.ContentType);
+            Assert.NotEmpty(fileResult.FileContents);
+        }
+        finally
+        {
+            if (hadExistingFallback && existingFallback is not null)
+            {
+                await File.WriteAllBytesAsync(appBaseFallbackPath, existingFallback);
+            }
+            else if (!hadExistingFallback && File.Exists(appBaseFallbackPath))
+            {
+                File.Delete(appBaseFallbackPath);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Render_ReturnsCacheSafeNotFoundWhenMissingFallbackUnavailable()
     {
         var controller = BuildController();
@@ -107,7 +157,7 @@ public sealed class MediaRenderControllerTests : IDisposable
         }
     }
 
-    private MediaRenderController BuildController(string webRootPath = "")
+    private MediaRenderController BuildController(string webRootPath = "", string? contentRootPath = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -119,7 +169,11 @@ public sealed class MediaRenderControllerTests : IDisposable
         var controller = new MediaRenderController(
             new UploadStoragePaths(configuration, new TestWebHostEnvironment()),
             new ChatFileAccessService(dbContext, new ServerStateService(dbContext)),
-            new TestWebHostEnvironment { WebRootPath = webRootPath })
+            new TestWebHostEnvironment
+            {
+                WebRootPath = webRootPath,
+                ContentRootPath = contentRootPath ?? Directory.GetCurrentDirectory()
+            })
         {
             ControllerContext = new ControllerContext
             {

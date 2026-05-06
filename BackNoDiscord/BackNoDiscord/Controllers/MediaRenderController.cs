@@ -31,7 +31,9 @@ public sealed class MediaRenderController : ControllerBase
         ".png",
         ".webp",
         ".gif",
-        ".bmp"
+        ".bmp",
+        ".heic",
+        ".heif"
     };
 
     private readonly UploadStoragePaths _uploadStoragePaths;
@@ -120,13 +122,114 @@ public sealed class MediaRenderController : ControllerBase
         }
         catch (UnknownImageFormatException)
         {
-            return MissingMediaResult();
+            return TryResolveMissingMediaFallback(src, out var fallbackPath, out var fallbackExtension)
+                ? await RenderResolvedImageAsync(fallbackPath, fallbackExtension, targetWidth, targetHeight, resizeMode, animated, cacheSeconds: 300, cancellationToken)
+                : MissingMediaResult();
         }
         catch (InvalidImageContentException)
         {
-            return MissingMediaResult();
+            return TryResolveMissingMediaFallback(src, out var fallbackPath, out var fallbackExtension)
+                ? await RenderResolvedImageAsync(fallbackPath, fallbackExtension, targetWidth, targetHeight, resizeMode, animated, cacheSeconds: 300, cancellationToken)
+                : MissingMediaResult();
         }
 
+        return await RenderImageAsync(image, extension, targetWidth, targetHeight, resizeMode, animated, IsDefaultMediaFallback(filePath) ? 300 : 604800, cancellationToken);
+    }
+
+    private static bool SupportsTransparentOutput(string extension) =>
+        string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(extension, ".webp", StringComparison.OrdinalIgnoreCase);
+
+    private bool TryResolveMissingMediaFallback(string? rawSource, out string filePath, out string extension)
+    {
+        filePath = string.Empty;
+        extension = ".png";
+
+        var normalizedSource = StringFromUrlPath(rawSource);
+        if (!CanUseDefaultMediaFallback(normalizedSource))
+        {
+            return false;
+        }
+
+        var fallbackPath = ResolveDefaultMediaFallbackPath();
+        if (string.IsNullOrWhiteSpace(fallbackPath))
+        {
+            return false;
+        }
+
+        filePath = fallbackPath;
+        return true;
+    }
+
+    private static bool CanUseDefaultMediaFallback(string normalizedSource) =>
+        normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase)
+        || normalizedSource.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
+        || normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsDefaultMediaFallback(string filePath)
+    {
+        var fallbackPath = ResolveDefaultMediaFallbackPath();
+        return !string.IsNullOrWhiteSpace(fallbackPath)
+               && string.Equals(Path.GetFullPath(filePath), fallbackPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ResolveDefaultMediaFallbackPath()
+    {
+        var candidates = new[]
+        {
+            string.IsNullOrWhiteSpace(_environment.WebRootPath)
+                ? string.Empty
+                : Path.Combine(_environment.WebRootPath, "image", "image.png"),
+            string.IsNullOrWhiteSpace(_environment.ContentRootPath)
+                ? string.Empty
+                : Path.Combine(_environment.ContentRootPath, "wwwroot", "image", "image.png"),
+            Path.Combine(AppContext.BaseDirectory, "wwwroot", "image", "image.png"),
+            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "image", "image.png"),
+        };
+
+        return candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Select(Path.GetFullPath)
+            .FirstOrDefault(System.IO.File.Exists) ?? string.Empty;
+    }
+
+    private FileContentResult BuildFileResult(MemoryStream outputStream, string contentType, int cacheSeconds = 604800)
+    {
+        Response.Headers.CacheControl = $"public,max-age={cacheSeconds}";
+        return File(outputStream.ToArray(), contentType);
+    }
+
+    private async Task<IActionResult> RenderResolvedImageAsync(
+        string filePath,
+        string extension,
+        int targetWidth,
+        int targetHeight,
+        ResizeMode resizeMode,
+        string? animated,
+        int cacheSeconds,
+        CancellationToken cancellationToken)
+    {
+        await using var inputStream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var image = await Image.LoadAsync(inputStream, cancellationToken);
+        return await RenderImageAsync(image, extension, targetWidth, targetHeight, resizeMode, animated, cacheSeconds, cancellationToken);
+    }
+
+    private async Task<FileContentResult> RenderImageAsync(
+        Image image,
+        string extension,
+        int targetWidth,
+        int targetHeight,
+        ResizeMode resizeMode,
+        string? animated,
+        int cacheSeconds,
+        CancellationToken cancellationToken)
+    {
         using (image)
         {
             image.Mutate(context =>
@@ -143,7 +246,6 @@ public sealed class MediaRenderController : ControllerBase
 
             var outputStream = new MemoryStream();
             var preserveAnimatedGif = ParseAnimatedFlag(animated) && string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase);
-            var cacheSeconds = IsDefaultMediaFallback(filePath) ? 300 : 604800;
 
             if (preserveAnimatedGif)
             {
@@ -163,54 +265,6 @@ public sealed class MediaRenderController : ControllerBase
             }, cancellationToken);
             return BuildFileResult(outputStream, "image/jpeg", cacheSeconds);
         }
-    }
-
-    private static bool SupportsTransparentOutput(string extension) =>
-        string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(extension, ".webp", StringComparison.OrdinalIgnoreCase);
-
-    private bool TryResolveMissingMediaFallback(string? rawSource, out string filePath, out string extension)
-    {
-        filePath = string.Empty;
-        extension = ".png";
-
-        var normalizedSource = StringFromUrlPath(rawSource);
-        if (!CanUseDefaultMediaFallback(normalizedSource))
-        {
-            return false;
-        }
-
-        var webRootPath = !string.IsNullOrWhiteSpace(_environment.WebRootPath)
-            ? _environment.WebRootPath
-            : Path.Combine(_environment.ContentRootPath, "wwwroot");
-        var fallbackPath = Path.Combine(webRootPath, "image", "image.png");
-        if (!System.IO.File.Exists(fallbackPath))
-        {
-            return false;
-        }
-
-        filePath = fallbackPath;
-        return true;
-    }
-
-    private static bool CanUseDefaultMediaFallback(string normalizedSource) =>
-        normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase)
-        || normalizedSource.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
-        || normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase);
-
-    private bool IsDefaultMediaFallback(string filePath)
-    {
-        var webRootPath = !string.IsNullOrWhiteSpace(_environment.WebRootPath)
-            ? _environment.WebRootPath
-            : Path.Combine(_environment.ContentRootPath, "wwwroot");
-        var fallbackPath = Path.GetFullPath(Path.Combine(webRootPath, "image", "image.png"));
-        return string.Equals(Path.GetFullPath(filePath), fallbackPath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private FileContentResult BuildFileResult(MemoryStream outputStream, string contentType, int cacheSeconds = 604800)
-    {
-        Response.Headers.CacheControl = $"public,max-age={cacheSeconds}";
-        return File(outputStream.ToArray(), contentType);
     }
 
     private IActionResult MissingMediaResult()
