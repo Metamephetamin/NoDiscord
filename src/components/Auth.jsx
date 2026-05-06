@@ -24,6 +24,7 @@ const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
+const MOBILE_AUTH_VISUAL_MODE_QUERY = "(max-width: 640px), (pointer: coarse)";
 const initialRegisterForm = {
   firstName: "",
   lastName: "",
@@ -47,6 +48,16 @@ const initialLoginErrors = {
 const initialEmailVerificationModal = {
   open: false,
   purpose: "registration",
+  email: "",
+  verificationToken: "",
+  deliveryMode: "",
+  debugCode: "",
+  resendAvailableAt: "",
+};
+
+const initialPasswordResetState = {
+  open: false,
+  step: "email",
   email: "",
   verificationToken: "",
   deliveryMode: "",
@@ -138,6 +149,11 @@ function shouldUseLiteAuthVisualMode() {
     return false;
   }
 
+  const isMobileAuthVisualMode = window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY).matches;
+  if (!isMobileAuthVisualMode) {
+    return false;
+  }
+
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const saveData = Boolean(connection?.saveData);
@@ -150,7 +166,7 @@ function shouldPreferQrCameraLogin() {
     return false;
   }
 
-  return window.matchMedia("(max-width: 640px), (pointer: coarse)").matches;
+  return window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY).matches;
 }
 
 function mapAuthUser(data) {
@@ -263,6 +279,14 @@ export default function Auth({ onAuthSuccess }) {
   const [isRequestingLoginCode, setIsRequestingLoginCode] = useState(false);
   const [isResendingEmailCode, setIsResendingEmailCode] = useState(false);
   const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
+  const [passwordResetState, setPasswordResetState] = useState(initialPasswordResetState);
+  const [passwordResetCode, setPasswordResetCode] = useState("");
+  const [passwordResetPassword, setPasswordResetPassword] = useState("");
+  const [passwordResetPasswordConfirm, setPasswordResetPasswordConfirm] = useState("");
+  const [passwordResetSecondsLeft, setPasswordResetSecondsLeft] = useState(0);
+  const [passwordResetAttemptCount, setPasswordResetAttemptCount] = useState(0);
+  const [isRequestingPasswordResetCode, setIsRequestingPasswordResetCode] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [qrLoginSession, setQrLoginSession] = useState(null);
   const [qrLoginSvg, setQrLoginSvg] = useState("");
   const [qrLoginStatus, setQrLoginStatus] = useState("loading");
@@ -308,6 +332,13 @@ export default function Auth({ onAuthSuccess }) {
   const isLoginEmailVerification = emailVerificationModal.purpose === "login";
   const isRegistrationEmailVerification = emailVerificationModal.purpose === "registration";
   const shouldShowRegistrationCodeStep = mode === "register" && isRegistrationEmailVerification && emailVerificationModal.open;
+  const shouldShowPasswordResetStep = mode === "login" && loginMethod === "password" && passwordResetState.open;
+  const canResendPasswordResetCode =
+    Boolean(passwordResetState.email) &&
+    passwordResetState.step !== "email" &&
+    passwordResetSecondsLeft === 0 &&
+    !isRequestingPasswordResetCode &&
+    !isResettingPassword;
 
   const resetEmailVerificationModal = () => {
     setEmailVerificationCode("");
@@ -322,6 +353,17 @@ export default function Auth({ onAuthSuccess }) {
     setMessage("");
     setIsVerifyingEmailCode(false);
     setIsResendingEmailCode(false);
+  };
+
+  const resetPasswordResetFlow = () => {
+    setPasswordResetState(initialPasswordResetState);
+    setPasswordResetCode("");
+    setPasswordResetPassword("");
+    setPasswordResetPasswordConfirm("");
+    setPasswordResetSecondsLeft(0);
+    setPasswordResetAttemptCount(0);
+    setIsRequestingPasswordResetCode(false);
+    setIsResettingPassword(false);
   };
 
   useEffect(() => {
@@ -370,6 +412,7 @@ export default function Auth({ onAuthSuccess }) {
 
     const mediaQueries = [
       window.matchMedia("(prefers-reduced-motion: reduce)"),
+      window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY),
     ];
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     const addMediaListener = (mediaQuery) => {
@@ -395,7 +438,7 @@ export default function Auth({ onAuthSuccess }) {
   }, []);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 640px), (pointer: coarse)");
+    const mediaQuery = window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY);
     const updateQrMode = () => setIsQrCameraPreferred(shouldPreferQrCameraLogin());
 
     updateQrMode();
@@ -498,6 +541,21 @@ export default function Auth({ onAuthSuccess }) {
     const intervalId = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(intervalId);
   }, [emailVerificationModal.open, emailVerificationModal.resendAvailableAt]);
+
+  useEffect(() => {
+    if (!passwordResetState.open || passwordResetState.step === "email") {
+      setPasswordResetSecondsLeft(0);
+      return undefined;
+    }
+
+    const updateCountdown = () => {
+      setPasswordResetSecondsLeft(getRemainingSeconds(passwordResetState.resendAvailableAt));
+    };
+
+    updateCountdown();
+    const intervalId = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [passwordResetState.open, passwordResetState.resendAvailableAt, passwordResetState.step]);
 
   useEffect(() => {
     if (mode !== "login" || isQrCameraPreferred) {
@@ -664,6 +722,9 @@ export default function Auth({ onAuthSuccess }) {
           : event.target.value;
 
     setLoginForm((previous) => ({ ...previous, [field]: nextValue }));
+    if (field === "identifier" && passwordResetState.open && passwordResetState.step === "email") {
+      setPasswordResetState((previous) => ({ ...previous, email: nextValue.trim().toLowerCase() }));
+    }
     setLoginErrors((previous) => ({ ...previous, [field]: "" }));
     if (field === "identifier" && emailVerificationModal.purpose === "login") {
       resetEmailVerificationModal();
@@ -812,6 +873,166 @@ export default function Auth({ onAuthSuccess }) {
       }
     } finally {
       setIsRequestingLoginCode(false);
+    }
+  };
+
+  const requestPasswordResetCode = async (email, { resend = false } = {}) => {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!normalizedEmail) {
+      setLoginErrors({
+        identifier: "Введите email.",
+        password: "",
+      });
+      return;
+    }
+
+    if (!isSupportedEmail(normalizedEmail)) {
+      setLoginErrors({
+        identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
+        password: "",
+      });
+      return;
+    }
+
+    setIsRequestingPasswordResetCode(true);
+    setMessage("");
+    setLoginErrors(initialLoginErrors);
+
+    try {
+      const data = await submitAuthRequest(
+        "/auth/request-password-reset-code",
+        { email: normalizedEmail },
+        "Не удалось отправить код восстановления."
+      );
+      const nextAttemptCount = resend ? Math.max(1, passwordResetAttemptCount + 1) : 1;
+      const nextResendAvailableAt = resolveResendAvailableAt(nextAttemptCount, data?.resendAvailableAt);
+      const isMockDelivery = String(data?.deliveryMode || "").toLowerCase() === "mock";
+
+      setPasswordResetAttemptCount(nextAttemptCount);
+      setPasswordResetCode("");
+      setPasswordResetPassword("");
+      setPasswordResetPasswordConfirm("");
+      setPasswordResetState({
+        open: true,
+        step: "code",
+        email: data?.email || normalizedEmail,
+        verificationToken: data?.verificationToken || "",
+        deliveryMode: data?.deliveryMode || "",
+        debugCode: isMockDelivery ? data?.debugCode || "" : "",
+        resendAvailableAt: nextResendAvailableAt,
+      });
+      setMessage(isMockDelivery && data?.debugCode ? `Тестовый код восстановления: ${data.debugCode}` : "");
+    } catch (error) {
+      const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
+        ? error.data.fieldErrors
+        : null;
+
+      if (backendFieldErrors) {
+        setLoginErrors({
+          identifier: typeof backendFieldErrors.email === "string" ? backendFieldErrors.email : "",
+          password: typeof backendFieldErrors.password === "string" ? backendFieldErrors.password : "",
+          totpCode: "",
+        });
+      } else {
+        setMessage(error.message || "Не удалось отправить код восстановления.");
+      }
+    } finally {
+      setIsRequestingPasswordResetCode(false);
+    }
+  };
+
+  const startPasswordResetFlow = () => {
+    resetEmailVerificationModal();
+    setIsQrLoginOpen(false);
+    closeQrScanner();
+    setMessage("");
+    setLoginErrors(initialLoginErrors);
+    setPasswordResetState({
+      ...initialPasswordResetState,
+      open: true,
+      email: loginForm.identifier.trim().toLowerCase(),
+    });
+    setPasswordResetCode("");
+    setPasswordResetPassword("");
+    setPasswordResetPasswordConfirm("");
+  };
+
+  const handleRequestPasswordResetCode = async (event) => {
+    event?.preventDefault?.();
+    await requestPasswordResetCode(passwordResetState.email || loginForm.identifier);
+  };
+
+  const handleResendPasswordResetCode = async () => {
+    if (!canResendPasswordResetCode) {
+      return;
+    }
+
+    await requestPasswordResetCode(passwordResetState.email, { resend: true });
+  };
+
+  const handleResetPassword = async (event) => {
+    event?.preventDefault?.();
+    setMessage("");
+    setLoginErrors(initialLoginErrors);
+
+    if (!passwordResetState.email || !passwordResetState.verificationToken) {
+      setMessage("Сессия восстановления не найдена. Запросите код заново.");
+      return;
+    }
+
+    if (passwordResetCode.trim().length !== 6) {
+      setMessage("Введите шестизначный код из письма.");
+      return;
+    }
+
+    if (passwordResetPassword.length < 6) {
+      setLoginErrors((previous) => ({ ...previous, password: "Пароль должен быть не короче 6 символов." }));
+      return;
+    }
+
+    if (passwordResetPassword !== passwordResetPasswordConfirm) {
+      setLoginErrors((previous) => ({ ...previous, password: "Пароли не совпадают." }));
+      return;
+    }
+
+    setIsResettingPassword(true);
+
+    try {
+      await submitAuthRequest(
+        "/auth/reset-password",
+        {
+          email: passwordResetState.email,
+          verificationToken: passwordResetState.verificationToken,
+          code: passwordResetCode.trim(),
+          password: passwordResetPassword,
+        },
+        "Не удалось изменить пароль."
+      );
+      const resetEmail = passwordResetState.email;
+      resetPasswordResetFlow();
+      setLoginMethod("password");
+      setLoginForm((previous) => ({
+        ...previous,
+        identifier: resetEmail,
+        password: "",
+        totpCode: "",
+      }));
+      setMessage("Пароль изменён. Войдите с новым паролем.");
+    } catch (error) {
+      const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
+        ? error.data.fieldErrors
+        : null;
+
+      if (backendFieldErrors) {
+        setLoginErrors({
+          identifier: typeof backendFieldErrors.email === "string" ? backendFieldErrors.email : "",
+          password: typeof backendFieldErrors.password === "string" ? backendFieldErrors.password : "",
+          totpCode: "",
+        });
+      }
+      setMessage(error.message || "Не удалось изменить пароль.");
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -1153,6 +1374,7 @@ export default function Auth({ onAuthSuccess }) {
     setIsResendingEmailCode(false);
     setIsVerifyingEmailCode(false);
     resetEmailVerificationModal();
+    resetPasswordResetFlow();
   };
 
   const switchLoginMethod = () => {
@@ -1163,6 +1385,7 @@ export default function Auth({ onAuthSuccess }) {
     setLoginErrors(initialLoginErrors);
     setIsSubmitting(false);
     setIsRequestingLoginCode(false);
+    resetPasswordResetFlow();
   };
 
   const refreshQrLoginSession = () => {
@@ -1196,6 +1419,16 @@ export default function Auth({ onAuthSuccess }) {
       }
 
       handleRequestLoginCode(event);
+      return;
+    }
+
+    if (shouldShowPasswordResetStep) {
+      if (passwordResetState.step === "email") {
+        handleRequestPasswordResetCode(event);
+        return;
+      }
+
+      handleResetPassword(event);
       return;
     }
 
@@ -1278,7 +1511,72 @@ export default function Auth({ onAuthSuccess }) {
                   <span className="auth-field__error">{loginErrors.identifier}</span>
                 ) : null}
               </label>
-              {loginMethod === "code" && isLoginEmailVerification && emailVerificationModal.open ? (
+              {shouldShowPasswordResetStep ? (
+                <div className="auth-inline-code auth-section--password-reset">
+                  {passwordResetState.step === "email" ? (
+                    <p className="auth-inline-code__text">
+                      Мы отправим код восстановления на указанную почту.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="auth-inline-code__text">
+                        Код отправлен на <strong>{passwordResetState.email}</strong>. Введите код и новый пароль.
+                      </p>
+                      {passwordResetState.deliveryMode === "mock" && passwordResetState.debugCode ? (
+                        <div className="auth-hint">Тестовый код: <span className="auth-hint__code">{passwordResetState.debugCode}</span></div>
+                      ) : null}
+                      <input
+                        className="auth-input"
+                        placeholder="Код из письма"
+                        value={passwordResetCode}
+                        onChange={(event) => setPasswordResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        maxLength={6}
+                        inputMode="numeric"
+                        autoFocus
+                      />
+                      <input
+                        className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
+                        placeholder="Новый пароль"
+                        type="password"
+                        value={passwordResetPassword}
+                        onChange={(event) => {
+                          setPasswordResetPassword(event.target.value.slice(0, MAX_AUTH_PASSWORD_LENGTH));
+                          setLoginErrors((previous) => ({ ...previous, password: "" }));
+                        }}
+                        maxLength={MAX_AUTH_PASSWORD_LENGTH}
+                        minLength={6}
+                      />
+                      <input
+                        className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
+                        placeholder="Повторите пароль"
+                        type="password"
+                        value={passwordResetPasswordConfirm}
+                        onChange={(event) => {
+                          setPasswordResetPasswordConfirm(event.target.value.slice(0, MAX_AUTH_PASSWORD_LENGTH));
+                          setLoginErrors((previous) => ({ ...previous, password: "" }));
+                        }}
+                        maxLength={MAX_AUTH_PASSWORD_LENGTH}
+                        minLength={6}
+                      />
+                      <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
+                      <button
+                        type="button"
+                        className="auth-switch-link auth-inline-code__resend"
+                        onClick={handleResendPasswordResetCode}
+                        disabled={!canResendPasswordResetCode}
+                      >
+                        <span>Отправить код снова</span>
+                        <span className="auth-inline-code__timer">
+                          {isRequestingPasswordResetCode ? "Отправляем..." : passwordResetSecondsLeft > 0 ? formatCooldown(passwordResetSecondsLeft) : "доступно"}
+                        </span>
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className="auth-switch-link" onClick={resetPasswordResetFlow}>
+                    Назад ко входу
+                  </button>
+                </div>
+              ) : loginMethod === "code" && isLoginEmailVerification && emailVerificationModal.open ? (
                 <div className="auth-inline-code">
                   <p className="auth-inline-code__text">
                     Код отправлен на <strong>{emailVerificationModal.email}</strong>.
@@ -1318,7 +1616,7 @@ export default function Auth({ onAuthSuccess }) {
                   </button>
                 </div>
               ) : null}
-              {loginMethod === "password" ? (
+              {loginMethod === "password" && !shouldShowPasswordResetStep ? (
                 <>
                   <label className="auth-field auth-field--with-error-slot">
                     <input
@@ -1332,6 +1630,14 @@ export default function Auth({ onAuthSuccess }) {
                     />
                     <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
                   </label>
+                  <button
+                    type="button"
+                    className="auth-switch-link"
+                    onClick={startPasswordResetFlow}
+                    disabled={isSubmitting || isRequestingPasswordResetCode || isResettingPassword}
+                  >
+                    Забыли пароль?
+                  </button>
                   {loginErrors.totpCode || loginForm.totpCode ? (
                     <label className="auth-field auth-field--with-error-slot">
                       <input
@@ -1446,7 +1752,11 @@ export default function Auth({ onAuthSuccess }) {
             </div>
           )}
 
-          <button className="auth-submit" type="submit" disabled={isSubmitting || isRequestingLoginCode || isVerifyingEmailCode}>
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={isSubmitting || isRequestingLoginCode || isVerifyingEmailCode || isRequestingPasswordResetCode || isResettingPassword}
+          >
             {mode === "login"
               ? loginMethod === "code"
                 ? isRequestingLoginCode
@@ -1456,9 +1766,17 @@ export default function Auth({ onAuthSuccess }) {
                       ? "Проверяем..."
                       : "Подтвердить"
                     : "Войти"
-                : isSubmitting
-                  ? "Входим..."
-                  : "Войти"
+                : shouldShowPasswordResetStep
+                  ? passwordResetState.step === "email"
+                    ? isRequestingPasswordResetCode
+                      ? "Отправляем код..."
+                      : "Получить код"
+                    : isResettingPassword
+                      ? "Сохраняем..."
+                      : "Сменить пароль"
+                  : isSubmitting
+                    ? "Входим..."
+                    : "Войти"
               : shouldShowRegistrationCodeStep
                 ? isVerifyingEmailCode
                   ? "Проверяем..."
@@ -1492,7 +1810,7 @@ export default function Auth({ onAuthSuccess }) {
                 type="button"
                 className="auth-switch-link"
                 onClick={switchLoginMethod}
-                disabled={isSubmitting || isRequestingLoginCode}
+                disabled={isSubmitting || isRequestingLoginCode || isRequestingPasswordResetCode || isResettingPassword}
               >
                 {loginMethod === "code" ? "Войти по паролю" : "Войти по коду из письма"}
               </button>
@@ -1502,7 +1820,7 @@ export default function Auth({ onAuthSuccess }) {
               type="button"
               className="auth-switch-link"
               onClick={() => switchMode(mode === "login" ? "register" : "login")}
-              disabled={isSubmitting || isRequestingLoginCode}
+              disabled={isSubmitting || isRequestingLoginCode || isRequestingPasswordResetCode || isResettingPassword}
             >
               {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт? Войти"}
             </button>

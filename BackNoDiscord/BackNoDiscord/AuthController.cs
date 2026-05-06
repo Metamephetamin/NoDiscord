@@ -28,6 +28,9 @@ public class AuthController : ControllerBase
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
     private const string MediaAccessTokenCookieName = "tend_access_token";
     private const int MaxEmailVerificationAttempts = 5;
+    private const string EmailVerificationPurpose = "email_verification";
+    private const string LoginCodePurpose = "login";
+    private const string PasswordResetPurpose = "password_reset";
     private bool RequireEmailRegistrationVerification => _config.GetValue<bool?>("Auth:RequireEmailVerification") ?? true;
 
     private readonly AppDbContext _context;
@@ -164,6 +167,7 @@ public class AuthController : ControllerBase
                 item.UserId == user.id &&
                 item.Email == normalizedEmail &&
                 item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
+                (item.Purpose == EmailVerificationPurpose || item.Purpose == LoginCodePurpose || item.Purpose == string.Empty) &&
                 !item.ConsumedAt.HasValue)
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync();
@@ -553,7 +557,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            var payload = await CreateEmailVerificationAsync(user);
+            var payload = await CreateEmailVerificationAsync(user, purpose: LoginCodePurpose);
             if (payload.IsRateLimited)
             {
                 return StatusCode(StatusCodes.Status429TooManyRequests, new
@@ -572,6 +576,131 @@ public class AuthController : ControllerBase
                 message = "Не удалось отправить код входа на почту. Попробуйте немного позже."
             });
         }
+    }
+
+    [HttpPost("request-password-reset-code")]
+    [EnableRateLimiting("email-send")]
+    public async Task<IActionResult> RequestPasswordResetCode([FromBody] PasswordResetCodeRequestDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (!AuthInputPolicies.TryNormalizeEmail(dto.email, out var normalizedEmail, out var emailError))
+        {
+            return BadRequest(new { message = emailError, fieldErrors = new { email = emailError } });
+        }
+
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        if (user == null)
+        {
+            return BadRequest(new { message = "Пользователь с такой почтой не найден.", fieldErrors = new { email = "Пользователь с такой почтой не найден." } });
+        }
+
+        try
+        {
+            var payload = await CreateEmailVerificationAsync(user, purpose: PasswordResetPurpose);
+            if (payload.IsRateLimited)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    message = "Повторно отправить код можно через 60 секунд.",
+                    resendAvailableAt = payload.ResendAvailableAt
+                });
+            }
+
+            return Ok(payload.ToResponse());
+        }
+        catch (EmailDeliveryException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Не удалось отправить код восстановления на почту. Попробуйте немного позже."
+            });
+        }
+    }
+
+    [HttpPost("reset-password")]
+    [EnableRateLimiting("email-verify")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (!AuthInputPolicies.TryNormalizeEmail(dto.email, out var normalizedEmail, out var emailError))
+        {
+            return BadRequest(new { message = emailError, fieldErrors = new { email = emailError } });
+        }
+
+        var verificationToken = (dto.verificationToken ?? string.Empty).Trim();
+        var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
+        {
+            return BadRequest(new { message = "Введите корректный шестизначный код." });
+        }
+
+        if (dto.password.Trim().Length < 6)
+        {
+            return BadRequest(new { message = "Пароль должен быть не короче 6 символов.", fieldErrors = new { password = "Пароль должен быть не короче 6 символов." } });
+        }
+
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        if (user == null)
+        {
+            return BadRequest(new { message = "Сессия восстановления пароля не найдена. Запросите код заново." });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.EmailVerificationCodes
+            .Where(item =>
+                item.UserId == user.id &&
+                item.Email == normalizedEmail &&
+                item.Purpose == PasswordResetPurpose &&
+                item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
+                !item.ConsumedAt.HasValue)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (record == null)
+        {
+            return BadRequest(new { message = "Сессия восстановления пароля не найдена. Запросите код заново." });
+        }
+
+        if (record.ExpiresAt <= now)
+        {
+            record.ConsumedAt = now;
+            await _context.SaveChangesAsync();
+            return BadRequest(new { message = "Срок действия кода истёк. Запросите новый код." });
+        }
+
+        if (record.AttemptCount >= MaxEmailVerificationAttempts)
+        {
+            return BadRequest(new { message = "Лимит попыток исчерпан. Запросите новый код." });
+        }
+
+        if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
+        {
+            record.AttemptCount += 1;
+            if (record.AttemptCount >= MaxEmailVerificationAttempts)
+            {
+                record.ConsumedAt = now;
+            }
+
+            await _context.SaveChangesAsync();
+            return BadRequest(new { message = "Неверный код восстановления." });
+        }
+
+        record.VerifiedAt = now;
+        record.ConsumedAt = now;
+        user.is_email_verified = true;
+        user.password_hash = _passwordHasher.HashPassword(user, dto.password);
+        await _context.SaveChangesAsync();
+
+        await RevokeActiveRefreshTokensAsync(user.id);
+        return Ok(new { message = "Пароль изменён. Войдите снова." });
     }
 
     [HttpPost("register")]
@@ -1170,7 +1299,7 @@ public class AuthController : ControllerBase
         }
     }
 
-    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user, bool ignoreResendCooldown = false)
+    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user, bool ignoreResendCooldown = false, string purpose = EmailVerificationPurpose)
     {
         if (string.IsNullOrWhiteSpace(user.email))
         {
@@ -1181,7 +1310,7 @@ public class AuthController : ControllerBase
         var now = DateTimeOffset.UtcNow;
         var deliveryMode = GetEmailDeliveryMode();
         var latestActive = await _context.EmailVerificationCodes
-            .Where(item => item.UserId == user.id && !item.ConsumedAt.HasValue)
+            .Where(item => item.UserId == user.id && item.Purpose == purpose && !item.ConsumedAt.HasValue)
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync();
 
@@ -1203,7 +1332,7 @@ public class AuthController : ControllerBase
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         var activeCodes = await _context.EmailVerificationCodes
-            .Where(item => item.UserId == user.id && !item.ConsumedAt.HasValue)
+            .Where(item => item.UserId == user.id && item.Purpose == purpose && !item.ConsumedAt.HasValue)
             .ToListAsync();
 
         foreach (var activeCode in activeCodes)
@@ -1215,6 +1344,7 @@ public class AuthController : ControllerBase
         {
             UserId = user.id,
             Email = userEmail,
+            Purpose = purpose,
             VerificationTokenHash = AuthInputPolicies.HashSecret(verificationToken),
             CodeHash = AuthInputPolicies.HashSecret(verificationCode),
             CreatedAt = now,
@@ -1577,6 +1707,28 @@ public class LoginDto
 public class LoginCodeRequestDto
 {
     public string? identifier { get; set; }
+}
+
+public class PasswordResetCodeRequestDto
+{
+    [Required]
+    public string? email { get; set; }
+}
+
+public class ResetPasswordDto
+{
+    [Required]
+    public string? email { get; set; }
+
+    [Required]
+    public string verificationToken { get; set; } = string.Empty;
+
+    [Required]
+    public string code { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(6)]
+    public string password { get; set; } = string.Empty;
 }
 
 public class QrLoginApproveDto

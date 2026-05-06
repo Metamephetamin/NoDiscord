@@ -144,6 +144,9 @@ public class EmailVerificationCodeRecord
     [Column("email")]
     public string Email { get; set; } = string.Empty;
 
+    [Column("purpose")]
+    public string Purpose { get; set; } = "email_verification";
+
     [Column("verification_token_hash")]
     public string VerificationTokenHash { get; set; } = string.Empty;
 
@@ -794,8 +797,10 @@ public class AppDbContext : DbContext
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.UserId);
             entity.HasIndex(x => x.Email);
+            entity.HasIndex(x => new { x.UserId, x.Purpose });
             entity.HasIndex(x => x.VerificationTokenHash).IsUnique();
             entity.Property(x => x.Email).IsRequired();
+            entity.Property(x => x.Purpose).IsRequired();
             entity.Property(x => x.VerificationTokenHash).IsRequired();
             entity.Property(x => x.CodeHash).IsRequired();
         });

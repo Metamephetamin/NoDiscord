@@ -1,6 +1,7 @@
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -18,6 +19,90 @@ public sealed class AuthControllerTests : IDisposable
     public AuthControllerTests()
     {
         _context = CreateContext();
+    }
+
+    [Fact]
+    public async Task RequestPasswordResetCode_CreatesPasswordResetVerificationWithoutExposingDebugCodeOutsideMockMode()
+    {
+        var user = BuildUser(10, "reset-user@gmail.com");
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        var controller = BuildController(emailMode: "smtp", environmentName: "Production");
+
+        var result = await controller.RequestPasswordResetCode(new PasswordResetCodeRequestDto { email = "reset-user@gmail.com" });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var json = JsonSerializer.Serialize(ok.Value);
+        Assert.Contains("\"deliveryMode\":\"smtp\"", json);
+        Assert.DoesNotContain("debugCode", json, StringComparison.OrdinalIgnoreCase);
+        var record = Assert.Single(_context.EmailVerificationCodes);
+        Assert.Equal("password_reset", record.Purpose);
+        Assert.Equal(user.id, record.UserId);
+        Assert.Equal(1, _emailSender.SendCount);
+    }
+
+    [Fact]
+    public async Task ResetPassword_WithPasswordResetCode_UpdatesPasswordAndRevokesActiveSessions()
+    {
+        var passwordHasher = new PasswordHasher<User>();
+        var user = BuildUser(11, "password-reset@gmail.com");
+        user.password_hash = passwordHasher.HashPassword(user, "old-password");
+        _context.Users.Add(user);
+        _context.RefreshTokens.Add(new RefreshTokenRecord
+        {
+            UserId = user.id,
+            TokenHash = "active-refresh-token",
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+            UserAgent = "test",
+            DeviceLabel = "test",
+            LastIp = "127.0.0.1",
+            LastUsedAt = DateTimeOffset.UtcNow.AddMinutes(-5)
+        });
+        await _context.SaveChangesAsync();
+        var controller = BuildController();
+        var codeResult = await controller.RequestPasswordResetCode(new PasswordResetCodeRequestDto { email = "password-reset@gmail.com" });
+        var (verificationToken, debugCode) = ReadVerificationPayload(Assert.IsType<OkObjectResult>(codeResult));
+
+        var result = await controller.ResetPassword(new ResetPasswordDto
+        {
+            email = "password-reset@gmail.com",
+            verificationToken = verificationToken,
+            code = debugCode,
+            password = "new-password"
+        });
+
+        Assert.IsType<OkObjectResult>(result);
+        var updatedUser = await _context.Users.FirstAsync(item => item.id == user.id);
+        Assert.Equal(PasswordVerificationResult.Success, passwordHasher.VerifyHashedPassword(updatedUser, updatedUser.password_hash, "new-password"));
+        Assert.NotEqual(PasswordVerificationResult.Success, passwordHasher.VerifyHashedPassword(updatedUser, updatedUser.password_hash, "old-password"));
+        Assert.All(_context.RefreshTokens.Where(item => item.UserId == user.id), item => Assert.NotNull(item.RevokedAt));
+        Assert.All(_context.EmailVerificationCodes.Where(item => item.UserId == user.id), item => Assert.NotNull(item.ConsumedAt));
+    }
+
+    [Fact]
+    public async Task ResetPassword_WithLoginCode_DoesNotResetPassword()
+    {
+        var passwordHasher = new PasswordHasher<User>();
+        var user = BuildUser(12, "login-code-reset@gmail.com");
+        user.password_hash = passwordHasher.HashPassword(user, "old-password");
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        var controller = BuildController();
+        var loginCodeResult = await controller.RequestLoginCode(new LoginCodeRequestDto { identifier = "login-code-reset@gmail.com" });
+        var (verificationToken, debugCode) = ReadVerificationPayload(Assert.IsType<OkObjectResult>(loginCodeResult));
+
+        var result = await controller.ResetPassword(new ResetPasswordDto
+        {
+            email = "login-code-reset@gmail.com",
+            verificationToken = verificationToken,
+            code = debugCode,
+            password = "new-password"
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        var updatedUser = await _context.Users.FirstAsync(item => item.id == user.id);
+        Assert.Equal(PasswordVerificationResult.Success, passwordHasher.VerifyHashedPassword(updatedUser, updatedUser.password_hash, "old-password"));
     }
 
     [Fact]
@@ -121,6 +206,30 @@ public sealed class AuthControllerTests : IDisposable
             _emailSender,
             new TestWebHostEnvironment { EnvironmentName = environmentName },
             new CryptoService(configuration));
+    }
+
+    private static User BuildUser(int id, string email)
+    {
+        return new User
+        {
+            id = id,
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = $"LanayaUser{id}",
+            email = email,
+            is_email_verified = true,
+            password_hash = "hash"
+        };
+    }
+
+    private static (string VerificationToken, string DebugCode) ReadVerificationPayload(OkObjectResult result)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(result.Value));
+        var root = document.RootElement;
+        return (
+            root.GetProperty("verificationToken").GetString() ?? string.Empty,
+            root.GetProperty("debugCode").GetString() ?? string.Empty
+        );
     }
 
     private static AppDbContext CreateContext()

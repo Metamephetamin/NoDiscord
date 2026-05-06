@@ -6,6 +6,8 @@ const authCss = readFileSync("src/css/Auth.css", "utf8");
 
 const requiredSourceMarkers = [
   'const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4")',
+  'const MOBILE_AUTH_VISUAL_MODE_QUERY = "(max-width: 640px), (pointer: coarse)"',
+  "if (!isMobileAuthVisualMode)",
   'className="auth-video-bg"',
   "<source src={AUTH_BACKGROUND_VIDEO_URL} type=\"video/mp4\" />",
   'mode === "login" ? "auth-page--login" : "auth-page--register"',
