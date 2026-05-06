@@ -3128,8 +3128,8 @@
 
 .message-media__upload-action {
   position: relative;
-  width: 62px;
-  height: 62px;
+  width: 52px;
+  height: 52px;
   padding: 0;
   border-radius: 999px;
   display: inline-flex;
@@ -3189,12 +3189,12 @@
 
 .message-media__upload-loader-ring {
   position: absolute;
-  inset: 9px;
+  inset: 7px;
   border-radius: 999px;
 }
 
 .message-media__upload-loader-ring {
-  border: 3px solid rgba(255, 255, 255, 0.28);
+  border: 2px solid rgba(255, 255, 255, 0.28);
   border-top-color: #ffffff;
   border-right-color: rgba(255, 255, 255, 0.86);
   animation: messageMediaUploadSpin 0.86s linear infinite;
@@ -3355,6 +3355,20 @@
 
 .message-media__upload-cancel-icon::after {
   transform: rotate(-45deg);
+}
+
+.message-media__upload-cancel-icon--simple {
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+}
+
+.message-media__upload-cancel-icon--simple::before,
+.message-media__upload-cancel-icon--simple::after {
+  left: 7px;
+  top: -1px;
+  height: 18px;
+  width: 2px;
 }
 
 .message-media__upload-footer {
@@ -3537,48 +3551,67 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.52);
   border-radius: 999px;
   background:
-    conic-gradient(#eef7ff var(--message-attachment-upload-progress, 0%), rgba(238, 247, 255, 0.34) 0),
-    #5db4f0;
+    linear-gradient(#5e646b, #5e646b) padding-box,
+    conic-gradient(#eef7ff var(--message-attachment-upload-progress, 0%), rgba(238, 247, 255, 0.28) 0) border-box;
   color: #ffffff;
   cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 .message-attachment__upload-control::before {
   content: "";
   position: absolute;
-  inset: 4px;
+  inset: 5px;
   border-radius: inherit;
-  background: #5db4f0;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #ffffff;
+  border-right-color: rgba(255, 255, 255, 0.86);
+  animation: messageAttachmentUploadSpin 0.86s linear infinite;
 }
 
-.message-attachment__upload-control span {
+.message-attachment__upload-cancel-icon,
+.message-attachment__upload-retry-icon {
   position: relative;
-  width: 18px;
-  height: 18px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.message-attachment__upload-control span::before,
-.message-attachment__upload-control span::after {
+.message-attachment__upload-cancel-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.message-attachment__upload-cancel-icon::before,
+.message-attachment__upload-cancel-icon::after {
   content: "";
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 19px;
-  height: 3px;
+  width: 18px;
+  height: 2px;
   border-radius: 999px;
   background: currentColor;
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
-.message-attachment__upload-control span::after {
+.message-attachment__upload-cancel-icon::after {
   transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.message-attachment__upload-retry-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 20px;
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 .message-attachment__upload-control:focus-visible {
@@ -3588,12 +3621,13 @@
 
 .message-attachment__upload-control--failed {
   background:
-    conic-gradient(#ffe2e2 var(--message-attachment-upload-progress, 0%), rgba(255, 226, 226, 0.38) 0),
-    #ef6f7a;
+    linear-gradient(#6f6053, #6f6053) padding-box,
+    conic-gradient(#ffe7db var(--message-attachment-upload-progress, 0%), rgba(255, 231, 219, 0.28) 0) border-box;
 }
 
 .message-attachment__upload-control--failed::before {
-  background: #ef6f7a;
+  animation: none;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .msg-content--file-only .message-attachment--document .message-attachment__meta {

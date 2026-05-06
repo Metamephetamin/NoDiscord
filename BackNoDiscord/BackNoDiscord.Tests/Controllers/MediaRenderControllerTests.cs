@@ -123,15 +123,16 @@ public sealed class MediaRenderControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_ReturnsCacheSafeNotFoundWhenMissingFallbackUnavailable()
+    public async Task Render_ReturnsGeneratedFallbackWhenFallbackFileUnavailable()
     {
         var controller = BuildController();
 
         var result = await controller.Render("/server-icons/missing-server-icon.png", 60, 60, "cover", "false", CancellationToken.None);
 
-        Assert.IsType<NotFoundResult>(result);
-        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
-        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", fileResult.ContentType);
+        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
+        Assert.NotEmpty(fileResult.FileContents);
     }
 
     [Theory]

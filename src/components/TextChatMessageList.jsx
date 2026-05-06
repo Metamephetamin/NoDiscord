@@ -495,44 +495,15 @@ function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry }) 
   );
 }
 
-function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) {
+function LocalEchoDocumentMeta({ attachmentItem }) {
   const uploadState = getDocumentUploadCardState(attachmentItem);
 
   return (
-    <>
-      <span className={`message-attachment__upload-row ${uploadState.failed ? "message-attachment__upload-row--failed" : ""}`}>
-        <span className="message-attachment__size message-attachment__size--upload">
-          {uploadState.progressLabel}
-        </span>
+    <span className={`message-attachment__upload-row ${uploadState.failed ? "message-attachment__upload-row--failed" : ""}`}>
+      <span className="message-attachment__size message-attachment__size--upload">
+        {uploadState.progressLabel}
       </span>
-      <span className="message-attachment__open-with message-attachment__open-with--upload">{uploadState.statusLabel}</span>
-      <span className="message-attachment__local-echo-actions">
-        {uploadState.failed ? (
-          <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onRetry?.();
-          }}>
-            Повторить
-          </button>
-        ) : uploadState.status === "sent" ? null : (
-          <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onCancel?.();
-          }}>
-            Отмена
-          </button>
-        )}
-        <button type="button" className="message-attachment__local-echo-action" onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onRemove?.();
-        }}>
-          Убрать
-        </button>
-      </span>
-    </>
+    </span>
   );
 }
 
@@ -556,7 +527,11 @@ function LocalEchoDocumentAction({ attachmentItem, onCancel, onRetry }) {
         handleClick?.();
       }}
     >
-      <span aria-hidden="true" />
+      {uploadState.failed ? (
+        <span className="message-attachment__upload-retry-icon" aria-hidden="true">↻</span>
+      ) : (
+        <span className="message-attachment__upload-cancel-icon" aria-hidden="true" />
+      )}
     </button>
   );
 }
@@ -1474,9 +1449,6 @@ function MessageAttachmentCard({
           {showLocalEchoOverlay ? (
             <LocalEchoDocumentMeta
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
-              onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
-              onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
           ) : (
             <>
