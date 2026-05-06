@@ -142,10 +142,7 @@ function shouldUseLiteAuthVisualMode() {
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const saveData = Boolean(connection?.saveData);
   const slowConnection = SLOW_CONNECTION_TYPES.has(connection?.effectiveType || "");
-  const lowCpu = Number.isFinite(navigator.hardwareConcurrency) && navigator.hardwareConcurrency <= 4;
-  const lowMemory = Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory <= 4;
-
-  return prefersReducedMotion || saveData || slowConnection || lowCpu || lowMemory;
+  return prefersReducedMotion || saveData || slowConnection;
 }
 
 function shouldPreferQrCameraLogin() {
@@ -432,11 +429,12 @@ export default function Auth({ onAuthSuccess }) {
       return undefined;
     }
 
-    const syncVideoPlayback = () => {
-      if (document.hidden) {
-        videoNode.pause();
-        return;
-      }
+    let reloadTimeoutId = 0;
+
+    const playVideo = () => {
+      videoNode.muted = true;
+      videoNode.loop = true;
+      videoNode.playsInline = true;
 
       const playPromise = videoNode.play();
       if (typeof playPromise?.catch === "function") {
@@ -444,9 +442,50 @@ export default function Auth({ onAuthSuccess }) {
       }
     };
 
+    const syncVideoPlayback = () => {
+      if (document.hidden) {
+        videoNode.pause();
+        return;
+      }
+
+      if (videoNode.readyState === 0 || videoNode.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+        videoNode.load();
+      }
+
+      playVideo();
+    };
+
+    const reloadVideo = () => {
+      if (document.hidden) {
+        return;
+      }
+
+      window.clearTimeout(reloadTimeoutId);
+      reloadTimeoutId = window.setTimeout(() => {
+        videoNode.load();
+        playVideo();
+      }, 120);
+    };
+
     syncVideoPlayback();
     document.addEventListener("visibilitychange", syncVideoPlayback);
-    return () => document.removeEventListener("visibilitychange", syncVideoPlayback);
+    window.addEventListener("pageshow", syncVideoPlayback);
+    videoNode.addEventListener("loadeddata", playVideo);
+    videoNode.addEventListener("canplay", playVideo);
+    videoNode.addEventListener("stalled", reloadVideo);
+    videoNode.addEventListener("emptied", reloadVideo);
+    videoNode.addEventListener("error", reloadVideo);
+
+    return () => {
+      window.clearTimeout(reloadTimeoutId);
+      document.removeEventListener("visibilitychange", syncVideoPlayback);
+      window.removeEventListener("pageshow", syncVideoPlayback);
+      videoNode.removeEventListener("loadeddata", playVideo);
+      videoNode.removeEventListener("canplay", playVideo);
+      videoNode.removeEventListener("stalled", reloadVideo);
+      videoNode.removeEventListener("emptied", reloadVideo);
+      videoNode.removeEventListener("error", reloadVideo);
+    };
   }, [isLiteVisualMode]);
 
   useEffect(() => {
@@ -1175,7 +1214,7 @@ export default function Auth({ onAuthSuccess }) {
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           disablePictureInPicture
           disableRemotePlayback
           aria-hidden="true"
