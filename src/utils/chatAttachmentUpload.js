@@ -45,7 +45,6 @@ function uploadWithProgress({ formData, onProgress, signal }) {
 
       console.warn("[chat-upload] failed", {
         status: request.status,
-        response: data,
         diagnostics: request.getResponseHeader("X-Upload-Storage-Diagnostics") || "",
       });
       reject(new Error(data?.message || "Не удалось загрузить файл"));
@@ -99,7 +98,6 @@ export async function uploadChatAttachment({ blob, fileName = "", onProgress, si
   if (!response.ok) {
     console.warn("[chat-upload] failed", {
       status: response.status,
-      response: data,
       diagnostics: response.headers.get("X-Upload-Storage-Diagnostics") || "",
     });
     throw new Error(data?.message || "Не удалось загрузить файл");

@@ -267,12 +267,12 @@ public class ChatHub : Hub
         }
         catch (HubException ex)
         {
-            _logger.LogWarning(ex, "SendMessage validation failed for channel {ChannelId}. Attachments: {AttachmentCount}, LegacyAttachmentUrl: {AttachmentUrl}, AttachmentAsFile: {AttachmentAsFile}", channelId, attachments?.Count ?? 0, attachmentUrl, attachmentAsFile);
+            _logger.LogWarning(ex, "SendMessage validation failed for channel {ChannelId}. Attachments: {AttachmentCount}, AttachmentAsFile: {AttachmentAsFile}", channelId, attachments?.Count ?? 0, attachmentAsFile);
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected SendMessage failure for channel {ChannelId}. Attachments: {AttachmentCount}, LegacyAttachmentUrl: {AttachmentUrl}, AttachmentAsFile: {AttachmentAsFile}", channelId, attachments?.Count ?? 0, attachmentUrl, attachmentAsFile);
+            _logger.LogError(ex, "Unexpected SendMessage failure for channel {ChannelId}. Attachments: {AttachmentCount}, AttachmentAsFile: {AttachmentAsFile}", channelId, attachments?.Count ?? 0, attachmentAsFile);
             throw;
         }
     }

@@ -458,6 +458,7 @@
 .auth-card--login .auth-login-divider,
 .auth-card--login .auth-qr-entry,
 .auth-card--login .auth-card__links,
+.auth-card--login .auth-card__forgot,
 .auth-card--login .auth-message {
   width: min(100%, 300px);
 }
@@ -851,6 +852,12 @@
   border-radius: 50%;
   background: rgba(49, 33, 93, 0.72);
   transform: translateY(-50%);
+}
+
+.auth-card__forgot {
+  display: flex;
+  justify-content: center;
+  margin-top: -2px;
 }
 
 .auth-hint__code {
@@ -1939,6 +1946,7 @@
   .auth-page--login .auth-card--login .auth-login-divider,
   .auth-page--login .auth-card--login .auth-qr-entry,
   .auth-page--login .auth-card--login .auth-card__links,
+  .auth-page--login .auth-card--login .auth-card__forgot,
   .auth-page--login .auth-card--login .auth-message {
     width: min(100%, 374px);
   }
@@ -2127,6 +2135,7 @@
   .auth-page--login .auth-card--login .auth-login-divider,
   .auth-page--login .auth-card--login .auth-qr-entry,
   .auth-page--login .auth-card--login .auth-card__links,
+  .auth-page--login .auth-card--login .auth-card__forgot,
   .auth-page--login .auth-card--login .auth-message {
     width: 100%;
     max-width: none;

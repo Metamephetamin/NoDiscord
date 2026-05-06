@@ -88,7 +88,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("resend-email-verification")]
     [EnableRateLimiting("email-send")]
-    public async Task<IActionResult> ResendEmailVerification([FromBody] ResendEmailVerificationDto dto)
+    public async Task<IActionResult> ResendEmailVerification([FromBody] ResendEmailVerificationDto dto, CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
@@ -113,7 +113,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            var payload = await CreateEmailVerificationAsync(user);
+            var payload = await CreateEmailVerificationAsync(user, cancellationToken: cancellationToken);
             if (payload.IsRateLimited)
             {
                 return StatusCode(StatusCodes.Status429TooManyRequests, new
@@ -517,7 +517,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("request-login-code")]
     [EnableRateLimiting("email-send")]
-    public async Task<IActionResult> RequestLoginCode([FromBody] LoginCodeRequestDto dto)
+    public async Task<IActionResult> RequestLoginCode([FromBody] LoginCodeRequestDto dto, CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
@@ -541,7 +541,7 @@ public class AuthController : ControllerBase
             return BadRequest(CreateLoginError("identifier_invalid", emailError, identifier: emailError));
         }
 
-        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail, cancellationToken);
         if (user == null)
         {
             return BadRequest(CreateInvalidCredentialsError());
@@ -557,7 +557,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            var payload = await CreateEmailVerificationAsync(user, purpose: LoginCodePurpose);
+            var payload = await CreateEmailVerificationAsync(user, purpose: LoginCodePurpose, cancellationToken: cancellationToken);
             if (payload.IsRateLimited)
             {
                 return StatusCode(StatusCodes.Status429TooManyRequests, new
@@ -580,7 +580,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("request-password-reset-code")]
     [EnableRateLimiting("email-send")]
-    public async Task<IActionResult> RequestPasswordResetCode([FromBody] PasswordResetCodeRequestDto dto)
+    public async Task<IActionResult> RequestPasswordResetCode([FromBody] PasswordResetCodeRequestDto dto, CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
@@ -592,7 +592,7 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = emailError, fieldErrors = new { email = emailError } });
         }
 
-        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail, cancellationToken);
         if (user == null)
         {
             return BadRequest(new { message = "Пользователь с такой почтой не найден.", fieldErrors = new { email = "Пользователь с такой почтой не найден." } });
@@ -600,7 +600,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            var payload = await CreateEmailVerificationAsync(user, purpose: PasswordResetPurpose);
+            var payload = await CreateEmailVerificationAsync(user, purpose: PasswordResetPurpose, cancellationToken: cancellationToken);
             if (payload.IsRateLimited)
             {
                 return StatusCode(StatusCodes.Status429TooManyRequests, new
@@ -623,7 +623,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("reset-password")]
     [EnableRateLimiting("email-verify")]
-    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto, CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
@@ -647,7 +647,7 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Пароль должен быть не короче 6 символов.", fieldErrors = new { password = "Пароль должен быть не короче 6 символов." } });
         }
 
-        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail);
+        var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail, cancellationToken);
         if (user == null)
         {
             return BadRequest(new { message = "Сессия восстановления пароля не найдена. Запросите код заново." });
@@ -705,7 +705,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("register")]
     [EnableRateLimiting("auth")]
-    public async Task<IActionResult> Register([FromBody] RegisterDto dto)
+    public async Task<IActionResult> Register([FromBody] RegisterDto dto, CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
@@ -748,13 +748,13 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Пароль должен быть не короче 6 символов." });
         }
 
-        if (await _context.Users.AnyAsync(u => u.email == normalizedEmail))
+        if (await _context.Users.AnyAsync(u => u.email == normalizedEmail, cancellationToken))
         {
             return CreateEmailAlreadyRegisteredResponse();
         }
 
         var nicknameLookup = nickname.ToLowerInvariant();
-        if (await _context.Users.AnyAsync(u => u.nickname.ToLower() == nicknameLookup))
+        if (await _context.Users.AnyAsync(u => u.nickname.ToLower() == nicknameLookup, cancellationToken))
         {
             return BadRequest(new { message = "Этот никнейм уже занят." });
         }
@@ -776,7 +776,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (IsUniqueConstraintViolation(
             ex,
@@ -792,7 +792,7 @@ public class AuthController : ControllerBase
         {
             try
             {
-                var emailVerification = await CreateEmailVerificationAsync(user);
+                var emailVerification = await CreateEmailVerificationAsync(user, cancellationToken: cancellationToken);
                 return Ok(new
                 {
                     pendingEmailVerification = true,
@@ -802,16 +802,16 @@ public class AuthController : ControllerBase
             }
             catch (EmailDeliveryException)
             {
-                var createdUser = await _context.Users.FirstOrDefaultAsync(item => item.id == user.id);
+                var createdUser = await _context.Users.FirstOrDefaultAsync(item => item.id == user.id, cancellationToken);
                 if (createdUser != null)
                 {
                     var pendingCodes = await _context.EmailVerificationCodes
                         .Where(item => item.UserId == createdUser.id)
-                        .ToListAsync();
+                        .ToListAsync(cancellationToken);
 
                     _context.EmailVerificationCodes.RemoveRange(pendingCodes);
                     _context.Users.Remove(createdUser);
-                    await _context.SaveChangesAsync();
+                    await _context.SaveChangesAsync(cancellationToken);
                 }
 
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, new
@@ -1299,7 +1299,11 @@ public class AuthController : ControllerBase
         }
     }
 
-    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(User user, bool ignoreResendCooldown = false, string purpose = EmailVerificationPurpose)
+    private async Task<EmailVerificationResult> CreateEmailVerificationAsync(
+        User user,
+        bool ignoreResendCooldown = false,
+        string purpose = EmailVerificationPurpose,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(user.email))
         {
@@ -1312,7 +1316,7 @@ public class AuthController : ControllerBase
         var latestActive = await _context.EmailVerificationCodes
             .Where(item => item.UserId == user.id && item.Purpose == purpose && !item.ConsumedAt.HasValue)
             .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (!ignoreResendCooldown &&
             latestActive != null &&
@@ -1330,10 +1334,10 @@ public class AuthController : ControllerBase
         var expiresAt = now.Add(EmailVerificationLifetime);
         var resendAvailableAt = now.Add(EmailVerificationResendCooldown);
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         var activeCodes = await _context.EmailVerificationCodes
             .Where(item => item.UserId == user.id && item.Purpose == purpose && !item.ConsumedAt.HasValue)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         foreach (var activeCode in activeCodes)
         {
@@ -1353,9 +1357,9 @@ public class AuthController : ControllerBase
             AttemptCount = 0
         });
 
-        await _context.SaveChangesAsync();
-        await _emailVerificationSender.SendVerificationCodeAsync(userEmail, verificationCode, expiresAt);
-        await transaction.CommitAsync();
+        await _context.SaveChangesAsync(cancellationToken);
+        await _emailVerificationSender.SendVerificationCodeAsync(userEmail, verificationCode, expiresAt, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return EmailVerificationResult.Success(
             userEmail,
@@ -1423,7 +1427,13 @@ public class AuthController : ControllerBase
         var configuredMode = (_config["Email:Mode"] ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(configuredMode))
         {
-            return configuredMode.ToLowerInvariant();
+            var normalizedMode = configuredMode.ToLowerInvariant();
+            if (string.Equals(normalizedMode, "mock", StringComparison.OrdinalIgnoreCase) && !_environment.IsDevelopment())
+            {
+                throw new EmailDeliveryException("Email:Mode=mock is only allowed in Development.");
+            }
+
+            return normalizedMode;
         }
 
         if (_environment.IsDevelopment())

@@ -2208,24 +2208,7 @@ app.whenReady().then(async () => {
     return { canceled: false, filePath };
   });
   ipcMain.handle("downloads:fetch-and-save", async (_event, payload) => {
-    const sourceUrl = String(payload?.url || "").trim();
-    if (!sourceUrl) {
-      throw new Error("No download URL provided.");
-    }
-
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(payload?.headers || {})) {
-      const normalizedKey = String(key || "").trim();
-      const normalizedValue = String(value || "").trim();
-      if (normalizedKey && normalizedValue) {
-        headers.set(normalizedKey, normalizedValue);
-      }
-    }
-
-    const response = await fetch(sourceUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`Download request failed with status ${response.status}.`);
-    }
+    const response = await fetchTrustedDownloadResponse(payload?.url, { headers: payload?.headers });
 
     const fileName = sanitizeDownloadFileName(payload?.defaultFileName);
     const targetPath = path.join(app.getPath("downloads"), fileName);

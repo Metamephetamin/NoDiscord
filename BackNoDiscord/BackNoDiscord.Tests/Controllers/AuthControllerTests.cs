@@ -156,6 +156,31 @@ public sealed class AuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task RequestLoginCode_PassesRequestCancellationTokenToEmailSender()
+    {
+        _context.Users.Add(new User
+        {
+            id = 5,
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = "LanayaCancellation",
+            email = "cancellation-user@gmail.com",
+            is_email_verified = true,
+            password_hash = "hash"
+        });
+        await _context.SaveChangesAsync();
+        var controller = BuildController();
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        var result = await controller.RequestLoginCode(
+            new LoginCodeRequestDto { identifier = "cancellation-user@gmail.com" },
+            cancellationTokenSource.Token);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(cancellationTokenSource.Token, _emailSender.LastCancellationToken);
+    }
+
+    [Fact]
     public async Task RequestLoginCode_WhenEmailModeIsMissingOutsideDevelopment_FailsClosedWithoutSendingCode()
     {
         _context.Users.Add(new User
@@ -172,6 +197,30 @@ public sealed class AuthControllerTests : IDisposable
         var controller = BuildController(emailMode: null, environmentName: "Production");
 
         var result = await controller.RequestLoginCode(new LoginCodeRequestDto { identifier = "production-user@gmail.com" });
+
+        var unavailable = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
+        Assert.Equal(0, _emailSender.SendCount);
+        Assert.Empty(_context.EmailVerificationCodes);
+    }
+
+    [Fact]
+    public async Task RequestLoginCode_WhenMockEmailModeIsConfiguredOutsideDevelopment_FailsClosedWithoutSendingCode()
+    {
+        _context.Users.Add(new User
+        {
+            id = 4,
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = "LanayaMockProduction",
+            email = "mock-production-user@gmail.com",
+            is_email_verified = true,
+            password_hash = "hash"
+        });
+        await _context.SaveChangesAsync();
+        var controller = BuildController(emailMode: "mock", environmentName: "Production");
+
+        var result = await controller.RequestLoginCode(new LoginCodeRequestDto { identifier = "mock-production-user@gmail.com" });
 
         var unavailable = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
@@ -245,10 +294,12 @@ public sealed class AuthControllerTests : IDisposable
     private sealed class TestEmailVerificationSender : IEmailVerificationSender
     {
         public int SendCount { get; private set; }
+        public CancellationToken LastCancellationToken { get; private set; }
 
         public Task SendVerificationCodeAsync(string email, string verificationCode, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
         {
             SendCount++;
+            LastCancellationToken = cancellationToken;
             return Task.CompletedTask;
         }
     }

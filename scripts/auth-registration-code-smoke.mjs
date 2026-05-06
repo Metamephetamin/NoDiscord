@@ -15,6 +15,8 @@ assert(authSource.includes("auth-section--password-reset"), "Password reset shou
 assert(!authSource.includes("auth-verify-modal__backdrop"), "Registration verification should not render a separate modal backdrop.");
 assert(!authSource.includes("auth-verify-modal__close"), "Registration verification should not render a modal close button.");
 assert(authSource.includes('toLowerCase() === "mock"'), "Debug email codes should only render for explicit mock delivery mode.");
+assert(authSource.includes("import.meta.env.DEV"), "Debug email codes must be gated to dev builds.");
+assert(authSource.includes("shouldExposeAuthDebugCode"), "Auth UI should centralize debug code visibility behind a helper.");
 assert(authCss.includes(".auth-registration-code__actions"), "Registration code step actions should be styled.");
 
 const authMeIndex = rendererSource.indexOf("`${API_BASE_URL}/auth/me`");

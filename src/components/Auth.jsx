@@ -121,6 +121,12 @@ function getAuthMessageTone(value) {
   return "error";
 }
 
+function shouldExposeAuthDebugCode(deliveryMode, debugCode) {
+  return import.meta.env.DEV
+    && String(deliveryMode || "").toLowerCase() === "mock"
+    && Boolean(debugCode);
+}
+
 function resolveResendAvailableAt(attemptNumber, serverAvailableAt = "") {
   const localCooldownMs = Date.now() + Math.max(1, Math.round(Number(attemptNumber) || 1)) * EMAIL_RESEND_COOLDOWN_SECONDS * 1000;
   const serverCooldownMs = new Date(serverAvailableAt || "").getTime();
@@ -771,7 +777,7 @@ export default function Auth({ onAuthSuccess }) {
         : null;
 
       if (pendingEmailVerification && verification) {
-        const isMockDelivery = String(verification.deliveryMode || "").toLowerCase() === "mock";
+        const canExposeDebugCode = shouldExposeAuthDebugCode(verification.deliveryMode, verification.debugCode);
         setEmailVerificationCode("");
         setEmailVerificationTotpCode("");
         setEmailResendAttemptCount(1);
@@ -781,12 +787,12 @@ export default function Auth({ onAuthSuccess }) {
           email: verification.email || payload.identifier,
           verificationToken: verification.verificationToken || "",
           deliveryMode: verification.deliveryMode || "",
-          debugCode: isMockDelivery ? verification.debugCode || "" : "",
+          debugCode: canExposeDebugCode ? verification.debugCode || "" : "",
           resendAvailableAt: resolveResendAvailableAt(1, verification.resendAvailableAt),
           requiresTotp: false,
         });
         setMessage(
-          isMockDelivery && verification.debugCode
+          canExposeDebugCode
             ? `Подтвердите email. Тестовый код: ${verification.debugCode}`
             : (error.message || "Сначала подтвердите email.")
         );
@@ -845,13 +851,14 @@ export default function Auth({ onAuthSuccess }) {
       setEmailVerificationCode("");
       setEmailVerificationTotpCode("");
       setEmailResendAttemptCount(1);
+      const canExposeDebugCode = shouldExposeAuthDebugCode(data?.deliveryMode, data?.debugCode);
       setEmailVerificationModal({
         open: true,
         purpose: "login",
         email: data?.email || identifier,
         verificationToken: data?.verificationToken || "",
         deliveryMode: data?.deliveryMode || "",
-        debugCode: String(data?.deliveryMode || "").toLowerCase() === "mock" ? data?.debugCode || "" : "",
+        debugCode: canExposeDebugCode ? data?.debugCode || "" : "",
         resendAvailableAt: resolveResendAvailableAt(1, data?.resendAvailableAt),
         requiresTotp: false,
       });
@@ -906,7 +913,7 @@ export default function Auth({ onAuthSuccess }) {
       );
       const nextAttemptCount = resend ? Math.max(1, passwordResetAttemptCount + 1) : 1;
       const nextResendAvailableAt = resolveResendAvailableAt(nextAttemptCount, data?.resendAvailableAt);
-      const isMockDelivery = String(data?.deliveryMode || "").toLowerCase() === "mock";
+      const canExposeDebugCode = shouldExposeAuthDebugCode(data?.deliveryMode, data?.debugCode);
 
       setPasswordResetAttemptCount(nextAttemptCount);
       setPasswordResetCode("");
@@ -918,10 +925,10 @@ export default function Auth({ onAuthSuccess }) {
         email: data?.email || normalizedEmail,
         verificationToken: data?.verificationToken || "",
         deliveryMode: data?.deliveryMode || "",
-        debugCode: isMockDelivery ? data?.debugCode || "" : "",
+        debugCode: canExposeDebugCode ? data?.debugCode || "" : "",
         resendAvailableAt: nextResendAvailableAt,
       });
-      setMessage(isMockDelivery && data?.debugCode ? `Тестовый код восстановления: ${data.debugCode}` : "");
+      setMessage(canExposeDebugCode ? `Тестовый код восстановления: ${data.debugCode}` : "");
     } catch (error) {
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
@@ -1084,7 +1091,7 @@ export default function Auth({ onAuthSuccess }) {
       }
 
       const verification = data?.verification || {};
-      const isMockDelivery = String(verification?.deliveryMode || "").toLowerCase() === "mock";
+      const canExposeDebugCode = shouldExposeAuthDebugCode(verification?.deliveryMode, verification?.debugCode);
 
       setEmailVerificationCode("");
       setEmailResendAttemptCount(1);
@@ -1094,12 +1101,12 @@ export default function Auth({ onAuthSuccess }) {
         email: verification?.email || payload.email,
         verificationToken: verification?.verificationToken || "",
         deliveryMode: verification?.deliveryMode || "",
-        debugCode: isMockDelivery ? verification?.debugCode || "" : "",
+        debugCode: canExposeDebugCode ? verification?.debugCode || "" : "",
         resendAvailableAt: resolveResendAvailableAt(1, verification?.resendAvailableAt),
       });
 
       setMessage(
-        isMockDelivery && verification?.debugCode
+        canExposeDebugCode
           ? `Аккаунт создан. Тестовый email-код: ${verification.debugCode}`
           : "Аккаунт создан. Мы отправили код подтверждения на почту."
       );
@@ -1139,6 +1146,8 @@ export default function Auth({ onAuthSuccess }) {
       const nextAttemptCount = Math.max(1, emailResendAttemptCount + 1);
       const nextResendAvailableAt = resolveResendAvailableAt(nextAttemptCount, data?.resendAvailableAt);
       setEmailResendAttemptCount(nextAttemptCount);
+      const nextDeliveryMode = data?.deliveryMode || emailVerificationModal.deliveryMode || "";
+      const canExposeDebugCode = shouldExposeAuthDebugCode(nextDeliveryMode, data?.debugCode);
 
       setEmailVerificationModal((previous) => ({
         ...previous,
@@ -1146,11 +1155,11 @@ export default function Auth({ onAuthSuccess }) {
         purpose: previous.purpose,
         verificationToken: data?.verificationToken || previous.verificationToken,
         deliveryMode: data?.deliveryMode || previous.deliveryMode || "",
-        debugCode: String(data?.deliveryMode || previous.deliveryMode || "").toLowerCase() === "mock" ? data?.debugCode || "" : "",
+        debugCode: canExposeDebugCode ? data?.debugCode || "" : "",
         resendAvailableAt: nextResendAvailableAt,
       }));
 
-      setMessage(String(data?.deliveryMode || emailVerificationModal.deliveryMode || "").toLowerCase() === "mock" && data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "");
+      setMessage(canExposeDebugCode ? `Новый тестовый email-код: ${data.debugCode}` : "");
     } catch (error) {
       setMessage(error.message || "Не удалось повторно отправить код на почту.");
     } finally {
@@ -1630,14 +1639,6 @@ export default function Auth({ onAuthSuccess }) {
                     />
                     <span className="auth-field__error auth-field__error-slot">{loginErrorMessage}</span>
                   </label>
-                  <button
-                    type="button"
-                    className="auth-switch-link"
-                    onClick={startPasswordResetFlow}
-                    disabled={isSubmitting || isRequestingPasswordResetCode || isResettingPassword}
-                  >
-                    Забыли пароль?
-                  </button>
                   {loginErrors.totpCode || loginForm.totpCode ? (
                     <label className="auth-field auth-field--with-error-slot">
                       <input
@@ -1825,6 +1826,19 @@ export default function Auth({ onAuthSuccess }) {
               {mode === "login" ? "Нет аккаунта?" : "Уже есть аккаунт? Войти"}
             </button>
           </div>
+
+          {mode === "login" && loginMethod === "password" && !shouldShowPasswordResetStep ? (
+            <div className="auth-card__forgot">
+              <button
+                type="button"
+                className="auth-switch-link"
+                onClick={startPasswordResetFlow}
+                disabled={isSubmitting || isRequestingPasswordResetCode || isResettingPassword}
+              >
+                Забыли пароль?
+              </button>
+            </div>
+          ) : null}
 
           {mode === "register" ? <div className="auth-beta-note">Beta 0.1</div> : null}
 

@@ -32,6 +32,11 @@ test("large Electron downloads stream to disk instead of buffering whole respons
     /readDownloadResponseBuffer|arrayBuffer\(\)|fs\.writeFile\(nextFilePath,\s*buffer/,
     "batch downloads should not buffer each full response before writing"
   );
+  assert.doesNotMatch(
+    mainSource,
+    /const sourceUrl = String\(payload\?\.url \|\| ""\)\.trim\(\);[\s\S]*?fetch\(sourceUrl, \{ headers \}\)/,
+    "main process should not keep legacy untrusted download handlers"
+  );
   assert.match(
     fetchAndSaveBody,
     /streamDownloadResponseToFile\(response,\s*filePath/,

@@ -201,6 +201,10 @@ const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
 }, {});
 
 const getAllowedStreamFps = (resolution) => SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"] || [30];
+const readVoiceDebugInfoEnabled = () => (
+  typeof window !== "undefined" && window.localStorage?.getItem("ND_VOICE_DEBUG") === "1"
+);
+
 const normalizeStreamFpsForResolution = (value, resolution) => {
   const allowedFps = getAllowedStreamFps(resolution);
   const requestedFps = Math.round(Number(value) || allowedFps[0] || 30);
@@ -1342,6 +1346,7 @@ export default function MenuMain({
     };
   }, [isLocalStreamActive]);
   const hasLocalSharePreview = Boolean(localSharePreview?.stream);
+  const shouldShowVoiceDebugInfo = useMemo(() => readVoiceDebugInfoEnabled(), []);
   const streamFpsOptions = useMemo(
     () => STREAM_FPS_OPTIONS.filter((option) => getAllowedStreamFps(resolution).includes(option.value)),
     [resolution]
@@ -6285,7 +6290,7 @@ export default function MenuMain({
         selectedStreamUserId={selectedStreamUserId}
         selectedStream={selectedStream}
         selectedStreamParticipant={selectedStreamParticipant}
-        selectedStreamDebugInfo={selectedStreamDebugInfo}
+        selectedStreamDebugInfo={shouldShowVoiceDebugInfo ? selectedStreamDebugInfo : null}
         friendsPageSection={friendsPageSection}
         friends={friendsWithRelationState}
         incomingFriendRequestCount={incomingFriendRequestCount}
@@ -6377,11 +6382,11 @@ export default function MenuMain({
       isLocalSharePreviewVisible={isLocalSharePreviewVisible}
       localSharePreview={localSharePreview}
       localSharePreviewMeta={localSharePreviewMeta}
-      localSharePreviewDebugInfo={localSharePreviewDebugInfo}
+      localSharePreviewDebugInfo={shouldShowVoiceDebugInfo ? localSharePreviewDebugInfo : null}
       selectedStreamUserId={selectedStreamUserId}
       selectedStream={selectedStream}
       selectedStreamParticipant={selectedStreamParticipant}
-      selectedStreamDebugInfo={selectedStreamDebugInfo}
+      selectedStreamDebugInfo={shouldShowVoiceDebugInfo ? selectedStreamDebugInfo : null}
       channelSearchQuery={channelSearchQuery}
       searchIcon={SEARCH_ICON_URL}
       user={user}
