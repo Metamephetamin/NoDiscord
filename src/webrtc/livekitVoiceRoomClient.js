@@ -330,7 +330,7 @@ function getMicrophonePublishOptions(
 
   return {
     audioPreset: createChannelAudioPreset(basePreset, audioBitrateKbps),
-    dtx: useSpeechPreset,
+    dtx: false,
     red: true,
     forceStereo: false,
   };
@@ -1696,42 +1696,42 @@ const handleDeviceChange = () => {
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        openThreshold: 0.01,
-        closeThreshold: 0.005,
-        floorGain: 0.075,
+        openThreshold: 0.008,
+        closeThreshold: 0.004,
+        floorGain: 0.28,
         attackTime: 0.0015,
-        releaseTime: 0.14,
-        holdMs: 280,
-        adaptiveOpenRatio: 1.55,
-        adaptiveCloseRatio: 1.16,
-        maxAdaptiveOpenThreshold: 0.032,
+        releaseTime: 0.22,
+        holdMs: 420,
+        adaptiveOpenRatio: 1.28,
+        adaptiveCloseRatio: 1.08,
+        maxAdaptiveOpenThreshold: 0.022,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        openThreshold: 0.018,
-        closeThreshold: 0.009,
-        floorGain: 0.05,
+        openThreshold: 0.01,
+        closeThreshold: 0.005,
+        floorGain: 0.48,
         attackTime: 0.008,
-        releaseTime: 0.14,
-        holdMs: 180,
-        adaptiveOpenRatio: 2,
-        adaptiveCloseRatio: 1.32,
-        maxAdaptiveOpenThreshold: 0.058,
+        releaseTime: 0.24,
+        holdMs: 360,
+        adaptiveOpenRatio: 1.36,
+        adaptiveCloseRatio: 1.1,
+        maxAdaptiveOpenThreshold: 0.026,
       };
     }
 
     return {
-      openThreshold: 0.014,
-      closeThreshold: 0.007,
-      floorGain: 0.1,
+      openThreshold: 0.009,
+      closeThreshold: 0.0045,
+      floorGain: 0.58,
       attackTime: 0.016,
-      releaseTime: 0.16,
-      holdMs: 140,
-      adaptiveOpenRatio: 1.9,
-      adaptiveCloseRatio: 1.25,
-      maxAdaptiveOpenThreshold: 0.046,
+      releaseTime: 0.24,
+      holdMs: 300,
+      adaptiveOpenRatio: 1.32,
+      adaptiveCloseRatio: 1.08,
+      maxAdaptiveOpenThreshold: 0.024,
     };
   };
 
@@ -2158,6 +2158,81 @@ const handleDeviceChange = () => {
     });
   };
 
+  const captureLocalAudioPipeline = () => ({
+    sourceStream: localMicSourceStream,
+    processingStream: localAudioProcessingStream,
+    outputStream: localAudioStream,
+    pipelinePromise: localAudioPipelinePromise,
+    context: audioContext,
+    gain: gainNode,
+    destination: destinationNode,
+    outputAnalyser: localOutputAnalyser,
+    noiseGateAnalyser: localNoiseGateAnalyser,
+    noiseGateNode: localNoiseGateNode,
+    noiseGateState: localNoiseGateState,
+    voiceDynamicsState: localVoiceDynamicsState,
+    speakingMeter: localSpeakingMeter,
+    noiseGateMeter: localNoiseGateMeter,
+  });
+
+  const restoreLocalAudioPipeline = (pipeline) => {
+    localMicSourceStream = pipeline?.sourceStream || null;
+    localAudioProcessingStream = pipeline?.processingStream || null;
+    localAudioStream = pipeline?.outputStream || null;
+    localAudioPipelinePromise = pipeline?.pipelinePromise || null;
+    audioContext = pipeline?.context || null;
+    gainNode = pipeline?.gain || null;
+    destinationNode = pipeline?.destination || null;
+    localOutputAnalyser = pipeline?.outputAnalyser || null;
+    localNoiseGateAnalyser = pipeline?.noiseGateAnalyser || null;
+    localNoiseGateNode = pipeline?.noiseGateNode || null;
+    localNoiseGateState = pipeline?.noiseGateState || null;
+    localVoiceDynamicsState = pipeline?.voiceDynamicsState || null;
+    localSpeakingMeter = pipeline?.speakingMeter || null;
+    localNoiseGateMeter = pipeline?.noiseGateMeter || null;
+  };
+
+  const disposeCapturedLocalAudioPipeline = (pipeline, { stopSource = false } = {}) => {
+    if (!pipeline) {
+      return;
+    }
+
+    if (pipeline.speakingMeter) {
+      window.clearInterval(pipeline.speakingMeter);
+    }
+
+    if (pipeline.noiseGateMeter) {
+      window.clearInterval(pipeline.noiseGateMeter);
+    }
+
+    const sourceTrackSet = new Set(pipeline.sourceStream?.getTracks?.() || []);
+    if (stopSource) {
+      sourceTrackSet.forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore already stopped capture tracks
+        }
+      });
+    }
+
+    [pipeline.processingStream, pipeline.outputStream].forEach((stream) => {
+      stream?.getTracks?.().forEach((track) => {
+        if (!stopSource && sourceTrackSet.has(track)) {
+          return;
+        }
+
+        try {
+          track.stop();
+        } catch {
+          // ignore already stopped graph tracks
+        }
+      });
+    });
+
+    pipeline.context?.close?.().catch(() => {});
+  };
+
   const stopLocalMic = () => {
     logVoiceDebug("local-mic:stop", {
       sourceTracks: localMicSourceStream?.getAudioTracks?.().map(getTrackDebugInfo) || [],
@@ -2166,17 +2241,7 @@ const handleDeviceChange = () => {
       audioContextState: audioContext?.state || "",
     });
 
-    if (localSpeakingMeter) {
-      window.clearInterval(localSpeakingMeter);
-      localSpeakingMeter = null;
-    }
-
-    if (localNoiseGateMeter) {
-      window.clearInterval(localNoiseGateMeter);
-      localNoiseGateMeter = null;
-    }
-
-    localMicSourceStream?.getTracks().forEach((track) => track.stop());
+    disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: true });
     disconnectMicrophoneMonitor();
     localMicSourceStream = null;
     localAudioProcessingStream = null;
@@ -2189,25 +2254,22 @@ const handleDeviceChange = () => {
     localVoiceDynamicsState = null;
     onMicLevelChanged?.(0);
 
-    if (audioContext) {
-      audioContext.close().catch(() => {});
-      audioContext = null;
-    }
-
+    audioContext = null;
     gainNode = null;
     destinationNode = null;
   };
 
-  const createLocalAudioPipeline = async () => {
+  const createLocalAudioPipeline = async ({ sourceStream = null } = {}) => {
     logVoiceDebug("local-audio:pipeline-create:start", {
       selectedInputDeviceId,
       noiseSuppressionMode,
       echoCancellationEnabled,
       micVolume,
+      reuseSourceStream: Boolean(sourceStream),
     });
 
     try {
-      localMicSourceStream = await requestLocalMicSourceStream();
+      localMicSourceStream = sourceStream || await requestLocalMicSourceStream();
       const [capturedMicTrack] = localMicSourceStream.getAudioTracks();
       if (capturedMicTrack) {
         capturedMicTrack.contentHint = "speech";
@@ -2241,7 +2303,20 @@ const handleDeviceChange = () => {
 
       return localAudioStream;
     } catch (error) {
-      stopLocalMic();
+      disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: !sourceStream });
+      disconnectMicrophoneMonitor();
+      localMicSourceStream = null;
+      localAudioProcessingStream = null;
+      localAudioStream = null;
+      localAudioPipelinePromise = null;
+      localOutputAnalyser = null;
+      localNoiseGateAnalyser = null;
+      localNoiseGateNode = null;
+      localNoiseGateState = null;
+      localVoiceDynamicsState = null;
+      audioContext = null;
+      gainNode = null;
+      destinationNode = null;
       throw error;
     }
   };
@@ -2960,18 +3035,53 @@ const handleDeviceChange = () => {
 
   const rebuildLocalAudioPipeline = async () => {
     const hadMicTrack = Boolean(localMicSourceStream || localAudioStream);
-    stopLocalMic();
-
     if (!hadMicTrack) {
       return null;
     }
 
-    const nextStream = await ensureAudioPipeline();
+    const previousPipeline = captureLocalAudioPipeline();
+    const canReuseCapture = Boolean(previousPipeline.sourceStream?.getAudioTracks?.().some((track) => track.readyState !== "ended"));
+    const shouldPreserveExistingPublication = Boolean(micPublication?.track?.replaceTrack);
+
+    disconnectMicrophoneMonitor();
+
+    let nextStream = null;
+    if (canReuseCapture && shouldPreserveExistingPublication) {
+      try {
+        nextStream = await createLocalAudioPipeline({ sourceStream: previousPipeline.sourceStream });
+      } catch (error) {
+        restoreLocalAudioPipeline(previousPipeline);
+        await connectMicrophoneMonitor().catch(() => {});
+        throw error;
+      }
+    } else {
+      stopLocalMic();
+      nextStream = await ensureAudioPipeline();
+    }
+
     const nextTrack = nextStream?.getAudioTracks?.()?.[0] || null;
+    if (!nextTrack && canReuseCapture && shouldPreserveExistingPublication) {
+      disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: false });
+      restoreLocalAudioPipeline(previousPipeline);
+      await connectMicrophoneMonitor().catch(() => {});
+      return previousPipeline.outputStream || null;
+    }
 
     if (nextTrack && micPublication?.track?.replaceTrack) {
       nextTrack.contentHint = "speech";
-      await micPublication.track.replaceTrack(nextTrack, true);
+      try {
+        await micPublication.track.replaceTrack(nextTrack, true);
+      } catch (error) {
+        if (canReuseCapture && shouldPreserveExistingPublication) {
+          disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: false });
+          restoreLocalAudioPipeline(previousPipeline);
+          await connectMicrophoneMonitor().catch(() => {});
+        }
+        throw error;
+      }
+      if (canReuseCapture && shouldPreserveExistingPublication) {
+        disposeCapturedLocalAudioPipeline(previousPipeline, { stopSource: false });
+      }
       appliedMicSenderBitrateKbps = 0;
       await applyAdaptiveAudioProfile();
       logVoiceDebug("local-audio:rebuild-replaced-track", {
@@ -2992,6 +3102,9 @@ const handleDeviceChange = () => {
         publicationSid: micPublication?.trackSid || "",
         track: getTrackDebugInfo(nextTrack),
       });
+      if (canReuseCapture && shouldPreserveExistingPublication) {
+        disposeCapturedLocalAudioPipeline(previousPipeline, { stopSource: false });
+      }
     }
 
     await applyPublishedAudioState();
