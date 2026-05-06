@@ -77,6 +77,7 @@ export default function TextChatLocationPickerModal({
       const nextLocation = {
         latitude: clampLatitude(nextCenter.lat),
         longitude: normalizeLongitude(nextCenter.lng),
+        accuracy: null,
       };
 
       setCenter(nextLocation);
@@ -95,6 +96,7 @@ export default function TextChatLocationPickerModal({
       const nextLocation = {
         latitude: clampLatitude(event.latlng.lat),
         longitude: normalizeLongitude(event.latlng.lng),
+        accuracy: null,
       };
 
       suppressMoveSyncRef.current = true;
@@ -270,9 +272,6 @@ export default function TextChatLocationPickerModal({
           </div>
 
           <div className="location-picker-modal__actions">
-            <button type="button" className="location-picker-modal__button location-picker-modal__button--ghost" onClick={handleClose}>
-              Отмена
-            </button>
             <button type="button" className="location-picker-modal__button" onClick={() => void handleConfirm()}>
               Отправить точку
             </button>

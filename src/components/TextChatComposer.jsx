@@ -18,6 +18,104 @@ import { COMPOSER_TRANSLATION_LANGUAGES, translateComposerText } from "../utils/
 import { punctuateComposerText } from "../utils/speechPunctuation";
 import { copyTextToClipboard } from "../utils/clipboard";
 
+const LOCATION_DESIRED_ACCURACY_METERS = 25;
+const LOCATION_ACCURACY_TIMEOUT_MS = 9000;
+const LOCATION_HIGH_ACCURACY_OPTIONS = {
+  enableHighAccuracy: true,
+  timeout: 15000,
+  maximumAge: 0,
+};
+
+function clampLocationLatitude(value) {
+  return Math.max(-85.05112878, Math.min(85.05112878, Number(value) || 0));
+}
+
+function normalizeLocationLongitude(value) {
+  let longitude = Number(value) || 0;
+  while (longitude > 180) {
+    longitude -= 360;
+  }
+  while (longitude < -180) {
+    longitude += 360;
+  }
+  return longitude;
+}
+
+function normalizeGeolocationPosition(position) {
+  return {
+    latitude: clampLocationLatitude(position?.coords?.latitude),
+    longitude: normalizeLocationLongitude(position?.coords?.longitude),
+    accuracy: Number(position?.coords?.accuracy) || null,
+  };
+}
+
+function isMoreAccurateLocation(candidate, currentBest) {
+  if (!currentBest) {
+    return true;
+  }
+
+  const candidateAccuracy = Number(candidate?.accuracy) || Number.POSITIVE_INFINITY;
+  const bestAccuracy = Number(currentBest?.accuracy) || Number.POSITIVE_INFINITY;
+  return candidateAccuracy < bestAccuracy;
+}
+
+function getBestAvailableGeolocation(geolocation) {
+  return new Promise((resolve, reject) => {
+    let bestPosition = null;
+    let lastError = null;
+    let watchId = null;
+    let settled = false;
+
+    const finish = (position, error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeoutId);
+      if (watchId !== null && typeof geolocation.clearWatch === "function") {
+        geolocation.clearWatch(watchId);
+      }
+
+      if (position) {
+        resolve(position);
+        return;
+      }
+
+      reject(error || new Error("Geolocation unavailable"));
+    };
+
+    const handlePosition = (position) => {
+      const normalizedPosition = normalizeGeolocationPosition(position);
+      if (isMoreAccurateLocation(normalizedPosition, bestPosition)) {
+        bestPosition = normalizedPosition;
+      }
+
+      const accuracy = Number(normalizedPosition.accuracy) || Number.POSITIVE_INFINITY;
+      if (accuracy <= LOCATION_DESIRED_ACCURACY_METERS) {
+        finish(normalizedPosition, null);
+      }
+    };
+
+    const handleError = (error) => {
+      lastError = error;
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish(bestPosition, lastError);
+    }, LOCATION_ACCURACY_TIMEOUT_MS);
+
+    try {
+      if (typeof geolocation.watchPosition === "function") {
+        watchId = geolocation.watchPosition(handlePosition, handleError, LOCATION_HIGH_ACCURACY_OPTIONS);
+      }
+      geolocation.getCurrentPosition(handlePosition, handleError, LOCATION_HIGH_ACCURACY_OPTIONS);
+    } catch (error) {
+      finish(bestPosition, error);
+    }
+  });
+}
+
 function normalizePendingUploadProgress(progressValue) {
   const numericProgress = Number(progressValue);
   if (!Number.isFinite(numericProgress) || numericProgress <= 0) {
@@ -319,19 +417,7 @@ function TextChatComposer({
     setLocationPickerError("");
 
     try {
-      const nextPosition = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 0,
-        });
-      });
-
-      const resolvedPosition = {
-        latitude: Number(nextPosition?.coords?.latitude) || 0,
-        longitude: Number(nextPosition?.coords?.longitude) || 0,
-        accuracy: Number(nextPosition?.coords?.accuracy) || null,
-      };
+      const resolvedPosition = await getBestAvailableGeolocation(navigator.geolocation);
 
       setLocationPickerCurrentPosition(resolvedPosition);
       return resolvedPosition;

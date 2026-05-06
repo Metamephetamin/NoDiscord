@@ -33,6 +33,10 @@ import { parseMediaFrame } from "../utils/mediaFrames";
 import { recordPerfEvent } from "../utils/perf";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
+const LOCATION_MESSAGE_PATTERN = /^\s*📍?\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:\s*\n\s*(https?:\/\/\S+))?\s*$/u;
+const LOCATION_TILE_SIZE = 256;
+const LOCATION_PREVIEW_WIDTH = 320;
+const LOCATION_PREVIEW_HEIGHT = 160;
 const invitePreviewCache = new Map();
 const TEXT_CHAT_STATIC_EMOJI_IN_FEED = true;
 const CHAT_SYSTEM_EVENT_MEMBER_ADDED = "conversation_member_added";
@@ -198,6 +202,88 @@ function normalizeTextLinkHref(value) {
   return /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
 }
 
+function clampLocationPreviewZoom(value) {
+  return Math.max(3, Math.min(20, Math.round(Number(value) || 16)));
+}
+
+function getLocationMapsUrl(latitude, longitude, zoom = 16) {
+  return `https://www.google.com/maps?q=${latitude},${longitude}&z=${clampLocationPreviewZoom(zoom)}`;
+}
+
+function parseLocationMessage(value) {
+  const normalizedValue = String(value || "").trim();
+  const match = normalizedValue.match(LOCATION_MESSAGE_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  const latitude = Number(match[1]);
+  const longitude = Number(match[2]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  let zoom = 16;
+  const sourceUrl = String(match[3] || "").trim();
+  if (sourceUrl) {
+    try {
+      const parsedUrl = new URL(sourceUrl);
+      zoom = clampLocationPreviewZoom(parsedUrl.searchParams.get("z"));
+    } catch {
+      zoom = 16;
+    }
+  }
+
+  return {
+    latitude,
+    longitude,
+    zoom,
+    url: sourceUrl || getLocationMapsUrl(latitude, longitude, zoom),
+  };
+}
+
+function getLocationTileUrl(x, y, zoom) {
+  const tileCount = 2 ** zoom;
+  const normalizedX = ((x % tileCount) + tileCount) % tileCount;
+  const normalizedY = Math.max(0, Math.min(tileCount - 1, y));
+  const subdomain = Math.abs(normalizedX + normalizedY) % 4;
+  return `https://mt${subdomain}.google.com/vt/lyrs=m&x=${normalizedX}&y=${normalizedY}&z=${zoom}`;
+}
+
+function getLocationPreviewTiles(latitude, longitude, zoom) {
+  const normalizedZoom = clampLocationPreviewZoom(zoom);
+  const tileCount = 2 ** normalizedZoom;
+  const clampedLatitude = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude) || 0));
+  const normalizedLongitude = Math.max(-180, Math.min(180, Number(longitude) || 0));
+  const sinLatitude = Math.sin((clampedLatitude * Math.PI) / 180);
+  const worldPixelX = ((normalizedLongitude + 180) / 360) * tileCount * LOCATION_TILE_SIZE;
+  const worldPixelY = (0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) * tileCount * LOCATION_TILE_SIZE;
+  const centerTileX = Math.floor(worldPixelX / LOCATION_TILE_SIZE);
+  const centerTileY = Math.floor(worldPixelY / LOCATION_TILE_SIZE);
+  const gridOriginTileX = centerTileX - 1;
+  const gridOriginTileY = centerTileY - 1;
+  const offsetX = (LOCATION_PREVIEW_WIDTH / 2) - (worldPixelX - gridOriginTileX * LOCATION_TILE_SIZE);
+  const offsetY = (LOCATION_PREVIEW_HEIGHT / 2) - (worldPixelY - gridOriginTileY * LOCATION_TILE_SIZE);
+  const tiles = [];
+
+  for (let row = 0; row < 3; row += 1) {
+    for (let column = 0; column < 3; column += 1) {
+      const tileX = gridOriginTileX + column;
+      const tileY = gridOriginTileY + row;
+      tiles.push({
+        key: `${tileX}:${tileY}:${normalizedZoom}`,
+        src: getLocationTileUrl(tileX, tileY, normalizedZoom),
+        style: {
+          left: `${Math.round(offsetX + column * LOCATION_TILE_SIZE)}px`,
+          top: `${Math.round(offsetY + row * LOCATION_TILE_SIZE)}px`,
+        },
+      });
+    }
+  }
+
+  return tiles;
+}
+
 function getEmojiOnlyMessageMeta(value) {
   const normalizedValue = String(value || "").trim();
   if (!normalizedValue || normalizedValue.length > 16 || !EMOJI_ONLY_MESSAGE_PATTERN.test(normalizedValue)) {
@@ -225,9 +311,28 @@ function EditedBadge({ message }) {
 }
 
 function MessageTimestamp({ messageItem }) {
+  const timestampLabel = formatTime(messageItem?.timestamp);
+
   return (
     <span className={`message-time ${messageItem?.isLocalEcho ? "message-time--pending" : ""}`}>
-      {messageItem?.isLocalEcho ? "Отправка..." : formatTime(messageItem.timestamp)}
+      {timestampLabel}
+    </span>
+  );
+}
+
+function MessageDeliveryStatus({ messageItem, isOwnMessage }) {
+  if (!isOwnMessage) {
+    return null;
+  }
+
+  if (messageItem?.isLocalEcho) {
+    return <span className="message-send-status" aria-hidden="true" />;
+  }
+
+  return (
+    <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
+      <span className="message-read-status__check" />
+      <span className="message-read-status__check" />
     </span>
   );
 }
@@ -452,6 +557,31 @@ function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) 
         </button>
       </span>
     </>
+  );
+}
+
+function LocalEchoDocumentAction({ attachmentItem, onCancel, onRetry }) {
+  const uploadState = getDocumentUploadCardState(attachmentItem);
+  const handleClick = uploadState.failed ? onRetry : onCancel;
+
+  if (uploadState.status === "sent") {
+    return <span className="message-attachment__icon" aria-hidden="true" />;
+  }
+
+  return (
+    <button
+      type="button"
+      className={`message-attachment__upload-control ${uploadState.failed ? "message-attachment__upload-control--failed" : ""}`}
+      style={{ "--message-attachment-upload-progress": `${uploadState.progress}%` }}
+      aria-label={uploadState.failed ? "Retry upload" : "Cancel upload"}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleClick?.();
+      }}
+    >
+      <span aria-hidden="true" />
+    </button>
   );
 }
 
@@ -713,15 +843,49 @@ function MessageMediaOverlayFooter({ messageItem, isOwnMessage }) {
     <div className={`message-footer message-media-overlay-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
       <MessageTimestamp messageItem={messageItem} />
       <EditedBadge message={messageItem} />
-      {isOwnMessage && !messageItem?.isLocalEcho ? (
-        <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
-          <span className="message-read-status__check" />
-          <span className="message-read-status__check" />
-        </span>
-      ) : null}
+      <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
     </div>
   );
 }
+
+const LocationMessageCard = memo(function LocationMessageCard({ location }) {
+  const previewTiles = useMemo(
+    () => getLocationPreviewTiles(location.latitude, location.longitude, location.zoom),
+    [location.latitude, location.longitude, location.zoom]
+  );
+
+  return (
+    <a
+      className="message-location-card"
+      href={location.url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      aria-label="Открыть точку на карте"
+    >
+      <span className="message-location-card__map" aria-hidden="true">
+        {previewTiles.map((tile) => (
+          <img
+            key={tile.key}
+            className="message-location-card__tile"
+            src={tile.src}
+            style={tile.style}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ))}
+        <span className="message-location-card__pin" />
+      </span>
+      <span className="message-location-card__meta">
+        <strong>Геолокация</strong>
+        <span>{location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</span>
+      </span>
+    </a>
+  );
+});
+
+LocationMessageCard.displayName = "LocationMessageCard";
 
 const MessageText = memo(function MessageText({ text, mentions, currentUserId }) {
   const mentionCacheKey = getMentionSegmentCacheKey(mentions);
@@ -1320,6 +1484,12 @@ function MessageAttachmentCard({
           <span className="message-attachment__preview" aria-hidden="true">
             <img src={attachmentItem.attachmentUrl} alt="" loading="lazy" decoding="async" fetchPriority="low" />
           </span>
+        ) : showLocalEchoOverlay ? (
+          <LocalEchoDocumentAction
+            attachmentItem={attachmentItem}
+            onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+            onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
+          />
         ) : (
           <span className="message-attachment__icon" aria-hidden="true" />
         )}
@@ -1867,6 +2037,7 @@ function TextChatMessageList({
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
+          const locationMessage = parseLocationMessage(messageText);
           const isFileOnlyMessage =
             isDirectChat
             && hasOnlyFileLikeAttachments
@@ -1878,7 +2049,7 @@ function TextChatMessageList({
             && !messageItem.replyToMessageId;
           const useInlineFooter = shouldUseInlineDirectMessageFooter({
             isDirectChat,
-            messageText: isEmojiOnlyTextMessage ? "" : messageText,
+            messageText: isEmojiOnlyTextMessage || locationMessage ? "" : messageText,
             hasMessagePoll: Boolean(messagePoll),
             hasRenderableAttachments,
             hasReactions: Boolean(reactions.length),
@@ -1960,7 +2131,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${locationMessage ? "msg-content--location" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {
@@ -2050,7 +2221,9 @@ function TextChatMessageList({
                 ) : null}
 
                 {messageText && !messagePoll ? (
-                  useInlineFooter ? (
+                  locationMessage ? (
+                    <LocationMessageCard location={locationMessage} />
+                  ) : useInlineFooter ? (
                     <div className="message-text-row">
                       <div className="message-text">
                         <MessageText text={messageText} mentions={messageMentions} currentUserId={currentUserId} />
@@ -2058,12 +2231,7 @@ function TextChatMessageList({
                       <div className={`message-footer message-footer--inline ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />
-                        {isOwnMessage && !messageItem?.isLocalEcho ? (
-                          <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
-                            <span className="message-read-status__check" />
-                            <span className="message-read-status__check" />
-                          </span>
-                        ) : null}
+                        <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
                       </div>
                     </div>
                   ) : (
@@ -2139,12 +2307,7 @@ function TextChatMessageList({
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />
-                        {isOwnMessage && !messageItem?.isLocalEcho ? (
-                          <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
-                            <span className="message-read-status__check" />
-                            <span className="message-read-status__check" />
-                          </span>
-                        ) : null}
+                        <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
                       </div>
                     ) : null}
                   </div>

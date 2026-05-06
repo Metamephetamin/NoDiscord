@@ -877,6 +877,10 @@
   -webkit-backdrop-filter: none;
 }
 
+.message-item--local-echo .msg-content--file-only {
+  opacity: 1;
+}
+
 .msg-content--dm.msg-content--file-only::before {
   content: none;
 }
@@ -1198,6 +1202,16 @@
   margin-left: -1px;
 }
 
+.message-send-status {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 2px solid rgba(209, 229, 248, 0.72);
+  border-top-color: rgba(209, 229, 248, 0.2);
+  animation: messageAttachmentUploadSpin 0.85s linear infinite;
+}
+
 .message-text {
   margin-top: 1px;
   color: #dbe2f0;
@@ -1208,6 +1222,111 @@
   font-family: var(--font-body);
   font-weight: 450;
   font-style: normal;
+}
+
+.message-location-card {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 340px);
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 17, 25, 0.72);
+  color: #ffffff;
+  text-decoration: none;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
+.message-location-card__map {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  background: #e9eff6;
+}
+
+.message-location-card__tile {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  object-fit: cover;
+  user-select: none;
+  pointer-events: none;
+}
+
+.message-location-card__pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30px;
+  height: 38px;
+  transform: translate(-50%, -100%);
+  filter: drop-shadow(0 7px 12px rgba(0, 0, 0, 0.28));
+  pointer-events: none;
+}
+
+.message-location-card__pin::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #ffffff;
+  border-radius: 999px 999px 999px 0;
+  background: linear-gradient(180deg, #ff6256, #d93025);
+  transform: translateX(-50%) rotate(-45deg);
+}
+
+.message-location-card__pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #ffffff;
+  transform: translateX(-50%);
+}
+
+.message-location-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px 11px;
+}
+
+.message-location-card__meta strong {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.message-location-card__meta span {
+  color: rgba(215, 228, 246, 0.72);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  line-height: 1.2;
+}
+
+.msg-content--dm.msg-content--location {
+  width: fit-content;
+  max-width: min(100%, 360px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.msg-content--dm.msg-content--location::before {
+  content: none;
 }
 
 .message-text--emoji-only {
@@ -1600,6 +1719,17 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   background: rgba(22, 25, 34, 0.92);
+}
+
+.msg-content--file-only .message-attachment--document.message-attachment--local-echo {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .message-attachment--pending {
@@ -3429,6 +3559,70 @@
   clip-path: polygon(0 0, 68% 0, 100% 30%, 100% 100%, 0 100%);
 }
 
+.message-attachment__upload-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background:
+    conic-gradient(#eef7ff var(--message-attachment-upload-progress, 0%), rgba(238, 247, 255, 0.34) 0),
+    #5db4f0;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.message-attachment__upload-control::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: inherit;
+  background: #5db4f0;
+}
+
+.message-attachment__upload-control span {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.message-attachment__upload-control span::before,
+.message-attachment__upload-control span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 19px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.message-attachment__upload-control span::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.message-attachment__upload-control:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.86);
+  outline-offset: 2px;
+}
+
+.message-attachment__upload-control--failed {
+  background:
+    conic-gradient(#ffe2e2 var(--message-attachment-upload-progress, 0%), rgba(255, 226, 226, 0.38) 0),
+    #ef6f7a;
+}
+
+.message-attachment__upload-control--failed::before {
+  background: #ef6f7a;
+}
+
 .msg-content--file-only .message-attachment--document .message-attachment__meta {
   justify-content: center;
   gap: 4px;
@@ -3524,8 +3718,18 @@
   min-width: 0;
 }
 
+.msg-content--file-only .message-attachment__upload-row {
+  justify-content: flex-start;
+}
+
 .message-attachment__upload-row--failed .message-attachment__size--upload {
   color: rgba(255, 165, 165, 0.92);
+}
+
+.msg-content--file-only .message-attachment__upload-spinner,
+.msg-content--file-only .message-attachment__open-with--upload,
+.msg-content--file-only .message-attachment__local-echo-actions {
+  display: none;
 }
 
 .message-attachment__upload-spinner {
@@ -5495,23 +5699,38 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  z-index: 5;
-  width: 28px;
-  height: 28px;
+  z-index: 500;
+  width: 38px;
+  height: 48px;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.34));
+}
+
+.location-picker-map__marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 34px;
+  height: 34px;
   border-radius: 999px 999px 999px 0;
   border: 3px solid #ffffff;
-  background: linear-gradient(180deg, #f05245, #d93025);
-  box-shadow: 0 10px 22px rgba(217, 48, 37, 0.32), 0 0 0 4px rgba(217, 48, 37, 0.18);
-  pointer-events: none;
-  transform: translate(-50%, -100%) rotate(-45deg);
+  background: linear-gradient(180deg, #ff6256, #d93025);
+  box-shadow: 0 0 0 5px rgba(217, 48, 37, 0.2);
+  transform: translateX(-50%) rotate(-45deg);
 }
 
 .location-picker-map__marker::after {
   content: "";
   position: absolute;
-  inset: 7px;
+  left: 50%;
+  top: 11px;
+  width: 11px;
+  height: 11px;
   border-radius: 999px;
   background: #ffffff;
+  transform: translateX(-50%);
 }
 
 .location-picker-map .leaflet-control-container,
@@ -5554,10 +5773,13 @@
 
 .location-picker-modal__meta-item strong {
   color: #ffffff;
-  font-size: 14px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  font-weight: 750;
   line-height: 1.2;
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: 0;
 }
 
 .location-picker-modal__actions {
