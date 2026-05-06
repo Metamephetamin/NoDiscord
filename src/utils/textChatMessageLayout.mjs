@@ -17,3 +17,10 @@ export function shouldUseInlineDirectMessageFooter({
     && !hasReplyToMessageId
     && !normalizedText.includes("\n");
 }
+
+export function shouldReserveVisualAttachmentWidth({
+  hasVisualAttachmentGroup = false,
+  isMediaOnlyMessage = false,
+} = {}) {
+  return Boolean(hasVisualAttachmentGroup) && !isMediaOnlyMessage;
+}

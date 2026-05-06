@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldUseInlineDirectMessageFooter } from "../textChatMessageLayout.mjs";
+import {
+  shouldReserveVisualAttachmentWidth,
+  shouldUseInlineDirectMessageFooter,
+} from "../textChatMessageLayout.mjs";
 
 test("shouldUseInlineDirectMessageFooter allows long single-line direct text", () => {
   assert.equal(shouldUseInlineDirectMessageFooter({
@@ -22,5 +25,24 @@ test("shouldUseInlineDirectMessageFooter rejects attachment messages", () => {
     isDirectChat: true,
     messageText: "файл",
     hasRenderableAttachments: true,
+  }), false);
+});
+
+test("shouldReserveVisualAttachmentWidth keeps captioned media from collapsing to caption width", () => {
+  assert.equal(shouldReserveVisualAttachmentWidth({
+    hasVisualAttachmentGroup: true,
+    isMediaOnlyMessage: false,
+  }), true);
+});
+
+test("shouldReserveVisualAttachmentWidth does not affect media-only or file attachment messages", () => {
+  assert.equal(shouldReserveVisualAttachmentWidth({
+    hasVisualAttachmentGroup: true,
+    isMediaOnlyMessage: true,
+  }), false);
+
+  assert.equal(shouldReserveVisualAttachmentWidth({
+    hasVisualAttachmentGroup: false,
+    isMediaOnlyMessage: false,
   }), false);
 });

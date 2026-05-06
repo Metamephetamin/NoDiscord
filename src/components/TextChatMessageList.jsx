@@ -17,7 +17,10 @@ import {
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
-import { shouldUseInlineDirectMessageFooter } from "../utils/textChatMessageLayout.mjs";
+import {
+  shouldReserveVisualAttachmentWidth,
+  shouldUseInlineDirectMessageFooter,
+} from "../utils/textChatMessageLayout.mjs";
 import { getDocumentUploadCardState, getTelegramUploadOverlayState } from "../utils/textChatUploadOverlay.mjs";
 import {
   getAttachmentCacheKey,
@@ -2014,6 +2017,10 @@ function TextChatMessageList({
             && attachments.length === 1
             && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
+          const reserveVisualAttachmentWidth = shouldReserveVisualAttachmentWidth({
+            hasVisualAttachmentGroup,
+            isMediaOnlyMessage,
+          });
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
           const isVoiceOnlyMessage = isDirectChat
             && isMediaOnlyMessage
@@ -2121,7 +2128,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${locationMessage ? "msg-content--location" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${locationMessage ? "msg-content--location" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${reserveVisualAttachmentWidth ? "msg-content--visual-attachments" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {

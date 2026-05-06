@@ -1103,6 +1103,11 @@
   flex: 1 1 auto;
 }
 
+.message-item:not(.message-item--dm) .msg-content--visual-attachments,
+.message-item--dm .msg-content--visual-attachments {
+  min-width: min(520px, 100%);
+}
+
 .message-item--dm .msg-content--file-only {
   width: fit-content;
   min-width: min(100%, 260px);
@@ -1772,6 +1777,12 @@
 
 .message-attachments-stack--single {
   display: inline-flex;
+}
+
+.msg-content--visual-attachments .message-attachments-stack {
+  width: min(100%, var(--media-grid-standard-width)) !important;
+  max-width: 100%;
+  align-self: flex-start;
 }
 
 .message-attachment-single {
