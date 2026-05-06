@@ -314,7 +314,9 @@ public sealed class MediaRenderController : ControllerBase
             return normalizedSource;
         }
 
-        if (Uri.TryCreate(rawSource, UriKind.Absolute, out var absoluteUri))
+        if (Uri.TryCreate(rawSource, UriKind.Absolute, out var absoluteUri) &&
+            (string.Equals(absoluteUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(absoluteUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
         {
             normalizedSource = absoluteUri.AbsolutePath;
         }
