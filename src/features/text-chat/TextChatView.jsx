@@ -146,6 +146,7 @@ export default function TextChatView(props) {
     updateMediaPreviewZoom,
     updateMediaPreviewPan,
     resetMediaPreviewZoom,
+    handleDeleteMediaPreviewItem,
     contextMenuRef,
     messageContextMenu,
     contextMenuActions,
@@ -649,6 +650,7 @@ export default function TextChatView(props) {
           })
         }
         onDownloadAll={handleDownloadAllMediaPreviewItems}
+        onDeleteActive={handleDeleteMediaPreviewItem}
         onFullscreen={handleOpenMediaPreviewFullscreen}
         onNavigate={updateMediaPreviewIndex}
         onZoom={updateMediaPreviewZoom}

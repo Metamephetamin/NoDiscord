@@ -62,6 +62,7 @@ export default function useTextChatMessageActions({
   setReplyState,
   currentUserId,
   onDeleteMessageLocally,
+  onDeleteAttachmentLocally,
 }) {
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchResults = useMemo(() => {
@@ -267,6 +268,43 @@ export default function useTextChatMessageActions({
         panX: 0,
         panY: 0,
       };
+    });
+  };
+
+  const handleDeleteMediaPreviewItem = () => {
+    if (!mediaPreview?.messageId) {
+      return;
+    }
+
+    const currentItems = Array.isArray(mediaPreview.items) ? mediaPreview.items : [];
+    const currentIndex = Number(mediaPreview.activeIndex || 0);
+    const activeItem = currentItems[currentIndex] || mediaPreview;
+    const messageId = String(activeItem?.messageId || mediaPreview.messageId || "").trim();
+    const attachmentIndex = Number(activeItem?.attachmentIndex ?? mediaPreview.attachmentIndex ?? 0) || 0;
+    if (!messageId) {
+      return;
+    }
+
+    onDeleteAttachmentLocally?.(messageId, attachmentIndex);
+
+    const nextItems = currentItems.filter((item) =>
+      !(String(item?.messageId || "") === messageId && Number(item?.attachmentIndex || 0) === attachmentIndex)
+    );
+    if (!nextItems.length) {
+      setMediaPreview(null);
+      return;
+    }
+
+    const nextIndex = Math.min(currentIndex, nextItems.length - 1);
+    const nextItem = nextItems[nextIndex] || nextItems[0];
+    setMediaPreview({
+      ...mediaPreview,
+      ...nextItem,
+      items: nextItems,
+      activeIndex: nextIndex,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
     });
   };
 
@@ -802,6 +840,7 @@ export default function useTextChatMessageActions({
     updateMediaPreviewZoom,
     updateMediaPreviewPan,
     resetMediaPreviewZoom,
+    handleDeleteMediaPreviewItem,
     openMessageContextMenu,
     handleDownloadAttachment,
     handleDownloadAllMediaPreviewItems,

@@ -2629,6 +2629,80 @@ export default function TextChat({
     setActionFeedback({ tone: "success", message: "Сообщение удалено" });
   }, [currentUserId, scopedChannelId]);
 
+  const deleteMessageAttachmentLocally = useCallback((messageId, attachmentIndex) => {
+    const normalizedMessageId = String(messageId || "").trim();
+    const normalizedAttachmentIndex = Number(attachmentIndex) || 0;
+    if (!normalizedMessageId || !scopedChannelId) {
+      return;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      scopedChannelId,
+      (channelMessages) => {
+        let didChange = false;
+        const nextMessages = [];
+
+        (Array.isArray(channelMessages) ? channelMessages : []).forEach((messageItem) => {
+          if (String(messageItem?.id || "") !== normalizedMessageId) {
+            nextMessages.push(messageItem);
+            return;
+          }
+
+          const attachments = normalizeAttachmentItems(messageItem);
+          const nextAttachments = attachments.filter((attachmentItem) =>
+            Number(attachmentItem?.attachmentIndex || 0) !== normalizedAttachmentIndex
+          );
+
+          if (nextAttachments.length === attachments.length) {
+            nextMessages.push(messageItem);
+            return;
+          }
+
+          didChange = true;
+          if (!nextAttachments.length && !String(messageItem?.message || "").trim()) {
+            return;
+          }
+
+          const primaryAttachment = nextAttachments[0] || null;
+          nextMessages.push({
+            ...messageItem,
+            attachments: nextAttachments,
+            attachmentUrl: primaryAttachment?.attachmentUrl || "",
+            attachmentName: primaryAttachment?.attachmentName || "",
+            attachmentSize: primaryAttachment?.attachmentSize ?? null,
+            attachmentContentType: primaryAttachment?.attachmentContentType || "",
+            attachmentAsFile: Boolean(primaryAttachment?.attachmentAsFile),
+          });
+        });
+
+        return didChange ? nextMessages : channelMessages;
+      }
+    ));
+
+    setPinnedMessages((previous) => previous
+      .map((messageItem) => {
+        if (String(messageItem?.id || "") !== normalizedMessageId || !Array.isArray(messageItem?.attachments)) {
+          return messageItem;
+        }
+
+        const nextAttachments = messageItem.attachments.filter((attachmentItem) =>
+          Number(attachmentItem?.attachmentIndex || 0) !== normalizedAttachmentIndex
+        );
+        return {
+          ...messageItem,
+          attachments: nextAttachments,
+        };
+      })
+      .filter((messageItem) =>
+        String(messageItem?.id || "") !== normalizedMessageId
+        || String(messageItem?.message || "").trim()
+        || (Array.isArray(messageItem?.attachments) && messageItem.attachments.length)
+      ));
+
+    setActionFeedback({ tone: "success", message: "Фото удалено" });
+  }, [scopedChannelId]);
+
   const updateLocalEchoUploadProgress = useCallback((pendingUploadId, { progress = null, status = "" } = {}) => {
     const normalizedPendingUploadId = String(pendingUploadId || "").trim();
     if (!normalizedPendingUploadId) {
@@ -2912,6 +2986,7 @@ export default function TextChat({
     updateMediaPreviewZoom,
     updateMediaPreviewPan,
     resetMediaPreviewZoom,
+    handleDeleteMediaPreviewItem,
     openMessageContextMenu,
     handleDownloadAttachment,
     handleDownloadAllMediaPreviewItems,
@@ -2952,6 +3027,7 @@ export default function TextChat({
     setReplyState,
     currentUserId,
     onDeleteMessageLocally: deleteMessageLocally,
+    onDeleteAttachmentLocally: deleteMessageAttachmentLocally,
   });
   const searchResults = useMemo(
     () => mergeSearchResults(remoteSearchState.results, localSearchResults),
@@ -3208,6 +3284,7 @@ export default function TextChat({
       updateMediaPreviewZoom={updateMediaPreviewZoom}
       updateMediaPreviewPan={updateMediaPreviewPan}
       resetMediaPreviewZoom={resetMediaPreviewZoom}
+      handleDeleteMediaPreviewItem={handleDeleteMediaPreviewItem}
       contextMenuRef={contextMenuRef}
       messageContextMenu={messageContextMenu}
       contextMenuActions={contextMenuActions}

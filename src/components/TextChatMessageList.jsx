@@ -108,12 +108,29 @@ function ChatSystemEventMessage({ systemEvent }) {
   );
 }
 
+const getPreviewMediaDisplayUrl = (attachmentItem) => {
+  const sourceUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "").trim();
+  const directUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const isLocalPreview = /^(?:blob:|data:|file:)/i.test(directUrl);
+
+  if (attachmentItem?.isImage && sourceUrl && !isLocalPreview) {
+    return resolveOptimizedMediaUrl(sourceUrl, {
+      width: MESSAGE_MEDIA_FALLBACK_SIZE,
+      height: MESSAGE_MEDIA_FALLBACK_SIZE,
+      fit: "contain",
+      animated: true,
+    }) || directUrl;
+  }
+
+  return directUrl;
+};
+
 const getPreviewableMediaItems = (messageItem, attachments) =>
   attachments
     .filter((attachmentItem) => attachmentItem.attachmentUrl && (attachmentItem.isImage || attachmentItem.isVideo))
     .map((attachmentItem) => ({
       type: attachmentItem.isImage ? "image" : "video",
-      url: attachmentItem.attachmentUrl,
+      url: getPreviewMediaDisplayUrl(attachmentItem),
       name: attachmentItem.attachmentName || (attachmentItem.isImage ? "Изображение" : "Видео"),
       contentType: attachmentItem.attachmentContentType || "",
       messageId: String(messageItem?.id || ""),

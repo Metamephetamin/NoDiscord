@@ -9064,6 +9064,10 @@ html[data-ui-density="compact"] .input-area {
   opacity: 0.8;
 }
 
+.media-preview__icon-button--danger {
+  color: #ff8d9a;
+}
+
 .media-preview__download-icon {
   position: relative;
   width: 18px;
@@ -9127,6 +9131,41 @@ html[data-ui-density="compact"] .input-area {
     linear-gradient(-45deg, transparent 47%, currentColor 48%, currentColor 52%, transparent 53%) calc(50% - 5px) 9px / 8px 8px no-repeat,
     linear-gradient(45deg, transparent 47%, currentColor 48%, currentColor 52%, transparent 53%) calc(50% + 5px) 9px / 8px 8px no-repeat,
     linear-gradient(-45deg, transparent 47%, currentColor 48%, currentColor 52%, transparent 53%) calc(50% + 5px) 9px / 8px 8px no-repeat;
+}
+
+.media-preview__delete-icon {
+  position: relative;
+  width: 18px;
+  height: 19px;
+  display: inline-block;
+  color: inherit;
+}
+
+.media-preview__delete-icon::before,
+.media-preview__delete-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.media-preview__delete-icon::before {
+  top: 3px;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  box-shadow: 0 -3px 0 -1px currentColor;
+}
+
+.media-preview__delete-icon::after {
+  top: 8px;
+  width: 12px;
+  height: 10px;
+  border-radius: 2px 2px 4px 4px;
+  box-shadow:
+    inset 3px 0 0 -1px rgba(0, 0, 0, 0.28),
+    inset -3px 0 0 -1px rgba(0, 0, 0, 0.28);
 }
 
 .media-preview__viewport {
