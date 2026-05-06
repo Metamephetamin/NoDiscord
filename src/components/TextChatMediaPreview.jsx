@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
+import { MISSING_MEDIA_EVENT, isMediaUrlKnownMissing, markMediaUrlMissing } from "../utils/media";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const WHEEL_NAVIGATION_COOLDOWN_MS = 180;
@@ -29,16 +30,23 @@ export default function TextChatMediaPreview({
   });
   const [isDragging, setIsDragging] = useState(false);
   const [imageLoadState, setImageLoadState] = useState({ url: "", failed: false });
+  const [videoLoadState, setVideoLoadState] = useState({ url: "", failed: false });
+  const [missingMediaVersion, setMissingMediaVersion] = useState(0);
   const zoom = Number(mediaPreview?.zoom) || 1;
   const hasGallery = (mediaPreview?.items?.length || 0) > 1;
   const canPan = zoom > 1;
   const translateX = Number(mediaPreview?.panX) || 0;
   const translateY = Number(mediaPreview?.panY) || 0;
   const isImagePreview = mediaPreview?.type === "image";
+  const isVideoPreview = mediaPreview?.type === "video";
   const isPreviewOpen = Boolean(mediaPreview);
   const imagePreviewUrl = isImagePreview ? String(mediaPreview?.url || "") : "";
-  const isImageReady = !isImagePreview || (imagePreviewUrl && imageLoadState.url === imagePreviewUrl && !imageLoadState.failed);
-  const imageLoadFailed = isImagePreview && imagePreviewUrl && imageLoadState.url === imagePreviewUrl && imageLoadState.failed;
+  const videoPreviewUrl = isVideoPreview ? String(mediaPreview?.url || "") : "";
+  const isImageKnownMissing = Boolean(missingMediaVersion >= 0 && imagePreviewUrl && isMediaUrlKnownMissing(imagePreviewUrl));
+  const isVideoKnownMissing = Boolean(missingMediaVersion >= 0 && videoPreviewUrl && isMediaUrlKnownMissing(videoPreviewUrl));
+  const isImageReady = !isImagePreview || (imagePreviewUrl && imageLoadState.url === imagePreviewUrl && !imageLoadState.failed && !isImageKnownMissing);
+  const imageLoadFailed = isImagePreview && imagePreviewUrl && (isImageKnownMissing || (imageLoadState.url === imagePreviewUrl && imageLoadState.failed));
+  const videoLoadFailed = isVideoPreview && videoPreviewUrl && (isVideoKnownMissing || (videoLoadState.url === videoPreviewUrl && videoLoadState.failed));
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -206,6 +214,21 @@ export default function TextChatMediaPreview({
     };
   }, [isPreviewOpen]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleMissingMedia = () => {
+      setMissingMediaVersion((current) => current + 1);
+    };
+
+    window.addEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    return () => {
+      window.removeEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
+    };
+  }, []);
+
   if (!mediaPreview) {
     return null;
   }
@@ -284,9 +307,14 @@ export default function TextChatMediaPreview({
                     transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})`,
                   }}
                   onLoad={() => setImageLoadState({ url: imagePreviewUrl, failed: false })}
-                  onError={() => setImageLoadState({ url: imagePreviewUrl, failed: true })}
+                  onError={() => {
+                    markMediaUrlMissing(imagePreviewUrl);
+                    setImageLoadState({ url: imagePreviewUrl, failed: true });
+                  }}
                 />
               </>
+            ) : videoLoadFailed ? (
+              <div className="media-preview__image-fallback">Не удалось загрузить видео</div>
             ) : (
               <video
                 ref={videoRef}
@@ -294,6 +322,11 @@ export default function TextChatMediaPreview({
                 src={mediaPreview.url}
                 style={{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})` }}
                 onClick={stopEvent}
+                onLoadedData={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })}
+                onError={() => {
+                  markMediaUrlMissing(videoPreviewUrl);
+                  setVideoLoadState({ url: videoPreviewUrl, failed: true });
+                }}
                 controls
                 autoPlay
                 playsInline

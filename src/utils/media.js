@@ -66,6 +66,7 @@ const INTERNAL_MEDIA_PREFIXES = [
   "/server-icons/",
   "/chat-files/",
 ];
+const INTERNAL_MEDIA_RENDER_PATH = "/api/media/render";
 
 const CACHEABLE_MISSING_MEDIA_PREFIXES = [
   "/avatars/",
@@ -89,6 +90,10 @@ function getInternalMediaPath(value) {
   try {
     const parsed = new URL(normalizedValue, typeof window !== "undefined" ? window.location.origin : API_URL);
     const parsedPath = String(parsed.pathname || "").trim();
+    if (parsedPath === INTERNAL_MEDIA_RENDER_PATH) {
+      return getInternalMediaPath(parsed.searchParams.get("src") || "");
+    }
+
     return INTERNAL_MEDIA_PREFIXES.find((prefix) => parsedPath.startsWith(prefix)) ? parsedPath : "";
   } catch {
     return "";

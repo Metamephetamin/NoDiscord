@@ -39,6 +39,14 @@ assert(
   "Missing chat file URLs must be cacheable so deleted attachments do not retry forever."
 );
 assert(
+  mediaSource.includes('const INTERNAL_MEDIA_RENDER_PATH = "/api/media/render"'),
+  "Optimized media render URLs must resolve back to their internal src for missing-media caching."
+);
+assert(
+  mediaSource.includes('parsed.searchParams.get("src")'),
+  "Missing-media caching must inspect /api/media/render src query values."
+);
+assert(
   messageListSource.includes("markMediaUrlMissing(directSourceUrl"),
   "Message media cards must mark failed chat-file URLs as missing."
 );

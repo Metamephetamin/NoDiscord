@@ -55,6 +55,50 @@ public sealed class MediaRenderControllerTests : IDisposable
         Assert.NotEmpty(fileResult.FileContents);
     }
 
+    [Fact]
+    public async Task Render_ReturnsDefaultIconForMissingOwnedChatImage()
+    {
+        var webRootPath = Path.Combine(_storageRoot, "wwwroot");
+        var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(defaultIconPath)!);
+        await File.WriteAllBytesAsync(defaultIconPath, OnePixelPng);
+        var controller = BuildController(webRootPath);
+
+        var result = await controller.Render("/chat-files/chat-42-missing.png", 160, 120, "contain", "false", CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", fileResult.ContentType);
+        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
+        Assert.NotEmpty(fileResult.FileContents);
+    }
+
+    [Fact]
+    public async Task Render_ReturnsCacheSafeNotFoundWhenMissingFallbackUnavailable()
+    {
+        var controller = BuildController();
+
+        var result = await controller.Render("/server-icons/missing-server-icon.png", 60, 60, "cover", "false", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
+        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
+    }
+
+    [Theory]
+    [InlineData("/avatars/../secret.png")]
+    [InlineData("/chat-files/chat-42-safe.png/../../secret.png")]
+    [InlineData("/server-icons/%2e%2e/secret.png")]
+    public async Task Render_RejectsTraversalLikeMediaPaths(string source)
+    {
+        var controller = BuildController();
+
+        var result = await controller.Render(source, 128, 128, "cover", "false", CancellationToken.None);
+
+        Assert.IsType<BadRequestResult>(result);
+        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
+        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_storageRoot))

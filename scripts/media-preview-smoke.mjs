@@ -23,5 +23,17 @@ assert(
   source.includes("onLoad={() => setImageLoadState({ url: imagePreviewUrl, failed: false })}"),
   "Image preview must mark readiness from the visible image load event."
 );
+assert(
+  source.includes("markMediaUrlMissing(imagePreviewUrl)"),
+  "Image preview must cache failed internal media URLs instead of retrying them repeatedly."
+);
+assert(
+  source.includes("markMediaUrlMissing(videoPreviewUrl)"),
+  "Video preview must cache failed internal media URLs instead of retrying them repeatedly."
+);
+assert(
+  source.includes("window.addEventListener(MISSING_MEDIA_EVENT"),
+  "Media preview must react when another mounted media component marks the same source missing."
+);
 
 console.log("Media preview smoke checks passed.");

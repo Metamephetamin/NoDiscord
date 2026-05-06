@@ -58,6 +58,11 @@ public sealed class MediaRenderController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var normalizedSource = StringFromUrlPath(src);
+        if (!TryResolveAllowedAsset(src, out var filePath, out var extension, out var isRejectedSource))
+        {
+            return isRejectedSource ? RejectedMediaResult() : MissingMediaResult();
+        }
+
         if (normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase))
         {
             if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
@@ -72,22 +77,17 @@ public sealed class MediaRenderController : ControllerBase
             }
         }
 
-        if (!TryResolveAllowedAsset(src, out var filePath, out var extension))
-        {
-            return NotFound();
-        }
-
         if (string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase))
         {
-            return NotFound();
+            return MissingMediaResult();
         }
 
         var fileInfo = new FileInfo(filePath);
         if (!fileInfo.Exists)
         {
-            if (!TryResolveMissingServerIconFallback(src, out filePath, out extension))
+            if (!TryResolveMissingMediaFallback(src, out filePath, out extension))
             {
-                return NotFound();
+                return MissingMediaResult();
             }
 
             fileInfo = new FileInfo(filePath);
@@ -120,11 +120,11 @@ public sealed class MediaRenderController : ControllerBase
         }
         catch (UnknownImageFormatException)
         {
-            return NotFound();
+            return MissingMediaResult();
         }
         catch (InvalidImageContentException)
         {
-            return NotFound();
+            return MissingMediaResult();
         }
 
         using (image)
@@ -143,24 +143,25 @@ public sealed class MediaRenderController : ControllerBase
 
             var outputStream = new MemoryStream();
             var preserveAnimatedGif = ParseAnimatedFlag(animated) && string.Equals(extension, ".gif", StringComparison.OrdinalIgnoreCase);
+            var cacheSeconds = IsDefaultMediaFallback(filePath) ? 300 : 604800;
 
             if (preserveAnimatedGif)
             {
                 await image.SaveAsGifAsync(outputStream, new GifEncoder(), cancellationToken);
-                return BuildFileResult(outputStream, "image/gif");
+                return BuildFileResult(outputStream, "image/gif", cacheSeconds);
             }
 
             if (SupportsTransparentOutput(extension))
             {
                 await image.SaveAsPngAsync(outputStream, new PngEncoder(), cancellationToken);
-                return BuildFileResult(outputStream, "image/png");
+                return BuildFileResult(outputStream, "image/png", cacheSeconds);
             }
 
             await image.SaveAsJpegAsync(outputStream, new JpegEncoder
             {
                 Quality = 92,
             }, cancellationToken);
-            return BuildFileResult(outputStream, "image/jpeg");
+            return BuildFileResult(outputStream, "image/jpeg", cacheSeconds);
         }
     }
 
@@ -168,13 +169,13 @@ public sealed class MediaRenderController : ControllerBase
         string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)
         || string.Equals(extension, ".webp", StringComparison.OrdinalIgnoreCase);
 
-    private bool TryResolveMissingServerIconFallback(string? rawSource, out string filePath, out string extension)
+    private bool TryResolveMissingMediaFallback(string? rawSource, out string filePath, out string extension)
     {
         filePath = string.Empty;
         extension = ".png";
 
         var normalizedSource = StringFromUrlPath(rawSource);
-        if (!normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase))
+        if (!CanUseDefaultMediaFallback(normalizedSource))
         {
             return false;
         }
@@ -192,10 +193,38 @@ public sealed class MediaRenderController : ControllerBase
         return true;
     }
 
-    private FileContentResult BuildFileResult(MemoryStream outputStream, string contentType)
+    private static bool CanUseDefaultMediaFallback(string normalizedSource) =>
+        normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase)
+        || normalizedSource.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
+        || normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsDefaultMediaFallback(string filePath)
     {
-        Response.Headers.CacheControl = "public,max-age=604800";
+        var webRootPath = !string.IsNullOrWhiteSpace(_environment.WebRootPath)
+            ? _environment.WebRootPath
+            : Path.Combine(_environment.ContentRootPath, "wwwroot");
+        var fallbackPath = Path.GetFullPath(Path.Combine(webRootPath, "image", "image.png"));
+        return string.Equals(Path.GetFullPath(filePath), fallbackPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private FileContentResult BuildFileResult(MemoryStream outputStream, string contentType, int cacheSeconds = 604800)
+    {
+        Response.Headers.CacheControl = $"public,max-age={cacheSeconds}";
         return File(outputStream.ToArray(), contentType);
+    }
+
+    private IActionResult MissingMediaResult()
+    {
+        Response.Headers.CacheControl = "no-store,max-age=0";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return NotFound();
+    }
+
+    private IActionResult RejectedMediaResult()
+    {
+        Response.Headers.CacheControl = "no-store,max-age=0";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return BadRequest();
     }
 
     private static int NormalizeEdge(int? requestedEdge)
@@ -214,10 +243,11 @@ public sealed class MediaRenderController : ControllerBase
         return normalizedValue;
     }
 
-    private bool TryResolveAllowedAsset(string? rawSource, out string filePath, out string extension)
+    private bool TryResolveAllowedAsset(string? rawSource, out string filePath, out string extension, out bool isRejectedSource)
     {
         filePath = string.Empty;
         extension = string.Empty;
+        isRejectedSource = false;
 
         var normalizedSource = StringFromUrlPath(rawSource);
         if (string.IsNullOrWhiteSpace(normalizedSource))
@@ -241,7 +271,14 @@ public sealed class MediaRenderController : ControllerBase
                 continue;
             }
 
-            var fileName = Path.GetFileName(normalizedSource[mapping.Prefix.Length..]);
+            var mappedName = normalizedSource[mapping.Prefix.Length..];
+            if (IsUnsafeMappedFileName(mappedName))
+            {
+                isRejectedSource = true;
+                return false;
+            }
+
+            var fileName = Path.GetFileName(mappedName);
             if (string.IsNullOrWhiteSpace(fileName))
             {
                 return false;
@@ -258,6 +295,15 @@ public sealed class MediaRenderController : ControllerBase
         }
 
         return false;
+    }
+
+    private static bool IsUnsafeMappedFileName(string value)
+    {
+        var normalizedValue = value.Trim();
+        return string.IsNullOrWhiteSpace(normalizedValue)
+               || normalizedValue.Contains('/', StringComparison.Ordinal)
+               || normalizedValue.Contains('\\', StringComparison.Ordinal)
+               || normalizedValue.Contains("..", StringComparison.Ordinal);
     }
 
     private static string StringFromUrlPath(string? rawSource)
