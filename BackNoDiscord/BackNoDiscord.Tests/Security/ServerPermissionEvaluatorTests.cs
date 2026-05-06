@@ -36,6 +36,30 @@ public class ServerPermissionEvaluatorTests
     }
 
     [Fact]
+    public void CanManageChannelsRolesAndMessages_FollowRolePermissions()
+    {
+        var snapshot = CreateSnapshot();
+
+        Assert.True(ServerPermissionEvaluator.CanManageChannels(snapshot, "owner"));
+        Assert.True(ServerPermissionEvaluator.CanManageChannels(snapshot, "admin"));
+        Assert.True(ServerPermissionEvaluator.CanManageRoles(snapshot, "admin"));
+        Assert.True(ServerPermissionEvaluator.CanManageMessages(snapshot, "moderator"));
+        Assert.False(ServerPermissionEvaluator.CanManageRoles(snapshot, "moderator"));
+        Assert.False(ServerPermissionEvaluator.CanManageMessages(snapshot, "member"));
+    }
+
+    [Fact]
+    public void CanAssignRole_RequiresHigherPriorityThanTargetAndNextRole()
+    {
+        var snapshot = CreateSnapshot();
+
+        Assert.True(ServerPermissionEvaluator.CanAssignRole(snapshot, "admin", "member", "moderator"));
+        Assert.False(ServerPermissionEvaluator.CanAssignRole(snapshot, "moderator", "member", "admin"));
+        Assert.False(ServerPermissionEvaluator.CanAssignRole(snapshot, "admin", "owner", "member"));
+        Assert.False(ServerPermissionEvaluator.CanAssignRole(snapshot, "owner", "member", "missing"));
+    }
+
+    [Fact]
     public void CanCreateInvite_AllowsOwnerToRecoverStaleSnapshot()
     {
         var existingSnapshot = new ServerSnapshot
@@ -75,13 +99,15 @@ public class ServerPermissionEvaluatorTests
             Roles =
             [
                 new ServerRoleSnapshot { Id = "owner", Priority = 400, Permissions = ["manage_server", "mute_members", "deafen_members"] },
-                new ServerRoleSnapshot { Id = "admin", Priority = 300, Permissions = ["manage_server", "mute_members", "deafen_members"] },
+                new ServerRoleSnapshot { Id = "admin", Priority = 300, Permissions = ["manage_server", "manage_channels", "manage_roles", "mute_members", "deafen_members"] },
+                new ServerRoleSnapshot { Id = "moderator", Priority = 200, Permissions = ["manage_messages"] },
                 new ServerRoleSnapshot { Id = "member", Priority = 100, Permissions = [] }
             ],
             Members =
             [
                 new ServerMemberSnapshot { UserId = "owner", RoleId = "owner", Name = "Owner" },
                 new ServerMemberSnapshot { UserId = "admin", RoleId = "admin", Name = "Admin" },
+                new ServerMemberSnapshot { UserId = "moderator", RoleId = "moderator", Name = "Moderator" },
                 new ServerMemberSnapshot { UserId = "member", RoleId = "member", Name = "Member" }
             ]
         };

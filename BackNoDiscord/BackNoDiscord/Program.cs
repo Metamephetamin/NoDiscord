@@ -239,6 +239,7 @@ builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddScoped<ChatFileAccessService>();
 builder.Services.AddScoped<ChatFileMetadataRepairService>();
 builder.Services.AddScoped<MessageSearchService>();
+builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<FriendRequestService>();
 builder.Services.AddScoped<UserBlockService>();
 builder.Services.AddHostedService<ChatFileMetadataRepairHostedService>();

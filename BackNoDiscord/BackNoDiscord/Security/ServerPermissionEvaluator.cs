@@ -63,6 +63,81 @@ public static class ServerPermissionEvaluator
                permissions.Contains("manage_server", StringComparer.Ordinal);
     }
 
+    public static bool CanManageRoles(ServerSnapshot? snapshot, string userId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        if (IsOwner(snapshot, userId))
+        {
+            return true;
+        }
+
+        var permissions = GetPermissions(snapshot, userId);
+        return permissions.Contains("manage_roles", StringComparer.Ordinal) ||
+               permissions.Contains("manage_server", StringComparer.Ordinal);
+    }
+
+    public static bool CanManageMessages(ServerSnapshot? snapshot, string userId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        if (IsOwner(snapshot, userId))
+        {
+            return true;
+        }
+
+        var permissions = GetPermissions(snapshot, userId);
+        return permissions.Contains("manage_messages", StringComparer.Ordinal) ||
+               permissions.Contains("manage_server", StringComparer.Ordinal);
+    }
+
+    public static bool CanAssignRole(ServerSnapshot? snapshot, string actorUserId, string targetUserId, string nextRoleId)
+    {
+        if (snapshot is null ||
+            string.IsNullOrWhiteSpace(actorUserId) ||
+            string.IsNullOrWhiteSpace(targetUserId) ||
+            string.IsNullOrWhiteSpace(nextRoleId) ||
+            string.Equals(actorUserId, targetUserId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var nextRolePriority = GetRolePriority(snapshot, nextRoleId);
+        if (nextRolePriority <= 0)
+        {
+            return false;
+        }
+
+        if (IsOwner(snapshot, actorUserId))
+        {
+            return !string.Equals(snapshot.OwnerId, targetUserId, StringComparison.Ordinal);
+        }
+
+        if (!CanManageRoles(snapshot, actorUserId))
+        {
+            return false;
+        }
+
+        var actorMember = snapshot.Members?.FirstOrDefault(member =>
+            string.Equals(member.UserId, actorUserId, StringComparison.Ordinal));
+        var targetMember = snapshot.Members?.FirstOrDefault(member =>
+            string.Equals(member.UserId, targetUserId, StringComparison.Ordinal));
+        if (actorMember is null || targetMember is null)
+        {
+            return false;
+        }
+
+        var actorPriority = GetRolePriority(snapshot, actorMember.RoleId);
+        return actorPriority > GetRolePriority(snapshot, targetMember.RoleId) &&
+               actorPriority > nextRolePriority;
+    }
+
     public static bool CanCreateInvite(ServerSnapshot? existingSnapshot, ServerSnapshot? requestedSnapshot, string userId)
     {
         if (requestedSnapshot is null || string.IsNullOrWhiteSpace(userId))

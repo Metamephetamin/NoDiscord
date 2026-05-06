@@ -13,15 +13,17 @@ public class ServerInvitesController : ControllerBase
 {
     private readonly ServerInviteService _invites;
     private readonly ServerStateService _serverState;
+    private readonly AuditLogService _auditLog;
 
-    public ServerInvitesController(ServerInviteService invites, ServerStateService serverState)
+    public ServerInvitesController(ServerInviteService invites, ServerStateService serverState, AuditLogService auditLog)
     {
         _invites = invites;
         _serverState = serverState;
+        _auditLog = auditLog;
     }
 
     [HttpPost("create")]
-    public IActionResult CreateInvite([FromBody] CreateServerInviteRequest request)
+    public async Task<IActionResult> CreateInvite([FromBody] CreateServerInviteRequest request, CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
@@ -51,6 +53,16 @@ public class ServerInvitesController : ControllerBase
                 : request.ServerSnapshot;
         var syncedSnapshot = _serverState.UpsertSnapshot(inviteSource, currentUser.UserId);
         var result = _invites.CreateInvite(currentUser.UserId, syncedSnapshot);
+        await _auditLog.RecordAsync(
+            syncedSnapshot.Id,
+            currentUser.UserId,
+            "server.invite.create",
+            metadata: new Dictionary<string, string?>
+            {
+                ["serverName"] = syncedSnapshot.Name,
+                ["expiresAt"] = result.ExpiresAt.ToString("O")
+            },
+            cancellationToken: cancellationToken);
 
         return Ok(new
         {
@@ -153,7 +165,7 @@ public class ServerInvitesController : ControllerBase
     }
 
     [HttpDelete("server/{serverId}", Order = -1)]
-    public IActionResult DeleteServerSnapshot([FromRoute] string serverId)
+    public async Task<IActionResult> DeleteServerSnapshot([FromRoute] string serverId, CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
@@ -172,8 +184,37 @@ public class ServerInvitesController : ControllerBase
         }
 
         _invites.DeleteInvitesForServer(snapshot.Id, currentUser.UserId);
+        await _auditLog.RecordAsync(
+            snapshot.Id,
+            currentUser.UserId,
+            "server.delete",
+            metadata: new Dictionary<string, string?> { ["serverName"] = snapshot.Name },
+            cancellationToken: cancellationToken);
         _serverState.DeleteSnapshot(snapshot.Id);
         return NoContent();
+    }
+
+    [HttpGet("server/{serverId}/audit-log", Order = -1)]
+    public async Task<IActionResult> GetServerAuditLog([FromRoute] string serverId, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is null)
+        {
+            return NotFound(new { message = "Server snapshot not found." });
+        }
+
+        if (!ServerPermissionEvaluator.CanReadServer(snapshot, currentUser.UserId))
+        {
+            return Forbid();
+        }
+
+        var entries = await _auditLog.GetRecentAsync(snapshot.Id, limit.GetValueOrDefault(50), cancellationToken);
+        return Ok(entries);
     }
 
     [HttpGet("my-servers", Order = -1)]
@@ -195,7 +236,7 @@ public class ServerInvitesController : ControllerBase
     }
 
     [HttpPost("server-sync")]
-    public IActionResult SyncServerSnapshot([FromBody] SyncServerSnapshotRequest request)
+    public async Task<IActionResult> SyncServerSnapshot([FromBody] SyncServerSnapshotRequest request, CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
@@ -230,7 +271,43 @@ public class ServerInvitesController : ControllerBase
         }
 
         var snapshot = _serverState.UpsertSnapshot(snapshotToSave, currentUser.UserId);
+        await _auditLog.RecordAsync(
+            snapshot.Id,
+            currentUser.UserId,
+            ResolveSnapshotAuditAction(existingSnapshot, snapshot),
+            metadata: new Dictionary<string, string?>
+            {
+                ["serverName"] = snapshot.Name,
+                ["textChannelCount"] = snapshot.TextChannels.Count.ToString(),
+                ["voiceChannelCount"] = snapshot.VoiceChannels.Count.ToString(),
+                ["roleCount"] = snapshot.Roles.Count.ToString()
+            },
+            cancellationToken: cancellationToken);
         return Ok(snapshot);
+    }
+
+    private static string ResolveSnapshotAuditAction(ServerSnapshot? previous, ServerSnapshot next)
+    {
+        if (previous is null)
+        {
+            return "server.create";
+        }
+
+        if (!string.Equals(
+                string.Join('|', previous.Roles.Select(role => $"{role.Id}:{role.Name}:{role.Priority}:{string.Join(',', role.Permissions)}")),
+                string.Join('|', next.Roles.Select(role => $"{role.Id}:{role.Name}:{role.Priority}:{string.Join(',', role.Permissions)}")),
+                StringComparison.Ordinal))
+        {
+            return "server.roles.update";
+        }
+
+        if (previous.TextChannels.Count != next.TextChannels.Count ||
+            previous.VoiceChannels.Count != next.VoiceChannels.Count)
+        {
+            return "server.channels.update";
+        }
+
+        return "server.settings.update";
     }
 
     private static bool IsReservedPersonalServer(string? serverId)

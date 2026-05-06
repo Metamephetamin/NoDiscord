@@ -11571,6 +11571,40 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   color: #d7ddef;
 }
 
+.settings-audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-audit-item {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  background: var(--app-panel-strong, rgba(255, 255, 255, 0.045));
+}
+
+.settings-audit-item__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-audit-item__main strong {
+  color: var(--app-text, #f8fafc);
+  font-size: 14px;
+}
+
+.settings-audit-item__main span {
+  flex-shrink: 0;
+  color: var(--app-text-muted, #aeb7cc);
+  font-size: 12px;
+}
+
 .settings-empty-state {
   display: flex;
   flex-direction: column;

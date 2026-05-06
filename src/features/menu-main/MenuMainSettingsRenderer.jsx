@@ -140,6 +140,7 @@ export function MenuMainSettingsContent({
   handleImportServer,
   markServerAsShared,
   currentServerRole,
+  serverAuditLogs,
 }) {
   switch (settingsTab) {
     case "account":
@@ -305,6 +306,7 @@ export function MenuMainSettingsContent({
           activeServer={activeServer}
           currentServerRole={currentServerRole}
           rolePermissionLabels={ROLE_PERMISSION_LABELS}
+          auditLogs={serverAuditLogs}
         />
       );
     case "voice_video":

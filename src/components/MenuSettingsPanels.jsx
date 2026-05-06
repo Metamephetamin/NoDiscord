@@ -1349,7 +1349,36 @@ export const AppearanceAccessibilitySettings = ({
   </div>
 );
 
-export const RolesSettings = ({ activeServer, currentServerRole, rolePermissionLabels }) => (
+const AUDIT_ACTION_LABELS = {
+  "server.create": "Сервер создан",
+  "server.settings.update": "Настройки сервера изменены",
+  "server.roles.update": "Роли изменены",
+  "server.channels.update": "Каналы изменены",
+  "server.invite.create": "Создано приглашение",
+  "server.delete": "Сервер удален",
+};
+
+const formatAuditAction = (actionType) => AUDIT_ACTION_LABELS[actionType] || actionType || "Действие";
+
+const formatAuditDate = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+export const RolesSettings = ({ activeServer, currentServerRole, rolePermissionLabels, auditLogs = [] }) => (
   <div className="settings-shell__content">
     <div className="settings-shell__content-header">
       <div>
@@ -1405,6 +1434,28 @@ export const RolesSettings = ({ activeServer, currentServerRole, rolePermissionL
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        <section className="voice-settings-card">
+          <div className="settings-section__header">
+            <h4>Журнал действий</h4>
+            <span className="settings-role-current">{auditLogs.length}</span>
+          </div>
+          <div className="settings-audit-list">
+            {auditLogs.length ? (
+              auditLogs.slice(0, 20).map((entry) => (
+                <div key={entry.id || `${entry.actionType}-${entry.createdAt}`} className="settings-audit-item">
+                  <div className="settings-audit-item__main">
+                    <strong>{formatAuditAction(entry.actionType)}</strong>
+                    <span>{formatAuditDate(entry.createdAt)}</span>
+                  </div>
+                  <span className="settings-role-description">Пользователь ID: {entry.actorUserId || "unknown"}</span>
+                </div>
+              ))
+            ) : (
+              <span className="settings-role-description">Пока нет записей.</span>
+            )}
           </div>
         </section>
       </>

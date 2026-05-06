@@ -530,6 +530,31 @@ public class PushSubscriptionRecord
     public bool IsActive { get; set; }
 }
 
+[Table("server_audit_logs")]
+public class ServerAuditLogRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("server_id")]
+    public string ServerId { get; set; } = string.Empty;
+
+    [Column("actor_user_id")]
+    public string ActorUserId { get; set; } = string.Empty;
+
+    [Column("action_type")]
+    public string ActionType { get; set; } = string.Empty;
+
+    [Column("target_id")]
+    public string TargetId { get; set; } = string.Empty;
+
+    [Column("metadata_json")]
+    public string MetadataJson { get; set; } = "{}";
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 [Table("user_integrations")]
 public class UserIntegrationRecord
 {
@@ -610,6 +635,7 @@ public class AppDbContext : DbContext
     public DbSet<QrLoginSessionRecord> QrLoginSessions => Set<QrLoginSessionRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
+    public DbSet<ServerAuditLogRecord> ServerAuditLogs => Set<ServerAuditLogRecord>();
     public DbSet<UserIntegrationRecord> UserIntegrations => Set<UserIntegrationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -847,6 +873,19 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.UserLowId, x.CreatedAt });
             entity.HasIndex(x => new { x.UserHighId, x.CreatedAt });
             entity.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<ServerAuditLogRecord>(entity =>
+        {
+            entity.ToTable("server_audit_logs");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.ServerId, x.CreatedAt });
+            entity.HasIndex(x => x.ActorUserId);
+            entity.Property(x => x.ServerId).IsRequired();
+            entity.Property(x => x.ActorUserId).IsRequired();
+            entity.Property(x => x.ActionType).IsRequired();
+            entity.Property(x => x.TargetId).IsRequired();
+            entity.Property(x => x.MetadataJson).IsRequired();
         });
     }
 }

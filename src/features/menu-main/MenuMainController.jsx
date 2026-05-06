@@ -495,6 +495,7 @@ export default function MenuMain({
   const [workspaceStatusToasts, setWorkspaceStatusToasts] = useState([]);
   const [directUnreadCounts, setDirectUnreadCounts] = useState({});
   const [serverUnreadCounts, setServerUnreadCounts] = useState({});
+  const [serverAuditLogs, setServerAuditLogs] = useState([]);
   const [chatDraftPresence, setChatDraftPresence] = useState({});
   const [textChatLocalStateVersion, setTextChatLocalStateVersion] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState(() => readWorkspaceState(user).workspaceMode || "servers");
@@ -3125,6 +3126,40 @@ export default function MenuMain({
   ]);
 
   useEffect(() => {
+    if (!user || settingsTab !== "roles" || !activeServer?.id || isDefaultServer) {
+      setServerAuditLogs([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    authFetch(`${API_BASE_URL}/api/server-invites/server/${encodeURIComponent(activeServer.id)}/audit-log?limit=20`, {
+      method: "GET",
+    })
+      .then(async (response) => {
+        const data = await parseApiResponse(response);
+        if (!response.ok) {
+          return [];
+        }
+
+        return Array.isArray(data) ? data : [];
+      })
+      .then((entries) => {
+        if (!cancelled) {
+          setServerAuditLogs(entries);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setServerAuditLogs([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeServer?.id, isDefaultServer, settingsTab, user]);
+
+  useEffect(() => {
     if (!activeServer?.id || isDefaultServer || !currentUserId || (!canManageServer && !canManageChannels) || !activeServerSyncFingerprint) return;
     if (lastServerSyncFingerprintRef.current === activeServerSyncFingerprint) return;
 
@@ -5589,6 +5624,7 @@ export default function MenuMain({
     handleImportServer,
     markServerAsShared,
     currentServerRole,
+    serverAuditLogs,
   };
 
   const renderSettingsContent = () => (
