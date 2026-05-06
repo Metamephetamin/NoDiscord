@@ -963,6 +963,58 @@ export default function TextChat({
     ));
   }, []);
 
+  const removeLocalEchoAttachment = useCallback((channelId, messageId, pendingUploadId) => {
+    const normalizedChannelId = String(channelId || "").trim();
+    const normalizedMessageId = String(messageId || "").trim();
+    const normalizedPendingUploadId = String(pendingUploadId || "").trim();
+    if (!normalizedChannelId || !normalizedMessageId || !normalizedPendingUploadId) {
+      return;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(
+      previous,
+      normalizedChannelId,
+      (channelMessages) => {
+        let didChange = false;
+        const nextChannelMessages = [];
+
+        (Array.isArray(channelMessages) ? channelMessages : []).forEach((messageItem) => {
+          if (String(messageItem?.id || "") !== normalizedMessageId || !Array.isArray(messageItem?.attachments)) {
+            nextChannelMessages.push(messageItem);
+            return;
+          }
+
+          const nextAttachments = messageItem.attachments.filter((attachmentItem) =>
+            String(attachmentItem?.sourcePendingUploadId || "") !== normalizedPendingUploadId
+          );
+          if (nextAttachments.length === messageItem.attachments.length) {
+            nextChannelMessages.push(messageItem);
+            return;
+          }
+
+          didChange = true;
+          if (!nextAttachments.length) {
+            revokeLocalEchoObjectUrls(normalizedMessageId);
+            return;
+          }
+
+          const primaryAttachment = nextAttachments[0] || null;
+          nextChannelMessages.push({
+            ...messageItem,
+            attachments: nextAttachments,
+            attachmentUrl: primaryAttachment?.attachmentUrl || "",
+            attachmentName: primaryAttachment?.attachmentName || "",
+            attachmentSize: primaryAttachment?.attachmentSize ?? null,
+            attachmentContentType: primaryAttachment?.attachmentContentType || "",
+            attachmentAsFile: Boolean(primaryAttachment?.attachmentAsFile),
+          });
+        });
+
+        return didChange ? nextChannelMessages : channelMessages;
+      }
+    ));
+  }, [revokeLocalEchoObjectUrls]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -2644,6 +2696,7 @@ export default function TextChat({
     onCreateLocalEchoMessages: appendLocalEchoMessages,
     onPatchLocalEchoMessage: patchLocalEchoMessage,
     onPatchLocalEchoAttachment: patchLocalEchoAttachment,
+    onRemoveLocalEchoAttachment: removeLocalEchoAttachment,
     onRemoveLocalEchoMessages: removeLocalEchoMessages,
   });
   markLocalEchoReconciledRef.current = reconcileLocalEchoUpload;

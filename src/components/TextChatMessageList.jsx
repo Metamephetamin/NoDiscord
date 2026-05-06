@@ -649,6 +649,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
   priorityMedia = false,
 }) {
   const sourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const canLoadPreviewVideo = sourceUrl.startsWith("blob:") || sourceUrl.startsWith("data:") || sourceUrl.startsWith("file:");
   const preparedSourceUrlRef = useRef("");
   const previewSeekRequestedRef = useRef(false);
   const [node, setNode] = useState(null);
@@ -663,6 +664,10 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
   }, []);
 
   useEffect(() => {
+    if (!canLoadPreviewVideo) {
+      return undefined;
+    }
+
     if (priorityMedia || hasStartedLoading) {
       return undefined;
     }
@@ -687,7 +692,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasStartedLoading, node, priorityMedia]);
+  }, [canLoadPreviewVideo, hasStartedLoading, node, priorityMedia]);
 
   const handleVideoLoadedMetadata = useCallback((event) => {
     if (preparedSourceUrlRef.current !== sourceUrl) {
@@ -760,7 +765,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
 
   return (
     <span ref={attachNodeRef} className={className} aria-hidden="true">
-      {hasStartedLoading ? (
+      {canLoadPreviewVideo && hasStartedLoading ? (
         <video
           className={`message-media__video-frame ${readyFrameSourceUrl === sourceUrl ? "message-media__video-frame--ready" : ""}`.trim()}
           src={sourceUrl}
@@ -1376,7 +1381,7 @@ function MessageAttachmentCard({
           {showLocalEchoOverlay ? (
             <SimplifiedLocalEchoMediaOverlay
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId)}
               onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
               onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
@@ -1403,7 +1408,7 @@ function MessageAttachmentCard({
           {showLocalEchoOverlay ? (
             <SimplifiedLocalEchoMediaOverlay
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId)}
               onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
               onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
@@ -1438,7 +1443,7 @@ function MessageAttachmentCard({
         ) : showLocalEchoOverlay ? (
           <LocalEchoDocumentAction
             attachmentItem={attachmentItem}
-            onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id)}
+            onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId)}
             onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
           />
         ) : (

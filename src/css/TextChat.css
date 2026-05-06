@@ -3128,17 +3128,17 @@
 
 .message-media__upload-action {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font: inherit;
-  background: #666a70;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
   cursor: pointer;
   pointer-events: auto;
   transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
@@ -3147,28 +3147,28 @@
 .message-media__upload-action:hover,
 .message-media__upload-action:focus-visible {
   transform: scale(1.025);
-  background: #71757a;
-  border-color: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
   outline: none;
 }
 
 .message-media__upload-action--loading {
-  background: #666a70;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .message-media__upload-action--loading:hover,
 .message-media__upload-action--loading:focus-visible {
-  background: #71757a;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .message-media__upload-action--retry {
-  background: #6f6053;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .message-media__upload-action--retry:hover,
 .message-media__upload-action--retry:focus-visible {
-  background: #7a695b;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .message-media__upload-retry-icon {
@@ -3189,14 +3189,14 @@
 
 .message-media__upload-loader-ring {
   position: absolute;
-  inset: 7px;
+  inset: 2px;
   border-radius: 999px;
 }
 
 .message-media__upload-loader-ring {
-  border: 2px solid rgba(255, 255, 255, 0.28);
+  border: 2px solid rgba(255, 255, 255, 0.34);
   border-top-color: #ffffff;
-  border-right-color: rgba(255, 255, 255, 0.86);
+  border-right-color: rgba(255, 255, 255, 0.92);
   animation: messageMediaUploadSpin 0.86s linear infinite;
 }
 
@@ -3551,14 +3551,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.52);
   border-radius: 999px;
   background:
-    linear-gradient(#5e646b, #5e646b) padding-box,
-    conic-gradient(#eef7ff var(--message-attachment-upload-progress, 0%), rgba(238, 247, 255, 0.28) 0) border-box;
+    linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)) padding-box,
+    conic-gradient(#ffffff var(--message-attachment-upload-progress, 0%), rgba(255, 255, 255, 0.28) 0) border-box;
   color: #ffffff;
   cursor: pointer;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
@@ -3567,11 +3567,11 @@
 .message-attachment__upload-control::before {
   content: "";
   position: absolute;
-  inset: 5px;
+  inset: 2px;
   border-radius: inherit;
-  border: 2px solid rgba(255, 255, 255, 0.28);
+  border: 2px solid rgba(255, 255, 255, 0.34);
   border-top-color: #ffffff;
-  border-right-color: rgba(255, 255, 255, 0.86);
+  border-right-color: rgba(255, 255, 255, 0.92);
   animation: messageAttachmentUploadSpin 0.86s linear infinite;
 }
 
@@ -3621,8 +3621,8 @@
 
 .message-attachment__upload-control--failed {
   background:
-    linear-gradient(#6f6053, #6f6053) padding-box,
-    conic-gradient(#ffe7db var(--message-attachment-upload-progress, 0%), rgba(255, 231, 219, 0.28) 0) border-box;
+    linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)) padding-box,
+    conic-gradient(#ffffff var(--message-attachment-upload-progress, 0%), rgba(255, 255, 255, 0.28) 0) border-box;
 }
 
 .message-attachment__upload-control--failed::before {

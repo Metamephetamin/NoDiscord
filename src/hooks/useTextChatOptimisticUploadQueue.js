@@ -39,6 +39,7 @@ export default function useTextChatOptimisticUploadQueue({
   onCreateLocalEchoMessages,
   onPatchLocalEchoMessage,
   onPatchLocalEchoAttachment,
+  onRemoveLocalEchoAttachment,
   onRemoveLocalEchoMessages,
 }) {
   const jobsRef = useRef(new Map());
@@ -112,6 +113,10 @@ export default function useTextChatOptimisticUploadQueue({
 
         const processSingleAttachment = async (attachmentDraft, index) => {
           const uploadId = String(attachmentDraft?.uploadId || "");
+          if (job.cancelledAttachmentIds?.has(uploadId)) {
+            return;
+          }
+
           const uploadAbortController = abortControllers[index];
           uploadProgressSnapshot.set(uploadId, 0.04);
           patchJobAttachment(job, uploadId, {
@@ -161,6 +166,10 @@ export default function useTextChatOptimisticUploadQueue({
             },
           });
 
+          if (job.cancelledAttachmentIds?.has(uploadId)) {
+            return;
+          }
+
           patchJobAttachment(job, uploadId, {
             localEchoStatus: "processing",
             localEchoProgress: 100,
@@ -188,6 +197,11 @@ export default function useTextChatOptimisticUploadQueue({
             try {
               await processSingleAttachment(job.attachments[currentIndex], currentIndex);
             } catch (error) {
+              const failedUploadId = String(job.attachments[currentIndex]?.uploadId || "");
+              if (failedUploadId && job.cancelledAttachmentIds?.has(failedUploadId)) {
+                continue;
+              }
+
               capturedUploadFailure = {
                 error,
                 failedAttachment: job.attachments[currentIndex],
@@ -210,6 +224,13 @@ export default function useTextChatOptimisticUploadQueue({
           throw capturedUploadFailure.error;
         }
 
+        const uploadedAttachments = attachmentResults.filter(Boolean);
+        if (!uploadedAttachments.length) {
+          cleanupJob(job.localEchoMessageId);
+          onRemoveLocalEchoMessages?.([job.localEchoMessageId]);
+          return false;
+        }
+
         patchJobMessage(job, {
           localEchoUploadState: "processing",
           localEchoRetryable: false,
@@ -223,13 +244,13 @@ export default function useTextChatOptimisticUploadQueue({
           replyToMessageId: job.replyToMessageId,
           replyToUsername: job.replyToUsername,
           replyPreview: job.replyPreview,
-          attachments: attachmentResults.filter(Boolean).map(buildUploadedAttachmentPayload),
-          attachmentUrl: attachmentResults[0]?.fileUrl || "",
-          attachmentName: attachmentResults[0]?.fileName || "",
-          attachmentSize: attachmentResults[0]?.size || null,
-          attachmentContentType: attachmentResults[0]?.contentType || "",
-          attachmentAsFile: Boolean(attachmentResults[0]?.attachmentAsFile),
-          attachmentEncryption: attachmentResults[0]?.attachmentEncryption || null,
+          attachments: uploadedAttachments.map(buildUploadedAttachmentPayload),
+          attachmentUrl: uploadedAttachments[0]?.fileUrl || "",
+          attachmentName: uploadedAttachments[0]?.fileName || "",
+          attachmentSize: uploadedAttachments[0]?.size || null,
+          attachmentContentType: uploadedAttachments[0]?.contentType || "",
+          attachmentAsFile: Boolean(uploadedAttachments[0]?.attachmentAsFile),
+          attachmentEncryption: uploadedAttachments[0]?.attachmentEncryption || null,
           voiceMessage: null,
         }], { allowBatch: false });
 
@@ -239,6 +260,11 @@ export default function useTextChatOptimisticUploadQueue({
           localEchoError: "",
         });
         job.attachments.forEach((attachmentDraft) => {
+          const uploadId = String(attachmentDraft?.uploadId || "");
+          if (job.cancelledAttachmentIds?.has(uploadId)) {
+            return;
+          }
+
           patchJobAttachment(job, attachmentDraft.uploadId, {
             localEchoStatus: "sent",
             localEchoProgress: 100,
@@ -287,6 +313,8 @@ export default function useTextChatOptimisticUploadQueue({
     playDirectMessageSound,
     sendMessagesCompat,
     uploadAttachment,
+    cleanupJob,
+    onRemoveLocalEchoMessages,
   ]);
 
   const startOptimisticAttachmentSend = useCallback(({
@@ -397,7 +425,7 @@ export default function useTextChatOptimisticUploadQueue({
     return true;
   }, [patchJobAttachment, patchJobMessage, runJob]);
 
-  const cancelLocalEchoUpload = useCallback((messageId) => {
+  const cancelLocalEchoUpload = useCallback((messageId, uploadId = "") => {
     const normalizedMessageId = String(messageId || "").trim();
     if (!normalizedMessageId) {
       return false;
@@ -406,6 +434,37 @@ export default function useTextChatOptimisticUploadQueue({
     const job = jobsRef.current.get(normalizedMessageId);
     if (!job) {
       return false;
+    }
+
+    const normalizedUploadId = String(uploadId || "").trim();
+    if (normalizedUploadId) {
+      const attachmentIndex = job.attachments.findIndex((attachmentDraft) =>
+        String(attachmentDraft?.uploadId || "") === normalizedUploadId
+      );
+      if (attachmentIndex < 0) {
+        return false;
+      }
+
+      job.cancelledAttachmentIds ??= new Set();
+      job.cancelledAttachmentIds.add(normalizedUploadId);
+      try {
+        job.abortControllers?.[attachmentIndex]?.abort();
+      } catch {
+        // ignore single attachment cancellation failures
+      }
+
+      const activeAttachmentCount = job.attachments.filter((attachmentDraft) =>
+        !job.cancelledAttachmentIds.has(String(attachmentDraft?.uploadId || ""))
+      ).length;
+      if (activeAttachmentCount <= 0) {
+        job.cancelRequested = true;
+        cleanupJob(normalizedMessageId);
+        onRemoveLocalEchoMessages?.([normalizedMessageId]);
+        return true;
+      }
+
+      onRemoveLocalEchoAttachment?.(job.channelId, normalizedMessageId, normalizedUploadId);
+      return true;
     }
 
     job.cancelRequested = true;
@@ -433,7 +492,7 @@ export default function useTextChatOptimisticUploadQueue({
       });
     });
     return true;
-  }, [patchJobAttachment, patchJobMessage]);
+  }, [cleanupJob, onRemoveLocalEchoAttachment, onRemoveLocalEchoMessages, patchJobAttachment, patchJobMessage]);
 
   const removeLocalEchoUpload = useCallback((messageId) => {
     const normalizedMessageId = String(messageId || "").trim();
