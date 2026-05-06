@@ -436,8 +436,6 @@ export default function Renderer() {
         }
       };
 
-      restoreCachedSession();
-
       try {
         const response = await authFetch(`${API_BASE_URL}/auth/me`, {
           method: "GET",
@@ -453,6 +451,7 @@ export default function Renderer() {
           console.warn("Failed to refresh session snapshot, keeping cached credentials.", {
             status: response.status,
           });
+          restoreCachedSession();
           return;
         }
 
@@ -518,6 +517,7 @@ export default function Renderer() {
         }
 
         console.error("Failed to restore secure session", error);
+        restoreCachedSession();
       }
     };
 
