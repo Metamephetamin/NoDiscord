@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { formatTimestamp } from "../utils/textChatHelpers";
 
-export function MessageSearchPanel({ query, results, onOpenMessage }) {
+export function MessageSearchPanel({ query, results, loading = false, error = "", onOpenMessage }) {
   const normalizedQuery = String(query || "").trim();
   const [collapsedQuery, setCollapsedQuery] = useState("");
 
@@ -20,6 +20,8 @@ export function MessageSearchPanel({ query, results, onOpenMessage }) {
 
   return (
     <div className="message-search-panel">
+      {loading ? <div className="message-search-panel__empty">Поиск по истории...</div> : null}
+      {error ? <div className="message-search-panel__empty">{error}</div> : null}
       <div className="message-search-panel__header">
         <strong>Найденные сообщения</strong>
         <span>{results.length ? `${results.length} совпадений` : "Совпадений нет"}</span>

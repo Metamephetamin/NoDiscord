@@ -313,6 +313,30 @@ function filterMessagesAfterLocalClear(messages, localClearCutoffMs = 0) {
   return messageList.filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
 }
 
+function normalizeSearchResult(item) {
+  return {
+    id: String(item?.id || item?.Id || ""),
+    channelId: String(item?.channelId || item?.ChannelId || ""),
+    authorUserId: String(item?.authorUserId || item?.AuthorUserId || ""),
+    username: String(item?.username || item?.Username || "User"),
+    timestamp: item?.timestamp || item?.Timestamp || "",
+    preview: String(item?.preview || item?.Preview || ""),
+  };
+}
+
+function mergeSearchResults(primaryResults, fallbackResults) {
+  const seen = new Set();
+  return [...(primaryResults || []), ...(fallbackResults || [])].filter((item) => {
+    const id = String(item?.id || "");
+    if (!id || seen.has(id)) {
+      return false;
+    }
+
+    seen.add(id);
+    return true;
+  });
+}
+
 function buildLocalEchoAttachmentKey(attachmentItem, index = 0) {
   return [
     String(attachmentItem?.attachmentName || "").trim(),
@@ -509,6 +533,12 @@ export default function TextChat({
   const [actionFeedback, setActionFeedback] = useState(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
+  const [remoteSearchState, setRemoteSearchState] = useState({
+    query: "",
+    results: [],
+    loading: false,
+    error: "",
+  });
   const [preferExplicitSend, setPreferExplicitSend] = useState(() => (
     typeof window !== "undefined"
       ? window.matchMedia("(pointer: coarse), (max-width: 900px)").matches
@@ -554,6 +584,7 @@ export default function TextChat({
   }, [channelId, resolvedChannelId, serverId]);
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
+  const deferredSearchQuery = useDeferredValue(String(searchQuery || "").trim());
 
   useEffect(() => {
     messageEditStateRef.current = messageEditState;
@@ -604,6 +635,61 @@ export default function TextChat({
   useEffect(() => {
     activeChannelRef.current = scopedChannelId;
   }, [scopedChannelId]);
+
+  useEffect(() => {
+    const query = String(deferredSearchQuery || "").trim();
+    if (!scopedChannelId || query.length < 2 || !shouldUseRestTextChatHistoryEndpoint()) {
+      setRemoteSearchState((previous) => (
+        previous.query === query && !previous.results.length && !previous.loading && !previous.error
+          ? previous
+          : { query, results: [], loading: false, error: "" }
+      ));
+      return undefined;
+    }
+
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      setRemoteSearchState((previous) => ({
+        ...previous,
+        query,
+        loading: true,
+        error: "",
+      }));
+
+      authFetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(scopedChannelId)}/messages/search?q=${encodeURIComponent(query)}&limit=25`, {
+        method: "GET",
+        signal: abortController.signal,
+      })
+        .then(async (response) => {
+          const data = await parseApiResponse(response);
+          if (!response.ok) {
+            throw new Error(getApiErrorMessage(response, data, "Не удалось выполнить поиск по сообщениям."));
+          }
+
+          const results = Array.isArray(data)
+            ? data.map(normalizeSearchResult).filter((item) => item.id)
+            : [];
+          setRemoteSearchState({ query, results, loading: false, error: "" });
+        })
+        .catch((error) => {
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          setRemoteSearchState({
+            query,
+            results: [],
+            loading: false,
+            error: error?.message || "Не удалось выполнить поиск по сообщениям.",
+          });
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      abortController.abort();
+    };
+  }, [deferredSearchQuery, scopedChannelId]);
 
   useEffect(() => {
     setMessagesByChannel((previous) => {
@@ -2748,7 +2834,7 @@ export default function TextChat({
   });
 
   const {
-    searchResults,
+    searchResults: localSearchResults,
     availableForwardTargets,
     forwardableMessages,
     toggleMessageSelection,
@@ -2802,6 +2888,10 @@ export default function TextChat({
     currentUserId,
     onDeleteMessageLocally: deleteMessageLocally,
   });
+  const searchResults = useMemo(
+    () => mergeSearchResults(remoteSearchState.results, localSearchResults),
+    [localSearchResults, remoteSearchState.results]
+  );
 
   const mentionMessages = useMemo(
     () => messages.filter((messageItem) =>
@@ -2934,6 +3024,8 @@ export default function TextChat({
     <TextChatView
       searchQuery={searchQuery}
       searchResults={searchResults}
+      searchLoading={remoteSearchState.loading}
+      searchError={remoteSearchState.error}
       onClearSearchQuery={onClearSearchQuery}
       scopedChannelId={scopedChannelId}
       navigationRequest={navigationRequest}

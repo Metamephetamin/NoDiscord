@@ -26,17 +26,20 @@ public sealed class ChatMessagesController : ControllerBase
     private readonly CryptoService _crypto;
     private readonly ILogger<ChatMessagesController> _logger;
     private readonly ServerStateService _serverState;
+    private readonly MessageSearchService _messageSearch;
 
     public ChatMessagesController(
         AppDbContext context,
         CryptoService crypto,
         ILogger<ChatMessagesController> logger,
-        ServerStateService serverState)
+        ServerStateService serverState,
+        MessageSearchService messageSearch)
     {
         _context = context;
         _crypto = crypto;
         _logger = logger;
         _serverState = serverState;
+        _messageSearch = messageSearch;
     }
 
     [HttpGet]
@@ -109,6 +112,34 @@ public sealed class ChatMessagesController : ControllerBase
             HasMore = hasMore,
             NextCursor = pageMessages.Count > 0 ? pageMessages.Min(message => message.Id) : null
         };
+    }
+
+    [HttpGet("search")]
+    public async Task<ActionResult<IReadOnlyList<MessageSearchResultDto>>> SearchMessages(
+        [FromRoute] string chatId,
+        [FromQuery] string? q,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var normalizedChannelId = NormalizeChannelId(chatId);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            return BadRequest(new { message = "chatId is required" });
+        }
+
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+        var results = await _messageSearch.SearchAsync(equivalentChannelIds, q, limit, cancellationToken);
+        return Ok(results);
     }
 
     private MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)

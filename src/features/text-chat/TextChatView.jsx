@@ -26,6 +26,8 @@ export default function TextChatView(props) {
   const {
     searchQuery,
     searchResults,
+    searchLoading,
+    searchError,
     onClearSearchQuery,
     scopedChannelId,
     navigationRequest,
@@ -382,7 +384,14 @@ export default function TextChatView(props) {
           </div>
         </div>
       ) : null}
-      <MessageSearchPanel key={normalizedSearchQuery} query={normalizedSearchQuery} results={searchResults} onOpenMessage={handleSearchPanelOpenMessage} />
+      <MessageSearchPanel
+        key={normalizedSearchQuery}
+        query={normalizedSearchQuery}
+        results={searchResults}
+        loading={searchLoading}
+        error={searchError}
+        onOpenMessage={handleSearchPanelOpenMessage}
+      />
       <PinnedMessagesPanel
         pinnedMessages={pinnedMessages}
         onOpenMessage={stableScrollToMessage}
