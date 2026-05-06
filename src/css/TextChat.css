@@ -9645,7 +9645,7 @@ html[data-ui-theme="light"] .chat-user-menu__item--danger,
 html[data-ui-theme="light"] .chat-user-menu__item--danger .chat-user-menu__label,
 html[data-ui-theme="light"] .message-context-menu__item--danger:not(:disabled),
 html[data-ui-theme="light"] .message-context-menu__item--danger:not(:disabled) .message-context-menu__label {
-  color: #b4232e;
+  color: var(--app-danger);
 }
 
 html[data-ui-theme="light"] .attach-menu__popover,

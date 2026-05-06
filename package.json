@@ -27,6 +27,7 @@
     "test:auth-storage": "node --test src/utils/__tests__/authStoragePolicy.test.mjs",
     "test:auth-branding": "node ./scripts/auth-branding-smoke.mjs",
     "test:auth-registration-code": "node ./scripts/auth-registration-code-smoke.mjs",
+    "test:theme": "node ./scripts/auth-theme-smoke.mjs",
     "test:attachment-descriptors": "node --test src/utils/__tests__/textChatAttachmentDescriptorPolicy.test.mjs",
     "test:console-secrets": "node ./scripts/console-secret-smoke.mjs",
     "test:electron-downloads": "node --test src/utils/__tests__/electronDownloadStreamingPolicy.test.mjs",

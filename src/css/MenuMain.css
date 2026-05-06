@@ -18293,7 +18293,7 @@ html[data-ui-theme="light"] .voice-room-stage__toolbar-button--active {
 html[data-ui-theme="light"] .voice-room-stage__toolbar-button--muted {
   border-color: rgba(211, 47, 47, 0.24);
   background: rgba(211, 47, 47, 0.08);
-  color: #b4232e;
+  color: var(--app-danger);
 }
 
 html[data-ui-theme="light"] .voice-room-stage__toolbar-button--danger,
@@ -18354,7 +18354,7 @@ html[data-ui-theme="light"] .settings-shell__content svg {
 }
 
 html[data-ui-theme="light"] .profile__mini-icon--slashed {
-  color: #b4232e;
+  color: var(--app-danger);
 }
 
 html[data-ui-theme="light"] .profile__stream-banner,
@@ -18561,7 +18561,7 @@ html[data-ui-theme="light"] .server-invite-modal__footer {
 
 html[data-ui-theme="light"] .member-role-menu__item--danger,
 html[data-ui-theme="light"] .friends-conversation-member-menu__item--danger {
-  color: #b4232e;
+  color: var(--app-danger);
 }
 
 html[data-ui-theme="light"] .member-role-menu__item--danger:hover,
