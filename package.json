@@ -23,7 +23,7 @@
     "lint:ci": "eslint . --quiet",
     "check:encoding": "node ./scripts/check-encoding.mjs",
     "check:encoding:fix": "node ./scripts/check-encoding.mjs --fix",
-    "check:release": "npm run check:encoding && npm run test:encoding && npm run lint:ci && npm run build:frontend && npm run audit:public-assets && npm run audit:perf",
+    "check:release": "npm run check:encoding && npm run test:encoding && npm run test:auth-branding && npm run lint:ci && npm run build:frontend && npm run audit:public-assets && npm run audit:perf && dotnet test BackNoDiscord\\BackNoDiscord.Tests\\BackNoDiscord.Tests.csproj --configuration Release",
     "test:auth-storage": "node --test src/utils/__tests__/authStoragePolicy.test.mjs",
     "test:auth-branding": "node ./scripts/auth-branding-smoke.mjs",
     "test:auth-registration-code": "node ./scripts/auth-registration-code-smoke.mjs",

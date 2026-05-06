@@ -2,8 +2,12 @@
 
 ## Required Automated Checks
 
+- `git status --short` shows no `.env`, local secrets, or unrelated generated files staged.
+- `git branch --show-current` returns `master`.
+- `git remote get-url origin` points to `https://github.com/Metamephetamin/NoDiscord.git`.
 - `npm run check:encoding`
 - `npm run test:encoding`
+- `npm run test:auth-branding`
 - `npm run lint:ci`
 - `npm run build:frontend`
 - `npm run audit:public-assets`
@@ -13,6 +17,9 @@
 ## Manual Smoke Before Pushing To master
 
 - Login with an existing account.
+- Confirm auth background video renders on login and registration.
+- Open QR login and confirm the QR panel renders with the current app logo.
+- Confirm production email verification uses live delivery mode and does not show a debug code in the UI.
 - Send and receive a direct message.
 - Send and receive a server channel message.
 - Upload a small image.

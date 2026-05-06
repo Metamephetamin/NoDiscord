@@ -95,6 +95,8 @@ typings/
 .artifacts/
 dist/
 scripts/public-asset-audit.json
+.superpowers/
+outputs/
 
 .node_modules/
 
