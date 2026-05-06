@@ -56,9 +56,8 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         if (string.Equals(deliveryMode, "mock", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation(
-                "Email verification code for {Email}: {VerificationCode}. Expires at {ExpiresAt}.",
+                "Mock email verification requested for {Email}. Expires at {ExpiresAt}.",
                 email,
-                verificationCode,
                 expiresAt);
             return;
         }

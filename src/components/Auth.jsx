@@ -710,6 +710,7 @@ export default function Auth({ onAuthSuccess }) {
         : null;
 
       if (pendingEmailVerification && verification) {
+        const isMockDelivery = String(verification.deliveryMode || "").toLowerCase() === "mock";
         setEmailVerificationCode("");
         setEmailVerificationTotpCode("");
         setEmailResendAttemptCount(1);
@@ -718,13 +719,13 @@ export default function Auth({ onAuthSuccess }) {
           purpose: "login",
           email: verification.email || payload.identifier,
           verificationToken: verification.verificationToken || "",
-          deliveryMode: verification.deliveryMode || "mock",
-          debugCode: verification.debugCode || "",
+          deliveryMode: verification.deliveryMode || "",
+          debugCode: isMockDelivery ? verification.debugCode || "" : "",
           resendAvailableAt: resolveResendAvailableAt(1, verification.resendAvailableAt),
           requiresTotp: false,
         });
         setMessage(
-          verification.debugCode
+          isMockDelivery && verification.debugCode
             ? `Подтвердите email. Тестовый код: ${verification.debugCode}`
             : (error.message || "Сначала подтвердите email.")
         );
@@ -788,8 +789,8 @@ export default function Auth({ onAuthSuccess }) {
         purpose: "login",
         email: data?.email || identifier,
         verificationToken: data?.verificationToken || "",
-        deliveryMode: data?.deliveryMode || "mock",
-        debugCode: data?.debugCode || "",
+        deliveryMode: data?.deliveryMode || "",
+        debugCode: String(data?.deliveryMode || "").toLowerCase() === "mock" ? data?.debugCode || "" : "",
         resendAvailableAt: resolveResendAvailableAt(1, data?.resendAvailableAt),
         requiresTotp: false,
       });
@@ -862,6 +863,7 @@ export default function Auth({ onAuthSuccess }) {
       }
 
       const verification = data?.verification || {};
+      const isMockDelivery = String(verification?.deliveryMode || "").toLowerCase() === "mock";
 
       setEmailVerificationCode("");
       setEmailResendAttemptCount(1);
@@ -870,13 +872,13 @@ export default function Auth({ onAuthSuccess }) {
         purpose: "registration",
         email: verification?.email || payload.email,
         verificationToken: verification?.verificationToken || "",
-        deliveryMode: verification?.deliveryMode || "mock",
-        debugCode: verification?.debugCode || "",
+        deliveryMode: verification?.deliveryMode || "",
+        debugCode: isMockDelivery ? verification?.debugCode || "" : "",
         resendAvailableAt: resolveResendAvailableAt(1, verification?.resendAvailableAt),
       });
 
       setMessage(
-        verification?.debugCode
+        isMockDelivery && verification?.debugCode
           ? `Аккаунт создан. Тестовый email-код: ${verification.debugCode}`
           : "Аккаунт создан. Мы отправили код подтверждения на почту."
       );
@@ -922,12 +924,12 @@ export default function Auth({ onAuthSuccess }) {
         open: true,
         purpose: previous.purpose,
         verificationToken: data?.verificationToken || previous.verificationToken,
-        deliveryMode: data?.deliveryMode || previous.deliveryMode || "mock",
-        debugCode: data?.debugCode || "",
+        deliveryMode: data?.deliveryMode || previous.deliveryMode || "",
+        debugCode: String(data?.deliveryMode || previous.deliveryMode || "").toLowerCase() === "mock" ? data?.debugCode || "" : "",
         resendAvailableAt: nextResendAvailableAt,
       }));
 
-      setMessage(data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "");
+      setMessage(String(data?.deliveryMode || emailVerificationModal.deliveryMode || "").toLowerCase() === "mock" && data?.debugCode ? `Новый тестовый email-код: ${data.debugCode}` : "");
     } catch (error) {
       setMessage(error.message || "Не удалось повторно отправить код на почту.");
     } finally {

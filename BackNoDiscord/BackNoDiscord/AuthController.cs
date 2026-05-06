@@ -1179,6 +1179,7 @@ public class AuthController : ControllerBase
 
         var userEmail = user.email;
         var now = DateTimeOffset.UtcNow;
+        var deliveryMode = GetEmailDeliveryMode();
         var latestActive = await _context.EmailVerificationCodes
             .Where(item => item.UserId == user.id && !item.ConsumedAt.HasValue)
             .OrderByDescending(item => item.CreatedAt)
@@ -1191,7 +1192,8 @@ public class AuthController : ControllerBase
             return EmailVerificationResult.RateLimited(
                 userEmail,
                 latestActive.ExpiresAt,
-                latestActive.LastSentAt.Add(EmailVerificationResendCooldown));
+                latestActive.LastSentAt.Add(EmailVerificationResendCooldown),
+                deliveryMode);
         }
 
         var verificationCode = GenerateEmailVerificationCode();
@@ -1225,7 +1227,6 @@ public class AuthController : ControllerBase
         await _emailVerificationSender.SendVerificationCodeAsync(userEmail, verificationCode, expiresAt);
         await transaction.CommitAsync();
 
-        var deliveryMode = GetEmailDeliveryMode();
         return EmailVerificationResult.Success(
             userEmail,
             verificationToken,
@@ -1289,7 +1290,18 @@ public class AuthController : ControllerBase
 
     private string GetEmailDeliveryMode()
     {
-        return string.IsNullOrWhiteSpace(_config["Email:Mode"]) ? "mock" : _config["Email:Mode"]!.Trim().ToLowerInvariant();
+        var configuredMode = (_config["Email:Mode"] ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(configuredMode))
+        {
+            return configuredMode.ToLowerInvariant();
+        }
+
+        if (_environment.IsDevelopment())
+        {
+            return "mock";
+        }
+
+        throw new EmailDeliveryException("Email:Mode is not configured.");
     }
 
     private IActionResult CreateEmailAlreadyRegisteredResponse()
@@ -1625,15 +1637,21 @@ public sealed class EmailVerificationResult
 
     public object ToResponse()
     {
-        return new
+        var response = new Dictionary<string, object?>
         {
-            email = Email,
-            verificationToken = VerificationToken,
-            expiresAt = ExpiresAt.ToString("O"),
-            resendAvailableAt = ResendAvailableAt.ToString("O"),
-            deliveryMode = DeliveryMode,
-            debugCode = DebugCode
+            ["email"] = Email,
+            ["verificationToken"] = VerificationToken,
+            ["expiresAt"] = ExpiresAt.ToString("O"),
+            ["resendAvailableAt"] = ResendAvailableAt.ToString("O"),
+            ["deliveryMode"] = DeliveryMode
         };
+
+        if (!string.IsNullOrWhiteSpace(DebugCode))
+        {
+            response["debugCode"] = DebugCode;
+        }
+
+        return response;
     }
 
     public static EmailVerificationResult Success(string email, string verificationToken, DateTimeOffset expiresAt, DateTimeOffset resendAvailableAt, string deliveryMode, string? debugCode)
@@ -1650,14 +1668,14 @@ public sealed class EmailVerificationResult
         };
     }
 
-    public static EmailVerificationResult RateLimited(string email, DateTimeOffset expiresAt, DateTimeOffset resendAvailableAt)
+    public static EmailVerificationResult RateLimited(string email, DateTimeOffset expiresAt, DateTimeOffset resendAvailableAt, string deliveryMode)
     {
         return new EmailVerificationResult
         {
             Email = email,
             ExpiresAt = expiresAt,
             ResendAvailableAt = resendAvailableAt,
-            DeliveryMode = "mock",
+            DeliveryMode = deliveryMode,
             IsRateLimited = true
         };
     }

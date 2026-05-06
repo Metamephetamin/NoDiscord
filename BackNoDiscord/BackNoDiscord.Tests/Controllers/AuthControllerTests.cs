@@ -1,10 +1,12 @@
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
+using System.Text.Json;
 
 namespace BackNoDiscord.Tests.Controllers;
 
@@ -43,26 +45,81 @@ public sealed class AuthControllerTests : IDisposable
         Assert.Equal(1, _emailSender.SendCount);
     }
 
+    [Fact]
+    public async Task RequestLoginCode_WhenSmtpModeIsConfigured_DoesNotExposeDebugCode()
+    {
+        _context.Users.Add(new User
+        {
+            id = 2,
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = "LanayaSmtp",
+            email = "smtp-user@gmail.com",
+            is_email_verified = true,
+            password_hash = "hash"
+        });
+        await _context.SaveChangesAsync();
+        var controller = BuildController(emailMode: "smtp", environmentName: "Production");
+
+        var result = await controller.RequestLoginCode(new LoginCodeRequestDto { identifier = "smtp-user@gmail.com" });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var json = JsonSerializer.Serialize(ok.Value);
+        Assert.Contains("\"deliveryMode\":\"smtp\"", json);
+        Assert.DoesNotContain("debugCode", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, _emailSender.SendCount);
+    }
+
+    [Fact]
+    public async Task RequestLoginCode_WhenEmailModeIsMissingOutsideDevelopment_FailsClosedWithoutSendingCode()
+    {
+        _context.Users.Add(new User
+        {
+            id = 3,
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = "LanayaProduction",
+            email = "production-user@gmail.com",
+            is_email_verified = true,
+            password_hash = "hash"
+        });
+        await _context.SaveChangesAsync();
+        var controller = BuildController(emailMode: null, environmentName: "Production");
+
+        var result = await controller.RequestLoginCode(new LoginCodeRequestDto { identifier = "production-user@gmail.com" });
+
+        var unavailable = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
+        Assert.Equal(0, _emailSender.SendCount);
+        Assert.Empty(_context.EmailVerificationCodes);
+    }
+
     public void Dispose()
     {
         _context.Dispose();
     }
 
-    private AuthController BuildController()
+    private AuthController BuildController(string? emailMode = "mock", string environmentName = "Development")
     {
+        var values = new Dictionary<string, string?>
+        {
+            ["Crypto:Key"] = "0123456789abcdef0123456789abcdef"
+        };
+
+        if (emailMode != null)
+        {
+            values["Email:Mode"] = emailMode;
+        }
+
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Crypto:Key"] = "0123456789abcdef0123456789abcdef",
-                ["Email:Mode"] = "mock"
-            })
+            .AddInMemoryCollection(values)
             .Build();
 
         return new AuthController(
             _context,
             configuration,
             _emailSender,
-            new TestWebHostEnvironment(),
+            new TestWebHostEnvironment { EnvironmentName = environmentName },
             new CryptoService(configuration));
     }
 
