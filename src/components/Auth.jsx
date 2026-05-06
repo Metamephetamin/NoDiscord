@@ -1230,11 +1230,6 @@ export default function Auth({ onAuthSuccess }) {
         <div className="auth-brand__copy">
           <span className="auth-brand__name">
             <span className="auth-brand__name-base">{AUTH_BRAND_NAME}</span>
-            {!isLiteVisualMode ? (
-              <span className="auth-brand__name-overlay auth-brand__name-overlay--glitch" data-text={AUTH_BRAND_NAME} aria-hidden="true">
-                {AUTH_BRAND_NAME}
-              </span>
-            ) : null}
           </span>
           <h1 className="auth-brand__title">
             <span className="auth-brand__title-static">пространство для</span>

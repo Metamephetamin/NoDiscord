@@ -43,7 +43,7 @@ const MAX_PERF_EVENTS = 500;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
 const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = MAX_ELECTRON_DOWNLOAD_BYTES;
 const ATTACHMENT_PICKER_PREVIEW_MAX_EDGE = 320;
-const DEFAULT_APP_ICON_ASSET = "app-logos/logo-mono-light.png";
+const DEFAULT_APP_ICON_ASSET = "app-logos/logo-white-dark.png";
 const APP_LOGO_ASSET_PATHS = new Set([
   "app-logos/logo-mono-light.png",
   "app-logos/logo-gradient-light.png",

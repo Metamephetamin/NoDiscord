@@ -18,8 +18,8 @@ self.addEventListener("push", (event) => {
 
     const title = String(payload?.title || "Lanaya");
     const body = String(payload?.body || "").trim();
-    const icon = String(payload?.icon || "/image/app-logos/logo-mono-light.png").trim();
-    const badge = String(payload?.badge || icon || "/image/app-logos/logo-mono-light.png").trim();
+    const icon = String(payload?.icon || "/image/app-logos/logo-white-dark.png").trim();
+    const badge = String(payload?.badge || icon || "/image/app-logos/logo-white-dark.png").trim();
     const tag = String(payload?.tag || "").trim();
     const url = String(payload?.url || "/").trim() || "/";
 
