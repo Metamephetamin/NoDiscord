@@ -77,6 +77,8 @@
     "LogLevel": {
       "Default": "Information",
       "Microsoft.AspNetCore": "Warning",
+      "Microsoft.AspNetCore.HttpLogging": "Warning",
+      "Microsoft.AspNetCore.Routing.EndpointMiddleware": "Warning",
       "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
     }
   },

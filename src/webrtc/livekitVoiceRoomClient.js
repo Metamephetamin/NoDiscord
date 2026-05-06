@@ -43,6 +43,11 @@ const RTC_CONFIGURATION = {
   iceServers: (VOICE_RTC_CONFIGURATION.iceServers || []).map((server) => ({ ...server })),
 };
 setLogLevel(LogLevel.error);
+export const VOICE_MONITORING_EVENT_NAMES = Object.freeze({
+  signalDisconnect: "signalr.disconnect",
+  livekitReconnect: "livekit.reconnect",
+  uploadFailure: "upload.failure",
+});
 const MICROPHONE_TRACK_NAME = "microphone";
 const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";

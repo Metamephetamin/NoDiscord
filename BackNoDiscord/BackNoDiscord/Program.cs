@@ -15,6 +15,14 @@ using System.Threading.RateLimiting;
 LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.Configure(options =>
+{
+    options.ActivityTrackingOptions =
+        ActivityTrackingOptions.TraceId |
+        ActivityTrackingOptions.SpanId |
+        ActivityTrackingOptions.ParentId;
+});
+builder.Logging.AddFilter("Microsoft.AspNetCore.HttpLogging", LogLevel.Warning);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))

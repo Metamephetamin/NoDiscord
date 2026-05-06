@@ -10,6 +10,11 @@ const SESSION_API_URL_STORAGE_KEY = "session_api_url";
 const LEGACY_LOCAL_AUTH_BYPASS_TOKEN = "local-dev-auth-bypass-token";
 
 export const AUTH_UNAUTHORIZED_EVENT = "nodiscord:auth-unauthorized";
+export const AUTH_MONITORING_EVENT_NAMES = Object.freeze({
+  failure: "auth.failure",
+  unauthorized: "auth.unauthorized",
+  refreshFailure: "auth.refresh_failure",
+});
 
 const sessionCache = {
   user: null,
