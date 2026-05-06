@@ -35,6 +35,21 @@ export default function useMenuMainVoiceProcessing({
     () => getVoiceInputModeNoiseStrength(noiseSuppressionMode),
     [noiseSuppressionMode]
   );
+  const voiceProcessingStateRef = useMemo(() => ({
+    current: {
+      noiseSuppressionMode: DEFAULT_VOICE_INPUT_MODE,
+      noiseSuppressionStrength: getVoiceInputModeNoiseStrength(DEFAULT_VOICE_INPUT_MODE),
+      echoCancellationEnabled: true,
+    },
+  }), []);
+
+  useEffect(() => {
+    voiceProcessingStateRef.current = {
+      noiseSuppressionMode,
+      noiseSuppressionStrength,
+      echoCancellationEnabled,
+    };
+  }, [echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
 
   useEffect(() => {
     if (!user) {
@@ -98,16 +113,17 @@ export default function useMenuMainVoiceProcessing({
       return;
     }
 
-    client.setNoiseSuppressionMode(noiseSuppressionMode).catch((error) => {
+    const currentVoiceProcessingState = voiceProcessingStateRef.current;
+    client.setNoiseSuppressionMode(currentVoiceProcessingState.noiseSuppressionMode).catch((error) => {
       console.error("Ошибка применения стартового режима шумоподавления:", error);
     });
-    client.setNoiseSuppressionStrength?.(noiseSuppressionStrength).catch((error) => {
+    client.setNoiseSuppressionStrength?.(currentVoiceProcessingState.noiseSuppressionStrength).catch((error) => {
       console.error("Ошибка применения силы шумоподавления:", error);
     });
-    client.setEchoCancellationEnabled(echoCancellationEnabled).catch((error) => {
+    client.setEchoCancellationEnabled(currentVoiceProcessingState.echoCancellationEnabled).catch((error) => {
       console.error("Ошибка применения стартового эхоподавления:", error);
     });
-  }, [echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceClientRef]);
+  }, [voiceClientRef, voiceProcessingStateRef]);
 
   useEffect(() => {
     if (!voiceClientRef.current) {
