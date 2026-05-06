@@ -3113,6 +3113,8 @@ const handleDeviceChange = () => {
     return nextStream;
   };
 
+  const hasActiveVoiceRoom = () => Boolean(room && currentChannel);
+
   const getCachedPrewarmedSession = (channelName, user) => {
     return prewarmedSessionCache.take(channelName, user);
   };
@@ -4223,6 +4225,14 @@ const handleDeviceChange = () => {
       }
 
       noiseSuppressionMode = nextMode;
+      logVoiceDebug("local-audio:noise-mode-set", {
+        noiseSuppressionMode,
+        deferredRebuild: hasActiveVoiceRoom(),
+      });
+      if (hasActiveVoiceRoom()) {
+        return;
+      }
+
       await rebuildLocalAudioPipeline();
     },
 
@@ -4243,6 +4253,14 @@ const handleDeviceChange = () => {
       }
 
       echoCancellationEnabled = nextEnabled;
+      logVoiceDebug("local-audio:echo-cancellation-set", {
+        echoCancellationEnabled,
+        deferredRebuild: hasActiveVoiceRoom(),
+      });
+      if (hasActiveVoiceRoom()) {
+        return;
+      }
+
       await rebuildLocalAudioPipeline();
     },
 
