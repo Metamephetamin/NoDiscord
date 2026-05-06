@@ -461,7 +461,7 @@ function LocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) 
   );
 }
 
-function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, onRemove }) {
+function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry }) {
   const overlayState = getTelegramUploadOverlayState(attachmentItem);
   const primaryAction = overlayState.primaryAction === "retry" ? onRetry : onCancel;
 
@@ -487,26 +487,9 @@ function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry, on
         ) : (
           <span className="message-media__upload-loader" aria-hidden="true">
             <span className="message-media__upload-loader-ring" />
-            <span className="message-media__upload-loader-core" />
+            <span className="message-media__upload-cancel-icon message-media__upload-cancel-icon--simple" />
           </span>
         )}
-      </button>
-      <button
-        type="button"
-        className="message-media__upload-footer-simple"
-        title={overlayState.label}
-        aria-label={overlayState.failed ? "Убрать неотправленное вложение" : overlayState.label}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!overlayState.failed) {
-            return;
-          }
-
-          onRemove?.();
-        }}
-      >
-        <span className="message-media__upload-status-simple">{overlayState.label}</span>
       </button>
     </span>
   );
