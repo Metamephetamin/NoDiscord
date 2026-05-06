@@ -141,27 +141,28 @@ public class StreamedChatFileUploadReaderTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadAsync_RejectsBlockedExtensionWithoutFinalStorageWrite()
+    public async Task UploadAsync_StoresInstallerFileToStorage()
     {
         var file = BuildFormFile(
             "installer.exe",
             "application/vnd.microsoft.portable-executable",
             new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
 
-        var exception = await Assert.ThrowsAsync<StreamedChatFileUploadException>(() =>
-            StreamedChatFileUploadReader.UploadAsync(
-                file,
-                _tempDirectory,
-                userId: "42",
-                limits: new StreamedChatFileUploadLimits(
-                    MaxFileSizeBytes: 1024,
-                    MaxUserStorageBytes: 1024,
-                    MinFreeDiskBytes: 0),
-                storageMetrics: new TestStorageMetrics(),
-                CancellationToken.None));
+        var result = await StreamedChatFileUploadReader.UploadAsync(
+            file,
+            _tempDirectory,
+            userId: "42",
+            limits: new StreamedChatFileUploadLimits(
+                MaxFileSizeBytes: 1024,
+                MaxUserStorageBytes: 1024,
+                MinFreeDiskBytes: 0),
+            storageMetrics: new TestStorageMetrics(),
+            CancellationToken.None);
 
-        Assert.Equal("This file type is not allowed.", exception.Message);
-        Assert.Empty(Directory.EnumerateFiles(_tempDirectory));
+        Assert.Equal("installer.exe", result.DisplayFileName);
+        Assert.Equal("application/vnd.microsoft.portable-executable", result.ContentType);
+        Assert.EndsWith(".exe", result.FileUrl, StringComparison.Ordinal);
+        Assert.Single(Directory.EnumerateFiles(_tempDirectory));
     }
 
     [Fact]

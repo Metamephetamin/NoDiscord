@@ -95,6 +95,7 @@ export default function TextChatView(props) {
     preferExplicitSend,
     handleFileChange,
     queueFiles,
+    handleRejectedAttachmentFiles,
     removePendingUpload,
     cancelLocalEchoUpload,
     retryLocalEchoUpload,
@@ -525,6 +526,7 @@ export default function TextChatView(props) {
             preferExplicitSend={preferExplicitSend}
             onFileChange={handleFileChange}
             onQueueFiles={queueFiles}
+            onRejectedFiles={handleRejectedAttachmentFiles}
             onRemovePendingUpload={removePendingUpload}
             onRetryPendingUpload={retryPendingUpload}
             onClearPendingUploads={clearPendingUploads}
@@ -591,6 +593,7 @@ export default function TextChatView(props) {
           preferExplicitSend={preferExplicitSend}
           onFileChange={handleFileChange}
           onQueueFiles={queueFiles}
+          onRejectedFiles={handleRejectedAttachmentFiles}
           onRemovePendingUpload={removePendingUpload}
           onRetryPendingUpload={retryPendingUpload}
           onClearPendingUploads={clearPendingUploads}

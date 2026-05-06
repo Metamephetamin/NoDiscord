@@ -20,6 +20,26 @@ public class ChatFilesController : ControllerBase
     private const long DefaultMinFreeDiskBytes = 1L * 1024 * 1024 * 1024;
     private const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
     private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
+    private static readonly HashSet<string> InlinePreviewExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".avif",
+        ".bmp",
+        ".gif",
+        ".heic",
+        ".heif",
+        ".ico",
+        ".jpeg",
+        ".jpg",
+        ".m4a",
+        ".mov",
+        ".mp3",
+        ".mp4",
+        ".ogg",
+        ".png",
+        ".wav",
+        ".webm",
+        ".webp"
+    };
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly IConfiguration _configuration;
     private readonly IChatFileUploadStorageMetrics _storageMetrics;
@@ -257,6 +277,18 @@ public class ChatFilesController : ControllerBase
 
         Response.Headers.CacheControl = "private,max-age=604800";
         Response.Headers["X-Content-Type-Options"] = "nosniff";
-        return PhysicalFile(filePath, contentType, enableRangeProcessing: true);
+        var fileResult = PhysicalFile(filePath, contentType, enableRangeProcessing: true);
+        if (ShouldForceAttachmentDownload(safeFileName))
+        {
+            fileResult.FileDownloadName = safeFileName;
+        }
+
+        return fileResult;
+    }
+
+    private static bool ShouldForceAttachmentDownload(string fileName)
+    {
+        var extension = Path.GetExtension(fileName);
+        return string.IsNullOrWhiteSpace(extension) || !InlinePreviewExtensions.Contains(extension);
     }
 }

@@ -1,4 +1,5 @@
 import { compressImageInWorker } from "./imageCompressionWorkerClient";
+import { isAllowedChatAttachmentFile as isAllowedChatAttachmentByPolicy } from "./chatAttachmentPolicy";
 
 const COMPRESSIBLE_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -26,28 +27,6 @@ const UPLOAD_SIGNATURE_CONTENT_TYPES = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
 };
-
-const ALLOWED_CHAT_ATTACHMENT_EXTENSIONS = new Set([
-  ".jpg",
-  ".jpeg",
-  ".jfif",
-  ".png",
-  ".webp",
-  ".gif",
-  ".bmp",
-  ".pdf",
-  ".txt",
-  ".md",
-  ".bin",
-  ".zip",
-  ".rar",
-  ".7z",
-  ".mp3",
-  ".wav",
-  ".ogg",
-  ".mp4",
-  ".webm",
-]);
 
 const JPEG_EXTENSIONS = new Set([".jpg", ".jpeg", ".jfif"]);
 
@@ -186,12 +165,7 @@ function getFileExtension(name) {
 }
 
 export function isAllowedChatAttachmentFile(file) {
-  if (!(file instanceof File)) {
-    return false;
-  }
-
-  const extension = getFileExtension(file.name);
-  return !extension || ALLOWED_CHAT_ATTACHMENT_EXTENSIONS.has(extension);
+  return isAllowedChatAttachmentByPolicy(file);
 }
 
 function bytesStartWith(bytes, signature) {

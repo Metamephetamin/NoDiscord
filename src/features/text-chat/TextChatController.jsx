@@ -2719,6 +2719,18 @@ export default function TextChat({
     }));
   };
 
+  const handleRejectedAttachmentFiles = useCallback((files) => {
+    const names = (Array.isArray(files) ? files : [])
+      .map((file) => String(file?.name || "").trim())
+      .filter(Boolean);
+    const sample = names.slice(0, 2).join(", ");
+    const extraCount = Math.max(0, names.length - 2);
+    const suffix = extraCount ? ` и ещё ${extraCount}` : "";
+    setErrorMessage(sample
+      ? `Нельзя отправить файл: ${sample}${suffix}. Этот тип вложения заблокирован.`
+      : "Этот тип файла нельзя отправить.");
+  }, []);
+
   useEffect(() => () => {
     revokePendingUploadPreviews(selectedFilesRef.current);
   }, []);
@@ -3092,6 +3104,7 @@ export default function TextChat({
       preferExplicitSend={preferExplicitSend}
       handleFileChange={handleFileChange}
       queueFiles={queueFiles}
+      handleRejectedAttachmentFiles={handleRejectedAttachmentFiles}
       removePendingUpload={removePendingUpload}
       cancelLocalEchoUpload={cancelLocalEchoUpload}
       retryLocalEchoUpload={retryLocalEchoUpload}

@@ -75,7 +75,7 @@ public class UploadPoliciesTests
     }
 
     [Fact]
-    public void TryValidateChatFile_RejectsDisallowedExtension()
+    public void TryValidateChatFile_AllowsHtmlAttachment()
     {
         using var stream = new MemoryStream([1, 2, 3]);
         IFormFile file = new FormFile(stream, 0, stream.Length, "file", "script.html")
@@ -84,10 +84,76 @@ public class UploadPoliciesTests
             ContentType = "text/html"
         };
 
-        var success = UploadPolicies.TryValidateChatFile(file, out _, out _, out var error);
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
 
-        Assert.False(success);
-        Assert.Equal("This file type is not allowed.", error);
+        Assert.True(success);
+        Assert.Equal(".html", extension);
+        Assert.Equal("text/html", contentType);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Theory]
+    [InlineData("report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+    [InlineData("table.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
+    [InlineData("slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation")]
+    public void TryValidateChatFile_AllowsOfficeDocuments(string fileName, string expectedContentType)
+    {
+        using var stream = new MemoryStream(new byte[] { 0x50, 0x4B, 0x03, 0x04, 0x14, 0x00 });
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = expectedContentType
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
+
+        Assert.True(success);
+        Assert.Equal(Path.GetExtension(fileName), extension);
+        Assert.Equal(expectedContentType, contentType);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Theory]
+    [InlineData("notes.csv", "name,value\none,1\n")]
+    [InlineData("data.json", "{\"ok\":true}")]
+    [InlineData("readme.log", "plain log line\n")]
+    [InlineData("export.sql", "select 1;\n")]
+    public void TryValidateChatFile_AllowsPlainDocumentExtensions(string fileName, string content)
+    {
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "text/plain"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out _, out var error);
+
+        Assert.True(success);
+        Assert.Equal(Path.GetExtension(fileName), extension);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Theory]
+    [InlineData("start.bat")]
+    [InlineData("deploy.cmd")]
+    [InlineData("script.ps1")]
+    [InlineData("tool.msi")]
+    [InlineData("payload.js")]
+    public void TryValidateChatFile_AllowsInstallerAndScriptExtensions(string fileName)
+    {
+        using var stream = new MemoryStream([1, 2, 3]);
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/octet-stream"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out _, out var error);
+
+        Assert.True(success);
+        Assert.Equal(Path.GetExtension(fileName), extension);
+        Assert.Equal(string.Empty, error);
     }
 
     [Fact]
@@ -109,7 +175,7 @@ public class UploadPoliciesTests
     }
 
     [Fact]
-    public void TryValidateChatFile_RejectsExecutableFiles()
+    public void TryValidateChatFile_AllowsExecutableFiles()
     {
         using var stream = new MemoryStream(new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
         IFormFile file = new FormFile(stream, 0, stream.Length, "file", "installer.exe")
@@ -118,10 +184,12 @@ public class UploadPoliciesTests
             ContentType = "application/vnd.microsoft.portable-executable"
         };
 
-        var success = UploadPolicies.TryValidateChatFile(file, out _, out _, out var error);
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
 
-        Assert.False(success);
-        Assert.Equal("This file type is not allowed.", error);
+        Assert.True(success);
+        Assert.Equal(".exe", extension);
+        Assert.Equal("application/vnd.microsoft.portable-executable", contentType);
+        Assert.Equal(string.Empty, error);
     }
 
     [Fact]
@@ -138,6 +206,23 @@ public class UploadPoliciesTests
 
         Assert.False(success);
         Assert.Equal("File content does not match the selected file type.", error);
+    }
+
+    [Fact]
+    public void TryValidateChatFile_AllowsExecutableSignatureInGenericFile()
+    {
+        using var stream = new MemoryStream(new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", "payload.dat")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/octet-stream"
+        };
+
+        var success = UploadPolicies.TryValidateChatFile(file, out var extension, out _, out var error);
+
+        Assert.True(success);
+        Assert.Equal(".dat", extension);
+        Assert.Equal(string.Empty, error);
     }
 
     [Fact]

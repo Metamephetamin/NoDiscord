@@ -156,6 +156,7 @@ function TextChatComposer({
   instantAttachmentSend = false,
   onFileChange,
   onQueueFiles,
+  onRejectedFiles,
   onRemovePendingUpload,
   onRetryPendingUpload,
   onClearPendingUploads,
@@ -246,6 +247,7 @@ function TextChatComposer({
     messageEditState,
     onFileChange,
     onQueueFiles,
+    onRejectedFiles,
     onToggleBatchUploadSendAsDocuments,
   });
 

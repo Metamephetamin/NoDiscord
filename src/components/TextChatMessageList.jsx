@@ -521,13 +521,6 @@ function LocalEchoDocumentMeta({ attachmentItem, onCancel, onRetry, onRemove }) 
         <span className="message-attachment__size message-attachment__size--upload">
           {uploadState.progressLabel}
         </span>
-        {uploadState.showSpinner ? (
-          <span
-            className="message-attachment__upload-spinner"
-            style={{ "--message-attachment-upload-progress": `${uploadState.progress}%` }}
-            aria-hidden="true"
-          />
-        ) : null}
       </span>
       <span className="message-attachment__open-with message-attachment__open-with--upload">{uploadState.statusLabel}</span>
       <span className="message-attachment__local-echo-actions">
@@ -1505,7 +1498,6 @@ function MessageAttachmentCard({
           ) : (
             <>
               <span className="message-attachment__size">{formatFileSize(attachmentItem.attachmentSize)}</span>
-              {isDocumentAttachment ? <span className="message-attachment__open-with">OPEN WITH</span> : null}
             </>
           )}
         </span>

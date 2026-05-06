@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { isAllowedChatAttachmentFile } from "../utils/chatAttachmentPolicy";
 import { recordPerfEvent, startPerfTrace } from "../utils/perf";
 
 const SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG = "__TEND_SKIP_NEXT_WINDOW_FOCUS_REFRESH__";
@@ -121,6 +122,7 @@ export default function useTextChatAttachmentPickerFlow({
   messageEditState,
   onFileChange,
   onQueueFiles,
+  onRejectedFiles,
   onToggleBatchUploadSendAsDocuments,
 }) {
   const [pendingBatchSelection, setPendingBatchSelection] = useState(null);
@@ -355,7 +357,11 @@ export default function useTextChatAttachmentPickerFlow({
       : 0;
     const pickerDiagnostic = pickerDiagnosticRef.current;
     messageComposerRef.current?.classList.remove("message-composer--attach-menu-open");
-    const selectedInputFiles = Array.from(event?.target?.files || []);
+    const pickedInputFiles = Array.from(event?.target?.files || []);
+    const rejectedInputFiles = pickedInputFiles.filter((file) => !isAllowedChatAttachmentFile(file));
+    const selectedInputFiles = rejectedInputFiles.length
+      ? pickedInputFiles.filter((file) => isAllowedChatAttachmentFile(file))
+      : pickedInputFiles;
     const totalSelectedBytes = selectedInputFiles.reduce(
       (sum, file) => sum + (Number(file?.size || 0) || 0),
       0
@@ -372,6 +378,7 @@ export default function useTextChatAttachmentPickerFlow({
 
     logUploadDiagnostic("input-change-start", {
       selectedFileCount: selectedInputFiles.length,
+      rejectedFileCount: rejectedInputFiles.length,
       selectedFromDocumentPicker,
       allSelectedAreMedia,
       shouldPreferSendAsDocuments,
@@ -390,6 +397,7 @@ export default function useTextChatAttachmentPickerFlow({
 
     recordPerfEvent("text-chat", "file-picker:input-change", {
       selectedFileCount: selectedInputFiles.length,
+      rejectedFileCount: rejectedInputFiles.length,
       selectedFromDocumentPicker,
       allSelectedAreMedia,
       shouldPreferSendAsDocuments,
@@ -433,6 +441,10 @@ export default function useTextChatAttachmentPickerFlow({
       }
     } else {
       onFileChange(event);
+    }
+
+    if (rejectedInputFiles.length) {
+      onRejectedFiles?.(rejectedInputFiles);
     }
 
     if (event?.target) {

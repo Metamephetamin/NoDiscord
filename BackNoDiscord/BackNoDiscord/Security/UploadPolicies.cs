@@ -43,22 +43,26 @@ public static class UploadPolicies
         ".mp4"
     };
 
-    private static readonly HashSet<string> AllowedChatExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> SignatureValidatedChatExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".jpg",
-        ".jpeg",
-        ".jfif",
-        ".png",
-        ".webp",
-        ".gif",
         ".heif",
         ".heic",
-        ".bmp",
         ".pdf",
         ".txt",
         ".md",
-        ".bin",
+        ".csv",
+        ".json",
+        ".log",
+        ".sql",
+        ".xml",
+        ".rtf",
         ".zip",
+        ".docx",
+        ".xlsx",
+        ".pptx",
+        ".odt",
+        ".ods",
+        ".odp",
         ".rar",
         ".7z",
         ".mp3",
@@ -232,24 +236,23 @@ public static class UploadPolicies
         contentType = GetContentType(extension);
         error = string.Empty;
 
-        if (!AllowedChatExtensions.Contains(extension))
-        {
-            error = "This file type is not allowed.";
-            return false;
-        }
-
         if (!HasExpectedFileSignature(file, extension))
         {
-            if (!TryDetectChatFileSignature(file, out var detectedExtension) ||
-                !AllowedChatExtensions.Contains(detectedExtension) ||
+            var detectedExtension = string.Empty;
+            if (RequiresChatSignatureValidation(extension) &&
+                (!TryDetectChatFileSignature(file, out detectedExtension) ||
                 !AreCompatibleChatFileExtensions(extension, detectedExtension))
+            )
             {
                 error = "File content does not match the selected file type.";
                 return false;
             }
 
-            extension = NormalizeStorageExtension(detectedExtension);
-            contentType = GetContentType(extension);
+            if (!string.IsNullOrWhiteSpace(detectedExtension))
+            {
+                extension = NormalizeStorageExtension(detectedExtension);
+                contentType = GetContentType(extension);
+            }
         }
 
         extension = NormalizeStorageExtension(extension);
@@ -356,6 +359,11 @@ public static class UploadPolicies
                || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool RequiresChatSignatureValidation(string extension)
+    {
+        return SignatureValidatedChatExtensions.Contains(extension) || IsImageExtension(extension);
+    }
+
     private static bool TryDetectChatFileSignature(IFormFile file, out string extension)
     {
         using var stream = file.OpenReadStream();
@@ -424,7 +432,7 @@ public static class UploadPolicies
             ".heif" or ".heic" => HasAsciiAt(header, 4, "ftyp"),
             ".bmp" => StartsWithAscii(header, "BM"),
             ".pdf" => StartsWithAscii(header, "%PDF"),
-            ".zip" => StartsWith(header, 0x50, 0x4B, 0x03, 0x04) || StartsWith(header, 0x50, 0x4B, 0x05, 0x06) || StartsWith(header, 0x50, 0x4B, 0x07, 0x08),
+            ".zip" or ".docx" or ".xlsx" or ".pptx" or ".odt" or ".ods" or ".odp" => StartsWith(header, 0x50, 0x4B, 0x03, 0x04) || StartsWith(header, 0x50, 0x4B, 0x05, 0x06) || StartsWith(header, 0x50, 0x4B, 0x07, 0x08),
             ".rar" => StartsWith(header, 0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00) || StartsWith(header, 0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00),
             ".7z" => StartsWith(header, 0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C),
             ".mp3" => StartsWithAscii(header, "ID3") || StartsWith(header, 0xFF, 0xFB) || StartsWith(header, 0xFF, 0xF3) || StartsWith(header, 0xFF, 0xF2),
@@ -432,7 +440,7 @@ public static class UploadPolicies
             ".ogg" => StartsWithAscii(header, "OggS"),
             ".mp4" or ".m4a" or ".mov" => HasAsciiAt(header, 4, "ftyp"),
             ".webm" => StartsWith(header, 0x1A, 0x45, 0xDF, 0xA3),
-            ".txt" or ".md" => LooksLikeText(header),
+            ".txt" or ".md" or ".csv" or ".json" or ".log" or ".sql" or ".xml" or ".rtf" => LooksLikeText(header),
             ".bin" => true,
             _ => false
         };

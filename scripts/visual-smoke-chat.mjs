@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/css/TextChat.css", "utf8");
+const messageListSource = readFileSync("src/components/TextChatMessageList.jsx", "utf8");
 
 const requiredSelectors = [
   ".msg-content--dm",
@@ -10,7 +11,7 @@ const requiredSelectors = [
   ".message-footer--inline",
   ".message-read-status__check",
   ".message-attachment--document.message-attachment--local-echo",
-  ".message-attachment__upload-spinner",
+  ".message-attachment__upload-control",
   ".msg-content--dm.msg-content--emoji-only-text",
   ".message-item--emoji-only-text",
   ".msg-content--dm.msg-content--file-only",
@@ -29,5 +30,7 @@ assert(css.includes("background: transparent"), "Emoji-only DM messages must not
 assert(css.includes("flex-direction: row"), "Emoji-only DM messages must keep emoji and time on one row.");
 assert(css.includes(".msg-content--dm.msg-content--file-only::before"), "File-only DM messages must not render a bubble tail.");
 assert(css.includes(".msg-content--file-only .message-attachment--document"), "File-only document attachments must use the compact file pill style.");
+assert(!messageListSource.includes("message-attachment__upload-spinner"), "Document upload rows must not render a second right-side loader.");
+assert(!messageListSource.includes("OPEN WITH"), "Ready document attachments must not render the legacy OPEN WITH label.");
 
 console.log("Chat visual smoke checks passed.");
