@@ -30,6 +30,7 @@ import {
   writePinnedMessages,
 } from "../../utils/textChatHelpers";
 import { normalizeVoiceMessageMetadata } from "../../utils/voiceMessages";
+import { shouldTrackIncomingUnread } from "../../utils/unreadState";
 
 import {
   createPinnedSnapshot,
@@ -1985,7 +1986,13 @@ export default function TextChat({
           });
         }));
 
-        if (isDirectChat && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
+        const shouldCreateUnread = shouldTrackIncomingUnread({
+          channelId: scopedChannelId,
+          activeChannelId: scopedChannelId,
+          authorUserId: nextMessage?.authorUserId,
+          currentUserId,
+        });
+        if (isDirectChat && !shouldCreateUnread && String(nextMessage?.authorUserId || "") !== String(currentUserId)) {
           playDirectMessageSound("receive");
           chatConnection.invoke("MarkChannelRead", scopedChannelId).catch(() => {});
         }

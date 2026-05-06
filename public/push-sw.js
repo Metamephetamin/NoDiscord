@@ -6,6 +6,37 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+const DEFAULT_PUSH_LOGO = "/image/app-logos/logo-white-dark.png";
+const SAFE_PAYLOAD_KEYS = new Set([
+  "type",
+  "url",
+  "route",
+  "channelId",
+  "conversationId",
+  "serverId",
+  "messageId",
+  "senderId",
+  "title",
+  "body",
+  "tag",
+]);
+const FORBIDDEN_PAYLOAD_KEY_PATTERN = /(token|secret|password|cookie|authorization|auth|refresh|access)/i;
+
+function sanitizePushPayload(payload) {
+  const sanitized = {};
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey || FORBIDDEN_PAYLOAD_KEY_PATTERN.test(normalizedKey) || !SAFE_PAYLOAD_KEYS.has(normalizedKey)) {
+      return;
+    }
+
+    sanitized[normalizedKey] = typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+      ? value
+      : String(value ?? "");
+  });
+  return sanitized;
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     let payload = {};
@@ -16,12 +47,13 @@ self.addEventListener("push", (event) => {
       payload = {};
     }
 
-    const title = String(payload?.title || "Lanaya");
-    const body = String(payload?.body || "").trim();
-    const icon = String(payload?.icon || "/image/app-logos/logo-white-dark.png").trim();
-    const badge = String(payload?.badge || icon || "/image/app-logos/logo-white-dark.png").trim();
-    const tag = String(payload?.tag || "").trim();
-    const url = String(payload?.url || "/").trim() || "/";
+    const safePayload = sanitizePushPayload(payload);
+    const title = String(safePayload?.title || "Lanaya");
+    const body = String(safePayload?.body || "").trim();
+    const icon = DEFAULT_PUSH_LOGO;
+    const badge = DEFAULT_PUSH_LOGO;
+    const tag = String(safePayload?.tag || "").trim();
+    const url = String(safePayload?.url || "/").trim() || "/";
 
     const windowClients = await self.clients.matchAll({
       type: "window",
@@ -33,7 +65,7 @@ self.addEventListener("push", (event) => {
       windowClients.forEach((client) => {
         client.postMessage({
           type: "push:received",
-          payload,
+          payload: safePayload,
         });
       });
       return;
@@ -47,8 +79,8 @@ self.addEventListener("push", (event) => {
       renotify: true,
       data: {
         url,
-        type: String(payload?.type || "").trim(),
-        payload,
+        type: String(safePayload?.type || "").trim(),
+        payload: safePayload,
       },
     });
   })());

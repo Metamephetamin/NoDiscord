@@ -119,6 +119,15 @@ import {
   DEFAULT_SERVER_ICON,
   resolveMediaUrl,
 } from "../../utils/media";
+import {
+  clearUnreadCount,
+  getTotalUnreadCount,
+  getUnreadThreadCount,
+  incrementUnreadCount,
+  mergeUnreadCountsFromTargets,
+  shouldNotifyForUnread,
+  shouldTrackIncomingUnread,
+} from "../../utils/unreadState";
 import { getDisplayCaptureSupportInfo } from "../../utils/browserMediaSupport";
 import {
   getDefaultMediaFrame,
@@ -1418,23 +1427,17 @@ export default function MenuMain({
     [currentUserId, friendsWithRelationState, participantsMap, servers]
   );
   const totalDirectUnreadCount = useMemo(
-    () => Object.values(directUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
+    () => getTotalUnreadCount(directUnreadCounts),
     [directUnreadCounts]
   );
   const incomingFriendRequestCount = useMemo(() => incomingFriendRequests.length, [incomingFriendRequests]);
   const conversationUnreadThreadCount = useMemo(
-    () => conversationTargets.reduce((sum, conversation) => {
-      const channelId = String(conversation?.directChannelId || "").trim();
-      if (!channelId || channelId === currentConversationChannelId) {
-        return sum;
-      }
-
-      const hasLocalCount = Object.prototype.hasOwnProperty.call(directUnreadCounts || {}, channelId);
-      const unreadCount = hasLocalCount
-        ? Number(directUnreadCounts[channelId] || 0)
-        : Number(conversation?.unreadCount || 0);
-      return unreadCount > 0 ? sum + 1 : sum;
-    }, 0),
+    () => getUnreadThreadCount(conversationTargets, {
+      state: directUnreadCounts,
+      activeChannelId: currentConversationChannelId,
+      getChannelId: (conversation) => conversation?.directChannelId,
+      getFallbackUnreadCount: (conversation) => conversation?.unreadCount,
+    }),
     [conversationTargets, currentConversationChannelId, directUnreadCounts]
   );
   const totalFriendsAttentionCount = useMemo(
@@ -1442,7 +1445,7 @@ export default function MenuMain({
     [incomingFriendRequestCount, totalDirectUnreadCount]
   );
   const totalServerUnreadCount = useMemo(
-    () => Object.values(serverUnreadCounts || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0),
+    () => getTotalUnreadCount(serverUnreadCounts),
     [serverUnreadCounts]
   );
   const activeServerUnreadCount = useMemo(() => {
@@ -1717,51 +1720,28 @@ export default function MenuMain({
       return;
     }
 
-    setDirectUnreadCounts((previous) => ({
-      ...previous,
-      [channelId]: Math.min(999, Number(previous[channelId] || 0) + 1),
-    }));
+    setDirectUnreadCounts((previous) => incrementUnreadCount(previous, channelId));
   };
   const incrementServerUnread = (channelKey) => {
     if (!channelKey) {
       return;
     }
 
-    setServerUnreadCounts((previous) => ({
-      ...previous,
-      [channelKey]: Math.min(999, Number(previous[channelKey] || 0) + 1),
-    }));
+    setServerUnreadCounts((previous) => incrementUnreadCount(previous, channelKey));
   };
   const clearDirectUnread = (channelId) => {
     if (!channelId) {
       return;
     }
 
-    setDirectUnreadCounts((previous) => {
-      if (Object.prototype.hasOwnProperty.call(previous, channelId) && Number(previous[channelId] || 0) === 0) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        [channelId]: 0,
-      };
-    });
+    setDirectUnreadCounts((previous) => clearUnreadCount(previous, channelId, { keepZero: true }));
   };
   const clearServerUnread = (channelKey) => {
     if (!channelKey) {
       return;
     }
 
-    setServerUnreadCounts((previous) => {
-      if (!previous[channelKey]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[channelKey];
-      return next;
-    });
+    setServerUnreadCounts((previous) => clearUnreadCount(previous, channelKey));
   };
   const logVoiceHubError = (label, error) => {
     if (isUnauthorizedError(error)) {
@@ -2735,35 +2715,11 @@ export default function MenuMain({
       return;
     }
 
-    setDirectUnreadCounts((previous) => {
-      let changed = false;
-      const next = { ...previous };
-
-      conversationTargets.forEach((conversation) => {
-        const channelId = String(conversation?.directChannelId || "").trim();
-        if (!channelId) {
-          return;
-        }
-
-        if (workspaceMode === "friends" && channelId === currentConversationChannelId) {
-          if (Number(next[channelId] || 0) !== 0 || !Object.prototype.hasOwnProperty.call(next, channelId)) {
-            next[channelId] = 0;
-            changed = true;
-          }
-          return;
-        }
-
-        const unreadCount = Math.max(0, Number(conversation?.unreadCount || 0) || 0);
-        const hasLocalCount = Object.prototype.hasOwnProperty.call(next, channelId);
-        const localUnreadCount = Number(next[channelId] || 0);
-        if (unreadCount > localUnreadCount && (!hasLocalCount || localUnreadCount > 0)) {
-          next[channelId] = Math.min(999, unreadCount);
-          changed = true;
-        }
-      });
-
-      return changed ? next : previous;
-    });
+    setDirectUnreadCounts((previous) => mergeUnreadCountsFromTargets(previous, conversationTargets, {
+      activeChannelId: workspaceMode === "friends" ? currentConversationChannelId : "",
+      getChannelId: (conversation) => conversation?.directChannelId,
+      getUnreadCount: (conversation) => conversation?.unreadCount,
+    }));
   }, [conversationTargets, currentConversationChannelId, workspaceMode]);
 
   useEffect(() => {
@@ -2941,8 +2897,13 @@ export default function MenuMain({
         return;
       }
 
-      const isCurrentDirectOpen = channelId === currentDirectChannelId;
-      if (isCurrentDirectOpen) {
+      const shouldTrackUnread = shouldTrackIncomingUnread({
+        channelId,
+        activeChannelId: currentDirectChannelId,
+        authorUserId: messageItem?.authorUserId,
+        currentUserId,
+      });
+      if (!shouldTrackUnread) {
         return;
       }
 
@@ -2953,7 +2914,11 @@ export default function MenuMain({
 
       incrementDirectUnread(channelId);
 
-      if (!directNotificationsEnabled) {
+      if (!shouldNotifyForUnread({
+        notificationsEnabled: directNotificationsEnabled,
+        muted: Boolean(friend?.isMuted || friend?.muted),
+        shouldTrackUnread,
+      })) {
         return;
       }
 
@@ -3006,17 +2971,23 @@ export default function MenuMain({
         return;
       }
 
-      if (String(messageItem?.authorUserId || "") === String(currentUserId)) {
-        return;
-      }
-
-      if (channelId === currentConversationChannelId) {
+      const shouldTrackUnread = shouldTrackIncomingUnread({
+        channelId,
+        activeChannelId: currentConversationChannelId,
+        authorUserId: messageItem?.authorUserId,
+        currentUserId,
+      });
+      if (!shouldTrackUnread) {
         return;
       }
 
       incrementDirectUnread(channelId);
 
-      if (!conversationNotificationsEnabled) {
+      if (!shouldNotifyForUnread({
+        notificationsEnabled: conversationNotificationsEnabled,
+        muted: Boolean(conversation?.isMuted || conversation?.muted),
+        shouldTrackUnread,
+      })) {
         return;
       }
 
@@ -3065,10 +3036,6 @@ export default function MenuMain({
         return;
       }
 
-      if (String(messageItem?.authorUserId || "") === String(currentUserId)) {
-        return;
-      }
-
       const fallbackServer =
         servers.find((server) => String(server.id) === String(parsedChannel.serverId)) ||
         servers.find((server) => (server.textChannels || []).some((channel) => String(channel.id) === String(parsedChannel.channelId)));
@@ -3087,19 +3054,29 @@ export default function MenuMain({
         return;
       }
 
-      const isCurrentChannelOpen =
+      const activeScopedChannelId =
         workspaceMode === "servers" &&
         !activeDirectFriendId &&
-        String(activeServerId || "") === String(channelInfo.serverId) &&
-        String(currentTextChannelId || "") === String(channelInfo.channelId);
-
-      if (isCurrentChannelOpen) {
+        String(activeServerId || "") === String(channelInfo.serverId)
+          ? getScopedChatChannelId(channelInfo.serverId, currentTextChannelId)
+          : "";
+      const shouldTrackUnread = shouldTrackIncomingUnread({
+        channelId: scopedChannelId,
+        activeChannelId: activeScopedChannelId,
+        authorUserId: messageItem?.authorUserId,
+        currentUserId,
+      });
+      if (!shouldTrackUnread) {
         return;
       }
 
       incrementServerUnread(scopedChannelId);
 
-      if (!serverNotificationsEnabled) {
+      if (!shouldNotifyForUnread({
+        notificationsEnabled: serverNotificationsEnabled,
+        muted: Boolean(channelInfo?.isMuted || channelInfo?.muted),
+        shouldTrackUnread,
+      })) {
         return;
       }
 

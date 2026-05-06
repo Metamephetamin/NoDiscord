@@ -13,6 +13,7 @@ import {
   normalizeFriendRequest,
   parseFriendSearchInput,
 } from "../utils/menuMainModel";
+import { incrementUnreadCount, shouldTrackIncomingUnread } from "../utils/unreadState";
 
 const SKIP_NEXT_WINDOW_FOCUS_REFRESH_FLAG = "__TEND_SKIP_NEXT_WINDOW_FOCUS_REFRESH__";
 
@@ -666,6 +667,13 @@ export default function useFriendsWorkspaceState({
       if (!channelId || channelId.startsWith("dm:")) {
         return;
       }
+      const authorUserId = String(messageItem?.authorUserId || messageItem?.AuthorUserId || "");
+      const currentUserId = String(user?.id || user?.userId || "");
+      const shouldIncrementUnread = shouldTrackIncomingUnread({
+        channelId,
+        authorUserId,
+        currentUserId,
+      });
 
       setConversations((previous) => {
         let changed = false;
@@ -676,13 +684,17 @@ export default function useFriendsWorkspaceState({
 
           changed = true;
           const timestamp = String(messageItem?.timestamp || messageItem?.Timestamp || new Date().toISOString());
+          const unreadCount = shouldIncrementUnread
+            ? incrementUnreadCount({ [channelId]: conversation.unreadCount }, channelId)[channelId]
+            : conversation.unreadCount;
           return {
             ...conversation,
             updatedAt: timestamp,
+            unreadCount,
             lastMessage: {
               id: String(messageItem?.id || messageItem?.Id || ""),
               channelId,
-              authorUserId: String(messageItem?.authorUserId || messageItem?.AuthorUserId || ""),
+              authorUserId,
               username: String(messageItem?.username || messageItem?.Username || "User"),
               preview: getIncomingMessagePreview(messageItem, "Новое сообщение"),
               timestamp,
