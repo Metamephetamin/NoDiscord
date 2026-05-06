@@ -3136,8 +3136,8 @@
   align-items: center;
   justify-content: center;
   font: inherit;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.32);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
   cursor: pointer;
   pointer-events: auto;
@@ -3147,32 +3147,32 @@
 .message-media__upload-action:hover,
 .message-media__upload-action:focus-visible {
   transform: scale(1.025);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.62);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
   outline: none;
 }
 
 .message-media__upload-action--loading {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
 }
 
 .message-media__upload-action--loading:hover,
 .message-media__upload-action--loading:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .message-media__upload-action--retry {
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
 }
 
 .message-media__upload-action--retry:hover,
 .message-media__upload-action--retry:focus-visible {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .message-media__upload-retry-icon {
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
   color: #ffffff;
   transform: translateY(-1px);
@@ -3359,15 +3359,15 @@
 
 .message-media__upload-cancel-icon--simple {
   z-index: 1;
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
 }
 
 .message-media__upload-cancel-icon--simple::before,
 .message-media__upload-cancel-icon--simple::after {
-  left: 7px;
+  left: 5.5px;
   top: -1px;
-  height: 18px;
+  height: 15px;
   width: 2px;
 }
 
@@ -3556,9 +3556,7 @@
   flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.52);
   border-radius: 999px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)) padding-box,
-    conic-gradient(#ffffff var(--message-attachment-upload-progress, 0%), rgba(255, 255, 255, 0.28) 0) border-box;
+  background: transparent;
   color: #ffffff;
   cursor: pointer;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
@@ -3585,8 +3583,8 @@
 }
 
 .message-attachment__upload-cancel-icon {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
 }
 
 .message-attachment__upload-cancel-icon::before,
@@ -3595,7 +3593,7 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 18px;
+  width: 15px;
   height: 2px;
   border-radius: 999px;
   background: currentColor;
@@ -3607,9 +3605,9 @@
 }
 
 .message-attachment__upload-retry-icon {
-  width: 18px;
-  height: 18px;
-  font-size: 20px;
+  width: 16px;
+  height: 16px;
+  font-size: 18px;
   line-height: 1;
   transform: translateY(-1px);
 }
@@ -3620,9 +3618,7 @@
 }
 
 .message-attachment__upload-control--failed {
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)) padding-box,
-    conic-gradient(#ffffff var(--message-attachment-upload-progress, 0%), rgba(255, 255, 255, 0.28) 0) border-box;
+  background: transparent;
 }
 
 .message-attachment__upload-control--failed::before {

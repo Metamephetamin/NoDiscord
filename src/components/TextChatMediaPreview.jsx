@@ -32,6 +32,7 @@ export default function TextChatMediaPreview({
   const [imageLoadState, setImageLoadState] = useState({ url: "", failed: false });
   const [videoLoadState, setVideoLoadState] = useState({ url: "", failed: false });
   const [missingMediaVersion, setMissingMediaVersion] = useState(0);
+  const [loadedImageUrls, setLoadedImageUrls] = useState(() => new Set());
   const zoom = Number(mediaPreview?.zoom) || 1;
   const hasGallery = (mediaPreview?.items?.length || 0) > 1;
   const canPan = zoom > 1;
@@ -42,11 +43,13 @@ export default function TextChatMediaPreview({
   const isPreviewOpen = Boolean(mediaPreview);
   const imagePreviewUrl = isImagePreview ? String(mediaPreview?.url || "") : "";
   const videoPreviewUrl = isVideoPreview ? String(mediaPreview?.url || "") : "";
+  const canLoadPreviewVideo = videoPreviewUrl.startsWith("blob:") || videoPreviewUrl.startsWith("data:") || videoPreviewUrl.startsWith("file:");
   const isImageKnownMissing = Boolean(missingMediaVersion >= 0 && imagePreviewUrl && isMediaUrlKnownMissing(imagePreviewUrl));
   const isVideoKnownMissing = Boolean(missingMediaVersion >= 0 && videoPreviewUrl && isMediaUrlKnownMissing(videoPreviewUrl));
-  const isImageReady = !isImagePreview || (imagePreviewUrl && imageLoadState.url === imagePreviewUrl && !imageLoadState.failed && !isImageKnownMissing);
+  const isCachedImageReady = imagePreviewUrl && loadedImageUrls.has(imagePreviewUrl);
+  const isImageReady = !isImagePreview || (imagePreviewUrl && (isCachedImageReady || imageLoadState.url === imagePreviewUrl) && !imageLoadState.failed && !isImageKnownMissing);
   const imageLoadFailed = isImagePreview && imagePreviewUrl && (isImageKnownMissing || (imageLoadState.url === imagePreviewUrl && imageLoadState.failed));
-  const videoLoadFailed = isVideoPreview && videoPreviewUrl && (isVideoKnownMissing || (videoLoadState.url === videoPreviewUrl && videoLoadState.failed));
+  const videoLoadFailed = isVideoPreview && videoPreviewUrl && (!canLoadPreviewVideo || isVideoKnownMissing || (videoLoadState.url === videoPreviewUrl && videoLoadState.failed));
 
   const stopEvent = (event) => {
     event.stopPropagation();
@@ -306,7 +309,18 @@ export default function TextChatMediaPreview({
                     opacity: isImageReady ? 1 : 0,
                     transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})`,
                   }}
-                  onLoad={() => setImageLoadState({ url: imagePreviewUrl, failed: false })}
+                  onLoad={() => {
+                    setLoadedImageUrls((current) => {
+                      if (current.has(imagePreviewUrl)) {
+                        return current;
+                      }
+
+                      const next = new Set(current);
+                      next.add(imagePreviewUrl);
+                      return next;
+                    });
+                    setImageLoadState({ url: imagePreviewUrl, failed: false });
+                  }}
                   onError={() => {
                     markMediaUrlMissing(imagePreviewUrl);
                     setImageLoadState({ url: imagePreviewUrl, failed: true });

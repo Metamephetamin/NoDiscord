@@ -476,6 +476,10 @@ function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry }) 
         className={`message-media__upload-action ${overlayState.failed ? "message-media__upload-action--retry" : "message-media__upload-action--loading"}`}
         aria-label={overlayState.ariaLabel}
         style={{ "--message-media-upload-progress": `${overlayState.progress}%` }}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -521,6 +525,10 @@ function LocalEchoDocumentAction({ attachmentItem, onCancel, onRetry }) {
       className={`message-attachment__upload-control ${uploadState.failed ? "message-attachment__upload-control--failed" : ""}`}
       style={{ "--message-attachment-upload-progress": `${uploadState.progress}%` }}
       aria-label={uploadState.failed ? "Retry upload" : "Cancel upload"}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1419,22 +1427,35 @@ function MessageAttachmentCard({
 
     const isDocumentAttachment = Boolean(attachmentItem.attachmentAsFile);
     const showDocumentPreview = false;
+    const DocumentAttachmentWrapper = showLocalEchoOverlay ? "div" : "a";
+    const documentAttachmentProps = showLocalEchoOverlay
+      ? {
+          role: "button",
+          tabIndex: 0,
+          onClick: (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          },
+        }
+      : {
+          href: attachmentItem.attachmentUrl,
+          target: "_blank",
+          rel: "noreferrer",
+          onClick: (event) => {
+            if (!selectionMode) {
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            onToggleSelection(messageItem.id);
+          },
+        };
 
     return (
-      <a
+      <DocumentAttachmentWrapper
         className={`message-attachment ${isDocumentAttachment ? "message-attachment--document" : ""} ${showLocalEchoOverlay ? "message-attachment--local-echo" : ""}`}
-        href={attachmentItem.attachmentUrl}
-        target="_blank"
-        rel="noreferrer"
-        onClick={(event) => {
-          if (!selectionMode) {
-            return;
-          }
-
-          event.preventDefault();
-          event.stopPropagation();
-          onToggleSelection(messageItem.id);
-        }}
+        {...documentAttachmentProps}
       >
         {showDocumentPreview ? (
           <span className="message-attachment__preview" aria-hidden="true">
@@ -1461,7 +1482,7 @@ function MessageAttachmentCard({
             </>
           )}
         </span>
-      </a>
+      </DocumentAttachmentWrapper>
     );
   }
 
