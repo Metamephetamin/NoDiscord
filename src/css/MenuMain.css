@@ -6128,6 +6128,39 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   font-weight: 800;
 }
 
+.voice-room-stage__connection-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid rgba(139, 124, 255, 0.32);
+  border-radius: 8px;
+  background: rgba(139, 124, 255, 0.12);
+  color: #dfe5ff;
+}
+
+.voice-room-stage__connection-state strong {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.voice-room-stage__connection-state span {
+  min-width: 0;
+  color: #aab4cc;
+  font-size: 13px;
+  text-align: right;
+}
+
+.voice-room-stage__connection-state--disconnected,
+.voice-room-stage__connection-state--permission-denied,
+.voice-room-stage__connection-state--device-missing {
+  border-color: rgba(255, 154, 165, 0.32);
+  background: rgba(255, 154, 165, 0.1);
+}
+
 .voice-room-stage__header-button,
 .voice-room-stage__overlay-button {
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -18239,6 +18272,27 @@ html[data-ui-theme="light"] .voice-room-stage__hero-copy span,
 html[data-ui-theme="light"] .voice-room-stage__empty span,
 html[data-ui-theme="light"] .voice-room-stage__hero-empty span {
   color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .voice-room-stage__connection-state {
+  border-color: #cbd7ff;
+  background: #eef3ff;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .voice-room-stage__connection-state strong {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .voice-room-stage__connection-state span {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .voice-room-stage__connection-state--disconnected,
+html[data-ui-theme="light"] .voice-room-stage__connection-state--permission-denied,
+html[data-ui-theme="light"] .voice-room-stage__connection-state--device-missing {
+  border-color: #fecdd3;
+  background: #fff1f2;
 }
 
 html[data-ui-theme="light"] .voice-room-stage__card,

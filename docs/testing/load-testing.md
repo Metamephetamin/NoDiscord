@@ -84,3 +84,32 @@ SignalR load does not test LiveKit audio/video packet pressure. For that, use a 
 - 10+ users: only after the smaller runs stay stable.
 
 Record join p95, first remote participant visible time, camera preview time, screen publish time, disconnect cleanup time, backend CPU/RAM, LiveKit CPU/RAM, and websocket disconnect/reconnect counts.
+
+## Voice Failure State Checklist
+
+Expected UI states:
+
+- LiveKit room disconnected: voice stage shows a disconnected banner and clears stale remote media.
+- LiveKit reconnecting: voice stage shows a reconnecting banner without leaving the current channel immediately.
+- Microphone permission denied: join fails with a microphone access message and does not spam expected disconnect logs.
+- Device missing or busy: join fails with a device message; user can switch input device in voice settings and retry.
+- Screen share denied: stream modal keeps controls available and shows the existing screen share error state.
+- Participant media stalled: remote card remains stable in layout; reconnect or track resubscribe should not shift the stage.
+
+Staging LiveKit run:
+
+```powershell
+$env:LOAD_TEST_BASE_URL="https://lanaya.space"
+$env:LOAD_TEST_VOICE_CHANNEL="server:1:voice:1"
+$env:LOAD_TEST_CONNECTIONS="10"
+$env:LOAD_TEST_DURATION_SECONDS="120"
+npm run load:voice
+```
+
+Manual media matrix:
+
+- 3 rooms active at the same time, 2-5 participants per room.
+- One screen share at 1080p/60 per room.
+- Mute/deafen toggles every 10 seconds for 1 minute.
+- Browser/device permission denied for microphone and screen share.
+- Network drop for one participant for 5-15 seconds, then reconnect.

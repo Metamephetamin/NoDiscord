@@ -438,6 +438,7 @@ export function createVoiceRoomClient({
   onAudioDevicesChanged,
   onVoicePingChanged,
   onVoiceRouteChanged,
+  onVoiceConnectionStateChanged,
   onIncomingDirectCall,
   onDirectCallAccepted,
   onDirectCallDeclined,
@@ -495,6 +496,7 @@ export function createVoiceRoomClient({
   let lastVoicePingMs = null;
   let lastVoiceRouteSnapshot = null;
   let lastVoiceRouteSignature = "";
+  let lastVoiceConnectionStateSignature = "";
   let participantsMapSnapshot = {};
   const lastOutboundVideoSamplesByLabel = new Map();
   let adaptiveMediaProfile = "good";
@@ -514,6 +516,42 @@ export function createVoiceRoomClient({
   const remoteAudioNodes = new Map();
   const remoteParticipantMedia = new Map();
   const roomActiveSpeakerIds = new Set();
+
+  const emitVoiceConnectionState = (nextState = {}) => {
+    const phase = String(nextState.phase || "idle");
+    const channel = String(nextState.channel || currentChannel || roomConnectChannelName || "");
+    const reason = String(nextState.reason || "");
+    const message = String(nextState.message || "");
+    const signature = `${phase}|${channel}|${reason}|${message}`;
+
+    if (signature === lastVoiceConnectionStateSignature) {
+      return;
+    }
+
+    lastVoiceConnectionStateSignature = signature;
+    onVoiceConnectionStateChanged?.({
+      phase,
+      channel,
+      reason,
+      message,
+      updatedAt: Date.now(),
+    });
+  };
+
+  const getVoiceConnectionFailurePhase = (error) => {
+    const errorName = String(error?.name || "").trim();
+    const message = String(error?.message || "").toLowerCase();
+
+    if (errorName === "NotAllowedError" || errorName === "SecurityError" || message.includes("permission")) {
+      return "permission-denied";
+    }
+
+    if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError" || message.includes("not found")) {
+      return "device-missing";
+    }
+
+    return "disconnected";
+  };
 
   const getVoiceDebugSnapshot = () => ({
     currentChannel,
@@ -3194,16 +3232,28 @@ const handleDeviceChange = () => {
         roomState: nextRoom.state,
         remoteParticipants: nextRoom.remoteParticipants.size,
       });
+      emitVoiceConnectionState({ phase: "connected", channel: currentChannel || roomConnectChannelName, reason: "livekit-connected" });
       startVoicePingPolling();
       syncAllRemoteShares();
       emitRoomParticipants();
     });
+
+    if (RoomEvent.Reconnecting) {
+      nextRoom.on(RoomEvent.Reconnecting, () => {
+        logVoiceDebug("room:event:reconnecting", {
+          roomState: nextRoom.state,
+          remoteParticipants: nextRoom.remoteParticipants.size,
+        });
+        emitVoiceConnectionState({ phase: "reconnecting", channel: currentChannel || roomConnectChannelName, reason: "livekit-reconnecting" });
+      });
+    }
 
     nextRoom.on(RoomEvent.Reconnected, () => {
       logVoiceDebug("room:event:reconnected", {
         roomState: nextRoom.state,
         remoteParticipants: nextRoom.remoteParticipants.size,
       });
+      emitVoiceConnectionState({ phase: "connected", channel: currentChannel || roomConnectChannelName, reason: "livekit-reconnected" });
       startVoicePingPolling();
       syncAllRemoteShares();
       emitRoomParticipants();
@@ -3227,6 +3277,7 @@ const handleDeviceChange = () => {
       }
 
       await runLocalShareOperation("stop-all-shares", () => stopAllLocalSharesInternal()).catch(() => {});
+      emitVoiceConnectionState({ phase: "disconnected", channel: currentChannel || roomConnectChannelName, reason: "livekit-disconnected" });
       clearVoicePingPolling();
       if (room === nextRoom) {
         room = null;
@@ -3594,6 +3645,7 @@ const handleDeviceChange = () => {
     },
 
     async joinChannel(channelName, user, channelSettings = {}) {
+      emitVoiceConnectionState({ phase: "connecting", channel: channelName, reason: "join-start" });
       currentVoiceChannelSettings = {
         ...currentVoiceChannelSettings,
         ...channelSettings,
@@ -3656,6 +3708,7 @@ const handleDeviceChange = () => {
         await ensureRoomConnection(channelName, user, Array.isArray(joinResponse?.participants) ? joinResponse.participants : []);
         currentChannel = channelName;
         onChannelChanged?.(channelName);
+        emitVoiceConnectionState({ phase: "connected", channel: channelName, reason: "join-success" });
         publishVoiceDebugSnapshot("join:success");
       } catch (error) {
         if (isLocalVoicePreviewFallbackEnabled()) {
@@ -3669,6 +3722,7 @@ const handleDeviceChange = () => {
           currentLiveKitRoomName = channelName;
           currentChannel = channelName;
           onChannelChanged?.(channelName);
+          emitVoiceConnectionState({ phase: "connected", channel: channelName, reason: "local-preview-fallback" });
           emitLocalPreviewRoomParticipants(channelName, user, Array.isArray(joinResponse?.participants) ? joinResponse.participants : []);
           publishVoiceDebugSnapshot("join:local-preview-fallback:snapshot");
           return;
@@ -3686,6 +3740,12 @@ const handleDeviceChange = () => {
 
         currentChannel = null;
         onChannelChanged?.(null);
+        emitVoiceConnectionState({
+          phase: getVoiceConnectionFailurePhase(error),
+          channel: channelName,
+          reason: "join-failed",
+          message: error?.message || String(error),
+        });
         throw error;
       }
     },
@@ -3700,6 +3760,7 @@ const handleDeviceChange = () => {
 
       currentChannel = null;
       onChannelChanged?.(null);
+      emitVoiceConnectionState({ phase: "idle", channel: "", reason: "leave" });
 
       if (!preserveMic && !microphoneMonitorActive) {
         stopLocalMic();
@@ -3798,7 +3859,12 @@ const handleDeviceChange = () => {
         videoTrack.contentHint = "detail";
         videoTrack.onended = () => {
           runLocalShareOperation("stop-screen", () => stopScreenShareInternal())
-            .catch((error) => console.error("Failed to stop screen share:", error));
+            .catch((error) => {
+              logVoiceDebug("screen-share:stop-after-ended-failed", {
+                errorName: error?.name || "",
+                error: error?.message || String(error),
+              });
+            });
         };
 
         const screenSharePublishOptions = getScreenSharePublishOptions(resolution, fps);
@@ -3870,7 +3936,12 @@ const handleDeviceChange = () => {
         cameraTrack.contentHint = "motion";
         cameraTrack.onended = () => {
           runLocalShareOperation("stop-camera", () => stopCameraShareInternal())
-            .catch((error) => console.error("Failed to stop camera share:", error));
+            .catch((error) => {
+              logVoiceDebug("camera-share:stop-after-ended-failed", {
+                errorName: error?.name || "",
+                error: error?.message || String(error),
+              });
+            });
         };
 
         const cameraPublishOptions = getCameraPublishOptions(effectiveResolution, fps);
@@ -4087,6 +4158,7 @@ const handleDeviceChange = () => {
       stopLocalMic();
       currentChannel = null;
       onChannelChanged?.(null);
+      emitVoiceConnectionState({ phase: "idle", channel: "", reason: "disconnect" });
 
       await stopSignalConnection();
 

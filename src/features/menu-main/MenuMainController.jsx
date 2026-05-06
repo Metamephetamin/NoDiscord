@@ -467,6 +467,7 @@ export default function MenuMain({
   const [pingMs, setPingMs] = useState(null);
   const [voicePingMs, setVoicePingMs] = useState(null);
   const [voiceRouteSnapshot, setVoiceRouteSnapshot] = useState(null);
+  const [voiceConnectionState, setVoiceConnectionState] = useState({ phase: "idle", channel: "", reason: "", message: "" });
   const [selectedStreamUserId, setSelectedStreamUserId] = useState(null);
   const [speakingUserIds, setSpeakingUserIds] = useState([]);
   const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
@@ -638,6 +639,25 @@ export default function MenuMain({
     }
 
     return leaveVoiceChannelRef.current();
+  }, []);
+
+  const handleVoiceConnectionStateChanged = useCallback((nextState = {}) => {
+    const normalizedState = {
+      phase: String(nextState.phase || "idle"),
+      channel: String(nextState.channel || ""),
+      reason: String(nextState.reason || ""),
+      message: String(nextState.message || ""),
+      updatedAt: Number(nextState.updatedAt || Date.now()),
+    };
+
+    setVoiceConnectionState((previousState) => (
+      previousState.phase === normalizedState.phase
+        && previousState.channel === normalizedState.channel
+        && previousState.reason === normalizedState.reason
+        && previousState.message === normalizedState.message
+        ? previousState
+        : normalizedState
+    ));
   }, []);
 
   const {
@@ -3566,6 +3586,7 @@ export default function MenuMain({
       onVoiceRouteChanged: (nextRouteSnapshot) => {
         setVoiceRouteSnapshot(nextRouteSnapshot || null);
       },
+      onVoiceConnectionStateChanged: handleVoiceConnectionStateChanged,
       onIncomingDirectCall: ({ channelName, fromUserId, fromName, fromAvatar }) => {
         if (!channelName || !fromUserId) {
           return;
@@ -3791,6 +3812,7 @@ export default function MenuMain({
     handleRoomParticipantsChanged,
     handleSelfVoiceStateChanged,
     handleSpeakingUsersChanged,
+    handleVoiceConnectionStateChanged,
     ensureVoiceClientReady,
     flushQueuedSelfVoiceState,
     user?.id,
@@ -6335,6 +6357,7 @@ export default function MenuMain({
       currentVoiceParticipants={currentVoiceParticipants}
       activeVoiceParticipantsMap={activeVoiceParticipantsMap}
       joiningVoiceChannelId={joiningVoiceChannelId}
+      voiceConnectionState={voiceConnectionState}
       remoteScreenShares={remoteScreenShares}
       activeServerUnreadCount={activeServerUnreadCount}
       hasLocalSharePreview={hasLocalSharePreview}
