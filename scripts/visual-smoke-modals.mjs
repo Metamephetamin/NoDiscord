@@ -5,6 +5,8 @@ const menuCss = readFileSync("src/css/MenuMain.css", "utf8");
 const textChatCss = readFileSync("src/css/TextChat.css", "utf8");
 const overlaysSource = readFileSync("src/components/MenuMainOverlays.jsx", "utf8");
 const serverWorkspaceSource = readFileSync("src/components/ServerWorkspace.jsx", "utf8");
+const friendsWorkspaceSource = readFileSync("src/components/FriendsWorkspace.jsx", "utf8");
+const workspaceStorageSource = readFileSync("src/features/menu-main/menuMainWorkspaceStorage.js", "utf8");
 const composerSource = readFileSync("src/components/TextChatComposer.jsx", "utf8");
 const uploadSource = readFileSync("src/components/TextChatBatchUploadSheet.jsx", "utf8");
 const userMenuSource = readFileSync("src/components/TextChatUserContextMenu.jsx", "utf8");
@@ -60,5 +62,9 @@ for (const selector of [
 
 assert(css.includes("-webkit-text-fill-color"), "Modal/input CSS must control WebKit text fill.");
 assert(css.includes("var(--app-danger)"), "Danger actions must use the theme danger token.");
+assert(!serverWorkspaceSource.includes("Создать событие"), "Server menu must not show create event while the feature is disabled.");
+assert(!serverWorkspaceSource.includes("Каталог приложений"), "Server menu must not show app catalog while the feature is disabled.");
+assert(friendsWorkspaceSource.includes("const PROFILE_STORE_ENABLED = false"), "Profile store tab must stay disabled behind the feature flag.");
+assert(workspaceStorageSource.includes('friendsPageSection === "conversations"'), "Workspace restore must not reopen the disabled store tab.");
 
 console.log("Modal visual smoke checks passed.");

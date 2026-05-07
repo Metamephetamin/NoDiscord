@@ -2157,14 +2157,6 @@ export const ServersSidebar = memo(({
                 <span>Создать категорию</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">▣</span>
               </button>
-              <button type="button" onClick={() => runServerMenuAction(showUnavailableServerMenuAction)}>
-                <span>Создать событие</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">▦</span>
-              </button>
-              <button type="button" onClick={() => runServerMenuAction(showUnavailableServerMenuAction)}>
-                <span>Каталог приложений</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">◆</span>
-              </button>
               <span className="server-summary-menu__separator" aria-hidden="true" />
               <button type="button" onClick={() => runServerMenuAction(onOpenNotificationSettings)}>
                 <span>Параметры уведомлений</span>

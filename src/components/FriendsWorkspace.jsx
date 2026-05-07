@@ -16,6 +16,8 @@ import {
   getProfileStoreItemById,
 } from "../utils/profileCustomization";
 
+const PROFILE_STORE_ENABLED = false;
+
 function FriendsNavIcon({ kind }) {
   switch (kind) {
     case "friends":
@@ -275,6 +277,7 @@ export const FriendsSidebar = ({
 }) => {
   const friendItemLongPress = useMobileLongPress();
   const [pressedFriendId, setPressedFriendId] = useState("");
+  const activeFriendsPageSection = PROFILE_STORE_ENABLED ? friendsPageSection : friendsPageSection === "store" ? "friends" : friendsPageSection;
 
   return (
     <aside className="sidebar__channels sidebar__channels--friends">
@@ -292,7 +295,7 @@ export const FriendsSidebar = ({
             <button
               key={item.id}
               type="button"
-              className={`friends-nav__item ${item.id === friendsPageSection && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
+              className={`friends-nav__item ${item.id === activeFriendsPageSection && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
               onClick={() => {
                 if (item.id === "friends") {
                   onOpenFriendsWorkspace();
@@ -321,7 +324,7 @@ export const FriendsSidebar = ({
 
           <button
             type="button"
-            className={`friends-nav__item ${friendsPageSection === "conversations" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
+            className={`friends-nav__item ${activeFriendsPageSection === "conversations" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
             onClick={() => {
               onOpenFriendsWorkspace();
               onResetDirect();
@@ -335,18 +338,20 @@ export const FriendsSidebar = ({
             ) : null}
           </button>
 
-          <button
-            type="button"
-            className={`friends-nav__item ${friendsPageSection === "store" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
-            onClick={() => {
-              onOpenFriendsWorkspace();
-              onResetDirect();
-              onSetFriendsSection("store");
-            }}
-          >
-            <span className="friends-nav__icon"><FriendsNavIcon kind="store" /></span>
-            <span>Магазин</span>
-          </button>
+          {PROFILE_STORE_ENABLED ? (
+            <button
+              type="button"
+              className={`friends-nav__item ${activeFriendsPageSection === "store" && !activeDirectFriendId && !activeConversationId ? "friends-nav__item--active" : ""}`}
+              onClick={() => {
+                onOpenFriendsWorkspace();
+                onResetDirect();
+                onSetFriendsSection("store");
+              }}
+            >
+              <span className="friends-nav__icon"><FriendsNavIcon kind="store" /></span>
+              <span>Магазин</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -673,6 +678,7 @@ export const FriendsMain = ({
     String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
       ? directCallPanelProps
       : null;
+  const activeFriendsPageSection = PROFILE_STORE_ENABLED ? friendsPageSection : friendsPageSection === "store" ? "friends" : friendsPageSection;
   const appliedStoreItem = getProfileStoreItemById(profileCustomization?.appliedItemId);
   const applyStoreItem = (item) => {
     onProfileCustomizationChange?.(applyProfileStoreItem(profileCustomization, item));
@@ -1240,7 +1246,7 @@ export const FriendsMain = ({
           <div className="friends-main__tabs">
             <button
               type="button"
-              className={`friends-main__tab ${friendsPageSection === "friends" && !currentDirectFriend && !activeConversationId ? "friends-main__tab--active" : ""}`}
+              className={`friends-main__tab ${activeFriendsPageSection === "friends" && !currentDirectFriend && !activeConversationId ? "friends-main__tab--active" : ""}`}
               onClick={() => {
                 onResetDirect();
                 onSetFriendsSection("friends");
@@ -1250,7 +1256,7 @@ export const FriendsMain = ({
             </button>
             <button
               type="button"
-              className={`friends-main__tab ${friendsPageSection === "add" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
+              className={`friends-main__tab ${activeFriendsPageSection === "add" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
               onClick={() => {
                 onResetDirect();
                 onSetFriendsSection("add");
@@ -1260,7 +1266,7 @@ export const FriendsMain = ({
             </button>
             <button
               type="button"
-              className={`friends-main__tab ${friendsPageSection === "conversations" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
+              className={`friends-main__tab ${activeFriendsPageSection === "conversations" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
               onClick={() => {
                 onResetDirect();
                 onSetFriendsSection("conversations");
@@ -1268,16 +1274,18 @@ export const FriendsMain = ({
             >
               Беседы
             </button>
-            <button
-              type="button"
-              className={`friends-main__tab ${friendsPageSection === "store" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
-              onClick={() => {
-                onResetDirect();
-                onSetFriendsSection("store");
-              }}
-            >
-              Магазин
-            </button>
+            {PROFILE_STORE_ENABLED ? (
+              <button
+                type="button"
+                className={`friends-main__tab ${activeFriendsPageSection === "store" && !currentDirectFriend && !currentConversationTarget ? "friends-main__tab--active" : ""}`}
+                onClick={() => {
+                  onResetDirect();
+                  onSetFriendsSection("store");
+                }}
+              >
+                Магазин
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -1512,14 +1520,14 @@ export const FriendsMain = ({
               </div>
             </section>
           </div>
-        ) : friendsPageSection === "store" ? (
+        ) : activeFriendsPageSection === "store" ? (
           <ProfileStoreView
             avatarSrc={user?.avatar || ""}
             displayName={getDisplayName(user)}
             appliedItem={appliedStoreItem}
             onOpenItem={(item) => setActiveStoreItem(item)}
           />
-        ) : friendsPageSection !== "conversations" ? (
+        ) : activeFriendsPageSection !== "conversations" ? (
           <div className="friends-main__content friends-main__content--directory">
             <section className="friends-directory">
               <div className="friends-directory__header">
@@ -1673,7 +1681,7 @@ export const FriendsMain = ({
               )}
             </section>
           </div>
-        ) : friendsPageSection === "conversations" ? (
+        ) : activeFriendsPageSection === "conversations" ? (
           <div className="friends-main__content friends-main__content--directory">
             <div className="friends-hero friends-hero--compact friends-hero--directory">
               <div className="friends-hero__header">
