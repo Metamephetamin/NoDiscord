@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const voiceClientSource = readFileSync("src/webrtc/livekitVoiceRoomClient.js", "utf8");
+const menuMainSource = readFileSync("src/features/menu-main/MenuMainController.jsx", "utf8");
 
 assert(
   voiceClientSource.includes("local-audio:rebuild-disconnect-recover"),
@@ -18,6 +19,16 @@ assert(
   voiceClientSource.indexOf("recoverLiveKitRoomAfterLocalAudioRebuildDisconnect") <
     voiceClientSource.indexOf("await signalConnection.invoke(\"LeaveChannel\""),
   "Audio rebuild disconnect recovery must run before SignalR LeaveChannel cleanup."
+);
+
+assert(
+  menuMainSource.includes("const stableApplySelectedAudioDevicesToClient = useStableEvent(applySelectedAudioDevicesToClient);"),
+  "MenuMainController must use a stable audio-device applicator so changing selected input does not recreate the voice client."
+);
+
+assert(
+  !menuMainSource.includes("\n    applySelectedAudioDevicesToClient,\n    applyVoiceProcessingToClient,"),
+  "Voice client initialization effect must not depend directly on selected input device state."
 );
 
 console.log("Voice device switch smoke checks passed.");

@@ -830,6 +830,8 @@ export default function MenuMain({
     verifyTotpSetup,
     disableTotp,
   } = useMenuMainTotpSettings({ user, setUser });
+  const stableApplySelectedAudioDevicesToClient = useStableEvent(applySelectedAudioDevicesToClient);
+  const stableApplyVoiceProcessingToClient = useStableEvent(applyVoiceProcessingToClient);
 
   useEffect(() => {
     latestServersRef.current = servers;
@@ -3779,8 +3781,8 @@ export default function MenuMain({
       },
     });
     voiceClientRef.current = client;
-    applySelectedAudioDevicesToClient(client);
-    applyVoiceProcessingToClient(client);
+    stableApplySelectedAudioDevicesToClient(client);
+    stableApplyVoiceProcessingToClient(client);
     client.connect(user).catch((error) => logVoiceHubError("Ошибка подключения к голосовому хабу:", error));
     flushQueuedSelfVoiceState();
       return client;
@@ -3819,8 +3821,6 @@ export default function MenuMain({
       if (voiceClientRef.current === client) voiceClientRef.current = null;
     };
   }, [
-    applySelectedAudioDevicesToClient,
-    applyVoiceProcessingToClient,
     handleAudioDevicesChanged,
     handleLiveUsersChanged,
     handleMicLevelChanged,
@@ -3832,6 +3832,8 @@ export default function MenuMain({
     handleVoiceConnectionStateChanged,
     ensureVoiceClientReady,
     flushQueuedSelfVoiceState,
+    stableApplySelectedAudioDevicesToClient,
+    stableApplyVoiceProcessingToClient,
     user?.id,
   ]);
   useEffect(() => {
