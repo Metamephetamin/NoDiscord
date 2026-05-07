@@ -120,6 +120,72 @@ public class ServerStateServiceTests
     }
 
     [Fact]
+    public void UpsertSnapshot_ForNewSnapshotRebindsOwnerAndMembersToAuthenticatedUser()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        var snapshot = service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-forged",
+            OwnerId = "victim-user",
+            Name = "Forged",
+            Members = new List<ServerMemberSnapshot>
+            {
+                new() { UserId = "victim-user", Name = "Victim", RoleId = "owner" },
+                new() { UserId = "attacker-user", Name = "Attacker", RoleId = "admin" },
+                new() { UserId = "extra-admin", Name = "Extra", RoleId = "admin" }
+            }
+        }, "attacker-user");
+
+        Assert.Equal("attacker-user", snapshot.OwnerId);
+        var member = Assert.Single(snapshot.Members);
+        Assert.Equal("attacker-user", member.UserId);
+        Assert.Equal("owner", member.RoleId);
+
+        var record = context.SharedServerSnapshots.Single();
+        Assert.Equal("attacker-user", record.OwnerUserId);
+        var persistedSnapshot = service.GetSnapshot("server-forged");
+        Assert.NotNull(persistedSnapshot);
+        Assert.Equal("attacker-user", persistedSnapshot!.OwnerId);
+        Assert.DoesNotContain(persistedSnapshot.Members, item => item.UserId == "victim-user" || item.UserId == "extra-admin");
+    }
+
+    [Fact]
+    public void UpsertSnapshot_ForExistingSnapshotPreservesStoredOwner()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-team",
+            OwnerId = "owner-1",
+            Name = "Team",
+            Members = new List<ServerMemberSnapshot>
+            {
+                new() { UserId = "owner-1", Name = "Owner", RoleId = "owner" },
+                new() { UserId = "manager-2", Name = "Manager", RoleId = "admin" }
+            }
+        }, "owner-1");
+
+        var merged = service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-team",
+            OwnerId = "manager-2",
+            Name = "Team Renamed",
+            Members = new List<ServerMemberSnapshot>
+            {
+                new() { UserId = "manager-2", Name = "Manager", RoleId = "owner" }
+            }
+        }, "manager-2");
+
+        Assert.Equal("owner-1", merged.OwnerId);
+        Assert.Contains(merged.Members, member => member.UserId == "owner-1" && member.RoleId == "owner");
+        Assert.Equal("owner-1", context.SharedServerSnapshots.Single().OwnerUserId);
+    }
+
+    [Fact]
     public void AddMember_DoesNotDuplicateExistingMember()
     {
         using var context = CreateContext();
@@ -132,10 +198,10 @@ public class ServerStateServiceTests
             Name = "Team",
             Members = new List<ServerMemberSnapshot>
             {
-                new() { UserId = "owner-5", Name = "Owner", RoleId = "owner" },
-                new() { UserId = "member-7", Name = "Alice", RoleId = "member" }
+                new() { UserId = "owner-5", Name = "Owner", RoleId = "owner" }
             }
         }, "owner-5");
+        service.AddMember("server-team", "member-7", "Alice", "");
 
         var snapshot = service.AddMember("server-team", "member-7", "Alice Updated", "avatar.png");
 

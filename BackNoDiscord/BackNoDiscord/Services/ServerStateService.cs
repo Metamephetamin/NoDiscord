@@ -34,6 +34,7 @@ public class ServerStateService
         }
         else
         {
+            normalized = RebindNewSnapshotAuthority(normalized, fallbackOwnerUserId);
             _context.SharedServerSnapshots.Add(new SharedServerSnapshotRecord
             {
                 ServerId = normalized.Id,
@@ -220,9 +221,7 @@ public class ServerStateService
         var merged = NormalizeSnapshot(incoming, fallbackOwnerUserId);
         var normalizedExisting = NormalizeSnapshot(existing, fallbackOwnerUserId);
 
-        merged.OwnerId = string.IsNullOrWhiteSpace(merged.OwnerId)
-            ? normalizedExisting.OwnerId
-            : merged.OwnerId;
+        merged.OwnerId = normalizedExisting.OwnerId;
 
         merged.Roles = MergeRoles(normalizedExisting.Roles, merged.Roles);
         merged.Members = MergeMembers(normalizedExisting.Members, merged.Members, merged.OwnerId);
@@ -231,6 +230,31 @@ public class ServerStateService
         merged.VoiceChannels = MergeChannels(normalizedExisting.VoiceChannels, merged.VoiceChannels);
 
         return NormalizeSnapshot(merged, merged.OwnerId);
+    }
+
+    private static ServerSnapshot RebindNewSnapshotAuthority(ServerSnapshot snapshot, string ownerUserId)
+    {
+        var normalizedOwnerId = ownerUserId.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedOwnerId))
+        {
+            return snapshot;
+        }
+
+        var ownerMember = snapshot.Members?
+            .FirstOrDefault(member => string.Equals(member.UserId, normalizedOwnerId, StringComparison.Ordinal));
+        snapshot.OwnerId = normalizedOwnerId;
+        snapshot.Members = new List<ServerMemberSnapshot>
+        {
+            new()
+            {
+                UserId = normalizedOwnerId,
+                Name = string.IsNullOrWhiteSpace(ownerMember?.Name) ? "Owner" : ownerMember.Name,
+                Avatar = ownerMember?.Avatar ?? string.Empty,
+                RoleId = "owner"
+            }
+        };
+
+        return NormalizeSnapshot(snapshot, normalizedOwnerId);
     }
 
     private static List<ServerRoleSnapshot> MergeRoles(List<ServerRoleSnapshot>? existing, List<ServerRoleSnapshot>? incoming)
