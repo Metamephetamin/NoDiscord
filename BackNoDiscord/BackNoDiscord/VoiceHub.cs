@@ -243,13 +243,12 @@ public class VoiceHub : Hub
     {
         if (!TryBuildCurrentParticipant(string.Empty, out var participant) ||
             string.IsNullOrWhiteSpace(targetUserId) ||
-            !await TryAuthorizeDirectCallAsync(channelName, participant.UserId, targetUserId) ||
-            !_channels.TryGetConnectionId(targetUserId, out var targetConnectionId))
+            !await TryAuthorizeDirectCallAsync(channelName, participant.UserId, targetUserId))
         {
             return;
         }
 
-        await Clients.Client(targetConnectionId).SendAsync("voice:direct-call-ended", new DirectCallSignalPayload
+        await Clients.GroupExcept(channelName, new[] { Context.ConnectionId }).SendAsync("voice:direct-call-ended", new DirectCallSignalPayload
         {
             ChannelName = channelName,
             FromUserId = participant.UserId,
