@@ -492,6 +492,7 @@ export function createVoiceRoomClient({
   let localShareOperationPromise = null;
   let localShareOperationKey = "";
   let localAudioRebuildOperationPromise = null;
+  let localAudioRebuildRecoveryDeadlineMs = 0;
   let isIntentionalRoomDisconnect = false;
   let isSelfMicMuted = false;
   let isSelfDeafened = false;
@@ -3146,15 +3147,21 @@ const handleDeviceChange = () => {
 
     const operationPromise = Promise.resolve().then(operation);
     localAudioRebuildOperationPromise = operationPromise;
+    localAudioRebuildRecoveryDeadlineMs = Date.now() + 8_000;
 
     try {
       return await operationPromise;
     } finally {
       if (localAudioRebuildOperationPromise === operationPromise) {
         localAudioRebuildOperationPromise = null;
+        localAudioRebuildRecoveryDeadlineMs = Date.now() + 4_000;
       }
     }
   };
+
+  const isLocalAudioRebuildRecoveryWindowActive = () => (
+    Boolean(localAudioRebuildOperationPromise) || Date.now() < localAudioRebuildRecoveryDeadlineMs
+  );
 
   const hasActiveVoiceAudioSession = () => Boolean(
     currentChannel
@@ -3214,6 +3221,56 @@ const handleDeviceChange = () => {
       prepared: !isLocalVoicePreviewFallbackEnabled(),
     });
     return nextSession;
+  };
+
+  const recoverLiveKitRoomAfterLocalAudioRebuildDisconnect = async (disconnectedRoom, channelName) => {
+    if (!channelName || !currentUser?.id) {
+      return false;
+    }
+
+    logVoiceDebug("local-audio:rebuild-disconnect-recover", {
+      channelName,
+      roomState: disconnectedRoom?.state || "",
+      hasActiveRebuild: Boolean(localAudioRebuildOperationPromise),
+    });
+    emitVoiceConnectionState({ phase: "reconnecting", channel: channelName, reason: "audio-device-switch" });
+    clearVoicePingPolling();
+
+    if (room === disconnectedRoom) {
+      room = null;
+    }
+    roomConnectPromise = null;
+    roomConnectChannelName = "";
+    currentLiveKitServerUrl = "";
+    currentLiveKitRoomName = "";
+    micPublication = null;
+    localScreenVideoPublication = null;
+    localCameraVideoPublication = null;
+    localShareAudioPublication = null;
+    preferredRemoteShareUserId = "";
+    clearRemoteScreens();
+    removeAllRemoteAudioElements();
+    remoteParticipantMedia.clear();
+    roomActiveSpeakerIds.clear();
+    emitSpeakingUsers();
+    onRoomParticipantsChanged?.({ channel: channelName, participants: [] });
+
+    try {
+      await ensureRoomConnection(channelName, currentUser);
+      currentChannel = channelName;
+      onChannelChanged?.(channelName);
+      emitVoiceConnectionState({ phase: "connected", channel: channelName, reason: "audio-device-switch-recovered" });
+      publishVoiceDebugSnapshot("local-audio:rebuild-disconnect-recovered");
+      localAudioRebuildRecoveryDeadlineMs = 0;
+      return true;
+    } catch (error) {
+      logVoiceDebug("local-audio:rebuild-disconnect-recover-failed", {
+        channelName,
+        errorName: error?.name || "",
+        error: error?.message || String(error),
+      });
+      return false;
+    }
   };
 
   const bindRoomEvents = (nextRoom) => {
@@ -3444,6 +3501,14 @@ const handleDeviceChange = () => {
           nextRoomState: nextRoom.state,
         });
         return;
+      }
+
+      const disconnectedChannel = currentChannel || roomConnectChannelName;
+      if (isLocalAudioRebuildRecoveryWindowActive() && disconnectedChannel && currentUser?.id) {
+        const recovered = await recoverLiveKitRoomAfterLocalAudioRebuildDisconnect(nextRoom, disconnectedChannel);
+        if (recovered) {
+          return;
+        }
       }
 
       await runLocalShareOperation("stop-all-shares", () => stopAllLocalSharesInternal()).catch(() => {});

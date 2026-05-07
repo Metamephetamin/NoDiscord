@@ -38,6 +38,7 @@
     "test:media-preview": "node ./scripts/media-preview-smoke.mjs",
     "test:realtime": "node ./scripts/realtime-smoke.mjs",
     "test:upload-ui": "node ./scripts/upload-ui-smoke.mjs",
+    "test:voice-device-switch": "node ./scripts/voice-device-switch-smoke.mjs",
     "test:visual:auth": "node ./scripts/visual-smoke-auth.mjs",
     "test:visual:chat": "node ./scripts/visual-smoke-chat.mjs",
     "test:visual:settings": "node ./scripts/visual-smoke-settings.mjs",
