@@ -20,7 +20,7 @@ assert(
   "Image preview must not preload through a second Image object before rendering the visible image."
 );
 assert(
-  source.includes("onLoad={() => setImageLoadState({ url: imagePreviewUrl, failed: false })}"),
+  source.includes("onLoad={() => {") && source.includes("setImageLoadState({ url: imagePreviewUrl, failed: false })"),
   "Image preview must mark readiness from the visible image load event."
 );
 assert(

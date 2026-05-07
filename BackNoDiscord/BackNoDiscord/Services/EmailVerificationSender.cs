@@ -9,7 +9,18 @@ namespace BackNoDiscord.Services;
 
 public interface IEmailVerificationSender
 {
-    Task SendVerificationCodeAsync(string email, string verificationCode, DateTimeOffset expiresAt, CancellationToken cancellationToken = default);
+    Task SendVerificationCodeAsync(
+        string email,
+        string verificationCode,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default,
+        string purpose = EmailVerificationPurpose.Login);
+}
+
+public static class EmailVerificationPurpose
+{
+    public const string Login = "login";
+    public const string PasswordReset = "password_reset";
 }
 
 public sealed class EmailDeliveryException : Exception
@@ -48,7 +59,12 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         _logger = logger;
     }
 
-    public async Task SendVerificationCodeAsync(string email, string verificationCode, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+    public async Task SendVerificationCodeAsync(
+        string email,
+        string verificationCode,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default,
+        string purpose = EmailVerificationPurpose.Login)
     {
         var options = _optionsMonitor.CurrentValue;
         var deliveryMode = (options.Mode ?? string.Empty).Trim().ToLowerInvariant();
@@ -88,7 +104,7 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         }
 
         var expiresLocal = expiresAt.ToLocalTime().ToString("HH:mm");
-        var message = BuildVerificationMessage(options, email, verificationCode, expiresLocal);
+        var message = BuildVerificationMessage(options, email, verificationCode, expiresLocal, purpose);
 
         using var client = new MailKit.Net.Smtp.SmtpClient();
 
@@ -114,14 +130,22 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         }
     }
 
-    public static MimeMessage BuildVerificationMessage(EmailOptions options, string email, string verificationCode, string expiresLocal)
+    public static MimeMessage BuildVerificationMessage(
+        EmailOptions options,
+        string email,
+        string verificationCode,
+        string expiresLocal,
+        string purpose = EmailVerificationPurpose.Login)
     {
         var brandName = ResolveBrandName(options.FromName);
-        const string subject = "Код входа";
+        var template = ResolveTemplate(purpose);
+        var preheader = $"{template.CodeLabel}: {verificationCode}";
+        var preheaderSpacer = string.Concat(Enumerable.Repeat("\u200C\u00A0", 48));
         var plainTextBody =
-            $"Ваш код: {verificationCode}{Environment.NewLine}" +
+            $"{template.CodeLabel}: {verificationCode}{Environment.NewLine}" +
+            $"{template.IntroText}{Environment.NewLine}" +
             $"Действует до {expiresLocal}.{Environment.NewLine}{Environment.NewLine}" +
-            "Если вы не запрашивали код, просто проигнорируйте письмо.";
+            $"{template.IgnoreText}";
 
         var htmlBody = $$"""
             <!doctype html>
@@ -152,19 +176,20 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
               </style>
             </head>
             <body style="margin:0;padding:0;">
-              <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Ваш код: {{verificationCode}}</div>
+              <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">{{preheader}}</div>
+              <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;font-size:1px;line-height:1px;">{{preheaderSpacer}}</div>
               <div class="mail-bg" style="font-family:Arial,Helvetica,sans-serif;background:#eef2f9;color:#101827;padding:34px 18px;">
                 <div class="mail-card" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:22px;padding:0;border:1px solid #dce3f0;box-shadow:0 24px 70px rgba(31,42,68,0.14);overflow:hidden;">
                   <div class="mail-code" style="height:7px;background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%);"></div>
                   <div style="padding:30px;">
                   <div class="mail-brand" style="font-size:13px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#5a48ea;margin-bottom:18px;">{{brandName}}</div>
-                  <h1 class="mail-title" style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#121827;">Ваш код</h1>
-                  <p class="mail-text" style="margin:0 0 20px;color:#3d4659;font-size:15px;line-height:1.55;">Введите его в приложении, чтобы продолжить.</p>
+                  <h1 class="mail-title" style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#121827;">{{template.Title}}</h1>
+                  <p class="mail-text" style="margin:0 0 20px;color:#3d4659;font-size:15px;line-height:1.55;">{{template.IntroText}}</p>
                   <div class="mail-code" style="margin:0 0 18px;padding:20px 18px;border-radius:18px;background:linear-gradient(135deg,#5b5cff 0%,#8748ee 48%,#e052a6 100%);color:#ffffff;font-size:36px;font-weight:800;letter-spacing:0.28em;text-align:center;">
                     {{verificationCode}}
                   </div>
                   <div class="mail-chip" style="display:inline-block;margin:0 0 18px;padding:8px 12px;border-radius:999px;background:#eef1ff;color:#5a48ea;font-size:13px;font-weight:700;">Действует до {{expiresLocal}}</div>
-                  <p class="mail-muted" style="margin:0;color:#7a8496;font-size:13px;line-height:1.55;">Если вы не запрашивали код, просто проигнорируйте письмо.</p>
+                  <p class="mail-muted" style="margin:0;color:#7a8496;font-size:13px;line-height:1.55;">{{template.IgnoreText}}</p>
                   </div>
                 </div>
               </div>
@@ -175,7 +200,7 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(brandName, options.FromAddress));
         message.To.Add(MailboxAddress.Parse(email));
-        message.Subject = subject;
+        message.Subject = template.Subject;
 
         var bodyBuilder = new BodyBuilder
         {
@@ -185,6 +210,30 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
 
         message.Body = bodyBuilder.ToMessageBody();
         return message;
+    }
+
+    private sealed record VerificationMessageTemplate(
+        string Subject,
+        string Title,
+        string CodeLabel,
+        string IntroText,
+        string IgnoreText);
+
+    private static VerificationMessageTemplate ResolveTemplate(string? purpose)
+    {
+        return string.Equals(purpose, EmailVerificationPurpose.PasswordReset, StringComparison.OrdinalIgnoreCase)
+            ? new VerificationMessageTemplate(
+                "Восстановление пароля",
+                "Восстановление пароля",
+                "Код восстановления",
+                "Введите код в приложении, чтобы задать новый пароль.",
+                "Если вы не запрашивали восстановление пароля, просто проигнорируйте письмо.")
+            : new VerificationMessageTemplate(
+                "Код входа",
+                "Код входа",
+                "Код",
+                "Введите код в приложении, чтобы продолжить.",
+                "Если вы не запрашивали код, просто проигнорируйте письмо.");
     }
 
     private static string ResolveBrandName(string? configuredName)

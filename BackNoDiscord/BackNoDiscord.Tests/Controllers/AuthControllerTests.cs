@@ -296,7 +296,12 @@ public sealed class AuthControllerTests : IDisposable
         public int SendCount { get; private set; }
         public CancellationToken LastCancellationToken { get; private set; }
 
-        public Task SendVerificationCodeAsync(string email, string verificationCode, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+        public Task SendVerificationCodeAsync(
+            string email,
+            string verificationCode,
+            DateTimeOffset expiresAt,
+            CancellationToken cancellationToken = default,
+            string purpose = EmailVerificationPurpose.Login)
         {
             SendCount++;
             LastCancellationToken = cancellationToken;

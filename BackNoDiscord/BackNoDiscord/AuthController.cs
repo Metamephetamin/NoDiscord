@@ -1358,7 +1358,7 @@ public class AuthController : ControllerBase
         });
 
         await _context.SaveChangesAsync(cancellationToken);
-        await _emailVerificationSender.SendVerificationCodeAsync(userEmail, verificationCode, expiresAt, cancellationToken);
+        await _emailVerificationSender.SendVerificationCodeAsync(userEmail, verificationCode, expiresAt, cancellationToken, purpose);
         await transaction.CommitAsync(cancellationToken);
 
         return EmailVerificationResult.Success(
