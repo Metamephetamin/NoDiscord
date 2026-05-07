@@ -756,7 +756,7 @@
   max-width: 100%;
   padding: 12px 14px 10px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.045);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
 }
@@ -794,7 +794,7 @@
   margin-top: 0;
   padding: 7px 12px 6px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid transparent;
   background: rgba(27, 35, 48, 0.9);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
   overflow: visible;
@@ -809,8 +809,8 @@
   bottom: -1px;
   width: 18px;
   height: 18px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 0;
+  border-bottom: 0;
   border-bottom-left-radius: 12px;
   background: rgba(27, 35, 48, 0.9);
   clip-path: polygon(52% 0, 100% 0, 100% 100%, 0 100%, 23% 78%, 38% 42%);
@@ -900,7 +900,7 @@
 
 .msg-content--dm-own {
   align-self: flex-end;
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
   border-bottom-left-radius: 14px;
   background: rgba(27, 35, 48, 0.9);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
@@ -7868,6 +7868,13 @@ html[data-ui-theme="light"] .message-item--dm-own .msg-content--dm,
 html[data-ui-theme="purple"] .message-item--dm-own .msg-content--dm {
   background: var(--app-own-message-bg);
   color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .msg-content--dm,
+html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
+html[data-ui-theme="purple"] .msg-content--dm,
+html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
+  border-color: transparent;
 }
 
 html[data-ui-theme="light"] .input-area textarea,
