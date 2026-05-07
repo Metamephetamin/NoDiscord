@@ -1469,13 +1469,15 @@ export default function Auth({ onAuthSuccess }) {
       ) : null}
 
       <div className="auth-brand">
-        <div className="auth-brand__badge">
-          <img className="auth-brand__logo" src={brandLogoSrc} alt={AUTH_BRAND_NAME} />
-        </div>
-        <div className="auth-brand__copy">
+        <div className="auth-brand__identity">
+          <div className="auth-brand__badge">
+            <img className="auth-brand__logo" src={brandLogoSrc} alt={AUTH_BRAND_NAME} />
+          </div>
           <span className="auth-brand__name">
             <span className="auth-brand__name-base">{AUTH_BRAND_NAME}</span>
           </span>
+        </div>
+        <div className="auth-brand__copy">
           <h1 className="auth-brand__title">
             <span className="auth-brand__title-static">пространство для</span>
             <span className="auth-brand__title-rotator" aria-live="polite">
