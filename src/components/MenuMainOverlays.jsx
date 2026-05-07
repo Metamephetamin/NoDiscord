@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import SiriWave from "siriwave";
 import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
@@ -15,6 +16,10 @@ const clampDirectCallWaveLevel = (value) => {
 };
 
 function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }) {
+  const containerRef = useRef(null);
+  const waveRef = useRef(null);
+  const sizeRef = useRef({ width: 0, height: 0 });
+  const prefersReducedMotionRef = useRef(false);
   const isConnected = phase === "connected";
   const isPending = phase === "incoming" || phase === "outgoing";
   const isTransitioning = phase === "connecting" || phase === "reconnecting";
@@ -27,22 +32,96 @@ function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }
         ? 0.28
         : 0.18;
   const resolvedLevel = Math.max(baseLevel, normalizedLevel, peerSpeaking && isConnected ? 0.44 : 0);
+  const isLive = isConnected || isPending || isTransitioning;
+  const resolvedAmplitude = Math.max(0.28, Math.min(1.15, 0.36 + resolvedLevel * 1.25 + (peerSpeaking && isConnected ? 0.18 : 0)));
+  const resolvedSpeed = isConnected
+    ? peerSpeaking
+      ? 0.19
+      : 0.15
+    : isPending
+      ? 0.18
+      : isTransitioning
+        ? 0.16
+        : 0.11;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return undefined;
+    }
+
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+    prefersReducedMotionRef.current = prefersReducedMotion;
+    const buildWave = () => {
+      const rect = container.getBoundingClientRect();
+      const nextWidth = Math.max(80, Math.round(rect.width));
+      const nextHeight = Math.max(34, Math.round(rect.height));
+      const previousSize = sizeRef.current;
+      if (
+        waveRef.current
+        && Math.abs(previousSize.width - nextWidth) < 2
+        && Math.abs(previousSize.height - nextHeight) < 2
+      ) {
+        return;
+      }
+
+      waveRef.current?.dispose();
+      sizeRef.current = { width: nextWidth, height: nextHeight };
+      waveRef.current = new SiriWave({
+        container,
+        width: nextWidth,
+        height: nextHeight,
+        style: "ios9",
+        autostart: !prefersReducedMotion,
+        amplitude: 0.5,
+        speed: 0.14,
+        cover: true,
+        globalCompositeOperation: "lighter",
+      });
+      waveRef.current.canvas?.classList?.add("direct-call-inline__voice-wave-canvas");
+    };
+
+    buildWave();
+
+    const resizeObserver = typeof ResizeObserver === "function"
+      ? new ResizeObserver(buildWave)
+      : null;
+    resizeObserver?.observe(container);
+
+    return () => {
+      resizeObserver?.disconnect();
+      waveRef.current?.dispose();
+      waveRef.current = null;
+      sizeRef.current = { width: 0, height: 0 };
+    };
+  }, []);
+
+  useEffect(() => {
+    const wave = waveRef.current;
+    if (!wave) {
+      return;
+    }
+
+    wave.setAmplitude(resolvedAmplitude);
+    wave.setSpeed(resolvedSpeed);
+    if (isLive && !prefersReducedMotionRef.current) {
+      wave.start();
+    } else {
+      wave.stop();
+    }
+  }, [isLive, resolvedAmplitude, resolvedSpeed]);
 
   return (
     <div
-      className={`direct-call-inline__link direct-call-inline__voice-wave ${isConnected || isPending || isTransitioning ? "direct-call-inline__voice-wave--live" : ""}`}
+      ref={containerRef}
+      className={`direct-call-inline__link direct-call-inline__voice-wave ${isLive ? "direct-call-inline__voice-wave--live" : ""}`}
       aria-hidden="true"
       style={{
         "--direct-call-wave-level": resolvedLevel.toFixed(3),
         "--direct-call-wave-peer": peerSpeaking ? 1 : 0,
       }}
     >
-      <span className="direct-call-inline__voice-wave-glow" />
-      <span className="direct-call-inline__voice-wave-core" />
-      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--teal" />
-      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--rose" />
-      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--blue" />
-      <span className="direct-call-inline__voice-wave-band direct-call-inline__voice-wave-band--mint" />
+      <span className="direct-call-inline__voice-wave-fallback" />
     </div>
   );
 }
