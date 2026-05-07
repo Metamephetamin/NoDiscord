@@ -54,6 +54,8 @@ const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
 const VOICE_DEBUG_PREFIX = "[voice]";
 const PREWARMED_SESSION_TTL_MS = 20_000;
+const LOCAL_AUDIO_REBUILD_RECOVERY_WINDOW_MS = 15_000;
+const LOCAL_AUDIO_REBUILD_RECOVERY_RETRY_DELAYS_MS = [0, 750, 1_500, 3_000];
 const AUDIO_SAMPLE_RATE = 48_000;
 const PREFERRED_AUDIO_SAMPLE_SIZE = 24;
 const MAX_PREFERRED_AUDIO_SAMPLE_SIZE = 32;
@@ -523,6 +525,17 @@ export function createVoiceRoomClient({
   const remoteAudioNodes = new Map();
   const remoteParticipantMedia = new Map();
   const roomActiveSpeakerIds = new Set();
+
+  const waitForLocalAudioRecoveryRetry = (delayMs) => new Promise((resolve) => {
+    window.setTimeout(resolve, Math.max(0, Number(delayMs) || 0));
+  });
+
+  const extendLocalAudioRebuildRecoveryWindow = (durationMs = LOCAL_AUDIO_REBUILD_RECOVERY_WINDOW_MS) => {
+    localAudioRebuildRecoveryDeadlineMs = Math.max(
+      localAudioRebuildRecoveryDeadlineMs,
+      Date.now() + durationMs
+    );
+  };
 
   const emitVoiceConnectionState = (nextState = {}) => {
     const phase = String(nextState.phase || "idle");
@@ -3147,14 +3160,14 @@ const handleDeviceChange = () => {
 
     const operationPromise = Promise.resolve().then(operation);
     localAudioRebuildOperationPromise = operationPromise;
-    localAudioRebuildRecoveryDeadlineMs = Date.now() + 8_000;
+    extendLocalAudioRebuildRecoveryWindow();
 
     try {
       return await operationPromise;
     } finally {
       if (localAudioRebuildOperationPromise === operationPromise) {
         localAudioRebuildOperationPromise = null;
-        localAudioRebuildRecoveryDeadlineMs = Date.now() + 4_000;
+        extendLocalAudioRebuildRecoveryWindow();
       }
     }
   };
@@ -3255,22 +3268,31 @@ const handleDeviceChange = () => {
     emitSpeakingUsers();
     onRoomParticipantsChanged?.({ channel: channelName, participants: [] });
 
-    try {
-      await ensureRoomConnection(channelName, currentUser);
-      currentChannel = channelName;
-      onChannelChanged?.(channelName);
-      emitVoiceConnectionState({ phase: "connected", channel: channelName, reason: "audio-device-switch-recovered" });
-      publishVoiceDebugSnapshot("local-audio:rebuild-disconnect-recovered");
-      localAudioRebuildRecoveryDeadlineMs = 0;
-      return true;
-    } catch (error) {
-      logVoiceDebug("local-audio:rebuild-disconnect-recover-failed", {
-        channelName,
-        errorName: error?.name || "",
-        error: error?.message || String(error),
-      });
-      return false;
+    for (const delayMs of LOCAL_AUDIO_REBUILD_RECOVERY_RETRY_DELAYS_MS) {
+      if (delayMs > 0) {
+        await waitForLocalAudioRecoveryRetry(delayMs);
+      }
+
+      try {
+        await ensureRoomConnection(channelName, currentUser);
+        currentChannel = channelName;
+        onChannelChanged?.(channelName);
+        emitVoiceConnectionState({ phase: "connected", channel: channelName, reason: "audio-device-switch-recovered" });
+        publishVoiceDebugSnapshot("local-audio:rebuild-disconnect-recovered");
+        localAudioRebuildRecoveryDeadlineMs = 0;
+        return true;
+      } catch (error) {
+        logVoiceDebug("local-audio:rebuild-disconnect-recover-failed", {
+          channelName,
+          delayMs,
+          errorName: error?.name || "",
+          error: error?.message || String(error),
+        });
+        extendLocalAudioRebuildRecoveryWindow();
+      }
     }
+
+    return false;
   };
 
   const bindRoomEvents = (nextRoom) => {
@@ -4292,6 +4314,10 @@ const handleDeviceChange = () => {
 
     async setInputDevice(deviceId) {
       selectedInputDeviceId = deviceId || "";
+      if (hasActiveVoiceAudioSession()) {
+        extendLocalAudioRebuildRecoveryWindow();
+        emitVoiceConnectionState({ phase: "reconnecting", channel: currentChannel || roomConnectChannelName, reason: "audio-device-switch" });
+      }
       await emitAudioDevices().catch(() => {});
 
       if (localMicSourceStream || localAudioStream) {

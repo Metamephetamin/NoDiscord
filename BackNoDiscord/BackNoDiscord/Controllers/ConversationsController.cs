@@ -868,6 +868,9 @@ public sealed class ConversationsController : ControllerBase
                 Nickname = item.nickname,
                 Email = item.email,
                 AvatarUrl = item.avatar_url,
+                AvatarFrameJson = item.avatar_frame_json,
+                ProfileBackgroundUrl = item.profile_background_url,
+                ProfileBackgroundFrameJson = item.profile_background_frame_json,
                 LastSeenAt = item.last_seen_at,
                 ProfileCustomizationJson = item.profile_customization_json
             })
@@ -1207,6 +1210,9 @@ public sealed class ConversationsController : ControllerBase
                     nickname = user?.Nickname ?? string.Empty,
                     email = user?.Email ?? string.Empty,
                     avatar_url = user?.AvatarUrl ?? string.Empty,
+                    avatar_frame = MediaFrameSerializer.Parse(user?.AvatarFrameJson, allowNull: true),
+                    profile_background_url = user?.ProfileBackgroundUrl ?? string.Empty,
+                    profile_background_frame = MediaFrameSerializer.Parse(user?.ProfileBackgroundFrameJson, allowNull: true),
                     profile_customization = ParseProfileCustomization(user?.ProfileCustomizationJson),
                     last_seen_at = user?.LastSeenAt,
                     is_online = isOnline,
@@ -1323,6 +1329,9 @@ public sealed class ConversationsController : ControllerBase
         public string Nickname { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? AvatarUrl { get; set; }
+        public string? AvatarFrameJson { get; set; }
+        public string? ProfileBackgroundUrl { get; set; }
+        public string? ProfileBackgroundFrameJson { get; set; }
         public string? ProfileCustomizationJson { get; set; }
         public DateTimeOffset? LastSeenAt { get; set; }
     }

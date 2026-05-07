@@ -16,6 +16,16 @@ assert(
 );
 
 assert(
+  voiceClientSource.includes("LOCAL_AUDIO_REBUILD_RECOVERY_WINDOW_MS = 15_000"),
+  "Voice client must keep a long enough recovery window for delayed LiveKit disconnects during device switches."
+);
+
+assert(
+  voiceClientSource.includes("LOCAL_AUDIO_REBUILD_RECOVERY_RETRY_DELAYS_MS"),
+  "Voice client must retry room recovery after device-switch disconnects."
+);
+
+assert(
   voiceClientSource.indexOf("recoverLiveKitRoomAfterLocalAudioRebuildDisconnect") <
     voiceClientSource.indexOf("await signalConnection.invoke(\"LeaveChannel\""),
   "Audio rebuild disconnect recovery must run before SignalR LeaveChannel cleanup."

@@ -1,3 +1,4 @@
+using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -133,6 +134,9 @@ public class FriendsController : ControllerBase
                 nickname = item.nickname,
                 email = item.email,
                 avatar_url = item.avatar_url ?? string.Empty,
+                avatar_frame_json = item.avatar_frame_json,
+                profile_background_url = item.profile_background_url,
+                profile_background_frame_json = item.profile_background_frame_json,
                 profile_customization_json = item.profile_customization_json,
                 last_seen_at = item.last_seen_at,
                 directChannelId = BuildDirectChannelId(currentUserId, item.id)
@@ -180,6 +184,9 @@ public class FriendsController : ControllerBase
             item.nickname,
             item.email,
             item.avatar_url,
+            avatar_frame = MediaFrameSerializer.Parse(item.avatar_frame_json, allowNull: true),
+            profile_background_url = item.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(item.profile_background_frame_json, allowNull: true),
             profile_customization = ParseProfileCustomization(item.profile_customization_json),
             item.last_seen_at,
             is_online = _userPresenceService.IsOnline(item.id.ToString()),
@@ -742,6 +749,9 @@ public class FriendsController : ControllerBase
             nickname = friend.nickname,
             email = friend.email,
             avatar_url = friend.avatar_url ?? string.Empty,
+            avatar_frame = MediaFrameSerializer.Parse(friend.avatar_frame_json, allowNull: true),
+            profile_background_url = friend.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(friend.profile_background_frame_json, allowNull: true),
             profile_customization = ParseProfileCustomization(friend.profile_customization_json),
             is_online = isOnline,
             presence = isOnline ? "online" : "offline",
@@ -791,6 +801,9 @@ public class FriendsController : ControllerBase
                 nickname = sender.nickname,
                 email = sender.email,
                 avatar_url = sender.avatar_url ?? string.Empty,
+                avatar_frame = MediaFrameSerializer.Parse(sender.avatar_frame_json, allowNull: true),
+                profile_background_url = sender.profile_background_url ?? string.Empty,
+                profile_background_frame = MediaFrameSerializer.Parse(sender.profile_background_frame_json, allowNull: true),
                 profile_customization = ParseProfileCustomization(sender.profile_customization_json),
                 is_online = isOnline,
                 presence = isOnline ? "online" : "offline",

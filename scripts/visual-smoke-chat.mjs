@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/css/TextChat.css", "utf8");
 const messageListSource = readFileSync("src/components/TextChatMessageList.jsx", "utf8");
+const friendsControllerSource = readFileSync("BackNoDiscord/BackNoDiscord/Controllers/FriendsController.cs", "utf8");
+const conversationsControllerSource = readFileSync("BackNoDiscord/BackNoDiscord/Controllers/ConversationsController.cs", "utf8");
 
 const requiredSelectors = [
   ".msg-content--dm",
@@ -32,5 +34,9 @@ assert(css.includes(".msg-content--dm.msg-content--file-only::before"), "File-on
 assert(css.includes(".msg-content--file-only .message-attachment--document"), "File-only document attachments must use the compact file pill style.");
 assert(!messageListSource.includes("message-attachment__upload-spinner"), "Document upload rows must not render a second right-side loader.");
 assert(!messageListSource.includes("OPEN WITH"), "Ready document attachments must not render the legacy OPEN WITH label.");
+assert(friendsControllerSource.includes("profile_background_url = friend.profile_background_url"), "Friends payload must include profile background URLs for profile cards.");
+assert(friendsControllerSource.includes("profile_background_frame = MediaFrameSerializer.Parse(friend.profile_background_frame_json"), "Friends payload must include profile background frames.");
+assert(conversationsControllerSource.includes("ProfileBackgroundUrl = item.profile_background_url"), "Conversation member payload must load profile background URLs.");
+assert(conversationsControllerSource.includes("profile_background_url = user?.ProfileBackgroundUrl"), "Conversation member payload must expose profile background URLs.");
 
 console.log("Chat visual smoke checks passed.");
