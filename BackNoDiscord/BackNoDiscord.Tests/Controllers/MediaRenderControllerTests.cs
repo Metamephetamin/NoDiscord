@@ -56,7 +56,7 @@ public sealed class MediaRenderControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_ReturnsDefaultIconForMissingOwnedChatImage()
+    public async Task Render_ReturnsNotFoundForMissingOwnedChatImage()
     {
         var webRootPath = Path.Combine(_storageRoot, "wwwroot");
         var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
@@ -66,14 +66,13 @@ public sealed class MediaRenderControllerTests : IDisposable
 
         var result = await controller.Render("/chat-files/chat-42-missing.png", 160, 120, "contain", "false", CancellationToken.None);
 
-        var fileResult = Assert.IsType<FileContentResult>(result);
-        Assert.Equal("image/png", fileResult.ContentType);
-        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
-        Assert.NotEmpty(fileResult.FileContents);
+        Assert.IsType<NotFoundResult>(result);
+        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
+        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
     }
 
     [Fact]
-    public async Task Render_ReturnsDefaultIconForMissingOwnedHeicChatImage()
+    public async Task Render_ReturnsNotFoundForMissingOwnedHeicChatImage()
     {
         var webRootPath = Path.Combine(_storageRoot, "wwwroot");
         var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
@@ -83,10 +82,9 @@ public sealed class MediaRenderControllerTests : IDisposable
 
         var result = await controller.Render("/chat-files/chat-42-missing.heic", 160, 120, "contain", "false", CancellationToken.None);
 
-        var fileResult = Assert.IsType<FileContentResult>(result);
-        Assert.Equal("image/png", fileResult.ContentType);
-        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
-        Assert.NotEmpty(fileResult.FileContents);
+        Assert.IsType<NotFoundResult>(result);
+        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
+        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
     }
 
     [Fact]

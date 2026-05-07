@@ -165,8 +165,7 @@ public sealed class MediaRenderController : ControllerBase
 
     private static bool CanUseDefaultMediaFallback(string normalizedSource) =>
         normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase)
-        || normalizedSource.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase)
-        || normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase);
+        || normalizedSource.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase);
 
     private bool IsDefaultMediaFallback(string filePath)
     {
