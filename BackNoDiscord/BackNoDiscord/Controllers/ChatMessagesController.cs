@@ -27,19 +27,22 @@ public sealed class ChatMessagesController : ControllerBase
     private readonly ILogger<ChatMessagesController> _logger;
     private readonly ServerStateService _serverState;
     private readonly MessageSearchService _messageSearch;
+    private readonly ChatFileAccessService _chatFileAccess;
 
     public ChatMessagesController(
         AppDbContext context,
         CryptoService crypto,
         ILogger<ChatMessagesController> logger,
         ServerStateService serverState,
-        MessageSearchService messageSearch)
+        MessageSearchService messageSearch,
+        ChatFileAccessService chatFileAccess)
     {
         _context = context;
         _crypto = crypto;
         _logger = logger;
         _serverState = serverState;
         _messageSearch = messageSearch;
+        _chatFileAccess = chatFileAccess;
     }
 
     [HttpGet]
@@ -87,6 +90,7 @@ public sealed class ChatMessagesController : ControllerBase
                 Content = message.Content,
                 EncryptedContent = message.EncryptedContent,
                 PhotoUrl = message.PhotoUrl,
+                AuthorUserId = message.AuthorUserId,
                 Timestamp = message.Timestamp,
                 ReadAt = message.ReadAt,
                 ReadByUserId = message.ReadByUserId,
@@ -100,14 +104,31 @@ public sealed class ChatMessagesController : ControllerBase
             .OrderBy(message => message.Id)
             .ToList();
         var reactionsByMessageId = await BuildReactionMapAsync(pageMessages.Select(message => message.Id), cancellationToken);
+        var messagesWithPayloads = pageMessages
+            .Select(message => new
+            {
+                Message = message,
+                Payload = DeserializePayload(GetRawPayload(message))
+            })
+            .ToList();
+
+        foreach (var item in messagesWithPayloads)
+        {
+            await _chatFileAccess.EnsureLegacyMessageAttachmentsBoundAsync(
+                item.Message.ChannelId,
+                item.Message.Id,
+                item.Payload,
+                item.Message.AuthorUserId,
+                cancellationToken);
+        }
 
         return new ChatMessagesPageDto
         {
-            Items = pageMessages
-                .Select(message => ToMessageDto(
-                    message,
-                    DeserializePayload(GetRawPayload(message)),
-                    reactionsByMessageId.TryGetValue(message.Id, out var reactions) ? reactions : []))
+            Items = messagesWithPayloads
+                .Select(item => ToMessageDto(
+                    item.Message,
+                    item.Payload,
+                    reactionsByMessageId.TryGetValue(item.Message.Id, out var reactions) ? reactions : []))
                 .ToList(),
             HasMore = hasMore,
             NextCursor = pageMessages.Count > 0 ? pageMessages.Min(message => message.Id) : null

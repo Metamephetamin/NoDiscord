@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BackNoDiscord.Security;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,15 +6,18 @@ namespace BackNoDiscord.Services;
 
 public sealed class ChatFileAccessService
 {
+    private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
     private const string ChatServerPrefix = "server:";
     private const string ChatChannelMarker = "::channel:";
     private readonly AppDbContext _context;
     private readonly ServerStateService _serverState;
+    private readonly CryptoService? _crypto;
 
-    public ChatFileAccessService(AppDbContext context, ServerStateService serverState)
+    public ChatFileAccessService(AppDbContext context, ServerStateService serverState, CryptoService? crypto = null)
     {
         _context = context;
         _serverState = serverState;
+        _crypto = crypto;
     }
 
     public async Task TrackUploadAsync(StreamedChatFileUploadResult upload, string ownerUserId, CancellationToken cancellationToken)
@@ -113,6 +117,58 @@ public sealed class ChatFileAccessService
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task EnsureLegacyMessageAttachmentsBoundAsync(
+        string channelId,
+        int messageId,
+        ChatMessagePayload payload,
+        string? fallbackAuthorUserId,
+        CancellationToken cancellationToken)
+    {
+        var attachments = GetChatFileAttachments(payload).ToArray();
+        if (attachments.Length == 0)
+        {
+            return;
+        }
+
+        var fileNames = attachments
+            .Select(GetChatFileName)
+            .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (fileNames.Length == 0)
+        {
+            return;
+        }
+
+        var boundCount = await _context.ChatFileUploads
+            .AsNoTracking()
+            .CountAsync(item => fileNames.Contains(item.FileName) && item.MessageId == messageId, cancellationToken);
+        if (boundCount == fileNames.Length)
+        {
+            return;
+        }
+
+        var authorUserId = ResolvePayloadAuthorUserId(payload, fallbackAuthorUserId, attachments);
+        if (string.IsNullOrWhiteSpace(authorUserId))
+        {
+            return;
+        }
+
+        try
+        {
+            await BindMessageAttachmentsAsync(
+                channelId,
+                messageId,
+                attachments,
+                new AuthenticatedUser(authorUserId, string.Empty, string.Empty, string.Empty, string.Empty),
+                cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // Legacy repair must not break message reads. Access checks keep denying unsafe records.
+        }
+    }
+
     public async Task<bool> CanAccessFileAsync(string fileName, AuthenticatedUser currentUser, CancellationToken cancellationToken)
     {
         var safeFileName = Path.GetFileName(fileName ?? string.Empty);
@@ -133,7 +189,8 @@ public sealed class ChatFileAccessService
                 return true;
             }
 
-            return await TryAuthorizeLegacyMessageAttachmentAsync(safeFileName, currentUser, cancellationToken);
+            return await TryAuthorizeLegacyMessageAttachmentAsync(safeFileName, currentUser, cancellationToken) ||
+                   await TryAuthorizeEncryptedLegacyMessageAttachmentAsync(safeFileName, currentUser, cancellationToken);
         }
 
         if (string.Equals(record.OwnerUserId, currentUser.UserId, StringComparison.Ordinal))
@@ -143,7 +200,8 @@ public sealed class ChatFileAccessService
 
         if (string.IsNullOrWhiteSpace(record.ChannelId))
         {
-            return false;
+            return await TryAuthorizeLegacyMessageAttachmentAsync(safeFileName, currentUser, cancellationToken) ||
+                   await TryAuthorizeEncryptedLegacyMessageAttachmentAsync(safeFileName, currentUser, cancellationToken);
         }
 
         return await CanAccessChannelAsync(record.ChannelId, currentUser, cancellationToken);
@@ -189,6 +247,171 @@ public sealed class ChatFileAccessService
         }
 
         return true;
+    }
+
+    private async Task<bool> TryAuthorizeEncryptedLegacyMessageAttachmentAsync(
+        string fileName,
+        AuthenticatedUser currentUser,
+        CancellationToken cancellationToken)
+    {
+        if (_crypto is null)
+        {
+            return false;
+        }
+
+        var ownerUserId = ExtractOwnerUserIdFromFileName(fileName);
+        var candidateQuery = _context.Messages
+            .AsNoTracking()
+            .Where(message => !message.IsDeleted && message.EncryptedContent != null);
+
+        if (!string.IsNullOrWhiteSpace(ownerUserId))
+        {
+            candidateQuery = candidateQuery.Where(message =>
+                message.AuthorUserId == null ||
+                message.AuthorUserId == string.Empty ||
+                message.AuthorUserId == ownerUserId);
+        }
+
+        var candidates = candidateQuery
+            .OrderByDescending(message => message.Id)
+            .Select(message => new
+            {
+                message.Id,
+                message.ChannelId,
+                message.AuthorUserId,
+                message.EncryptedContent
+            })
+            .AsAsyncEnumerable()
+            .WithCancellation(cancellationToken);
+
+        await foreach (var candidate in candidates)
+        {
+            var payload = TryDeserializeEncryptedPayload(candidate.EncryptedContent);
+            if (payload is null)
+            {
+                continue;
+            }
+
+            var matchingAttachment = GetChatFileAttachments(payload)
+                .FirstOrDefault(attachment => string.Equals(GetChatFileName(attachment), fileName, StringComparison.Ordinal));
+            if (matchingAttachment is null)
+            {
+                continue;
+            }
+
+            if (!await CanAccessChannelAsync(candidate.ChannelId, currentUser, cancellationToken))
+            {
+                continue;
+            }
+
+            var authorUserId = ResolvePayloadAuthorUserId(payload, candidate.AuthorUserId, [matchingAttachment]);
+            if (string.IsNullOrWhiteSpace(authorUserId))
+            {
+                return false;
+            }
+
+            try
+            {
+                await BindMessageAttachmentsAsync(
+                    candidate.ChannelId,
+                    candidate.Id,
+                    [matchingAttachment],
+                    new AuthenticatedUser(authorUserId, string.Empty, string.Empty, string.Empty, string.Empty),
+                    cancellationToken);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private ChatMessagePayload? TryDeserializeEncryptedPayload(string? encryptedContent)
+    {
+        if (string.IsNullOrWhiteSpace(encryptedContent) || _crypto is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var raw = _crypto.Decrypt(encryptedContent);
+            if (string.IsNullOrWhiteSpace(raw) || !raw.StartsWith(MessagePayloadPrefix, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return JsonSerializer.Deserialize<ChatMessagePayload>(
+                raw[MessagePayloadPrefix.Length..],
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IEnumerable<ChatAttachmentPayload> GetChatFileAttachments(ChatMessagePayload payload)
+    {
+        foreach (var attachment in payload.Attachments ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(UploadPolicies.SanitizeRelativeAssetUrl(attachment.AttachmentUrl, "/chat-files/")))
+            {
+                yield return attachment;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(UploadPolicies.SanitizeRelativeAssetUrl(payload.AttachmentUrl, "/chat-files/")))
+        {
+            yield return new ChatAttachmentPayload
+            {
+                AttachmentUrl = payload.AttachmentUrl,
+                AttachmentName = payload.AttachmentName,
+                AttachmentSize = payload.AttachmentSize,
+                AttachmentContentType = payload.AttachmentContentType,
+                AttachmentSpoiler = payload.AttachmentSpoiler,
+                AttachmentAsFile = payload.AttachmentAsFile,
+                AttachmentEncryption = payload.AttachmentEncryption,
+                VoiceMessage = payload.VoiceMessage
+            };
+        }
+    }
+
+    private static string ResolvePayloadAuthorUserId(
+        ChatMessagePayload payload,
+        string? fallbackAuthorUserId,
+        IEnumerable<ChatAttachmentPayload> attachments)
+    {
+        if (!string.IsNullOrWhiteSpace(payload.AuthorUserId))
+        {
+            return payload.AuthorUserId.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(fallbackAuthorUserId))
+        {
+            return fallbackAuthorUserId.Trim();
+        }
+
+        foreach (var attachment in attachments)
+        {
+            var ownerUserId = ExtractOwnerUserIdFromFileName(GetChatFileName(attachment));
+            if (!string.IsNullOrWhiteSpace(ownerUserId))
+            {
+                return ownerUserId;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static string GetChatFileName(ChatAttachmentPayload attachment)
+    {
+        var normalizedUrl = UploadPolicies.SanitizeRelativeAssetUrl(attachment.AttachmentUrl, "/chat-files/");
+        return Path.GetFileName(normalizedUrl);
     }
 
     private async Task<bool> CanAccessChannelAsync(string channelId, AuthenticatedUser currentUser, CancellationToken cancellationToken)

@@ -1747,10 +1747,28 @@ function TextChatMessageList({
   const [pressedMessageId, setPressedMessageId] = useState("");
   const [pressedAvatarMessageId, setPressedAvatarMessageId] = useState("");
   const currentUserName = useMemo(() => getUserName(user).toLowerCase(), [user]);
+  const currentUserAvatar = String(user?.avatarUrl || user?.avatar || user?.avatar_url || "").trim();
   const serverRoleById = useMemo(
     () => new Map((serverRoles || []).map((role) => [String(role?.id || ""), role])),
     [serverRoles]
   );
+  const avatarFallbackByUserId = useMemo(() => {
+    const entries = [];
+    const ownUserId = String(currentUserId || user?.id || user?.userId || "").trim();
+    if (ownUserId && currentUserAvatar) {
+      entries.push([ownUserId, currentUserAvatar]);
+    }
+
+    (serverMembers || []).forEach((member) => {
+      const userId = String(member?.userId || member?.id || "").trim();
+      const avatar = String(member?.avatar || member?.avatarUrl || "").trim();
+      if (userId && avatar) {
+        entries.push([userId, avatar]);
+      }
+    });
+
+    return new Map(entries);
+  }, [currentUserAvatar, currentUserId, serverMembers, user?.id, user?.userId]);
   const authorRoleColorByUserId = useMemo(
     () =>
       new Map(
@@ -1980,9 +1998,11 @@ function TextChatMessageList({
           const messagePoll = getMessagePoll(messageItem);
           const inviteCode = extractInviteCode(messageText);
           const messageMentions = Array.isArray(messageItem.mentions) ? messageItem.mentions : [];
+          const messageAuthorUserId = String(messageItem.authorUserId || "").trim();
           const isOwnMessage =
-            String(messageItem.authorUserId || "") === currentUserId ||
+            messageAuthorUserId === currentUserId ||
             (!messageItem.authorUserId && messageItem.username?.toLowerCase() === currentUserName);
+          const messageAvatarFallback = avatarFallbackByUserId.get(messageAuthorUserId) || (isOwnMessage ? currentUserAvatar : "");
           const isSelectedMessage = selectedMessageIdSet.has(String(messageItem.id));
           const isForwardGroupFollow = areMessagesInSameForwardGroup(messageItem, previousMessage);
           const isForwardGroupStart = !isForwardGroupFollow && areMessagesInSameForwardGroup(messageItem, nextMessage);
@@ -2113,6 +2133,7 @@ function TextChatMessageList({
               ) : null}
               <AnimatedAvatar
                 src={messageItem.photoUrl}
+                fallback={messageAvatarFallback}
                 alt="avatar"
                 className={`msg-avatar ${pressedAvatarMessageId === String(messageItem.id) ? "msg-avatar--pressing" : ""}`}
                 loading="eager"

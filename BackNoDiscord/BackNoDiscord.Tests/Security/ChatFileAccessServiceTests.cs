@@ -1,6 +1,7 @@
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BackNoDiscord.Tests.Security;
 
@@ -83,6 +84,80 @@ public sealed class ChatFileAccessServiceTests
         var allowed = await service.CanAccessFileAsync("chat-42-legacy.png", User("84"), CancellationToken.None);
 
         Assert.True(allowed);
+    }
+
+    [Fact]
+    public async Task CanAccessFileAsync_AllowsDirectFriendForEncryptedLegacyMessageAttachmentWithoutMetadata()
+    {
+        await using var context = CreateContext();
+        var crypto = CreateCrypto();
+        var service = CreateService(context, crypto);
+        var channelId = DirectMessageChannels.BuildChannelId(42, 84);
+        context.Friendships.Add(new FriendshipRecord
+        {
+            UserLowId = 42,
+            UserHighId = 84,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.Messages.Add(new Message
+        {
+            Id = 123,
+            ChannelId = channelId,
+            Username = "owner",
+            EncryptedContent = crypto.Encrypt("__CHAT_PAYLOAD__:{\"authorUserId\":\"42\",\"attachments\":[{\"attachmentUrl\":\"/chat-files/chat-42-legacy.png\"}]}"),
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-legacy.png", User("84"), CancellationToken.None);
+
+        Assert.True(allowed);
+        var upload = await context.ChatFileUploads.SingleAsync();
+        Assert.Equal("chat-42-legacy.png", upload.FileName);
+        Assert.Equal(channelId, upload.ChannelId);
+        Assert.Equal(123, upload.MessageId);
+    }
+
+    [Fact]
+    public async Task CanAccessFileAsync_BindsEncryptedLegacyAttachmentWhenUploadRecordIsUnbound()
+    {
+        await using var context = CreateContext();
+        var crypto = CreateCrypto();
+        var service = CreateService(context, crypto);
+        var channelId = DirectMessageChannels.BuildChannelId(42, 84);
+        context.Friendships.Add(new FriendshipRecord
+        {
+            UserLowId = 42,
+            UserHighId = 84,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.ChatFileUploads.Add(new ChatFileUploadRecord
+        {
+            FileName = "chat-42-legacy.png",
+            OwnerUserId = "42",
+            DisplayFileName = "legacy.png",
+            ContentType = "image/png",
+            Size = 12,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.Messages.Add(new Message
+        {
+            Id = 123,
+            ChannelId = channelId,
+            Username = "owner",
+            EncryptedContent = crypto.Encrypt("__CHAT_PAYLOAD__:{\"authorUserId\":\"42\",\"attachments\":[{\"attachmentUrl\":\"/chat-files/chat-42-legacy.png\"}]}"),
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+
+        var allowed = await service.CanAccessFileAsync("chat-42-legacy.png", User("84"), CancellationToken.None);
+
+        Assert.True(allowed);
+        var upload = await context.ChatFileUploads.SingleAsync();
+        Assert.Equal(channelId, upload.ChannelId);
+        Assert.Equal(123, upload.MessageId);
     }
 
     [Fact]
@@ -173,9 +248,21 @@ public sealed class ChatFileAccessServiceTests
         Assert.False(allowed);
     }
 
-    private static ChatFileAccessService CreateService(AppDbContext context)
+    private static ChatFileAccessService CreateService(AppDbContext context, CryptoService? crypto = null)
     {
-        return new ChatFileAccessService(context, new ServerStateService(context));
+        return new ChatFileAccessService(context, new ServerStateService(context), crypto);
+    }
+
+    private static CryptoService CreateCrypto()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Crypto:Key"] = "01234567890123456789012345678901"
+            })
+            .Build();
+
+        return new CryptoService(configuration);
     }
 
     private static AuthenticatedUser User(string userId)
