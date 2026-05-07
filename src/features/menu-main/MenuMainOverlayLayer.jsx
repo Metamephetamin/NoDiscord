@@ -139,10 +139,13 @@ export default function MenuMainOverlayLayer({
 }) {
   const availableFpsOptions =
     STREAM_FPS_OPTIONS.filter((option) => (SCREEN_SHARE_ALLOWED_FPS[resolution] || SCREEN_SHARE_ALLOWED_FPS["1080p"]).includes(option.value));
-  const showPendingDirectCallPopup = directCallState?.phase === "incoming" || directCallState?.phase === "outgoing";
+  const directCallPhase = String(directCallState?.phase || "");
+  const showPendingDirectCallPopup = directCallPhase === "incoming" || directCallPhase === "outgoing";
+  const showExpandedDirectCallOverlay =
+    ["connected", "connecting", "reconnecting"].includes(directCallPhase) && !directCallState?.isMiniMode;
   const showDirectCallOverlay = isMobileViewport
-    ? directCallState?.phase && directCallState.phase !== "idle"
-    : showPendingDirectCallPopup;
+    ? directCallPhase && directCallPhase !== "idle"
+    : showPendingDirectCallPopup || showExpandedDirectCallOverlay;
 
   return (
     <>

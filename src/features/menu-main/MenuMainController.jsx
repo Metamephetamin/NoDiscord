@@ -5672,6 +5672,15 @@ export default function MenuMain({
   const stableAddForumReply = useStableEvent(addForumReply);
   const stableToggleMicMute = useStableEvent(toggleMicMute);
   const stableToggleSoundMute = useStableEvent(toggleSoundMute);
+  const openActiveDirectCallFromRail = useCallback((peerUserId) => {
+    const targetUserId = String(peerUserId || directCallStateRef.current.peerUserId || "").trim();
+    if (!targetUserId) {
+      return;
+    }
+
+    setDirectCallMiniMode(false);
+    openDirectChat(targetUserId);
+  }, [directCallStateRef, openDirectChat, setDirectCallMiniMode]);
   const directCallPanelProps = {
     call: directCallState,
     history: directCallHistory,
@@ -6434,13 +6443,7 @@ export default function MenuMain({
       defaultServerIcon={DEFAULT_SERVER_ICON}
       smsIcon={SMS_ICON_URL}
       onOpenFriendsWorkspace={openFriendsWorkspace}
-      onOpenDirectCallChat={(targetUserId) => {
-        if (!targetUserId) {
-          return;
-        }
-
-        openDirectChat(targetUserId);
-      }}
+      onOpenDirectCallChat={openActiveDirectCallFromRail}
       onServerShortcutClick={handleServerShortcutClick}
       onServerContextMenu={openServerContextMenu}
       onServerPointerDown={handleServerShortcutPointerDown}
