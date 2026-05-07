@@ -491,6 +491,7 @@ export function createVoiceRoomClient({
   let localShareAudioPublication = null;
   let localShareOperationPromise = null;
   let localShareOperationKey = "";
+  let localAudioRebuildOperationPromise = null;
   let isIntentionalRoomDisconnect = false;
   let isSelfMicMuted = false;
   let isSelfDeafened = false;
@@ -3033,15 +3034,16 @@ const handleDeviceChange = () => {
     publishVoiceDebugSnapshot("local-audio:published:snapshot");
   };
 
-  const rebuildLocalAudioPipeline = async () => {
+  const rebuildLocalAudioPipeline = async ({ reuseCapture = true } = {}) => {
     const hadMicTrack = Boolean(localMicSourceStream || localAudioStream);
     if (!hadMicTrack) {
       return null;
     }
 
     const previousPipeline = captureLocalAudioPipeline();
-    const canReuseCapture = Boolean(previousPipeline.sourceStream?.getAudioTracks?.().some((track) => track.readyState !== "ended"));
+    const canReuseCapture = reuseCapture && Boolean(previousPipeline.sourceStream?.getAudioTracks?.().some((track) => track.readyState !== "ended"));
     const shouldPreserveExistingPublication = Boolean(micPublication?.track?.replaceTrack);
+    const shouldSwapWithoutStoppingCurrent = shouldPreserveExistingPublication && !canReuseCapture;
 
     disconnectMicrophoneMonitor();
 
@@ -3055,13 +3057,33 @@ const handleDeviceChange = () => {
         throw error;
       }
     } else {
-      stopLocalMic();
-      nextStream = await ensureAudioPipeline();
+      localMicSourceStream = null;
+      localAudioProcessingStream = null;
+      localAudioStream = null;
+      localAudioPipelinePromise = null;
+      localOutputAnalyser = null;
+      localNoiseGateAnalyser = null;
+      localNoiseGateNode = null;
+      localNoiseGateState = null;
+      localVoiceDynamicsState = null;
+      localSpeakingMeter = null;
+      localNoiseGateMeter = null;
+      audioContext = null;
+      gainNode = null;
+      destinationNode = null;
+
+      try {
+        nextStream = await ensureAudioPipeline();
+      } catch (error) {
+        restoreLocalAudioPipeline(previousPipeline);
+        await connectMicrophoneMonitor().catch(() => {});
+        throw error;
+      }
     }
 
     const nextTrack = nextStream?.getAudioTracks?.()?.[0] || null;
-    if (!nextTrack && canReuseCapture && shouldPreserveExistingPublication) {
-      disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: false });
+    if (!nextTrack && shouldPreserveExistingPublication) {
+      disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: !canReuseCapture });
       restoreLocalAudioPipeline(previousPipeline);
       await connectMicrophoneMonitor().catch(() => {});
       return previousPipeline.outputStream || null;
@@ -3072,8 +3094,8 @@ const handleDeviceChange = () => {
       try {
         await micPublication.track.replaceTrack(nextTrack, true);
       } catch (error) {
-        if (canReuseCapture && shouldPreserveExistingPublication) {
-          disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: false });
+        if (shouldPreserveExistingPublication) {
+          disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: !canReuseCapture });
           restoreLocalAudioPipeline(previousPipeline);
           await connectMicrophoneMonitor().catch(() => {});
         }
@@ -3081,6 +3103,8 @@ const handleDeviceChange = () => {
       }
       if (canReuseCapture && shouldPreserveExistingPublication) {
         disposeCapturedLocalAudioPipeline(previousPipeline, { stopSource: false });
+      } else if (shouldSwapWithoutStoppingCurrent) {
+        disposeCapturedLocalAudioPipeline(previousPipeline, { stopSource: true });
       }
       appliedMicSenderBitrateKbps = 0;
       await applyAdaptiveAudioProfile();
@@ -3104,6 +3128,8 @@ const handleDeviceChange = () => {
       });
       if (canReuseCapture && shouldPreserveExistingPublication) {
         disposeCapturedLocalAudioPipeline(previousPipeline, { stopSource: false });
+      } else if (shouldSwapWithoutStoppingCurrent) {
+        disposeCapturedLocalAudioPipeline(previousPipeline, { stopSource: true });
       }
     }
 
@@ -3111,6 +3137,23 @@ const handleDeviceChange = () => {
     publishVoiceDebugSnapshot("local-audio:rebuild-complete");
 
     return nextStream;
+  };
+
+  const runLocalAudioRebuildOperation = async (operation) => {
+    if (localAudioRebuildOperationPromise) {
+      await localAudioRebuildOperationPromise.catch(() => {});
+    }
+
+    const operationPromise = Promise.resolve().then(operation);
+    localAudioRebuildOperationPromise = operationPromise;
+
+    try {
+      return await operationPromise;
+    } finally {
+      if (localAudioRebuildOperationPromise === operationPromise) {
+        localAudioRebuildOperationPromise = null;
+      }
+    }
   };
 
   const hasActiveVoiceAudioSession = () => Boolean(
@@ -4187,7 +4230,7 @@ const handleDeviceChange = () => {
       await emitAudioDevices().catch(() => {});
 
       if (localMicSourceStream || localAudioStream) {
-        await rebuildLocalAudioPipeline();
+        await runLocalAudioRebuildOperation(() => rebuildLocalAudioPipeline({ reuseCapture: false }));
       }
     },
 
@@ -4240,7 +4283,7 @@ const handleDeviceChange = () => {
         return;
       }
 
-      await rebuildLocalAudioPipeline();
+      await runLocalAudioRebuildOperation(() => rebuildLocalAudioPipeline());
     },
 
     async setNoiseSuppressionStrength(value) {
@@ -4268,7 +4311,7 @@ const handleDeviceChange = () => {
         return;
       }
 
-      await rebuildLocalAudioPipeline();
+      await runLocalAudioRebuildOperation(() => rebuildLocalAudioPipeline());
     },
 
     async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {
