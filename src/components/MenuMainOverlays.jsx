@@ -33,16 +33,16 @@ function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }
         : 0.18;
   const resolvedLevel = Math.max(baseLevel, normalizedLevel, peerSpeaking && isConnected ? 0.44 : 0);
   const isLive = isConnected || isPending || isTransitioning;
-  const resolvedAmplitude = Math.max(0.28, Math.min(1.15, 0.36 + resolvedLevel * 1.25 + (peerSpeaking && isConnected ? 0.18 : 0)));
+  const resolvedAmplitude = Math.max(0.72, Math.min(1.9, 0.72 + resolvedLevel * 1.4 + (peerSpeaking && isConnected ? 0.22 : 0)));
   const resolvedSpeed = isConnected
     ? peerSpeaking
-      ? 0.19
-      : 0.15
+      ? 0.075
+      : 0.052
     : isPending
-      ? 0.18
+      ? 0.06
       : isTransitioning
-        ? 0.16
-        : 0.11;
+        ? 0.048
+        : 0.035;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -73,9 +73,10 @@ function DirectCallVoiceWave({ level = 0, peerSpeaking = false, phase = "idle" }
         height: nextHeight,
         style: "ios9",
         autostart: !prefersReducedMotion,
-        amplitude: 0.5,
-        speed: 0.14,
+        amplitude: 0.9,
+        speed: 0.045,
         cover: true,
+        lerpSpeed: 0.018,
         globalCompositeOperation: "lighter",
       });
       waveRef.current.canvas?.classList?.add("direct-call-inline__voice-wave-canvas");

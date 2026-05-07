@@ -26,5 +26,13 @@ assert(
   menuCss.includes(".direct-call-inline__voice-wave-canvas"),
   "MenuMain.css should size the SiriWave canvas inside the existing compact call link."
 );
+assert(
+  menuCss.includes("background: transparent;") && menuCss.includes("box-shadow: none;"),
+  "The SiriWave holder should not draw the old oval capsule behind the iOS9 waves."
+);
+assert(
+  !menuCss.includes(".direct-call-inline__voice-wave::before"),
+  "The old edge mask should not dim the SiriWave canvas."
+);
 
 console.log("direct-call-siriwave smoke passed");
