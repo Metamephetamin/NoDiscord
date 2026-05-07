@@ -27,7 +27,6 @@ export default function MenuMainProfilePanelSlot({
   micMenuRef,
   soundMenuRef,
   avatarInputRef,
-  serverIconInputRef,
   user,
   profileCustomization,
   audioInputDevices,
@@ -54,7 +53,6 @@ export default function MenuMainProfilePanelSlot({
   leaveVoiceChannel,
   leaveCurrentVoiceContext,
   handleAvatarChange,
-  handleServerIconChange,
   toggleMicMute,
   toggleSoundMute,
   setShowMicMenu,
@@ -92,7 +90,6 @@ export default function MenuMainProfilePanelSlot({
       micMenuRef={micMenuRef}
       soundMenuRef={soundMenuRef}
       avatarInputRef={avatarInputRef}
-      serverIconInputRef={serverIconInputRef}
       userAvatarSrc={user?.avatarUrl || user?.avatar}
       userAvatarFrame={getUserAvatarFrame(user)}
       displayName={getDisplayName(user)}
@@ -123,7 +120,6 @@ export default function MenuMainProfilePanelSlot({
       onStreamFpsChange={handleStreamFpsChange}
       onLeaveVoiceChannel={leaveCurrentVoiceContext || leaveVoiceChannel}
       onAvatarChange={handleAvatarChange}
-      onServerIconChange={handleServerIconChange}
       onToggleMicMute={toggleMicMute}
       onToggleSoundMute={toggleSoundMute}
       onToggleMicMenu={() => setShowMicMenu((previous) => !previous)}

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const panelsSource = readFileSync("src/components/MenuSettingsPanels.jsx", "utf8");
+const profilePanelSource = readFileSync("src/components/MenuProfilePanel.jsx", "utf8");
+const overlayLayerSource = readFileSync("src/features/menu-main/MenuMainOverlayLayer.jsx", "utf8");
 const rendererSource = readFileSync("src/features/menu-main/MenuMainSettingsRenderer.jsx", "utf8");
 const controllerSource = readFileSync("src/features/menu-main/MenuMainController.jsx", "utf8");
 const css = readFileSync("src/css/MenuMain.css", "utf8");
@@ -35,6 +37,9 @@ for (const tab of [
 
 assert(controllerSource.includes("setUiTheme"), "Menu controller must wire theme changes.");
 assert(controllerSource.includes("normalizeUiTheme"), "Menu controller must normalize theme ids.");
+assert(overlayLayerSource.includes("serverIconInputRef"), "Server icon input must be owned by the overlay layer.");
+assert(overlayLayerSource.includes("handleServerIconChange"), "Overlay layer must wire server icon changes.");
+assert(!profilePanelSource.includes("serverIconInputRef"), "Server icon input must not live inside the profile button.");
 assert(indexCss.includes('html[data-ui-theme="light"]'), "Light theme root tokens are missing.");
 assert(indexCss.includes('html[data-ui-theme="purple"]'), "Purple theme root tokens are missing.");
 

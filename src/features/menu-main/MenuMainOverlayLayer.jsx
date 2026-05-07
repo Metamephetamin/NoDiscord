@@ -27,8 +27,10 @@ export default function MenuMainOverlayLayer({
   children,
   avatarInputRef,
   profileBackgroundInputRef,
+  serverIconInputRef,
   handleAvatarChange,
   handleProfileBackgroundChange,
+  handleServerIconChange,
   serverInviteFeedback,
   isMobileViewport,
   openSettings,
@@ -157,6 +159,13 @@ export default function MenuMainOverlayLayer({
         ref={profileBackgroundInputRef}
         className="hidden-input"
         onChange={handleProfileBackgroundChange}
+      />
+      <input
+        type="file"
+        accept=".png,.jpg,.jpeg,.heif,.heic,.gif,.mp4,image/png,image/jpeg,image/heif,image/heic,image/gif,video/mp4"
+        ref={serverIconInputRef}
+        className="hidden-input"
+        onChange={handleServerIconChange}
       />
       {serverInviteFeedback ? (
         <div className={`server-invite-feedback ${isMobileViewport ? "server-invite-feedback--mobile" : ""}`} role="status" aria-live="polite">

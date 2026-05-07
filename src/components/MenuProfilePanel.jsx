@@ -346,7 +346,6 @@ export default function MenuProfilePanel({
   micMenuRef,
   soundMenuRef,
   avatarInputRef,
-  serverIconInputRef,
   userAvatarSrc,
   userAvatarFrame,
   displayName,
@@ -377,7 +376,6 @@ export default function MenuProfilePanel({
   onStreamFpsChange,
   onLeaveVoiceChannel,
   onAvatarChange,
-  onServerIconChange,
   onToggleMicMute,
   onToggleSoundMute,
   onToggleMicMenu,
@@ -483,13 +481,6 @@ export default function MenuProfilePanel({
               <AnimatedAvatar className="avatar" src={userAvatarSrc} alt="avatar" frame={userAvatarFrame} loading="eager" decoding="sync" />
             </span>
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={onAvatarChange} />
-            <input
-              ref={serverIconInputRef}
-              type="file"
-              accept=".png,.jpg,.jpeg,.heif,.heic,.gif,.mp4,image/png,image/jpeg,image/heif,image/heic,image/gif,video/mp4"
-              className="hidden-input"
-              onChange={onServerIconChange}
-            />
             <div className="profile__names">
               <span className="profile__username">{displayName}</span>
               {activityStatus ? (

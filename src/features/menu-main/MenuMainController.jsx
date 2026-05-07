@@ -5729,7 +5729,6 @@ export default function MenuMain({
     micMenuRef,
     soundMenuRef,
     avatarInputRef,
-    serverIconInputRef,
     user,
     profileCustomization,
     audioInputDevices,
@@ -5756,7 +5755,6 @@ export default function MenuMain({
     leaveVoiceChannel: stableLeaveVoiceChannel,
     leaveCurrentVoiceContext,
     handleAvatarChange,
-    handleServerIconChange,
     toggleMicMute: stableToggleMicMute,
     toggleSoundMute: stableToggleSoundMute,
     setShowMicMenu,
@@ -6795,8 +6793,10 @@ export default function MenuMain({
     <MenuMainOverlayLayer
       avatarInputRef={avatarInputRef}
       profileBackgroundInputRef={profileBackgroundInputRef}
+      serverIconInputRef={serverIconInputRef}
       handleAvatarChange={handleAvatarChange}
       handleProfileBackgroundChange={handleProfileBackgroundChange}
+      handleServerIconChange={handleServerIconChange}
       serverInviteFeedback={serverInviteFeedback}
       isMobileViewport={isMobileViewport}
       openSettings={openSettings}
