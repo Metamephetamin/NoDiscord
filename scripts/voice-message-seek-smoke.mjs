@@ -16,5 +16,13 @@ assert(css.includes("cursor: pointer;") && css.includes(".voice-message__wavefor
 assert(css.includes("gap: 1px;") && css.includes("width: 2px;") && css.includes("flex: 0 0 2px;"), "Voice waveform bars should be thinner and denser.");
 assert(css.includes(".voice-message__bar::after") && css.includes("opacity: var(--voice-bar-fill);"), "Voice waveform active fill should be a smooth overlay.");
 assert(!css.includes(".voice-message__bar--active"), "Voice waveform should not rely on discrete active bar classes.");
+assert(
+  css.includes(".msg-content--voice-only .message-bottom-row--voice {\n  position: absolute;\n  right: 8px;\n  bottom: 6px;"),
+  "Voice-only message footer should sit inside the voice bubble instead of a separate right column."
+);
+assert(
+  css.includes(".voice-message__speed {\n  position: absolute;\n  right: 8px;\n  top: 50%;") && css.includes("transform: translateY(-50%);"),
+  "Voice playback speed button should be vertically centered inside the voice bubble."
+);
 
 console.log("voice-message-seek smoke passed");
