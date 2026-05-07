@@ -32,6 +32,8 @@ assert(css.includes("background: transparent"), "Emoji-only DM messages must not
 assert(css.includes("flex-direction: row"), "Emoji-only DM messages must keep emoji and time on one row.");
 assert(css.includes(".msg-content--dm.msg-content--file-only::before"), "File-only DM messages must not render a bubble tail.");
 assert(css.includes(".msg-content--file-only .message-attachment--document"), "File-only document attachments must use the compact file pill style.");
+assert(css.includes("--voice-waveform-width"), "Voice messages must reserve a stable, wider waveform width instead of leaving empty bubble space.");
+assert(!css.includes("background: linear-gradient(180deg, #356d9e 0%, #2b5f8d 100%)"), "File-only document bubbles must not use the old bright blue background.");
 assert(!messageListSource.includes("message-attachment__upload-spinner"), "Document upload rows must not render a second right-side loader.");
 assert(!messageListSource.includes("OPEN WITH"), "Ready document attachments must not render the legacy OPEN WITH label.");
 assert(friendsControllerSource.includes("profile_background_url = friend.profile_background_url"), "Friends payload must include profile background URLs for profile cards.");
