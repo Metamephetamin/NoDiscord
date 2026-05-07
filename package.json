@@ -37,6 +37,7 @@
     "test:media-missing": "node ./scripts/media-missing-smoke.mjs",
     "test:media-preview": "node ./scripts/media-preview-smoke.mjs",
     "test:realtime": "node ./scripts/realtime-smoke.mjs",
+    "test:settings-scroll": "node ./scripts/settings-scroll-smoke.mjs",
     "test:upload-ui": "node ./scripts/upload-ui-smoke.mjs",
     "test:voice-device-switch": "node ./scripts/voice-device-switch-smoke.mjs",
     "test:visual:auth": "node ./scripts/visual-smoke-auth.mjs",

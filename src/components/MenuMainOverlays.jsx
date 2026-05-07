@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
@@ -119,6 +119,61 @@ const SETTINGS_NAV_ICON_PATHS = {
     </>
   ),
 };
+const SETTINGS_WHEEL_SCROLL_MULTIPLIER = 2.6;
+const SETTINGS_SCROLL_TARGET_SELECTOR = [
+  ".settings-shell__content",
+  ".settings-shell__sidebar",
+  ".settings-mobile-shell__body",
+  ".settings-popup--shell",
+].join(",");
+
+function normalizeWheelDeltaY(event) {
+  const rawDeltaY = Number(event.deltaY || 0);
+  if (!Number.isFinite(rawDeltaY) || rawDeltaY === 0) {
+    return 0;
+  }
+
+  if (event.deltaMode === 1) {
+    return rawDeltaY * 16;
+  }
+
+  if (event.deltaMode === 2) {
+    return rawDeltaY * window.innerHeight;
+  }
+
+  return rawDeltaY;
+}
+
+function canScrollVertically(element, deltaY) {
+  if (!element) {
+    return false;
+  }
+
+  const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+  if (maxScrollTop <= 1) {
+    return false;
+  }
+
+  return deltaY > 0
+    ? element.scrollTop < maxScrollTop
+    : element.scrollTop > 0;
+}
+
+function findSettingsScrollTarget(startNode, boundary, deltaY) {
+  let node = startNode instanceof Element ? startNode : startNode?.parentElement || null;
+  while (node && node !== boundary.parentElement) {
+    if (node.matches?.(SETTINGS_SCROLL_TARGET_SELECTOR) && canScrollVertically(node, deltaY)) {
+      return node;
+    }
+
+    if (node === boundary) {
+      break;
+    }
+    node = node.parentElement;
+  }
+
+  return canScrollVertically(boundary, deltaY) ? boundary : null;
+}
 
 function SettingsNavIcon({ id }) {
   return (
@@ -146,6 +201,24 @@ export const SettingsOverlay = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const handleSettingsWheel = useCallback((event) => {
+    if (event.ctrlKey || event.metaKey || event.defaultPrevented) {
+      return;
+    }
+
+    const deltaY = normalizeWheelDeltaY(event);
+    if (!deltaY) {
+      return;
+    }
+
+    const scrollTarget = findSettingsScrollTarget(event.target, event.currentTarget, deltaY);
+    if (!scrollTarget) {
+      return;
+    }
+
+    event.preventDefault();
+    scrollTarget.scrollTop += deltaY * SETTINGS_WHEEL_SCROLL_MULTIPLIER;
+  }, []);
   const filteredSections = useMemo(() => {
     if (!normalizedSearchQuery) {
       return Object.entries(settingsNavSections);
@@ -187,6 +260,7 @@ export const SettingsOverlay = ({
         ref={popupRef}
         className={`settings-popup settings-popup--shell ${isMobileViewport ? "settings-popup--mobile" : ""}`}
         onClick={(event) => event.stopPropagation()}
+        onWheelCapture={handleSettingsWheel}
       >
         {isMobileViewport ? (
           renderMobileSettingsShell()
