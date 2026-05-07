@@ -3,6 +3,7 @@ import { formatVoiceMessageDuration } from "../utils/voiceMessages";
 
 const VOICE_PLAYBACK_RATES = [1, 2, 4];
 const VOICE_WAVEFORM_BAR_COUNT = 40;
+const VOICE_KEYBOARD_SEEK_SECONDS = 5;
 const DEFAULT_WAVEFORM = [0.18, 0.2, 0.24, 0.22, 0.28, 0.34, 0.48, 0.62, 0.72, 0.68, 0.58, 0.5, 0.42, 0.46, 0.54, 0.6, 0.56, 0.44, 0.36, 0.32, 0.38, 0.5, 0.58, 0.52, 0.4, 0.34, 0.3, 0.28, 0.24, 0.22];
 
 const formatPlaybackRate = (value) => (Number(value) === 1 ? "1x" : `${Number(value)}x`);
@@ -103,6 +104,70 @@ export default function VoiceMessageBubble({
     });
   };
 
+  const seekToRatio = (ratio) => {
+    if (!src || pending) {
+      return;
+    }
+
+    const audio = audioRef.current;
+    const durationSeconds = Math.max(
+      0,
+      Number(audio?.duration || 0) || (Number(resolvedDurationMs || 0) / 1000)
+    );
+    if (!audio || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      return;
+    }
+
+    const nextTimeSeconds = Math.max(0, Math.min(durationSeconds, durationSeconds * ratio));
+    audio.currentTime = nextTimeSeconds;
+    setCurrentTimeSeconds(nextTimeSeconds);
+  };
+
+  const handleWaveformSeek = (event) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = bounds.width > 0
+      ? (event.clientX - bounds.left) / bounds.width
+      : 0;
+    seekToRatio(ratio);
+  };
+
+  const handleWaveformKeyDown = (event) => {
+    if (!src || pending) {
+      return;
+    }
+
+    const audio = audioRef.current;
+    const durationSeconds = Math.max(
+      0,
+      Number(audio?.duration || 0) || (Number(resolvedDurationMs || 0) / 1000)
+    );
+    if (!audio || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      return;
+    }
+
+    let nextTimeSeconds = Number(audio.currentTime || 0);
+    if (event.key === "ArrowLeft") {
+      nextTimeSeconds -= VOICE_KEYBOARD_SEEK_SECONDS;
+    } else if (event.key === "ArrowRight") {
+      nextTimeSeconds += VOICE_KEYBOARD_SEEK_SECONDS;
+    } else if (event.key === "Home") {
+      nextTimeSeconds = 0;
+    } else if (event.key === "End") {
+      nextTimeSeconds = durationSeconds;
+    } else if (event.key === " " || event.key === "Enter") {
+      handleTogglePlayback();
+      event.preventDefault();
+      return;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    nextTimeSeconds = Math.max(0, Math.min(durationSeconds, nextTimeSeconds));
+    audio.currentTime = nextTimeSeconds;
+    setCurrentTimeSeconds(nextTimeSeconds);
+  };
+
   return (
     <div className={`voice-message ${pending ? "voice-message--pending" : ""}`}>
       <button
@@ -117,7 +182,18 @@ export default function VoiceMessageBubble({
       </button>
 
       <div className="voice-message__content">
-        <div className="voice-message__waveform" aria-hidden="true">
+        <div
+          className="voice-message__waveform"
+          role="slider"
+          tabIndex={!src || pending ? -1 : 0}
+          aria-label="Перемотка голосового сообщения"
+          aria-valuemin={0}
+          aria-valuemax={Math.max(0, Math.round(resolvedDurationMs / 1000))}
+          aria-valuenow={Math.max(0, Math.round(currentTimeSeconds))}
+          aria-valuetext={formatVoiceMessageDuration(displayTimeMs)}
+          onPointerDown={handleWaveformSeek}
+          onKeyDown={handleWaveformKeyDown}
+        >
           {effectiveWaveform.map((bar, index) => (
             <span
               key={`voice-bar-${index}`}

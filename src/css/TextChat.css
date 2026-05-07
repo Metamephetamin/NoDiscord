@@ -3884,7 +3884,19 @@
   gap: 2px;
   width: var(--voice-waveform-width);
   height: 24px;
+  border-radius: 999px;
   overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.voice-message__waveform:focus-visible {
+  outline: 2px solid rgba(125, 193, 255, 0.72);
+  outline-offset: 3px;
+}
+
+.voice-message--pending .voice-message__waveform {
+  cursor: default;
 }
 
 .voice-message__bar {
