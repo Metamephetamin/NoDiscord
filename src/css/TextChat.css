@@ -1788,6 +1788,11 @@
   display: inline-flex;
 }
 
+.message-attachments-stack--single.message-attachments-stack--with-overlay {
+  width: fit-content !important;
+  max-width: 100%;
+}
+
 .msg-content--visual-attachments .message-attachments-stack {
   width: min(100%, var(--media-grid-standard-width)) !important;
   max-width: 100%;
@@ -2358,10 +2363,10 @@
 
 .message-item--dm .msg-content--media-only,
 .message-item--dm-own.msg-content--media-only {
-  width: min(100%, 840px);
-  min-width: min(520px, 100%);
-  max-width: min(100%, 840px);
-  flex: 1 1 auto;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
 }
 
 .msg-content--inline-emoji-only {
@@ -2395,7 +2400,7 @@
   position: relative;
   display: inline-flex;
   flex-direction: column;
-  width: min(100%, var(--media-grid-standard-width)) !important;
+  width: fit-content !important;
   max-width: 100%;
   align-self: flex-start;
   transform: translateZ(0);
@@ -2408,7 +2413,7 @@
 .message-item--dm .msg-content--media-only .message-attachments-stack--with-overlay,
 .message-item--dm-own .msg-content--media-only .message-attachments-stack,
 .message-item--dm-own .msg-content--media-only .message-attachments-stack--with-overlay {
-  width: min(100%, var(--media-grid-standard-width)) !important;
+  width: fit-content !important;
   max-width: 100%;
 }
 
@@ -2438,7 +2443,7 @@
 }
 
 .msg-content--media-only .message-media-overlay-anchor {
-  width: min(100%, var(--media-grid-standard-width)) !important;
+  width: fit-content !important;
 }
 
 .message-media-overlay-anchor > .message-attachment-grid {
@@ -2521,9 +2526,9 @@
 .message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-footer {
   right: 10px;
   bottom: 10px;
-  padding: 4px 10px;
-  gap: 5px;
-  min-height: 26px;
+  padding: 3px 8px;
+  gap: 4px;
+  min-height: 22px;
   background: rgba(12, 14, 19, 0.32);
 }
 
