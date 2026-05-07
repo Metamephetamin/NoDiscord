@@ -156,6 +156,8 @@ const IntegrationBrandIcon = ({ provider, className = "" }) => {
   );
 };
 
+const HIDDEN_SETTINGS_INTEGRATION_PROVIDER_IDS = new Set(["battlenet", "yandex_music"]);
+
 const maskEmail = (value) => {
   const normalized = String(value || "").trim();
   const [name, domain] = normalized.split("@");
@@ -859,8 +861,9 @@ export const IntegrationsSettings = ({
   onDisconnectIntegration,
   onToggleIntegrationSetting,
 }) => {
-  const connectedProviders = integrations.filter((provider) => provider.connected);
-  const disconnectedProviders = integrations.filter((provider) => !provider.connected);
+  const visibleIntegrations = integrations.filter((provider) => !HIDDEN_SETTINGS_INTEGRATION_PROVIDER_IDS.has(provider.id));
+  const connectedProviders = visibleIntegrations.filter((provider) => provider.connected);
+  const disconnectedProviders = visibleIntegrations.filter((provider) => !provider.connected);
 
   return (
     <div className="settings-shell__content">

@@ -12,6 +12,8 @@ const requiredPanels = [
   "export const VoiceSettingsPanel",
   "export const PersonalProfileSettings",
   "export const AppearanceAccessibilitySettings",
+  'const HIDDEN_SETTINGS_INTEGRATION_PROVIDER_IDS = new Set(["battlenet", "yandex_music"])',
+  "visibleIntegrations.filter",
   "theme-choice-list",
   "UI_THEME_OPTIONS.map",
   "theme-choice--${option.id}",
