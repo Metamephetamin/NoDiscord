@@ -34,6 +34,35 @@ assert(
   "Changing microphone input must hot-swap the local audio track without showing reconnecting UI."
 );
 
+const setNoiseModeStart = voiceClientSource.indexOf("async setNoiseSuppressionMode(mode) {");
+const setNoiseStrengthStart = voiceClientSource.indexOf("async setNoiseSuppressionStrength(value)", setNoiseModeStart);
+assert(setNoiseModeStart >= 0 && setNoiseStrengthStart > setNoiseModeStart, "Voice client must expose setNoiseSuppressionMode before setNoiseSuppressionStrength.");
+const setNoiseModeSource = voiceClientSource.slice(setNoiseModeStart, setNoiseStrengthStart);
+assert(
+  setNoiseModeSource.includes("applyVoiceProcessingPipelineChange"),
+  "Changing voice input profile during a call must rebuild/replace the active audio pipeline."
+);
+assert(
+  !setNoiseModeSource.includes("if (hasActiveVoiceAudioSession())") || !setNoiseModeSource.includes("return;\n      }\n\n      await runLocalAudioRebuildOperation"),
+  "Changing voice input profile must not defer active-call audio rebuilds."
+);
+
+const setEchoStart = voiceClientSource.indexOf("async setEchoCancellationEnabled(enabled) {");
+const updateSelfVoiceStart = voiceClientSource.indexOf("async updateSelfVoiceState", setEchoStart);
+assert(setEchoStart >= 0 && updateSelfVoiceStart > setEchoStart, "Voice client must expose setEchoCancellationEnabled before updateSelfVoiceState.");
+const setEchoSource = voiceClientSource.slice(setEchoStart, updateSelfVoiceStart);
+assert(
+  setEchoSource.includes("applyVoiceProcessingPipelineChange"),
+  "Changing echo cancellation during a call must reacquire and replace the active audio track."
+);
+
+const hardGateProfileMatch = voiceClientSource.match(/if \(mode === NOISE_SUPPRESSION_MODE_HARD_GATE\) \{\s*return \{[\s\S]*?floorGain: ([0-9.]+)/);
+assert(hardGateProfileMatch, "Hard Gate profile must define a closed-gate floor gain.");
+assert(
+  Number(hardGateProfileMatch[1]) <= 0.18,
+  "Hard Gate must strongly reduce background noise when the gate is closed."
+);
+
 assert(
   voiceClientSource.indexOf("recoverLiveKitRoomAfterLocalAudioRebuildDisconnect") <
     voiceClientSource.indexOf("await signalConnection.invoke(\"LeaveChannel\""),

@@ -1711,36 +1711,36 @@ const handleDeviceChange = () => {
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        openThreshold: 0.008,
-        closeThreshold: 0.004,
-        floorGain: 0.72,
+        openThreshold: 0.014,
+        closeThreshold: 0.006,
+        floorGain: 0.1,
         attackTime: 0.0015,
-        releaseTime: 0.28,
-        holdMs: 520,
-        adaptiveOpenRatio: 1.18,
-        adaptiveCloseRatio: 1.08,
-        maxAdaptiveOpenThreshold: 0.018,
+        releaseTime: 0.16,
+        holdMs: 340,
+        adaptiveOpenRatio: 1.36,
+        adaptiveCloseRatio: 1.18,
+        maxAdaptiveOpenThreshold: 0.028,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        openThreshold: 0.01,
-        closeThreshold: 0.005,
-        floorGain: 1,
-        attackTime: 0.008,
-        releaseTime: 0.24,
-        holdMs: 360,
-        adaptiveOpenRatio: 1,
-        adaptiveCloseRatio: 1.1,
-        maxAdaptiveOpenThreshold: 0.01,
+        openThreshold: 0.009,
+        closeThreshold: 0.0045,
+        floorGain: 0.48,
+        attackTime: 0.004,
+        releaseTime: 0.2,
+        holdMs: 300,
+        adaptiveOpenRatio: 1.12,
+        adaptiveCloseRatio: 1.08,
+        maxAdaptiveOpenThreshold: 0.014,
       };
     }
 
     return {
       openThreshold: 0.009,
       closeThreshold: 0.0045,
-      floorGain: 1,
+      floorGain: 0.82,
       attackTime: 0.016,
       releaseTime: 0.24,
       holdMs: 300,
@@ -3172,6 +3172,14 @@ const handleDeviceChange = () => {
     }
   };
 
+  const applyVoiceProcessingPipelineChange = async ({ reuseCapture = false } = {}) => {
+    if (!localMicSourceStream && !localAudioStream) {
+      return;
+    }
+
+    await runLocalAudioRebuildOperation(() => rebuildLocalAudioPipeline({ reuseCapture }));
+  };
+
   const isLocalAudioRebuildRecoveryWindowActive = () => (
     Boolean(localAudioRebuildOperationPromise) || Date.now() < localAudioRebuildRecoveryDeadlineMs
   );
@@ -4364,13 +4372,11 @@ const handleDeviceChange = () => {
       noiseSuppressionMode = nextMode;
       logVoiceDebug("local-audio:noise-mode-set", {
         noiseSuppressionMode,
-        deferredRebuild: hasActiveVoiceAudioSession(),
+        activePipeline: Boolean(localMicSourceStream || localAudioStream),
+        activeVoiceSession: hasActiveVoiceAudioSession(),
       });
-      if (hasActiveVoiceAudioSession()) {
-        return;
-      }
 
-      await runLocalAudioRebuildOperation(() => rebuildLocalAudioPipeline());
+      await applyVoiceProcessingPipelineChange({ reuseCapture: false });
     },
 
     async setNoiseSuppressionStrength(value) {
@@ -4392,13 +4398,11 @@ const handleDeviceChange = () => {
       echoCancellationEnabled = nextEnabled;
       logVoiceDebug("local-audio:echo-cancellation-set", {
         echoCancellationEnabled,
-        deferredRebuild: hasActiveVoiceAudioSession(),
+        activePipeline: Boolean(localMicSourceStream || localAudioStream),
+        activeVoiceSession: hasActiveVoiceAudioSession(),
       });
-      if (hasActiveVoiceAudioSession()) {
-        return;
-      }
 
-      await runLocalAudioRebuildOperation(() => rebuildLocalAudioPipeline());
+      await applyVoiceProcessingPipelineChange({ reuseCapture: false });
     },
 
     async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {
