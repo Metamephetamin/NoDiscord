@@ -23,8 +23,6 @@ const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
-const AUTH_VIDEO_MAX_RELOAD_ATTEMPTS = 3;
-const AUTH_VIDEO_RELOAD_BACKOFF_MS = [600, 1800, 5000];
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
 const MOBILE_AUTH_VISUAL_MODE_QUERY = "(max-width: 640px), (pointer: coarse)";
 const initialRegisterForm = {
@@ -477,8 +475,6 @@ export default function Auth({ onAuthSuccess }) {
       return undefined;
     }
 
-    let reloadTimeoutId = 0;
-    let reloadAttempts = 0;
     let videoDisabled = false;
 
     const playVideo = () => {
@@ -506,16 +502,11 @@ export default function Auth({ onAuthSuccess }) {
         return;
       }
 
-      if (videoNode.readyState === 0 || videoNode.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
-        videoNode.load();
-      }
-
       playVideo();
     };
 
     const disableVideo = () => {
       videoDisabled = true;
-      window.clearTimeout(reloadTimeoutId);
       videoNode.pause();
       videoNode.removeAttribute("src");
       videoNode.querySelectorAll("source").forEach((sourceNode) => {
@@ -526,57 +517,23 @@ export default function Auth({ onAuthSuccess }) {
       setIsAuthVideoAvailable(false);
     };
 
-    const reloadVideo = ({ force = false } = {}) => {
-      if (videoDisabled) {
-        return;
-      }
-
-      if (document.hidden) {
-        return;
-      }
-
-      if (!force && videoNode.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        playVideo();
-        return;
-      }
-
-      if (reloadAttempts >= AUTH_VIDEO_MAX_RELOAD_ATTEMPTS) {
-        disableVideo();
-        return;
-      }
-
-      const reloadDelayMs = AUTH_VIDEO_RELOAD_BACKOFF_MS[Math.min(reloadAttempts, AUTH_VIDEO_RELOAD_BACKOFF_MS.length - 1)];
-      reloadAttempts += 1;
-      window.clearTimeout(reloadTimeoutId);
-      reloadTimeoutId = window.setTimeout(() => {
-        videoNode.load();
-        playVideo();
-      }, reloadDelayMs);
-    };
-
     const handleVideoReady = () => {
-      reloadAttempts = 0;
       playVideo();
     };
-    const handleVideoError = () => reloadVideo({ force: true });
+    const handleVideoError = () => disableVideo();
 
     syncVideoPlayback();
     document.addEventListener("visibilitychange", syncVideoPlayback);
     window.addEventListener("pageshow", syncVideoPlayback);
     videoNode.addEventListener("loadeddata", handleVideoReady);
     videoNode.addEventListener("canplay", handleVideoReady);
-    videoNode.addEventListener("stalled", reloadVideo);
-    videoNode.addEventListener("emptied", reloadVideo);
     videoNode.addEventListener("error", handleVideoError);
 
     return () => {
-      window.clearTimeout(reloadTimeoutId);
       document.removeEventListener("visibilitychange", syncVideoPlayback);
       window.removeEventListener("pageshow", syncVideoPlayback);
       videoNode.removeEventListener("loadeddata", handleVideoReady);
       videoNode.removeEventListener("canplay", handleVideoReady);
-      videoNode.removeEventListener("stalled", reloadVideo);
-      videoNode.removeEventListener("emptied", reloadVideo);
       videoNode.removeEventListener("error", handleVideoError);
     };
   }, []);

@@ -23,7 +23,7 @@ for (const marker of requiredSourceMarkers) {
   assert(authSource.includes(marker), `Missing auth render marker: ${marker}`);
 }
 
-for (const eventName of ["loadeddata", "canplay", "stalled", "emptied", "error"]) {
+for (const eventName of ["loadeddata", "canplay", "error"]) {
   assert(
     authSource.includes(`addEventListener("${eventName}"`),
     `Auth background video must handle ${eventName}.`,
@@ -31,6 +31,13 @@ for (const eventName of ["loadeddata", "canplay", "stalled", "emptied", "error"]
   assert(
     authSource.includes(`removeEventListener("${eventName}"`),
     `Auth background video must clean up ${eventName}.`,
+  );
+}
+
+for (const eventName of ["stalled", "emptied"]) {
+  assert(
+    !authSource.includes(`addEventListener("${eventName}"`),
+    `Auth background video must not reload on ${eventName}; buffering events can loop and flicker.`,
   );
 }
 
@@ -49,5 +56,10 @@ const requiredCssMarkers = [
 for (const marker of requiredCssMarkers) {
   assert(authCss.includes(marker), `Missing auth CSS marker: ${marker}`);
 }
+
+assert(
+  !/\.auth-page--login\s+\.auth-video-bg\s*\{[^}]*object-fit:\s*contain/i.test(authCss),
+  "Mobile login background video must cover the viewport, not contain inside it.",
+);
 
 console.log("Auth visual smoke checks passed.");
