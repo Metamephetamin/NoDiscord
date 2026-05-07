@@ -378,7 +378,7 @@
 
 .auth-page--login {
   --auth-brand-shift-y: -76px;
-  --auth-card-shift-y: -32px;
+  --auth-card-shift-y: -70px;
   justify-content: center;
   gap: 34px;
   padding: 24px;
