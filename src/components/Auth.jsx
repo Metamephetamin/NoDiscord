@@ -23,6 +23,8 @@ const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
+const AUTH_VIDEO_MAX_RELOAD_ATTEMPTS = 3;
+const AUTH_VIDEO_RELOAD_BACKOFF_MS = [600, 1800, 5000];
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
 const MOBILE_AUTH_VISUAL_MODE_QUERY = "(max-width: 640px), (pointer: coarse)";
 const initialRegisterForm = {
@@ -307,6 +309,7 @@ export default function Auth({ onAuthSuccess }) {
   const [typedSloganLength, setTypedSloganLength] = useState(0);
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
+  const [isAuthVideoAvailable, setIsAuthVideoAvailable] = useState(true);
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
   const qrScannerVideoRef = useRef(null);
@@ -475,8 +478,14 @@ export default function Auth({ onAuthSuccess }) {
     }
 
     let reloadTimeoutId = 0;
+    let reloadAttempts = 0;
+    let videoDisabled = false;
 
     const playVideo = () => {
+      if (videoDisabled) {
+        return;
+      }
+
       videoNode.muted = true;
       videoNode.loop = true;
       videoNode.playsInline = true;
@@ -488,6 +497,10 @@ export default function Auth({ onAuthSuccess }) {
     };
 
     const syncVideoPlayback = () => {
+      if (videoDisabled) {
+        return;
+      }
+
       if (document.hidden) {
         videoNode.pause();
         return;
@@ -500,36 +513,71 @@ export default function Auth({ onAuthSuccess }) {
       playVideo();
     };
 
-    const reloadVideo = () => {
+    const disableVideo = () => {
+      videoDisabled = true;
+      window.clearTimeout(reloadTimeoutId);
+      videoNode.pause();
+      videoNode.removeAttribute("src");
+      videoNode.querySelectorAll("source").forEach((sourceNode) => {
+        sourceNode.removeAttribute("src");
+      });
+      videoNode.load();
+      setIsLiteVisualMode(true);
+      setIsAuthVideoAvailable(false);
+    };
+
+    const reloadVideo = ({ force = false } = {}) => {
+      if (videoDisabled) {
+        return;
+      }
+
       if (document.hidden) {
         return;
       }
 
+      if (!force && videoNode.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        playVideo();
+        return;
+      }
+
+      if (reloadAttempts >= AUTH_VIDEO_MAX_RELOAD_ATTEMPTS) {
+        disableVideo();
+        return;
+      }
+
+      const reloadDelayMs = AUTH_VIDEO_RELOAD_BACKOFF_MS[Math.min(reloadAttempts, AUTH_VIDEO_RELOAD_BACKOFF_MS.length - 1)];
+      reloadAttempts += 1;
       window.clearTimeout(reloadTimeoutId);
       reloadTimeoutId = window.setTimeout(() => {
         videoNode.load();
         playVideo();
-      }, 120);
+      }, reloadDelayMs);
     };
+
+    const handleVideoReady = () => {
+      reloadAttempts = 0;
+      playVideo();
+    };
+    const handleVideoError = () => reloadVideo({ force: true });
 
     syncVideoPlayback();
     document.addEventListener("visibilitychange", syncVideoPlayback);
     window.addEventListener("pageshow", syncVideoPlayback);
-    videoNode.addEventListener("loadeddata", playVideo);
-    videoNode.addEventListener("canplay", playVideo);
+    videoNode.addEventListener("loadeddata", handleVideoReady);
+    videoNode.addEventListener("canplay", handleVideoReady);
     videoNode.addEventListener("stalled", reloadVideo);
     videoNode.addEventListener("emptied", reloadVideo);
-    videoNode.addEventListener("error", reloadVideo);
+    videoNode.addEventListener("error", handleVideoError);
 
     return () => {
       window.clearTimeout(reloadTimeoutId);
       document.removeEventListener("visibilitychange", syncVideoPlayback);
       window.removeEventListener("pageshow", syncVideoPlayback);
-      videoNode.removeEventListener("loadeddata", playVideo);
-      videoNode.removeEventListener("canplay", playVideo);
+      videoNode.removeEventListener("loadeddata", handleVideoReady);
+      videoNode.removeEventListener("canplay", handleVideoReady);
       videoNode.removeEventListener("stalled", reloadVideo);
       videoNode.removeEventListener("emptied", reloadVideo);
-      videoNode.removeEventListener("error", reloadVideo);
+      videoNode.removeEventListener("error", handleVideoError);
     };
   }, []);
 
@@ -1446,20 +1494,22 @@ export default function Auth({ onAuthSuccess }) {
 
   return (
     <div className={["auth-page", mode === "login" ? "auth-page--login" : "auth-page--register", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")}>
-      <video
-        ref={authVideoRef}
-        className="auth-video-bg"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        disablePictureInPicture
-        disableRemotePlayback
-        aria-hidden="true"
-      >
-        <source src={AUTH_BACKGROUND_VIDEO_URL} type="video/mp4" />
-      </video>
+      {isAuthVideoAvailable ? (
+        <video
+          ref={authVideoRef}
+          className="auth-video-bg"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          disablePictureInPicture
+          disableRemotePlayback
+          aria-hidden="true"
+        >
+          <source src={AUTH_BACKGROUND_VIDEO_URL} type="video/mp4" />
+        </video>
+      ) : null}
 
       <div className="auth-brand">
         <div className="auth-brand__badge">
