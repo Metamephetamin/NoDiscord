@@ -781,6 +781,7 @@
 }
 
 .msg-content--dm {
+  --message-bubble-bg: rgba(27, 35, 48, 0.9);
   position: relative;
   z-index: 0;
   isolation: isolate;
@@ -795,7 +796,7 @@
   padding: 7px 12px 6px;
   border-radius: 14px;
   border: 1px solid transparent;
-  background: rgba(27, 35, 48, 0.9);
+  background: var(--message-bubble-bg);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
   overflow: visible;
   backdrop-filter: blur(14px);
@@ -805,17 +806,23 @@
 .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
   content: "";
   position: absolute;
-  left: -9px;
-  bottom: -1px;
-  width: 18px;
-  height: 18px;
+  left: -10px;
+  bottom: 0;
+  width: 19px;
+  height: 19px;
   border-left: 0;
   border-bottom: 0;
-  border-bottom-left-radius: 12px;
-  background: rgba(27, 35, 48, 0.9);
-  clip-path: polygon(52% 0, 100% 0, 100% 100%, 0 100%, 23% 78%, 38% 42%);
+  border-bottom-left-radius: 13px;
+  background: var(--message-bubble-bg);
+  clip-path: polygon(55% 0, 100% 0, 100% 100%, 3% 100%, 22% 78%, 38% 42%);
   z-index: -1;
   pointer-events: none;
+}
+
+.message-item--dm-own .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
+  right: -10px;
+  left: auto;
+  transform: scaleX(-1);
 }
 
 .msg-content--dm.msg-content--emoji-only-text {
@@ -900,9 +907,10 @@
 
 .msg-content--dm-own {
   align-self: flex-end;
+  --message-bubble-bg: rgba(27, 35, 48, 0.9);
   border-color: transparent;
   border-bottom-left-radius: 14px;
-  background: rgba(27, 35, 48, 0.9);
+  background: var(--message-bubble-bg);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
 }
 
@@ -7878,7 +7886,8 @@ html[data-ui-theme="purple"] .message-reply-chip {
 
 html[data-ui-theme="light"] .message-item--dm-own .msg-content--dm,
 html[data-ui-theme="purple"] .message-item--dm-own .msg-content--dm {
-  background: var(--app-own-message-bg);
+  --message-bubble-bg: var(--app-own-message-bg);
+  background: var(--message-bubble-bg);
   color: var(--app-text);
 }
 
@@ -9899,15 +9908,11 @@ html[data-ui-theme="light"] .composer-tool--recording-sending {
 }
 
 html[data-ui-theme="light"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
-  border-left-color: var(--app-border);
-  border-bottom-color: var(--app-border);
-  background: var(--app-message-bg);
+  background: var(--message-bubble-bg);
 }
 
 html[data-ui-theme="purple"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
-  border-left-color: var(--app-border);
-  border-bottom-color: var(--app-border);
-  background: var(--app-message-bg);
+  background: var(--message-bubble-bg);
 }
 
 html[data-ui-theme="light"] .chat-user-menu,

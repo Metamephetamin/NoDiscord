@@ -16,6 +16,14 @@ assert(
   "DM message tail should not draw a bottom outline."
 );
 assert(
+  !css.includes("border-left-color: var(--app-border);") && !css.includes("border-bottom-color: var(--app-border);"),
+  "Theme overrides should not restore visible tail outlines."
+);
+assert(
+  css.includes("--message-bubble-bg: rgba(27, 35, 48, 0.9);") && css.includes("background: var(--message-bubble-bg);"),
+  "DM message tail should reuse the same background token as the message bubble."
+);
+assert(
   css.includes("html[data-ui-theme=\"light\"] .msg-content--dm,\nhtml[data-ui-theme=\"light\"] .message-item:not(.message-item--dm) .msg-content,\nhtml[data-ui-theme=\"purple\"] .msg-content--dm,\nhtml[data-ui-theme=\"purple\"] .message-item:not(.message-item--dm) .msg-content {\n  border-color: transparent;\n}"),
   "Theme overrides should keep message shell borders visually hidden."
 );
