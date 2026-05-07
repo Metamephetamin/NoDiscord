@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatVoiceMessageDuration } from "../utils/voiceMessages";
 
 const VOICE_PLAYBACK_RATES = [1, 2, 4];
-const VOICE_WAVEFORM_BAR_COUNT = 40;
+const VOICE_WAVEFORM_BAR_COUNT = 64;
 const VOICE_KEYBOARD_SEEK_SECONDS = 5;
 const DEFAULT_WAVEFORM = [0.18, 0.2, 0.24, 0.22, 0.28, 0.34, 0.48, 0.62, 0.72, 0.68, 0.58, 0.5, 0.42, 0.46, 0.54, 0.6, 0.56, 0.44, 0.36, 0.32, 0.38, 0.5, 0.58, 0.52, 0.4, 0.34, 0.3, 0.28, 0.24, 0.22];
 
@@ -37,8 +37,14 @@ export default function VoiceMessageBubble({
   const progressRatio = resolvedDurationMs > 0
     ? Math.max(0, Math.min(1, (currentTimeSeconds * 1000) / resolvedDurationMs))
     : 0;
-  const activeBars = Math.max(0, Math.round(progressRatio * effectiveWaveform.length));
   const displayTimeMs = currentTimeSeconds > 0 || isPlaying ? currentTimeSeconds * 1000 : resolvedDurationMs;
+  const getBarFill = (index) => {
+    const totalBars = Math.max(1, effectiveWaveform.length);
+    const barStart = index / totalBars;
+    const barEnd = (index + 1) / totalBars;
+    const fill = (progressRatio - barStart) / (barEnd - barStart);
+    return Math.max(0, Math.min(1, fill));
+  };
 
   useEffect(() => () => {
     if (frameRef.current) {
@@ -197,8 +203,11 @@ export default function VoiceMessageBubble({
           {effectiveWaveform.map((bar, index) => (
             <span
               key={`voice-bar-${index}`}
-              className={`voice-message__bar ${index < activeBars ? "voice-message__bar--active" : ""}`}
-              style={{ "--voice-bar-height": `${Math.round(5 + bar * 16)}px` }}
+              className="voice-message__bar"
+              style={{
+                "--voice-bar-height": `${Math.round(5 + bar * 16)}px`,
+                "--voice-bar-fill": getBarFill(index).toFixed(3),
+              }}
             />
           ))}
         </div>

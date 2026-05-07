@@ -3889,7 +3889,7 @@
 .voice-message__waveform {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   width: var(--voice-waveform-width);
   height: 24px;
   border-radius: 999px;
@@ -3908,21 +3908,28 @@
 }
 
 .voice-message__bar {
-  width: 3px;
-  flex: 0 0 3px;
+  position: relative;
+  width: 2px;
+  flex: 0 0 2px;
   min-height: 4px;
   height: var(--voice-bar-height);
   border-radius: 999px;
   background: rgba(170, 183, 210, 0.38);
   transform-origin: center;
-  transition: background-color 0.12s ease, opacity 0.12s ease;
+  overflow: hidden;
 }
 
-.voice-message__bar--active {
+.voice-message__bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background: linear-gradient(180deg, #7dc1ff, #74a0ff);
+  opacity: var(--voice-bar-fill);
+  transition: opacity 0.08s linear;
 }
 
-.message-item--dm-own .voice-message__bar--active {
+.message-item--dm-own .voice-message__bar::after {
   background: linear-gradient(180deg, #7dc1ff, #74a0ff);
 }
 
