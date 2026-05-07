@@ -25,6 +25,15 @@ assert(
   "Voice client must retry room recovery after device-switch disconnects."
 );
 
+const setInputDeviceStart = voiceClientSource.indexOf("async setInputDevice(deviceId) {");
+const setOutputDeviceStart = voiceClientSource.indexOf("async setOutputDevice(deviceId)", setInputDeviceStart);
+assert(setInputDeviceStart >= 0 && setOutputDeviceStart > setInputDeviceStart, "Voice client must expose setInputDevice before setOutputDevice.");
+const setInputDeviceSource = voiceClientSource.slice(setInputDeviceStart, setOutputDeviceStart);
+assert(
+  !setInputDeviceSource.includes("emitVoiceConnectionState({ phase: \"reconnecting\""),
+  "Changing microphone input must hot-swap the local audio track without showing reconnecting UI."
+);
+
 assert(
   voiceClientSource.indexOf("recoverLiveKitRoomAfterLocalAudioRebuildDisconnect") <
     voiceClientSource.indexOf("await signalConnection.invoke(\"LeaveChannel\""),

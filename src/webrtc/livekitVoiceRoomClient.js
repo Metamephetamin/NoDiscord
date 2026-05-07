@@ -4314,10 +4314,6 @@ const handleDeviceChange = () => {
 
     async setInputDevice(deviceId) {
       selectedInputDeviceId = deviceId || "";
-      if (hasActiveVoiceAudioSession()) {
-        extendLocalAudioRebuildRecoveryWindow();
-        emitVoiceConnectionState({ phase: "reconnecting", channel: currentChannel || roomConnectChannelName, reason: "audio-device-switch" });
-      }
       await emitAudioDevices().catch(() => {});
 
       if (localMicSourceStream || localAudioStream) {
