@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
 import { preparePendingUploadForSend } from "../utils/chatPendingUploads";
+import { getActiveUploadedAttachments } from "../utils/textChatOptimisticUploadQueuePolicy.mjs";
 import { getChatErrorMessage } from "../utils/textChatModel";
 import { buildUploadDescriptors } from "../utils/textChatUploadDescriptors.mjs";
 
@@ -227,7 +228,11 @@ export default function useTextChatOptimisticUploadQueue({
           throw capturedUploadFailure.error;
         }
 
-        const uploadedAttachments = attachmentResults.filter(Boolean);
+        const uploadedAttachments = getActiveUploadedAttachments(
+          attachmentResults,
+          job.attachments,
+          job.cancelledAttachmentIds
+        );
         if (!uploadedAttachments.length) {
           cleanupJob(job.localEchoMessageId);
           onRemoveLocalEchoMessages?.([job.localEchoMessageId]);
