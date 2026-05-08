@@ -5991,30 +5991,34 @@ export default function MenuMain({
     }
 
     const friendId = String(friend.id || "");
+    const matchedDirectTarget = directConversationTargets.find((target) => String(target?.id || "") === friendId) || null;
+    const profileSource = matchedDirectTarget || friend;
+    const isSelf = Boolean(profileSource.isSelf) || friendId === currentUserId;
+    const isFriend = Boolean(profileSource.isFriend ?? (matchedDirectTarget && !matchedDirectTarget?.isSelf));
     const isBlocked = Boolean(friend.isBlocked || blockedFriendIds.has(friendId));
     const blockedYou = Boolean(friend.blockedYou || blockedByFriendIds.has(friendId));
     const isIgnored = Boolean(friend.isIgnored || ignoredFriendIds.has(friendId));
-    const directChannelId = String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id));
+    const directChannelId = String(profileSource.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id));
 
     setFriendListUserContextMenu(null);
     setFriendListProfileModal({
       userId: friendId,
-      username: getDisplayName(friend),
-      avatarUrl: String(friend.avatar || ""),
-      avatarFrame: friend.avatarFrame || null,
-      backgroundUrl: String(friend.profileBackgroundUrl || ""),
-      backgroundFrame: friend.profileBackgroundFrame || null,
-      profileCustomization: friend.profileCustomization || null,
-      isOnline: Boolean(friend.isOnline ?? friend.is_online ?? friend.online ?? false),
-      lastSeenAt: String(friend.lastSeenAt || friend.last_seen_at || friend.lastSeen || friend.last_seen || ""),
-      presence: friend.presence || friend.presenceStatus || friend.presence_status || "",
-      isSelf: Boolean(friend.isSelf),
-      isFriend: true,
+      username: getDisplayName(profileSource),
+      avatarUrl: String(profileSource.avatar || ""),
+      avatarFrame: profileSource.avatarFrame || null,
+      backgroundUrl: String(profileSource.profileBackgroundUrl || ""),
+      backgroundFrame: profileSource.profileBackgroundFrame || null,
+      profileCustomization: profileSource.profileCustomization || null,
+      isOnline: Boolean(profileSource.isOnline ?? profileSource.is_online ?? profileSource.online ?? false),
+      lastSeenAt: String(profileSource.lastSeenAt || profileSource.last_seen_at || profileSource.lastSeen || profileSource.last_seen || ""),
+      presence: profileSource.presence || profileSource.presenceStatus || profileSource.presence_status || "",
+      isSelf,
+      isFriend,
       isBlocked,
       blockedYou,
       isIgnored,
-      canOpenDirectChat: !friend.isSelf,
-      socialStats: buildFriendProfileStats(friend, directChannelId),
+      canOpenDirectChat: !isSelf && isFriend,
+      socialStats: buildFriendProfileStats(profileSource, directChannelId),
     });
   };
   const closeFriendListUserContextMenu = () => setFriendListUserContextMenu(null);
@@ -6253,7 +6257,17 @@ export default function MenuMain({
           stableStartDirectCallWithUser(friendListProfileModal.userId);
           setFriendListProfileModal(null);
         }}
-        onAddFriend={() => {}}
+        onAddFriend={() => {
+          if (!friendListProfileModal?.userId || friendListProfileModal.isSelf || friendListProfileModal.isFriend) {
+            return;
+          }
+
+          handleAddFriend({
+            id: friendListProfileModal.userId,
+            name: friendListProfileModal.username,
+            avatar: friendListProfileModal.avatarUrl,
+          });
+        }}
         onCopyUserId={() => handleCopyFriendListUserId(friendListProfileModal?.userId)}
       />
     </>

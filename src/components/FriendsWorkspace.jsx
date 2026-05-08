@@ -2029,7 +2029,27 @@ export const FriendsMain = ({
                 const isMemberActionsOpen = activeConversationMemberActionId === String(member.id || "");
 
                 return (
-                  <div key={member.id} className="friends-member-picker__row friends-member-picker__row--settings">
+                  <div
+                    key={member.id}
+                    className="friends-member-picker__row friends-member-picker__row--settings friends-member-picker__row--profile"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      if (event.target instanceof Element && event.target.closest(".friends-conversation-member-controls")) {
+                        return;
+                      }
+
+                      onOpenDirectProfile?.(member);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      onOpenDirectProfile?.(member);
+                    }}
+                  >
                     <div className="friends-member-picker__identity">
                       <AnimatedAvatar className="friends-member-picker__avatar" src={member.avatar || ""} alt={getDisplayName(member)} loading="eager" decoding="sync" />
                       <div className="friends-member-picker__meta">
@@ -2104,7 +2124,7 @@ export const FriendsMain = ({
               {canLeaveConversation ? (
                 <button
                   type="button"
-                  className="friends-modal__action friends-modal__action--ghost friends-modal__action--compact"
+                  className="friends-modal__action friends-modal__action--danger friends-modal__action--compact"
                   onClick={handleLeaveConversation}
                   disabled={conversationActionLoading}
                 >

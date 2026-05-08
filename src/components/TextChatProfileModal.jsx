@@ -140,10 +140,12 @@ export default function TextChatProfileModal({
   const presenceLabel = profile.isSelf ? "Это вы" : formatUserPresenceStatus(profile);
   const relationshipLabel = getRelationshipLabel(profile);
   const canAddFriend = !profile.isSelf && !profile.isFriend && typeof onAddFriend === "function";
-  const canCall = Boolean(profile.canOpenDirectChat && profile.isFriend && !profile.isBlocked && !profile.blockedYou && typeof onStartDirectCall === "function");
+  const canMessage = Boolean(profile.canOpenDirectChat && profile.isFriend && !profile.isBlocked && !profile.blockedYou);
+  const canCall = Boolean(canMessage && typeof onStartDirectCall === "function");
+  const showMessageAction = !canAddFriend;
   const detailCards = [
     { id: "activity", icon: "activity", label: "Активность", value: presenceLabel },
-    { id: "contact", icon: "contact", label: "Связь", value: profile.canOpenDirectChat ? (canCall ? "Сообщения и звонки" : "Личные сообщения") : "Недоступно" },
+    { id: "contact", icon: "contact", label: "Связь", value: canMessage ? (canCall ? "Сообщения и звонки" : "Личные сообщения") : "Недоступно" },
     { id: "id", icon: "id", label: "ID", value: profile.userId ? `#${profile.userId}` : "Не указан" },
   ];
   const profileStats = Array.isArray(profile.socialStats)
@@ -268,32 +270,35 @@ export default function TextChatProfileModal({
 
           <aside className="chat-profile-modal__side">
             <div className="chat-profile-modal__actions">
-              <button
-                type="button"
-                className="chat-profile-modal__action chat-profile-modal__action--primary"
-                onClick={onOpenDirectChat}
-                disabled={!profile.canOpenDirectChat}
-              >
-                <ProfileIcon kind="message" className="chat-profile-modal__action-icon" />
-                Сообщение
-              </button>
-              <button
-                type="button"
-                className="chat-profile-modal__action"
-                onClick={onStartDirectCall}
-                disabled={!profile.canOpenDirectChat || !profile.isFriend || profile.isBlocked || profile.blockedYou || typeof onStartDirectCall !== "function"}
-              >
-                <ProfileIcon kind="call" className="chat-profile-modal__action-icon" />
-                Позвонить
-              </button>
               {canAddFriend ? (
                 <button
                   type="button"
-                  className="chat-profile-modal__action"
+                  className="chat-profile-modal__action chat-profile-modal__action--primary"
                   onClick={onAddFriend}
                 >
                   <ProfileIcon kind="friend" className="chat-profile-modal__action-icon" />
                   Добавить в друзья
+                </button>
+              ) : null}
+              {showMessageAction ? (
+                <button
+                  type="button"
+                  className="chat-profile-modal__action chat-profile-modal__action--primary"
+                  onClick={onOpenDirectChat}
+                  disabled={!canMessage}
+                >
+                  <ProfileIcon kind="message" className="chat-profile-modal__action-icon" />
+                  Сообщение
+                </button>
+              ) : null}
+              {canCall ? (
+                <button
+                  type="button"
+                  className="chat-profile-modal__action"
+                  onClick={onStartDirectCall}
+                >
+                  <ProfileIcon kind="call" className="chat-profile-modal__action-icon" />
+                  Позвонить
                 </button>
               ) : null}
               <button type="button" className="chat-profile-modal__action chat-profile-modal__action--ghost" onClick={onCopyUserId}>

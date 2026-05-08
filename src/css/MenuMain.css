@@ -5582,6 +5582,17 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   gap: 14px;
 }
 
+.friends-member-picker__row--profile {
+  cursor: pointer;
+}
+
+.friends-member-picker__row--profile:hover,
+.friends-member-picker__row--profile:focus-visible {
+  border-color: rgba(126, 156, 255, 0.3);
+  background: rgba(255, 255, 255, 0.055);
+  outline: none;
+}
+
 .friends-member-picker__row--selected {
   border-color: rgba(115, 146, 255, 0.72);
   background: rgba(73, 99, 189, 0.22);
@@ -5845,6 +5856,19 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .friends-modal__action--ghost {
   background: rgba(255, 255, 255, 0.06);
   color: #d6deef;
+}
+
+.friends-modal__action--danger {
+  background: rgba(214, 63, 92, 0.22);
+  color: #ffc1cc;
+  box-shadow: inset 0 0 0 1px rgba(255, 92, 123, 0.26);
+}
+
+.friends-modal__action--danger:hover:not(:disabled),
+.friends-modal__action--danger:focus-visible:not(:disabled) {
+  background: rgba(214, 63, 92, 0.34);
+  color: #ffffff;
+  outline: none;
 }
 
 .friends-conversation-settings-actions {
@@ -9942,18 +9966,36 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .device-menu__submenu {
   position: absolute;
   left: calc(100% + 8px);
-  top: 0;
+  top: -42px;
   min-width: 230px;
+  max-height: min(320px, calc(100vh - 128px));
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   background: rgba(30, 31, 37, 0.98);
   box-shadow: 0 22px 44px rgba(0, 0, 0, 0.42);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 116, 138, 0.68) transparent;
   opacity: 0;
   pointer-events: none;
   transform: translateX(-4px);
   transition: opacity 0.14s ease, transform 0.14s ease;
   z-index: 905;
+}
+
+.device-menu__submenu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.device-menu__submenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.device-menu__submenu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(110, 116, 138, 0.62);
 }
 
 .device-menu__submenu::before {

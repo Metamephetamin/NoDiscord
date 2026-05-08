@@ -2055,8 +2055,7 @@ function TextChatMessageList({
             isMediaOnlyMessage,
           });
           const isSingleVideoOnly = isMediaOnlyMessage && attachments.length === 1 && attachments[0]?.isVideo;
-          const isVoiceOnlyMessage = isDirectChat
-            && isMediaOnlyMessage
+          const isVoiceOnlyMessage = isMediaOnlyMessage
             && attachments.length > 0
             && attachments.every((attachmentItem) => attachmentItem?.isVoice);
           const showAttachmentOverlayFooter = showFloatingMediaFooter && !messageItem?.isLocalEcho;
@@ -2291,7 +2290,7 @@ function TextChatMessageList({
                   priorityMediaMessageIdSet={priorityMediaMessageIdSet}
                 />
 
-                {((isDirectChat && !useInlineFooter && !showAttachmentOverlayFooter && !usesEmbeddedLocationFooter) || reactions.length) ? (
+                {(((isDirectChat || isVoiceOnlyMessage) && !useInlineFooter && !showAttachmentOverlayFooter && !usesEmbeddedLocationFooter) || reactions.length) ? (
                   <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
@@ -2335,7 +2334,7 @@ function TextChatMessageList({
                       </div>
                     ) : null}
 
-                    {(isDirectChat && !useInlineFooter && !usesEmbeddedLocationFooter) ? (
+                    {((isDirectChat || isVoiceOnlyMessage) && !useInlineFooter && !usesEmbeddedLocationFooter) ? (
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />
