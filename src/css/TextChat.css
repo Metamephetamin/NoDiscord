@@ -1284,6 +1284,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 }
 
 .message-location-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: clamp(240px, 32vw, 340px);
@@ -1355,13 +1356,13 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 10px 12px 12px;
+  padding: 10px 88px 12px 12px;
 }
 
 .message-location-card__footer {
   position: absolute;
-  right: 8px;
-  bottom: 7px;
+  right: 10px;
+  bottom: 10px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
@@ -2503,6 +2504,14 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   width: min(100%, var(--media-grid-standard-width)) !important;
 }
 
+.msg-content--media-only .message-attachments-stack:not(.message-attachments-stack--single) {
+  width: min(100%, var(--media-grid-standard-width)) !important;
+}
+
+.msg-content--media-only .message-attachments-stack:not(.message-attachments-stack--single) .message-media-overlay-anchor {
+  width: 100% !important;
+}
+
 .message-media-overlay-anchor {
   position: relative;
   display: inline-flex;
@@ -2539,15 +2548,16 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-anchor,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {
-  width: min(380px, calc(100vw - 160px)) !important;
-  min-width: min(220px, calc(100vw - 160px));
-  max-width: 100%;
+  width: fit-content !important;
+  min-width: 0;
+  max-width: min(100%, 380px);
 }
 
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media__image {
-  width: 100%;
+  width: auto;
   height: auto;
-  max-width: 100%;
+  max-width: min(100%, 380px);
+  max-height: 420px;
 }
 
 .msg-content--media-only .message-bottom-row {

@@ -860,15 +860,15 @@ const LocationMessageCard = memo(function LocationMessageCard({ location, messag
           />
         ))}
         <span className="message-location-card__pin" />
-        <span className={`message-location-card__footer message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
-          <MessageTimestamp messageItem={messageItem} />
-          <EditedBadge message={messageItem} />
-          <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
-        </span>
       </span>
       <span className="message-location-card__meta">
         <strong>Геолокация</strong>
         <span>{location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</span>
+      </span>
+      <span className={`message-location-card__footer message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
+        <MessageTimestamp messageItem={messageItem} />
+        <EditedBadge message={messageItem} />
+        <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
       </span>
     </a>
   );
