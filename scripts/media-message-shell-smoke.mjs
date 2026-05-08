@@ -20,9 +20,16 @@ assert(
   "Single media stacks with overlay should stay fit-content."
 );
 assert(
-  css.includes(".message-attachment-single .message-media {\n  margin-top: 0;\n  width: fit-content;\n  min-width: min(220px, 100%);") &&
-    css.includes(".message-attachment-single .message-media__image {\n  width: auto;\n  max-width: min(100%, 520px);"),
-  "Single image media should not collapse through a 100%-width child inside a fit-content shell."
+  !css.includes("min-width: min(220px, 100%);"),
+  "Media-only shells should not use percentage-based min-width guards that can resolve to 0px."
+);
+assert(
+  css.includes(".msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single.message-attachments-stack--with-overlay,\n.msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-anchor,\n.msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,\n.msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {\n  width: min(380px, calc(100vw - 160px)) !important;"),
+  "Single media-only image shells should have a viewport-based definite width instead of a nested fit-content chain."
+);
+assert(
+  css.includes(".msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media__image {\n  width: 100%;\n  height: auto;\n  max-width: 100%;"),
+  "Single media-only images should fill the definite media shell without collapsing."
 );
 assert(
   css.includes(".message-item--dm .msg-content--visual-attachments {\n  width: fit-content;") &&
