@@ -4,6 +4,7 @@ import { formatVoiceMessageDuration } from "../utils/voiceMessages";
 const VOICE_PLAYBACK_RATES = [1, 2, 4];
 const VOICE_WAVEFORM_BAR_COUNT = 64;
 const VOICE_KEYBOARD_SEEK_SECONDS = 5;
+const VOICE_PROGRESS_COMPLETE_EPSILON_MS = 180;
 const DEFAULT_WAVEFORM = [0.18, 0.2, 0.24, 0.22, 0.28, 0.34, 0.48, 0.62, 0.72, 0.68, 0.58, 0.5, 0.42, 0.46, 0.54, 0.6, 0.56, 0.44, 0.36, 0.32, 0.38, 0.5, 0.58, 0.52, 0.4, 0.34, 0.3, 0.28, 0.24, 0.22];
 
 const formatPlaybackRate = (value) => (Number(value) === 1 ? "1x" : `${Number(value)}x`);
@@ -34,8 +35,11 @@ export default function VoiceMessageBubble({
   const [playbackRate, setPlaybackRate] = useState(1);
 
   const effectiveWaveform = useMemo(() => buildDisplayWaveform(waveform), [waveform]);
+  const playbackPositionMs = Math.max(0, currentTimeSeconds * 1000);
   const progressRatio = resolvedDurationMs > 0
-    ? Math.max(0, Math.min(1, (currentTimeSeconds * 1000) / resolvedDurationMs))
+    ? Math.max(0, Math.min(1, (resolvedDurationMs - playbackPositionMs <= VOICE_PROGRESS_COMPLETE_EPSILON_MS && playbackPositionMs > 0)
+        ? 1
+        : playbackPositionMs / resolvedDurationMs))
     : 0;
   const displayTimeMs = currentTimeSeconds > 0 || isPlaying ? currentTimeSeconds * 1000 : resolvedDurationMs;
   const getBarFill = (index) => {
@@ -86,6 +90,10 @@ export default function VoiceMessageBubble({
 
     try {
       if (audio.paused) {
+        if (audio.ended) {
+          audio.currentTime = 0;
+          setCurrentTimeSeconds(0);
+        }
         audio.playbackRate = playbackRate;
         await audio.play();
         setIsPlaying(true);
@@ -245,7 +253,7 @@ export default function VoiceMessageBubble({
         onPlay={() => setIsPlaying(true)}
         onEnded={() => {
           setIsPlaying(false);
-          setCurrentTimeSeconds(0);
+          setCurrentTimeSeconds(Math.max(0, Number(resolvedDurationMs || 0) / 1000));
         }}
       />
     </div>

@@ -2042,6 +2042,7 @@ function TextChatMessageList({
             && attachments.length === 1
             && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
           const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
+          const hasMultiVisualAttachments = hasVisualAttachmentGroup && attachments.length > 1;
           const reserveVisualAttachmentWidth = shouldReserveVisualAttachmentWidth({
             hasVisualAttachmentGroup,
             isMediaOnlyMessage,
@@ -2155,7 +2156,7 @@ function TextChatMessageList({
               />
 
               <div
-                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${locationMessage ? "msg-content--location" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${reserveVisualAttachmentWidth ? "msg-content--visual-attachments" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${locationMessage ? "msg-content--location" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${reserveVisualAttachmentWidth ? "msg-content--visual-attachments" : ""} ${hasMultiVisualAttachments ? "msg-content--multi-visual-attachments" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {

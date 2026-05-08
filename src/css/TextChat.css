@@ -2560,6 +2560,19 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   max-height: 420px;
 }
 
+.msg-content--media-only.msg-content--multi-visual-attachments,
+.message-item--dm .msg-content--media-only.msg-content--multi-visual-attachments,
+.message-item--dm-own .msg-content--media-only.msg-content--multi-visual-attachments {
+  width: clamp(320px, 52vw, 520px) !important;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.msg-content--media-only.msg-content--multi-visual-attachments .message-attachments-stack,
+.msg-content--media-only.msg-content--multi-visual-attachments .message-media-overlay-anchor {
+  width: 100% !important;
+}
+
 .msg-content--media-only .message-bottom-row {
   position: absolute;
   right: 8px;
@@ -2803,8 +2816,8 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 
 .msg-content--voice-only .message-bottom-row--voice {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
+  right: 13px;
+  bottom: 3px;
   z-index: 2;
   grid-column: 1;
   grid-row: 1;
@@ -2835,6 +2848,10 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--voice-only .message-bottom-row--voice .message-read-status {
   font-size: 11px;
   line-height: 1;
+}
+
+.msg-content--voice-only .message-bottom-row--voice .message-read-status {
+  transform: translateY(1px);
 }
 
 .message-reactions-wrap {
