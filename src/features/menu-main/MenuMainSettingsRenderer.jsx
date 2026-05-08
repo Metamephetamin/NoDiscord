@@ -117,12 +117,21 @@ export function MenuMainSettingsContent({
   uiReduceMotion,
   uiTouchTargetSize,
   uiTheme,
+  chatThemeId,
+  customChatBackgroundData,
+  customChatBackgroundName,
+  chatThemeError,
   appLogoId,
   setUiDensity,
   setUiFontScale,
   setUiReduceMotion,
   setUiTouchTargetSize,
   setUiTheme,
+  setChatThemeId,
+  setCustomChatBackgroundData,
+  setCustomChatBackgroundName,
+  setChatThemeError,
+  handleCustomChatBackgroundChange,
   handleAppLogoChange,
   activeServer,
   canManageServer,
@@ -267,12 +276,23 @@ export function MenuMainSettingsContent({
           uiReduceMotion={uiReduceMotion}
           uiTouchTargetSize={uiTouchTargetSize}
           uiTheme={uiTheme}
+          chatThemeId={chatThemeId}
+          customChatBackgroundData={customChatBackgroundData}
+          customChatBackgroundName={customChatBackgroundName}
+          chatThemeError={chatThemeError}
           appLogoId={appLogoId}
           onDensityChange={setUiDensity}
           onFontScaleChange={setUiFontScale}
           onReduceMotionChange={setUiReduceMotion}
           onTouchTargetSizeChange={setUiTouchTargetSize}
           onThemeChange={setUiTheme}
+          onChatThemeChange={setChatThemeId}
+          onCustomChatBackgroundChange={handleCustomChatBackgroundChange}
+          onRemoveCustomChatBackground={() => {
+            setCustomChatBackgroundData("");
+            setCustomChatBackgroundName("");
+            setChatThemeError("");
+          }}
           onAppLogoChange={handleAppLogoChange}
         />
       );

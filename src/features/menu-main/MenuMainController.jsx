@@ -57,6 +57,7 @@ import {
   getStoredAppLogoId,
 } from "../../utils/appLogo";
 import { applyUiThemePreference, normalizeUiTheme } from "../../utils/uiTheme.mjs";
+import { applyChatThemePreference, normalizeChatThemeId } from "../../utils/chatTheme.mjs";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import { buildStreamDiagnostics } from "../../webrtc/streamDiagnostics.mjs";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
@@ -191,6 +192,8 @@ import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../
 import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
 
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
+const MAX_CHAT_BACKGROUND_BYTES = 1.5 * 1024 * 1024;
+const CHAT_BACKGROUND_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
   if (!sections[item.section]) {
     sections[item.section] = [];
@@ -597,6 +600,10 @@ export default function MenuMain({
   const [uiReduceMotion, setUiReduceMotion] = useState(false);
   const [uiTouchTargetSize, setUiTouchTargetSize] = useState("standard");
   const [uiTheme, setUiTheme] = useState("dark");
+  const [chatThemeId, setChatThemeId] = useState("default");
+  const [customChatBackgroundData, setCustomChatBackgroundData] = useState("");
+  const [customChatBackgroundName, setCustomChatBackgroundName] = useState("");
+  const [chatThemeError, setChatThemeError] = useState("");
   const [appLogoId, setAppLogoId] = useState(() => getStoredAppLogoId());
 
   const popupRef = useRef(null);
@@ -701,6 +708,9 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
     uiThemeStorageKey,
+    chatThemeStorageKey,
+    chatBackgroundStorageKey,
+    chatBackgroundNameStorageKey,
   } = useMenuMainStorageKeys(user);
   const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {
@@ -1142,13 +1152,29 @@ export default function MenuMain({
     const nextReduceMotion = localStorage.getItem(uiReduceMotionStorageKey) === "true";
     const nextTouchTargetSize = localStorage.getItem(uiTouchTargetStorageKey) || "standard";
     const nextTheme = localStorage.getItem(uiThemeStorageKey) || "dark";
+    const nextChatTheme = localStorage.getItem(chatThemeStorageKey) || "default";
+    const nextChatBackground = localStorage.getItem(chatBackgroundStorageKey) || "";
+    const nextChatBackgroundName = localStorage.getItem(chatBackgroundNameStorageKey) || "";
 
     setUiDensity(nextDensity === "compact" ? "compact" : "standard");
     setUiFontScale(["sm", "md", "lg"].includes(nextFontScale) ? nextFontScale : "md");
     setUiReduceMotion(nextReduceMotion);
     setUiTouchTargetSize(nextTouchTargetSize === "large" ? "large" : "standard");
     setUiTheme(normalizeUiTheme(nextTheme));
-  }, [uiDensityStorageKey, uiFontScaleStorageKey, uiReduceMotionStorageKey, uiThemeStorageKey, uiTouchTargetStorageKey]);
+    setChatThemeId(normalizeChatThemeId(nextChatTheme));
+    setCustomChatBackgroundData(nextChatBackground);
+    setCustomChatBackgroundName(nextChatBackgroundName);
+    setChatThemeError("");
+  }, [
+    chatBackgroundNameStorageKey,
+    chatBackgroundStorageKey,
+    chatThemeStorageKey,
+    uiDensityStorageKey,
+    uiFontScaleStorageKey,
+    uiReduceMotionStorageKey,
+    uiThemeStorageKey,
+    uiTouchTargetStorageKey,
+  ]);
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -1159,6 +1185,17 @@ export default function MenuMain({
     localStorage.setItem(uiReduceMotionStorageKey, String(uiReduceMotion));
     localStorage.setItem(uiTouchTargetStorageKey, uiTouchTargetSize);
     localStorage.setItem(uiThemeStorageKey, normalizeUiTheme(uiTheme));
+    localStorage.setItem(chatThemeStorageKey, normalizeChatThemeId(chatThemeId));
+    if (customChatBackgroundData) {
+      localStorage.setItem(chatBackgroundStorageKey, customChatBackgroundData);
+    } else {
+      localStorage.removeItem(chatBackgroundStorageKey);
+    }
+    if (customChatBackgroundName) {
+      localStorage.setItem(chatBackgroundNameStorageKey, customChatBackgroundName);
+    } else {
+      localStorage.removeItem(chatBackgroundNameStorageKey);
+    }
 
     const root = document.documentElement;
     const body = document.body;
@@ -1171,7 +1208,14 @@ export default function MenuMain({
     body.dataset.uiFontScale = uiFontScale;
     body.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
     body.dataset.uiTouchTargets = uiTouchTargetSize;
+    applyChatThemePreference(chatThemeId, { root, body, customBackgroundData: customChatBackgroundData });
   }, [
+    chatBackgroundNameStorageKey,
+    chatBackgroundStorageKey,
+    chatThemeId,
+    chatThemeStorageKey,
+    customChatBackgroundData,
+    customChatBackgroundName,
     uiDensity,
     uiDensityStorageKey,
     uiFontScale,
@@ -1186,6 +1230,41 @@ export default function MenuMain({
   const handleAppLogoChange = useCallback((nextLogoId) => {
     const nextLogo = applyAppLogoPreference(nextLogoId);
     setAppLogoId(nextLogo.id);
+  }, []);
+  const handleCustomChatBackgroundChange = useCallback((event) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!CHAT_BACKGROUND_IMAGE_TYPES.has(file.type)) {
+      setChatThemeError("Выберите PNG, JPG, WEBP или GIF.");
+      return;
+    }
+
+    if (file.size > MAX_CHAT_BACKGROUND_BYTES) {
+      setChatThemeError("Фон чата должен быть до 1.5 МБ, чтобы не замедлять запуск.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      if (!result.startsWith("data:image/")) {
+        setChatThemeError("Не удалось прочитать изображение.");
+        return;
+      }
+
+      setCustomChatBackgroundData(result);
+      setCustomChatBackgroundName(file.name || "chat-background");
+      setChatThemeError("");
+    };
+    reader.onerror = () => {
+      setChatThemeError("Не удалось прочитать изображение.");
+    };
+    reader.readAsDataURL(file);
   }, []);
   useEffect(() => {
     currentVoiceChannelRef.current = currentVoiceChannel;
@@ -5608,12 +5687,21 @@ export default function MenuMain({
     uiReduceMotion,
     uiTouchTargetSize,
     uiTheme,
+    chatThemeId,
+    customChatBackgroundData,
+    customChatBackgroundName,
+    chatThemeError,
     appLogoId,
     setUiDensity,
     setUiFontScale,
     setUiReduceMotion,
     setUiTouchTargetSize,
     setUiTheme,
+    setChatThemeId,
+    setCustomChatBackgroundData,
+    setCustomChatBackgroundName,
+    setChatThemeError,
+    handleCustomChatBackgroundChange,
     handleAppLogoChange,
     activeServer,
     canManageServer,

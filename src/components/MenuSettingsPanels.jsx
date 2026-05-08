@@ -1,5 +1,5 @@
 ﻿import AnimatedAvatar from "./AnimatedAvatar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
@@ -14,6 +14,7 @@ import {
 } from "../utils/profileCustomization";
 import { APP_LOGO_OPTIONS } from "../utils/appLogo";
 import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
+import { CHAT_THEME_OPTIONS } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
@@ -1218,21 +1219,31 @@ export const AppearanceAccessibilitySettings = ({
   uiReduceMotion,
   uiTouchTargetSize,
   uiTheme,
+  chatThemeId,
+  customChatBackgroundData,
+  customChatBackgroundName,
+  chatThemeError,
   appLogoId,
   onDensityChange,
   onFontScaleChange,
   onReduceMotionChange,
   onTouchTargetSizeChange,
   onThemeChange,
+  onChatThemeChange,
+  onCustomChatBackgroundChange,
+  onRemoveCustomChatBackground,
   onAppLogoChange,
-}) => (
-  <div className="settings-shell__content">
-    <div className="settings-shell__content-header">
-      <div>
-        <h2>Внешний вид и доступность</h2>
-        <p>Настройте плотность интерфейса, размер шрифта, размеры зон попадания и уровень анимаций под свой ритм работы.</p>
+}) => {
+  const chatBackgroundInputRef = useRef(null);
+
+  return (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Внешний вид и доступность</h2>
+          <p>Настройте плотность интерфейса, размер шрифта, размеры зон попадания и уровень анимаций под свой ритм работы.</p>
+        </div>
       </div>
-    </div>
 
     <section className="voice-settings-card">
       <div className="voice-settings-card__title">Тема интерфейса</div>
@@ -1258,6 +1269,66 @@ export const AppearanceAccessibilitySettings = ({
           </button>
         ))}
       </div>
+    </section>
+
+    <section className="voice-settings-card">
+      <div className="settings-section__header settings-section__header--compact">
+        <div>
+          <h4>Темы чата</h4>
+          <p>Отдельно меняет фон чата, цвет оболочек сообщений и цвет блока документов.</p>
+        </div>
+      </div>
+
+      <div className="chat-theme-choice-list" role="radiogroup" aria-label="Тема чата">
+        {CHAT_THEME_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`chat-theme-choice ${chatThemeId === option.id ? "chat-theme-choice--active" : ""}`}
+            onClick={() => onChatThemeChange(option.id)}
+            role="radio"
+            aria-checked={chatThemeId === option.id}
+          >
+            <span className="chat-theme-choice__preview" style={{ "--chat-theme-preview-bg": option.preview.background }} aria-hidden="true">
+              <span style={{ "--chat-theme-preview-bubble": option.preview.bubble }} />
+              <span style={{ "--chat-theme-preview-document": option.preview.document }} />
+            </span>
+            <span className="chat-theme-choice__copy">
+              <strong>{option.title}</strong>
+              <span>{option.description}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="chat-background-picker">
+        <div>
+          <strong>Свой фон чата</strong>
+          <span>
+            {customChatBackgroundData
+              ? `Выбран файл: ${customChatBackgroundName || "изображение"}.`
+              : "Можно поставить PNG, JPG, WEBP или GIF до 1.5 МБ."}
+          </span>
+        </div>
+        <div className="settings-shell__actions">
+          <button type="button" className="settings-inline-button" onClick={() => chatBackgroundInputRef.current?.click()}>
+            Выбрать фон
+          </button>
+          {customChatBackgroundData ? (
+            <button type="button" className="settings-inline-button settings-inline-button--ghost" onClick={onRemoveCustomChatBackground}>
+              Убрать фон
+            </button>
+          ) : null}
+        </div>
+        <input
+          ref={chatBackgroundInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden-input"
+          onChange={onCustomChatBackgroundChange}
+        />
+      </div>
+      {chatThemeError ? <span className="settings-inline-error">{chatThemeError}</span> : null}
     </section>
 
     <section className="voice-settings-card">
@@ -1350,7 +1421,8 @@ export const AppearanceAccessibilitySettings = ({
       </div>
     </section>
   </div>
-);
+  );
+};
 
 const AUDIT_ACTION_LABELS = {
   "server.create": "Сервер создан",

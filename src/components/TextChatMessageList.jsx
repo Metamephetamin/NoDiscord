@@ -832,7 +832,7 @@ function MessageMediaOverlayFooter({ messageItem, isOwnMessage }) {
   );
 }
 
-const LocationMessageCard = memo(function LocationMessageCard({ location }) {
+const LocationMessageCard = memo(function LocationMessageCard({ location, messageItem, isOwnMessage }) {
   const previewTiles = useMemo(
     () => getLocationPreviewTiles(location.latitude, location.longitude, location.zoom),
     [location.latitude, location.longitude, location.zoom]
@@ -847,7 +847,7 @@ const LocationMessageCard = memo(function LocationMessageCard({ location }) {
       onClick={(event) => event.stopPropagation()}
       aria-label="Открыть точку на карте"
     >
-      <span className="message-location-card__map" aria-hidden="true">
+      <span className="message-location-card__map">
         {previewTiles.map((tile) => (
           <img
             key={tile.key}
@@ -860,6 +860,11 @@ const LocationMessageCard = memo(function LocationMessageCard({ location }) {
           />
         ))}
         <span className="message-location-card__pin" />
+        <span className={`message-location-card__footer message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
+          <MessageTimestamp messageItem={messageItem} />
+          <EditedBadge message={messageItem} />
+          <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
+        </span>
       </span>
       <span className="message-location-card__meta">
         <strong>Геолокация</strong>
@@ -2055,6 +2060,7 @@ function TextChatMessageList({
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
           const locationMessage = parseLocationMessage(messageText);
+          const usesEmbeddedLocationFooter = isDirectChat && Boolean(locationMessage);
           const isFileOnlyMessage =
             isDirectChat
             && hasOnlyFileLikeAttachments
@@ -2240,7 +2246,7 @@ function TextChatMessageList({
 
                 {messageText && !messagePoll ? (
                   locationMessage ? (
-                    <LocationMessageCard location={locationMessage} />
+                    <LocationMessageCard location={locationMessage} messageItem={messageItem} isOwnMessage={isOwnMessage} />
                   ) : useInlineFooter ? (
                     <div className="message-text-row">
                       <div className="message-text">
@@ -2277,7 +2283,7 @@ function TextChatMessageList({
                   priorityMediaMessageIdSet={priorityMediaMessageIdSet}
                 />
 
-                {((isDirectChat && !useInlineFooter && !showAttachmentOverlayFooter) || reactions.length) ? (
+                {((isDirectChat && !useInlineFooter && !showAttachmentOverlayFooter && !usesEmbeddedLocationFooter) || reactions.length) ? (
                   <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
@@ -2321,7 +2327,7 @@ function TextChatMessageList({
                       </div>
                     ) : null}
 
-                    {(isDirectChat && !useInlineFooter) ? (
+                    {(isDirectChat && !useInlineFooter && !usesEmbeddedLocationFooter) ? (
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />

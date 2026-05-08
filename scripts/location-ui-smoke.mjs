@@ -15,5 +15,9 @@ assert(css.includes("pointer-events: none"), "Location marker must not intercept
 assert(css.includes(".location-picker-modal__close::before"), "Location close button should draw its own cross.");
 assert(css.includes(".location-picker-modal__close::after"), "Location close button should draw its own cross.");
 assert(backendSource.includes("https://mt0.google.com"), "Production CSP must allow Google map tiles.");
+assert(css.includes("width: clamp(240px, 32vw, 340px);"), "Location message card should be wider than the old narrow preview.");
+assert(css.includes(".message-location-card__footer"), "Location message timestamp footer should render inside the card.");
+assert(css.includes("bottom: 7px;") && css.includes("background: rgba(7, 11, 18, 0.66);"), "Location footer should be an in-card overlay like media timestamps.");
+assert(!css.includes("width: min(100%, 340px);\n  overflow: hidden;\n  border-radius: 16px;"), "Location card should not use the old shrink-prone width rule.");
 
 console.log("Location UI smoke checks passed.");
