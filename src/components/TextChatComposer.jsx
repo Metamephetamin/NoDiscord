@@ -836,6 +836,7 @@ function TextChatComposer({
 
             {translatorMenuOpen ? (
               <div ref={translatorMenuRef} className="composer-text-tools-menu" role="menu" aria-label="Текстовые инструменты">
+                {/*
                 <button
                   type="button"
                   className="composer-text-tools-menu__action"
@@ -850,6 +851,7 @@ function TextChatComposer({
                     <small>Пунктуация, пробелы и легкие опечатки перед отправкой</small>
                   </span>
                 </button>
+                */}
 
                 <div className="composer-text-tools-menu__header">
                   <strong>{translationPending ? "Переводим..." : "Переводчик"}</strong>

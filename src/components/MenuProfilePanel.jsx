@@ -10,18 +10,68 @@ const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   </button>
 );
 
-const DeviceToggleButton = ({ active, title, onClick }) => (
-  <button
-    type="button"
-    className={`device-menu__toggle ${active ? "device-menu__toggle--active" : ""}`}
-    onClick={onClick}
-    aria-pressed={active}
-  >
-    <span className="device-menu__label">{title}</span>
-    <span className="device-menu__toggle-switch" aria-hidden="true">
-      <span />
-    </span>
-  </button>
+const DeviceMenuOptionSubmenu = ({
+  options,
+  activeId,
+  emptyLabel,
+  onSelect,
+}) => (
+  <div className="device-menu__submenu" role="menu">
+    {options.length > 0 ? options.map((option) => {
+      const active = option.id === activeId;
+
+      return (
+        <button
+          key={option.id}
+          type="button"
+          className={`device-menu__submenu-option ${active ? "is-active" : ""}`}
+          onClick={() => onSelect(option.id)}
+          role="menuitemradio"
+          aria-checked={active}
+        >
+          <span className="device-menu__submenu-copy">
+            <strong>{option.title}</strong>
+          </span>
+          <span className="device-menu__submenu-radio" aria-hidden="true" />
+        </button>
+      );
+    }) : (
+      <span className="device-menu__submenu-empty">{emptyLabel}</span>
+    )}
+  </div>
+);
+
+const DeviceMenuFlyoutRow = ({
+  title,
+  value,
+  options,
+  activeId,
+  emptyLabel,
+  disabled = false,
+  onSelect,
+}) => (
+  <div className={`device-menu__flyout-row ${disabled ? "is-disabled" : ""}`}>
+    <button
+      type="button"
+      className="device-menu__flyout-trigger"
+      disabled={disabled}
+      aria-haspopup="menu"
+    >
+      <span className="device-menu__flyout-copy">
+        <strong>{title}</strong>
+        <span>{value}</span>
+      </span>
+      <span className="device-menu__flyout-chevron" aria-hidden="true" />
+    </button>
+    {disabled ? null : (
+      <DeviceMenuOptionSubmenu
+        options={options}
+        activeId={activeId}
+        emptyLabel={emptyLabel}
+        onSelect={onSelect}
+      />
+    )}
+  </div>
 );
 
 const STREAM_PROFILE_LABELS = {
@@ -225,64 +275,63 @@ const MicMenuPanel = ({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
-  echoCancellationEnabled,
   micVolume,
   activeMicMenuBars,
   settingsIcon,
   onInputDeviceChange,
   onNoiseProfileChange,
-  onToggleEchoCancellation,
   onMicVolumeChange,
   onOpenVoiceSettings,
-}) => (
-  <div className="device-menu__panel">
-    <div className="device-menu__group">
-      <label className="device-menu__field">
-        <span className="device-menu__label">Устройство ввода</span>
-        <select className="device-menu__select" value={selectedInputDeviceId} onChange={(event) => onInputDeviceChange(event.target.value)}>
-          {audioInputDevices.length > 0 ? audioInputDevices.map((device) => (
-            <option key={device.id} value={device.id}>{device.label}</option>
-          )) : <option value="">Системный микрофон</option>}
-        </select>
-        <span className="device-menu__value">{deviceInputLabel}</span>
-      </label>
+}) => {
+  const inputDeviceOptions = audioInputDevices.length > 0
+    ? audioInputDevices.map((device) => ({
+        id: device.id,
+        title: device.label,
+      }))
+    : [{ id: "", title: "Системный микрофон" }];
 
-      <label className="device-menu__field">
-        <span className="device-menu__label">Профиль ввода</span>
-        <select className="device-menu__select" value={noiseSuppressionMode} onChange={(event) => onNoiseProfileChange(event.target.value)}>
-          {noiseProfileOptions.map((option) => (
-            <option key={option.id} value={option.id}>{option.title}</option>
-          ))}
-        </select>
-        <span className="device-menu__value">{activeNoiseProfile.description}</span>
-      </label>
+  return (
+    <div className="device-menu__panel">
+      <div className="device-menu__group">
+        <DeviceMenuFlyoutRow
+          title="Устройство ввода"
+          value={deviceInputLabel}
+          options={inputDeviceOptions}
+          activeId={selectedInputDeviceId}
+          emptyLabel="Системный микрофон"
+          onSelect={onInputDeviceChange}
+        />
 
-      <DeviceToggleButton
-        active={echoCancellationEnabled}
-        title="Эхоподавление"
-        onClick={onToggleEchoCancellation}
-      />
-    </div>
-
-    <div className="device-menu__slider">
-      <span>Громкость микрофона</span>
-      <PercentageSlider
-        min={0}
-        max={200}
-        value={micVolume}
-        onChange={(event) => onMicVolumeChange(Number(event.target.value))}
-        ariaLabel="Громкость микрофона"
-      />
-      <div className="device-menu__meter" aria-hidden="true">
-        {Array.from({ length: 24 }).map((_, index) => (
-          <span key={index} className={index < activeMicMenuBars ? "is-active" : ""} />
-        ))}
+        <DeviceMenuFlyoutRow
+          title="Профиль ввода"
+          value={activeNoiseProfile.title}
+          options={noiseProfileOptions}
+          activeId={noiseSuppressionMode}
+          emptyLabel="Профили недоступны"
+          onSelect={onNoiseProfileChange}
+        />
       </div>
-    </div>
 
-    <DeviceSettingsButton settingsIcon={settingsIcon} onClick={onOpenVoiceSettings} />
-  </div>
-);
+      <div className="device-menu__slider">
+        <span>Громкость микрофона</span>
+        <PercentageSlider
+          min={0}
+          max={200}
+          value={micVolume}
+          onChange={(event) => onMicVolumeChange(Number(event.target.value))}
+          ariaLabel="Громкость микрофона"
+        />
+        <div className="device-menu__meter" aria-hidden="true">
+          {Array.from({ length: 24 }).map((_, index) => (
+            <span key={index} className={index < activeMicMenuBars ? "is-active" : ""} />
+          ))}
+        </div>
+      </div>
+
+      <DeviceSettingsButton settingsIcon={settingsIcon} onClick={onOpenVoiceSettings} />
+    </div>
+  );
+};
 
 const SoundMenuPanel = ({
   audioOutputDevices,
@@ -294,36 +343,46 @@ const SoundMenuPanel = ({
   onOutputDeviceChange,
   onAudioVolumeChange,
   onOpenVoiceSettings,
-}) => (
-  <div className="device-menu__panel">
-    <div className="device-menu__group">
-      <label className="device-menu__field">
-        <span className="device-menu__label">Устройство вывода</span>
-        <select className="device-menu__select" value={selectedOutputDeviceId} onChange={(event) => onOutputDeviceChange(event.target.value)} disabled={!outputSelectionAvailable}>
-          {audioOutputDevices.length > 0 ? audioOutputDevices.map((device) => (
-            <option key={device.id} value={device.id}>{device.label}</option>
-          )) : <option value="">Системный вывод</option>}
-        </select>
-        <span className="device-menu__value">
-          {outputSelectionAvailable ? deviceOutputLabel : "Переключение вывода недоступно в этой среде"}
-        </span>
-      </label>
-    </div>
+}) => {
+  const outputDeviceOptions = audioOutputDevices.length > 0
+    ? audioOutputDevices.map((device) => ({
+        id: device.id,
+        title: device.label,
+      }))
+    : [{ id: "", title: "Системный вывод" }];
+  const outputValue = outputSelectionAvailable
+    ? deviceOutputLabel
+    : "Переключение вывода недоступно в этой среде";
 
-    <div className="device-menu__slider">
-      <span>Громкость звука</span>
-      <PercentageSlider
-        min={0}
-        max={200}
-        value={audioVolume}
-        onChange={(event) => onAudioVolumeChange(Number(event.target.value))}
-        ariaLabel="Громкость звука"
-      />
-    </div>
+  return (
+    <div className="device-menu__panel">
+      <div className="device-menu__group">
+        <DeviceMenuFlyoutRow
+          title="Устройство вывода"
+          value={outputValue}
+          options={outputDeviceOptions}
+          activeId={selectedOutputDeviceId}
+          emptyLabel="Системный вывод"
+          disabled={!outputSelectionAvailable}
+          onSelect={onOutputDeviceChange}
+        />
+      </div>
 
-    <DeviceSettingsButton settingsIcon={settingsIcon} onClick={onOpenVoiceSettings} />
-  </div>
-);
+      <div className="device-menu__slider">
+        <span>Громкость звука</span>
+        <PercentageSlider
+          min={0}
+          max={200}
+          value={audioVolume}
+          onChange={(event) => onAudioVolumeChange(Number(event.target.value))}
+          ariaLabel="Громкость звука"
+        />
+      </div>
+
+      <DeviceSettingsButton settingsIcon={settingsIcon} onClick={onOpenVoiceSettings} />
+    </div>
+  );
+};
 
 export default function MenuProfilePanel({
   currentVoiceChannel,
@@ -361,7 +420,6 @@ export default function MenuProfilePanel({
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
-  echoCancellationEnabled,
   micVolume,
   audioVolume,
   activeMicMenuBars,
@@ -383,7 +441,6 @@ export default function MenuProfilePanel({
   onInputDeviceChange,
   onOutputDeviceChange,
   onNoiseProfileChange,
-  onToggleEchoCancellation,
   onMicVolumeChange,
   onAudioVolumeChange,
   onSuppressTooltip,
@@ -527,13 +584,11 @@ export default function MenuProfilePanel({
                   noiseProfileOptions={noiseProfileOptions}
                   noiseSuppressionMode={noiseSuppressionMode}
                   activeNoiseProfile={activeNoiseProfile}
-                  echoCancellationEnabled={echoCancellationEnabled}
                   micVolume={micVolume}
                   activeMicMenuBars={activeMicMenuBars}
                   settingsIcon={icons.settings}
                   onInputDeviceChange={onInputDeviceChange}
                   onNoiseProfileChange={onNoiseProfileChange}
-                  onToggleEchoCancellation={onToggleEchoCancellation}
                   onMicVolumeChange={onMicVolumeChange}
                   onOpenVoiceSettings={onOpenVoiceSettings}
                 />

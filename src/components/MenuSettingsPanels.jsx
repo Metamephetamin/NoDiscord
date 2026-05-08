@@ -1061,7 +1061,6 @@ export const VoiceSettingsPanel = ({
             <input type="radio" name="noiseProfile" checked={noiseSuppressionMode === option.id} onChange={() => onNoiseProfileChange(option.id)} />
             <span className="voice-profile-option__copy">
               <strong>{option.title}</strong>
-              <span>{option.description}</span>
             </span>
           </label>
         ))}

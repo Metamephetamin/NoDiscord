@@ -1273,6 +1273,14 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   font-family: var(--font-body);
   font-weight: 450;
   font-style: normal;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.message-text * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .message-location-card {
@@ -7125,7 +7133,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .composer-tool__text-tools-icon::after {
   content: "";
   position: absolute;
-  right: 1px;
+  right: -2px;
   bottom: 2px;
   width: 9px;
   height: 9px;
