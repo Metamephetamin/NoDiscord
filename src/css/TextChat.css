@@ -1867,13 +1867,18 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 
 .message-attachment-single .message-media {
   margin-top: 0;
-  width: min(100%, 520px);
+  width: fit-content;
+  min-width: min(220px, 100%);
   max-width: min(100%, 520px);
 }
 
-.message-attachment-single .message-media__image,
+.message-attachment-single .message-media__image {
+  width: auto;
+  max-width: min(100%, 520px);
+}
+
 .message-attachment-single .message-media__video {
-  width: 100%;
+  width: min(100%, 520px);
   max-width: 100%;
 }
 
@@ -2413,8 +2418,8 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--dm-own.msg-content--media-only {
   position: relative;
   flex: 0 0 auto;
-  width: fit-content;
-  max-width: none;
+  width: auto;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2422,8 +2427,8 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 }
 
 .message-item--dm .msg-content--media-only,
-.message-item--dm-own.msg-content--media-only {
-  width: fit-content;
+.message-item--dm-own .msg-content--media-only {
+  width: auto;
   min-width: 0;
   max-width: 100%;
   flex: 0 1 auto;

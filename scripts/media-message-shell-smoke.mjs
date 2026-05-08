@@ -4,8 +4,12 @@ import assert from "node:assert/strict";
 const css = readFileSync("src/css/TextChat.css", "utf8");
 
 assert(
-  css.includes(".message-item--dm .msg-content--media-only,\n.message-item--dm-own.msg-content--media-only {\n  width: fit-content;"),
-  "DM media-only message shell should shrink to the media width."
+  css.includes(".msg-content--media-only,\n.msg-content--dm.msg-content--media-only,\n.msg-content--dm-own.msg-content--media-only {\n  position: relative;\n  flex: 0 0 auto;\n  width: auto;\n  max-width: 100%;"),
+  "Media-only message shell should keep intrinsic width without collapsing to a zero-width fit-content shell."
+);
+assert(
+  css.includes(".message-item--dm .msg-content--media-only,\n.message-item--dm-own .msg-content--media-only {\n  width: auto;"),
+  "DM media-only override should target the message content node for both incoming and own messages."
 );
 assert(
   css.includes("min-width: 0;") && css.includes("flex: 0 1 auto;"),
@@ -14,6 +18,11 @@ assert(
 assert(
   css.includes(".message-attachments-stack--single.message-attachments-stack--with-overlay {\n  width: fit-content !important;"),
   "Single media stacks with overlay should stay fit-content."
+);
+assert(
+  css.includes(".message-attachment-single .message-media {\n  margin-top: 0;\n  width: fit-content;\n  min-width: min(220px, 100%);") &&
+    css.includes(".message-attachment-single .message-media__image {\n  width: auto;\n  max-width: min(100%, 520px);"),
+  "Single image media should not collapse through a 100%-width child inside a fit-content shell."
 );
 assert(
   css.includes(".message-item--dm .msg-content--visual-attachments {\n  width: fit-content;") &&
