@@ -652,7 +652,6 @@ function TextChatComposer({
                         type="button"
                         className="chat-file-pill__remove"
                         onClick={() => onRemovePendingUpload(selectedFile.id)}
-                        disabled={uploadingFile && selectedFile.status === "uploading"}
                       >
                         Убрать
                       </button>

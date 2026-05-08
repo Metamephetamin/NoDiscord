@@ -105,7 +105,6 @@ function BatchUploadTile({
   file,
   fileCount,
   index,
-  uploadingFile,
   isActive,
   previewEnabled,
   onSelect,
@@ -139,7 +138,6 @@ function BatchUploadTile({
           event.stopPropagation();
           onRemove(file.id);
         }}
-        disabled={uploadingFile && file.status === "uploading"}
         aria-label={`Убрать ${file.name}`}
         title="Убрать"
       >
@@ -151,7 +149,6 @@ function BatchUploadTile({
 
 function BatchUploadDocumentRow({
   file,
-  uploadingFile,
   isActive,
   previewEnabled,
   onSelect,
@@ -192,7 +189,6 @@ function BatchUploadDocumentRow({
             event.stopPropagation();
             onRemove(file?.id);
           }}
-          disabled={uploadingFile && file?.status === "uploading"}
           aria-label={`Убрать ${file?.name || "файл"}`}
           title="Убрать"
         >
@@ -575,7 +571,6 @@ function TextChatBatchUploadSheet({
               <BatchUploadDocumentRow
                 key={selectedFile.id || `${selectedFile.name}-${selectedFile.size}`}
                 file={selectedFile}
-                uploadingFile={uploadingFile}
                 isActive={String(selectedFile?.id || "") === resolvedActiveFileId}
                 previewEnabled={previewEnabled}
                 onSelect={(nextFileId) => setActiveFileId(String(nextFileId || ""))}
@@ -591,7 +586,6 @@ function TextChatBatchUploadSheet({
                 file={selectedFile}
                 fileCount={displayTileCount}
                 index={index}
-                uploadingFile={uploadingFile}
                 isActive={String(selectedFile?.id || "") === resolvedActiveFileId}
                 previewEnabled={previewEnabled}
                 onSelect={(nextFileId) => setActiveFileId(String(nextFileId || ""))}

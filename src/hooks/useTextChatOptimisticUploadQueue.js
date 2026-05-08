@@ -136,6 +136,9 @@ export default function useTextChatOptimisticUploadQueue({
           const preparedAttachment = await prepareOutgoingAttachmentPayload({
             file: fileForUpload,
           });
+          if (uploadAbortController.signal.aborted || job.cancelledAttachmentIds?.has(uploadId)) {
+            return;
+          }
 
           patchJobAttachment(job, uploadId, {
             localEchoStatus: "uploading",
@@ -405,6 +408,7 @@ export default function useTextChatOptimisticUploadQueue({
     }
 
     job.cancelRequested = false;
+    job.cancelledAttachmentIds?.clear();
     patchJobMessage(job, {
       localEchoUploadState: "pending",
       localEchoRetryable: false,

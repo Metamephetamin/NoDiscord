@@ -1344,6 +1344,13 @@ function MessageAttachmentCard({
     handlePreviewClick(event);
   };
 
+  const handleCancelLocalEchoAttachment = () => {
+    const didCancel = onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId);
+    if (didCancel === false) {
+      onRemoveLocalEchoUpload?.(messageItem?.id);
+    }
+  };
+
   if (attachmentItem.isVoice) {
     return (
       <VoiceMessageBubble
@@ -1414,7 +1421,7 @@ function MessageAttachmentCard({
           {showLocalEchoOverlay ? (
             <SimplifiedLocalEchoMediaOverlay
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId)}
+              onCancel={handleCancelLocalEchoAttachment}
               onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
               onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
@@ -1441,7 +1448,7 @@ function MessageAttachmentCard({
           {showLocalEchoOverlay ? (
             <SimplifiedLocalEchoMediaOverlay
               attachmentItem={attachmentItem}
-              onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId)}
+              onCancel={handleCancelLocalEchoAttachment}
               onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
               onRemove={() => onRemoveLocalEchoUpload?.(messageItem?.id)}
             />
@@ -1489,7 +1496,7 @@ function MessageAttachmentCard({
         ) : showLocalEchoOverlay ? (
           <LocalEchoDocumentAction
             attachmentItem={attachmentItem}
-            onCancel={() => onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId)}
+            onCancel={handleCancelLocalEchoAttachment}
             onRetry={() => onRetryLocalEchoUpload?.(messageItem?.id)}
           />
         ) : (

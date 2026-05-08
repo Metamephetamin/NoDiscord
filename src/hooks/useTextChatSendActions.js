@@ -248,8 +248,12 @@ export default function useTextChatSendActions({
       return;
     }
 
+    cancelActiveUpload(normalizedId);
+    pendingUploadPatchQueueRef.current.delete(normalizedId);
+    cancelledPendingUploadIdsRef.current.add(normalizedId);
     preparedUploadFileCacheRef.current.delete(normalizedId);
     preparedUploadModeRef.current.delete(normalizedId);
+    uploadProgressSnapshotRef.current.delete(normalizedId);
 
     setSelectedFiles((previous) => {
       const nextUploads = [];
@@ -266,6 +270,12 @@ export default function useTextChatSendActions({
   };
 
   const clearPendingUploads = () => {
+    (Array.isArray(selectedFiles) ? selectedFiles : []).forEach((item) => {
+      const uploadId = String(item?.id || "");
+      if (uploadId) {
+        cancelActiveUpload(uploadId);
+      }
+    });
     pendingUploadPatchQueueRef.current.clear();
     uploadProgressSnapshotRef.current.clear();
     preparedUploadFileCacheRef.current.clear();

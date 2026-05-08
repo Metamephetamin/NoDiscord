@@ -42,6 +42,8 @@ export default function VoiceMessageBubble({
         : playbackPositionMs / resolvedDurationMs))
     : 0;
   const displayTimeMs = currentTimeSeconds > 0 || isPlaying ? currentTimeSeconds * 1000 : resolvedDurationMs;
+  const totalTimeMs = Math.max(0, Number(resolvedDurationMs || 0));
+  const elapsedTimeMs = Math.max(0, Math.min(totalTimeMs || playbackPositionMs, playbackPositionMs));
   const getBarFill = (index) => {
     const totalBars = Math.max(1, effectiveWaveform.length);
     const barStart = index / totalBars;
@@ -222,7 +224,7 @@ export default function VoiceMessageBubble({
 
         <div className="voice-message__meta">
           <span className="voice-message__time">
-            {formatVoiceMessageDuration(displayTimeMs)}
+            {formatVoiceMessageDuration(elapsedTimeMs)} / {formatVoiceMessageDuration(totalTimeMs)}
           </span>
           <button
             type="button"
