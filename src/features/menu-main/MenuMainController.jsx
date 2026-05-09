@@ -57,7 +57,7 @@ import {
   getStoredAppLogoId,
 } from "../../utils/appLogo";
 import { applyUiThemePreference, normalizeUiTheme } from "../../utils/uiTheme.mjs";
-import { applyChatThemePreference, normalizeChatThemeId } from "../../utils/chatTheme.mjs";
+import { applyChatThemePreference, normalizeChatBackgroundFit, normalizeChatThemeId } from "../../utils/chatTheme.mjs";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import { buildStreamDiagnostics } from "../../webrtc/streamDiagnostics.mjs";
 import useFriendsWorkspaceState from "../../hooks/useFriendsWorkspaceState";
@@ -603,6 +603,7 @@ export default function MenuMain({
   const [chatThemeId, setChatThemeId] = useState("default");
   const [customChatBackgroundData, setCustomChatBackgroundData] = useState("");
   const [customChatBackgroundName, setCustomChatBackgroundName] = useState("");
+  const [customChatBackgroundFit, setCustomChatBackgroundFit] = useState("cover");
   const [chatThemeError, setChatThemeError] = useState("");
   const [appLogoId, setAppLogoId] = useState(() => getStoredAppLogoId());
 
@@ -711,6 +712,7 @@ export default function MenuMain({
     chatThemeStorageKey,
     chatBackgroundStorageKey,
     chatBackgroundNameStorageKey,
+    chatBackgroundFitStorageKey,
   } = useMenuMainStorageKeys(user);
   const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {
@@ -1155,6 +1157,7 @@ export default function MenuMain({
     const nextChatTheme = localStorage.getItem(chatThemeStorageKey) || "default";
     const nextChatBackground = localStorage.getItem(chatBackgroundStorageKey) || "";
     const nextChatBackgroundName = localStorage.getItem(chatBackgroundNameStorageKey) || "";
+    const nextChatBackgroundFit = localStorage.getItem(chatBackgroundFitStorageKey) || "cover";
 
     setUiDensity(nextDensity === "compact" ? "compact" : "standard");
     setUiFontScale(["sm", "md", "lg"].includes(nextFontScale) ? nextFontScale : "md");
@@ -1164,8 +1167,10 @@ export default function MenuMain({
     setChatThemeId(normalizeChatThemeId(nextChatTheme));
     setCustomChatBackgroundData(nextChatBackground);
     setCustomChatBackgroundName(nextChatBackgroundName);
+    setCustomChatBackgroundFit(normalizeChatBackgroundFit(nextChatBackgroundFit));
     setChatThemeError("");
   }, [
+    chatBackgroundFitStorageKey,
     chatBackgroundNameStorageKey,
     chatBackgroundStorageKey,
     chatThemeStorageKey,
@@ -1186,6 +1191,7 @@ export default function MenuMain({
     localStorage.setItem(uiTouchTargetStorageKey, uiTouchTargetSize);
     localStorage.setItem(uiThemeStorageKey, normalizeUiTheme(uiTheme));
     localStorage.setItem(chatThemeStorageKey, normalizeChatThemeId(chatThemeId));
+    localStorage.setItem(chatBackgroundFitStorageKey, normalizeChatBackgroundFit(customChatBackgroundFit));
     if (customChatBackgroundData) {
       localStorage.setItem(chatBackgroundStorageKey, customChatBackgroundData);
     } else {
@@ -1208,13 +1214,20 @@ export default function MenuMain({
     body.dataset.uiFontScale = uiFontScale;
     body.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
     body.dataset.uiTouchTargets = uiTouchTargetSize;
-    applyChatThemePreference(chatThemeId, { root, body, customBackgroundData: customChatBackgroundData });
+    applyChatThemePreference(chatThemeId, {
+      root,
+      body,
+      customBackgroundData: customChatBackgroundData,
+      customBackgroundFit: customChatBackgroundFit,
+    });
   }, [
+    chatBackgroundFitStorageKey,
     chatBackgroundNameStorageKey,
     chatBackgroundStorageKey,
     chatThemeId,
     chatThemeStorageKey,
     customChatBackgroundData,
+    customChatBackgroundFit,
     customChatBackgroundName,
     uiDensity,
     uiDensityStorageKey,
@@ -5689,6 +5702,7 @@ export default function MenuMain({
     uiTheme,
     chatThemeId,
     customChatBackgroundData,
+    customChatBackgroundFit,
     customChatBackgroundName,
     chatThemeError,
     appLogoId,
@@ -5699,6 +5713,7 @@ export default function MenuMain({
     setUiTheme,
     setChatThemeId,
     setCustomChatBackgroundData,
+    setCustomChatBackgroundFit,
     setCustomChatBackgroundName,
     setChatThemeError,
     handleCustomChatBackgroundChange,

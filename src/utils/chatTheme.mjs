@@ -204,9 +204,57 @@ export const CHAT_THEME_OPTIONS = Object.freeze([
 const SUPPORTED_CHAT_THEME_IDS = new Set(CHAT_THEME_OPTIONS.map((option) => option.id));
 const DEFAULT_CHAT_THEME = CHAT_THEME_OPTIONS[0];
 
+export const CHAT_BACKGROUND_FIT_OPTIONS = Object.freeze([
+  {
+    id: "cover",
+    title: "Заполнить",
+    description: "Фон покрывает весь чат и может обрезаться по краям.",
+    size: "cover",
+    position: "center",
+    repeat: "no-repeat",
+  },
+  {
+    id: "contain",
+    title: "Вместить",
+    description: "Картинка видна целиком, вокруг могут остаться поля.",
+    size: "contain",
+    position: "center",
+    repeat: "no-repeat",
+  },
+  {
+    id: "stretch",
+    title: "Растянуть",
+    description: "Фон растягивается под размер чата без обрезки.",
+    size: "100% 100%",
+    position: "center",
+    repeat: "no-repeat",
+  },
+  {
+    id: "tile",
+    title: "Плитка",
+    description: "Небольшое изображение повторяется по всей области.",
+    size: "auto",
+    position: "top left",
+    repeat: "repeat",
+  },
+]);
+
+const SUPPORTED_CHAT_BACKGROUND_FIT_IDS = new Set(CHAT_BACKGROUND_FIT_OPTIONS.map((option) => option.id));
+const DEFAULT_CHAT_BACKGROUND_FIT = CHAT_BACKGROUND_FIT_OPTIONS[0];
+
 export function normalizeChatThemeId(value) {
   const normalizedValue = String(value || "").trim().toLowerCase();
   return SUPPORTED_CHAT_THEME_IDS.has(normalizedValue) ? normalizedValue : DEFAULT_CHAT_THEME.id;
+}
+
+export function normalizeChatBackgroundFit(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  return SUPPORTED_CHAT_BACKGROUND_FIT_IDS.has(normalizedValue) ? normalizedValue : DEFAULT_CHAT_BACKGROUND_FIT.id;
+}
+
+export function resolveChatBackgroundFit(value) {
+  const fitId = normalizeChatBackgroundFit(value);
+  return CHAT_BACKGROUND_FIT_OPTIONS.find((option) => option.id === fitId) || DEFAULT_CHAT_BACKGROUND_FIT;
 }
 
 export function resolveChatTheme(value) {
@@ -229,6 +277,7 @@ export function applyChatThemePreference(value, options = {}) {
   const root = options.root || documentRef?.documentElement;
   const body = options.body || documentRef?.body;
   const customBackgroundData = String(options.customBackgroundData || "").trim();
+  const customBackgroundFit = resolveChatBackgroundFit(options.customBackgroundFit);
 
   [root, body].forEach((node) => {
     if (!node) {
@@ -245,6 +294,9 @@ export function applyChatThemePreference(value, options = {}) {
         node.style.setProperty(name, themeValue);
       });
       node.style.setProperty("--chat-custom-background-image", toCssUrl(customBackgroundData));
+      node.style.setProperty("--chat-custom-background-size", customBackgroundFit.size);
+      node.style.setProperty("--chat-custom-background-position", customBackgroundFit.position);
+      node.style.setProperty("--chat-custom-background-repeat", customBackgroundFit.repeat);
     }
   });
 

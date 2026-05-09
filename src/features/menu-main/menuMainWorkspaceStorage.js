@@ -41,6 +41,7 @@ const getUiThemeStorageKey = (user) => `nd:ui-theme:${getCurrentUserId(user) || 
 const getChatThemeStorageKey = (user) => `nd:chat-theme:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundStorageKey = (user) => `nd:chat-background:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundNameStorageKey = (user) => `nd:chat-background-name:${getCurrentUserId(user) || "guest"}`;
+const getChatBackgroundFitStorageKey = (user) => `nd:chat-background-fit:${getCurrentUserId(user) || "guest"}`;
 
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
@@ -184,5 +185,6 @@ export function useMenuMainStorageKeys(user) {
     chatThemeStorageKey: getChatThemeStorageKey(user),
     chatBackgroundStorageKey: getChatBackgroundStorageKey(user),
     chatBackgroundNameStorageKey: getChatBackgroundNameStorageKey(user),
+    chatBackgroundFitStorageKey: getChatBackgroundFitStorageKey(user),
   };
 }

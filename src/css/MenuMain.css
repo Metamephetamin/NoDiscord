@@ -3198,8 +3198,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .friends-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 10px;
   min-height: 0;
   flex: 1;
+  padding-right: 10px;
 }
 
 .friends-main {
@@ -3207,6 +3209,9 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: 0 18px 18px 0;
+  isolation: isolate;
 }
 
 .friends-main__toolbar {
@@ -5951,8 +5956,11 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .friends-contacts {
   padding: 22px 18px;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.015);
+  border-left: 0;
+  border-radius: 18px;
+  background: rgba(8, 10, 14, 0.78);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
 .friends-contacts h3 {
@@ -11033,7 +11041,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .chat-theme-choice__copy,
-.chat-background-picker > div:first-child {
+.chat-background-picker__header > div:first-child {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -11055,15 +11063,144 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .chat-background-picker {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(148px, 0.34fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
   margin-top: 12px;
-  padding: 12px;
-  border-radius: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
+  background:
+    radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--app-accent) 16%, transparent), transparent 34%),
+    var(--app-input-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.chat-background-picker__preview {
+  position: relative;
+  min-height: 118px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background:
+    var(--chat-background-picker-image, none),
+    linear-gradient(135deg, rgba(44, 50, 68, 0.92), rgba(18, 21, 31, 0.96));
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(5, 8, 14, 0.28),
+    0 14px 30px rgba(0, 0, 0, 0.16);
+}
+
+.chat-background-picker__preview--contain {
+  background-size: cover, contain;
+}
+
+.chat-background-picker__preview--stretch {
+  background-size: cover, 100% 100%;
+}
+
+.chat-background-picker__preview--tile {
+  background-size: cover, auto;
+  background-position: center, top left;
+  background-repeat: no-repeat, repeat;
+}
+
+.chat-background-picker__preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(7, 9, 14, 0.08), rgba(7, 9, 14, 0.2)),
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.12), transparent 32%);
+  pointer-events: none;
+}
+
+.chat-background-picker__preview-topbar,
+.chat-background-picker__preview-message {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.chat-background-picker__preview-topbar {
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  height: 12px;
+}
+
+.chat-background-picker__preview-message {
+  height: 18px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.chat-background-picker__preview-message--incoming {
+  left: 16px;
+  bottom: 42px;
+  width: 52%;
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.chat-background-picker__preview-message--own {
+  right: 16px;
+  bottom: 18px;
+  width: 42%;
+  background: linear-gradient(135deg, rgba(78, 141, 255, 0.9), rgba(219, 76, 190, 0.86));
+}
+
+.chat-background-picker__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.chat-background-picker__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chat-background-picker__actions {
+  flex: 0 0 auto;
+}
+
+.chat-background-fit {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.chat-background-fit__option {
+  min-height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--app-border);
-  background: var(--app-input-bg);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.chat-background-fit__option:hover {
+  border-color: var(--app-border-strong);
+  background: var(--app-hover-bg);
+  color: var(--app-text);
+}
+
+.chat-background-fit__option--active {
+  border-color: color-mix(in srgb, var(--app-accent) 62%, transparent);
+  background: var(--app-selected-bg);
+  color: var(--app-text-strong);
 }
 
 @media (max-width: 780px) {
@@ -11072,8 +11209,19 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   }
 
   .chat-background-picker {
-    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .chat-background-picker__header {
     flex-direction: column;
+  }
+
+  .chat-background-picker__actions {
+    width: 100%;
+  }
+
+  .chat-background-fit {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -13822,6 +13970,12 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 @media (max-width: 1500px) {
   .friends-layout {
     grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-right: 0;
+  }
+
+  .friends-main {
+    border-radius: 0;
   }
 
   .friends-contacts {

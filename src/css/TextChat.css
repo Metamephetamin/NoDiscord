@@ -9,9 +9,9 @@
     var(--chat-theme-overlay, linear-gradient(180deg, rgba(7, 10, 16, 0), rgba(7, 10, 16, 0))),
     var(--chat-custom-background-image, none),
     var(--chat-theme-background, transparent);
-  background-size: cover, cover, cover;
-  background-position: center, center, center;
-  background-repeat: no-repeat;
+  background-size: cover, var(--chat-custom-background-size, cover), cover;
+  background-position: center, var(--chat-custom-background-position, center), center;
+  background-repeat: no-repeat, var(--chat-custom-background-repeat, no-repeat), no-repeat;
 }
 
 .textchat-container > * {
@@ -1056,7 +1056,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .message-time {
   display: inline-flex;
   align-items: center;
-  color: #8d97ac;
+  color: var(--chat-message-meta-color, rgba(255, 255, 255, 0.94));
   font-size: 12px;
   font-weight: 500;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -1067,7 +1067,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 }
 
 .message-time--pending {
-  color: #9bb7ff;
+  color: var(--chat-message-meta-pending-color, rgba(255, 255, 255, 0.78));
 }
 
 .message-item--local-echo .msg-content,
@@ -1103,11 +1103,11 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 }
 
 .message-item--dm-own .message-time {
-  color: #9ca7bc;
+  color: var(--chat-message-meta-color, rgba(255, 255, 255, 0.94));
 }
 
 .message-item--dm-incoming .message-time {
-  color: #9ca7bc;
+  color: var(--chat-message-meta-color, rgba(255, 255, 255, 0.94));
 }
 
 .message-item--dm-own .message-text {
@@ -1243,12 +1243,12 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   display: inline-flex;
   align-items: center;
   gap: 0;
-  color: #7f8799;
+  color: var(--chat-message-meta-color, rgba(255, 255, 255, 0.9));
   line-height: 1;
 }
 
 .message-read-status--read {
-  color: #54a7ff;
+  color: var(--chat-message-read-status-color, rgba(255, 255, 255, 0.96));
 }
 
 .message-read-status__check {
@@ -8065,6 +8065,18 @@ html[data-ui-theme="purple"] .composer-text-tools-menu__header span {
   color: var(--app-text-muted);
 }
 
+html[data-ui-theme="light"] {
+  --chat-message-meta-color: rgba(15, 23, 42, 0.78);
+  --chat-message-meta-pending-color: rgba(37, 99, 235, 0.78);
+  --chat-message-read-status-color: rgba(15, 23, 42, 0.82);
+}
+
+html:not([data-ui-theme="light"]) {
+  --chat-message-meta-color: rgba(255, 255, 255, 0.94);
+  --chat-message-meta-pending-color: rgba(255, 255, 255, 0.78);
+  --chat-message-read-status-color: rgba(255, 255, 255, 0.96);
+}
+
 html[data-ui-theme="light"] .message-search-panel__item,
 html[data-ui-theme="light"] .msg-content--dm,
 html[data-ui-theme="light"] .message-item:not(.message-item--dm) .msg-content,
@@ -10017,6 +10029,44 @@ html[data-ui-theme="purple"] .message-text__link {
 
 html[data-ui-theme="purple"] .message-text__link:hover {
   color: #f0dcff;
+}
+
+html:not([data-ui-theme="light"]) .message-time,
+html:not([data-ui-theme="light"]) .message-footer,
+html:not([data-ui-theme="light"]) .message-read-status,
+html:not([data-ui-theme="light"]) .message-media-overlay-footer .message-time,
+html:not([data-ui-theme="light"]) .message-media-overlay-footer .message-read-status,
+html:not([data-ui-theme="light"]) .msg-content--media-only .message-time,
+html:not([data-ui-theme="light"]) .msg-content--media-only .message-read-status,
+html:not([data-ui-theme="light"]) .msg-content--voice-only .message-bottom-row--voice .message-time,
+html:not([data-ui-theme="light"]) .msg-content--voice-only .message-bottom-row--voice .message-read-status {
+  color: var(--chat-message-meta-color, rgba(255, 255, 255, 0.94));
+}
+
+html:not([data-ui-theme="light"]) .message-read-status--read,
+html:not([data-ui-theme="light"]) .message-media-overlay-footer .message-read-status--read,
+html:not([data-ui-theme="light"]) .msg-content--media-only .message-read-status--read,
+html:not([data-ui-theme="light"]) .msg-content--voice-only .message-bottom-row--voice .message-read-status--read {
+  color: var(--chat-message-read-status-color, rgba(255, 255, 255, 0.96));
+}
+
+html[data-ui-theme="light"] .message-time,
+html[data-ui-theme="light"] .message-footer,
+html[data-ui-theme="light"] .message-read-status,
+html[data-ui-theme="light"] .message-media-overlay-footer .message-time,
+html[data-ui-theme="light"] .message-media-overlay-footer .message-read-status,
+html[data-ui-theme="light"] .msg-content--media-only .message-time,
+html[data-ui-theme="light"] .msg-content--media-only .message-read-status,
+html[data-ui-theme="light"] .msg-content--voice-only .message-bottom-row--voice .message-time,
+html[data-ui-theme="light"] .msg-content--voice-only .message-bottom-row--voice .message-read-status {
+  color: var(--chat-message-meta-color, rgba(15, 23, 42, 0.78));
+}
+
+html[data-ui-theme="light"] .message-read-status--read,
+html[data-ui-theme="light"] .message-media-overlay-footer .message-read-status--read,
+html[data-ui-theme="light"] .msg-content--media-only .message-read-status--read,
+html[data-ui-theme="light"] .msg-content--voice-only .message-bottom-row--voice .message-read-status--read {
+  color: var(--chat-message-read-status-color, rgba(15, 23, 42, 0.82));
 }
 
 html[data-ui-theme="light"] .msg-content,

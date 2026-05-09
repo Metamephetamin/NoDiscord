@@ -14,7 +14,7 @@ import {
 } from "../utils/profileCustomization";
 import { APP_LOGO_OPTIONS } from "../utils/appLogo";
 import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
-import { CHAT_THEME_OPTIONS } from "../utils/chatTheme.mjs";
+import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
@@ -1220,6 +1220,7 @@ export const AppearanceAccessibilitySettings = ({
   uiTheme,
   chatThemeId,
   customChatBackgroundData,
+  customChatBackgroundFit,
   customChatBackgroundName,
   chatThemeError,
   appLogoId,
@@ -1229,11 +1230,13 @@ export const AppearanceAccessibilitySettings = ({
   onTouchTargetSizeChange,
   onThemeChange,
   onChatThemeChange,
+  onCustomChatBackgroundFitChange,
   onCustomChatBackgroundChange,
   onRemoveCustomChatBackground,
   onAppLogoChange,
 }) => {
   const chatBackgroundInputRef = useRef(null);
+  const resolvedChatBackgroundFit = resolveChatBackgroundFit(customChatBackgroundFit);
 
   return (
     <div className="settings-shell__content">
@@ -1301,23 +1304,53 @@ export const AppearanceAccessibilitySettings = ({
       </div>
 
       <div className="chat-background-picker">
-        <div>
-          <strong>Свой фон чата</strong>
-          <span>
-            {customChatBackgroundData
-              ? `Выбран файл: ${customChatBackgroundName || "изображение"}.`
-              : "Можно поставить PNG, JPG, WEBP или GIF до 1.5 МБ."}
-          </span>
+        <div
+          className={`chat-background-picker__preview chat-background-picker__preview--${resolvedChatBackgroundFit.id} ${customChatBackgroundData ? "chat-background-picker__preview--filled" : ""}`}
+          style={customChatBackgroundData ? { "--chat-background-picker-image": `url("${customChatBackgroundData}")` } : undefined}
+          aria-hidden="true"
+        >
+          <span className="chat-background-picker__preview-topbar" />
+          <span className="chat-background-picker__preview-message chat-background-picker__preview-message--incoming" />
+          <span className="chat-background-picker__preview-message chat-background-picker__preview-message--own" />
         </div>
-        <div className="settings-shell__actions">
-          <button type="button" className="settings-inline-button" onClick={() => chatBackgroundInputRef.current?.click()}>
-            Выбрать фон
-          </button>
-          {customChatBackgroundData ? (
-            <button type="button" className="settings-inline-button settings-inline-button--ghost" onClick={onRemoveCustomChatBackground}>
-              Убрать фон
-            </button>
-          ) : null}
+
+        <div className="chat-background-picker__body">
+          <div className="chat-background-picker__header">
+            <div>
+              <strong>Свой фон чата</strong>
+              <span>
+                {customChatBackgroundData
+                  ? `Выбран файл: ${customChatBackgroundName || "изображение"}.`
+                  : "Можно поставить PNG, JPG, WEBP или GIF до 1.5 МБ."}
+              </span>
+            </div>
+            <div className="settings-shell__actions chat-background-picker__actions">
+              <button type="button" className="settings-inline-button" onClick={() => chatBackgroundInputRef.current?.click()}>
+                Выбрать фон
+              </button>
+              {customChatBackgroundData ? (
+                <button type="button" className="settings-inline-button settings-inline-button--ghost" onClick={onRemoveCustomChatBackground}>
+                  Убрать фон
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="chat-background-fit" role="radiogroup" aria-label="Отображение фона чата">
+            {CHAT_BACKGROUND_FIT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`chat-background-fit__option ${resolvedChatBackgroundFit.id === option.id ? "chat-background-fit__option--active" : ""}`}
+                onClick={() => onCustomChatBackgroundFitChange(option.id)}
+                role="radio"
+                aria-checked={resolvedChatBackgroundFit.id === option.id}
+                title={option.description}
+              >
+                {option.title}
+              </button>
+            ))}
+          </div>
         </div>
         <input
           ref={chatBackgroundInputRef}

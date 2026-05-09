@@ -119,6 +119,7 @@ export function MenuMainSettingsContent({
   uiTheme,
   chatThemeId,
   customChatBackgroundData,
+  customChatBackgroundFit,
   customChatBackgroundName,
   chatThemeError,
   appLogoId,
@@ -129,6 +130,7 @@ export function MenuMainSettingsContent({
   setUiTheme,
   setChatThemeId,
   setCustomChatBackgroundData,
+  setCustomChatBackgroundFit,
   setCustomChatBackgroundName,
   setChatThemeError,
   handleCustomChatBackgroundChange,
@@ -278,6 +280,7 @@ export function MenuMainSettingsContent({
           uiTheme={uiTheme}
           chatThemeId={chatThemeId}
           customChatBackgroundData={customChatBackgroundData}
+          customChatBackgroundFit={customChatBackgroundFit}
           customChatBackgroundName={customChatBackgroundName}
           chatThemeError={chatThemeError}
           appLogoId={appLogoId}
@@ -287,6 +290,7 @@ export function MenuMainSettingsContent({
           onTouchTargetSizeChange={setUiTouchTargetSize}
           onThemeChange={setUiTheme}
           onChatThemeChange={setChatThemeId}
+          onCustomChatBackgroundFitChange={setCustomChatBackgroundFit}
           onCustomChatBackgroundChange={handleCustomChatBackgroundChange}
           onRemoveCustomChatBackground={() => {
             setCustomChatBackgroundData("");
