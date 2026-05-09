@@ -138,6 +138,7 @@ function TextChatComposer({
   voiceRecordingState,
   voiceMicLevel = 0,
   speechRecognitionActive,
+  speechRecognitionSupported = true,
   speechMicLevel = 0,
   speechCaptureState = "idle",
   composerEmojiButtonRef,
@@ -384,6 +385,7 @@ function TextChatComposer({
       "--speech-level-opacity": (0.58 + activeMicLevel * 0.34).toFixed(3),
     }
     : undefined;
+  const shouldShowSpeechHybridButton = ENABLE_SPEECH_INPUT_BUTTON && speechRecognitionSupported;
   const speechIsHolding = speechCaptureState === "holding";
   const speechIsLocked = speechCaptureState === "locked";
   const speechIsCanceling = speechCaptureState === "canceling" || voiceRecordingState === "canceling";
@@ -1158,7 +1160,7 @@ function TextChatComposer({
                 >
                   <span className="composer-send-button__icon" aria-hidden="true" />
                 </button>
-              ) : ENABLE_SPEECH_INPUT_BUTTON ? (
+              ) : shouldShowSpeechHybridButton ? (
                 <button
                   type="button"
                   className={`composer-tool composer-tool--speech composer-tool--action-slot ${speechRecognitionActive || voiceRecordingState !== "idle" ? "composer-tool--active" : ""} ${hybridMicStateClass}`}
@@ -1363,6 +1365,7 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
     && previousProps.voiceRecordingState === nextProps.voiceRecordingState
     && previousProps.voiceMicLevel === nextProps.voiceMicLevel
     && previousProps.speechRecognitionActive === nextProps.speechRecognitionActive
+    && previousProps.speechRecognitionSupported === nextProps.speechRecognitionSupported
     && previousProps.speechMicLevel === nextProps.speechMicLevel
     && previousProps.speechCaptureState === nextProps.speechCaptureState
     && previousProps.composerEmojiButtonRef === nextProps.composerEmojiButtonRef

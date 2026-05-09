@@ -1922,7 +1922,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   grid-auto-rows: minmax(84px, auto);
   overflow: hidden;
   border-radius: 14px;
-  background: rgba(8, 10, 15, 0.34);
+  background: var(--chat-media-gap-bg, rgba(8, 10, 15, 0.34));
   isolation: isolate;
   contain: paint;
 }

@@ -3217,7 +3217,9 @@ export default function TextChat({
       messageEditState={messageEditState}
       voiceRecordingState={voiceRecordingState}
       voiceRecordingDurationMs={voiceRecordingDurationMs}
+      voiceMicLevel={voiceMicLevel}
       speechRecognitionActive={speechRecognitionActive}
+      speechRecognitionSupported={speechRecognitionSupported}
       speechMicLevel={speechMicLevel}
       speechCaptureState={speechCaptureState}
       composerEmojiButtonRef={composerEmojiButtonRef}

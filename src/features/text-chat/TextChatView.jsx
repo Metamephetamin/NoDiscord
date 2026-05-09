@@ -80,6 +80,7 @@ export default function TextChatView(props) {
     voiceRecordingDurationMs,
     voiceMicLevel,
     speechRecognitionActive,
+    speechRecognitionSupported,
     speechMicLevel,
     speechCaptureState,
     composerEmojiButtonRef,
@@ -510,6 +511,7 @@ export default function TextChatView(props) {
             voiceRecordingDurationMs={voiceRecordingDurationMs}
             voiceMicLevel={voiceMicLevel}
             speechRecognitionActive={speechRecognitionActive}
+            speechRecognitionSupported={speechRecognitionSupported}
             speechMicLevel={speechMicLevel}
             speechCaptureState={speechCaptureState}
             composerEmojiButtonRef={composerEmojiButtonRef}
@@ -577,6 +579,7 @@ export default function TextChatView(props) {
           voiceRecordingDurationMs={voiceRecordingDurationMs}
           voiceMicLevel={voiceMicLevel}
           speechRecognitionActive={speechRecognitionActive}
+          speechRecognitionSupported={speechRecognitionSupported}
           speechMicLevel={speechMicLevel}
           speechCaptureState={speechCaptureState}
           composerEmojiButtonRef={composerEmojiButtonRef}

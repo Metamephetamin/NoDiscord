@@ -417,6 +417,18 @@ function logVoiceDebug(eventName, payload = {}) {
   }
 }
 
+function isVoiceProcessingBypassEnabled() {
+  if (!isVoiceDebugEnabled()) {
+    return false;
+  }
+
+  try {
+    return window.localStorage?.getItem("ND_VOICE_BYPASS_PROCESSING") === "1";
+  } catch {
+    return false;
+  }
+}
+
 function getTrackDebugInfo(track) {
   const mediaTrack = track?.mediaStreamTrack || track;
   return {
@@ -427,6 +439,7 @@ function getTrackDebugInfo(track) {
     muted: mediaTrack?.muted,
     readyState: mediaTrack?.readyState,
     settings: typeof mediaTrack?.getSettings === "function" ? mediaTrack.getSettings() : null,
+    constraints: typeof mediaTrack?.getConstraints === "function" ? mediaTrack.getConstraints() : null,
   };
 }
 
@@ -465,6 +478,7 @@ export function createVoiceRoomClient({
   let audioContext = null;
   let gainNode = null;
   let destinationNode = null;
+  let localInputAnalyser = null;
   let localOutputAnalyser = null;
   let microphoneMonitorGainNode = null;
   let microphoneMonitorDestinationNode = null;
@@ -475,6 +489,12 @@ export function createVoiceRoomClient({
   let localNoiseGateMeter = null;
   let localNoiseGateState = null;
   let localVoiceDynamicsState = null;
+  let localAudioMetrics = {
+    inputRms: 0,
+    inputPeak: 0,
+    outputRms: 0,
+    outputPeak: 0,
+  };
   let localSpeakingMeter = null;
   let micVolume = 0.7;
   let remoteVolume = 0.7;
@@ -602,6 +622,9 @@ export function createVoiceRoomClient({
       micVolume,
       noiseSuppressionMode,
       noiseSuppressionStrength,
+      audioMetrics: localAudioMetrics,
+      gateState: localNoiseGateState,
+      dynamicsState: localVoiceDynamicsState,
       isSelfMicMuted,
       isSelfDeafened,
       publicationSid: micPublication?.trackSid || "",
@@ -1468,7 +1491,12 @@ const handleDeviceChange = () => {
   const requestLocalMicSourceStream = async () => {
     const preferredConstraints = getMicConstraints();
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: preferredConstraints });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: preferredConstraints });
+      logVoiceDebug("local-audio:capture-success", {
+        requestedConstraints: preferredConstraints,
+        tracks: stream.getAudioTracks?.().map(getTrackDebugInfo) || [],
+      });
+      return stream;
     } catch (error) {
       logVoiceDebug("local-audio:capture-failed", {
         errorName: error?.name || "",
@@ -1543,21 +1571,42 @@ const handleDeviceChange = () => {
     }
   };
 
-  const startLocalMetering = (analyser) => {
-    if (!analyser) {
+  const startLocalMetering = (outputAnalyser, inputAnalyser = null) => {
+    if (!outputAnalyser) {
       return;
     }
 
-    const data = new Uint8Array(analyser.fftSize);
+    const outputData = new Uint8Array(outputAnalyser.fftSize);
+    const inputData = inputAnalyser ? new Uint8Array(inputAnalyser.fftSize) : null;
     localSpeakingMeter = window.setInterval(() => {
-      analyser.getByteTimeDomainData(data);
-      let sumSquares = 0;
-      for (const value of data) {
+      outputAnalyser.getByteTimeDomainData(outputData);
+      let outputSumSquares = 0;
+      let outputPeak = 0;
+      for (const value of outputData) {
         const centered = (value - 128) / 128;
-        sumSquares += centered * centered;
+        outputSumSquares += centered * centered;
+        outputPeak = Math.max(outputPeak, Math.abs(centered));
       }
 
-      const rms = Math.sqrt(sumSquares / Math.max(1, data.length));
+      const rms = Math.sqrt(outputSumSquares / Math.max(1, outputData.length));
+      let inputRms = 0;
+      let inputPeak = 0;
+      if (inputAnalyser && inputData) {
+        inputAnalyser.getByteTimeDomainData(inputData);
+        let inputSumSquares = 0;
+        for (const value of inputData) {
+          const centered = (value - 128) / 128;
+          inputSumSquares += centered * centered;
+          inputPeak = Math.max(inputPeak, Math.abs(centered));
+        }
+        inputRms = Math.sqrt(inputSumSquares / Math.max(1, inputData.length));
+      }
+      localAudioMetrics = {
+        inputRms,
+        inputPeak,
+        outputRms: rms,
+        outputPeak,
+      };
       const normalizedLevel = Math.max(0, Math.min(1, rms * 8));
       onMicLevelChanged?.(normalizedLevel);
     }, 120);
@@ -1589,7 +1638,7 @@ const handleDeviceChange = () => {
   const resolveVoiceDynamicsProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        highPassFrequency: 120,
+        highPassFrequency: 110,
         highPassQ: 0.82,
         highPassStages: 2,
         lowBump: {
@@ -1617,19 +1666,19 @@ const handleDeviceChange = () => {
           minRms: 0.01,
         },
         compressor: {
-          threshold: -28,
+          threshold: -25,
           knee: 12,
-          ratio: 2.8,
+          ratio: 2.4,
           attack: 0.012,
-          release: 0.11,
+          release: 0.14,
         },
-        makeupGainDb: 14,
+        makeupGainDb: 6,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        highPassFrequency: 104,
+        highPassFrequency: 90,
         highPassQ: 0.74,
         highPassStages: 2,
         lowBump: {
@@ -1657,20 +1706,20 @@ const handleDeviceChange = () => {
           minRms: 1,
         },
         compressor: {
-          threshold: -21,
+          threshold: -20,
           knee: 10,
-          ratio: 2,
+          ratio: 1.8,
           attack: 0.02,
-          release: 0.16,
+          release: 0.18,
         },
-        makeupGainDb: 5,
+        makeupGainDb: 2,
       };
     }
 
     return {
-      highPassFrequency: 100,
+      highPassFrequency: 76,
       highPassQ: 0.72,
-      highPassStages: 2,
+      highPassStages: 1,
       lowBump: {
         triggerDb: 18,
         attackTime: 0.003,
@@ -1696,13 +1745,13 @@ const handleDeviceChange = () => {
         minRms: 1,
       },
       compressor: {
-        threshold: -21,
-        knee: 12,
-        ratio: 1.8,
-        attack: 0.02,
-        release: 0.15,
+        threshold: -18,
+        knee: 18,
+        ratio: 1.22,
+        attack: 0.025,
+        release: 0.18,
       },
-      makeupGainDb: 3,
+      makeupGainDb: 0,
     };
   };
 
@@ -1714,9 +1763,9 @@ const handleDeviceChange = () => {
         openThreshold: 0.014,
         closeThreshold: 0.006,
         floorGain: 0.1,
-        attackTime: 0.0015,
-        releaseTime: 0.16,
-        holdMs: 340,
+        attackTime: 0.005,
+        releaseTime: 0.2,
+        holdMs: 140,
         adaptiveOpenRatio: 1.36,
         adaptiveCloseRatio: 1.18,
         maxAdaptiveOpenThreshold: 0.028,
@@ -1725,15 +1774,15 @@ const handleDeviceChange = () => {
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        openThreshold: 0.009,
-        closeThreshold: 0.0045,
-        floorGain: 0.48,
-        attackTime: 0.004,
-        releaseTime: 0.2,
-        holdMs: 300,
-        adaptiveOpenRatio: 1.12,
+        openThreshold: 0.008,
+        closeThreshold: 0.004,
+        floorGain: 0.62,
+        attackTime: 0.008,
+        releaseTime: 0.22,
+        holdMs: 120,
+        adaptiveOpenRatio: 1.08,
         adaptiveCloseRatio: 1.08,
-        maxAdaptiveOpenThreshold: 0.014,
+        maxAdaptiveOpenThreshold: 0.012,
       };
     }
 
@@ -2008,16 +2057,16 @@ const handleDeviceChange = () => {
     lowBumpGainNode.connect(transientGainNode);
     transientGainNode.connect(mudCutFilter);
     mudCutFilter.connect(boxCutFilter);
-    boxCutFilter.connect(presenceFilter);
-    presenceFilter.connect(airFilter);
-    airFilter.connect(lowPassFilter);
+    boxCutFilter.connect(lowPassFilter);
     lowPassFilter.connect(noiseGateNode);
     lowPassFilter.connect(noiseGateAnalyser);
-    noiseGateNode.connect(deEsserGainNode);
-    noiseGateNode.connect(deEsserDetectorFilter);
+    noiseGateNode.connect(compressorNode);
+    compressorNode.connect(presenceFilter);
+    presenceFilter.connect(airFilter);
+    airFilter.connect(deEsserGainNode);
+    airFilter.connect(deEsserDetectorFilter);
     deEsserDetectorFilter.connect(deEsserAnalyser);
-    deEsserGainNode.connect(compressorNode);
-    compressorNode.connect(makeupGainNode);
+    deEsserGainNode.connect(makeupGainNode);
     makeupGainNode.connect(limiterNode);
 
     localNoiseGateNode = noiseGateNode;
@@ -2056,21 +2105,39 @@ const handleDeviceChange = () => {
     });
   };
 
-  const buildTransparentVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 92,
-    highPassStages: 2,
-    mudCutFrequency: 235,
-    mudCutGain: -2,
-    boxCutFrequency: 520,
-    boxCutGain: -1.1,
-    presenceFrequency: 2650,
-    presenceGain: 1.85,
-    airFrequency: 6400,
-    airGain: 0.75,
-    lowPassFrequency: 11000,
-    noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT),
-    dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT),
-  });
+  const buildTransparentVoiceChain = (sourceNode) => {
+    const dynamicsProfile = resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_TRANSPARENT);
+
+    const highPassFilter = audioContext.createBiquadFilter();
+    highPassFilter.type = "highpass";
+    highPassFilter.frequency.value = dynamicsProfile.highPassFrequency || 76;
+    highPassFilter.Q.value = dynamicsProfile.highPassQ || 0.72;
+
+    const compressorNode = audioContext.createDynamicsCompressor();
+    compressorNode.threshold.value = dynamicsProfile.compressor?.threshold ?? -18;
+    compressorNode.knee.value = dynamicsProfile.compressor?.knee ?? 18;
+    compressorNode.ratio.value = dynamicsProfile.compressor?.ratio ?? 1.22;
+    compressorNode.attack.value = dynamicsProfile.compressor?.attack ?? 0.025;
+    compressorNode.release.value = dynamicsProfile.compressor?.release ?? 0.18;
+
+    const limiterNode = audioContext.createDynamicsCompressor();
+    limiterNode.threshold.value = -1;
+    limiterNode.knee.value = 0;
+    limiterNode.ratio.value = 20;
+    limiterNode.attack.value = 0.001;
+    limiterNode.release.value = 0.06;
+
+    localNoiseGateNode = null;
+    localNoiseGateAnalyser = null;
+    localNoiseGateState = null;
+    localVoiceDynamicsState = null;
+
+    sourceNode.connect(highPassFilter);
+    highPassFilter.connect(compressorNode);
+    compressorNode.connect(limiterNode);
+
+    return limiterNode;
+  };
 
   const buildHardGateVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
     highPassFrequency: 120,
@@ -2094,6 +2161,24 @@ const handleDeviceChange = () => {
   });
 
   const connectLocalAudioGraph = (sourceNode) => {
+    if (isVoiceProcessingBypassEnabled()) {
+      logVoiceDebug("local-audio:processing-bypass-enabled", {
+        noiseSuppressionMode,
+        echoCancellationEnabled,
+      });
+      sourceNode.connect(gainNode);
+      gainNode.connect(destinationNode);
+
+      localNoiseGateNode = null;
+      localNoiseGateAnalyser = null;
+      localNoiseGateState = null;
+      localVoiceDynamicsState = null;
+      localOutputAnalyser = audioContext.createAnalyser();
+      localOutputAnalyser.fftSize = 256;
+      gainNode.connect(localOutputAnalyser);
+      return;
+    }
+
     let inputNode = sourceNode;
     if (noiseSuppressionMode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       inputNode = buildBroadcastVoiceChain(sourceNode);
@@ -2181,6 +2266,7 @@ const handleDeviceChange = () => {
     context: audioContext,
     gain: gainNode,
     destination: destinationNode,
+    inputAnalyser: localInputAnalyser,
     outputAnalyser: localOutputAnalyser,
     noiseGateAnalyser: localNoiseGateAnalyser,
     noiseGateNode: localNoiseGateNode,
@@ -2198,6 +2284,7 @@ const handleDeviceChange = () => {
     audioContext = pipeline?.context || null;
     gainNode = pipeline?.gain || null;
     destinationNode = pipeline?.destination || null;
+    localInputAnalyser = pipeline?.inputAnalyser || null;
     localOutputAnalyser = pipeline?.outputAnalyser || null;
     localNoiseGateAnalyser = pipeline?.noiseGateAnalyser || null;
     localNoiseGateNode = pipeline?.noiseGateNode || null;
@@ -2262,11 +2349,18 @@ const handleDeviceChange = () => {
     localAudioProcessingStream = null;
     localAudioStream = null;
     localAudioPipelinePromise = null;
+    localInputAnalyser = null;
     localOutputAnalyser = null;
     localNoiseGateAnalyser = null;
     localNoiseGateNode = null;
     localNoiseGateState = null;
     localVoiceDynamicsState = null;
+    localAudioMetrics = {
+      inputRms: 0,
+      inputPeak: 0,
+      outputRms: 0,
+      outputPeak: 0,
+    };
     onMicLevelChanged?.(0);
 
     audioContext = null;
@@ -2299,13 +2393,16 @@ const handleDeviceChange = () => {
       }
 
       const sourceNode = audioContext.createMediaStreamSource(localAudioProcessingStream || localMicSourceStream);
+      localInputAnalyser = audioContext.createAnalyser();
+      localInputAnalyser.fftSize = 256;
+      sourceNode.connect(localInputAnalyser);
       gainNode = audioContext.createGain();
       destinationNode = audioContext.createMediaStreamDestination();
       gainNode.gain.value = micVolume;
       connectLocalAudioGraph(sourceNode);
       localAudioStream = destinationNode.stream;
 
-      startLocalMetering(localOutputAnalyser);
+      startLocalMetering(localOutputAnalyser, localInputAnalyser);
       await connectMicrophoneMonitor();
 
       logVoiceDebug("local-audio:pipeline-create:success", {
@@ -2324,6 +2421,7 @@ const handleDeviceChange = () => {
       localAudioProcessingStream = null;
       localAudioStream = null;
       localAudioPipelinePromise = null;
+      localInputAnalyser = null;
       localOutputAnalyser = null;
       localNoiseGateAnalyser = null;
       localNoiseGateNode = null;
@@ -3075,6 +3173,7 @@ const handleDeviceChange = () => {
       localAudioProcessingStream = null;
       localAudioStream = null;
       localAudioPipelinePromise = null;
+      localInputAnalyser = null;
       localOutputAnalyser = null;
       localNoiseGateAnalyser = null;
       localNoiseGateNode = null;

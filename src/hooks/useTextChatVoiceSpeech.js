@@ -85,6 +85,40 @@ export default function useTextChatVoiceSpeech({
   const SPEECH_RECOGNITION_NETWORK_WARNING_DELAY_MS = 7000;
   const PREFERRED_VOICE_SAMPLE_SIZE = 24;
   const MAX_VOICE_SAMPLE_SIZE = 32;
+  const isAudioDebugEnabled = () => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    try {
+      return window.__ND_AUDIO_DEBUG__ === true || window.localStorage?.getItem("nd:audio-debug") === "true";
+    } catch {
+      return window.__ND_AUDIO_DEBUG__ === true;
+    }
+  };
+
+  const isVoiceMessageBypassProcessingEnabled = () => {
+    if (!isAudioDebugEnabled()) {
+      return false;
+    }
+
+    try {
+      return window.localStorage?.getItem("nd:voice-message-bypass-processing") === "true";
+    } catch {
+      return false;
+    }
+  };
+
+  const logAudioCaptureSettings = (scope, requestedConstraints, stream) => {
+    if (!isAudioDebugEnabled()) {
+      return;
+    }
+
+    const [track] = stream?.getAudioTracks?.() || [];
+    console.debug(`[audio:${scope}] requested constraints`, requestedConstraints);
+    console.debug(`[audio:${scope}] actual track settings`, track?.getSettings?.() || {});
+    console.debug(`[audio:${scope}] actual track constraints`, track?.getConstraints?.() || {});
+  };
 
   const getPointerGestureDistances = (pointerState, event) => {
     const deltaX = (Number(event.clientX) || 0) - (Number(pointerState?.startX) || 0);
@@ -371,16 +405,28 @@ export default function useTextChatVoiceSpeech({
     outputGain.gain.value = VOICE_OUTPUT_GAIN;
 
     const destination = audioContext.createMediaStreamDestination();
+    if (isVoiceMessageBypassProcessingEnabled()) {
+      source.connect(analyser);
+      source.connect(destination);
+      voiceAudioContextRef.current = audioContext;
+      voiceAnalyserRef.current = analyser;
+      voiceLastSampleAtRef.current = performance.now();
+      stopVoiceLevelLoop();
+      voiceLevelFrameRef.current = requestAnimationFrame(sampleVoiceLevel);
+      console.debug("[audio:voice-message] bypass processing enabled");
+      return destination.stream;
+    }
+
     source.connect(highPassFilter);
     highPassFilter.connect(lowShelfFilter);
     lowShelfFilter.connect(presenceFilter);
     presenceFilter.connect(highShelfFilter);
     highShelfFilter.connect(lowPassFilter);
     lowPassFilter.connect(compressor);
-    compressor.connect(limiter);
-    limiter.connect(outputGain);
-    outputGain.connect(analyser);
-    outputGain.connect(destination);
+    compressor.connect(outputGain);
+    outputGain.connect(limiter);
+    limiter.connect(analyser);
+    limiter.connect(destination);
 
     voiceAudioContextRef.current = audioContext;
     voiceAnalyserRef.current = analyser;
@@ -638,15 +684,18 @@ export default function useTextChatVoiceSpeech({
 
     try {
       setErrorMessage("");
-      const inputStream = await navigator.mediaDevices.getUserMedia({
+      const voiceCaptureConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
           channelCount: 1,
+          sampleRate: VOICE_RECORDING_SAMPLE_RATE,
           ...buildPreferredVoiceCaptureConstraints(),
         },
-      });
+      };
+      const inputStream = await navigator.mediaDevices.getUserMedia(voiceCaptureConstraints);
+      logAudioCaptureSettings("voice-message", voiceCaptureConstraints, inputStream);
 
       const currentStartRequest = voiceRecordingStartRequestRef.current;
       if (currentStartRequest.id !== startRequestId || currentStartRequest.cancel) {
