@@ -84,6 +84,7 @@
     "vite": "^7.3.2"
   },
   "dependencies": {
+    "@cc-livekit/audio-pipeline-plugin": "^1.1.9",
     "@microsoft/signalr": "^9.0.6",
     "@microsoft/signalr-protocol-msgpack": "^10.0.0",
     "electron-squirrel-startup": "^1.0.1",

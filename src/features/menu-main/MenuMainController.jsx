@@ -455,7 +455,7 @@ export default function MenuMain({
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
   const [profileCustomization, setProfileCustomization] = useState(() => readProfileCustomization(user));
-  const [micVolume, setMicVolume] = useState(70);
+  const [micVolume, setMicVolume] = useState(100);
   const [audioVolume, setAudioVolume] = useState(100);
   const [micLevel, setMicLevel] = useState(0);
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
@@ -4437,10 +4437,10 @@ export default function MenuMain({
   };
   const handleNoiseSuppressionModeChange = (mode) => {
     const normalizedMode =
-      mode === "voice_isolation"
-        ? "hard_gate"
+      mode === "voice_isolation" || mode === "hard_gate"
+        ? "noisy_room"
         : mode === "rnnoise" || mode === "krisp" || mode === "ai_noise_suppression"
-          ? "hard_gate"
+          ? "noisy_room"
           : mode;
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : DEFAULT_VOICE_INPUT_MODE);
     setShowNoiseMenu(false);

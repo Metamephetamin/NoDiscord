@@ -10,6 +10,11 @@ import {
 } from "../utils/voiceMessages";
 import { autocorrectUserText } from "../utils/textAutocorrect";
 import {
+  AUDIO_PROCESSING_PROFILE_VOICE_MESSAGE,
+  createProcessedMicrophoneTrack,
+  shouldUseBrowserNoiseSuppression,
+} from "../webrtc/processedMicrophoneTrack";
+import {
   getChatErrorMessage,
   getSpeechRecognitionConstructor,
   SPEECH_RECOGNITION_RESTART_DELAY_MS,
@@ -63,6 +68,8 @@ export default function useTextChatVoiceSpeech({
   const speechPointerStateRef = useRef({ pointerId: null, startX: 0, startY: 0, locked: false, canceled: false });
   const voiceAudioContextRef = useRef(null);
   const voiceAnalyserRef = useRef(null);
+  const voiceDenoiserCleanupRef = useRef(null);
+  const voiceDenoiserStreamRef = useRef(null);
   const voiceLevelFrameRef = useRef(0);
   const voiceLevelSamplesRef = useRef([]);
   const voiceLastSampleAtRef = useRef(0);
@@ -212,13 +219,24 @@ export default function useTextChatVoiceSpeech({
       voiceAudioContextRef.current = null;
     }
 
+    if (voiceDenoiserCleanupRef.current) {
+      voiceDenoiserCleanupRef.current();
+      voiceDenoiserCleanupRef.current = null;
+    }
+
     const processedStream = voiceStreamRef.current;
+    const denoiserStream = voiceDenoiserStreamRef.current;
     const inputStream = voiceInputStreamRef.current;
 
     if (processedStream) {
       processedStream.getTracks().forEach((track) => track.stop());
       voiceStreamRef.current = null;
     }
+
+    if (denoiserStream && denoiserStream !== processedStream && denoiserStream !== inputStream) {
+      denoiserStream.getTracks().forEach((track) => track.stop());
+    }
+    voiceDenoiserStreamRef.current = null;
 
     if (inputStream && inputStream !== processedStream) {
       inputStream.getTracks().forEach((track) => track.stop());
@@ -684,23 +702,41 @@ export default function useTextChatVoiceSpeech({
 
     try {
       setErrorMessage("");
-      const voiceCaptureConstraints = {
+      const buildVoiceCaptureConstraints = (denoiserMode) => ({
         audio: {
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression: shouldUseBrowserNoiseSuppression(denoiserMode),
           autoGainControl: false,
           channelCount: 1,
           sampleRate: VOICE_RECORDING_SAMPLE_RATE,
           ...buildPreferredVoiceCaptureConstraints(),
         },
-      };
-      const inputStream = await navigator.mediaDevices.getUserMedia(voiceCaptureConstraints);
-      logAudioCaptureSettings("voice-message", voiceCaptureConstraints, inputStream);
+      });
+      const processedMicrophone = await createProcessedMicrophoneTrack({
+        profile: AUDIO_PROCESSING_PROFILE_VOICE_MESSAGE,
+        debugLabel: "voice-message",
+        buildCaptureConstraints: buildVoiceCaptureConstraints,
+        logger: (eventName, payload) => {
+          if (isAudioDebugEnabled()) {
+            console.debug(`[${eventName}]`, payload);
+          }
+        },
+      });
+      const inputStream = processedMicrophone.sourceStream;
+      logAudioCaptureSettings(
+        "voice-message",
+        buildVoiceCaptureConstraints(processedMicrophone.selectedDenoiser),
+        inputStream
+      );
 
       const currentStartRequest = voiceRecordingStartRequestRef.current;
       if (currentStartRequest.id !== startRequestId || currentStartRequest.cancel) {
         if (currentStartRequest.id === startRequestId) {
           voiceRecordingStartRequestRef.current = { id: 0, cancel: false, sendOnReady: false };
+        }
+        processedMicrophone.cleanup?.();
+        if (processedMicrophone.stream && processedMicrophone.stream !== inputStream) {
+          processedMicrophone.stream.getTracks().forEach((track) => track.stop());
         }
         inputStream.getTracks().forEach((track) => track.stop());
         cleanupVoiceRecordingResources();
@@ -710,10 +746,12 @@ export default function useTextChatVoiceSpeech({
       }
 
       voiceInputStreamRef.current = inputStream;
+      voiceDenoiserCleanupRef.current = processedMicrophone.cleanup;
+      voiceDenoiserStreamRef.current = processedMicrophone.stream;
       voiceRecordingChunksRef.current = [];
       voiceLevelSamplesRef.current = [];
 
-      const processedStream = await startMicrophoneAnalysis(inputStream);
+      const processedStream = await startMicrophoneAnalysis(processedMicrophone.stream || inputStream);
       const readyStartRequest = voiceRecordingStartRequestRef.current;
       if (readyStartRequest.id !== startRequestId || readyStartRequest.cancel) {
         if (readyStartRequest.id === startRequestId) {

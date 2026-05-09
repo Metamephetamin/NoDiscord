@@ -17400,7 +17400,8 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline--floating .direct-call-inline__participants {
-  padding: 14px 10px;
+  padding: 18px 12px;
+  min-height: 126px;
 }
 
 .direct-call-inline__participant {
@@ -17434,17 +17435,17 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline__link {
-  width: 104px;
-  height: 52px;
+  width: 132px;
+  height: 72px;
   position: relative;
-  flex: 0 0 104px;
+  flex: 0 0 132px;
   border-radius: 0;
   overflow: visible;
 }
 
 .direct-call-inline--floating .direct-call-inline__link {
-  width: 124px;
-  height: 54px;
+  width: 150px;
+  height: 80px;
 }
 
 .direct-call-inline__voice-wave {
@@ -17461,7 +17462,7 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 .direct-call-inline__voice-wave-canvas {
   position: absolute;
   z-index: 1;
-  inset: -2px -4px;
+  inset: -10px -8px;
   width: 100% !important;
   height: 100% !important;
   opacity: calc(0.92 + var(--direct-call-wave-level) * 0.08);
@@ -17487,11 +17488,15 @@ html[data-ui-density="compact"] .quick-switcher__badge {
     0 0 14px rgba(100, 220, 255, 0.22);
 }
 
+.direct-call-inline__voice-wave--live .direct-call-inline__voice-wave-fallback {
+  opacity: 0;
+}
+
 .direct-call-inline__actions {
   grid-column: 1 / -1;
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 14px;
 }
 
 .direct-call-inline__stream,
@@ -17561,10 +17566,10 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline__button {
-  min-height: 38px;
-  padding: 0 16px;
+  min-height: 46px;
+  padding: 0 18px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.08);
   color: #edf3ff;
   font-weight: 900;
@@ -17615,17 +17620,24 @@ html[data-ui-density="compact"] .quick-switcher__badge {
 }
 
 .direct-call-inline__button--icon {
-  width: 44px;
-  min-width: 44px;
+  width: 56px;
+  min-width: 56px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
+.direct-call-inline--floating .direct-call-inline__button--icon {
+  width: 58px;
+  min-width: 58px;
+  min-height: 50px;
+  border-radius: 18px;
+}
+
 .direct-call-inline__icon {
-  width: 19px;
-  height: 19px;
+  width: 22px;
+  height: 22px;
   background: currentColor;
   display: block;
 }

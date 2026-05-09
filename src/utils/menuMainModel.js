@@ -18,10 +18,11 @@ export const AUDIO_INPUT_DEVICE_STORAGE_KEY = "nd_audio_input_device";
 export const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 export const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 export const MAX_PROFILE_NAME_LENGTH = 32;
-export const VOICE_INPUT_MODES = ["transparent", "broadcast", "hard_gate"];
+export const VOICE_INPUT_MODES = ["transparent", "broadcast", "noisy_room"];
 export const VOICE_INPUT_MODE_NOISE_STRENGTH = {
   transparent: 55,
   broadcast: 85,
+  noisy_room: 100,
   hard_gate: 100,
 };
 export const DEFAULT_VOICE_INPUT_MODE = "broadcast";

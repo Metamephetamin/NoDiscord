@@ -17,7 +17,7 @@ const NOISE_PROFILE_OPTIONS = [
     description: "Сбалансированный режим для звонков: умеренное шумоподавление, чистый верх и ровная громкость.",
   },
   {
-    id: "hard_gate",
+    id: "noisy_room",
     title: "Шумная комната",
     description: "Агрессивное отсечение шума для шумной комнаты, рации или дешёвого микрофона.",
   },
@@ -60,10 +60,10 @@ export default function useMenuMainVoiceProcessing({
     try {
       const storedMode = localStorage.getItem(noiseSuppressionStorageKey);
       const normalizedStoredMode =
-        storedMode === "voice_isolation"
-          ? "hard_gate"
+        storedMode === "voice_isolation" || storedMode === "hard_gate"
+          ? "noisy_room"
           : storedMode === "rnnoise" || storedMode === "krisp" || storedMode === "ai_noise_suppression"
-            ? "hard_gate"
+            ? "noisy_room"
             : storedMode;
       setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : DEFAULT_VOICE_INPUT_MODE);
     } catch {

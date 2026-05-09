@@ -37,6 +37,14 @@ import {
 import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
 import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
 import { getReusableVideoTrack } from "./localShareStreamReuse.mjs";
+import {
+  AUDIO_PROCESSING_PROFILE_BROADCAST,
+  AUDIO_PROCESSING_PROFILE_NOISY_ROOM,
+  AUDIO_PROCESSING_PROFILE_TRANSPARENT,
+  createProcessedMicrophoneTrack,
+  resolvePreferredAudioDenoiser,
+  shouldUseBrowserNoiseSuppression,
+} from "./processedMicrophoneTrack";
 
 const RTC_CONFIGURATION = {
   ...VOICE_RTC_CONFIGURATION,
@@ -343,7 +351,7 @@ function normalizeNoiseSuppressionMode(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT
     return NOISE_SUPPRESSION_MODE_BROADCAST;
   }
 
-  if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
+  if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE || mode === AUDIO_PROCESSING_PROFILE_NOISY_ROOM) {
     return NOISE_SUPPRESSION_MODE_HARD_GATE;
   }
 
@@ -489,14 +497,28 @@ export function createVoiceRoomClient({
   let localNoiseGateMeter = null;
   let localNoiseGateState = null;
   let localVoiceDynamicsState = null;
+  let localCompressorNode = null;
+  let localLimiterNode = null;
+  let localDenoiserCleanup = null;
+  let localSelectedDenoiser = "";
+  let localDenoiserFallbackReason = "";
+  let localDenoiserMetrics = null;
   let localAudioMetrics = {
     inputRms: 0,
     inputPeak: 0,
     outputRms: 0,
     outputPeak: 0,
+    selectedDenoiser: "",
+    fallbackReason: "",
+    workletDroppedFrames: 0,
+    workletUnderruns: 0,
+    processorLatencyMs: 0,
+    realtimeFactor: 0,
+    compressorReductionDb: 0,
+    limiterReductionDb: 0,
   };
   let localSpeakingMeter = null;
-  let micVolume = 0.7;
+  let micVolume = 1;
   let remoteVolume = 0.7;
   let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_BROADCAST;
   let noiseSuppressionStrength = 85;
@@ -1434,42 +1456,62 @@ const handleDeviceChange = () => {
     };
   };
 
-  const usesLocalNoiseSuppression = (mode = noiseSuppressionMode) => (
-    mode === NOISE_SUPPRESSION_MODE_HARD_GATE
-  );
+  const getLocalAudioProcessingProfile = (mode = noiseSuppressionMode) => {
+    if (mode === NOISE_SUPPRESSION_MODE_TRANSPARENT) {
+      return AUDIO_PROCESSING_PROFILE_TRANSPARENT;
+    }
 
-  const buildMicConstraints = ({ deviceId = selectedInputDeviceId, relaxed = false } = {}) => ({
-    deviceId:
-      deviceId && deviceId !== "default"
-        ? { exact: deviceId }
-        : undefined,
-    echoCancellation: echoCancellationEnabled ? { ideal: true } : false,
-    ...(echoCancellationEnabled && getSupportedMediaConstraints().echoCancellationType
-      ? { echoCancellationType: { ideal: "system" } }
-      : {}),
-    noiseSuppression: usesLocalNoiseSuppression() ? false : true,
-    autoGainControl: false,
-    voiceIsolation: undefined,
-    googEchoCancellation: echoCancellationEnabled,
-    googEchoCancellation2: echoCancellationEnabled,
-    googDAEchoCancellation: echoCancellationEnabled,
-    googExperimentalEchoCancellation: echoCancellationEnabled,
-    googEchoCancellation3: echoCancellationEnabled,
-    googAutoGainControl: false,
-    googExperimentalAutoGainControl: false,
-    googNoiseSuppression: usesLocalNoiseSuppression() ? false : true,
-    googNoiseSuppression2: usesLocalNoiseSuppression() ? false : true,
-    googHighpassFilter: usesLocalNoiseSuppression() ? false : true,
-    googTypingNoiseDetection: true,
-    channelCount: relaxed ? undefined : 1,
-    sampleRate: relaxed ? undefined : AUDIO_SAMPLE_RATE,
-    latency: relaxed ? undefined : 0.01,
-    ...buildPreferredSampleSizeConstraints(relaxed),
-  });
+    if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
+      return AUDIO_PROCESSING_PROFILE_NOISY_ROOM;
+    }
+
+    return AUDIO_PROCESSING_PROFILE_BROADCAST;
+  };
+
+  const getPreferredLocalAudioDenoiser = (profile = getLocalAudioProcessingProfile()) =>
+    resolvePreferredAudioDenoiser(profile);
+
+  const buildMicConstraints = ({
+    deviceId = selectedInputDeviceId,
+    relaxed = false,
+    denoiserMode = getPreferredLocalAudioDenoiser(),
+  } = {}) => {
+    const useBrowserNoiseSuppression = shouldUseBrowserNoiseSuppression(denoiserMode);
+
+    return {
+      deviceId:
+        deviceId && deviceId !== "default"
+          ? { exact: deviceId }
+          : undefined,
+      echoCancellation: echoCancellationEnabled ? { ideal: true } : false,
+      ...(echoCancellationEnabled && getSupportedMediaConstraints().echoCancellationType
+        ? { echoCancellationType: { ideal: "system" } }
+        : {}),
+      noiseSuppression: useBrowserNoiseSuppression,
+      autoGainControl: false,
+      voiceIsolation: undefined,
+      googEchoCancellation: echoCancellationEnabled,
+      googEchoCancellation2: echoCancellationEnabled,
+      googDAEchoCancellation: echoCancellationEnabled,
+      googExperimentalEchoCancellation: echoCancellationEnabled,
+      googEchoCancellation3: echoCancellationEnabled,
+      googAutoGainControl: false,
+      googExperimentalAutoGainControl: false,
+      googNoiseSuppression: useBrowserNoiseSuppression,
+      googNoiseSuppression2: useBrowserNoiseSuppression,
+      googHighpassFilter: useBrowserNoiseSuppression,
+      googTypingNoiseDetection: useBrowserNoiseSuppression,
+      channelCount: relaxed ? undefined : 1,
+      sampleRate: relaxed ? undefined : AUDIO_SAMPLE_RATE,
+      latency: relaxed ? undefined : 0.01,
+      ...buildPreferredSampleSizeConstraints(relaxed),
+    };
+  };
 
   const getMicConstraints = () => buildMicConstraints();
 
-  const getRelaxedMicConstraints = () => buildMicConstraints({ relaxed: true, deviceId: "" });
+  const getRelaxedMicConstraints = (denoiserMode = getPreferredLocalAudioDenoiser()) =>
+    buildMicConstraints({ relaxed: true, deviceId: "", denoiserMode });
 
   const isAudioCaptureStartError = (error) => {
     const errorName = String(error?.name || "").trim();
@@ -1488,12 +1530,15 @@ const handleDeviceChange = () => {
     return error;
   };
 
-  const requestLocalMicSourceStream = async () => {
-    const preferredConstraints = getMicConstraints();
+  const requestLocalMicSourceStream = async ({
+    preferredConstraints = getMicConstraints(),
+    denoiserMode = getPreferredLocalAudioDenoiser(),
+  } = {}) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: preferredConstraints });
       logVoiceDebug("local-audio:capture-success", {
         requestedConstraints: preferredConstraints,
+        selectedDenoiser: denoiserMode,
         tracks: stream.getAudioTracks?.().map(getTrackDebugInfo) || [],
       });
       return stream;
@@ -1502,6 +1547,7 @@ const handleDeviceChange = () => {
         errorName: error?.name || "",
         error: error?.message || String(error),
         selectedInputDeviceId,
+        selectedDenoiser: denoiserMode,
         constraints: preferredConstraints,
       });
 
@@ -1521,7 +1567,7 @@ const handleDeviceChange = () => {
             .filter((device) => device.id && device.id !== selectedInputDeviceId);
 
           for (const input of alternativeInputs) {
-            const deviceConstraints = buildMicConstraints({ deviceId: input.id, relaxed: true });
+            const deviceConstraints = buildMicConstraints({ deviceId: input.id, relaxed: true, denoiserMode });
             try {
               const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: deviceConstraints });
               selectedInputDeviceId = input.id;
@@ -1529,6 +1575,7 @@ const handleDeviceChange = () => {
               logVoiceDebug("local-audio:capture-device-fallback-success", {
                 selectedInputDeviceId,
                 label: input.label,
+                selectedDenoiser: denoiserMode,
                 constraints: deviceConstraints,
                 tracks: fallbackStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
               });
@@ -1550,11 +1597,12 @@ const handleDeviceChange = () => {
         }
       }
 
-      const relaxedConstraints = getRelaxedMicConstraints();
+      const relaxedConstraints = getRelaxedMicConstraints(denoiserMode);
       try {
         const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: relaxedConstraints });
         logVoiceDebug("local-audio:capture-fallback-success", {
           selectedInputDeviceId,
+          selectedDenoiser: denoiserMode,
           constraints: relaxedConstraints,
           tracks: fallbackStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
         });
@@ -1564,6 +1612,7 @@ const handleDeviceChange = () => {
           errorName: fallbackError?.name || "",
           error: fallbackError?.message || String(fallbackError),
           selectedInputDeviceId,
+          selectedDenoiser: denoiserMode,
           constraints: relaxedConstraints,
         });
         throw buildMicrophoneAccessError(fallbackError);
@@ -1606,6 +1655,14 @@ const handleDeviceChange = () => {
         inputPeak,
         outputRms: rms,
         outputPeak,
+        selectedDenoiser: localSelectedDenoiser,
+        fallbackReason: localDenoiserFallbackReason,
+        workletDroppedFrames: localDenoiserMetrics?.droppedFrames || 0,
+        workletUnderruns: localDenoiserMetrics?.underruns || 0,
+        processorLatencyMs: localDenoiserMetrics?.processorLatencyMs || 0,
+        realtimeFactor: localDenoiserMetrics?.realtimeFactor || 0,
+        compressorReductionDb: Number(localCompressorNode?.reduction) || 0,
+        limiterReductionDb: Number(localLimiterNode?.reduction) || 0,
       };
       const normalizedLevel = Math.max(0, Math.min(1, rms * 8));
       onMicLevelChanged?.(normalizedLevel);
@@ -1666,21 +1723,21 @@ const handleDeviceChange = () => {
           minRms: 0.01,
         },
         compressor: {
-          threshold: -25,
-          knee: 12,
-          ratio: 2.4,
-          attack: 0.012,
-          release: 0.14,
+          threshold: -22,
+          knee: 16,
+          ratio: 1.8,
+          attack: 0.018,
+          release: 0.18,
         },
-        makeupGainDb: 6,
+        makeupGainDb: 4,
       };
     }
 
     if (mode === NOISE_SUPPRESSION_MODE_BROADCAST) {
       return {
-        highPassFrequency: 90,
+        highPassFrequency: 86,
         highPassQ: 0.74,
-        highPassStages: 2,
+        highPassStages: 1,
         lowBump: {
           triggerDb: 18,
           attackTime: 0.002,
@@ -1706,13 +1763,13 @@ const handleDeviceChange = () => {
           minRms: 1,
         },
         compressor: {
-          threshold: -20,
-          knee: 10,
-          ratio: 1.8,
-          attack: 0.02,
-          release: 0.18,
+          threshold: -18,
+          knee: 16,
+          ratio: 1.45,
+          attack: 0.024,
+          release: 0.2,
         },
-        makeupGainDb: 2,
+        makeupGainDb: 3.5,
       };
     }
 
@@ -1760,15 +1817,15 @@ const handleDeviceChange = () => {
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
       return {
-        openThreshold: 0.014,
-        closeThreshold: 0.006,
-        floorGain: 0.1,
-        attackTime: 0.005,
-        releaseTime: 0.2,
-        holdMs: 140,
-        adaptiveOpenRatio: 1.36,
-        adaptiveCloseRatio: 1.18,
-        maxAdaptiveOpenThreshold: 0.028,
+        openThreshold: 0.01,
+        closeThreshold: 0.005,
+        floorGain: 0.34,
+        attackTime: 0.008,
+        releaseTime: 0.28,
+        holdMs: 180,
+        adaptiveOpenRatio: 1.18,
+        adaptiveCloseRatio: 1.12,
+        maxAdaptiveOpenThreshold: 0.02,
       };
     }
 
@@ -1776,13 +1833,13 @@ const handleDeviceChange = () => {
       return {
         openThreshold: 0.008,
         closeThreshold: 0.004,
-        floorGain: 0.62,
-        attackTime: 0.008,
-        releaseTime: 0.22,
-        holdMs: 120,
+        floorGain: 0.74,
+        attackTime: 0.012,
+        releaseTime: 0.26,
+        holdMs: 160,
         adaptiveOpenRatio: 1.08,
         adaptiveCloseRatio: 1.08,
-        maxAdaptiveOpenThreshold: 0.012,
+        maxAdaptiveOpenThreshold: 0.011,
       };
     }
 
@@ -2071,6 +2128,8 @@ const handleDeviceChange = () => {
 
     localNoiseGateNode = noiseGateNode;
     localNoiseGateAnalyser = noiseGateAnalyser;
+    localCompressorNode = compressorNode;
+    localLimiterNode = limiterNode;
     startVoiceDynamicsMetering({
       gateAnalyser: noiseGateAnalyser,
       gateNode: noiseGateNode,
@@ -2089,17 +2148,17 @@ const handleDeviceChange = () => {
 
   const buildBroadcastVoiceChain = (sourceNode) => {
     return buildSpeechPolishChain(sourceNode, {
-      highPassFrequency: 102,
-      highPassStages: 2,
+      highPassFrequency: 86,
+      highPassStages: 1,
       mudCutFrequency: 245,
-      mudCutGain: -3,
+      mudCutGain: -1.4,
       boxCutFrequency: 520,
-      boxCutGain: -1.6,
+      boxCutGain: -0.8,
       presenceFrequency: 2650,
-      presenceGain: 2.3,
+      presenceGain: 1.4,
       airFrequency: 6200,
-      airGain: 1.15,
-      lowPassFrequency: 11500,
+      airGain: 0.7,
+      lowPassFrequency: 12500,
       noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
       dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
     });
@@ -2131,6 +2190,8 @@ const handleDeviceChange = () => {
     localNoiseGateAnalyser = null;
     localNoiseGateState = null;
     localVoiceDynamicsState = null;
+    localCompressorNode = compressorNode;
+    localLimiterNode = limiterNode;
 
     sourceNode.connect(highPassFilter);
     highPassFilter.connect(compressorNode);
@@ -2140,21 +2201,21 @@ const handleDeviceChange = () => {
   };
 
   const buildHardGateVoiceChain = (sourceNode) => buildSpeechPolishChain(sourceNode, {
-    highPassFrequency: 120,
+    highPassFrequency: 95,
     highPassQ: 0.82,
-    highPassStages: 2,
-    mudCutFrequency: 285,
+    highPassStages: 1,
+    mudCutFrequency: 250,
     mudCutQ: 1.12,
-    mudCutGain: -2.8,
-    boxCutFrequency: 720,
+    mudCutGain: -1.8,
+    boxCutFrequency: 620,
     boxCutQ: 1.2,
-    boxCutGain: -1.6,
+    boxCutGain: -1,
     presenceFrequency: 2550,
     presenceQ: 1.05,
-    presenceGain: 2.6,
+    presenceGain: 1.2,
     airFrequency: 5200,
-    airGain: 0.4,
-    lowPassFrequency: 8500,
+    airGain: 0.35,
+    lowPassFrequency: 10500,
     lowPassQ: 0.8,
     noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
     dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_HARD_GATE),
@@ -2173,6 +2234,8 @@ const handleDeviceChange = () => {
       localNoiseGateAnalyser = null;
       localNoiseGateState = null;
       localVoiceDynamicsState = null;
+      localCompressorNode = null;
+      localLimiterNode = null;
       localOutputAnalyser = audioContext.createAnalyser();
       localOutputAnalyser.fftSize = 256;
       gainNode.connect(localOutputAnalyser);
@@ -2272,6 +2335,12 @@ const handleDeviceChange = () => {
     noiseGateNode: localNoiseGateNode,
     noiseGateState: localNoiseGateState,
     voiceDynamicsState: localVoiceDynamicsState,
+    compressorNode: localCompressorNode,
+    limiterNode: localLimiterNode,
+    denoiserCleanup: localDenoiserCleanup,
+    selectedDenoiser: localSelectedDenoiser,
+    denoiserFallbackReason: localDenoiserFallbackReason,
+    denoiserMetrics: localDenoiserMetrics,
     speakingMeter: localSpeakingMeter,
     noiseGateMeter: localNoiseGateMeter,
   });
@@ -2290,6 +2359,12 @@ const handleDeviceChange = () => {
     localNoiseGateNode = pipeline?.noiseGateNode || null;
     localNoiseGateState = pipeline?.noiseGateState || null;
     localVoiceDynamicsState = pipeline?.voiceDynamicsState || null;
+    localCompressorNode = pipeline?.compressorNode || null;
+    localLimiterNode = pipeline?.limiterNode || null;
+    localDenoiserCleanup = pipeline?.denoiserCleanup || null;
+    localSelectedDenoiser = pipeline?.selectedDenoiser || "";
+    localDenoiserFallbackReason = pipeline?.denoiserFallbackReason || "";
+    localDenoiserMetrics = pipeline?.denoiserMetrics || null;
     localSpeakingMeter = pipeline?.speakingMeter || null;
     localNoiseGateMeter = pipeline?.noiseGateMeter || null;
   };
@@ -2306,6 +2381,8 @@ const handleDeviceChange = () => {
     if (pipeline.noiseGateMeter) {
       window.clearInterval(pipeline.noiseGateMeter);
     }
+
+    pipeline.denoiserCleanup?.();
 
     const sourceTrackSet = new Set(pipeline.sourceStream?.getTracks?.() || []);
     if (stopSource) {
@@ -2355,11 +2432,25 @@ const handleDeviceChange = () => {
     localNoiseGateNode = null;
     localNoiseGateState = null;
     localVoiceDynamicsState = null;
+    localCompressorNode = null;
+    localLimiterNode = null;
+    localDenoiserCleanup = null;
+    localSelectedDenoiser = "";
+    localDenoiserFallbackReason = "";
+    localDenoiserMetrics = null;
     localAudioMetrics = {
       inputRms: 0,
       inputPeak: 0,
       outputRms: 0,
       outputPeak: 0,
+      selectedDenoiser: "",
+      fallbackReason: "",
+      workletDroppedFrames: 0,
+      workletUnderruns: 0,
+      processorLatencyMs: 0,
+      realtimeFactor: 0,
+      compressorReductionDb: 0,
+      limiterReductionDb: 0,
     };
     onMicLevelChanged?.(0);
 
@@ -2378,14 +2469,35 @@ const handleDeviceChange = () => {
     });
 
     try {
-      localMicSourceStream = sourceStream || await requestLocalMicSourceStream();
+      const audioProfile = getLocalAudioProcessingProfile();
+      const preferredDenoiser = getPreferredLocalAudioDenoiser(audioProfile);
+      const processedMicrophone = await createProcessedMicrophoneTrack({
+        profile: audioProfile,
+        preferredDenoiser,
+        sourceStream,
+        debugLabel: "livekit-local-audio",
+        buildCaptureConstraints: (denoiserMode) => ({
+          audio: buildMicConstraints({ denoiserMode }),
+        }),
+        captureStream: (constraints, denoiserMode) => requestLocalMicSourceStream({
+          preferredConstraints: constraints?.audio || getMicConstraints(),
+          denoiserMode,
+        }),
+        logger: (eventName, payload) => logVoiceDebug(eventName, payload),
+      });
+
+      localDenoiserCleanup = processedMicrophone.cleanup;
+      localSelectedDenoiser = processedMicrophone.selectedDenoiser;
+      localDenoiserFallbackReason = processedMicrophone.fallbackReason;
+      localDenoiserMetrics = processedMicrophone.metrics;
+      localMicSourceStream = processedMicrophone.sourceStream;
       const [capturedMicTrack] = localMicSourceStream.getAudioTracks();
       if (capturedMicTrack) {
         capturedMicTrack.contentHint = "speech";
       }
       await emitAudioDevices().catch(() => {});
 
-      localAudioProcessingStream = localMicSourceStream;
+      localAudioProcessingStream = processedMicrophone.stream || localMicSourceStream;
 
       audioContext = createPreferredAudioContext();
       if (!audioContext) {
@@ -2411,6 +2523,8 @@ const handleDeviceChange = () => {
         outputTracks: localAudioStream.getAudioTracks?.().map(getTrackDebugInfo) || [],
         audioContextState: audioContext?.state || "",
         echoCancellationEnabled,
+        selectedDenoiser: localSelectedDenoiser,
+        denoiserFallbackReason: localDenoiserFallbackReason,
       });
 
       return localAudioStream;
@@ -2427,6 +2541,12 @@ const handleDeviceChange = () => {
       localNoiseGateNode = null;
       localNoiseGateState = null;
       localVoiceDynamicsState = null;
+      localCompressorNode = null;
+      localLimiterNode = null;
+      localDenoiserCleanup = null;
+      localSelectedDenoiser = "";
+      localDenoiserFallbackReason = "";
+      localDenoiserMetrics = null;
       audioContext = null;
       gainNode = null;
       destinationNode = null;
