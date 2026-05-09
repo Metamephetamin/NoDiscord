@@ -4439,9 +4439,7 @@ export default function MenuMain({
     const normalizedMode =
       mode === "voice_isolation" || mode === "hard_gate"
         ? "noisy_room"
-        : mode === "rnnoise" || mode === "krisp" || mode === "ai_noise_suppression"
-          ? "noisy_room"
-          : mode;
+        : mode;
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : DEFAULT_VOICE_INPUT_MODE);
     setShowNoiseMenu(false);
   };

@@ -62,9 +62,7 @@ export default function useMenuMainVoiceProcessing({
       const normalizedStoredMode =
         storedMode === "voice_isolation" || storedMode === "hard_gate"
           ? "noisy_room"
-          : storedMode === "rnnoise" || storedMode === "krisp" || storedMode === "ai_noise_suppression"
-            ? "noisy_room"
-            : storedMode;
+          : storedMode;
       setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedStoredMode) ? normalizedStoredMode : DEFAULT_VOICE_INPUT_MODE);
     } catch {
       setNoiseSuppressionMode(DEFAULT_VOICE_INPUT_MODE);

@@ -47,3 +47,11 @@ test("transparent and noisy room profiles stay simple and avoid overprocessing",
   assert.ok(hasPattern(/presenceGain:\s*1\.2,/));
   assert.ok(hasPattern(/airGain:\s*0\.35,/));
 });
+
+test("voice mode changes replace the active LiveKit microphone publication", () => {
+  assert.ok(hasPattern(/const getCurrentMicrophonePublication = \(\) =>/));
+  assert.ok(hasPattern(/getTrackPublication\?\.\(Track\.Source\.Microphone\)/));
+  assert.ok(hasPattern(/getTrackPublicationByName\?\.\(MICROPHONE_TRACK_NAME\)/));
+  assert.ok(hasPattern(/replaceTrack\(nextTrack,\s*\{\s*userProvidedTrack:\s*true,\s*stopProcessor:\s*true\s*\}\)/s));
+  assert.ok(hasPattern(/unpublishExistingMicrophonePublication/));
+});

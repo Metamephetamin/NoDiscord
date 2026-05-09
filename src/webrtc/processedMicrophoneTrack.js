@@ -2,13 +2,11 @@ import { AudioPipelineTrackProcessor } from "@cc-livekit/audio-pipeline-plugin";
 
 export const AUDIO_DENOISER_STORAGE_KEY = "nodiscord.audio.denoiser";
 export const AUDIO_DENOISER_MODE_DEEPFILTERNET3 = "deepfilternet3";
-export const AUDIO_DENOISER_MODE_RNNOISE_LEGACY = "rnnoise_legacy";
 export const AUDIO_DENOISER_MODE_WEBRTC = "webrtc";
 export const AUDIO_DENOISER_MODE_OFF = "off";
 
 export const AUDIO_DENOISER_MODES = Object.freeze([
   AUDIO_DENOISER_MODE_DEEPFILTERNET3,
-  AUDIO_DENOISER_MODE_RNNOISE_LEGACY,
   AUDIO_DENOISER_MODE_WEBRTC,
   AUDIO_DENOISER_MODE_OFF,
 ]);
@@ -31,7 +29,6 @@ const DEFAULT_SAMPLE_RATE = 48_000;
 const DEFAULT_CHANNEL_COUNT = 1;
 const DENOISER_FALLBACK_ORDER = Object.freeze([
   AUDIO_DENOISER_MODE_DEEPFILTERNET3,
-  AUDIO_DENOISER_MODE_RNNOISE_LEGACY,
   AUDIO_DENOISER_MODE_WEBRTC,
   AUDIO_DENOISER_MODE_OFF,
 ]);
@@ -51,10 +48,6 @@ const DEEPFILTER_CONFIG_BY_PROFILE = Object.freeze({
 });
 
 const LEGACY_DENOISER_ALIASES = Object.freeze({
-  rnnoise: AUDIO_DENOISER_MODE_RNNOISE_LEGACY,
-  rnnoise_legacy: AUDIO_DENOISER_MODE_RNNOISE_LEGACY,
-  krisp: AUDIO_DENOISER_MODE_RNNOISE_LEGACY,
-  ai_noise_suppression: AUDIO_DENOISER_MODE_RNNOISE_LEGACY,
   deepfilter: AUDIO_DENOISER_MODE_DEEPFILTERNET3,
   deepfilternet: AUDIO_DENOISER_MODE_DEEPFILTERNET3,
   deepfilternet3: AUDIO_DENOISER_MODE_DEEPFILTERNET3,
@@ -204,8 +197,33 @@ function getAudioTrackDebugInfo(track) {
   };
 }
 
-function getAudioPipelineModuleId(mode) {
-  return mode === AUDIO_DENOISER_MODE_DEEPFILTERNET3 ? "deepfilternet" : "rnnoise";
+function getAudioPipelineModuleId() {
+  return "deepfilternet";
+}
+
+async function runWithRnnoiseFetchDisabled(operation) {
+  if (typeof window === "undefined" || typeof window.fetch !== "function") {
+    return operation();
+  }
+
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (resource, options) => {
+    const url = typeof resource === "string" ? resource : resource?.url || "";
+    if (String(url).includes("rnnoise.wasm")) {
+      return Promise.resolve(new Response(new ArrayBuffer(0), {
+        status: 200,
+        headers: { "Content-Type": "application/wasm" },
+      }));
+    }
+
+    return originalFetch(resource, options);
+  };
+
+  try {
+    return await operation();
+  } finally {
+    window.fetch = originalFetch;
+  }
 }
 
 function getAudioPipelineRuntimeOptions(mode, profile, options = {}) {
@@ -238,10 +256,6 @@ function getAudioPipelineRuntimeOptions(mode, profile, options = {}) {
       denoise: moduleId,
     },
     moduleConfigs: {
-      rnnoise: {
-        vadLogs: Boolean(options.rnnoise?.vadLogs),
-        vadLogIntervalMs: Math.max(250, Number(options.rnnoise?.vadLogIntervalMs) || 1000),
-      },
       deepfilternet: deepFilterConfig,
       soundtouch: {
         enabled: false,
@@ -286,10 +300,10 @@ async function createAudioWorkletDenoisedStream({
     }
 
     processor = new AudioPipelineTrackProcessor(getAudioPipelineRuntimeOptions(mode, profile, workletOptions));
-    await processor.init({
+    await runWithRnnoiseFetchDisabled(() => processor.init({
       audioContext,
       track: sourceTrack,
-    });
+    }));
 
     if (audioContext.state === "suspended") {
       await audioContext.resume().catch(() => {});

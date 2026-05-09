@@ -123,8 +123,6 @@ const VOICE_ISOLATION_MIC_AUDIO_PRESET = AudioPresets.speech;
 const HIGH_QUALITY_SCREEN_AUDIO_PRESET = AudioPresets.musicHighQualityStereo;
 const VIDEO_ENCODING_PRIORITY = "high";
 const DESKTOP_SCREEN_SHARE_BITRATE_SCALE = 1.18;
-const LEGACY_NOISE_SUPPRESSION_MODE_KRISP = "krisp";
-const LEGACY_NOISE_SUPPRESSION_MODE_RNNOISE = "rnnoise";
 const LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION = "voice_isolation";
 const REMOTE_BACKGROUND_SHARE_TARGET = { width: 960, height: 540, fps: 15 };
 const REMOTE_CAMERA_TARGET = { width: 640, height: 360, fps: 15 };
@@ -356,14 +354,6 @@ function normalizeNoiseSuppressionMode(mode = NOISE_SUPPRESSION_MODE_TRANSPARENT
   }
 
   if (mode === LEGACY_NOISE_SUPPRESSION_MODE_VOICE_ISOLATION) {
-    return NOISE_SUPPRESSION_MODE_HARD_GATE;
-  }
-
-  if (
-    mode === "ai_noise_suppression" ||
-    mode === LEGACY_NOISE_SUPPRESSION_MODE_RNNOISE ||
-    mode === LEGACY_NOISE_SUPPRESSION_MODE_KRISP
-  ) {
     return NOISE_SUPPRESSION_MODE_HARD_GATE;
   }
 
@@ -3174,8 +3164,43 @@ const handleDeviceChange = () => {
     }
   };
 
+  const getCurrentMicrophonePublication = () => {
+    const localParticipant = room?.localParticipant;
+    const sourcePublication = localParticipant?.getTrackPublication?.(Track.Source.Microphone) || null;
+    const namedPublication = localParticipant?.getTrackPublicationByName?.(MICROPHONE_TRACK_NAME) || null;
+    const currentPublication = sourcePublication || namedPublication || micPublication || null;
+    if (currentPublication) {
+      micPublication = currentPublication;
+    }
+    return currentPublication;
+  };
+
+  const unpublishExistingMicrophonePublication = async (publication = getCurrentMicrophonePublication()) => {
+    if (!room?.localParticipant || !publication?.track) {
+      return;
+    }
+
+    try {
+      await room.localParticipant.unpublishTrack(publication.track, false);
+      logVoiceDebug("local-audio:old-mic-unpublished", {
+        publicationSid: publication.trackSid || "",
+        track: getTrackDebugInfo(publication.track || null),
+      });
+    } catch (error) {
+      logVoiceDebug("local-audio:old-mic-unpublish-failed", {
+        publicationSid: publication.trackSid || "",
+        error: error?.message || String(error),
+      });
+    } finally {
+      if (micPublication === publication) {
+        micPublication = null;
+      }
+    }
+  };
+
   const applyPublishedAudioState = async () => {
     const shouldMuteMicrophone = isSelfMicMuted || (isSelfDeafened && !isDirectCallChannelId(currentChannel));
+    micPublication = getCurrentMicrophonePublication();
     const microphoneTrack = micPublication?.track;
 
     if (microphoneTrack?.mediaStreamTrack) {
@@ -3239,19 +3264,24 @@ const handleDeviceChange = () => {
 
     nextTrack.enabled = !(isSelfMicMuted || isSelfDeafened);
 
-    if (micPublication?.track?.replaceTrack) {
+    const activeMicPublication = getCurrentMicrophonePublication();
+
+    if (activeMicPublication?.track?.replaceTrack) {
       nextTrack.contentHint = "speech";
-      await micPublication.track.replaceTrack(nextTrack, true);
+      await activeMicPublication.track.replaceTrack(nextTrack, { userProvidedTrack: true, stopProcessor: true });
+      micPublication = activeMicPublication;
       appliedMicSenderBitrateKbps = 0;
       await applyAdaptiveAudioProfile();
       await applyPublishedAudioState();
       logVoiceDebug("local-audio:track-replaced", {
-        publicationSid: micPublication.trackSid,
+        publicationSid: activeMicPublication.trackSid,
         track: getTrackDebugInfo(nextTrack),
       });
       publishVoiceDebugSnapshot("local-audio:track-replaced:snapshot");
       return;
     }
+
+    await unpublishExistingMicrophonePublication(activeMicPublication);
 
     nextTrack.contentHint = "speech";
     micPublication = await room.localParticipant.publishTrack(nextTrack, {
@@ -3280,7 +3310,8 @@ const handleDeviceChange = () => {
 
     const previousPipeline = captureLocalAudioPipeline();
     const canReuseCapture = reuseCapture && Boolean(previousPipeline.sourceStream?.getAudioTracks?.().some((track) => track.readyState !== "ended"));
-    const shouldPreserveExistingPublication = Boolean(micPublication?.track?.replaceTrack);
+    const activeMicPublication = getCurrentMicrophonePublication();
+    const shouldPreserveExistingPublication = Boolean(activeMicPublication?.track?.replaceTrack);
     const shouldSwapWithoutStoppingCurrent = shouldPreserveExistingPublication && !canReuseCapture;
 
     disconnectMicrophoneMonitor();
@@ -3328,10 +3359,11 @@ const handleDeviceChange = () => {
       return previousPipeline.outputStream || null;
     }
 
-    if (nextTrack && micPublication?.track?.replaceTrack) {
+    if (nextTrack && activeMicPublication?.track?.replaceTrack) {
       nextTrack.contentHint = "speech";
       try {
-        await micPublication.track.replaceTrack(nextTrack, true);
+        await activeMicPublication.track.replaceTrack(nextTrack, { userProvidedTrack: true, stopProcessor: true });
+        micPublication = activeMicPublication;
       } catch (error) {
         if (shouldPreserveExistingPublication) {
           disposeCapturedLocalAudioPipeline(captureLocalAudioPipeline(), { stopSource: !canReuseCapture });
@@ -3351,6 +3383,7 @@ const handleDeviceChange = () => {
         track: getTrackDebugInfo(nextTrack),
       });
     } else if (nextTrack && room && currentChannel) {
+      await unpublishExistingMicrophonePublication(activeMicPublication);
       nextTrack.contentHint = "speech";
       micPublication = await room.localParticipant.publishTrack(nextTrack, {
         source: Track.Source.Microphone,

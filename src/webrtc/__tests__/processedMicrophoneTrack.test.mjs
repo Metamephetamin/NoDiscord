@@ -12,7 +12,9 @@ const hasPattern = (pattern) => pattern.test(source);
 
 test("processed microphone helper exposes denoiser feature flag and fallback order", () => {
   assert.ok(source.includes('AUDIO_DENOISER_STORAGE_KEY = "nodiscord.audio.denoiser"'));
-  assert.ok(hasPattern(/AUDIO_DENOISER_MODE_DEEPFILTERNET3,\s*AUDIO_DENOISER_MODE_RNNOISE_LEGACY,\s*AUDIO_DENOISER_MODE_WEBRTC,\s*AUDIO_DENOISER_MODE_OFF,/s));
+  assert.ok(hasPattern(/AUDIO_DENOISER_MODE_DEEPFILTERNET3,\s*AUDIO_DENOISER_MODE_WEBRTC,\s*AUDIO_DENOISER_MODE_OFF,/s));
+  assert.equal(source.includes("AUDIO_DENOISER_MODE_RNNOISE_LEGACY"), false);
+  assert.equal(source.includes("rnnoise_legacy"), false);
 });
 
 test("deep denoisers use AudioWorklet and do not use ScriptProcessorNode", () => {
@@ -30,9 +32,10 @@ test("DeepFilterNet runtime is backed by the real audio pipeline package and pub
   assert.ok(existsSync(resolve(projectRoot, "public/audio/AudioPipelineWorklet.js")));
   assert.ok(existsSync(resolve(projectRoot, "public/audio/AudioPipelineWorker.js")));
   assert.ok(existsSync(resolve(projectRoot, "public/audio/deepfilter.wasm")));
-  assert.ok(existsSync(resolve(projectRoot, "public/audio/rnnoise.wasm")));
+  assert.equal(existsSync(resolve(projectRoot, "public/audio/rnnoise.wasm")), false);
   assert.equal(workerSource.includes("m.initSync(e),g=!0"), false);
   assert.ok(workerSource.includes("m.initSync({module:e}),g=!0"));
+  assert.equal(workerSource.includes("PRE_INIT rnnoise"), false);
 }
 );
 
@@ -47,4 +50,10 @@ test("DeepFilterNet strength is profile tuned instead of one aggressive default"
   assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_BROADCAST\]:\s*\{\s*attenLimDb:\s*52,\s*postFilterBeta:\s*0\.012\s*\}/s));
   assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_NOISY_ROOM\]:\s*\{\s*attenLimDb:\s*72,\s*postFilterBeta:\s*0\.02\s*\}/s));
   assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_VOICE_MESSAGE\]:\s*\{\s*attenLimDb:\s*52,\s*postFilterBeta:\s*0\.012\s*\}/s));
+});
+
+test("DeepFilterNet runtime does not fetch or initialize RNNoise", () => {
+  assert.ok(source.includes("runWithRnnoiseFetchDisabled"));
+  assert.equal(source.includes("moduleConfigs: {\\n      rnnoise:"), false);
+  assert.equal(source.includes('moduleId: "rnnoise"'), false);
 });
