@@ -23,6 +23,7 @@ test("deep denoisers use AudioWorklet and do not use ScriptProcessorNode", () =>
 
 test("DeepFilterNet runtime is backed by the real audio pipeline package and public assets", () => {
   const packageJson = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8"));
+  const workerSource = readFileSync(resolve(projectRoot, "public/audio/AudioPipelineWorker.js"), "utf8");
   assert.ok(packageJson.dependencies["@cc-livekit/audio-pipeline-plugin"]);
   assert.ok(source.includes('@cc-livekit/audio-pipeline-plugin'));
   assert.ok(source.includes("AudioPipelineTrackProcessor"));
@@ -30,11 +31,20 @@ test("DeepFilterNet runtime is backed by the real audio pipeline package and pub
   assert.ok(existsSync(resolve(projectRoot, "public/audio/AudioPipelineWorker.js")));
   assert.ok(existsSync(resolve(projectRoot, "public/audio/deepfilter.wasm")));
   assert.ok(existsSync(resolve(projectRoot, "public/audio/rnnoise.wasm")));
+  assert.equal(workerSource.includes("m.initSync(e),g=!0"), false);
+  assert.ok(workerSource.includes("m.initSync({module:e}),g=!0"));
 }
 );
 
-test("voice message and broadcast profiles default to DeepFilterNet3", () => {
+test("voice message and realtime voice profiles default to DeepFilterNet3", () => {
   assert.ok(hasPattern(/\[AUDIO_PROCESSING_PROFILE_VOICE_MESSAGE\]:\s*AUDIO_DENOISER_MODE_DEEPFILTERNET3/));
   assert.ok(hasPattern(/\[AUDIO_PROCESSING_PROFILE_BROADCAST\]:\s*AUDIO_DENOISER_MODE_DEEPFILTERNET3/));
-  assert.ok(hasPattern(/\[AUDIO_PROCESSING_PROFILE_TRANSPARENT\]:\s*AUDIO_DENOISER_MODE_OFF/));
+  assert.ok(hasPattern(/\[AUDIO_PROCESSING_PROFILE_TRANSPARENT\]:\s*AUDIO_DENOISER_MODE_DEEPFILTERNET3/));
+});
+
+test("DeepFilterNet strength is profile tuned instead of one aggressive default", () => {
+  assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_TRANSPARENT\]:\s*\{\s*attenLimDb:\s*35,\s*postFilterBeta:\s*0\.005\s*\}/s));
+  assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_BROADCAST\]:\s*\{\s*attenLimDb:\s*52,\s*postFilterBeta:\s*0\.012\s*\}/s));
+  assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_NOISY_ROOM\]:\s*\{\s*attenLimDb:\s*72,\s*postFilterBeta:\s*0\.02\s*\}/s));
+  assert.ok(hasPattern(/AUDIO_PROCESSING_PROFILE_VOICE_MESSAGE\]:\s*\{\s*attenLimDb:\s*52,\s*postFilterBeta:\s*0\.012\s*\}/s));
 });

@@ -9,7 +9,7 @@ const NOISE_PROFILE_OPTIONS = [
   {
     id: "transparent",
     title: "Студия",
-    description: "Естественный голос с лёгким EQ и мягкой компрессией, почти без заметного шумодава.",
+    description: "Естественный голос с лёгким DeepFilter, мягкой компрессией и без агрессивного отсечения.",
   },
   {
     id: "broadcast",

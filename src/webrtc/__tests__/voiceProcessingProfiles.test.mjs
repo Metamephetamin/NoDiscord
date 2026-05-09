@@ -28,8 +28,22 @@ test("broadcast profile favors clear speech without aggressive radio EQ", () => 
   assert.ok(hasPattern(/highPassFrequency:\s*86,/));
   assert.ok(hasPattern(/highPassStages:\s*1,/));
   assert.ok(hasPattern(/mudCutGain:\s*-1\.4,/));
-  assert.ok(hasPattern(/presenceGain:\s*1\.4,/));
-  assert.ok(hasPattern(/threshold:\s*-20,/));
-  assert.ok(hasPattern(/ratio:\s*1\.75,/));
-  assert.ok(hasPattern(/makeupGainDb:\s*6,/));
+  assert.ok(hasPattern(/boxCutGain:\s*-0\.8,/));
+  assert.ok(hasPattern(/presenceGain:\s*1\.3,/));
+  assert.ok(hasPattern(/airGain:\s*0\.65,/));
+  assert.ok(hasPattern(/threshold:\s*-18,/));
+  assert.ok(hasPattern(/ratio:\s*1\.45,/));
+  assert.ok(hasPattern(/makeupGainDb:\s*4\.5,/));
+});
+
+test("transparent and noisy room profiles stay simple and avoid overprocessing", () => {
+  assert.equal(hasPattern(/mudCutFilter\.frequency\.value = 260;/), false);
+  assert.equal(hasPattern(/airFilter\.frequency\.value = 6500;/), false);
+  assert.ok(hasPattern(/threshold:\s*-21,/));
+  assert.ok(hasPattern(/ratio:\s*1\.65,/));
+  assert.ok(hasPattern(/makeupGainDb:\s*5,/));
+  assert.ok(hasPattern(/mudCutGain:\s*-1\.8,/));
+  assert.ok(hasPattern(/boxCutGain:\s*-1,/));
+  assert.ok(hasPattern(/presenceGain:\s*1\.2,/));
+  assert.ok(hasPattern(/airGain:\s*0\.35,/));
 });

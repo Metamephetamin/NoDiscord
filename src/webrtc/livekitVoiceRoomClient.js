@@ -1723,13 +1723,13 @@ const handleDeviceChange = () => {
           minRms: 0.01,
         },
         compressor: {
-          threshold: -23,
+          threshold: -21,
           knee: 16,
-          ratio: 2,
+          ratio: 1.65,
           attack: 0.014,
           release: 0.17,
         },
-        makeupGainDb: 5.5,
+        makeupGainDb: 5,
       };
     }
 
@@ -1763,13 +1763,13 @@ const handleDeviceChange = () => {
           minRms: 1,
         },
         compressor: {
-          threshold: -20,
+          threshold: -18,
           knee: 16,
-          ratio: 1.75,
+          ratio: 1.45,
           attack: 0.018,
           release: 0.18,
         },
-        makeupGainDb: 6,
+        makeupGainDb: 4.5,
       };
     }
 
@@ -2161,9 +2161,9 @@ const handleDeviceChange = () => {
       boxCutFrequency: 520,
       boxCutGain: -0.8,
       presenceFrequency: 2650,
-      presenceGain: 1.4,
+      presenceGain: 1.3,
       airFrequency: 6200,
-      airGain: 0.7,
+      airGain: 0.65,
       lowPassFrequency: 12500,
       noiseGateProfile: getNoiseGateProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
       dynamicsProfile: resolveVoiceDynamicsProfile(NOISE_SUPPRESSION_MODE_BROADCAST),
