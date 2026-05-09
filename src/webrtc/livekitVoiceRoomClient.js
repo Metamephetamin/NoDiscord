@@ -1902,7 +1902,7 @@ const handleDeviceChange = () => {
     }
 
     const updateTransientSuppressor = (kind, analyser, data, gainNodeToUpdate, profile) => {
-      if (!analyser || !data || !gainNodeToUpdate || !profile) {
+      if (!audioContext || !analyser || !data || !gainNodeToUpdate || !profile) {
         return;
       }
 
@@ -1934,6 +1934,12 @@ const handleDeviceChange = () => {
     };
 
     localNoiseGateMeter = window.setInterval(() => {
+      if (!audioContext || !gateNode || !gateAnalyser) {
+        window.clearInterval(localNoiseGateMeter);
+        localNoiseGateMeter = null;
+        return;
+      }
+
       const rms = readAnalyserRms(gateAnalyser, gateData);
       const now = performance.now();
       const nextState = localNoiseGateState || {
