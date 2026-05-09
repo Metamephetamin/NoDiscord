@@ -9124,7 +9124,7 @@ html[data-ui-density="compact"] .input-area {
 .media-preview {
   position: fixed;
   inset: 0;
-  z-index: 9000;
+  z-index: 2147483000;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
@@ -10304,25 +10304,26 @@ html[data-ui-theme="light"] .chat-profile-modal {
 
 html[data-ui-theme="light"] .chat-profile-modal {
   background:
-    radial-gradient(circle at 20% 0%, rgba(99, 102, 241, 0.08), transparent 30%),
-    #ffffff;
+    radial-gradient(circle at 20% 0%, rgba(79, 70, 229, 0.16), transparent 32%),
+    #eef2f8;
 }
 
 html[data-ui-theme="light"] .chat-profile-modal__backdrop-media {
-  opacity: 0.34;
+  filter: saturate(1.12) contrast(1.06) brightness(0.82);
+  opacity: 0.78;
 }
 
 html[data-ui-theme="light"] .chat-profile-modal__backdrop-fallback {
   background:
-    radial-gradient(circle at 18% 34%, rgba(99, 102, 241, 0.16), transparent 24%),
-    radial-gradient(circle at 88% 14%, rgba(59, 130, 246, 0.12), transparent 26%),
-    linear-gradient(135deg, #f8fafc 0%, #eef3ff 50%, #ffffff 100%);
+    radial-gradient(circle at 18% 34%, rgba(79, 70, 229, 0.28), transparent 24%),
+    radial-gradient(circle at 88% 14%, rgba(14, 165, 233, 0.22), transparent 26%),
+    linear-gradient(135deg, #dbe7ff 0%, #cbd5ff 50%, #d9e2f1 100%);
 }
 
 html[data-ui-theme="light"] .chat-profile-modal__backdrop-scrim {
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.38) 52%, rgba(255, 255, 255, 0.82) 100%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.88) 78%, rgba(255, 255, 255, 0) 100%);
+    linear-gradient(90deg, rgba(15, 23, 42, 0.66) 0%, rgba(15, 23, 42, 0.22) 52%, rgba(15, 23, 42, 0.7) 100%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.04) 0%, rgba(238, 242, 248, 0.78) 78%, rgba(238, 242, 248, 0) 100%);
 }
 
 html[data-ui-theme="light"] .chat-profile-modal__close,
@@ -10356,6 +10357,11 @@ html[data-ui-theme="light"] .batch-upload-sheet__document-name {
   text-shadow: none;
 }
 
+html[data-ui-theme="light"] .chat-profile-modal__hero .chat-profile-modal__identity strong {
+  color: #ffffff;
+  text-shadow: 0 8px 26px rgba(15, 23, 42, 0.5);
+}
+
 html[data-ui-theme="light"] .chat-profile-modal__presence,
 html[data-ui-theme="light"] .chat-profile-modal__quick-card span,
 html[data-ui-theme="light"] .chat-profile-modal__section p,
@@ -10374,6 +10380,11 @@ html[data-ui-theme="light"] .batch-upload-sheet__header-meta,
 html[data-ui-theme="light"] .batch-upload-sheet__document-meta,
 html[data-ui-theme="light"] .batch-upload-sheet__pending-copy {
   color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .chat-profile-modal__hero .chat-profile-modal__presence {
+  color: rgba(255, 255, 255, 0.86);
+  text-shadow: 0 4px 18px rgba(15, 23, 42, 0.42);
 }
 
 html[data-ui-theme="light"] .chat-profile-modal__body {

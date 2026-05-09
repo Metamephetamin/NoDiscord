@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 import { MISSING_MEDIA_EVENT, isMediaUrlKnownMissing, markMediaUrlMissing } from "../utils/media";
 
@@ -237,7 +238,7 @@ export default function TextChatMediaPreview({
     return null;
   }
 
-  return (
+  const preview = (
     <div className="media-preview" onClick={onClose} role="presentation">
       <div className="media-preview__dialog" role="dialog" aria-modal="true" aria-label="Предпросмотр файла">
         <div className="media-preview__header">
@@ -385,4 +386,6 @@ export default function TextChatMediaPreview({
       </div>
     </div>
   );
+
+  return typeof document === "undefined" ? preview : createPortal(preview, document.body);
 }

@@ -146,6 +146,8 @@ export default function MenuMainOverlayLayer({
   const showDirectCallOverlay = isMobileViewport
     ? directCallPhase && directCallPhase !== "idle"
     : showPendingDirectCallPopup || showExpandedDirectCallOverlay;
+  const useCompactDirectCallOverlay =
+    !isMobileViewport && showPendingDirectCallPopup && Boolean(directCallState?.isMiniMode);
 
   return (
     <>
@@ -223,7 +225,7 @@ export default function MenuMainOverlayLayer({
           onRetry={retryDirectCall}
           onRedialHistoryItem={onDirectCallHistoryRedial}
           onWatchPeerStream={onWatchDirectCallPeerStream}
-          compact={!isMobileViewport && showPendingDirectCallPopup}
+          compact={useCompactDirectCallOverlay}
         />
       ) : null}
 

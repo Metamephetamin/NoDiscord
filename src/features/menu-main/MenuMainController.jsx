@@ -5773,15 +5773,9 @@ export default function MenuMain({
   const stableAddForumReply = useStableEvent(addForumReply);
   const stableToggleMicMute = useStableEvent(toggleMicMute);
   const stableToggleSoundMute = useStableEvent(toggleSoundMute);
-  const openActiveDirectCallFromRail = useCallback((peerUserId) => {
-    const targetUserId = String(peerUserId || directCallStateRef.current.peerUserId || "").trim();
-    if (!targetUserId) {
-      return;
-    }
-
+  const openActiveDirectCallFromRail = useCallback(() => {
     setDirectCallMiniMode(false);
-    openDirectChat(targetUserId);
-  }, [directCallStateRef, openDirectChat, setDirectCallMiniMode]);
+  }, [setDirectCallMiniMode]);
   const directCallPanelProps = {
     call: directCallState,
     history: directCallHistory,
