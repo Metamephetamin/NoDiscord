@@ -29,5 +29,7 @@ test("broadcast profile favors clear speech without aggressive radio EQ", () => 
   assert.ok(hasPattern(/highPassStages:\s*1,/));
   assert.ok(hasPattern(/mudCutGain:\s*-1\.4,/));
   assert.ok(hasPattern(/presenceGain:\s*1\.4,/));
-  assert.ok(hasPattern(/makeupGainDb:\s*3\.5,/));
+  assert.ok(hasPattern(/threshold:\s*-20,/));
+  assert.ok(hasPattern(/ratio:\s*1\.75,/));
+  assert.ok(hasPattern(/makeupGainDb:\s*6,/));
 });

@@ -1723,13 +1723,13 @@ const handleDeviceChange = () => {
           minRms: 0.01,
         },
         compressor: {
-          threshold: -22,
+          threshold: -23,
           knee: 16,
-          ratio: 1.8,
-          attack: 0.018,
-          release: 0.18,
+          ratio: 2,
+          attack: 0.014,
+          release: 0.17,
         },
-        makeupGainDb: 4,
+        makeupGainDb: 5.5,
       };
     }
 
@@ -1763,13 +1763,13 @@ const handleDeviceChange = () => {
           minRms: 1,
         },
         compressor: {
-          threshold: -18,
+          threshold: -20,
           knee: 16,
-          ratio: 1.45,
-          attack: 0.024,
-          release: 0.2,
+          ratio: 1.75,
+          attack: 0.018,
+          release: 0.18,
         },
-        makeupGainDb: 3.5,
+        makeupGainDb: 6,
       };
     }
 

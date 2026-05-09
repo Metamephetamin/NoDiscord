@@ -20,5 +20,5 @@ test("voice message audio defaults favor clean mono speech without extra gain af
   assert.equal(readExportedNumber("VOICE_LOW_PASS_FREQUENCY_HZ"), 13000);
   assert.equal(readExportedNumber("VOICE_PRESENCE_GAIN_DB"), 1.6);
   assert.equal(readExportedNumber("VOICE_HIGH_SHELF_GAIN_DB"), 0.8);
-  assert.equal(readExportedNumber("VOICE_OUTPUT_GAIN"), 1);
+  assert.equal(readExportedNumber("VOICE_OUTPUT_GAIN"), 1.12);
 });
