@@ -1230,6 +1230,7 @@ export default function MenuMain({
     applyChatThemePreference(chatThemeId, {
       root,
       body,
+      uiTheme,
       customBackgroundData: customChatBackgroundData,
       customBackgroundFit: customChatBackgroundFit,
     });

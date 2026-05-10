@@ -1237,6 +1237,13 @@ export const AppearanceAccessibilitySettings = ({
 }) => {
   const chatBackgroundInputRef = useRef(null);
   const resolvedChatBackgroundFit = resolveChatBackgroundFit(customChatBackgroundFit);
+  const hasCustomChatAppearance = chatThemeId !== "default" || Boolean(customChatBackgroundData);
+  const handleResetChatAppearance = () => {
+    onChatThemeChange("default");
+    if (customChatBackgroundData) {
+      onRemoveCustomChatBackground();
+    }
+  };
 
   return (
     <div className="settings-shell__content">
@@ -1279,18 +1286,6 @@ export const AppearanceAccessibilitySettings = ({
           <h4>Темы чата</h4>
           <p>Отдельно меняет фон чата, цвет оболочек сообщений и цвет блока документов.</p>
         </div>
-        {chatThemeId !== "default" ? (
-          <div className="settings-section__actions">
-            <button
-              type="button"
-              className="settings-inline-button settings-inline-button--ghost"
-              onClick={() => onChatThemeChange("default")}
-              title="Сбросить цветовую тему, не удаляя свой фон чата"
-            >
-              Убрать тему
-            </button>
-          </div>
-        ) : null}
       </div>
 
       <div className="chat-theme-choice-list" role="radiogroup" aria-label="Тема чата">
@@ -1340,11 +1335,15 @@ export const AppearanceAccessibilitySettings = ({
               <button type="button" className="settings-inline-button" onClick={() => chatBackgroundInputRef.current?.click()}>
                 Выбрать фон
               </button>
-              {customChatBackgroundData ? (
-                <button type="button" className="settings-inline-button settings-inline-button--ghost" onClick={onRemoveCustomChatBackground}>
-                  Убрать фон
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="settings-inline-button settings-inline-button--ghost"
+                onClick={handleResetChatAppearance}
+                disabled={!hasCustomChatAppearance}
+                title="Сбросить тему чата и свой фон"
+              >
+                Убрать тему
+              </button>
             </div>
           </div>
 

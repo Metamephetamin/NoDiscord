@@ -2561,13 +2561,13 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {
   width: fit-content !important;
-  min-width: 0;
+  min-width: min(220px, 100%);
   max-width: min(100%, 520px);
 }
 
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {
   aspect-ratio: auto;
-  min-height: 0;
+  min-height: 120px;
   background: transparent;
 }
 

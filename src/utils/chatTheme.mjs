@@ -203,6 +203,21 @@ export const CHAT_THEME_OPTIONS = Object.freeze([
 
 const SUPPORTED_CHAT_THEME_IDS = new Set(CHAT_THEME_OPTIONS.map((option) => option.id));
 const DEFAULT_CHAT_THEME = CHAT_THEME_OPTIONS[0];
+const LIGHT_DEFAULT_CHAT_THEME_VARIABLES = Object.freeze({
+  "--chat-theme-background": "linear-gradient(180deg, rgba(248, 250, 255, 0.98), rgba(242, 246, 253, 0.98))",
+  "--chat-theme-overlay": "linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(226, 232, 240, 0.1))",
+  "--chat-message-bubble-bg": "rgba(255, 255, 255, 0.94)",
+  "--chat-message-incoming-bg": "linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 253, 0.98))",
+  "--chat-message-own-bg": "linear-gradient(135deg, rgba(224, 234, 255, 0.98), rgba(207, 218, 255, 0.96))",
+  "--chat-message-border": "rgba(148, 163, 184, 0.28)",
+  "--chat-document-bg": "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  "--chat-document-local-bg": "linear-gradient(180deg, #ffffff 0%, #eef3ff 100%)",
+  "--chat-media-gap-bg": "#ffffff",
+  "--chat-topbar-bg": "linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94))",
+  "--chat-topbar-border": "rgba(203, 213, 225, 0.78)",
+  "--chat-topbar-search-bg": "rgba(255, 255, 255, 0.88)",
+  "--chat-topbar-search-border": "rgba(203, 213, 225, 0.8)",
+});
 
 export const CHAT_BACKGROUND_FIT_OPTIONS = Object.freeze([
   {
@@ -278,6 +293,11 @@ export function applyChatThemePreference(value, options = {}) {
   const body = options.body || documentRef?.body;
   const customBackgroundData = String(options.customBackgroundData || "").trim();
   const customBackgroundFit = resolveChatBackgroundFit(options.customBackgroundFit);
+  const uiTheme = String(options.uiTheme || root?.dataset?.uiTheme || body?.dataset?.uiTheme || "").trim().toLowerCase();
+  const themeVariables =
+    theme.id === "default" && uiTheme === "light"
+      ? { ...theme.variables, ...LIGHT_DEFAULT_CHAT_THEME_VARIABLES }
+      : theme.variables;
 
   [root, body].forEach((node) => {
     if (!node) {
@@ -290,7 +310,7 @@ export function applyChatThemePreference(value, options = {}) {
     }
 
     if (node.style) {
-      Object.entries(theme.variables).forEach(([name, themeValue]) => {
+      Object.entries(themeVariables).forEach(([name, themeValue]) => {
         node.style.setProperty(name, themeValue);
       });
       node.style.setProperty("--chat-custom-background-image", toCssUrl(customBackgroundData));

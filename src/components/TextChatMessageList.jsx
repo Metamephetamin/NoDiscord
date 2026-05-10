@@ -1640,14 +1640,21 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
   }
 
   if (attachmentList.length === 1) {
-    if (mediaOverlayFooter) {
+    const [singleAttachment] = attachmentList;
+    const isSingleVisualAttachment = (
+      !singleAttachment?.attachmentAsFile
+      && !singleAttachment?.isVoice
+      && (singleAttachment?.isImage || singleAttachment?.isVideo)
+    );
+
+    if (isSingleVisualAttachment || mediaOverlayFooter) {
       return (
-        <div className="message-attachments-stack message-attachments-stack--single message-attachments-stack--with-overlay">
+        <div className={`message-attachments-stack message-attachments-stack--single ${mediaOverlayFooter ? "message-attachments-stack--with-overlay" : ""}`}>
           <div className="message-media-overlay-anchor">
             <div className="message-attachment-single">
               <MessageAttachmentCard
                 {...props}
-                attachmentItem={attachmentList[0]}
+                attachmentItem={singleAttachment}
                 galleryAttachments={galleryAttachments}
                 priorityMedia={isPriorityMediaMessage}
               />
@@ -1661,7 +1668,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     return (
       <MessageAttachmentCard
         {...props}
-        attachmentItem={attachmentList[0]}
+        attachmentItem={singleAttachment}
         galleryAttachments={galleryAttachments}
         priorityMedia={isPriorityMediaMessage}
       />
