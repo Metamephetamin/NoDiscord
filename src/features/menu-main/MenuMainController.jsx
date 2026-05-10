@@ -406,6 +406,19 @@ async function requestFriendBlockState(targetUserId, shouldBlock) {
   };
 }
 
+async function requestRemoveFriend(targetUserId) {
+  const response = await authFetch(`${API_BASE_URL}/friends/${encodeURIComponent(String(targetUserId))}`, {
+    method: "DELETE",
+  });
+  const data = await parseApiResponse(response);
+
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(response, data, "Не удалось удалить пользователя из друзей."));
+  }
+
+  return data;
+}
+
 function loadVoiceRoomClientFactory() {
   if (!voiceRoomClientFactoryPromise) {
     voiceRoomClientFactoryPromise = recoverChunkImport(() => import("../../webrtc/voiceRoomClient"))
@@ -6088,6 +6101,54 @@ export default function MenuMain({
     setFriendActionStatus(`Чат с ${friendListUserContextMenu?.username || "пользователем"} очищен только у вас.`);
     setFriendListUserContextMenu(null);
   };
+  const handleRemoveFriendListUser = async () => {
+    const targetUserId = String(friendListUserContextMenu?.userId || "").trim();
+    if (!targetUserId || friendListUserContextMenu?.isSelf) {
+      return;
+    }
+
+    const username = friendListUserContextMenu?.username || "Пользователь";
+    const directChannelId = String(
+      friendListUserContextMenu?.directChannelId || buildDirectMessageChannelId(currentUserId, targetUserId)
+    );
+    if (typeof window !== "undefined" && !window.confirm(`Удалить ${username} из друзей? Связь пропадёт у вас обоих.`)) {
+      return;
+    }
+
+    setFriendListUserContextMenu(null);
+    setFriendsError("");
+
+    try {
+      await requestRemoveFriend(targetUserId);
+      setFriends((previousFriends) =>
+        previousFriends.filter((friend) => String(friend?.id || "") !== targetUserId)
+      );
+      updateFriendRelation(targetUserId, ({ ignoredIds }) => {
+        ignoredIds.delete(targetUserId);
+      });
+      setFriendListProfileModal((previousProfile) =>
+        String(previousProfile?.userId || "") === targetUserId ? null : previousProfile
+      );
+      setDirectUnreadCounts((previousCounts) => {
+        if (!directChannelId || !Object.prototype.hasOwnProperty.call(previousCounts, directChannelId)) {
+          return previousCounts;
+        }
+
+        const nextCounts = { ...previousCounts };
+        delete nextCounts[directChannelId];
+        return nextCounts;
+      });
+
+      if (String(activeDirectFriendId || "") === targetUserId) {
+        setActiveDirectFriendId("");
+      }
+
+      setFriendActionStatus(`${username} удалён из друзей.`);
+      refreshFriends().catch(() => {});
+    } catch (error) {
+      setFriendsError(error?.message || "Не удалось удалить пользователя из друзей.");
+    }
+  };
   const handleToggleFriendListIgnore = () => {
     const targetUserId = String(friendListUserContextMenu?.userId || "").trim();
     if (!targetUserId || friendListUserContextMenu?.isSelf || friendListUserContextMenu?.isBlocked) {
@@ -6226,6 +6287,14 @@ export default function MenuMain({
         danger: !friendListUserContextMenu?.isBlocked,
         disabled: false,
         onClick: handleToggleFriendListBlock,
+      },
+      {
+        id: "remove-friend",
+        label: "Удалить из друзей",
+        icon: "×",
+        danger: true,
+        disabled: !friendListUserContextMenu?.userId,
+        onClick: handleRemoveFriendListUser,
       },
     ],
     [

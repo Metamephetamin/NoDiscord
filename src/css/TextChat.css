@@ -5660,12 +5660,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 }
 
 .attach-menu__popover::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  width: 52px;
-  bottom: -10px;
-  height: 12px;
+  content: none;
 }
 
 .message-composer--attach-menu-open .attach-menu__popover {
@@ -6209,6 +6204,25 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   background: linear-gradient(180deg, rgba(20, 26, 39, 0.72), rgba(11, 15, 24, 0.48));
   border: 2px solid transparent;
   background-clip: padding-box;
+}
+
+.chat-profile-modal {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: auto;
+}
+
+.chat-profile-modal::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.chat-profile-modal::-webkit-scrollbar-track,
+.chat-profile-modal::-webkit-scrollbar-thumb {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .poll-composer__header,
@@ -10093,7 +10107,7 @@ html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
   box-shadow: none;
 }
 
-html[data-ui-theme="light"] .msg-content--file-only {
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .msg-content--file-only {
   --chat-document-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   --chat-document-local-bg: linear-gradient(180deg, #ffffff 0%, #eef3ff 100%);
   border-color: #d9e0ec;
@@ -10102,15 +10116,25 @@ html[data-ui-theme="light"] .msg-content--file-only {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
 }
 
-html[data-ui-theme="light"] .msg-content--file-only .message-attachment--document {
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document {
+  --chat-document-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  --chat-document-local-bg: linear-gradient(180deg, #ffffff 0%, #eef3ff 100%);
+  border-color: #d9e0ec;
+  background: var(--chat-document-bg);
+  color: #172033;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .msg-content--file-only .message-attachment--document {
+  background: transparent;
+  box-shadow: none;
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document .message-attachment__name {
   color: #172033;
 }
 
-html[data-ui-theme="light"] .msg-content--file-only .message-attachment--document .message-attachment__name {
-  color: #172033;
-}
-
-html[data-ui-theme="light"] .msg-content--file-only .message-attachment--document .message-attachment__size {
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document .message-attachment__size {
   color: #64748b;
 }
 
@@ -10224,6 +10248,62 @@ html[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .vo
 body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .voice-message {
   --voice-message-bg: var(--chat-message-own-bg, var(--chat-message-bubble-bg, linear-gradient(180deg, rgba(18, 21, 29, 0.98), rgba(9, 11, 16, 0.98))));
   --voice-message-border: var(--chat-message-border, rgba(255, 255, 255, 0.08));
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) {
+  --chat-message-meta-color: #0f172a;
+  --chat-message-meta-pending-color: #0f172a;
+  --chat-message-read-status-color: #0f172a;
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .chat__wrapper,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .text-chat-shell,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .messages-list-shell,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .messages-list,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-item,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .msg-content,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-text,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-text-row,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-bottom-row,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-author,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-author__name,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-time,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-footer,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-forwarded,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-read-status,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-location-card,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .voice-message {
+  color: #0f172a;
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-media-overlay-footer,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-media-overlay-footer .message-time,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-media-overlay-footer .message-read-status {
+  color: #ffffff;
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"])[data-chat-theme]:not([data-chat-theme="default"]) .message-attachment--document {
+  --chat-document-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  --chat-document-local-bg: linear-gradient(180deg, #ffffff 0%, #eef3ff 100%);
+  border-color: #d9e0ec;
+  background: var(--chat-document-bg);
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document .message-attachment__name,
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document .message-attachment__size {
+  color: #0f172a;
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document .message-attachment__icon {
+  background: #5db4f0;
+}
+
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .msg-content--file-only .message-attachment--document {
+  background: transparent;
+  box-shadow: none;
 }
 
 html[data-ui-theme="light"] .chat-user-menu,

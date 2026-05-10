@@ -361,6 +361,46 @@ public class FriendsController : ControllerBase
         });
     }
 
+    [HttpDelete("{targetUserId:int}")]
+    public async Task<IActionResult> RemoveFriend([FromRoute] int targetUserId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        if (targetUserId <= 0 || targetUserId == currentUserId)
+        {
+            return BadRequest(new { message = "Нельзя удалить этого пользователя из друзей." });
+        }
+
+        var lowId = Math.Min(currentUserId, targetUserId);
+        var highId = Math.Max(currentUserId, targetUserId);
+        var friendship = await _context.Friendships
+            .FirstOrDefaultAsync(item => item.UserLowId == lowId && item.UserHighId == highId, cancellationToken);
+
+        if (friendship is null)
+        {
+            return Ok(new
+            {
+                status = "not_friends",
+                targetUserId,
+                directChannelId = BuildDirectChannelId(currentUserId, targetUserId)
+            });
+        }
+
+        _context.Friendships.Remove(friendship);
+        await _context.SaveChangesAsync(cancellationToken);
+        await BroadcastFriendListUpdatedAsync(currentUserId, targetUserId);
+
+        return Ok(new
+        {
+            status = "removed",
+            targetUserId,
+            directChannelId = BuildDirectChannelId(currentUserId, targetUserId)
+        });
+    }
+
     [HttpGet("blocks")]
     public async Task<IActionResult> GetBlocks(CancellationToken cancellationToken)
     {
