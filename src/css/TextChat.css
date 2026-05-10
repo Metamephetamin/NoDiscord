@@ -10299,6 +10299,42 @@ html[data-ui-theme="light"] .composer-emoji-picker__empty {
   color: #5f6b82;
 }
 
+html[data-ui-theme="light"] .attach-menu__item-icon {
+  background-color: #5f6b82;
+  background-image: none;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+html[data-ui-theme="light"] .attach-menu__item:hover:not(:disabled) .attach-menu__item-icon,
+html[data-ui-theme="light"] .attach-menu__item:focus-visible .attach-menu__item-icon {
+  background-color: #0f172a;
+}
+
+html[data-ui-theme="light"] .attach-menu__item-icon--media {
+  -webkit-mask-image: url("/icons/telegram-attach/media.svg");
+  mask-image: url("/icons/telegram-attach/media.svg");
+}
+
+html[data-ui-theme="light"] .attach-menu__item-icon--file {
+  -webkit-mask-image: url("/icons/telegram-attach/file.png");
+  mask-image: url("/icons/telegram-attach/file.png");
+}
+
+html[data-ui-theme="light"] .attach-menu__item-icon--poll {
+  -webkit-mask-image: url("/icons/telegram-attach/poll.png");
+  mask-image: url("/icons/telegram-attach/poll.png");
+}
+
+html[data-ui-theme="light"] .attach-menu__item-icon--location {
+  -webkit-mask-image: url("/icons/telegram-attach/location.png");
+  mask-image: url("/icons/telegram-attach/location.png");
+}
+
 html[data-ui-theme="light"] .composer-emoji-picker__search {
   border-color: #d9e0ec;
   background: #f8fafc;
