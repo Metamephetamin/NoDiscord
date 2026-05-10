@@ -10093,6 +10093,27 @@ html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
   box-shadow: none;
 }
 
+html[data-ui-theme="light"] .msg-content--file-only {
+  --chat-document-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  --chat-document-local-bg: linear-gradient(180deg, #ffffff 0%, #eef3ff 100%);
+  border-color: #d9e0ec;
+  background: var(--chat-document-bg);
+  color: #172033;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+html[data-ui-theme="light"] .msg-content--file-only .message-attachment--document {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .msg-content--file-only .message-attachment--document .message-attachment__name {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .msg-content--file-only .message-attachment--document .message-attachment__size {
+  color: #64748b;
+}
+
 html[data-ui-theme="light"] .message-composer,
 html[data-ui-theme="purple"] .message-composer {
   border-color: var(--app-border);
