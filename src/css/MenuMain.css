@@ -18601,44 +18601,45 @@ html[data-ui-theme="light"] .profile-settings-form__reset-button {
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar {
-  border-right-color: rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(16, 18, 24, 0.96), rgba(10, 12, 17, 0.98));
-  color: #e8edf7;
+  border-right-color: #d9e0ec;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  color: #172033;
+  box-shadow: inset -1px 0 0 rgba(15, 23, 42, 0.04);
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__profile strong {
-  color: #ffffff;
+  color: #0f172a;
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__profile span,
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__profile-link,
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item,
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-label {
-  color: #9ea7bb;
+  color: #566277;
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-wrap .settings-shell__search {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
-  color: #edf2ff;
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__search-wrap::after {
-  color: #aab3c4;
+  color: #6b7688;
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-group {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: #e3e8f1;
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item:hover,
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item--active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: #e9eefb;
+  color: #0f172a;
 }
 
 html[data-ui-theme="light"] .settings-shell__sidebar .settings-shell__nav-item--active .settings-shell__nav-icon {
-  color: #9aa5ff;
+  color: #5867e8;
 }
 
 html[data-ui-theme="light"] .chat__box--voice-stage {

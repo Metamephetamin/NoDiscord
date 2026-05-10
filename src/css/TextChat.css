@@ -2560,24 +2560,24 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-anchor,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {
-  width: min(380px, calc(100vw - 160px)) !important;
+  width: fit-content !important;
   min-width: 0;
-  max-width: 100%;
+  max-width: min(100%, 520px);
 }
 
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {
-  aspect-ratio: 4 / 3;
-  min-height: 180px;
+  aspect-ratio: auto;
+  min-height: 0;
   background: transparent;
 }
 
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media__image {
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: none;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 520px);
+  max-height: 420px;
   background: transparent;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .msg-content--media-only.msg-content--multi-visual-attachments,

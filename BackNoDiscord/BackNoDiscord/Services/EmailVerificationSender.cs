@@ -36,6 +36,7 @@ public sealed class EmailOptions
     public string Mode { get; set; } = "smtp";
     public string FromAddress { get; set; } = string.Empty;
     public string FromName { get; set; } = "Lanaya";
+    public string TimeZoneId { get; set; } = "Europe/Moscow";
     public EmailSmtpOptions Smtp { get; set; } = new();
 }
 
@@ -103,7 +104,7 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
             throw new EmailDeliveryException("Email:Smtp:Password is not configured.");
         }
 
-        var expiresLocal = expiresAt.ToLocalTime().ToString("HH:mm");
+        var expiresLocal = FormatExpirationTime(expiresAt, options);
         var message = BuildVerificationMessage(options, email, verificationCode, expiresLocal, purpose);
 
         using var client = new MailKit.Net.Smtp.SmtpClient();
@@ -212,6 +213,12 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
         return message;
     }
 
+    public static string FormatExpirationTime(DateTimeOffset expiresAt, EmailOptions options)
+    {
+        var timeZone = ResolveDisplayTimeZone(options.TimeZoneId);
+        return TimeZoneInfo.ConvertTime(expiresAt, timeZone).ToString("HH:mm");
+    }
+
     private sealed record VerificationMessageTemplate(
         string Subject,
         string Title,
@@ -243,6 +250,39 @@ public sealed class SmtpEmailVerificationSender : IEmailVerificationSender
                string.Equals(trimmedName, "MAX", StringComparison.OrdinalIgnoreCase)
             ? "Lanaya"
             : trimmedName;
+    }
+
+    private static TimeZoneInfo ResolveDisplayTimeZone(string? configuredTimeZoneId)
+    {
+        var candidates = new[]
+        {
+            configuredTimeZoneId,
+            "Europe/Moscow",
+            "Russian Standard Time",
+            TimeZoneInfo.Local.Id,
+            "UTC"
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(candidate.Trim());
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Utc;
     }
 
     private static SecureSocketOptions ResolveSocketOptions(int port, bool enableSsl)

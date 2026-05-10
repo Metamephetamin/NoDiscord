@@ -5,6 +5,20 @@ namespace BackNoDiscord.Tests.Services;
 public sealed class EmailVerificationSenderTests
 {
     [Fact]
+    public void FormatExpirationTime_UsesConfiguredDisplayTimeZone()
+    {
+        var options = new EmailOptions
+        {
+            TimeZoneId = "Europe/Moscow"
+        };
+        var expiresAt = new DateTimeOffset(2026, 5, 9, 19, 10, 0, TimeSpan.Zero);
+
+        var formatted = SmtpEmailVerificationSender.FormatExpirationTime(expiresAt, options);
+
+        Assert.Equal("22:10", formatted);
+    }
+
+    [Fact]
     public void BuildVerificationMessage_UsesLanayaBrandWithoutDuplicatingOldMaxCodeTitle()
     {
         var options = new EmailOptions
