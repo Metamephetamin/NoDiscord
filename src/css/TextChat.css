@@ -835,7 +835,7 @@
   background-position: 9px bottom;
   background-repeat: no-repeat;
   clip-path: polygon(44% 0, 100% 0, 100% 100%, 0 100%, 20% 80%, 35% 45%);
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
 }
 
@@ -10107,6 +10107,11 @@ html[data-ui-theme="purple"] .message-item:not(.message-item--dm) .msg-content {
   box-shadow: none;
 }
 
+:where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment-grid {
+  --chat-media-gap-bg: #ffffff;
+  background: #ffffff;
+}
+
 :where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .msg-content--file-only {
   --chat-document-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   --chat-document-local-bg: linear-gradient(180deg, #ffffff 0%, #eef3ff 100%);
@@ -10197,6 +10202,15 @@ html[data-ui-theme="light"] .composer-tool--recording-sending {
   background: var(--app-selected-bg);
 }
 
+html[data-ui-theme="light"] .message-composer .composer-tool:not(.composer-tool--active):not(.composer-tool--recording-holding):not(.composer-tool--recording-locked):not(.composer-tool--recording-canceling):not(.composer-tool--recording-sending):hover,
+html[data-ui-theme="light"] .message-composer .composer-tool:not(.composer-tool--active):not(.composer-tool--recording-holding):not(.composer-tool--recording-locked):not(.composer-tool--recording-canceling):not(.composer-tool--recording-sending):focus-visible,
+html[data-ui-theme="light"] .message-composer .attach-button:hover,
+html[data-ui-theme="light"] .message-composer .attach-button:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  color: var(--app-text-strong);
+}
+
 html[data-ui-theme="light"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
   background: var(--message-bubble-bg);
 }
@@ -10280,6 +10294,44 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .vo
 :where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-media-overlay-footer .message-time,
 :where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-media-overlay-footer .message-read-status {
   color: #ffffff;
+}
+
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]),
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]),
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) {
+  --chat-message-meta-color: rgba(255, 255, 255, 0.94);
+  --chat-message-meta-pending-color: rgba(255, 255, 255, 0.9);
+  --chat-message-read-status-color: rgba(255, 255, 255, 0.96);
+}
+
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .msg-content,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-text,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-text *,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-text-row,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-bottom-row,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-time,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-footer,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-read-status,
+html[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-read-status--read,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .msg-content,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-text,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-text *,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-text-row,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-bottom-row,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-time,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-footer,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-read-status,
+html[data-ui-theme="light"] body[data-chat-theme]:not([data-chat-theme="default"]) .message-read-status--read,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .msg-content,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-text,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-text *,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-text-row,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-bottom-row,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-time,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-footer,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-read-status,
+body[data-ui-theme="light"][data-chat-theme]:not([data-chat-theme="default"]) .message-read-status--read {
+  color: rgba(255, 255, 255, 0.96);
 }
 
 :where(html[data-ui-theme="light"], body[data-ui-theme="light"]) .message-attachment--document,

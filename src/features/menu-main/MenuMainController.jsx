@@ -6397,6 +6397,7 @@ export default function MenuMain({
       serverContextMenuRef={serverContextMenuRef}
       voiceParticipantByUserId={voiceParticipantByUserId}
       currentUserId={currentUserId}
+      canManageServer={canManageServer}
       canManageChannels={canManageChannels}
       channelSettingsState={channelSettingsState}
       channelRenameState={channelRenameState}
@@ -6769,6 +6770,7 @@ export default function MenuMain({
         iconType: "image",
         iconSrc: SMS_ICON_URL,
         iconAlt: "Друзья",
+        iconTone: "mono",
       };
     }
 
@@ -6835,7 +6837,7 @@ export default function MenuMain({
         <div className="desktop-app-topbar__title">
           {desktopTitlebarContext.iconType === "image" && desktopTitlebarContext.iconSrc ? (
             <AnimatedAvatar
-              className="desktop-app-topbar__title-icon desktop-app-topbar__title-icon--image"
+              className={`desktop-app-topbar__title-icon desktop-app-topbar__title-icon--image ${desktopTitlebarContext.iconTone === "mono" ? "desktop-app-topbar__title-icon--mono" : ""}`}
               src={desktopTitlebarContext.iconSrc}
               alt={desktopTitlebarContext.iconAlt || desktopTitlebarContext.title}
               fallback=""

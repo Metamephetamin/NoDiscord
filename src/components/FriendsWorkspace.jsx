@@ -2238,39 +2238,6 @@ export const FriendsMain = ({
         onClose={() => setActiveStoreItem(null)}
       />
 
-      <aside className="friends-contacts">
-        <h3>Активные контакты</h3>
-        {activeContacts.length ? (
-          <div className="friends-contacts__list">
-            {activeContacts.map((friend) => (
-              <button
-                key={friend.id}
-                type="button"
-                className="friends-contacts__item"
-                onClick={() => onOpenDirectProfile?.(friend)}
-                onContextMenu={(event) => onOpenDirectActions?.(event, friend)}
-              >
-                <span className="friends-contacts__avatar-wrap">
-                  <AnimatedAvatar className="friends-contacts__avatar" src={friend.avatar || ""} alt={getDisplayName(friend)} loading="eager" decoding="sync" />
-                  <span className={`friends-contacts__presence friends-contacts__presence--${friend.activeStatusKind || "online"}`} aria-hidden="true" />
-                </span>
-                <span className="friends-contacts__copy">
-                  <strong>{getDisplayName(friend)}</strong>
-                  <span>{friend.activeStatus || formatUserPresenceStatus(friend)}</span>
-                </span>
-                <span className={`friends-contacts__activity-icon friends-contacts__activity-icon--${friend.activeStatusKind || "online"}`} aria-hidden="true">
-                  <ActiveContactStatusIcon kind={friend.activeStatusKind} />
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="friends-contacts__empty">
-            <strong>Пока что тут тихо...</strong>
-            <span>Когда друзья зайдут в голосовой чат или начнут активничать, они появятся здесь.</span>
-          </div>
-        )}
-      </aside>
     </div>
     </main>
   );

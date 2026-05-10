@@ -1,6 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { areObjectArraysEqual } from "./menuMainRealtimeComparators";
 
+const DEVICE_ALIAS_PREFIX_PATTERN = /^(default|communications|default communications)\s*[-:]\s*/i;
+const DEVICE_PARENTHESES_PATTERN = /\s*\([^)]*\)\s*$/g;
+const DEVICE_WHITESPACE_PATTERN = /\s+/g;
+const MAX_DEVICE_LABEL_LENGTH = 42;
+
+function compactDeviceLabel(value, fallback) {
+  const rawLabel = String(value || "").trim();
+  const compactLabel = rawLabel
+    .replace(DEVICE_ALIAS_PREFIX_PATTERN, "")
+    .replace(DEVICE_PARENTHESES_PATTERN, "")
+    .replace(DEVICE_WHITESPACE_PATTERN, " ")
+    .trim();
+  const label = compactLabel || fallback;
+
+  return label.length > MAX_DEVICE_LABEL_LENGTH
+    ? `${label.slice(0, MAX_DEVICE_LABEL_LENGTH - 1).trim()}…`
+    : label;
+}
+
+function getDeviceDedupeKey(device, fallback) {
+  return compactDeviceLabel(device?.label, fallback)
+    .toLowerCase()
+    .replace(DEVICE_WHITESPACE_PATTERN, " ");
+}
+
+function normalizeDeviceList(devices, selectedDeviceId, fallbackPrefix) {
+  const normalizedDevices = devices.map((device, index) => ({
+    ...device,
+    label: compactDeviceLabel(device?.label, `${fallbackPrefix} ${index + 1}`),
+  }));
+  const byLabel = new Map();
+
+  normalizedDevices.forEach((device, index) => {
+    const key = getDeviceDedupeKey(device, `${fallbackPrefix} ${index + 1}`);
+    const previousDevice = byLabel.get(key);
+
+    if (!previousDevice || String(device.id || "") === String(selectedDeviceId || "")) {
+      byLabel.set(key, device);
+    }
+  });
+
+  return Array.from(byLabel.values());
+}
+
 export default function useMenuMainAudioDevices({
   user,
   voiceClientRef,
@@ -84,10 +128,18 @@ export default function useMenuMainAudioDevices({
     selectedOutputDeviceId: nextOutputDeviceId,
     outputSelectionSupported: nextOutputSelectionSupported,
   }) => {
-    const normalizedInputs = Array.isArray(inputs) ? inputs : [];
-    const normalizedOutputs = Array.isArray(outputs) ? outputs : [];
     const normalizedInputDeviceId = nextInputDeviceId || "";
     const normalizedOutputDeviceId = nextOutputDeviceId || "";
+    const normalizedInputs = normalizeDeviceList(
+      Array.isArray(inputs) ? inputs : [],
+      normalizedInputDeviceId,
+      "Microphone"
+    );
+    const normalizedOutputs = normalizeDeviceList(
+      Array.isArray(outputs) ? outputs : [],
+      normalizedOutputDeviceId,
+      "Speaker"
+    );
     const normalizedOutputSelectionSupported = Boolean(nextOutputSelectionSupported);
 
     setAudioInputDevices((previousValue) => (

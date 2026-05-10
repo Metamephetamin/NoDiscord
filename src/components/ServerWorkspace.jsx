@@ -1510,6 +1510,7 @@ export const ServersSidebar = memo(({
   serverContextMenuRef,
   voiceParticipantByUserId,
   currentUserId,
+  canManageServer = false,
   canManageChannels,
   channelSettingsState,
   channelRenameState,
@@ -2141,11 +2142,11 @@ export const ServersSidebar = memo(({
                 maxHeight: serverMenuPosition.maxHeight,
               }}
             >
-              <button type="button" onClick={() => runServerMenuAction(onOpenServerInviteModal)}>
+              <button type="button" onClick={() => runServerMenuAction(onOpenServerInviteModal)} disabled={!canInviteToServer(activeServer)}>
                 <span>Пригласить на сервер</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">♣</span>
               </button>
-              <button type="button" onClick={() => runServerMenuAction(onOpenServerSettings)}>
+              <button type="button" onClick={() => runServerMenuAction(onOpenServerSettings)} disabled={!canManageServer}>
                 <span>Настройки сервера</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">⚙</span>
               </button>
@@ -2157,7 +2158,7 @@ export const ServersSidebar = memo(({
                 <span>Создать категорию</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">▣</span>
               </button>
-              <span className="server-summary-menu__separator" aria-hidden="true" />
+              <span className={`server-summary-menu__separator ${!canInviteToServer(activeServer) && !canManageServer && !canManageChannels ? "is-hidden" : ""}`} aria-hidden="true" />
               <button type="button" onClick={() => runServerMenuAction(onOpenNotificationSettings)}>
                 <span>Параметры уведомлений</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">●</span>

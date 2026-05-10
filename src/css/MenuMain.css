@@ -3197,11 +3197,11 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .friends-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   min-height: 0;
   flex: 1;
-  padding-right: 10px;
+  padding-right: 0;
 }
 
 .friends-main {
@@ -19002,6 +19002,11 @@ html[data-ui-theme="light"] .desktop-app-topbar__title-icon svg * {
   fill: none;
 }
 
+html[data-ui-theme="light"] .desktop-app-topbar__title-icon--mono {
+  filter: brightness(0) saturate(100%) invert(7%) sepia(19%) saturate(1828%) hue-rotate(190deg) brightness(94%) contrast(94%);
+  opacity: 1;
+}
+
 html[data-ui-theme="light"] .chat__topbar-icon img,
 html[data-ui-theme="light"] .chat__topbar-search-wrap img {
   filter: brightness(0) saturate(100%) invert(7%) sepia(19%) saturate(1828%) hue-rotate(190deg) brightness(94%) contrast(94%);
@@ -19030,6 +19035,13 @@ html[data-ui-theme="light"] .settings-shell {
 html[data-ui-theme="light"] .server-summary__name,
 html[data-ui-theme="light"] .server-summary__subtitle,
 html[data-ui-theme="light"] .server-summary__caret,
+html[data-ui-theme="light"] .server-summary__invite,
+html[data-ui-theme="light"] .server-summary__invite svg,
+html[data-ui-theme="light"] .server-panel__header,
+html[data-ui-theme="light"] .server-panel__header span,
+html[data-ui-theme="light"] .server-panel__header button,
+html[data-ui-theme="light"] .server-panel__category-toggle,
+html[data-ui-theme="light"] .server-panel__category-toggle span,
 html[data-ui-theme="light"] .text__channel h1,
 html[data-ui-theme="light"] .text__channel h2,
 html[data-ui-theme="light"] .voice__channels h2,
@@ -19052,6 +19064,20 @@ html[data-ui-theme="light"] .profile__username,
 html[data-ui-theme="light"] .status__profile,
 html[data-ui-theme="light"] .status__profile span {
   color: #0f172a;
+}
+
+html[data-ui-theme="light"] .server-summary__invite svg,
+html[data-ui-theme="light"] .server-panel__header svg,
+html[data-ui-theme="light"] .server-panel__category-caret {
+  stroke: currentColor;
+}
+
+.server-summary__invite:disabled,
+.server-panel__header button:disabled,
+.server-summary-menu button:disabled,
+.member-role-menu--server .member-role-menu__item:disabled,
+.server-summary-menu__separator.is-hidden {
+  display: none;
 }
 
 html[data-ui-theme="light"] .profile__mini-icon--slashed {

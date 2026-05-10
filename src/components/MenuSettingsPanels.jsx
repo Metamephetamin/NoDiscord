@@ -1279,6 +1279,18 @@ export const AppearanceAccessibilitySettings = ({
           <h4>Темы чата</h4>
           <p>Отдельно меняет фон чата, цвет оболочек сообщений и цвет блока документов.</p>
         </div>
+        {chatThemeId !== "default" ? (
+          <div className="settings-section__actions">
+            <button
+              type="button"
+              className="settings-inline-button settings-inline-button--ghost"
+              onClick={() => onChatThemeChange("default")}
+              title="Сбросить цветовую тему, не удаляя свой фон чата"
+            >
+              Убрать тему
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="chat-theme-choice-list" role="radiogroup" aria-label="Тема чата">
