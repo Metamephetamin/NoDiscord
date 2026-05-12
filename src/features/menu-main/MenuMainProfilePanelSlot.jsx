@@ -1,3 +1,4 @@
+import { memo } from "react";
 import MenuProfilePanel from "../../components/MenuProfilePanel";
 import {
   getDisplayName,
@@ -6,7 +7,7 @@ import {
 } from "../../utils/menuMainModel";
 import { formatIntegrationActivityStatus } from "../../utils/integrations";
 
-export default function MenuMainProfilePanelSlot({
+function MenuMainProfilePanelSlot({
   currentVoiceChannel,
   currentVoiceChannelName,
   pingTone,
@@ -138,3 +139,5 @@ export default function MenuMainProfilePanelSlot({
     />
   );
 }
+
+export default memo(MenuMainProfilePanelSlot);
