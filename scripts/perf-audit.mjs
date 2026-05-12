@@ -181,6 +181,7 @@ async function main() {
       byPriority: countBy(issues, "priority"),
       byStatus: countBy(issues, "status"),
       byArea: countBy(issues, "area"),
+      openIssues: issues.filter((issue) => issue.status !== "done"),
     },
     textChatHotPath,
   };
@@ -195,9 +196,18 @@ async function main() {
   if (issues.length) {
     console.log(`By priority: ${JSON.stringify(report.registry.byPriority)}`);
     console.log(`By status: ${JSON.stringify(report.registry.byStatus)}`);
+    if (report.registry.openIssues.length) {
+      console.log("Open registry issues:");
+      report.registry.openIssues.forEach((issue) => {
+        console.log(`- ${issue.id} [${issue.priority}/${issue.status}/${issue.area}]: ${issue.title}`);
+      });
+    } else {
+      console.log("Open registry issues: none");
+    }
   } else {
     console.log("By priority: {}");
     console.log("By status: {}");
+    console.log("Open registry issues: none");
   }
 
   if (!assets.length) {

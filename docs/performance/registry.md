@@ -1,5 +1,7 @@
 # Performance Registry
 
+`npm run audit:perf` prints open registry issues by id/title/priority/status/area and writes the same compact list to `.tmp/perf-audit-report.json`.
+
 Единый реестр лагов и точек оптимизации для первой волны `Electron Windows`.
 
 Шаблон записи:

@@ -1,5 +1,13 @@
 # Performance Playbook
 
+## Measured Baseline Flows
+
+1. TextChat batch upload: open a long text channel, select 3+ images, measure time to first visible batch modal.
+2. TextChat local state churn: open a long text channel, toggle reply/edit/media preview, measure message list commits.
+3. Voice init: cold start app, do not join voice, confirm voice/noise runtime is not initialized.
+4. Voice join: join voice, speak for 10 seconds, leave, measure audio pipeline init and cleanup.
+5. MenuMain navigation: switch workspace/server/settings repeatedly, measure long tasks and React commit counts.
+
 ## Цель первой волны
 
 Найти и зарегистрировать основные лаги в `Electron Windows`, затем закрывать их по приоритету с обязательным сравнением `baseline -> post-fix`.
