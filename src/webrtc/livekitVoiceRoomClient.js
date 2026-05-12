@@ -1811,7 +1811,7 @@ const handleDeviceChange = () => {
       return {
         openThreshold: 0.01,
         closeThreshold: 0.005,
-        floorGain: 0.34,
+        floorGain: 0.18,
         attackTime: 0.008,
         releaseTime: 0.28,
         holdMs: 180,

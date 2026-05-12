@@ -9,6 +9,8 @@ const distAssetsDir = path.join(repoRoot, "dist", "assets");
 const registryPath = path.join(repoRoot, "docs", "performance", "registry.md");
 const sloDocPath = path.join(repoRoot, "docs", "performance", "slo.md");
 const reportOutputPath = path.join(repoRoot, ".tmp", "perf-audit-report.json");
+const menuMainControllerPath = path.join(repoRoot, "src", "features", "menu-main", "MenuMainController.jsx");
+const serverWorkspacePath = path.join(repoRoot, "src", "components", "ServerWorkspace.jsx");
 const textChatMessageListPath = path.join(repoRoot, "src", "components", "TextChatMessageList.jsx");
 const textChatVirtualizerPath = path.join(repoRoot, "src", "hooks", "useTextChatVirtualizer.js");
 
@@ -162,10 +164,81 @@ async function auditTextChatHotPath() {
   };
 }
 
+async function auditVoiceJoinHotPath() {
+  const violations = [];
+  let source = "";
+  let serverWorkspaceSource = "";
+
+  try {
+    source = await fs.readFile(menuMainControllerPath, "utf8");
+  } catch {
+    violations.push({
+      id: "VOICE_JOIN_CONTROLLER_MISSING",
+      message: "MenuMainController.jsx was not readable.",
+    });
+  }
+
+  try {
+    serverWorkspaceSource = await fs.readFile(serverWorkspacePath, "utf8");
+  } catch {
+    violations.push({
+      id: "VOICE_STAGE_WORKSPACE_MISSING",
+      message: "ServerWorkspace.jsx was not readable.",
+    });
+  }
+
+  const joinStart = source.indexOf("const joinVoiceChannel = async");
+  const leaveStart = source.indexOf("const leaveVoiceChannel =", joinStart);
+  const joinSource = joinStart >= 0 && leaveStart > joinStart ? source.slice(joinStart, leaveStart) : "";
+
+  if (!joinSource) {
+    violations.push({
+      id: "VOICE_JOIN_HANDLER_MISSING",
+      message: "joinVoiceChannel handler was not found.",
+    });
+  }
+
+  const pendingUiIndex = joinSource.indexOf("activatePendingVoiceUi();");
+  const ensureClientIndex = joinSource.indexOf("await ensureVoiceClientReady()");
+  const joinChannelIndex = joinSource.indexOf("await voiceClientRef.current.joinChannel");
+  const stageLazyLoaded = serverWorkspaceSource.includes("const VoiceRoomStage = lazy(loadVoiceRoomStage)");
+
+  if (pendingUiIndex < 0) {
+    violations.push({
+      id: "VOICE_JOIN_NO_OPTIMISTIC_UI",
+      message: "Voice join must switch the visible voice UI immediately after click.",
+    });
+  }
+
+  if (ensureClientIndex >= 0 && pendingUiIndex > ensureClientIndex) {
+    violations.push({
+      id: "VOICE_JOIN_UI_WAITS_FOR_CLIENT_INIT",
+      message: "Voice join UI must render before ensureVoiceClientReady awaits SignalR/client initialization.",
+    });
+  }
+
+  if (joinChannelIndex >= 0 && pendingUiIndex > joinChannelIndex) {
+    violations.push({
+      id: "VOICE_JOIN_UI_WAITS_FOR_MEDIA_JOIN",
+      message: "Voice join UI must render before SignalR/LiveKit/microphone join completes.",
+    });
+  }
+
+  return {
+    values: {
+      pendingUiBeforeClientInit: pendingUiIndex >= 0 && (ensureClientIndex < 0 || pendingUiIndex < ensureClientIndex),
+      pendingUiBeforeMediaJoin: pendingUiIndex >= 0 && (joinChannelIndex < 0 || pendingUiIndex < joinChannelIndex),
+      stageLazyLoaded,
+    },
+    violations,
+  };
+}
+
 async function main() {
   const assets = await listDistAssets();
   const issues = await readRegistryIssues();
   const textChatHotPath = await auditTextChatHotPath();
+  const voiceJoinHotPath = await auditVoiceJoinHotPath();
   const jsAssets = assets.filter((item) => item.extension === ".js");
   const cssAssets = assets.filter((item) => item.extension === ".css");
 
@@ -193,6 +266,7 @@ async function main() {
       openIssues: issues.filter((issue) => issue.status !== "done"),
     },
     textChatHotPath,
+    voiceJoinHotPath,
   };
 
   await fs.mkdir(path.dirname(reportOutputPath), { recursive: true });
@@ -236,9 +310,18 @@ async function main() {
   console.log(
     `Text chat budgets: virtualization threshold >= ${textChatBudgets.minVirtualizationThreshold}, media prefetch image limit <= ${textChatBudgets.maxMediaPrefetchImageLimit}`
   );
-  if (textChatHotPath.violations.length) {
+  console.log(`Voice join UI before client init: ${voiceJoinHotPath.values.pendingUiBeforeClientInit ? "yes" : "no"}`);
+  console.log(`Voice join UI before media join: ${voiceJoinHotPath.values.pendingUiBeforeMediaJoin ? "yes" : "no"}`);
+  console.log(`Voice stage lazy loaded: ${voiceJoinHotPath.values.stageLazyLoaded ? "yes" : "no"}`);
+
+  const violations = [
+    ...textChatHotPath.violations,
+    ...voiceJoinHotPath.violations,
+  ];
+
+  if (violations.length) {
     console.error("Performance budget violations:");
-    textChatHotPath.violations.forEach((violation) => {
+    violations.forEach((violation) => {
       console.error(`- ${violation.id}: ${violation.message}`);
     });
     process.exitCode = 1;

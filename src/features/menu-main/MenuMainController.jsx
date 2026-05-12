@@ -4793,11 +4793,6 @@ export default function MenuMain({
       return;
     }
 
-    if (!voiceClientRef.current) {
-      await ensureVoiceClientReady();
-    }
-    if (!voiceClientRef.current) return;
-
     const joinTraceId = startPerfTrace("voice", "join-voice-channel", {
       channelId: String(channel.id || ""),
       scopedChannelId,
@@ -4825,8 +4820,14 @@ export default function MenuMain({
         }
       });
     };
-
-    playImmediateVoiceTransitionTone(scopedChannelId);
+    const activatePendingVoiceUi = () => {
+      handleVoiceConnectionStateChanged({
+        phase: "connecting",
+        channel: scopedChannelId,
+        reason: "join-click",
+      });
+      activateJoinedVoiceUi();
+    };
 
     const joinAttemptId = voiceJoinAttemptRef.current + 1;
     voiceJoinAttemptRef.current = joinAttemptId;
@@ -4836,6 +4837,35 @@ export default function MenuMain({
       suppressedVoiceChannelRef.current = "";
     }
     setJoiningVoiceChannelId(scopedChannelId);
+    activatePendingVoiceUi();
+    playImmediateVoiceTransitionTone(scopedChannelId);
+
+    if (!voiceClientRef.current) {
+      await ensureVoiceClientReady();
+    }
+    if (!voiceClientRef.current) {
+      if (voiceJoinAttemptRef.current === joinAttemptId) {
+        voiceJoinInFlightRef.current = false;
+        pendingVoiceChannelTargetRef.current = "";
+        pendingLocalVoiceTransitionRef.current = null;
+        setJoiningVoiceChannelId("");
+        setCurrentVoiceChannel(null);
+        handleVoiceConnectionStateChanged({
+          phase: "disconnected",
+          channel: scopedChannelId,
+          reason: "client-unavailable",
+          message: "Voice client is unavailable.",
+        });
+      }
+      finishJoinTrace({
+        channelId: String(channel.id || ""),
+        retry: false,
+        scopedChannelId,
+        success: false,
+      });
+      return;
+    }
+
     try {
       await voiceClientRef.current.joinChannel(scopedChannelId, user, {
         audioBitrateKbps: Number(channel.bitrateKbps || 64),

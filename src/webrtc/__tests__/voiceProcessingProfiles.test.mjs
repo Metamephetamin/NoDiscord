@@ -21,10 +21,10 @@ test("voice channel capture delegates browser noise suppression to selected deno
   assert.ok(hasPattern(/googNoiseSuppression:\s*useBrowserNoiseSuppression/));
 });
 
-test("voice channel defaults avoid post-processing attenuation and hard gate chopping", () => {
+test("voice channel defaults keep full mic level while hard gate strongly reduces closed-gate noise", () => {
   assert.ok(hasPattern(/let micVolume = 1;/));
   assert.ok(hasPattern(/openThreshold:\s*0\.01,/));
-  assert.ok(hasPattern(/floorGain:\s*0\.34,/));
+  assert.ok(hasPattern(/floorGain:\s*0\.18,/));
   assert.ok(hasPattern(/holdMs:\s*180,/));
   assert.ok(hasPattern(/releaseTime:\s*0\.28,/));
 });
