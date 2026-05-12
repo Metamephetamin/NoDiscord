@@ -57,6 +57,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Production release gate
+        run: node ./scripts/verify-release-gate.mjs
+
       - name: Check encoding
         run: npm run check:encoding
 
