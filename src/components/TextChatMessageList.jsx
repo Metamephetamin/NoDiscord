@@ -1656,7 +1656,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 {...props}
                 attachmentItem={singleAttachment}
                 galleryAttachments={galleryAttachments}
-                priorityMedia={isPriorityMediaMessage}
+                priorityMedia={isPriorityMediaMessage || Boolean(singleAttachment?.isImage)}
               />
             </div>
             {mediaOverlayFooter}
@@ -1670,7 +1670,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
         {...props}
         attachmentItem={singleAttachment}
         galleryAttachments={galleryAttachments}
-        priorityMedia={isPriorityMediaMessage}
+        priorityMedia={isPriorityMediaMessage || Boolean(singleAttachment?.isImage)}
       />
     );
   }

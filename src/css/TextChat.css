@@ -2574,6 +2574,8 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media__image {
   width: auto;
   height: auto;
+  min-width: min(220px, 100%);
+  min-height: 120px;
   max-width: min(100%, 520px);
   max-height: 420px;
   background: transparent;
