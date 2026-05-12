@@ -8,6 +8,11 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(join(testDir, "../livekitVoiceRoomClient.js"), "utf8");
 
 const hasPattern = (pattern) => pattern.test(source);
+const sliceBetween = (start, end) => {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  return startIndex >= 0 && endIndex > startIndex ? source.slice(startIndex, endIndex) : "";
+};
 
 test("voice channel capture delegates browser noise suppression to selected denoiser mode", () => {
   assert.ok(hasPattern(/createProcessedMicrophoneTrack/));
@@ -54,4 +59,10 @@ test("voice mode changes replace the active LiveKit microphone publication", () 
   assert.ok(hasPattern(/getTrackPublicationByName\?\.\(MICROPHONE_TRACK_NAME\)/));
   assert.ok(hasPattern(/replaceTrack\(nextTrack,\s*\{\s*userProvidedTrack:\s*true,\s*stopProcessor:\s*true\s*\}\)/s));
   assert.ok(hasPattern(/unpublishExistingMicrophonePublication/));
+});
+
+test("preview and session prewarm do not initialize the local audio denoiser", () => {
+  assert.ok(hasPattern(/async ensureMicrophonePreview\(\)\s*\{\s*await emitAudioDevices\(\)\.catch/s));
+  assert.equal(sliceBetween("async ensureMicrophonePreview()", "async releaseMicrophonePreview()").includes("ensureAudioPipeline()"), false);
+  assert.equal(sliceBetween("async prewarmChannel", "async joinChannel").includes("ensureAudioPipeline()"), false);
 });

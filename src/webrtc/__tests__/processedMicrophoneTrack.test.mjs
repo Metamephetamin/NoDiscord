@@ -27,7 +27,8 @@ test("DeepFilterNet runtime is backed by the real audio pipeline package and pub
   const packageJson = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8"));
   const workerSource = readFileSync(resolve(projectRoot, "public/audio/AudioPipelineWorker.js"), "utf8");
   assert.ok(packageJson.dependencies["@cc-livekit/audio-pipeline-plugin"]);
-  assert.ok(source.includes('@cc-livekit/audio-pipeline-plugin'));
+  assert.ok(source.includes('import("@cc-livekit/audio-pipeline-plugin")'));
+  assert.equal(hasPattern(/import\s+\{?\s*AudioPipelineTrackProcessor/s), false);
   assert.ok(source.includes("AudioPipelineTrackProcessor"));
   assert.ok(existsSync(resolve(projectRoot, "public/audio/AudioPipelineWorklet.js")));
   assert.ok(existsSync(resolve(projectRoot, "public/audio/AudioPipelineWorker.js")));

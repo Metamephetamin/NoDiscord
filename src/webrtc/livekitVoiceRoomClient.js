@@ -42,6 +42,7 @@ import {
   AUDIO_PROCESSING_PROFILE_NOISY_ROOM,
   AUDIO_PROCESSING_PROFILE_TRANSPARENT,
   createProcessedMicrophoneTrack,
+  normalizeAudioDenoiserMode,
   resolvePreferredAudioDenoiser,
   shouldUseBrowserNoiseSuppression,
 } from "./processedMicrophoneTrack";
@@ -511,6 +512,7 @@ export function createVoiceRoomClient({
   let micVolume = 1;
   let remoteVolume = 0.7;
   let noiseSuppressionMode = NOISE_SUPPRESSION_MODE_BROADCAST;
+  let audioDenoiserMode = "";
   let noiseSuppressionStrength = 85;
   let echoCancellationEnabled = true;
   let localScreenStream = null;
@@ -1459,7 +1461,7 @@ const handleDeviceChange = () => {
   };
 
   const getPreferredLocalAudioDenoiser = (profile = getLocalAudioProcessingProfile()) =>
-    resolvePreferredAudioDenoiser(profile);
+    resolvePreferredAudioDenoiser(profile, audioDenoiserMode);
 
   const buildMicConstraints = ({
     deviceId = selectedInputDeviceId,
@@ -4161,10 +4163,7 @@ const handleDeviceChange = () => {
 
     async prewarmChannel(channelName, user) {
       await ensureSignalConnection(user);
-      await Promise.allSettled([
-        prewarmLiveKitSession(channelName, user),
-        ensureAudioPipeline(),
-      ]);
+      await prewarmLiveKitSession(channelName, user);
     },
 
     async joinChannel(channelName, user, channelSettings = {}) {
@@ -4598,7 +4597,6 @@ const handleDeviceChange = () => {
     },
 
     async ensureMicrophonePreview() {
-      await ensureAudioPipeline();
       await emitAudioDevices().catch(() => {});
     },
 
@@ -4630,6 +4628,23 @@ const handleDeviceChange = () => {
       noiseSuppressionMode = nextMode;
       logVoiceDebug("local-audio:noise-mode-set", {
         noiseSuppressionMode,
+        activePipeline: Boolean(localMicSourceStream || localAudioStream),
+        activeVoiceSession: hasActiveVoiceAudioSession(),
+      });
+
+      await applyVoiceProcessingPipelineChange({ reuseCapture: false });
+    },
+
+    async setAudioDenoiserMode(mode) {
+      const nextMode = normalizeAudioDenoiserMode(mode, getPreferredLocalAudioDenoiser());
+
+      if (audioDenoiserMode === nextMode) {
+        return;
+      }
+
+      audioDenoiserMode = nextMode;
+      logVoiceDebug("local-audio:denoiser-mode-set", {
+        audioDenoiserMode,
         activePipeline: Boolean(localMicSourceStream || localAudioStream),
         activeVoiceSession: hasActiveVoiceAudioSession(),
       });

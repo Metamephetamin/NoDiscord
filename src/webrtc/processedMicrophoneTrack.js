@@ -1,5 +1,3 @@
-import { AudioPipelineTrackProcessor } from "@cc-livekit/audio-pipeline-plugin";
-
 export const AUDIO_DENOISER_STORAGE_KEY = "nodiscord.audio.denoiser";
 export const AUDIO_DENOISER_MODE_DEEPFILTERNET3 = "deepfilternet3";
 export const AUDIO_DENOISER_MODE_WEBRTC = "webrtc";
@@ -70,6 +68,7 @@ const PROFILE_ALIASES = Object.freeze({
 const failedWorkletDenoisers = new Map();
 const AUDIO_PIPELINE_WORKLET_URL = "/audio/AudioPipelineWorklet.js";
 const AUDIO_PIPELINE_WORKER_URL = "/audio/AudioPipelineWorker.js";
+let audioPipelinePluginPromise = null;
 
 const getWindowValue = (key) => {
   if (typeof window === "undefined") {
@@ -201,6 +200,19 @@ function getAudioPipelineModuleId() {
   return "deepfilternet";
 }
 
+async function loadAudioPipelineTrackProcessor() {
+  if (!audioPipelinePluginPromise) {
+    audioPipelinePluginPromise = import("@cc-livekit/audio-pipeline-plugin");
+  }
+
+  const module = await audioPipelinePluginPromise;
+  if (!module?.AudioPipelineTrackProcessor) {
+    throw new Error("Audio pipeline processor is unavailable.");
+  }
+
+  return module.AudioPipelineTrackProcessor;
+}
+
 async function runWithRnnoiseFetchDisabled(operation) {
   if (typeof window === "undefined" || typeof window.fetch !== "function") {
     return operation();
@@ -275,7 +287,7 @@ async function createAudioWorkletDenoisedStream({
   }
 
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor || !window.AudioWorkletNode || !AudioPipelineTrackProcessor.isSupported?.()) {
+  if (!AudioContextCtor || !window.AudioWorkletNode) {
     throw new Error("AudioWorklet is not supported in this runtime.");
   }
 
@@ -295,6 +307,11 @@ async function createAudioWorkletDenoisedStream({
 
   let processor = null;
   try {
+    const AudioPipelineTrackProcessor = await loadAudioPipelineTrackProcessor();
+    if (!AudioPipelineTrackProcessor.isSupported?.()) {
+      throw new Error("Audio pipeline processor is not supported in this runtime.");
+    }
+
     if (!audioContext.audioWorklet?.addModule) {
       throw new Error("AudioWorklet module loading is not supported in this runtime.");
     }
