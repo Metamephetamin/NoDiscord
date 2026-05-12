@@ -25,7 +25,7 @@ export default defineConfig(({ command }) => ({
     command === "serve" ? basicSsl() : null,
   ].filter(Boolean),
   build: {
-    // The RNNoise bundle is an intentionally isolated optional chunk.
+    // Voice denoiser/runtime code is intentionally isolated behind real microphone capture.
     // Raise the generic warning threshold so regular builds stay signal-rich.
     chunkSizeWarningLimit: 5000,
     rollupOptions: {
@@ -33,8 +33,8 @@ export default defineConfig(({ command }) => ({
         manualChunks(id) {
           const normalizedId = String(id || "").replace(/\\/g, "/");
 
-          if (normalizedId.includes("@shiguredo/noise-suppression")) {
-            return "noise_suppression";
+          if (normalizedId.includes("@cc-livekit/audio-pipeline-plugin")) {
+            return "audio_pipeline";
           }
 
           if (normalizedId.includes("/src/webrtc/")) {

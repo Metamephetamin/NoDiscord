@@ -4,6 +4,12 @@ import path from "node:path";
 const ROOT_DIR = process.cwd();
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const REPORT_PATH = path.join(ROOT_DIR, "scripts", "public-asset-audit.json");
+const DEFAULT_FILE_WARNING_BYTES = 10 * 1024 * 1024;
+const WARNING_BYTES_BY_EXTENSION = {
+  ".mp4": 25 * 1024 * 1024,
+  ".wasm": 20 * 1024 * 1024,
+  ".wav": 2 * 1024 * 1024,
+};
 
 async function walk(dirPath) {
   const entries = await readdir(dirPath, { withFileTypes: true });
@@ -26,6 +32,10 @@ async function walk(dirPath) {
 
 function toMegabytes(byteCount) {
   return Number((byteCount / (1024 * 1024)).toFixed(2));
+}
+
+function getWarningLimit(entry) {
+  return WARNING_BYTES_BY_EXTENSION[entry.extension] || DEFAULT_FILE_WARNING_BYTES;
 }
 
 const allFiles = await walk(PUBLIC_DIR);
@@ -67,6 +77,14 @@ const report = {
   totalMegabytes: toMegabytes(totalBytes),
   topFiles: entries.slice(0, 40),
   totalsByExtension: byExtension,
+  warnings: entries
+    .filter((entry) => entry.bytes > getWarningLimit(entry))
+    .map((entry) => ({
+      path: entry.path,
+      extension: entry.extension || "[no extension]",
+      megabytes: entry.megabytes,
+      limitMegabytes: toMegabytes(getWarningLimit(entry)),
+    })),
 };
 
 await writeFile(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -77,3 +95,12 @@ console.table(report.topFiles.slice(0, 20).map((entry) => ({
   ext: entry.extension || "-",
   path: entry.path,
 })));
+
+if (report.warnings.length) {
+  console.warn("public asset warnings:");
+  report.warnings.forEach((warning) => {
+    console.warn(`- ${warning.path}: ${warning.megabytes} MB exceeds ${warning.limitMegabytes} MB ${warning.extension} budget`);
+  });
+} else {
+  console.log("public asset warnings: none");
+}
