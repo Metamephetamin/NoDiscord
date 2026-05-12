@@ -9903,6 +9903,16 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   position: relative;
 }
 
+.device-menu__flyout-row::after {
+  content: "";
+  position: absolute;
+  top: -14px;
+  bottom: -14px;
+  left: 100%;
+  width: 22px;
+  z-index: 904;
+}
+
 .device-menu__flyout-trigger {
   width: 100%;
   min-height: 64px;
@@ -10004,15 +10014,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .device-menu__submenu::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(110, 116, 138, 0.62);
-}
-
-.device-menu__submenu::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -10px;
-  width: 10px;
 }
 
 .device-menu__flyout-row:hover .device-menu__submenu,
