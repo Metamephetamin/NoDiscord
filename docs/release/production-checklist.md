@@ -12,7 +12,12 @@
 - `npm run build:frontend`
 - `npm run audit:public-assets`
 - `npm run audit:perf`
+- `node ./scripts/release-smoke.mjs`
+- `node ./scripts/verify-release-gate.mjs`
+- `npm run test:e2e-smoke`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\db-backup-drill.ps1`
 - `dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release`
+- Confirm PostgreSQL backup exists and a recent non-production restore drill is recorded.
 
 ## Manual Smoke Before Pushing To master
 
