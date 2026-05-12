@@ -24,6 +24,7 @@
 2. P1 voice/noise pipeline payload and initialization.
 3. P1 bundle/menu-main split and state isolation.
 4. Asset weight and release smoke automation.
+5. Production reliability, security, and observability.
 
 ## Success Gates
 
@@ -421,6 +422,360 @@ git commit -m "Add production release smoke script"
 
 ---
 
+### Task 9: Add Production Error And Crash Observability
+
+**Files:**
+- Modify: `src/main.js`
+- Modify: `src/renderer.jsx`
+- Modify: `BackNoDiscord/BackNoDiscord/Program.cs`
+- Modify: `docs/release/production-checklist.md`
+- Create: `docs/release/observability.md`
+
+- [ ] **Step 1: Define reportable event classes**
+
+Document these classes in `docs/release/observability.md`:
+
+```md
+# Production Observability
+
+## Client Events
+
+- renderer uncaught exception
+- renderer unhandled promise rejection
+- Electron main uncaught exception
+- failed chunk load
+- SignalR reconnect failure
+- voice join failure
+- media device permission failure
+
+## Server Events
+
+- unhandled HTTP exception
+- failed authentication attempt aggregate
+- SignalR hub disconnect with exception
+- database command failure
+- file upload rejection aggregate
+
+## Never Log
+
+- passwords
+- tokens
+- cookies
+- authorization headers
+- message bodies
+- uploaded file contents
+- raw microphone/audio data
+```
+
+- [ ] **Step 2: Add safe client error capture**
+
+Use existing Electron IPC patterns in `src/preload.js` and `src/main.js` if available. Capture error type, message, stack hash, route/surface, app version, and timestamp. Do not capture message text content or auth data.
+
+- [ ] **Step 3: Add backend correlation**
+
+In `BackNoDiscord/BackNoDiscord/Program.cs`, ensure request logging includes a correlation id and status code, but not sensitive headers or body content.
+
+- [ ] **Step 4: Verify**
+
+Run:
+
+```powershell
+npm run test:console-secrets
+npm run lint:ci
+dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release
+```
+
+Expected: no secret logging regression, frontend lint passes, backend tests pass.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add src/main.js src/renderer.jsx BackNoDiscord/BackNoDiscord/Program.cs docs/release/observability.md docs/release/production-checklist.md
+git commit -m "Add production observability safeguards"
+```
+
+---
+
+### Task 10: Add CI Status Gate Before Production Push
+
+**Files:**
+- Modify: `.github/workflows/Deploy.yml` or the active deploy workflow path
+- Modify: `docs/release/production-checklist.md`
+- Create: `scripts/verify-release-gate.mjs`
+
+- [ ] **Step 1: Discover workflow names**
+
+Run:
+
+```powershell
+Get-ChildItem -Recurse -LiteralPath '.github\\workflows' -Filter '*.yml'
+Get-ChildItem -Recurse -LiteralPath '.github\\workflows' -Filter '*.yaml'
+```
+
+Use the actual deploy workflow file found in the repo.
+
+- [ ] **Step 2: Add local release gate script**
+
+Create `scripts/verify-release-gate.mjs` to run the required local commands in sequence:
+
+```txt
+npm run check:encoding
+npm run test:encoding
+npm run test:auth-branding
+npm run lint:ci
+npm run build:frontend
+npm run audit:public-assets
+npm run audit:perf
+dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release
+```
+
+- [ ] **Step 3: Add GitHub Actions requirement**
+
+Make the deploy workflow run the same gate before production deploy. If the existing workflow already runs these commands, document that it is the authoritative gate.
+
+- [ ] **Step 4: Verify**
+
+Run:
+
+```powershell
+node ./scripts/verify-release-gate.mjs
+```
+
+Expected: exits 0 after all required checks pass.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add .github/workflows scripts/verify-release-gate.mjs docs/release/production-checklist.md
+git commit -m "Add production release gate"
+```
+
+---
+
+### Task 11: Add E2E Smoke Coverage For Critical User Flows
+
+**Files:**
+- Modify: `package.json`
+- Create: `scripts/e2e-smoke.mjs`
+- Create: `docs/testing/e2e-smoke.md`
+
+- [ ] **Step 1: Define smoke scope**
+
+Document these flows in `docs/testing/e2e-smoke.md`:
+
+```md
+# E2E Smoke Scope
+
+- login with existing account
+- send and receive direct message
+- send and receive server channel message
+- upload small image
+- upload zip and see progress UI
+- blocked exe shows clear error
+- join voice, speak, leave
+- start/stop camera
+- start/stop screen share
+- native notification opens expected area
+- restart app restores session
+```
+
+- [ ] **Step 2: Build script around existing smoke helpers**
+
+Create `scripts/e2e-smoke.mjs` as an orchestrator over existing scripts first. Do not add a new browser dependency unless Browser/Playwright automation is intentionally adopted.
+
+- [ ] **Step 3: Add npm script**
+
+Add this to `package.json`:
+
+```json
+"test:e2e-smoke": "node ./scripts/e2e-smoke.mjs"
+```
+
+- [ ] **Step 4: Verify**
+
+Run:
+
+```powershell
+npm run test:e2e-smoke
+```
+
+Expected: script reports which automated checks ran and which manual checks still require a logged-in Electron session.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add package.json scripts/e2e-smoke.mjs docs/testing/e2e-smoke.md
+git commit -m "Add critical flow smoke checklist"
+```
+
+---
+
+### Task 12: Add PostgreSQL Backup And Restore Drill
+
+**Files:**
+- Create: `docs/release/database-backup-restore.md`
+- Create: `scripts/db-backup-drill.ps1`
+- Modify: `docs/release/production-checklist.md`
+
+- [ ] **Step 1: Document backup policy**
+
+Create `docs/release/database-backup-restore.md` with:
+
+```md
+# Database Backup And Restore
+
+## Policy
+
+- Take scheduled PostgreSQL backups before production deploys.
+- Keep at least one recent restore-tested backup.
+- Never store backups in the repo.
+- Never print database passwords in logs.
+
+## Restore Drill
+
+1. Restore latest backup into a non-production database.
+2. Run backend migration/startup checks.
+3. Run API health check against the restored database.
+4. Record restore duration and result.
+```
+
+- [ ] **Step 2: Add local drill script**
+
+Create `scripts/db-backup-drill.ps1` that validates required environment variables are present and prints the exact `pg_dump`/`pg_restore` commands it will run. Require an explicit `-Execute` switch before running destructive or external commands.
+
+- [ ] **Step 3: Add checklist item**
+
+Add backup/restore drill confirmation to `docs/release/production-checklist.md`.
+
+- [ ] **Step 4: Verify**
+
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\db-backup-drill.ps1
+```
+
+Expected: dry-run output only, no destructive action.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add docs/release/database-backup-restore.md scripts/db-backup-drill.ps1 docs/release/production-checklist.md
+git commit -m "Document database backup restore drill"
+```
+
+---
+
+### Task 13: Harden Abuse Protection And Security Headers
+
+**Files:**
+- Modify: `BackNoDiscord/BackNoDiscord/Program.cs`
+- Modify: backend auth/upload endpoints under `BackNoDiscord/BackNoDiscord/`
+- Modify: `docs/release/production-checklist.md`
+- Test: backend test project under `BackNoDiscord/BackNoDiscord.Tests/`
+
+- [ ] **Step 1: Audit security boundaries**
+
+Check:
+
+```txt
+- auth login/register/email verification rate limits
+- upload size/type limits
+- SignalR hub auth requirements
+- cookie settings
+- CORS policy
+- security headers
+- static file caching for immutable assets
+```
+
+- [ ] **Step 2: Add missing tests before fixes**
+
+For each missing protection, add focused backend tests first. Prefer endpoint-level tests for auth/upload limits and unit tests for pure policy helpers.
+
+- [ ] **Step 3: Implement narrow hardening**
+
+Add only the missing protections found in Step 1. Do not change auth/session architecture in this task unless a test proves a concrete gap.
+
+- [ ] **Step 4: Verify**
+
+Run:
+
+```powershell
+dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release
+npm run test:console-secrets
+```
+
+Expected: backend tests pass and console secret smoke passes.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add BackNoDiscord/BackNoDiscord BackNoDiscord/BackNoDiscord.Tests docs/release/production-checklist.md
+git commit -m "Harden production abuse protections"
+```
+
+---
+
+### Task 14: Define Product SLOs And Regression Budgets
+
+**Files:**
+- Create: `docs/performance/slo.md`
+- Modify: `scripts/perf-audit.mjs`
+- Modify: `docs/performance/playbook.md`
+
+- [ ] **Step 1: Define measurable SLOs**
+
+Create `docs/performance/slo.md`:
+
+```md
+# Product SLOs
+
+## Frontend
+
+- App first meaningful screen: target <= 2 s on reference Windows machine.
+- Route switch: target <= 150 ms to first visible update.
+- Text input latency: target no repeated long tasks > 100 ms while typing.
+- Long chat scroll: target no visible blanking or stuck scroll.
+- Batch upload modal first paint: target <= 150 ms.
+
+## Voice
+
+- Voice join UI acknowledgement: target <= 300 ms.
+- Voice media connected: target <= 2 s on healthy network.
+- Microphone mute/unmute: target <= 100 ms UI feedback.
+- Denoiser init: must not run before microphone capture is requested.
+
+## Backend
+
+- `/api/ping`: target p95 <= 100 ms from production region.
+- SignalR negotiate: non-5xx and auth-enforced.
+- Message send API/hub acknowledgement: target p95 <= 500 ms under normal load.
+```
+
+- [ ] **Step 2: Link perf audit to SLO docs**
+
+Update `scripts/perf-audit.mjs` output to print the SLO doc path and current measurable bundle/text-chat budgets.
+
+- [ ] **Step 3: Verify**
+
+Run:
+
+```powershell
+npm run audit:perf
+npm run check:encoding
+```
+
+Expected: perf audit exits 0 and references `docs/performance/slo.md`.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add docs/performance/slo.md docs/performance/playbook.md scripts/perf-audit.mjs
+git commit -m "Define production performance SLOs"
+```
+
+---
+
 ## Execution Order
 
 1. Task 1: make performance issues visible.
@@ -431,10 +786,15 @@ git commit -m "Add production release smoke script"
 6. Task 6: split MenuMain state in small safe passes.
 7. Task 7: reduce payload and asset weight.
 8. Task 8: make release smoke reproducible.
+9. Task 9: add safe error/crash observability.
+10. Task 10: enforce CI/release gates before production.
+11. Task 11: cover critical user flows with smoke evidence.
+12. Task 12: document and dry-run database restore drills.
+13. Task 13: harden abuse/security boundaries.
+14. Task 14: define product SLOs and regression budgets.
 
 ## Release Policy
 
 - Do this on `dev` or a `codex/production-hardening-*` branch first.
 - Push to `master` only after checks and manual smoke pass.
 - Do not mix unrelated TextChat CSS/message-list edits into the same commits unless they are part of the active TextChat tasks.
-
