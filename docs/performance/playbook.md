@@ -8,6 +8,10 @@
 4. Voice join: join voice, speak for 10 seconds, leave, measure audio pipeline init and cleanup.
 5. MenuMain navigation: switch workspace/server/settings repeatedly, measure long tasks and React commit counts.
 
+## SLO And Regression Budgets
+
+Product SLOs and the measurable budget targets printed by `npm run audit:perf` live in `docs/performance/slo.md`.
+
 ## Цель первой волны
 
 Найти и зарегистрировать основные лаги в `Electron Windows`, затем закрывать их по приоритету с обязательным сравнением `baseline -> post-fix`.

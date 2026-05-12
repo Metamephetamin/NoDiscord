@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const distAssetsDir = path.join(repoRoot, "dist", "assets");
 const registryPath = path.join(repoRoot, "docs", "performance", "registry.md");
+const sloDocPath = path.join(repoRoot, "docs", "performance", "slo.md");
 const reportOutputPath = path.join(repoRoot, ".tmp", "perf-audit-report.json");
 const textChatMessageListPath = path.join(repoRoot, "src", "components", "TextChatMessageList.jsx");
 const textChatVirtualizerPath = path.join(repoRoot, "src", "hooks", "useTextChatVirtualizer.js");
@@ -22,6 +23,10 @@ function formatKb(bytes) {
 
 function formatMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatRepoPath(value) {
+  return value.split(path.sep).join("/");
 }
 
 async function listDistAssets() {
@@ -166,6 +171,10 @@ async function main() {
 
   const report = {
     generatedAt: new Date().toISOString(),
+    slo: {
+      docPath: formatRepoPath(path.relative(repoRoot, sloDocPath)),
+      textChatBudgets,
+    },
     dist: {
       exists: assets.length > 0,
       assetCount: assets.length,
@@ -191,6 +200,7 @@ async function main() {
 
   console.log("Performance audit summary");
   console.log(`Generated: ${report.generatedAt}`);
+  console.log(`SLO doc: ${report.slo.docPath}`);
   console.log(`Registry issues: ${report.registry.issueCount}`);
 
   if (issues.length) {
@@ -223,6 +233,9 @@ async function main() {
 
   console.log(`Text chat virtualization threshold: ${textChatHotPath.values.virtualizationThreshold ?? "unknown"}`);
   console.log(`Text chat media prefetch image limit: ${textChatHotPath.values.mediaPrefetchImageLimit ?? "unknown"}`);
+  console.log(
+    `Text chat budgets: virtualization threshold >= ${textChatBudgets.minVirtualizationThreshold}, media prefetch image limit <= ${textChatBudgets.maxMediaPrefetchImageLimit}`
+  );
   if (textChatHotPath.violations.length) {
     console.error("Performance budget violations:");
     textChatHotPath.violations.forEach((violation) => {
