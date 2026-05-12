@@ -31,6 +31,7 @@
     "test:attachment-descriptors": "node --test src/utils/__tests__/textChatAttachmentDescriptorPolicy.test.mjs",
     "test:console-secrets": "node ./scripts/console-secret-smoke.mjs",
     "test:electron-downloads": "node --test src/utils/__tests__/electronDownloadStreamingPolicy.test.mjs",
+    "test:e2e-smoke": "node ./scripts/e2e-smoke.mjs",
     "test:file-size-policy": "node --test src/utils/__tests__/chatFileSizePolicy.test.mjs",
     "test:encoding": "node --test ./scripts/__tests__/encoding-tools.test.mjs",
     "test:location-ui": "node ./scripts/location-ui-smoke.mjs",
