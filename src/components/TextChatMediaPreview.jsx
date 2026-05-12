@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 import { MISSING_MEDIA_EVENT, isMediaUrlKnownMissing, markMediaUrlMissing } from "../utils/media";
@@ -7,7 +7,7 @@ const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const WHEEL_NAVIGATION_COOLDOWN_MS = 180;
 const CLICK_CLOSE_DRAG_THRESHOLD = 6;
 
-export default function TextChatMediaPreview({
+function TextChatMediaPreview({
   mediaPreview,
   videoRef,
   onClose,
@@ -389,3 +389,17 @@ export default function TextChatMediaPreview({
 
   return typeof document === "undefined" ? preview : createPortal(preview, document.body);
 }
+
+function areMediaPreviewPropsEqual(previousProps, nextProps) {
+  return previousProps.mediaPreview === nextProps.mediaPreview
+    && previousProps.videoRef === nextProps.videoRef
+    && previousProps.onClose === nextProps.onClose
+    && previousProps.onDownload === nextProps.onDownload
+    && previousProps.onDownloadAll === nextProps.onDownloadAll
+    && previousProps.onDeleteActive === nextProps.onDeleteActive
+    && previousProps.onNavigate === nextProps.onNavigate
+    && previousProps.onZoom === nextProps.onZoom
+    && previousProps.onPan === nextProps.onPan;
+}
+
+export default memo(TextChatMediaPreview, areMediaPreviewPropsEqual);

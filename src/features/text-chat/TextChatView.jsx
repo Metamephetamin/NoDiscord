@@ -181,6 +181,10 @@ export default function TextChatView(props) {
   const stableOpenMediaPreview = useStableCallback(openMediaPreview);
   const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
   const stableOpenForwardModal = useStableCallback(openForwardModal);
+  const stableHandleInsertMentionByUserId = useStableCallback(handleInsertMentionByUserId);
+  const stableCancelLocalEchoUpload = useStableCallback(cancelLocalEchoUpload);
+  const stableRetryLocalEchoUpload = useStableCallback(retryLocalEchoUpload);
+  const stableRemoveLocalEchoUpload = useStableCallback(removeLocalEchoUpload);
   const {
     floatingDateLabel,
     pendingNewMessagesCount,
@@ -229,17 +233,23 @@ export default function TextChatView(props) {
   const firstSearchResultId = String(searchResults?.[0]?.id || "");
   const handleMessageListRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
+      hasMediaPreview: Boolean(mediaPreview),
+      isEditing: Boolean(messageEditState),
       messageCount: messages.length,
+      replyActive: Boolean(replyState),
+      selectedFileCount: selectedFiles.length,
       visibleMessageCount: visibleMessages.length,
       virtualizationEnabled,
     });
-  }, [messages.length, visibleMessages.length, virtualizationEnabled]);
+  }, [mediaPreview, messageEditState, messages.length, replyState, selectedFiles.length, visibleMessages.length, virtualizationEnabled]);
+  const selectedFileCount = selectedFiles.length;
+  const hasImageBatchUploadSheet = selectedFileCount > 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image");
   const handleComposerRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("text-chat", id, phase, actualDuration, baseDuration, startTime, commitTime, {
-      hasBatchUploadSheet: selectedFiles.length > 1 && selectedFiles.every((selectedFile) => selectedFile?.kind === "image"),
-      selectedFileCount: selectedFiles.length,
+      hasBatchUploadSheet: hasImageBatchUploadSheet,
+      selectedFileCount,
     });
-  }, [selectedFiles]);
+  }, [hasImageBatchUploadSheet, selectedFileCount]);
 
   useEffect(() => {
     latestOwnMessageSignatureRef.current = "";
@@ -371,6 +381,27 @@ export default function TextChatView(props) {
     };
   }, [firstSearchResultId, handleSearchPanelOpenMessage, normalizedSearchQuery]);
 
+  const handleCloseMediaPreview = useCallback(() => {
+    setMediaPreview(null);
+  }, [setMediaPreview]);
+
+  const handleDownloadActiveMediaPreview = useCallback(() => {
+    if (!mediaPreview) {
+      return;
+    }
+
+    handleDownloadAttachment({
+      attachmentKind: mediaPreview.type,
+      attachmentUrl: mediaPreview.url,
+      attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
+      attachmentName: mediaPreview.name,
+      attachmentContentType: mediaPreview.contentType || "",
+      attachmentEncryption: mediaPreview.attachmentEncryption || null,
+      messageId: mediaPreview.messageId || "",
+      attachmentIndex: mediaPreview.attachmentIndex || 0,
+    });
+  }, [handleDownloadAttachment, mediaPreview]);
+
   return (
     <div
       className={`textchat-container ${composerDropActive ? "textchat-container--drag-active" : ""}`}
@@ -455,13 +486,13 @@ export default function TextChatView(props) {
             onToggleSelection={stableToggleMessageSelection}
             onOpenContextMenu={stableOpenMessageContextMenu}
             onOpenUserContextMenu={stableOpenUserContextMenu}
-            onInsertMentionByUserId={handleInsertMentionByUserId}
+            onInsertMentionByUserId={stableHandleInsertMentionByUserId}
             onOpenMediaPreview={stableOpenMediaPreview}
             onToggleReaction={stableHandleToggleReaction}
             onJumpToReply={stableScrollToMessage}
-            onCancelLocalEchoUpload={cancelLocalEchoUpload}
-            onRetryLocalEchoUpload={retryLocalEchoUpload}
-            onRemoveLocalEchoUpload={removeLocalEchoUpload}
+            onCancelLocalEchoUpload={stableCancelLocalEchoUpload}
+            onRetryLocalEchoUpload={stableRetryLocalEchoUpload}
+            onRemoveLocalEchoUpload={stableRemoveLocalEchoUpload}
           />
         </Profiler>
       ) : (
@@ -490,13 +521,13 @@ export default function TextChatView(props) {
           onToggleSelection={stableToggleMessageSelection}
           onOpenContextMenu={stableOpenMessageContextMenu}
           onOpenUserContextMenu={stableOpenUserContextMenu}
-          onInsertMentionByUserId={handleInsertMentionByUserId}
+          onInsertMentionByUserId={stableHandleInsertMentionByUserId}
           onOpenMediaPreview={stableOpenMediaPreview}
           onToggleReaction={stableHandleToggleReaction}
           onJumpToReply={stableScrollToMessage}
-          onCancelLocalEchoUpload={cancelLocalEchoUpload}
-          onRetryLocalEchoUpload={retryLocalEchoUpload}
-          onRemoveLocalEchoUpload={removeLocalEchoUpload}
+          onCancelLocalEchoUpload={stableCancelLocalEchoUpload}
+          onRetryLocalEchoUpload={stableRetryLocalEchoUpload}
+          onRemoveLocalEchoUpload={stableRemoveLocalEchoUpload}
         />
       )}
       {PERF_ENABLED ? (
@@ -639,19 +670,8 @@ export default function TextChatView(props) {
       <TextChatMediaPreview
         mediaPreview={mediaPreview}
         videoRef={mediaPreviewVideoRef}
-        onClose={() => setMediaPreview(null)}
-        onDownload={() =>
-          handleDownloadAttachment({
-            attachmentKind: mediaPreview.type,
-            attachmentUrl: mediaPreview.url,
-            attachmentSourceUrl: mediaPreview.sourceUrl || mediaPreview.url,
-            attachmentName: mediaPreview.name,
-            attachmentContentType: mediaPreview.contentType || "",
-            attachmentEncryption: mediaPreview.attachmentEncryption || null,
-            messageId: mediaPreview.messageId || "",
-            attachmentIndex: mediaPreview.attachmentIndex || 0,
-          })
-        }
+        onClose={handleCloseMediaPreview}
+        onDownload={handleDownloadActiveMediaPreview}
         onDownloadAll={handleDownloadAllMediaPreviewItems}
         onDeleteActive={handleDeleteMediaPreviewItem}
         onFullscreen={handleOpenMediaPreviewFullscreen}

@@ -1384,7 +1384,7 @@ export default function TextChat({
     }
   }, [fetchMessageHistoryPage, historyStateByChannel, localClearCutoffMs, messages, scopedChannelId, updateHistoryState]);
 
-  const openUserContextMenu = (event, messageItem) => {
+  const openUserContextMenu = useCallback((event, messageItem) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -1426,7 +1426,7 @@ export default function TextChat({
       canOpenDirectChat: typeof onOpenDirectChat === "function" && userId !== currentUserId,
       canInviteToServer: Boolean(serverId && !matchedDirectTarget?.isBlocked && !matchedDirectTarget?.blockedYou),
     });
-  };
+  }, [currentUserId, directTargets, onOpenDirectChat, serverId]);
 
   const closeUserContextMenu = () => {
     setUserContextMenu(null);
