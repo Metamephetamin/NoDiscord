@@ -969,6 +969,8 @@ export const VoiceSettingsPanel = ({
   audioVolume,
   activeMicSettingsBars,
   isMicTestActive,
+  denoiserModeOptions = [],
+  audioDenoiserMode = "",
   noiseProfileOptions,
   noiseSuppressionMode,
   echoCancellationEnabled,
@@ -978,6 +980,7 @@ export const VoiceSettingsPanel = ({
   onMicVolumeChange,
   onAudioVolumeChange,
   onToggleMicTest,
+  onDenoiserModeChange,
   onNoiseProfileChange,
   onToggleEchoCancellation,
   onToggleAutoSensitivity,
@@ -1054,6 +1057,19 @@ export const VoiceSettingsPanel = ({
     </section>
 
     <section className="voice-settings-card">
+      <div className="voice-settings-card__title">Движок шумоподавления</div>
+      <div className="voice-profile-list">
+        {denoiserModeOptions.map((option) => (
+          <label key={option.id} className="voice-profile-option">
+            <input type="radio" name="denoiserMode" checked={audioDenoiserMode === option.id} onChange={() => onDenoiserModeChange(option.id)} />
+            <span className="voice-profile-option__copy">
+              <strong>{option.title}</strong>
+              <span>{option.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
       <div className="voice-settings-card__title">Профиль ввода</div>
       <div className="voice-profile-list">
         {noiseProfileOptions.map((option) => (

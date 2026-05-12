@@ -4,6 +4,13 @@ import {
   VOICE_INPUT_MODES,
   getVoiceInputModeNoiseStrength,
 } from "../../utils/menuMainModel";
+import {
+  AUDIO_DENOISER_MODE_DEEPFILTERNET3,
+  AUDIO_DENOISER_MODE_OFF,
+  AUDIO_DENOISER_MODE_WEBRTC,
+  AUDIO_DENOISER_STORAGE_KEY,
+  normalizeAudioDenoiserMode,
+} from "../../webrtc/processedMicrophoneTrack";
 
 const NOISE_PROFILE_OPTIONS = [
   {
@@ -23,6 +30,24 @@ const NOISE_PROFILE_OPTIONS = [
   },
 ];
 
+const DENOISER_MODE_OPTIONS = [
+  {
+    id: AUDIO_DENOISER_MODE_DEEPFILTERNET3,
+    title: "Лучшее качество",
+    description: "DeepFilterNet: самое сильное шумоподавление без зависимости от сети.",
+  },
+  {
+    id: AUDIO_DENOISER_MODE_WEBRTC,
+    title: "Баланс",
+    description: "Встроенное WebRTC-шумоподавление браузера, легче для слабых устройств.",
+  },
+  {
+    id: AUDIO_DENOISER_MODE_OFF,
+    title: "Выключено",
+    description: "Сырой микрофонный сигнал для диагностики и проблемных устройств.",
+  },
+];
+
 export default function useMenuMainVoiceProcessing({
   user,
   voiceClientRef,
@@ -30,6 +55,7 @@ export default function useMenuMainVoiceProcessing({
   echoCancellationStorageKey,
 }) {
   const [noiseSuppressionMode, setNoiseSuppressionMode] = useState(DEFAULT_VOICE_INPUT_MODE);
+  const [audioDenoiserMode, setAudioDenoiserMode] = useState(AUDIO_DENOISER_MODE_DEEPFILTERNET3);
   const [echoCancellationEnabled, setEchoCancellationEnabled] = useState(true);
   const noiseSuppressionStrength = useMemo(
     () => getVoiceInputModeNoiseStrength(noiseSuppressionMode),
@@ -38,6 +64,7 @@ export default function useMenuMainVoiceProcessing({
   const voiceProcessingStateRef = useMemo(() => ({
     current: {
       noiseSuppressionMode: DEFAULT_VOICE_INPUT_MODE,
+      audioDenoiserMode: AUDIO_DENOISER_MODE_DEEPFILTERNET3,
       noiseSuppressionStrength: getVoiceInputModeNoiseStrength(DEFAULT_VOICE_INPUT_MODE),
       echoCancellationEnabled: true,
     },
@@ -46,10 +73,11 @@ export default function useMenuMainVoiceProcessing({
   useEffect(() => {
     voiceProcessingStateRef.current = {
       noiseSuppressionMode,
+      audioDenoiserMode,
       noiseSuppressionStrength,
       echoCancellationEnabled,
     };
-  }, [echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
+  }, [audioDenoiserMode, echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
 
   useEffect(() => {
     if (!user) {
@@ -80,6 +108,34 @@ export default function useMenuMainVoiceProcessing({
       // ignore storage failures
     }
   }, [noiseSuppressionMode, noiseSuppressionStorageKey, user]);
+
+  useEffect(() => {
+    if (!user) {
+      setAudioDenoiserMode(AUDIO_DENOISER_MODE_DEEPFILTERNET3);
+      return;
+    }
+
+    try {
+      setAudioDenoiserMode(normalizeAudioDenoiserMode(
+        localStorage.getItem(AUDIO_DENOISER_STORAGE_KEY),
+        AUDIO_DENOISER_MODE_DEEPFILTERNET3
+      ));
+    } catch {
+      setAudioDenoiserMode(AUDIO_DENOISER_MODE_DEEPFILTERNET3);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(AUDIO_DENOISER_STORAGE_KEY, audioDenoiserMode);
+    } catch {
+      // ignore storage failures
+    }
+  }, [audioDenoiserMode, user]);
 
   useEffect(() => {
     if (!user) {
@@ -115,6 +171,9 @@ export default function useMenuMainVoiceProcessing({
     client.setNoiseSuppressionMode(currentVoiceProcessingState.noiseSuppressionMode).catch((error) => {
       console.error("Ошибка применения стартового режима шумоподавления:", error);
     });
+    client.setAudioDenoiserMode?.(currentVoiceProcessingState.audioDenoiserMode).catch((error) => {
+      console.error("Ошибка применения стартового движка шумоподавления:", error);
+    });
     client.setNoiseSuppressionStrength?.(currentVoiceProcessingState.noiseSuppressionStrength).catch((error) => {
       console.error("Ошибка применения силы шумоподавления:", error);
     });
@@ -132,6 +191,16 @@ export default function useMenuMainVoiceProcessing({
       console.error("Ошибка переключения режима шумоподавления:", error);
     });
   }, [noiseSuppressionMode, voiceClientRef]);
+
+  useEffect(() => {
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    voiceClientRef.current.setAudioDenoiserMode?.(audioDenoiserMode).catch((error) => {
+      console.error("Ошибка переключения движка шумоподавления:", error);
+    });
+  }, [audioDenoiserMode, voiceClientRef]);
 
   useEffect(() => {
     if (!voiceClientRef.current) {
@@ -160,6 +229,9 @@ export default function useMenuMainVoiceProcessing({
   );
 
   return {
+    denoiserModeOptions: DENOISER_MODE_OPTIONS,
+    audioDenoiserMode,
+    setAudioDenoiserMode,
     noiseProfileOptions,
     activeNoiseProfile,
     noiseSuppressionMode,

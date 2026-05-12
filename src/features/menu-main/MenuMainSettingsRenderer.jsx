@@ -74,6 +74,8 @@ export function MenuMainSettingsContent({
   audioVolume,
   activeMicSettingsBars,
   isMicTestActive,
+  denoiserModeOptions,
+  audioDenoiserMode,
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
@@ -84,6 +86,7 @@ export function MenuMainSettingsContent({
   updateMicVolume,
   updateAudioVolume,
   toggleMicrophoneTestPreview,
+  handleDenoiserModeChange,
   handleNoiseSuppressionModeChange,
   toggleEchoCancellation,
   setAutoInputSensitivity,
@@ -346,6 +349,8 @@ export function MenuMainSettingsContent({
           audioVolume={audioVolume}
           activeMicSettingsBars={activeMicSettingsBars}
           isMicTestActive={isMicTestActive}
+          denoiserModeOptions={denoiserModeOptions}
+          audioDenoiserMode={audioDenoiserMode}
           noiseProfileOptions={noiseProfileOptions}
           noiseSuppressionMode={noiseSuppressionMode}
           activeNoiseProfile={activeNoiseProfile}
@@ -356,6 +361,7 @@ export function MenuMainSettingsContent({
           onMicVolumeChange={updateMicVolume}
           onAudioVolumeChange={updateAudioVolume}
           onToggleMicTest={toggleMicrophoneTestPreview}
+          onDenoiserModeChange={handleDenoiserModeChange}
           onNoiseProfileChange={handleNoiseSuppressionModeChange}
           onToggleEchoCancellation={toggleEchoCancellation}
           onToggleAutoSensitivity={() => setAutoInputSensitivity((previous) => !previous)}

@@ -819,6 +819,9 @@ export default function MenuMain({
     isMicTestActive,
   });
   const {
+    denoiserModeOptions,
+    audioDenoiserMode,
+    setAudioDenoiserMode,
     noiseProfileOptions,
     activeNoiseProfile,
     noiseSuppressionMode,
@@ -4457,6 +4460,9 @@ export default function MenuMain({
     setNoiseSuppressionMode(VOICE_INPUT_MODES.includes(normalizedMode) ? normalizedMode : DEFAULT_VOICE_INPUT_MODE);
     setShowNoiseMenu(false);
   };
+  const handleDenoiserModeChange = (mode) => {
+    setAudioDenoiserMode(mode);
+  };
   const toggleEchoCancellation = () => {
     setEchoCancellationEnabled((previous) => !previous);
   };
@@ -5669,6 +5675,8 @@ export default function MenuMain({
     audioVolume,
     activeMicSettingsBars,
     isMicTestActive,
+    denoiserModeOptions,
+    audioDenoiserMode,
     noiseProfileOptions,
     noiseSuppressionMode,
     activeNoiseProfile,
@@ -5679,6 +5687,7 @@ export default function MenuMain({
     updateMicVolume,
     updateAudioVolume,
     toggleMicrophoneTestPreview,
+    handleDenoiserModeChange,
     handleNoiseSuppressionModeChange,
     toggleEchoCancellation,
     setAutoInputSensitivity,
@@ -5856,6 +5865,8 @@ export default function MenuMain({
     outputSelectionAvailable,
     deviceInputLabel,
     deviceOutputLabel,
+    denoiserModeOptions,
+    audioDenoiserMode,
     noiseProfileOptions,
     noiseSuppressionMode,
     activeNoiseProfile,
@@ -5879,6 +5890,7 @@ export default function MenuMain({
     setShowSoundMenu,
     handleInputDeviceChange,
     handleOutputDeviceChange,
+    handleDenoiserModeChange,
     handleNoiseSuppressionModeChange,
     toggleEchoCancellation,
     updateMicVolume,
