@@ -153,6 +153,27 @@ builder.Services.AddAuthorization();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, cancellationToken) =>
+    {
+        var httpContext = context.HttpContext;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            httpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString("F0");
+        }
+
+        var logger = httpContext.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("BackNoDiscord.RateLimiting");
+        logger.LogWarning(
+            "Rate limit rejected {Method} {Path} from {RemoteIp} status {StatusCode} correlationId={CorrelationId}",
+            httpContext.Request.Method,
+            httpContext.Request.Path.Value,
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            StatusCodes.Status429TooManyRequests,
+            httpContext.TraceIdentifier);
+
+        return ValueTask.CompletedTask;
+    };
     options.AddPolicy("auth", context =>
     {
         var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";

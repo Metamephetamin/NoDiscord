@@ -223,4 +223,65 @@ public sealed class BackendSourcePolicyTests
         Assert.Contains("GetValue<bool>", hostedServiceSource);
         Assert.Contains("RepairAsync", hostedServiceSource);
     }
+
+    [Fact]
+    public void ProductionSecurityBoundariesRemainEnabled()
+    {
+        var programSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Program.cs"));
+        var authControllerSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "AuthController.cs"));
+        var chatFilesControllerSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Controllers",
+            "ChatFilesController.cs"));
+
+        Assert.Contains("options.AddPolicy(\"auth\"", programSource);
+        Assert.Contains("options.AddPolicy(\"email-send\"", programSource);
+        Assert.Contains("options.AddPolicy(\"email-verify\"", programSource);
+        Assert.Contains("options.AddPolicy(\"qr-login-poll\"", programSource);
+        Assert.Contains("options.AddPolicy(\"chat-upload\"", programSource);
+        Assert.Contains("MapHub<ChatHub>(\"/chatHub\").RequireAuthorization()", programSource);
+        Assert.Contains("MapHub<VoiceHub>(\"/voiceHub\").RequireAuthorization()", programSource);
+        Assert.Contains("FrontendOriginPolicy.IsAllowed", programSource);
+        Assert.Contains("X-Content-Type-Options", programSource);
+        Assert.Contains("Content-Security-Policy", programSource);
+        Assert.Contains("SameSite = context.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax", programSource);
+        Assert.Contains("Cache-Control", programSource);
+        Assert.Contains("[EnableRateLimiting(\"auth\")]", authControllerSource);
+        Assert.Contains("[EnableRateLimiting(\"chat-upload\")]", chatFilesControllerSource);
+        Assert.Contains("StreamedChatFileUploadReader.UploadAsync(", chatFilesControllerSource);
+    }
+
+    [Fact]
+    public void RateLimitRejectionsExposeRetryAfterWithoutSensitiveLogging()
+    {
+        var programSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Program.cs"));
+
+        Assert.Contains("options.OnRejected", programSource);
+        Assert.Contains("Headers.RetryAfter", programSource);
+        Assert.Contains("Rate limit rejected {Method} {Path}", programSource);
+        Assert.Contains("correlationId={CorrelationId}", programSource);
+        Assert.DoesNotContain("Request.Body", programSource);
+    }
 }
