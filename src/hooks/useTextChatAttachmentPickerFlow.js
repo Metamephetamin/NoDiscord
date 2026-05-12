@@ -52,66 +52,86 @@ function revokeObjectUrls(urls) {
   });
 }
 
-function buildPendingSelectionPreviewItems(items, { maxItems = 6, onCreateObjectUrl } = {}) {
-  if (!Array.isArray(items) || !items.length) {
-    return [];
+function buildPendingSelectionPreviewItem(item, index, { onCreateObjectUrl } = {}) {
+  if (item instanceof File) {
+    const normalizedType = String(item?.type || "").trim();
+    const kind = normalizedType.startsWith("image/")
+      ? "image"
+      : normalizedType.startsWith("video/")
+        ? "video"
+        : "file";
+    let previewUrl = "";
+    let thumbnailUrl = "";
+
+    if (kind === "image" || kind === "video") {
+      try {
+        previewUrl = URL.createObjectURL(item);
+        onCreateObjectUrl?.(previewUrl);
+        if (kind === "image") {
+          thumbnailUrl = previewUrl;
+        }
+      } catch {
+        previewUrl = "";
+        thumbnailUrl = "";
+      }
+    }
+
+    return {
+      id: String(item?.name || `pending-preview-${index}`),
+      name: getDisplayFileName(item?.name) || "attachment",
+      size: Number(item?.size || 0) || 0,
+      kind,
+      previewUrl,
+      thumbnailUrl,
+    };
   }
 
-  return items
-    .slice(0, Math.max(0, Number(maxItems) || 0))
-    .map((item, index) => {
-      if (item instanceof File) {
-        const normalizedType = String(item?.type || "").trim();
-        const kind = normalizedType.startsWith("image/")
-          ? "image"
-          : normalizedType.startsWith("video/")
-            ? "video"
-            : "file";
-        let previewUrl = "";
-        let thumbnailUrl = "";
+  const previewUrl = String(item?.previewUrl || "").trim();
+  const kind = String(item?.kind || "").trim() || (
+    String(item?.type || "").startsWith("image/")
+      ? "image"
+      : String(item?.type || "").startsWith("video/")
+        ? "video"
+        : "file"
+  );
 
-        if (kind === "image" || kind === "video") {
-          try {
-            previewUrl = URL.createObjectURL(item);
-            onCreateObjectUrl?.(previewUrl);
-            if (kind === "image") {
-              thumbnailUrl = previewUrl;
-            }
-          } catch {
-            previewUrl = "";
-            thumbnailUrl = "";
-          }
-        }
+  return {
+    id: String(item?.token || item?.id || `pending-preview-${index}`),
+    name: getDisplayFileName(item?.name) || "attachment",
+    size: Number(item?.size || 0) || 0,
+    kind,
+    previewUrl,
+    thumbnailUrl: String(item?.thumbnailUrl || "").trim(),
+  };
+}
 
-        return {
-          id: String(item?.name || `pending-preview-${index}`),
-          name: getDisplayFileName(item?.name) || "attachment",
-          size: Number(item?.size || 0) || 0,
-          kind,
-          previewUrl,
-          thumbnailUrl,
-        };
-      }
+function buildPendingSelectionShellMetadata(items) {
+  const selectedItems = Array.isArray(items) ? items : [];
 
-      const previewUrl = String(item?.previewUrl || "").trim();
-      const kind = String(item?.kind || "").trim() || (
-        String(item?.type || "").startsWith("image/")
-          ? "image"
-          : String(item?.type || "").startsWith("video/")
-            ? "video"
-            : "file"
-      );
+  return {
+    totalSize: selectedItems.reduce((sum, item) => sum + (Number(item?.size || 0) || 0), 0),
+    fileNames: selectedItems.slice(0, 8).map((item) => getDisplayFileName(item?.name)).filter(Boolean),
+  };
+}
 
-      return {
-        id: String(item?.token || item?.id || `pending-preview-${index}`),
-        name: getDisplayFileName(item?.name) || "attachment",
-        size: Number(item?.size || 0) || 0,
-        kind,
-        previewUrl,
-        thumbnailUrl: String(item?.thumbnailUrl || "").trim(),
-      };
-    })
-    .filter(Boolean);
+function scheduleAfterNextPaint(callback) {
+  if (typeof window === "undefined") {
+    callback();
+    return { kind: "none", id: 0 };
+  }
+
+  const timeoutId = window.setTimeout(callback, 32);
+  return { kind: "timeout", id: timeoutId };
+}
+
+function cancelScheduledHandle(handle) {
+  if (!handle || typeof window === "undefined") {
+    return;
+  }
+
+  if (handle.kind === "timeout") {
+    window.clearTimeout(handle.id);
+  }
 }
 
 export default function useTextChatAttachmentPickerFlow({
@@ -131,7 +151,7 @@ export default function useTextChatAttachmentPickerFlow({
   const pendingBatchQueueFrameRef = useRef([]);
   const pendingPickerShellTimeoutRef = useRef(0);
   const pendingPickerFocusShellTimeoutRef = useRef(0);
-  const pendingSelectionPreviewHydrationTimeoutRef = useRef(0);
+  const pendingSelectionPreviewHydrationHandleRef = useRef(null);
   const pendingBatchSelectionRef = useRef(null);
   const pendingSelectionPreviewObjectUrlsRef = useRef([]);
   const selectedFilesLengthRef = useRef(0);
@@ -161,8 +181,8 @@ export default function useTextChatAttachmentPickerFlow({
         : window.clearTimeout.bind(window);
 
     pendingBatchQueueFrameRef.current.forEach((handle) => {
-      if (handle?.kind === "timeout") {
-        window.clearTimeout(handle.id);
+      if (handle?.kind) {
+        cancelScheduledHandle(handle);
         return;
       }
 
@@ -184,9 +204,9 @@ export default function useTextChatAttachmentPickerFlow({
     }
 
     cancelPendingBatchQueue();
-    const timeoutId = window.setTimeout(() => {
+    const queueHandle = scheduleAfterNextPaint(() => {
       pendingBatchQueueFrameRef.current = [];
-      recordPerfEvent("text-chat", "file-picker:queue-files-callback", {
+      recordPerfEvent("text-chat", "file-picker:upload-queue-commit", {
         selectedFileCount: selectedInputFiles.length,
         source,
       }, getPerfNow() - inputChangeStartedAt);
@@ -204,9 +224,9 @@ export default function useTextChatAttachmentPickerFlow({
         resetPendingSelectionPreviewObjectUrls();
         setPendingBatchSelection(null);
       }
-    }, 0);
+    });
 
-    pendingBatchQueueFrameRef.current = [{ kind: "timeout", id: timeoutId }];
+    pendingBatchQueueFrameRef.current = [queueHandle];
   };
 
   const clearPendingPickerShellTimeout = () => {
@@ -228,17 +248,68 @@ export default function useTextChatAttachmentPickerFlow({
   };
 
   const clearPendingSelectionPreviewHydrationTimeout = () => {
-    if (!pendingSelectionPreviewHydrationTimeoutRef.current || typeof window === "undefined") {
-      return;
-    }
-
-    window.clearTimeout(pendingSelectionPreviewHydrationTimeoutRef.current);
-    pendingSelectionPreviewHydrationTimeoutRef.current = 0;
+    cancelScheduledHandle(pendingSelectionPreviewHydrationHandleRef.current);
+    pendingSelectionPreviewHydrationHandleRef.current = null;
   };
 
   const resetPendingSelectionPreviewObjectUrls = () => {
     revokeObjectUrls(pendingSelectionPreviewObjectUrlsRef.current);
     pendingSelectionPreviewObjectUrlsRef.current = [];
+  };
+
+  const schedulePendingSelectionPreviewHydration = (
+    selectedInputFiles,
+    {
+      inputChangeStartedAt,
+      maxItems,
+      source,
+    }
+  ) => {
+    const filesToHydrate = (Array.isArray(selectedInputFiles) ? selectedInputFiles : [])
+      .slice(0, Math.max(0, Number(maxItems) || 0));
+    if (!filesToHydrate.length) {
+      return;
+    }
+
+    clearPendingSelectionPreviewHydrationTimeout();
+    let nextIndex = 0;
+    const hydratedItems = [];
+    const hydrateNext = () => {
+      pendingSelectionPreviewHydrationHandleRef.current = null;
+      const nextItem = buildPendingSelectionPreviewItem(filesToHydrate[nextIndex], nextIndex, {
+        onCreateObjectUrl: (objectUrl) => {
+          pendingSelectionPreviewObjectUrlsRef.current.push(objectUrl);
+        },
+      });
+      if (nextItem) {
+        hydratedItems.push(nextItem);
+      }
+
+      if (nextIndex === 0) {
+        recordPerfEvent("text-chat", "file-picker:first-preview-item-hydrated", {
+          selectedFileCount: selectedInputFiles.length,
+          source,
+        }, getPerfNow() - inputChangeStartedAt);
+      }
+
+      setPendingBatchSelection((previous) => {
+        if (!previous || previous.waitingForPicker) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          previewItems: hydratedItems.slice(),
+        };
+      });
+
+      nextIndex += 1;
+      if (nextIndex < filesToHydrate.length) {
+        pendingSelectionPreviewHydrationHandleRef.current = scheduleAfterNextPaint(hydrateNext);
+      }
+    };
+
+    pendingSelectionPreviewHydrationHandleRef.current = scheduleAfterNextPaint(hydrateNext);
   };
 
   const getPickerInputNode = (kind = attachPickerKindRef.current) => (
@@ -311,28 +382,24 @@ export default function useTextChatAttachmentPickerFlow({
 
     const normalizedLayout = shouldPreferSendAsDocuments ? "document" : "media";
     const normalizedFirstFileName = getDisplayFileName(selectedInputFiles[0]?.name) || "";
-    const createdObjectUrls = [];
-    const nextPreviewItems = buildPendingSelectionPreviewItems(selectedInputFiles, {
-      maxItems: normalizedLayout === "document" ? 4 : 6,
-      onCreateObjectUrl: (objectUrl) => {
-        createdObjectUrls.push(objectUrl);
-      },
-    });
+    const shellMetadata = buildPendingSelectionShellMetadata(selectedInputFiles);
+    const previewHydrationMaxItems = normalizedLayout === "document" ? 4 : 6;
 
     flushSync(() => {
       clearPendingSelectionPreviewHydrationTimeout();
       resetPendingSelectionPreviewObjectUrls();
-      pendingSelectionPreviewObjectUrlsRef.current.push(...createdObjectUrls);
       setPendingBatchSelection({
         fileCount: selectedInputFiles.length,
         firstFileName: normalizedFirstFileName,
         layout: normalizedLayout,
+        totalSize: shellMetadata.totalSize,
+        fileNames: shellMetadata.fileNames,
         waitingForPicker: false,
-        previewItems: nextPreviewItems,
+        previewItems: [],
       });
     });
 
-    recordPerfEvent("text-chat", "file-picker:pending-selection-flushed", {
+    recordPerfEvent("text-chat", "file-picker:pending-modal-state-set", {
       selectedFileCount: selectedInputFiles.length,
       source,
     }, getPerfNow() - inputChangeStartedAt);
@@ -342,6 +409,11 @@ export default function useTextChatAttachmentPickerFlow({
     }, getPerfNow() - inputChangeStartedAt);
 
     onToggleBatchUploadSendAsDocuments(shouldPreferSendAsDocuments);
+    schedulePendingSelectionPreviewHydration(selectedInputFiles, {
+      inputChangeStartedAt,
+      maxItems: previewHydrationMaxItems,
+      source,
+    });
     scheduleSelectedFilesQueue(selectedInputFiles, {
       inputChangeStartedAt,
       shouldPreferSendAsDocuments,
@@ -352,6 +424,7 @@ export default function useTextChatAttachmentPickerFlow({
 
   const handleAttachFileChange = (event) => {
     const inputChangeStartedAt = getPerfNow();
+    recordPerfEvent("text-chat", "file-picker:selection-start", {}, 0);
     const pickerOpenedAt = typeof window !== "undefined"
       ? Number(window.__TEND_FILE_PICKER_OPENED_AT__ || 0)
       : 0;

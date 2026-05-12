@@ -1,5 +1,6 @@
 ﻿import { startTransition, useEffect, useRef } from "react";
 import chatConnection from "../SignalR/ChatConnect";
+import { useCallback } from "react";
 import { flushSync } from "react-dom";
 import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
 import { clearChatDraft } from "../utils/chatDrafts";
@@ -19,6 +20,7 @@ import {
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
 
 const LOCATION_MESSAGE_DEFAULT_ZOOM = 15;
+const PENDING_UPLOAD_CREATION_CHUNK_SIZE = 12;
 
 export default function useTextChatSendActions({
   message,
@@ -60,6 +62,23 @@ export default function useTextChatSendActions({
   const uploadProgressSnapshotRef = useRef(new Map());
   const preparedUploadFileCacheRef = useRef(new Map());
   const preparedUploadModeRef = useRef(new Map());
+  const pendingUploadCreationFrameRef = useRef(0);
+  const pendingUploadCreationJobIdRef = useRef(0);
+
+  const cancelPendingUploadCreation = useCallback(() => {
+    pendingUploadCreationJobIdRef.current += 1;
+    if (!pendingUploadCreationFrameRef.current || typeof window === "undefined") {
+      pendingUploadCreationFrameRef.current = 0;
+      return;
+    }
+
+    const cancelFrame =
+      typeof window.cancelAnimationFrame === "function"
+        ? window.cancelAnimationFrame.bind(window)
+        : window.clearTimeout.bind(window);
+    cancelFrame(pendingUploadCreationFrameRef.current);
+    pendingUploadCreationFrameRef.current = 0;
+  }, [cancelPendingUploadCreation]);
 
   const isCancelledPendingUploadError = (uploadId, error) => {
     const normalizedUploadId = String(uploadId || "").trim();
@@ -180,6 +199,7 @@ export default function useTextChatSendActions({
     uploadProgressSnapshotRef.current.clear();
     preparedUploadFileCacheRef.current.clear();
     preparedUploadModeRef.current.clear();
+    cancelPendingUploadCreation();
   }, []);
 
   useEffect(() => {
@@ -202,19 +222,54 @@ export default function useTextChatSendActions({
       return false;
     }
 
-    const shouldSendAsDocuments = preferSendAsDocuments || Boolean(batchUploadOptions?.sendAsDocuments);
-    const nextUploads = validFiles.map((file) => createPendingUpload(file));
+    const currentJobId = pendingUploadCreationJobIdRef.current + 1;
+    pendingUploadCreationJobIdRef.current = currentJobId;
+    if (pendingUploadCreationFrameRef.current && typeof window !== "undefined") {
+      const cancelFrame =
+        typeof window.cancelAnimationFrame === "function"
+          ? window.cancelAnimationFrame.bind(window)
+          : window.clearTimeout.bind(window);
+      cancelFrame(pendingUploadCreationFrameRef.current);
+      pendingUploadCreationFrameRef.current = 0;
+    }
+
+    const firstChunk = validFiles.slice(0, PENDING_UPLOAD_CREATION_CHUNK_SIZE).map((file) => createPendingUpload(file));
 
     flushSync(() => {
       setSelectedFiles((previous) => {
         if (replace) {
           revokePendingUploadPreviews(previous);
-          return nextUploads;
+          return firstChunk;
         }
 
-        return [...previous, ...nextUploads];
+        return [...previous, ...firstChunk];
       });
     });
+
+    let nextIndex = PENDING_UPLOAD_CREATION_CHUNK_SIZE;
+    const scheduleFrame =
+      typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame.bind(window)
+        : (callback) => window.setTimeout(callback, 16);
+    const appendNextChunk = () => {
+      pendingUploadCreationFrameRef.current = 0;
+      if (pendingUploadCreationJobIdRef.current !== currentJobId || nextIndex >= validFiles.length) {
+        return;
+      }
+
+      const nextUploads = validFiles
+        .slice(nextIndex, nextIndex + PENDING_UPLOAD_CREATION_CHUNK_SIZE)
+        .map((file) => createPendingUpload(file));
+      nextIndex += PENDING_UPLOAD_CREATION_CHUNK_SIZE;
+      setSelectedFiles((previous) => [...previous, ...nextUploads]);
+      if (nextIndex < validFiles.length) {
+        pendingUploadCreationFrameRef.current = scheduleFrame(appendNextChunk);
+      }
+    };
+
+    if (nextIndex < validFiles.length) {
+      pendingUploadCreationFrameRef.current = scheduleFrame(appendNextChunk);
+    }
     return true;
   };
 
@@ -270,6 +325,7 @@ export default function useTextChatSendActions({
   };
 
   const clearPendingUploads = () => {
+    cancelPendingUploadCreation();
     (Array.isArray(selectedFiles) ? selectedFiles : []).forEach((item) => {
       const uploadId = String(item?.id || "");
       if (uploadId) {
