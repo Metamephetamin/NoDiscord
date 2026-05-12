@@ -293,3 +293,9 @@ contextBridge.exposeInMainWorld("electronPerf", {
     return ipcRenderer.invoke("perf:ping", payload);
   },
 });
+
+contextBridge.exposeInMainWorld("electronDiagnostics", {
+  async reportClientError(payload) {
+    return ipcRenderer.invoke("diagnostics:client-error", payload);
+  },
+});

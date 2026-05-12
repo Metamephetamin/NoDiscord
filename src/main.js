@@ -40,6 +40,7 @@ const WINDOWS_USE_NATIVE_TITLEBAR_OVERLAY = false;
 const APP_UPDATE_EVENT = "app-update:state";
 const SUPPORTED_AUTO_UPDATE_PLATFORM = "win32";
 const MAX_PERF_EVENTS = 500;
+const MAX_DIAGNOSTIC_TEXT_LENGTH = 240;
 const PERF_ENABLED = !app.isPackaged || process.env.ND_PERF_AUDIT === "1";
 const ATTACHMENT_PICKER_MAX_FILE_SIZE_BYTES = MAX_ELECTRON_DOWNLOAD_BYTES;
 const ATTACHMENT_PICKER_PREVIEW_MAX_EDGE = 320;
@@ -481,6 +482,58 @@ const redactSensitiveLogText = (value) => String(value || "")
   .replace(/([?&](?:access_token|refresh_token|token|scannerToken|sid)=)[^&\s)]+/gi, "$1[redacted]")
   .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
   .replace(/\b(tend_access_token=)[^;\s)]+/gi, "$1[redacted]");
+
+const truncateDiagnosticText = (value) => {
+  const normalized = redactSensitiveLogText(value).replace(/\s+/g, " ").trim();
+  return normalized.length > MAX_DIAGNOSTIC_TEXT_LENGTH
+    ? `${normalized.slice(0, MAX_DIAGNOSTIC_TEXT_LENGTH)}...`
+    : normalized;
+};
+
+const hashDiagnosticText = (value) => {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+};
+
+const normalizeClientDiagnosticEvent = (payload) => {
+  const event = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+  const rawStack = String(event.stack || "");
+  const rawMessage = String(event.message || "");
+
+  return {
+    type: truncateDiagnosticText(event.type || "renderer diagnostic"),
+    message: truncateDiagnosticText(rawMessage),
+    stackHash: hashDiagnosticText(rawStack || rawMessage),
+    route: truncateDiagnosticText(event.route || ""),
+    surface: truncateDiagnosticText(event.surface || "renderer"),
+    appVersion: truncateDiagnosticText(event.appVersion || app.getVersion()),
+    timestamp: truncateDiagnosticText(event.timestamp || new Date().toISOString()),
+  };
+};
+
+const logMainProcessDiagnostic = (type, error) => {
+  const stack = String(error?.stack || "");
+  const message = String(error?.message || error || "");
+  console.error("[main-diagnostic]", {
+    type,
+    message: truncateDiagnosticText(message),
+    stackHash: hashDiagnosticText(stack || message),
+    appVersion: app.getVersion(),
+    timestamp: new Date().toISOString(),
+  });
+};
+
+process.on("uncaughtException", (error) => {
+  logMainProcessDiagnostic("Electron main uncaught exception", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logMainProcessDiagnostic("Electron main unhandled promise rejection", reason);
+});
 
 const deliverPendingRendererRoute = () => {
   if (!pendingRendererRoute || !mainWindow || mainWindow.isDestroyed()) {
@@ -1873,11 +1926,16 @@ const createWindow = () => {
     mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
       console.error(`[renderer:load-failed] ${errorCode} ${redactSensitiveLogText(errorDescription)} ${redactSensitiveLogText(validatedURL)}`);
     });
-
-    mainWindow.webContents.on("render-process-gone", (_event, details) => {
-      console.error("[renderer:gone]", details);
-    });
   }
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[renderer:gone]", {
+      reason: truncateDiagnosticText(details?.reason || ""),
+      exitCode: Number.isFinite(details?.exitCode) ? details.exitCode : null,
+      appVersion: app.getVersion(),
+      timestamp: new Date().toISOString(),
+    });
+  });
 
   if (RENDERER_DEV_SERVER_URL) {
     mainWindow.loadURL(RENDERER_DEV_SERVER_URL);
@@ -2014,6 +2072,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("app-logo:set", async (_event, assetPath) => applyAppIconAsset(assetPath));
   ipcMain.handle("permissions:get-media-status", async (_event, mediaType) => getMediaAccessStatus(mediaType));
   ipcMain.handle("permissions:request-media-access", async (_event, mediaType) => requestMediaAccess(mediaType));
+  ipcMain.handle("diagnostics:client-error", async (_event, payload) => {
+    console.warn("[client-diagnostic]", normalizeClientDiagnosticEvent(payload));
+    return true;
+  });
   ipcMain.handle("perf:record", async (_event, payload) => {
     if (!PERF_ENABLED) {
       return false;

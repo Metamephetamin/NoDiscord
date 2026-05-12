@@ -34,6 +34,7 @@ import {
 } from "./utils/auth";
 
 const MEDIA_PERMISSION_BOOTSTRAP_STORAGE_KEY = "nd_media_permissions_bootstrap_v2";
+const DIAGNOSTIC_MESSAGE_MAX_LENGTH = 240;
 const rendererBootstrapTraceId = startPerfTrace("app-shell", "renderer-bootstrap");
 installChunkLoadRecovery();
 
@@ -69,6 +70,54 @@ function writeMediaPermissionBootstrapState(value) {
   } catch {
     // ignore storage errors
   }
+}
+
+function redactDiagnosticText(value) {
+  const normalized = String(value || "")
+    .replace(/([?&](?:access_token|refresh_token|token|scannerToken|sid)=)[^&\s)]+/gi, "$1[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\b(tend_access_token=)[^;\s)]+/gi, "$1[redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized.length > DIAGNOSTIC_MESSAGE_MAX_LENGTH
+    ? `${normalized.slice(0, DIAGNOSTIC_MESSAGE_MAX_LENGTH)}...`
+    : normalized;
+}
+
+function readDiagnosticRoute() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return redactDiagnosticText(`${window.location?.pathname || ""}${window.location?.search || ""}${window.location?.hash || ""}`);
+}
+
+function reportClientDiagnostic(payload) {
+  const diagnosticsApi = typeof window !== "undefined" ? window.electronDiagnostics : null;
+  if (!diagnosticsApi?.reportClientError) {
+    return;
+  }
+
+  diagnosticsApi.reportClientError({
+    type: payload?.type || "renderer diagnostic",
+    message: redactDiagnosticText(payload?.message),
+    stack: String(payload?.stack || ""),
+    route: readDiagnosticRoute(),
+    surface: redactDiagnosticText(payload?.surface || "renderer"),
+    appVersion: redactDiagnosticText(window.electronRuntime?.appVersion || ""),
+    timestamp: new Date().toISOString(),
+  }).catch(() => {});
+}
+
+function classifyRendererError(message) {
+  const text = String(message || "").toLowerCase();
+  return text.includes("failed to fetch dynamically imported module")
+    || text.includes("loading chunk")
+    || text.includes("chunkloaderror")
+    || text.includes("module script")
+    ? "failed chunk load"
+    : "renderer uncaught exception";
 }
 
 function hasSettledMediaPermissionBootstrapState(value) {
@@ -274,7 +323,13 @@ async function requestMediaPermissionsAtAppLevel() {
         displayCapture: permissionState.displayCapture,
       };
     }
-  } catch {
+  } catch (error) {
+    reportClientDiagnostic({
+      type: "media device permission failure",
+      message: error?.name || error?.message || "combined media permission failed",
+      stack: error?.stack || "",
+      surface: "media-permissions",
+    });
     // fall back to separate permission prompts
   }
 
@@ -291,6 +346,12 @@ async function requestMediaPermissionsAtAppLevel() {
       stopTracks(stream);
       markGranted(request.mediaType);
     } catch (error) {
+      reportClientDiagnostic({
+        type: "media device permission failure",
+        message: error?.name || error?.message || `${request.mediaType} permission failed`,
+        stack: error?.stack || "",
+        surface: request.mediaType,
+      });
       const errorName = String(error?.name || "").trim();
       if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
         markDenied(request.mediaType);
@@ -349,6 +410,36 @@ export default function Renderer() {
     void measureElectronIpcRoundTrip("startup-ipc-roundtrip", {
       phase: "renderer-mount",
     });
+
+    const handleWindowError = (event) => {
+      const error = event?.error;
+      const message = error?.message || event?.message || "";
+      reportClientDiagnostic({
+        type: classifyRendererError(message),
+        message,
+        stack: error?.stack || "",
+        surface: "window-error",
+      });
+    };
+
+    const handleUnhandledRejection = (event) => {
+      const reason = event?.reason;
+      const message = reason?.message || reason || "";
+      reportClientDiagnostic({
+        type: classifyRendererError(message),
+        message,
+        stack: reason?.stack || "",
+        surface: "unhandledrejection",
+      });
+    };
+
+    window.addEventListener("error", handleWindowError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("error", handleWindowError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
 
   useEffect(() => {

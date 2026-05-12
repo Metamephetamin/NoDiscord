@@ -18,6 +18,7 @@
 - `powershell -ExecutionPolicy Bypass -File .\scripts\db-backup-drill.ps1`
 - `dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release`
 - Confirm PostgreSQL backup exists and a recent non-production restore drill is recorded.
+- Confirm client diagnostics and backend request logs include a correlation id/status without secrets or message bodies.
 
 ## Manual Smoke Before Pushing To master
 
