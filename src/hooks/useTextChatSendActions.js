@@ -78,7 +78,7 @@ export default function useTextChatSendActions({
         : window.clearTimeout.bind(window);
     cancelFrame(pendingUploadCreationFrameRef.current);
     pendingUploadCreationFrameRef.current = 0;
-  }, [cancelPendingUploadCreation]);
+  }, []);
 
   const isCancelledPendingUploadError = (uploadId, error) => {
     const normalizedUploadId = String(uploadId || "").trim();
@@ -200,7 +200,7 @@ export default function useTextChatSendActions({
     preparedUploadFileCacheRef.current.clear();
     preparedUploadModeRef.current.clear();
     cancelPendingUploadCreation();
-  }, []);
+  }, [cancelPendingUploadCreation]);
 
   useEffect(() => {
     const nextSelectedFiles = Array.isArray(selectedFiles) ? selectedFiles : [];
