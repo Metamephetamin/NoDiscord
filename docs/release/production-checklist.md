@@ -13,6 +13,7 @@
 - `npm run audit:public-assets`
 - `npm run audit:perf`
 - `node ./scripts/release-smoke.mjs`
+- `npm run smoke:release`
 - `node ./scripts/verify-release-gate.mjs`
 - `npm run test:e2e-smoke`
 - `powershell -ExecutionPolicy Bypass -File .\scripts\db-backup-drill.ps1`
@@ -20,6 +21,7 @@
 - Confirm PostgreSQL backup exists and a recent non-production restore drill is recorded.
 - Confirm client diagnostics and backend request logs include a correlation id/status without secrets or message bodies.
 - Confirm auth, email verification, QR login, media render, and chat upload rate-limit policies are active.
+- For deep release smoke, configure `SMOKE_TEST_EMAIL`, `SMOKE_TEST_PASSWORD`, `SMOKE_CHAT_ID`, and `SMOKE_VOICE_CHANNEL`; set `SMOKE_REQUIRE_CREDENTIALS=1` in CI when these are ready.
 
 ## Manual Smoke Before Pushing To master
 
@@ -45,5 +47,10 @@
 - Frontend opens without chunk load errors.
 - `/chatHub/negotiate` returns non-5xx.
 - `/voiceHub/negotiate` returns non-5xx.
+- `npm run smoke:release` passes against `https://lanaya.space` with the production smoke account.
 - Backend service is active.
 - nginx config validates with `nginx -t`.
+
+## Rollback
+
+- Follow `docs/release/rollback.md`.

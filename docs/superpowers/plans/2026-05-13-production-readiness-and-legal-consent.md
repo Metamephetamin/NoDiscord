@@ -258,12 +258,12 @@ Expected: status is `ok`.
 - Modify: `.github/workflows/deploy.yml`
 - Modify: `docs/release/production-checklist.md`
 
-- [ ] Add smoke scripts with environment-driven test user credentials.
-- [ ] Add deploy workflow gate: build, backend tests, frontend build, smoke against staging or preview URL.
-- [ ] Add rollback doc with exact GitHub Actions/manual steps.
-- [ ] Add post-deploy health check against `https://lanaya.space/api/ping`.
-- [ ] Verify local smoke commands and CI syntax.
-- [ ] Commit: `Add production smoke release gates`.
+- [x] Add smoke scripts with environment-driven test user credentials.
+- [x] Add deploy workflow gate: build, backend tests, frontend build, smoke against staging or preview URL.
+- [x] Add rollback doc with exact GitHub Actions/manual steps.
+- [x] Add post-deploy health check against `https://lanaya.space/api/ping`.
+- [x] Verify local smoke commands and CI syntax.
+- [x] Commit: `Add production smoke release gates`.
 
 **Acceptance:**
 - A broken auth/chat/upload path blocks release before production.

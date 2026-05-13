@@ -82,6 +82,18 @@ jobs:
       - name: Test backend before deploy
         run: dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --no-restore
 
+      - name: Run release smoke gate
+        env:
+          SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL }}
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          SMOKE_TEST_TOTP_CODE: ${{ secrets.SMOKE_TEST_TOTP_CODE }}
+          SMOKE_CHAT_ID: ${{ vars.SMOKE_CHAT_ID }}
+          SMOKE_CHAT_WRITE: ${{ vars.SMOKE_CHAT_WRITE }}
+          SMOKE_VOICE_CHANNEL: ${{ vars.SMOKE_VOICE_CHANNEL }}
+          SMOKE_REQUIRE_CREDENTIALS: ${{ vars.SMOKE_REQUIRE_CREDENTIALS }}
+        run: npm run smoke:release
+
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --no-restore --output ./artifacts/backend
 
@@ -520,7 +532,11 @@ jobs:
           curl --fail --silent --show-error --location "$HEALTHCHECK" > /dev/null
 
           echo "Running backend API healthcheck: $API_HEALTHCHECK"
-          curl --fail --silent --show-error --location "$API_HEALTHCHECK" > /dev/null
+          api_body="$(curl --fail --silent --show-error --location "$API_HEALTHCHECK")"
+          if ! printf '%s\n' "$api_body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+            echo "Backend API ping did not return status ok: $api_body" >&2
+            exit 1
+          fi
           api_headers="$(mktemp)"
           curl --fail --silent --show-error --location --dump-header "$api_headers" --output /dev/null "$API_HEALTHCHECK"
           if ! grep -iq "content-security-policy:.*wss://lanaya.space" "$api_headers"; then
