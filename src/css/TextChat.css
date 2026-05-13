@@ -2590,7 +2590,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media {
   width: fit-content !important;
-  min-width: min(220px, 100%);
+  min-width: min(220px, calc(100vw - 160px));
   max-width: min(100%, 520px);
 }
 
@@ -2603,7 +2603,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media__image {
   width: auto;
   height: auto;
-  min-width: min(220px, 100%);
+  min-width: min(220px, calc(100vw - 160px));
   min-height: 120px;
   max-width: min(100%, 520px);
   max-height: 420px;
@@ -2755,14 +2755,23 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 
 .msg-content--single-video-only .message-media-overlay-anchor,
 .msg-content--single-video-only .message-attachment-single,
-.msg-content--single-video-only > .message-media--video {
-  width: min(100%, 620px) !important;
-  max-width: min(100%, 620px) !important;
-}
-
 .msg-content--single-video-only .message-attachment-single .message-media,
 .msg-content--single-video-only > .message-media--video {
-  width: 100% !important;
+  width: min(620px, calc(100vw - 160px)) !important;
+  min-width: min(260px, calc(100vw - 160px));
+  max-width: 100% !important;
+}
+
+.message-item--dm .msg-content--single-video-only .message-media-overlay-anchor,
+.message-item--dm .msg-content--single-video-only .message-attachment-single,
+.message-item--dm .msg-content--single-video-only .message-attachment-single .message-media,
+.message-item--dm .msg-content--single-video-only > .message-media--video,
+.message-item--dm-own .msg-content--single-video-only .message-media-overlay-anchor,
+.message-item--dm-own .msg-content--single-video-only .message-attachment-single,
+.message-item--dm-own .msg-content--single-video-only .message-attachment-single .message-media,
+.message-item--dm-own .msg-content--single-video-only > .message-media--video {
+  width: min(620px, calc(100vw - 128px)) !important;
+  min-width: min(220px, calc(100vw - 128px));
   max-width: 100% !important;
 }
 
