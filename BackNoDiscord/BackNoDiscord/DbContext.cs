@@ -27,6 +27,9 @@ public class Message
     [Column("author_user_id")]
     public string? AuthorUserId { get; set; }
 
+    [Column("client_message_id")]
+    public string? ClientMessageId { get; set; }
+
     [Column("timestamp")]
     public DateTime Timestamp { get; set; }
 
@@ -658,6 +661,10 @@ public class AppDbContext : DbContext
                 .HasDatabaseName("ix_chatmessages_active_channelid_id")
                 .HasFilter("is_deleted = false");
             entity.HasIndex(x => new { x.ChannelId, x.ReadAt, x.AuthorUserId });
+            entity.HasIndex(x => new { x.AuthorUserId, x.ChannelId, x.ClientMessageId })
+                .HasDatabaseName("ix_chatmessages_author_channel_client_message_id")
+                .IsUnique()
+                .HasFilter("client_message_id IS NOT NULL AND client_message_id <> '' AND is_deleted = false");
             entity.HasIndex(x => x.Timestamp);
         });
 

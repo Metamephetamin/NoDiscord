@@ -70,12 +70,14 @@ function normalizeHubMessageInput(item) {
       : [];
   const attachments = sourceAttachments.map(normalizeHubAttachmentInput);
   const attachmentAsFile = Boolean(item?.attachmentAsFile || item?.AttachmentAsFile || attachments[0]?.attachmentAsFile);
-  const clientTempId = String(item?.clientTempId || item?.ClientTempId || "").trim();
+  const clientMessageId = String(item?.clientMessageId || item?.ClientMessageId || item?.clientTempId || item?.ClientTempId || "").trim();
 
   return {
     ...item,
-    clientTempId,
-    ClientTempId: clientTempId,
+    clientMessageId,
+    ClientMessageId: clientMessageId,
+    clientTempId: clientMessageId,
+    ClientTempId: clientMessageId,
     attachmentAsFile,
     AttachmentAsFile: attachmentAsFile,
     attachments,
@@ -178,7 +180,7 @@ export async function sendMessagesCompat(...args) {
       item.replyPreview || null,
       false,
       Boolean(item.attachmentAsFile || primaryAttachment?.attachmentAsFile),
-      item.clientTempId || null,
+      item.clientMessageId || item.clientTempId || null,
     ];
 
     try {

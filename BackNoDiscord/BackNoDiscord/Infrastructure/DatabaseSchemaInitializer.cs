@@ -268,6 +268,8 @@ public static class DatabaseSchemaInitializer
                 ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false;
             ALTER TABLE IF EXISTS chatmessages
                 ADD COLUMN IF NOT EXISTS author_user_id text NULL;
+            ALTER TABLE IF EXISTS chatmessages
+                ADD COLUMN IF NOT EXISTS client_message_id text NULL;
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS is_email_verified boolean NOT NULL DEFAULT true;
             ALTER TABLE IF EXISTS users
@@ -360,6 +362,9 @@ public static class DatabaseSchemaInitializer
             CREATE INDEX IF NOT EXISTS ix_chatmessages_timestamp ON chatmessages (timestamp);
             CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_read_at ON chatmessages (channelid, read_at);
             CREATE INDEX IF NOT EXISTS ix_chatmessages_channelid_read_at_author_user_id ON chatmessages (channelid, read_at, author_user_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_chatmessages_author_channel_client_message_id
+                ON chatmessages (author_user_id, channelid, client_message_id)
+                WHERE client_message_id IS NOT NULL AND client_message_id <> '' AND is_deleted = false;
             CREATE INDEX IF NOT EXISTS ix_message_reactions_message_id_created_at ON message_reactions (message_id, created_at);
             CREATE INDEX IF NOT EXISTS ix_friendships_user_low_created_at ON friendships (user_low_id, created_at);
             CREATE INDEX IF NOT EXISTS ix_friendships_user_high_created_at ON friendships (user_high_id, created_at);

@@ -45,6 +45,7 @@ import {
 import { buildForwardPayloadForTargetChannel as buildForwardPayloadForTargetChannelCore } from "../../utils/textChatForwardPayload";
 import { TEXT_CHAT_INSERT_MENTION_EVENT } from "../../utils/textChatMentionInterop";
 import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
+import { normalizeClientMessageId } from "./messageDeliveryState.mjs";
 import { finishPerfTrace, startPerfTrace } from "../../utils/perf";
 import useMediaPreviewKeyboardControls from "../../hooks/useMediaPreviewKeyboardControls";
 import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers";
@@ -393,12 +394,12 @@ function findMatchingLocalEchoMessageIndex(channelMessages, incomingMessage, cur
     return -1;
   }
 
-  const incomingClientTempId = String(incomingMessage?.clientTempId || "").trim();
+  const incomingClientTempId = normalizeClientMessageId(incomingMessage);
   if (incomingClientTempId) {
     const clientTempMatchIndex = (Array.isArray(channelMessages) ? channelMessages : []).findIndex((messageItem) => (
       Boolean(messageItem?.isLocalEcho)
       && String(messageItem?.authorUserId || "") === normalizedCurrentUserId
-      && String(messageItem?.clientTempId || "").trim() === incomingClientTempId
+      && normalizeClientMessageId(messageItem) === incomingClientTempId
     ));
     if (clientTempMatchIndex >= 0) {
       return clientTempMatchIndex;
@@ -1211,7 +1212,8 @@ export default function TextChat({
 
     return {
       ...messageItem,
-      clientTempId: String(messageItem?.clientTempId || messageItem?.ClientTempId || "").trim(),
+      clientMessageId: String(messageItem?.clientMessageId || messageItem?.ClientMessageId || messageItem?.clientTempId || messageItem?.ClientTempId || "").trim(),
+      clientTempId: String(messageItem?.clientTempId || messageItem?.ClientTempId || messageItem?.clientMessageId || messageItem?.ClientMessageId || "").trim(),
       username: String(messageItem?.username || messageItem?.Username || messageItem?.name || messageItem?.Name || "User").trim() || "User",
       message: decrypted.text,
       systemEvent: normalizeChatSystemEvent(messageItem?.systemEvent || messageItem?.SystemEvent),
@@ -2545,7 +2547,8 @@ export default function TextChat({
       return {
         id: messageId,
         channelId: normalizedChannelId,
-        clientTempId: String(descriptor?.clientTempId || "").trim(),
+        clientMessageId: String(descriptor?.clientMessageId || descriptor?.clientTempId || "").trim(),
+        clientTempId: String(descriptor?.clientTempId || descriptor?.clientMessageId || "").trim(),
         authorUserId: currentUserId,
         username,
         photoUrl,

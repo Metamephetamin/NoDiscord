@@ -34,6 +34,7 @@ import {
 import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import { recordPerfEvent } from "../utils/perf";
+import { deriveMessageDeliveryState } from "../features/text-chat/messageDeliveryState.mjs";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
 const LOCATION_MESSAGE_PATTERN = /^\s*📍?\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:\s*\n\s*(https?:\/\/\S+))?\s*$/u;
@@ -341,16 +342,25 @@ function MessageTimestamp({ messageItem }) {
 }
 
 function MessageDeliveryStatus({ messageItem, isOwnMessage }) {
-  if (!isOwnMessage) {
+  const deliveryState = deriveMessageDeliveryState(messageItem, isOwnMessage);
+  if (!deliveryState) {
     return null;
   }
 
-  if (messageItem?.isLocalEcho) {
-    return <span className="message-send-status" aria-hidden="true" />;
+  if (deliveryState.state === "queued" || deliveryState.state === "sending") {
+    return <span className="message-send-status" aria-label={deliveryState.label} title={deliveryState.label} />;
+  }
+
+  if (deliveryState.state === "failed") {
+    return <span className="message-send-status message-send-status--failed" aria-label={deliveryState.label} title={deliveryState.label} />;
   }
 
   return (
-    <span className={`message-read-status ${messageItem.isRead ? "message-read-status--read" : ""}`}>
+    <span
+      className={`message-read-status ${deliveryState.state === "delivered" ? "message-read-status--read" : ""}`}
+      aria-label={deliveryState.label}
+      title={deliveryState.label}
+    >
       <span className="message-read-status__check" />
       <span className="message-read-status__check" />
     </span>

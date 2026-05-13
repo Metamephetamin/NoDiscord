@@ -111,6 +111,7 @@ public sealed class ChatMessagesControllerTests
             new MessageSearchService(context, CreateCrypto()),
             new ChatFileAccessService(context, new ServerStateService(context)),
             limiter ?? new ChatSpamBurstLimiter(),
+            new MessageDeduplicationService(),
             hubContext ?? new RecordingHubContext())
         {
             ControllerContext = new ControllerContext

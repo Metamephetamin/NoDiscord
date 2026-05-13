@@ -30,6 +30,7 @@ public sealed class ChatMessagesController : ControllerBase
     private readonly MessageSearchService _messageSearch;
     private readonly ChatFileAccessService _chatFileAccess;
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
+    private readonly MessageDeduplicationService _messageDeduplication;
     private readonly IHubContext<ChatHub> _hubContext;
 
     public ChatMessagesController(
@@ -40,6 +41,7 @@ public sealed class ChatMessagesController : ControllerBase
         MessageSearchService messageSearch,
         ChatFileAccessService chatFileAccess,
         ChatSpamBurstLimiter messageBurstLimiter,
+        MessageDeduplicationService messageDeduplication,
         IHubContext<ChatHub> hubContext)
     {
         _context = context;
@@ -49,6 +51,7 @@ public sealed class ChatMessagesController : ControllerBase
         _messageSearch = messageSearch;
         _chatFileAccess = chatFileAccess;
         _messageBurstLimiter = messageBurstLimiter;
+        _messageDeduplication = messageDeduplication;
         _hubContext = hubContext;
     }
 
@@ -193,7 +196,7 @@ public sealed class ChatMessagesController : ControllerBase
         }
 
         var normalizedMessage = UploadPolicies.TrimToLength(request.Message, 4000);
-        var normalizedClientTempId = UploadPolicies.TrimToLength(request.ClientTempId, 160);
+        var normalizedClientMessageId = MessageDeduplicationService.NormalizeClientMessageId(request.ClientMessageId, request.ClientTempId);
         var normalizedEncryption = NormalizeEncryptionEnvelope(request.Encryption);
         if (string.IsNullOrWhiteSpace(normalizedMessage) && normalizedEncryption is null)
         {
@@ -201,10 +204,16 @@ public sealed class ChatMessagesController : ControllerBase
         }
 
         var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
-        var existingMessage = await FindMessageByClientTempIdAsync(
+        var existingMessage = await _messageDeduplication.FindExistingAsync(
+            _context,
             equivalentChannelIds,
             currentUser.UserId,
-            normalizedClientTempId,
+            normalizedClientMessageId,
+            cancellationToken);
+        existingMessage ??= await FindMessageByClientTempIdAsync(
+            equivalentChannelIds,
+            currentUser.UserId,
+            normalizedClientMessageId,
             cancellationToken);
         if (existingMessage is not null)
         {
@@ -230,7 +239,8 @@ public sealed class ChatMessagesController : ControllerBase
             AuthorUserId = currentUser.UserId,
             Message = normalizedMessage,
             Encryption = normalizedEncryption,
-            ClientTempId = normalizedClientTempId,
+            ClientMessageId = normalizedClientMessageId,
+            ClientTempId = normalizedClientMessageId,
             ReplyToMessageId = UploadPolicies.TrimToLength(request.ReplyToMessageId, 80),
             ReplyToUsername = UploadPolicies.TrimToLength(request.ReplyToUsername, 160),
             ReplyPreview = UploadPolicies.TrimToLength(request.ReplyPreview, 240)
@@ -244,6 +254,7 @@ public sealed class ChatMessagesController : ControllerBase
             EncryptedContent = _crypto.Encrypt($"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}"),
             PhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(request.PhotoUrl, "/avatars/"),
             AuthorUserId = currentUser.UserId,
+            ClientMessageId = normalizedClientMessageId,
             Timestamp = DateTime.UtcNow,
             IsDeleted = false
         };
@@ -273,7 +284,8 @@ public sealed class ChatMessagesController : ControllerBase
             ReplyToMessageId = payload.ReplyToMessageId,
             ReplyToUsername = payload.ReplyToUsername,
             ReplyPreview = payload.ReplyPreview,
-            ClientTempId = payload.ClientTempId,
+            ClientMessageId = message.ClientMessageId ?? payload.ClientMessageId ?? payload.ClientTempId,
+            ClientTempId = payload.ClientTempId ?? message.ClientMessageId,
             PhotoUrl = message.PhotoUrl,
             AttachmentEncryption = payload.AttachmentEncryption,
             AttachmentUrl = payload.AttachmentUrl,
@@ -687,6 +699,7 @@ public sealed class ChatOutboxMessageRequest
     public string Message { get; set; } = string.Empty;
     public ChatMessageEncryptionEnvelope? Encryption { get; set; }
     public string? PhotoUrl { get; set; }
+    public string? ClientMessageId { get; set; }
     public string? ClientTempId { get; set; }
     public string? ReplyToMessageId { get; set; }
     public string? ReplyToUsername { get; set; }

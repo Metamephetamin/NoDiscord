@@ -57,6 +57,7 @@ public class ChatHub : Hub
     private readonly UserBlockService _userBlockService;
     private readonly ChatFileAccessService _chatFileAccess;
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
+    private readonly MessageDeduplicationService _messageDeduplication;
 
     public ChatHub(
         AppDbContext context,
@@ -68,7 +69,8 @@ public class ChatHub : Hub
         IServiceScopeFactory scopeFactory,
         UserBlockService userBlockService,
         ChatFileAccessService chatFileAccess,
-        ChatSpamBurstLimiter messageBurstLimiter)
+        ChatSpamBurstLimiter messageBurstLimiter,
+        MessageDeduplicationService messageDeduplication)
     {
         _context = context;
         _crypto = crypto;
@@ -80,6 +82,7 @@ public class ChatHub : Hub
         _userBlockService = userBlockService;
         _chatFileAccess = chatFileAccess;
         _messageBurstLimiter = messageBurstLimiter;
+        _messageDeduplication = messageDeduplication;
     }
 
     public override async Task OnConnectedAsync()
@@ -206,6 +209,21 @@ public class ChatHub : Hub
 
             var replyReference = await ResolveReplyReferenceAsync(normalizedChannelId, replyToMessageId, currentUser, allowMissing: false);
 
+            var normalizedClientMessageId = MessageDeduplicationService.NormalizeClientMessageId(clientTempId);
+            var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+            var existingMessage = await _messageDeduplication.FindExistingAsync(
+                _context,
+                equivalentChannelIds,
+                currentUser.UserId,
+                normalizedClientMessageId,
+                Context.ConnectionAborted);
+            if (existingMessage is not null)
+            {
+                var existingPayload = DeserializePayload(GetRawPayload(existingMessage.Content, existingMessage.EncryptedContent, existingMessage.Id, existingMessage.ChannelId));
+                await Clients.Caller.SendAsync("ReceiveMessage", ToMessageDto(existingMessage, existingPayload), Context.ConnectionAborted);
+                return;
+            }
+
             var payload = new ChatMessagePayload
             {
                 AuthorUserId = currentUser.UserId,
@@ -214,7 +232,8 @@ public class ChatHub : Hub
                 ReplyToMessageId = replyReference?.MessageId,
                 ReplyToUsername = replyReference?.Username,
                 ReplyPreview = replyReference?.Preview,
-                ClientTempId = UploadPolicies.TrimToLength(clientTempId, 160),
+                ClientMessageId = normalizedClientMessageId,
+                ClientTempId = normalizedClientMessageId,
                 Attachments = normalizedAttachments,
                 Mentions = await NormalizeMentionsAsync(normalizedChannelId, mentions, currentUser.UserId),
                 VoiceMessage = normalizedAttachments.FirstOrDefault(static item => item.VoiceMessage is not null)?.VoiceMessage
@@ -240,6 +259,7 @@ public class ChatHub : Hub
                 EncryptedContent = encrypted,
                 PhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(photoUrl, "/avatars/"),
                 AuthorUserId = currentUser.UserId,
+                ClientMessageId = normalizedClientMessageId,
                 Timestamp = DateTime.UtcNow,
                 IsDeleted = false
             };
@@ -749,7 +769,8 @@ public class ChatHub : Hub
             ReplyToMessageId = payload.ReplyToMessageId,
             ReplyToUsername = payload.ReplyToUsername,
             ReplyPreview = payload.ReplyPreview,
-            ClientTempId = payload.ClientTempId,
+            ClientMessageId = message.ClientMessageId ?? payload.ClientMessageId ?? payload.ClientTempId,
+            ClientTempId = payload.ClientTempId ?? message.ClientMessageId,
             PhotoUrl = message.PhotoUrl,
             AttachmentEncryption = payload.AttachmentEncryption,
             AttachmentUrl = payload.AttachmentUrl,
@@ -1865,6 +1886,7 @@ public class MessageDto
     public string? ReplyToMessageId { get; set; }
     public string? ReplyToUsername { get; set; }
     public string? ReplyPreview { get; set; }
+    public string? ClientMessageId { get; set; }
     public string? ClientTempId { get; set; }
     public string? PhotoUrl { get; set; }
     public string? AttachmentUrl { get; set; }
@@ -1940,6 +1962,7 @@ public class ChatMessagePayload
     public string? ReplyToMessageId { get; set; }
     public string? ReplyToUsername { get; set; }
     public string? ReplyPreview { get; set; }
+    public string? ClientMessageId { get; set; }
     public string? ClientTempId { get; set; }
     public string? AttachmentUrl { get; set; }
     public string? AttachmentName { get; set; }

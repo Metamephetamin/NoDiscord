@@ -1275,6 +1275,35 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   animation: messageAttachmentUploadSpin 0.85s linear infinite;
 }
 
+.message-send-status--failed {
+  border-color: rgba(255, 116, 116, 0.9);
+  border-top-color: rgba(255, 116, 116, 0.9);
+  animation: none;
+  position: relative;
+}
+
+.message-send-status--failed::before,
+.message-send-status--failed::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 2px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  color: rgba(255, 116, 116, 0.95);
+  transform-origin: center;
+}
+
+.message-send-status--failed::before {
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.message-send-status--failed::after {
+  transform: translateX(-50%) rotate(-45deg);
+}
+
 .message-text {
   margin-top: 1px;
   color: #dbe2f0;
