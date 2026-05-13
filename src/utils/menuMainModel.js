@@ -916,6 +916,7 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "appearance_accessibility", label: "Внешний вид и доступность", section: "Приложение" },
   { id: "server", label: "Сервер", section: "Текущий сервер" },
   { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
+  { id: "moderation", label: "Модерация", section: "Текущий сервер" },
 ];
 export const uiSoundCache = new Map();
 

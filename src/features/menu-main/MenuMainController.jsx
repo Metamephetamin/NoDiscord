@@ -1461,6 +1461,7 @@ export default function MenuMain({
   const canManageServer = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_server"), [activeServer, currentUserId]);
   const canManageChannels = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_channels"), [activeServer, currentUserId]);
   const canManageRoles = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_roles"), [activeServer, currentUserId]);
+  const canManageMessages = useMemo(() => hasServerPermission(activeServer, currentUserId, "manage_messages"), [activeServer, currentUserId]);
   const canInviteMembers = useMemo(() => hasServerPermission(activeServer, currentUserId, "invite_members"), [activeServer, currentUserId]);
   const { canInviteToServer } = useMenuMainServerInvitePermissions({ currentUserId, user });
   const isCurrentUserSpeaking = useMemo(() => speakingUserIds.some((id) => String(id) === String(currentUserId)), [currentUserId, speakingUserIds]);
@@ -5628,7 +5629,7 @@ export default function MenuMain({
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
   const settingsNavSections = SETTINGS_NAV_SECTIONS;
   const mobileSettingsNavItems = useMemo(
-    () => SETTINGS_NAV_ITEMS.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles")),
+    () => SETTINGS_NAV_ITEMS.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation")),
     [activeServer]
   );
   const activeSettingsTabMeta =
@@ -5798,6 +5799,7 @@ export default function MenuMain({
     handleAppLogoChange,
     activeServer,
     canManageServer,
+    canManageMessages,
     canInviteMembers,
     isDefaultServer,
     currentUserId,

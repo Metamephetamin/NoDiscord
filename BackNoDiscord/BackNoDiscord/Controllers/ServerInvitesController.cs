@@ -14,12 +14,14 @@ public class ServerInvitesController : ControllerBase
     private readonly ServerInviteService _invites;
     private readonly ServerStateService _serverState;
     private readonly AuditLogService _auditLog;
+    private readonly ModerationService _moderation;
 
-    public ServerInvitesController(ServerInviteService invites, ServerStateService serverState, AuditLogService auditLog)
+    public ServerInvitesController(ServerInviteService invites, ServerStateService serverState, AuditLogService auditLog, ModerationService moderation)
     {
         _invites = invites;
         _serverState = serverState;
         _auditLog = auditLog;
+        _moderation = moderation;
     }
 
     [HttpPost("create")]
@@ -73,7 +75,7 @@ public class ServerInvitesController : ControllerBase
     }
 
     [HttpPost("redeem")]
-    public IActionResult RedeemInvite([FromBody] RedeemServerInviteRequest request)
+    public async Task<IActionResult> RedeemInvite([FromBody] RedeemServerInviteRequest request, CancellationToken cancellationToken)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
         {
@@ -92,6 +94,17 @@ public class ServerInvitesController : ControllerBase
 
         try
         {
+            var preview = _invites.GetInvitePreview(request.InviteCode, currentUser.UserId);
+            var activeBan = await _moderation.GetActiveActionAsync(
+                preview.ServerId,
+                currentUser.UserId,
+                ["ban"],
+                cancellationToken);
+            if (activeBan is not null)
+            {
+                return StatusCode(403, new { message = "Вы заблокированы на этом сервере." });
+            }
+
             var result = _invites.RedeemInvite(request.InviteCode, currentUser.UserId, displayName, avatarUrl);
             var syncedSnapshot = _serverState.AddMember(result.Snapshot.Id, currentUser.UserId, displayName, avatarUrl);
 
@@ -135,14 +148,14 @@ public class ServerInvitesController : ControllerBase
     }
 
     [HttpPost("{inviteCode}/redeem")]
-    public IActionResult RedeemInviteByLink([FromRoute] string inviteCode, [FromBody] RedeemServerInviteRequest? request)
+    public Task<IActionResult> RedeemInviteByLink([FromRoute] string inviteCode, [FromBody] RedeemServerInviteRequest? request, CancellationToken cancellationToken)
     {
         return RedeemInvite(new RedeemServerInviteRequest
         {
             InviteCode = inviteCode,
             Name = request?.Name,
             Avatar = request?.Avatar
-        });
+        }, cancellationToken);
     }
 
     [HttpGet("server/{serverId}", Order = -1)]

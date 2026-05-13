@@ -65,6 +65,77 @@ public class ChatChannelReadStateRecord
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+[Table("chat_moderation_reports")]
+public class ChatModerationReportRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("server_id")]
+    public string ServerId { get; set; } = string.Empty;
+
+    [Column("channel_id")]
+    public string ChannelId { get; set; } = string.Empty;
+
+    [Column("message_id")]
+    public int? MessageId { get; set; }
+
+    [Column("reporter_user_id")]
+    public string ReporterUserId { get; set; } = string.Empty;
+
+    [Column("target_user_id")]
+    public string TargetUserId { get; set; } = string.Empty;
+
+    [Column("reason")]
+    public string Reason { get; set; } = string.Empty;
+
+    [Column("status")]
+    public string Status { get; set; } = "open";
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("reviewed_at")]
+    public DateTimeOffset? ReviewedAt { get; set; }
+
+    [Column("reviewed_by_user_id")]
+    public string? ReviewedByUserId { get; set; }
+}
+
+[Table("chat_moderation_actions")]
+public class ChatModerationActionRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("server_id")]
+    public string ServerId { get; set; } = string.Empty;
+
+    [Column("actor_user_id")]
+    public string ActorUserId { get; set; } = string.Empty;
+
+    [Column("target_user_id")]
+    public string TargetUserId { get; set; } = string.Empty;
+
+    [Column("action_type")]
+    public string ActionType { get; set; } = string.Empty;
+
+    [Column("reason")]
+    public string Reason { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("expires_at")]
+    public DateTimeOffset? ExpiresAt { get; set; }
+
+    [Column("revoked_at")]
+    public DateTimeOffset? RevokedAt { get; set; }
+
+    [Column("revoked_by_user_id")]
+    public string? RevokedByUserId { get; set; }
+}
+
 [Table("chat_file_uploads")]
 public class ChatFileUploadRecord
 {
@@ -666,6 +737,8 @@ public class AppDbContext : DbContext
     public DbSet<ServerAuditLogRecord> ServerAuditLogs => Set<ServerAuditLogRecord>();
     public DbSet<UserIntegrationRecord> UserIntegrations => Set<UserIntegrationRecord>();
     public DbSet<ChatChannelReadStateRecord> ChatChannelReadStates => Set<ChatChannelReadStateRecord>();
+    public DbSet<ChatModerationReportRecord> ChatModerationReports => Set<ChatModerationReportRecord>();
+    public DbSet<ChatModerationActionRecord> ChatModerationActions => Set<ChatModerationActionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -712,6 +785,33 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.ChannelId, x.LastReadAt });
             entity.Property(x => x.UserId).IsRequired();
             entity.Property(x => x.ChannelId).IsRequired();
+        });
+
+        modelBuilder.Entity<ChatModerationReportRecord>(entity =>
+        {
+            entity.ToTable("chat_moderation_reports");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.ServerId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.ServerId, x.TargetUserId, x.CreatedAt });
+            entity.Property(x => x.ServerId).IsRequired();
+            entity.Property(x => x.ChannelId).IsRequired();
+            entity.Property(x => x.ReporterUserId).IsRequired();
+            entity.Property(x => x.TargetUserId).IsRequired();
+            entity.Property(x => x.Reason).IsRequired();
+            entity.Property(x => x.Status).IsRequired();
+        });
+
+        modelBuilder.Entity<ChatModerationActionRecord>(entity =>
+        {
+            entity.ToTable("chat_moderation_actions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.ServerId, x.TargetUserId, x.ActionType, x.RevokedAt, x.ExpiresAt });
+            entity.HasIndex(x => new { x.ServerId, x.CreatedAt });
+            entity.Property(x => x.ServerId).IsRequired();
+            entity.Property(x => x.ActorUserId).IsRequired();
+            entity.Property(x => x.TargetUserId).IsRequired();
+            entity.Property(x => x.ActionType).IsRequired();
+            entity.Property(x => x.Reason).IsRequired();
         });
 
         modelBuilder.Entity<MessageReactionRecord>(entity =>

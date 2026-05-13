@@ -142,14 +142,14 @@ Expected: status is `ok`.
 - Modify: `src/components/TextChatMessageList.jsx`
 - Modify: `src/features/menu-main/MenuMainController.jsx`
 
-- [ ] Add report table: reporter, target user/message/server, reason, status, timestamps.
-- [ ] Add mute/ban/block enforcement in message send, friend requests, invites, voice actions.
-- [ ] Add moderator role check using existing server permissions where possible.
-- [ ] Add report action in message/user context menu.
-- [ ] Add basic moderation inbox: open, reviewed, actioned, dismissed.
-- [ ] Add audit log for moderation actions without storing private message bodies in logs.
-- [ ] Verify reports, mute, ban, unban, blocked send, audit entries.
-- [ ] Commit: `Add moderation reports and enforcement`.
+- [x] Add report table: reporter, target user/message/server, reason, status, timestamps.
+- [x] Add mute/ban/block enforcement in message send, friend requests, invites, voice actions.
+- [x] Add moderator role check using existing server permissions where possible.
+- [x] Add report action in message/user context menu.
+- [x] Add basic moderation inbox: open, reviewed, actioned, dismissed.
+- [x] Add audit log for moderation actions without storing private message bodies in logs.
+- [x] Verify reports, mute, ban, unban, blocked send, audit entries.
+- [x] Commit: `Add moderation reports and enforcement`.
 
 **Acceptance:**
 - A muted user cannot send in scoped channels.

@@ -21,6 +21,7 @@ public class VoiceHub : Hub
     private readonly ServerStateService _serverState;
     private readonly AppDbContext _context;
     private readonly PushNotificationService _pushNotificationService;
+    private readonly ModerationService _moderation;
     private readonly bool _legacySignalRScreenShareEnabled;
 
     public VoiceHub(
@@ -28,12 +29,14 @@ public class VoiceHub : Hub
         ServerStateService serverState,
         AppDbContext context,
         PushNotificationService pushNotificationService,
+        ModerationService moderation,
         IConfiguration configuration)
     {
         _channels = channels;
         _serverState = serverState;
         _context = context;
         _pushNotificationService = pushNotificationService;
+        _moderation = moderation;
         _legacySignalRScreenShareEnabled = configuration.GetValue("Voice:EnableLegacySignalRScreenShare", false);
     }
 
@@ -85,6 +88,19 @@ public class VoiceHub : Hub
         if (!await TryAuthorizeChannelAccessAsync(normalizedChannelName, participant.UserId))
         {
             throw new HubException("Forbidden");
+        }
+
+        if (ServerChannelAuthorization.TryGetServerIdFromVoiceChannelName(normalizedChannelName, out var serverId))
+        {
+            var activeBan = await _moderation.GetActiveActionAsync(
+                serverId,
+                participant.UserId,
+                ["ban"],
+                Context.ConnectionAborted);
+            if (activeBan is not null)
+            {
+                throw new HubException("Вы заблокированы на этом сервере.");
+            }
         }
 
         var previousChannel = _channels.GetChannelForUser(participant.UserId);

@@ -59,6 +59,7 @@ public class ChatHub : Hub
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
     private readonly MessageDeduplicationService _messageDeduplication;
     private readonly ChatReadStateService _chatReadState;
+    private readonly ModerationService _moderation;
 
     public ChatHub(
         AppDbContext context,
@@ -72,7 +73,8 @@ public class ChatHub : Hub
         ChatFileAccessService chatFileAccess,
         ChatSpamBurstLimiter messageBurstLimiter,
         MessageDeduplicationService messageDeduplication,
-        ChatReadStateService chatReadState)
+        ChatReadStateService chatReadState,
+        ModerationService moderation)
     {
         _context = context;
         _crypto = crypto;
@@ -86,6 +88,7 @@ public class ChatHub : Hub
         _messageBurstLimiter = messageBurstLimiter;
         _messageDeduplication = messageDeduplication;
         _chatReadState = chatReadState;
+        _moderation = moderation;
     }
 
     public override async Task OnConnectedAsync()
@@ -164,6 +167,7 @@ public class ChatHub : Hub
             }
 
             await EnsureDirectInteractionAllowedAsync(normalizedChannelId, currentUser);
+            await EnsureServerModerationAllowsTextSendAsync(normalizedChannelId, currentUser);
 
             var currentDisplayName = await ResolveCurrentUserDisplayNameAsync(currentUser);
 
@@ -1480,6 +1484,33 @@ public class ChatHub : Hub
         {
             throw new HubException(UserBlockService.BlockedByTargetMessage);
         }
+    }
+
+    private async Task EnsureServerModerationAllowsTextSendAsync(string channelId, AuthenticatedUser currentUser)
+    {
+        if (!ServerChannelAuthorization.TryGetServerIdFromChatChannelId(channelId, out var serverId))
+        {
+            return;
+        }
+
+        var activeAction = await _moderation.GetActiveActionAsync(
+            serverId,
+            currentUser.UserId,
+            ["ban", "mute"],
+            Context.ConnectionAborted);
+        if (activeAction is null)
+        {
+            return;
+        }
+
+        if (string.Equals(activeAction.ActionType, "ban", StringComparison.Ordinal))
+        {
+            throw new HubException("Вы заблокированы на этом сервере.");
+        }
+
+        throw new HubException(activeAction.ExpiresAt.HasValue
+            ? $"Вы временно замучены на сервере до {activeAction.ExpiresAt.Value.LocalDateTime:dd.MM HH:mm}."
+            : "Вы замучены на этом сервере.");
     }
 
     private async Task<bool> CanAccessConversationChannelAsync(string currentUserId, int conversationId)

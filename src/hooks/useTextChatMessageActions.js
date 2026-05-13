@@ -2,6 +2,7 @@
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import { API_URL } from "../config/runtime";
 import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
+import { createModerationReport } from "../features/moderation/moderationApi";
 import { authFetch, getStoredToken } from "../utils/auth";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { resolveMediaUrl } from "../utils/media";
@@ -31,6 +32,11 @@ import {
   sleep,
   STICKER_MESSAGE_REACTION_OPTIONS,
 } from "../utils/textChatModel";
+
+function getServerIdFromTextChannelId(channelId) {
+  const match = String(channelId || "").match(/^server:(.+)::channel:/i);
+  return match?.[1] || "";
+}
 
 export default function useTextChatMessageActions({
   searchQuery,
@@ -400,6 +406,9 @@ export default function useTextChatMessageActions({
       x: Math.max(padding, nextX),
       y: Math.max(padding, nextY),
       messageId: messageItem.id,
+      channelId: String(messageItem.channelId || scopedChannelId || ""),
+      serverId: getServerIdFromTextChannelId(messageItem.channelId || scopedChannelId),
+      authorUserId: String(messageItem.authorUserId || ""),
       text: String(messageItem.message || messageItem.attachmentName || "").trim(),
       attachmentKind,
       attachmentUrl: messageItem?.attachmentUrl ? resolveMediaUrl(messageItem.attachmentUrl, messageItem.attachmentUrl) : "",
@@ -412,6 +421,8 @@ export default function useTextChatMessageActions({
       canEdit,
       isPinned: pinnedMessageIdSet.has(String(messageItem.id)),
       canDelete: Boolean(isOwnMessage),
+      canReport: Boolean(getServerIdFromTextChannelId(messageItem.channelId || scopedChannelId))
+        && String(messageItem.authorUserId || "") !== currentUserId,
     });
   };
 
@@ -574,6 +585,35 @@ export default function useTextChatMessageActions({
     } catch (error) {
       console.error("ToggleReaction error:", error);
       setErrorMessage(getChatErrorMessage(error, "Не удалось поставить реакцию."));
+    }
+  };
+
+  const handleReportMessage = async () => {
+    if (!messageContextMenu?.canReport || !messageContextMenu?.serverId || !messageContextMenu?.authorUserId) {
+      return;
+    }
+
+    const reason = window.prompt("Опишите причину жалобы", "spam");
+    if (reason == null) {
+      setMessageContextMenu(null);
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      await createModerationReport({
+        serverId: messageContextMenu.serverId,
+        channelId: messageContextMenu.channelId || scopedChannelId,
+        messageId: Number(messageContextMenu.messageId) || null,
+        targetUserId: messageContextMenu.authorUserId,
+        reason,
+      });
+      setActionFeedback({ tone: "success", message: "Жалоба отправлена" });
+    } catch (error) {
+      console.error("Create moderation report error:", error);
+      setErrorMessage(error?.message || "Не удалось отправить жалобу.");
+    } finally {
+      setMessageContextMenu(null);
     }
   };
 
@@ -807,6 +847,7 @@ export default function useTextChatMessageActions({
     },
     { id: "copy", label: "Копировать текст", icon: "⧉", disabled: !messageContextMenu?.hasText, hidden: false, onClick: handleCopyMessageText },
     { id: "forward", label: "Переслать", icon: "↗", disabled: !directTargets.length, hidden: false, onClick: () => openForwardModal([messageContextMenu?.messageId]) },
+    { id: "report", label: "Пожаловаться", icon: "!", disabled: !messageContextMenu?.canReport, hidden: !messageContextMenu?.canReport, danger: true, onClick: handleReportMessage },
     { id: "delete-local", label: "Удалить", icon: "🗑", disabled: !messageContextMenu?.messageId, hidden: false, danger: true, onClick: handleDeleteMessageLocally },
     { id: "delete", label: "Удалить у всех", icon: "🗑", disabled: !messageContextMenu?.canDelete, hidden: !messageContextMenu?.canDelete, danger: true, onClick: handleDeleteMessage },
     { id: "select", label: "Выбрать", icon: "✓", disabled: false, hidden: false, onClick: () => openSelectionMode(messageContextMenu?.messageId) },

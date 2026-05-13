@@ -111,6 +111,40 @@ public sealed class BackendSourcePolicyTests
     }
 
     [Fact]
+    public void ServerModerationActionsAreEnforcedAcrossChatInvitesAndVoice()
+    {
+        var chatHubSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "ChatHub.cs"));
+        var invitesSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Controllers",
+            "ServerInvitesController.cs"));
+        var voiceHubSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "VoiceHub.cs"));
+
+        Assert.Contains("EnsureServerModerationAllowsTextSendAsync", chatHubSource);
+        Assert.Contains("[\"ban\", \"mute\"]", chatHubSource);
+        Assert.Contains("GetInvitePreview(request.InviteCode", invitesSource);
+        Assert.Contains("[\"ban\"]", invitesSource);
+        Assert.Contains("TryGetServerIdFromVoiceChannelName", voiceHubSource);
+        Assert.Contains("[\"ban\"]", voiceHubSource);
+    }
+
+    [Fact]
     public void ChatHubReactionLimitQueryIsBounded()
     {
         var source = File.ReadAllText(Path.Combine(

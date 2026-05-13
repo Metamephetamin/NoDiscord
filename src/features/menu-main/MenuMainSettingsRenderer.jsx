@@ -10,6 +10,7 @@ import {
   ServerSettings,
   VoiceSettingsPanel,
 } from "../../components/MenuSettingsPanels";
+import ModerationPanel from "../moderation/ModerationPanel";
 import {
   DEFAULT_SERVER_ICON,
 } from "../../utils/media";
@@ -140,6 +141,7 @@ export function MenuMainSettingsContent({
   handleAppLogoChange,
   activeServer,
   canManageServer,
+  canManageMessages,
   canInviteMembers,
   isDefaultServer,
   currentUserId,
@@ -334,6 +336,13 @@ export function MenuMainSettingsContent({
           currentServerRole={currentServerRole}
           rolePermissionLabels={ROLE_PERMISSION_LABELS}
           auditLogs={serverAuditLogs}
+        />
+      );
+    case "moderation":
+      return (
+        <ModerationPanel
+          serverId={activeServer?.id || ""}
+          canManage={Boolean(canManageServer || canManageMessages)}
         />
       );
     case "voice_video":
