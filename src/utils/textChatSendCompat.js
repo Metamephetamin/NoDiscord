@@ -1,6 +1,11 @@
 import chatConnection from "../SignalR/ChatConnect";
 import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
 import {
+  canUseHttpOutboxFallback,
+  isRealtimeSendUnavailableError,
+  sendOutboxMessageViaHttp,
+} from "./textChatHttpFallback";
+import {
   COMPAT_FORWARD_DELAY_MS,
   getUserName,
   isMissingHubMethodError,
@@ -134,11 +139,12 @@ export async function sendMessagesCompat(...args) {
 
   const hubPayload = normalizedPayload.map(normalizeHubMessageInput);
   const containsTextPayload = hubPayload.some((item) => String(item?.message || "").trim());
+  const deliveredMessages = [];
 
   if (allowBatch && hubPayload.length > 1 && !containsTextPayload) {
     try {
       await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, hubPayload);
-      return;
+      return deliveredMessages;
     } catch (error) {
       if (!isMissingHubMethodError(error, "ForwardMessages")) {
         throw error;
@@ -180,6 +186,19 @@ export async function sendMessagesCompat(...args) {
     } catch (error) {
       const rawMessage = String(error?.message || "");
       const expectsLegacySignature = rawMessage.includes("provides 19 argument(s) but target expects 18");
+      if (!expectsLegacySignature && isRealtimeSendUnavailableError(error) && canUseHttpOutboxFallback(hubPayload)) {
+        const deliveredMessage = await sendOutboxMessageViaHttp({
+          targetChannelId,
+          avatar,
+          item,
+          preparedTextPayload,
+        });
+        if (deliveredMessage) {
+          deliveredMessages.push(deliveredMessage);
+        }
+        continue;
+      }
+
       if (!expectsLegacySignature) {
         throw error;
       }
@@ -192,4 +211,6 @@ export async function sendMessagesCompat(...args) {
       await sleep(COMPAT_FORWARD_DELAY_MS);
     }
   }
+
+  return deliveredMessages;
 }

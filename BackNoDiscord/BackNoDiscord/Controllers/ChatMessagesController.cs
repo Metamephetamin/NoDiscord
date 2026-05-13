@@ -163,6 +163,81 @@ public sealed class ChatMessagesController : ControllerBase
         return Ok(results);
     }
 
+    [HttpPost("outbox")]
+    public async Task<ActionResult<MessageDto>> SendOutboxMessage(
+        [FromRoute] string chatId,
+        [FromBody] ChatOutboxMessageRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var normalizedChannelId = NormalizeChannelId(chatId);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            return BadRequest(new { message = "chatId is required" });
+        }
+
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var normalizedMessage = UploadPolicies.TrimToLength(request.Message, 4000);
+        var normalizedClientTempId = UploadPolicies.TrimToLength(request.ClientTempId, 160);
+        var normalizedEncryption = NormalizeEncryptionEnvelope(request.Encryption);
+        if (string.IsNullOrWhiteSpace(normalizedMessage) && normalizedEncryption is null)
+        {
+            return BadRequest(new { message = "message is required" });
+        }
+
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+        var existingMessage = await FindMessageByClientTempIdAsync(
+            equivalentChannelIds,
+            currentUser.UserId,
+            normalizedClientTempId,
+            cancellationToken);
+        if (existingMessage is not null)
+        {
+            var existingPayload = DeserializePayload(GetRawPayload(existingMessage));
+            var existingReactions = await BuildReactionMapAsync([existingMessage.Id], cancellationToken);
+            return Ok(ToMessageDto(
+                existingMessage,
+                existingPayload,
+                existingReactions.TryGetValue(existingMessage.Id, out var reactions) ? reactions : []));
+        }
+
+        var payload = new ChatMessagePayload
+        {
+            AuthorUserId = currentUser.UserId,
+            Message = normalizedMessage,
+            Encryption = normalizedEncryption,
+            ClientTempId = normalizedClientTempId,
+            ReplyToMessageId = UploadPolicies.TrimToLength(request.ReplyToMessageId, 80),
+            ReplyToUsername = UploadPolicies.TrimToLength(request.ReplyToUsername, 160),
+            ReplyPreview = UploadPolicies.TrimToLength(request.ReplyPreview, 240)
+        };
+
+        var message = new Message
+        {
+            ChannelId = normalizedChannelId,
+            Username = currentUser.DisplayName,
+            Content = null,
+            EncryptedContent = _crypto.Encrypt($"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}"),
+            PhotoUrl = UploadPolicies.SanitizeRelativeAssetUrl(request.PhotoUrl, "/avatars/"),
+            AuthorUserId = currentUser.UserId,
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        };
+
+        _context.Messages.Add(message);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Ok(ToMessageDto(message, payload));
+    }
+
     private MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)
     {
         return new MessageDto
@@ -347,6 +422,45 @@ public sealed class ChatMessagesController : ControllerBase
                             .ToList()
                     })
                     .ToList());
+    }
+
+    private async Task<Message?> FindMessageByClientTempIdAsync(
+        IReadOnlyCollection<string> channelIds,
+        string authorUserId,
+        string clientTempId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(clientTempId))
+        {
+            return null;
+        }
+
+        var candidates = await _context.Messages
+            .AsNoTracking()
+            .Where(message =>
+                channelIds.Contains(message.ChannelId) &&
+                message.AuthorUserId == authorUserId &&
+                !message.IsDeleted)
+            .OrderByDescending(message => message.Id)
+            .Take(100)
+            .Select(message => new Message
+            {
+                Id = message.Id,
+                ChannelId = message.ChannelId,
+                Username = message.Username,
+                Content = message.Content,
+                EncryptedContent = message.EncryptedContent,
+                PhotoUrl = message.PhotoUrl,
+                AuthorUserId = message.AuthorUserId,
+                Timestamp = message.Timestamp,
+                ReadAt = message.ReadAt,
+                ReadByUserId = message.ReadByUserId,
+                IsDeleted = message.IsDeleted
+            })
+            .ToListAsync(cancellationToken);
+
+        return candidates.FirstOrDefault(message =>
+            string.Equals(DeserializePayload(GetRawPayload(message)).ClientTempId, clientTempId, StringComparison.Ordinal));
     }
 
     private async Task<bool> TryAuthorizeChannelAccessAsync(string channelId, AuthenticatedUser currentUser, CancellationToken cancellationToken)
@@ -535,6 +649,11 @@ public sealed class ChatMessagesController : ControllerBase
         payload.AttachmentAsFile = primaryAttachment?.AttachmentAsFile ?? payload.AttachmentAsFile;
         payload.VoiceMessage = primaryAttachment?.VoiceMessage ?? payload.VoiceMessage;
     }
+
+    private static ChatMessageEncryptionEnvelope? NormalizeEncryptionEnvelope(ChatMessageEncryptionEnvelope? _)
+    {
+        return null;
+    }
 }
 
 public sealed class ChatMessagesPageDto
@@ -542,4 +661,15 @@ public sealed class ChatMessagesPageDto
     public List<MessageDto> Items { get; set; } = [];
     public bool HasMore { get; set; }
     public int? NextCursor { get; set; }
+}
+
+public sealed class ChatOutboxMessageRequest
+{
+    public string Message { get; set; } = string.Empty;
+    public ChatMessageEncryptionEnvelope? Encryption { get; set; }
+    public string? PhotoUrl { get; set; }
+    public string? ClientTempId { get; set; }
+    public string? ReplyToMessageId { get; set; }
+    public string? ReplyToUsername { get; set; }
+    public string? ReplyPreview { get; set; }
 }

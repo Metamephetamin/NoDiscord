@@ -85,6 +85,32 @@ public sealed class BackendSourcePolicyTests
     }
 
     [Fact]
+    public void ChatHubUsesBurstSpamLimiterForMessageSends()
+    {
+        var chatHubSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "ChatHub.cs"));
+
+        var limiterSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Security",
+            "ChatSpamBurstLimiter.cs"));
+
+        Assert.Contains("ChatSpamBurstLimiter", chatHubSource);
+        Assert.Contains("EnsureMessageBurstAllowed(currentUser.UserId, nowUtc)", chatHubSource);
+        Assert.Contains("MaxMessagesPerWindow = 12", limiterSource);
+        Assert.Contains("Window = TimeSpan.FromSeconds(10)", limiterSource);
+    }
+
+    [Fact]
     public void ChatHubReactionLimitQueryIsBounded()
     {
         var source = File.ReadAllText(Path.Combine(

@@ -44,6 +44,7 @@ public class ChatHub : Hub
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastSlowModeMessageSentAtByUserAndChannel = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
+    private static readonly ChatSpamBurstLimiter MessageBurstLimiter = new();
     private static readonly object CooldownCleanupSync = new();
     private static DateTime LastCooldownCleanupUtc = DateTime.MinValue;
 
@@ -181,6 +182,7 @@ public class ChatHub : Hub
 
             var nowUtc = DateTime.UtcNow;
             TrimCooldownState(nowUtc);
+            EnsureMessageBurstAllowed(currentUser.UserId, nowUtc);
             if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
                 && nowUtc - lastMessageSentAtUtc < MessageSendCooldown)
             {
@@ -305,6 +307,7 @@ public class ChatHub : Hub
 
         var nowUtc = DateTime.UtcNow;
         TrimCooldownState(nowUtc);
+        EnsureMessageBurstAllowed(currentUser.UserId, nowUtc);
         if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
             && nowUtc - lastMessageSentAtUtc < MessageSendCooldown)
         {
@@ -1113,6 +1116,17 @@ public class ChatHub : Hub
         }
 
         LastActionAtByUserAndName[actionKey] = nowUtc;
+    }
+
+    private static void EnsureMessageBurstAllowed(string userId, DateTime nowUtc)
+    {
+        if (MessageBurstLimiter.TryRecord(userId, nowUtc, out var retryAfter))
+        {
+            return;
+        }
+
+        var seconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+        throw new HubException($"Слишком много сообщений подряд. Подождите {seconds} сек.");
     }
 
     private static void TrimCooldownState(DateTime nowUtc)
