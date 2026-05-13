@@ -34,6 +34,7 @@ import {
 import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import { recordPerfEvent } from "../utils/perf";
+import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
 import { deriveMessageDeliveryState } from "../features/text-chat/messageDeliveryState.mjs";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
@@ -687,7 +688,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
   priorityMedia = false,
 }) {
   const sourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
-  const canLoadPreviewVideo = sourceUrl.startsWith("blob:") || sourceUrl.startsWith("data:") || sourceUrl.startsWith("file:");
+  const canLoadPreviewVideo = canLoadVideoPreviewUrl(sourceUrl);
   const preparedSourceUrlRef = useRef("");
   const previewSeekRequestedRef = useRef(false);
   const [node, setNode] = useState(null);

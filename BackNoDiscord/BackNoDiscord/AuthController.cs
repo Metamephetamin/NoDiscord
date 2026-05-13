@@ -26,8 +26,8 @@ public class AuthController : ControllerBase
     private static readonly TimeSpan QrLoginLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
-    private const string CurrentTermsVersion = "2026-05-13";
-    private const string CurrentPrivacyVersion = "2026-05-13";
+    private const string CurrentTermsVersion = "2026-05-13-rf-1";
+    private const string CurrentPrivacyVersion = "2026-05-13-rf-1";
     private const string MediaAccessTokenCookieName = "tend_access_token";
     private const int MaxEmailVerificationAttempts = 5;
     private const string EmailVerificationPurpose = "email_verification";

@@ -34,20 +34,22 @@ Not completed locally:
 - `npm run check:encoding`
 - `npm run test:encoding`
 - `npm run test:auth-branding`
+- `npm run test:legal-consent`
 - `npm run lint:ci`
 - `npm run build:frontend`
 - `npm run audit:public-assets`
 - `npm run audit:perf`
 - `node ./scripts/release-smoke.mjs`
-- `npm run smoke:release`
+- `npm run smoke:release:strict`
 - `node ./scripts/verify-release-gate.mjs`
 - `npm run test:e2e-smoke`
-- `powershell -ExecutionPolicy Bypass -File .\scripts\db-backup-drill.ps1`
+- `npm run check:db-backup-drill`
+- `powershell -ExecutionPolicy Bypass -File .\scripts\db-backup-drill.ps1 -Execute`
 - `dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release`
 - Confirm PostgreSQL backup exists and a recent non-production restore drill is recorded.
 - Confirm client diagnostics and backend request logs include a correlation id/status without secrets or message bodies.
 - Confirm auth, email verification, QR login, media render, and chat upload rate-limit policies are active.
-- For deep release smoke, configure `SMOKE_TEST_EMAIL`, `SMOKE_TEST_PASSWORD`, `SMOKE_CHAT_ID`, and `SMOKE_VOICE_CHANNEL`; set `SMOKE_REQUIRE_CREDENTIALS=1` in CI when these are ready.
+- For deep release smoke, configure `SMOKE_TEST_EMAIL`, `SMOKE_TEST_PASSWORD`, `SMOKE_CHAT_ID`, and `SMOKE_VOICE_CHANNEL`; production deploy requires strict smoke and must fail if these are not configured.
 
 ## Manual Smoke Before Pushing To master
 

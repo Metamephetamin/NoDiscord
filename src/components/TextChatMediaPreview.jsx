@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 import { MISSING_MEDIA_EVENT, isMediaUrlKnownMissing, markMediaUrlMissing } from "../utils/media";
+import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const WHEEL_NAVIGATION_COOLDOWN_MS = 180;
@@ -45,7 +46,7 @@ function TextChatMediaPreview({
   const isPreviewOpen = Boolean(mediaPreview);
   const imagePreviewUrl = isImagePreview ? String(mediaPreview?.url || "") : "";
   const videoPreviewUrl = isVideoPreview ? String(mediaPreview?.url || "") : "";
-  const canLoadPreviewVideo = videoPreviewUrl.startsWith("blob:") || videoPreviewUrl.startsWith("data:") || videoPreviewUrl.startsWith("file:");
+  const canLoadPreviewVideo = canLoadVideoPreviewUrl(videoPreviewUrl);
   const isImageKnownMissing = Boolean(missingMediaVersion >= 0 && imagePreviewUrl && isMediaUrlKnownMissing(imagePreviewUrl));
   const isVideoKnownMissing = Boolean(missingMediaVersion >= 0 && videoPreviewUrl && isMediaUrlKnownMissing(videoPreviewUrl));
   const isCachedImageReady = imagePreviewUrl && loadedImageUrls.has(imagePreviewUrl);

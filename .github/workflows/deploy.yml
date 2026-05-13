@@ -91,8 +91,8 @@ jobs:
           SMOKE_CHAT_ID: ${{ vars.SMOKE_CHAT_ID }}
           SMOKE_CHAT_WRITE: ${{ vars.SMOKE_CHAT_WRITE }}
           SMOKE_VOICE_CHANNEL: ${{ vars.SMOKE_VOICE_CHANNEL }}
-          SMOKE_REQUIRE_CREDENTIALS: ${{ vars.SMOKE_REQUIRE_CREDENTIALS }}
-        run: npm run smoke:release
+          SMOKE_REQUIRE_CREDENTIALS: "1"
+        run: npm run smoke:release:strict
 
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --no-restore --output ./artifacts/backend

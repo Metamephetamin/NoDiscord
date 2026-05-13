@@ -1,5 +1,6 @@
 param(
-  [switch]$Execute
+  [switch]$Execute,
+  [switch]$RequireConfigured
 )
 
 $required = @(
@@ -21,7 +22,7 @@ if ([string]::IsNullOrWhiteSpace($backupPath)) {
 }
 
 Write-Host "PostgreSQL backup/restore drill"
-Write-Host "Mode: $(if ($Execute) { 'execute' } else { 'dry-run' })"
+Write-Host "Mode: $(if ($Execute) { 'execute' } elseif ($RequireConfigured) { 'configuration-check' } else { 'dry-run' })"
 Write-Host ""
 Write-Host "Required environment variables:"
 foreach ($name in $required) {
@@ -33,6 +34,11 @@ Write-Host ""
 Write-Host "Commands:"
 Write-Host 'pg_dump --format=custom --no-owner --no-acl --file "$env:DB_BACKUP_PATH" "$env:DB_BACKUP_CONNECTION_STRING"'
 Write-Host 'pg_restore --clean --if-exists --no-owner --no-acl --dbname "$env:DB_RESTORE_CONNECTION_STRING" "$env:DB_BACKUP_PATH"'
+
+if ($RequireConfigured -and $missing.Count -gt 0) {
+  Write-Error "Missing required environment variables: $($missing -join ', ')"
+  exit 1
+}
 
 if (-not $Execute) {
   Write-Host ""

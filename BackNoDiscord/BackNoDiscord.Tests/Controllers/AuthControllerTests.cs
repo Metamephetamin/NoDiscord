@@ -60,8 +60,8 @@ public sealed class AuthControllerTests : IDisposable
         Assert.IsType<OkObjectResult>(result);
         var user = Assert.Single(_context.Users);
         Assert.NotNull(user.terms_accepted_at);
-        Assert.Equal("2026-05-13", user.terms_version);
-        Assert.Equal("2026-05-13", user.privacy_version);
+        Assert.Equal("2026-05-13-rf-1", user.terms_version);
+        Assert.Equal("2026-05-13-rf-1", user.privacy_version);
     }
 
     [Fact]
