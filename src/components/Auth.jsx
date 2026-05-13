@@ -573,7 +573,7 @@ export default function Auth({ onAuthSuccess }) {
   }, [passwordResetState.open, passwordResetState.resendAvailableAt, passwordResetState.step]);
 
   useEffect(() => {
-    if (mode !== "login" || isQrCameraPreferred) {
+    if (mode !== "login" || isQrCameraPreferred || !isQrLoginOpen) {
       setQrLoginSession(null);
       setQrLoginSvg("");
       setQrLoginStatus("idle");
@@ -626,10 +626,10 @@ export default function Auth({ onAuthSuccess }) {
     return () => {
       disposed = true;
     };
-  }, [isQrCameraPreferred, mode, qrLoginRefreshIndex]);
+  }, [isQrCameraPreferred, isQrLoginOpen, mode, qrLoginRefreshIndex]);
 
   useEffect(() => {
-    if (mode !== "login" || !qrLoginSession?.sessionId || !qrLoginSession?.browserToken || qrLoginStatus !== "pending") {
+    if (mode !== "login" || !isQrLoginOpen || !qrLoginSession?.sessionId || !qrLoginSession?.browserToken || qrLoginStatus !== "pending") {
       return undefined;
     }
 
@@ -688,7 +688,7 @@ export default function Auth({ onAuthSuccess }) {
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [mode, onAuthSuccess, qrLoginSession, qrLoginStatus]);
+  }, [isQrLoginOpen, mode, onAuthSuccess, qrLoginSession, qrLoginStatus]);
 
   useEffect(() => () => {
     stopQrScanner();
