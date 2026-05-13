@@ -35,6 +35,7 @@ import {
   tuneDisplayStream,
 } from "./voiceClientUtils";
 import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
+import { reportClientDiagnostic } from "../utils/clientDiagnostics";
 import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
 import { createVoiceSignalCommandQueue } from "./voiceSignalCommandQueue.mjs";
 import { invokeVoiceSignalWithRetry } from "./voiceSignalRetry.mjs";
@@ -54,6 +55,15 @@ const RTC_CONFIGURATION = {
   iceServers: (VOICE_RTC_CONFIGURATION.iceServers || []).map((server) => ({ ...server })),
 };
 setLogLevel(LogLevel.error);
+const VOICE_CLIENT_DIAGNOSTIC_EVENTS = new Set([
+  "join:failed",
+  "livekit-session:prepare-failed",
+  "livekit-session:prewarm-on-join-failed",
+  "local-audio:publish-after-connect-failed",
+  "room:start-audio-failed",
+  "signal:reconnected-recovery-failed",
+  "signal:start-failed",
+]);
 export const VOICE_MONITORING_EVENT_NAMES = Object.freeze({
   signalDisconnect: "signalr.disconnect",
   livekitReconnect: "livekit.reconnect",
@@ -407,6 +417,16 @@ function isVoiceDebugEnabled() {
 }
 
 function logVoiceDebug(eventName, payload = {}) {
+  if (VOICE_CLIENT_DIAGNOSTIC_EVENTS.has(eventName)) {
+    reportClientDiagnostic({
+      type: eventName,
+      surface: "voice-client",
+      errorName: payload?.errorName || "",
+      phase: eventName,
+      status: payload?.state || payload?.roomState || "",
+    });
+  }
+
   if (!isVoiceDebugEnabled()) {
     return;
   }

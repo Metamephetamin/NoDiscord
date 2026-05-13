@@ -1,6 +1,7 @@
 import * as signalR from "@microsoft/signalr";
 import { CHAT_HUB_URL } from "../config/runtime";
 import { getStoredToken, isUnauthorizedError, notifyUnauthorizedSession } from "../utils/auth";
+import { reportClientDiagnostic } from "../utils/clientDiagnostics";
 
 const chatConnection = new signalR.HubConnectionBuilder()
   .withUrl(CHAT_HUB_URL, {
@@ -106,6 +107,13 @@ export const startChatConnection = async () => {
     } catch (error) {
       isConnected = false;
       logStartFailureOnce(error);
+      reportClientDiagnostic({
+        type: "chat signalr start failed",
+        surface: "chat-signalr",
+        errorName: error?.name || "SignalRStartError",
+        phase: "start-failed",
+        status: chatConnection.state,
+      });
 
       if (isUnauthorizedError(error)) {
         resetReconnectState();
@@ -143,23 +151,42 @@ export const stopChatConnection = async () => {
   }
 };
 
-chatConnection.onclose(() => {
+chatConnection.onclose((error) => {
   isConnected = false;
   startPromise = null;
   if (isStoppingConnection) {
     return;
   }
+  reportClientDiagnostic({
+    type: "chat signalr closed",
+    surface: "chat-signalr",
+    errorName: error?.name || "",
+    phase: "closed",
+    status: chatConnection.state,
+  });
   scheduleReconnect();
 });
 
 chatConnection.onreconnecting(() => {
   isConnected = false;
   startPromise = null;
+  reportClientDiagnostic({
+    type: "chat signalr reconnecting",
+    surface: "chat-signalr",
+    phase: "reconnecting",
+    status: chatConnection.state,
+  });
 });
 
 chatConnection.onreconnected(() => {
   isConnected = true;
   resetReconnectState();
+  reportClientDiagnostic({
+    type: "chat signalr reconnected",
+    surface: "chat-signalr",
+    phase: "reconnected",
+    status: chatConnection.state,
+  });
 });
 
 export default chatConnection;

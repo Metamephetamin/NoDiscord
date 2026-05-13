@@ -1,5 +1,6 @@
 using BackNoDiscord;
 using BackNoDiscord.Infrastructure;
+using BackNoDiscord.Observability;
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -42,7 +43,6 @@ if (jwtKey.Length < 32)
 }
 
 const string MediaAccessTokenCookieName = "tend_access_token";
-const string CorrelationIdHeaderName = "X-Correlation-ID";
 const long MaxChatFileUploadBytes = 500L * 1024 * 1024;
 const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
 var maxChatFileUploadRequestBytes = checked(
@@ -254,8 +254,23 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+    options.AddPolicy("client-diagnostics", context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"client-diagnostics:{remoteIp}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
 });
 builder.Services.AddSingleton<ChannelService>();
+builder.Services.AddSingleton<ProductionMetrics>();
+builder.Services.AddScoped<ProductionHealthService>();
 builder.Services.AddSingleton<IClientUpdateService, ClientUpdateService>();
 builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
@@ -308,35 +323,7 @@ else
 }
 
 app.UseForwardedHeaders();
-
-app.Use(async (context, next) =>
-{
-    var correlationId = NormalizeCorrelationId(context.Request.Headers[CorrelationIdHeaderName].FirstOrDefault())
-        ?? context.TraceIdentifier;
-    context.TraceIdentifier = correlationId;
-    context.Response.OnStarting(() =>
-    {
-        context.Response.Headers[CorrelationIdHeaderName] = correlationId;
-        return Task.CompletedTask;
-    });
-
-    var startedAt = TimeProvider.System.GetTimestamp();
-    try
-    {
-        await next();
-    }
-    finally
-    {
-        var elapsedMs = TimeProvider.System.GetElapsedTime(startedAt).TotalMilliseconds;
-        app.Logger.LogInformation(
-            "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs:F1} ms correlationId={CorrelationId}",
-            context.Request.Method,
-            context.Request.Path.Value,
-            context.Response.StatusCode,
-            elapsedMs,
-            correlationId);
-    }
-});
+app.UseMiddleware<RequestCorrelationMiddleware>();
 
 app.Use(async (context, next) =>
 {
@@ -592,21 +579,6 @@ static IEnumerable<string> ReadSeparatedValues(string? value)
     return string.IsNullOrWhiteSpace(value)
         ? []
         : value.Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-}
-
-static string? NormalizeCorrelationId(string? value)
-{
-    var normalized = value?.Trim();
-    if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > 128)
-    {
-        return null;
-    }
-
-    return normalized.All(character =>
-        char.IsLetterOrDigit(character) ||
-        character is '-' or '_' or '.' or ':')
-        ? normalized
-        : null;
 }
 
 static bool CanAcceptMediaCookieToken(HttpRequest request, PathString path)

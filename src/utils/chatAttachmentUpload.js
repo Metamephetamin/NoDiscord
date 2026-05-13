@@ -1,5 +1,6 @@
 import { API_URL } from "../config/runtime";
 import { authFetch, getStoredToken } from "./auth";
+import { reportClientDiagnostic } from "./clientDiagnostics";
 
 function uploadWithProgress({ formData, onProgress, signal }) {
   return new Promise((resolve, reject) => {
@@ -47,10 +48,25 @@ function uploadWithProgress({ formData, onProgress, signal }) {
         status: request.status,
         diagnostics: request.getResponseHeader("X-Upload-Storage-Diagnostics") || "",
       });
+      reportClientDiagnostic({
+        type: "chat upload failed",
+        surface: "chat-upload",
+        phase: "xhr-load",
+        status: String(request.status || 0),
+      });
       reject(new Error(data?.message || "Не удалось загрузить файл"));
     };
 
-    request.onerror = () => reject(new Error("Не удалось загрузить файл"));
+    request.onerror = () => {
+      reportClientDiagnostic({
+        type: "chat upload failed",
+        surface: "chat-upload",
+        errorName: "NetworkError",
+        phase: "xhr-error",
+        status: String(request.status || 0),
+      });
+      reject(new Error("Не удалось загрузить файл"));
+    };
     request.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
 
     if (signal) {
@@ -99,6 +115,12 @@ export async function uploadChatAttachment({ blob, fileName = "", onProgress, si
     console.warn("[chat-upload] failed", {
       status: response.status,
       diagnostics: response.headers.get("X-Upload-Storage-Diagnostics") || "",
+    });
+    reportClientDiagnostic({
+      type: "chat upload failed",
+      surface: "chat-upload",
+      phase: "fetch-response",
+      status: String(response.status || 0),
     });
     throw new Error(data?.message || "Не удалось загрузить файл");
   }

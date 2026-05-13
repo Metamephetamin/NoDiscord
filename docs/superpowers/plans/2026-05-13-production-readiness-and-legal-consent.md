@@ -77,14 +77,14 @@ Expected: status is `ok`.
 - Modify: `src/SignalR/ChatConnect.jsx`
 - Modify: `src/webrtc/livekitVoiceRoomClient.js`
 
-- [ ] Add request correlation id middleware and include it in structured logs.
-- [ ] Add `/api/health/live` and `/api/health/ready`: live checks process; ready checks database and critical config.
-- [ ] Add frontend diagnostic queue for sanitized client errors: error name, component area, route, app version, timestamp, no message contents.
-- [ ] Hook `window.onerror`, `unhandledrejection`, SignalR reconnect events, LiveKit connect failures, upload failures.
-- [ ] Add backend endpoint `POST /api/diagnostics/client-events` with rate limit and payload size limit.
-- [ ] Add tests proving diagnostics reject message content/token-like fields.
-- [ ] Verify with `npm run lint:ci`, `npm run build:frontend`, `dotnet test`.
-- [ ] Commit: `Add production diagnostics and health checks`.
+- [x] Add request correlation id middleware and include it in structured logs.
+- [x] Add `/api/health/live` and `/api/health/ready`: live checks process; ready checks database and critical config.
+- [x] Add frontend diagnostic queue for sanitized client errors: error name, component area, route, app version, timestamp, no message contents.
+- [x] Hook `window.onerror`, `unhandledrejection`, SignalR reconnect events, LiveKit connect failures, upload failures.
+- [x] Add backend endpoint `POST /api/diagnostics/client-events` with rate limit and payload size limit.
+- [x] Add tests proving diagnostics reject message content/token-like fields.
+- [x] Verify with `npm run lint:ci`, `npm run build:frontend`, `dotnet test`.
+- [x] Commit: `Add production diagnostics and health checks`.
 
 **Acceptance:**
 - A failed upload or voice connect produces a sanitized diagnostic event.
@@ -398,4 +398,3 @@ Use honest wording:
 5. Phase 5 before serious account growth.
 6. Phase 7 and Phase 8 before treating `master` as a stable release train.
 7. Phase 10 before the next production push.
-
