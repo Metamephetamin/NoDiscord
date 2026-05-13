@@ -1,0 +1,26 @@
+{
+  "name": "Lanaya",
+  "short_name": "Lanaya",
+  "description": "Lanaya messenger",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0f1115",
+  "background_color": "#0f1115",
+  "icons": [
+    {
+      "src": "/image/app-logos/logo-gradient-dark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/image/app-logos/logo-white-dark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
