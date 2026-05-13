@@ -1,5 +1,31 @@
 # Production Release Checklist
 
+## Last Verification Snapshot
+
+Date: 2026-05-13
+Commit checked locally: `f7f83fd` (`Require user agreement consent at registration`)
+Branch: `master`
+Production health checked: `https://lanaya.space/api/ping` returned `{"status":"ok"}`.
+
+Passed locally:
+
+- `node --test src\components\__tests__\userAgreementText.test.mjs`
+- `dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release --filter AuthControllerTests`
+- `git diff --check`
+- `npm run check:encoding`
+- `npm run lint:ci`
+- `dotnet test BackNoDiscord\BackNoDiscord.Tests\BackNoDiscord.Tests.csproj --configuration Release`
+- `npm run build:frontend`
+- `dotnet build BackNoDiscord\BackNoDiscord\BackNoDiscord.csproj --configuration Release`
+- `npm run audit:perf`
+- `npm run smoke:release` in skip-mode because production smoke credentials are not configured in the local environment.
+
+Not completed locally:
+
+- GitHub Actions deploy status could not be read from this machine: `gh` is not installed, and unauthenticated GitHub API access returned `404`.
+- Deep production smoke with `SMOKE_TEST_EMAIL`, `SMOKE_TEST_PASSWORD`, `SMOKE_CHAT_ID`, and `SMOKE_VOICE_CHANNEL`.
+- Manual QA: registration consent click-through, login, message send, image in DM, image in server chat, offline/reconnect send, call start/accept/end, poor network status, upload quota error, report user, mute user, revoke session.
+
 ## Required Automated Checks
 
 - `git status --short` shows no `.env`, local secrets, or unrelated generated files staged.

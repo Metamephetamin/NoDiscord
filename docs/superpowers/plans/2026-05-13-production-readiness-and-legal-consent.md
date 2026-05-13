@@ -373,14 +373,14 @@ Use honest wording:
 - Modify: `docs/release/rollback.md`
 - Modify: `docs/performance/registry.md`
 
-- [ ] Run frontend checks.
-- [ ] Run backend build/tests.
-- [ ] Run smoke tests.
+- [x] Run frontend checks.
+- [x] Run backend build/tests.
+- [x] Run smoke tests in local skip-mode; credentialed production smoke remains in the release checklist.
 - [ ] Manually verify: registration consent, login, message send, image in DM, image in server chat, offline/reconnect send, call start/accept/end, poor network status, upload quota error, report user, mute user, revoke session.
-- [ ] Update production checklist with exact result and date.
-- [ ] Push to `origin master`.
-- [ ] Check `https://lanaya.space/api/ping`.
-- [ ] Commit final docs if needed: `Document production readiness verification`.
+- [x] Update production checklist with exact result and date.
+- [x] Push to `origin master`.
+- [x] Check `https://lanaya.space/api/ping`.
+- [x] Commit final docs if needed: `Document production readiness verification`.
 
 **Acceptance:**
 - Production deploy is green.
