@@ -2399,6 +2399,31 @@ export default function TextChat({
     };
   }, []);
 
+  const applyDeliveredMessages = async (targetChannelId, deliveredMessages) => {
+    const normalizedTargetChannelId = String(targetChannelId || "").trim();
+    if (!normalizedTargetChannelId || !Array.isArray(deliveredMessages) || deliveredMessages.length === 0) {
+      return;
+    }
+
+    const normalizedMessages = (await Promise.all(deliveredMessages.map((messageItem) => normalizeIncomingMessage(messageItem))))
+      .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem));
+    if (!normalizedMessages.length) {
+      return;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(previous, normalizedTargetChannelId, (channelMessages) => (
+      mergeChannelMessages(channelMessages, normalizedMessages, {
+        maxMessages: MAX_ACTIVE_CHANNEL_MESSAGES,
+        keep: "latest",
+        currentUserId,
+        onLocalEchoReplaced: (replacedMessage, normalizedMessage) => {
+          revokeLocalEchoObjectUrls(replacedMessage?.id);
+          markLocalEchoReconciledRef.current?.(replacedMessage, normalizedMessage);
+        },
+      })
+    )));
+  };
+
   const uploadAttachment = uploadChatAttachment;
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
     const slowModeRemainingMs = getSlowModeRemainingMs(targetChannelId);
@@ -2406,7 +2431,7 @@ export default function TextChat({
       throw new Error(formatSlowModeRemainingMessage(slowModeRemainingMs));
     }
 
-    await sendMessagesCompatCore({
+    const deliveredMessages = await sendMessagesCompatCore({
       targetChannelId,
       avatar,
       payload,
@@ -2414,6 +2439,7 @@ export default function TextChat({
       allowBatch,
     });
     markSlowModeMessageSent(targetChannelId);
+    await applyDeliveredMessages(targetChannelId, deliveredMessages);
   };
 
   const {

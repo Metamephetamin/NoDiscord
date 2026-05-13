@@ -27,5 +27,6 @@ test("canUseHttpOutboxFallback rejects attachments and batched sends", () => {
 test("isRealtimeSendUnavailableError detects connection failures but not hub validation", () => {
   assert.equal(isRealtimeSendUnavailableError(new Error("Cannot send data if the connection is not in the Connected State.")), true);
   assert.equal(isRealtimeSendUnavailableError(new Error("Server timeout elapsed without receiving a message from the server.")), true);
+  assert.equal(isRealtimeSendUnavailableError(new Error("Failed to invoke 'SendMessage' due to an error on the server.")), false);
   assert.equal(isRealtimeSendUnavailableError(new Error("Слишком много сообщений подряд. Подождите 4 сек.")), false);
 });

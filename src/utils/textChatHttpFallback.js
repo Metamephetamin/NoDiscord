@@ -31,7 +31,6 @@ export function isRealtimeSendUnavailableError(error) {
   const message = String(error?.message || error || "").toLowerCase();
   return message.includes("connection is not in the connected state")
     || message.includes("server timeout")
-    || message.includes("failed to invoke")
     || message.includes("connection disconnected")
     || message.includes("connection closed")
     || message.includes("websocket")

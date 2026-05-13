@@ -3,6 +3,7 @@ using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -28,6 +29,8 @@ public sealed class ChatMessagesController : ControllerBase
     private readonly ServerStateService _serverState;
     private readonly MessageSearchService _messageSearch;
     private readonly ChatFileAccessService _chatFileAccess;
+    private readonly ChatSpamBurstLimiter _messageBurstLimiter;
+    private readonly IHubContext<ChatHub> _hubContext;
 
     public ChatMessagesController(
         AppDbContext context,
@@ -35,7 +38,9 @@ public sealed class ChatMessagesController : ControllerBase
         ILogger<ChatMessagesController> logger,
         ServerStateService serverState,
         MessageSearchService messageSearch,
-        ChatFileAccessService chatFileAccess)
+        ChatFileAccessService chatFileAccess,
+        ChatSpamBurstLimiter messageBurstLimiter,
+        IHubContext<ChatHub> hubContext)
     {
         _context = context;
         _crypto = crypto;
@@ -43,6 +48,8 @@ public sealed class ChatMessagesController : ControllerBase
         _serverState = serverState;
         _messageSearch = messageSearch;
         _chatFileAccess = chatFileAccess;
+        _messageBurstLimiter = messageBurstLimiter;
+        _hubContext = hubContext;
     }
 
     [HttpGet]
@@ -209,6 +216,15 @@ public sealed class ChatMessagesController : ControllerBase
                 existingReactions.TryGetValue(existingMessage.Id, out var reactions) ? reactions : []));
         }
 
+        if (!_messageBurstLimiter.TryRecord(currentUser.UserId, DateTime.UtcNow, out var retryAfter))
+        {
+            var seconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                message = $"Too many messages in a row. Wait {seconds} sec."
+            });
+        }
+
         var payload = new ChatMessagePayload
         {
             AuthorUserId = currentUser.UserId,
@@ -235,7 +251,10 @@ public sealed class ChatMessagesController : ControllerBase
         _context.Messages.Add(message);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Ok(ToMessageDto(message, payload));
+        var dto = ToMessageDto(message, payload);
+        await _hubContext.Clients.Group(normalizedChannelId).SendAsync("ReceiveMessage", dto, cancellationToken);
+
+        return Ok(dto);
     }
 
     private MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)

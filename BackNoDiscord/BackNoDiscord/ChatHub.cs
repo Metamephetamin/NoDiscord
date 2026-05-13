@@ -44,7 +44,6 @@ public class ChatHub : Hub
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastSlowModeMessageSentAtByUserAndChannel = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
-    private static readonly ChatSpamBurstLimiter MessageBurstLimiter = new();
     private static readonly object CooldownCleanupSync = new();
     private static DateTime LastCooldownCleanupUtc = DateTime.MinValue;
 
@@ -57,6 +56,7 @@ public class ChatHub : Hub
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly UserBlockService _userBlockService;
     private readonly ChatFileAccessService _chatFileAccess;
+    private readonly ChatSpamBurstLimiter _messageBurstLimiter;
 
     public ChatHub(
         AppDbContext context,
@@ -67,7 +67,8 @@ public class ChatHub : Hub
         UserPresenceService userPresenceService,
         IServiceScopeFactory scopeFactory,
         UserBlockService userBlockService,
-        ChatFileAccessService chatFileAccess)
+        ChatFileAccessService chatFileAccess,
+        ChatSpamBurstLimiter messageBurstLimiter)
     {
         _context = context;
         _crypto = crypto;
@@ -78,6 +79,7 @@ public class ChatHub : Hub
         _scopeFactory = scopeFactory;
         _userBlockService = userBlockService;
         _chatFileAccess = chatFileAccess;
+        _messageBurstLimiter = messageBurstLimiter;
     }
 
     public override async Task OnConnectedAsync()
@@ -1118,9 +1120,9 @@ public class ChatHub : Hub
         LastActionAtByUserAndName[actionKey] = nowUtc;
     }
 
-    private static void EnsureMessageBurstAllowed(string userId, DateTime nowUtc)
+    private void EnsureMessageBurstAllowed(string userId, DateTime nowUtc)
     {
-        if (MessageBurstLimiter.TryRecord(userId, nowUtc, out var retryAfter))
+        if (_messageBurstLimiter.TryRecord(userId, nowUtc, out var retryAfter))
         {
             return;
         }
