@@ -11,8 +11,13 @@ export default function UserAgreementModal({ open, onClose }) {
       <section className="auth-terms-modal__panel">
         <header className="auth-terms-modal__header">
           <div>
+            <span className="auth-terms-modal__badge">Редакция РФ · физическое лицо</span>
             <h2 id="auth-terms-title">Пользовательское соглашение</h2>
-            <span>Версия {USER_AGREEMENT_VERSION}</span>
+            <p>
+              Кратко описывает правила сервиса, обработку данных, ответственность пользователя
+              и технические ограничения Lanaya.
+            </p>
+            <span className="auth-terms-modal__version">Версия {USER_AGREEMENT_VERSION}</span>
           </div>
           <button type="button" className="auth-terms-modal__close" onClick={onClose} aria-label="Закрыть соглашение">
             x

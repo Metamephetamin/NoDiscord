@@ -343,6 +343,7 @@ export default function Auth({ onAuthSuccess }) {
   const isRegistrationEmailVerification = emailVerificationModal.purpose === "registration";
   const shouldShowRegistrationCodeStep = mode === "register" && isRegistrationEmailVerification && emailVerificationModal.open;
   const shouldShowPasswordResetStep = mode === "login" && loginMethod === "password" && passwordResetState.open;
+  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode;
   const canResendPasswordResetCode =
     Boolean(passwordResetState.email) &&
     passwordResetState.step !== "email" &&
@@ -1461,7 +1462,7 @@ export default function Auth({ onAuthSuccess }) {
 
   return (
     <div className={["auth-page", mode === "login" ? "auth-page--login" : "auth-page--register", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")}>
-      {isAuthVideoAvailable ? (
+      {shouldRenderAuthVideo ? (
         <video
           ref={authVideoRef}
           className="auth-video-bg"
