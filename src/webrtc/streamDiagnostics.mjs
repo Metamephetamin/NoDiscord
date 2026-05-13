@@ -1,3 +1,5 @@
+import { normalizeVoiceNetworkProfile } from "./voiceNetworkProfile.mjs";
+
 const PROFILE_RANK = {
   poor: 0,
   constrained: 1,
@@ -142,6 +144,12 @@ export function buildStreamDiagnostics({
     rttMs,
     videoRetransmitPercent,
   });
+  const networkProfile = normalizeVoiceNetworkProfile({
+    adaptiveMediaProfile: profile,
+    rttMs,
+    outgoingBitrateBps,
+    videoRetransmitPercent,
+  });
 
   return {
     rttMs,
@@ -149,6 +157,7 @@ export function buildStreamDiagnostics({
     outboundVideoBitrateBps,
     routeType,
     profile,
+    networkProfile,
     audioBitrateKbps,
     actualFps,
     targetFps: toPositiveNumber(targetFps),

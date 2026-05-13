@@ -11644,6 +11644,43 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   line-height: 1.4;
 }
 
+.voice-settings-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.voice-settings-diagnostics__row {
+  min-width: 0;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.voice-settings-diagnostics__row span {
+  color: #98a2ba;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.voice-settings-diagnostics__row strong {
+  min-width: 0;
+  color: #f4f6fb;
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-shell__content--voice {
   max-width: none;
   margin-right: 0;
@@ -13884,6 +13921,10 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   align-items: stretch;
   gap: 14px;
   margin-top: 18px;
+}
+
+.settings-popup--mobile .voice-settings-diagnostics {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-popup--mobile .voice-toggle-row {
@@ -18554,6 +18595,19 @@ html[data-ui-theme="light"] .voice-settings-meter__bars span {
 
 html[data-ui-theme="light"] .voice-settings-meter__bars span.is-active {
   background: #6b6cff;
+}
+
+html[data-ui-theme="light"] .voice-settings-diagnostics__row {
+  border-color: #d9e0ec;
+  background: #ffffff;
+}
+
+html[data-ui-theme="light"] .voice-settings-diagnostics__row span {
+  color: #64748b;
+}
+
+html[data-ui-theme="light"] .voice-settings-diagnostics__row strong {
+  color: #0f172a;
 }
 
 html[data-ui-theme="light"] .voice-switch {

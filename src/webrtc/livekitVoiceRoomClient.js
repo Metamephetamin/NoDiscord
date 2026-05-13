@@ -40,6 +40,7 @@ import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
 import { createVoiceSignalCommandQueue } from "./voiceSignalCommandQueue.mjs";
 import { invokeVoiceSignalWithRetry } from "./voiceSignalRetry.mjs";
 import { getReusableVideoTrack } from "./localShareStreamReuse.mjs";
+import { normalizeVoiceNetworkProfile } from "./voiceNetworkProfile.mjs";
 import {
   AUDIO_PROCESSING_PROFILE_BROADCAST,
   AUDIO_PROCESSING_PROFILE_NOISY_ROOM,
@@ -599,7 +600,8 @@ export function createVoiceRoomClient({
     const channel = String(nextState.channel || currentChannel || roomConnectChannelName || "");
     const reason = String(nextState.reason || "");
     const message = String(nextState.message || "");
-    const signature = `${phase}|${channel}|${reason}|${message}`;
+    const networkProfile = String(nextState.networkProfile || normalizeVoiceNetworkProfile({ phase, adaptiveMediaProfile }));
+    const signature = `${phase}|${channel}|${reason}|${message}|${networkProfile}`;
 
     if (signature === lastVoiceConnectionStateSignature) {
       return;
@@ -611,6 +613,7 @@ export function createVoiceRoomClient({
       channel,
       reason,
       message,
+      networkProfile,
       updatedAt: Date.now(),
     });
   };
@@ -625,6 +628,16 @@ export function createVoiceRoomClient({
 
     if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError" || message.includes("not found")) {
       return "device-missing";
+    }
+
+    if (
+      message.includes("livekit") ||
+      message.includes("participanttoken") ||
+      message.includes("token") ||
+      message.includes("session") ||
+      message.includes("unauthorized")
+    ) {
+      return "session-failed";
     }
 
     return "disconnected";
@@ -934,6 +947,17 @@ export function createVoiceRoomClient({
     });
     applyAdaptiveMediaProfile();
   };
+  const getVoiceNetworkProfileFromRoute = (routeSnapshot = null) => {
+    const publisherRoute = Array.isArray(routeSnapshot?.transports)
+      ? routeSnapshot.transports.find((route) => route.label === "publisher") || routeSnapshot.transports[0] || null
+      : null;
+
+    return normalizeVoiceNetworkProfile({
+      adaptiveMediaProfile,
+      rttMs: routeSnapshot?.rttMs ?? publisherRoute?.rttMs ?? 0,
+      outgoingBitrateBps: publisherRoute?.availableOutgoingBitrate ?? 0,
+    });
+  };
   const resetAdaptiveMediaProfile = () => {
     adaptiveMediaProfile = "good";
     pendingAdaptiveMediaProfile = "";
@@ -1186,6 +1210,7 @@ export function createVoiceRoomClient({
         ...routeSnapshot,
         adaptiveMediaProfile,
         adaptiveAudioBitrateKbps: getAdaptiveAudioBitrateKbps(currentVoiceChannelSettings.audioBitrateKbps, adaptiveMediaProfile),
+        networkProfile: getVoiceNetworkProfileFromRoute(routeSnapshot),
       });
       emitVoicePing(samples.length ? Math.max(...samples) : null);
     } finally {

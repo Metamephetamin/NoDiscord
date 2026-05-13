@@ -230,13 +230,13 @@ Expected: status is `ok`.
 - Modify: `src/components/MenuMainOverlays.jsx`
 - Modify: `BackNoDiscord/BackNoDiscord/VoiceHub.cs`
 
-- [ ] Normalize network profiles: `good`, `constrained`, `poor`, `reconnecting`.
-- [ ] Apply lower audio bitrate and disable nonessential video/screen quality under poor network.
-- [ ] Add visible diagnostics: reconnecting, poor network, trying lower quality.
-- [ ] Add explicit LiveKit token/session failure UI path.
-- [ ] Add "test call diagnostics" mode showing mic selected, permissions, route, ping, packet pressure.
-- [ ] Verify simulated reconnect, LiveKit session failure, no mic, weak route, direct call command retry.
-- [ ] Commit: `Improve weak network voice resilience`.
+- [x] Normalize network profiles: `good`, `constrained`, `poor`, `reconnecting`.
+- [x] Apply lower audio bitrate and disable nonessential video/screen quality under poor network.
+- [x] Add visible diagnostics: reconnecting, poor network, trying lower quality.
+- [x] Add explicit LiveKit token/session failure UI path.
+- [x] Add "test call diagnostics" mode showing mic selected, permissions, route, ping, packet pressure.
+- [x] Verify simulated reconnect, LiveKit session failure, no mic, weak route, direct call command retry.
+- [x] Commit: `Improve weak network voice resilience`.
 
 **Acceptance:**
 - On poor network, app attempts lower quality before failing.

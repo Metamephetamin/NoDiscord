@@ -1,3 +1,5 @@
+import { normalizeVoiceNetworkProfile } from "../../webrtc/voiceNetworkProfile.mjs";
+
 export const DIRECT_CALL_NO_ANSWER_TIMEOUT_MS = 180000;
 
 export const readDirectCallHistory = (storageKey) => {
@@ -43,6 +45,11 @@ export const getDirectCallConnectionQuality = (pingMs, phase) => {
   return "stable";
 };
 
+export const getDirectCallNetworkProfile = (pingMs, phase) => normalizeVoiceNetworkProfile({
+  phase,
+  rttMs: normalizeMeasuredPingMs(pingMs) || 0,
+});
+
 const isDirectCallChannel = (channelId) => /^direct-call::\d+::\d+$/i.test(String(channelId || "").trim());
 
 const DIRECT_CALL_SIGNAL_LABELS = {
@@ -86,6 +93,7 @@ export const createDirectCallState = () => ({
   peerAvatarFrame: null,
   peer: null,
   connectionQuality: "unknown",
+  networkProfile: "good",
   canRetry: false,
   isMiniMode: false,
   direction: "",
@@ -206,6 +214,7 @@ export const deriveDirectCallStateFromVoiceConnection = (previousState, voiceCon
       status: "reconnecting",
       statusLabel: "Восстанавливаем соединение",
       connectionQuality: "reconnecting",
+      networkProfile: "reconnecting",
       canRetry: false,
     };
   }
@@ -217,6 +226,7 @@ export const deriveDirectCallStateFromVoiceConnection = (previousState, voiceCon
       status: "connected",
       statusLabel: "Идет разговор",
       connectionQuality: getDirectCallConnectionQuality(null, "connected"),
+      networkProfile: getDirectCallNetworkProfile(null, "connected"),
       canRetry: false,
     };
   }

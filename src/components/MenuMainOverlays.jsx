@@ -5,6 +5,7 @@ import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
 import { formatTimestamp } from "../utils/textChatHelpers";
+import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
 const clampDirectCallWaveLevel = (value) => {
   const numericValue = Number(value);
@@ -739,6 +740,9 @@ export const DirectCallOverlay = ({
         : isConnecting
           ? "Подключаем звонок"
           : "Ожидаем ответ");
+  const networkProfileLabel = call.networkProfile
+    ? getVoiceNetworkProfileLabel(call.networkProfile)
+    : "";
 
   return (
     <div className="direct-call-overlay">
@@ -748,7 +752,7 @@ export const DirectCallOverlay = ({
           <div className="direct-call-overlay__header-copy">
             <span className="direct-call-overlay__eyebrow">{isConnected ? "Личный разговор" : "Личный звонок"}</span>
             <strong>{callTitle}</strong>
-            <span>{statusLabel}</span>
+            <span>{networkProfileLabel ? `${statusLabel} · ${networkProfileLabel}` : statusLabel}</span>
           </div>
         </div>
 
@@ -765,7 +769,7 @@ export const DirectCallOverlay = ({
           />
           <div className="direct-call-overlay__copy">
             <strong>{callTitle}</strong>
-            <span>{statusLabel}</span>
+            <span>{networkProfileLabel ? `${statusLabel} · ${networkProfileLabel}` : statusLabel}</span>
           </div>
           <div className="direct-call-overlay__hint">
             {isIncoming
@@ -878,6 +882,9 @@ export const DirectCallOverlayView = ({
         : isConnecting
           ? "Подключаем звонок"
           : "Ожидаем ответ");
+  const networkProfileLabel = call.networkProfile
+    ? getVoiceNetworkProfileLabel(call.networkProfile)
+    : "";
   const recentHistory = history
     .filter((entry) => String(entry?.peerUserId || "") === String(call.peerUserId || ""))
     .slice(0, 4);
@@ -888,7 +895,7 @@ export const DirectCallOverlayView = ({
           <div className="direct-call-inline__copy">
             <span>{isIncoming ? "Входящий звонок" : isConnected ? "Личный разговор" : isFinished ? "Звонок завершён" : "Личный звонок"}</span>
             <strong>{callTitle}</strong>
-            <small>{statusLabel}</small>
+            <small>{networkProfileLabel ? `${statusLabel} · ${networkProfileLabel}` : statusLabel}</small>
           </div>
         </div>
 
@@ -1039,7 +1046,7 @@ export const DirectCallOverlayView = ({
               {isIncoming ? "Входящий звонок" : isConnected ? "Личный разговор" : "Личный звонок"}
             </span>
             <strong>{callTitle}</strong>
-            <span>{statusLabel}</span>
+            <span>{networkProfileLabel ? `${statusLabel} · ${networkProfileLabel}` : statusLabel}</span>
           </div>
           <div className="direct-call-overlay__header-actions">
             {!embedded && (isConnected || isFinished) ? (

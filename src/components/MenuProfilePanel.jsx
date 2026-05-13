@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
+import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 import PercentageSlider from "./PercentageSlider";
 import { getProfileCustomizationClassName } from "../utils/profileCustomization";
 
@@ -118,6 +119,10 @@ const getStreamDiagnosticsItems = (diagnostics) => {
   const pressureReason = diagnostics.pressure?.reason || "";
   if (pressureReason) {
     items.push(STREAM_PRESSURE_LABELS[pressureReason] || pressureReason);
+  }
+
+  if (diagnostics.networkProfile) {
+    items.push(getVoiceNetworkProfileLabel(diagnostics.networkProfile));
   }
 
   const outboundVideoBitrate = formatStreamBitrate(diagnostics.outboundVideoBitrateBps);

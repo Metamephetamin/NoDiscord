@@ -18,6 +18,7 @@ import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundF
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import AccountSessionsPanel from "../features/account-security/AccountSessionsPanel";
+import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -30,6 +31,81 @@ const VoiceSwitch = ({ active, onClick, label }) => (
     <span />
   </button>
 );
+
+const formatVoiceDiagnosticsPing = (rttMs) => {
+  const value = Number(rttMs);
+  return Number.isFinite(value) && value > 0 ? `${Math.round(value)} мс` : "нет данных";
+};
+
+const formatVoiceDiagnosticsBitrate = (bitrateBps) => {
+  const value = Number(bitrateBps);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "нет данных";
+  }
+
+  return value >= 1_000_000
+    ? `${(value / 1_000_000).toFixed(1)} Мбит/с`
+    : `${Math.round(value / 1000)} Кбит/с`;
+};
+
+const getVoiceRouteLabel = (routeType) => {
+  if (routeType === "relay") {
+    return "через TURN";
+  }
+  if (routeType === "direct") {
+    return "прямой";
+  }
+  return "нет данных";
+};
+
+const getVoiceDiagnosticsRows = ({
+  audioInputDevices = [],
+  selectedInputDeviceId = "",
+  isMicTestActive = false,
+  streamDiagnostics = null,
+}) => {
+  const selectedInputDevice = audioInputDevices.find((device) => device.id === selectedInputDeviceId);
+  const retransmitPercent = Number(streamDiagnostics?.videoRetransmitPercent);
+
+  return [
+    {
+      label: "Микрофон",
+      value: selectedInputDevice?.label || "Системный микрофон",
+    },
+    {
+      label: "Проверка",
+      value: isMicTestActive ? "идет" : "остановлена",
+    },
+    {
+      label: "Доступ",
+      value: audioInputDevices.length > 0 || selectedInputDeviceId ? "микрофон доступен" : "ожидает разрешение",
+    },
+    {
+      label: "Сеть",
+      value: getVoiceNetworkProfileLabel(streamDiagnostics?.networkProfile || "good"),
+    },
+    {
+      label: "Маршрут",
+      value: getVoiceRouteLabel(streamDiagnostics?.routeType),
+    },
+    {
+      label: "RTT",
+      value: formatVoiceDiagnosticsPing(streamDiagnostics?.rttMs),
+    },
+    {
+      label: "Повторы",
+      value: Number.isFinite(retransmitPercent) && retransmitPercent > 0 ? `${retransmitPercent.toFixed(1)}%` : "нет давления",
+    },
+    {
+      label: "Голос",
+      value: formatVoiceDiagnosticsBitrate(
+        Number(streamDiagnostics?.audioBitrateKbps) > 0
+          ? Number(streamDiagnostics.audioBitrateKbps) * 1000
+          : streamDiagnostics?.outgoingBitrateBps,
+      ),
+    },
+  ];
+};
 
 const PROFILE_PREVIEW_ICON_PATHS = {
   about: (
@@ -955,6 +1031,7 @@ export const VoiceSettingsPanel = ({
   noiseSuppressionMode,
   echoCancellationEnabled,
   autoInputSensitivity,
+  streamDiagnostics,
   onInputDeviceChange,
   onOutputDeviceChange,
   onMicVolumeChange,
@@ -964,121 +1041,139 @@ export const VoiceSettingsPanel = ({
   onNoiseProfileChange,
   onToggleEchoCancellation,
   onToggleAutoSensitivity,
-}) => (
-  <div className="settings-shell__content settings-shell__content--voice">
-    <div className="settings-shell__content-header">
-      <div>
-        <h2>Голос и видео</h2>
-        <p>Настройте микрофон, вывод и профиль обработки так, как в вашем макете.</p>
-      </div>
-    </div>
+}) => {
+  const voiceDiagnosticsRows = getVoiceDiagnosticsRows({
+    audioInputDevices,
+    selectedInputDeviceId,
+    isMicTestActive,
+    streamDiagnostics,
+  });
 
-    <section className="voice-settings-card voice-settings-card--voice">
-      <div className="voice-settings-card__title">Голос</div>
-      <div className="voice-settings-grid">
-        <label className="voice-settings-field">
-          <span>Микрофон</span>
-          <select className="voice-settings-select voice-settings-select--native" value={selectedInputDeviceId} onChange={(event) => onInputDeviceChange(event.target.value)}>
-            {audioInputDevices.length > 0 ? audioInputDevices.map((device) => (
-              <option key={device.id} value={device.id}>{device.label}</option>
-            )) : <option value="">Системный микрофон</option>}
-          </select>
-          <span className="voice-settings-caption">Выбранное устройство ввода будет использоваться в звонке и при проверке.</span>
-        </label>
-
-        <label className="voice-settings-field">
-          <span>Динамик</span>
-          <select className="voice-settings-select voice-settings-select--native" value={selectedOutputDeviceId} onChange={(event) => onOutputDeviceChange(event.target.value)} disabled={!outputSelectionAvailable}>
-            {audioOutputDevices.length > 0 ? audioOutputDevices.map((device) => (
-              <option key={device.id} value={device.id}>{device.label}</option>
-            )) : <option value="">Системный вывод</option>}
-          </select>
-          <span className="voice-settings-caption">
-            {outputSelectionAvailable ? "Выход звука можно переключать прямо отсюда." : "Эта система пока не дает приложению переключать устройство вывода напрямую."}
-          </span>
-        </label>
-
-        <label className="voice-settings-field voice-settings-field--volume">
-          <span>Громкость микрофона</span>
-          <PercentageSlider
-            min={0}
-            max={200}
-            value={micVolume}
-            onChange={(event) => onMicVolumeChange(Number(event.target.value))}
-            ariaLabel="Громкость микрофона"
-          />
-        </label>
-        <label className="voice-settings-field voice-settings-field--volume">
-          <span>Громкость динамика</span>
-          <PercentageSlider
-            min={0}
-            max={200}
-            value={audioVolume}
-            onChange={(event) => onAudioVolumeChange(Number(event.target.value))}
-            ariaLabel="Громкость динамика"
-          />
-        </label>
+  return (
+    <div className="settings-shell__content settings-shell__content--voice">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Голос и видео</h2>
+          <p>Настройте микрофон, вывод и профиль обработки так, как в вашем макете.</p>
+        </div>
       </div>
 
-      <div className="voice-settings-meter">
-        <button type="button" className="voice-settings-meter__button" onClick={onToggleMicTest}>
-          {isMicTestActive ? "Остановить проверку" : "Проверка микрофона"}
-        </button>
-        <div className="voice-settings-meter__bars" aria-hidden="true">
-          {Array.from({ length: 48 }).map((_, index) => (
-            <span key={index} className={index < activeMicSettingsBars ? "is-active" : ""} />
+      <section className="voice-settings-card voice-settings-card--voice">
+        <div className="voice-settings-card__title">Голос</div>
+        <div className="voice-settings-grid">
+          <label className="voice-settings-field">
+            <span>Микрофон</span>
+            <select className="voice-settings-select voice-settings-select--native" value={selectedInputDeviceId} onChange={(event) => onInputDeviceChange(event.target.value)}>
+              {audioInputDevices.length > 0 ? audioInputDevices.map((device) => (
+                <option key={device.id} value={device.id}>{device.label}</option>
+              )) : <option value="">Системный микрофон</option>}
+            </select>
+            <span className="voice-settings-caption">Выбранное устройство ввода будет использоваться в звонке и при проверке.</span>
+          </label>
+
+          <label className="voice-settings-field">
+            <span>Динамик</span>
+            <select className="voice-settings-select voice-settings-select--native" value={selectedOutputDeviceId} onChange={(event) => onOutputDeviceChange(event.target.value)} disabled={!outputSelectionAvailable}>
+              {audioOutputDevices.length > 0 ? audioOutputDevices.map((device) => (
+                <option key={device.id} value={device.id}>{device.label}</option>
+              )) : <option value="">Системный вывод</option>}
+            </select>
+            <span className="voice-settings-caption">
+              {outputSelectionAvailable ? "Выход звука можно переключать прямо отсюда." : "Эта система пока не дает приложению переключать устройство вывода напрямую."}
+            </span>
+          </label>
+
+          <label className="voice-settings-field voice-settings-field--volume">
+            <span>Громкость микрофона</span>
+            <PercentageSlider
+              min={0}
+              max={200}
+              value={micVolume}
+              onChange={(event) => onMicVolumeChange(Number(event.target.value))}
+              ariaLabel="Громкость микрофона"
+            />
+          </label>
+          <label className="voice-settings-field voice-settings-field--volume">
+            <span>Громкость динамика</span>
+            <PercentageSlider
+              min={0}
+              max={200}
+              value={audioVolume}
+              onChange={(event) => onAudioVolumeChange(Number(event.target.value))}
+              ariaLabel="Громкость динамика"
+            />
+          </label>
+        </div>
+
+        <div className="voice-settings-meter">
+          <button type="button" className="voice-settings-meter__button" onClick={onToggleMicTest}>
+            {isMicTestActive ? "Остановить проверку" : "Проверка микрофона"}
+          </button>
+          <div className="voice-settings-meter__bars" aria-hidden="true">
+            {Array.from({ length: 48 }).map((_, index) => (
+              <span key={index} className={index < activeMicSettingsBars ? "is-active" : ""} />
+            ))}
+          </div>
+        </div>
+
+        <div className="voice-settings-diagnostics" aria-label="Диагностика тестового звонка">
+          {voiceDiagnosticsRows.map((row) => (
+            <div key={row.label} className="voice-settings-diagnostics__row">
+              <span>{row.label}</span>
+              <strong>{row.value}</strong>
+            </div>
           ))}
         </div>
-      </div>
 
-      <div className="voice-settings-help">
-        Нужна помощь? Здесь собраны все быстрые настройки голоса, чтобы не вылезать из звонка.
-      </div>
-    </section>
-
-    <section className="voice-settings-card">
-      <div className="voice-settings-card__title">Движок шумоподавления</div>
-      <div className="voice-profile-list">
-        {denoiserModeOptions.map((option) => (
-          <label key={option.id} className="voice-profile-option">
-            <input type="radio" name="denoiserMode" checked={audioDenoiserMode === option.id} onChange={() => onDenoiserModeChange(option.id)} />
-            <span className="voice-profile-option__copy">
-              <strong>{option.title}</strong>
-              <span>{option.description}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-
-      <div className="voice-settings-card__title">Профиль ввода</div>
-      <div className="voice-profile-list">
-        {noiseProfileOptions.map((option) => (
-          <label key={option.id} className="voice-profile-option">
-            <input type="radio" name="noiseProfile" checked={noiseSuppressionMode === option.id} onChange={() => onNoiseProfileChange(option.id)} />
-            <span className="voice-profile-option__copy">
-              <strong>{option.title}</strong>
-            </span>
-          </label>
-        ))}
-      </div>
-
-      <div className="voice-toggle-row voice-toggle-row--compact">
-        <div>
-          <strong>Эхоподавление</strong>
+        <div className="voice-settings-help">
+          Нужна помощь? Здесь собраны все быстрые настройки голоса, чтобы не вылезать из звонка.
         </div>
-        <VoiceSwitch active={echoCancellationEnabled} onClick={onToggleEchoCancellation} label="Эхоподавление" />
-      </div>
+      </section>
 
-      <div className="voice-toggle-row">
-        <div>
-          <strong>Автоматически определять чувствительность ввода</strong>
-          <span>Система сама подстраивает порог срабатывания микрофона под текущий шум.</span>
+      <section className="voice-settings-card">
+        <div className="voice-settings-card__title">Движок шумоподавления</div>
+        <div className="voice-profile-list">
+          {denoiserModeOptions.map((option) => (
+            <label key={option.id} className="voice-profile-option">
+              <input type="radio" name="denoiserMode" checked={audioDenoiserMode === option.id} onChange={() => onDenoiserModeChange(option.id)} />
+              <span className="voice-profile-option__copy">
+                <strong>{option.title}</strong>
+                <span>{option.description}</span>
+              </span>
+            </label>
+          ))}
         </div>
-        <VoiceSwitch active={autoInputSensitivity} onClick={onToggleAutoSensitivity} label="Автоматическая чувствительность" />
-      </div>
-    </section>
-  </div>
-);
+
+        <div className="voice-settings-card__title">Профиль ввода</div>
+        <div className="voice-profile-list">
+          {noiseProfileOptions.map((option) => (
+            <label key={option.id} className="voice-profile-option">
+              <input type="radio" name="noiseProfile" checked={noiseSuppressionMode === option.id} onChange={() => onNoiseProfileChange(option.id)} />
+              <span className="voice-profile-option__copy">
+                <strong>{option.title}</strong>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <div className="voice-toggle-row voice-toggle-row--compact">
+          <div>
+            <strong>Эхоподавление</strong>
+          </div>
+          <VoiceSwitch active={echoCancellationEnabled} onClick={onToggleEchoCancellation} label="Эхоподавление" />
+        </div>
+
+        <div className="voice-toggle-row">
+          <div>
+            <strong>Автоматически определять чувствительность ввода</strong>
+            <span>Система сама подстраивает порог срабатывания микрофона под текущий шум.</span>
+          </div>
+          <VoiceSwitch active={autoInputSensitivity} onClick={onToggleAutoSensitivity} label="Автоматическая чувствительность" />
+        </div>
+      </section>
+    </div>
+  );
+};
 
 export const NotificationsSettings = ({
   directNotificationsEnabled,

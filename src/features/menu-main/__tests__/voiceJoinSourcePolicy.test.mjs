@@ -37,6 +37,10 @@ test("voice signal reconnect updates visible connection state and recovers curre
   assert.match(voiceClientSource, /connection\.invoke\(\s*"JoinChannel"/, "voice SignalR reconnected must rejoin the active channel");
 });
 
+test("voice join exposes LiveKit session failures as a dedicated UI phase", () => {
+  assert.match(voiceClientSource, /return "session-failed";/, "LiveKit token/session failures must have a dedicated phase");
+});
+
 test("direct call signal commands use bounded retry helper", () => {
   assert.match(voiceClientSource, /import \{ invokeVoiceSignalWithRetry \} from "\.\/voiceSignalRetry\.mjs"/, "voice client must import retry helper");
   assert.match(voiceClientSource, /import \{ createVoiceSignalCommandQueue \} from "\.\/voiceSignalCommandQueue\.mjs"/, "voice client must import signal command queue");

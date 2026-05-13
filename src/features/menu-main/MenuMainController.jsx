@@ -99,6 +99,7 @@ import {
   deriveDirectCallStateFromSignalCommand,
   deriveDirectCallStateFromVoiceConnection,
   getDirectCallConnectionQuality,
+  getDirectCallNetworkProfile,
   normalizeMeasuredPingMs,
 } from "./menuMainDirectCallState";
 import {
@@ -1328,9 +1329,10 @@ export default function MenuMain({
       }
 
       const nextQuality = getDirectCallConnectionQuality(activeLatencyMs, previous.phase);
-      return previous.connectionQuality === nextQuality
+      const nextNetworkProfile = getDirectCallNetworkProfile(activeLatencyMs, previous.phase);
+      return previous.connectionQuality === nextQuality && previous.networkProfile === nextNetworkProfile
         ? previous
-        : { ...previous, connectionQuality: nextQuality };
+        : { ...previous, connectionQuality: nextQuality, networkProfile: nextNetworkProfile };
     });
   }, [activeLatencyMs]);
   useEffect(() => {
@@ -3845,6 +3847,7 @@ export default function MenuMain({
               statusLabel: "Идёт разговор",
               isMiniMode: true,
               connectionQuality: getDirectCallConnectionQuality(activeLatencyMs, "connected"),
+              networkProfile: getDirectCallNetworkProfile(activeLatencyMs, "connected"),
             };
             directCallStateRef.current = connectedCall;
             setDirectCallState(connectedCall);
@@ -5746,6 +5749,7 @@ export default function MenuMain({
     activeNoiseProfile,
     echoCancellationEnabled,
     autoInputSensitivity,
+    streamDiagnostics,
     handleInputDeviceChange,
     handleOutputDeviceChange,
     updateMicVolume,

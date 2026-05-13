@@ -25,6 +25,7 @@ test("deriveDirectCallStateFromVoiceConnection marks active direct call as recon
   assert.equal(next.phase, "reconnecting");
   assert.equal(next.status, "reconnecting");
   assert.equal(next.connectionQuality, "reconnecting");
+  assert.equal(next.networkProfile, "reconnecting");
   assert.equal(next.canRetry, false);
 });
 
@@ -46,6 +47,7 @@ test("deriveDirectCallStateFromVoiceConnection restores connected direct call af
   assert.equal(next.phase, "connected");
   assert.equal(next.status, "connected");
   assert.equal(next.statusLabel, "Идет разговор");
+  assert.equal(next.networkProfile, "good");
 });
 
 test("deriveDirectCallStateFromVoiceConnection ignores unrelated channels", () => {

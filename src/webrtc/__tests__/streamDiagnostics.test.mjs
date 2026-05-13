@@ -60,6 +60,7 @@ test("buildStreamDiagnostics reports bandwidth pressure from bitrate and packet 
 
   assert.equal(diagnostics.pressure.reason, "bandwidth");
   assert.equal(diagnostics.pressure.severity, "danger");
+  assert.equal(diagnostics.networkProfile, "poor");
   assert.ok(diagnostics.videoRetransmitPercent >= 4);
 });
 
@@ -118,4 +119,5 @@ test("buildStreamDiagnostics reports healthy when route and profile are good", (
 
   assert.equal(diagnostics.pressure.reason, "healthy");
   assert.equal(diagnostics.pressure.severity, "ok");
+  assert.equal(diagnostics.networkProfile, "good");
 });
