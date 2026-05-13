@@ -97,6 +97,45 @@ public sealed class ChatMessagesControllerTests
         Assert.Equal(12, context.Messages.Count());
     }
 
+    [Fact]
+    public async Task GetMessages_ReturnsCurrentUsersReadState()
+    {
+        await using var context = CreateContext();
+        context.Friendships.Add(new FriendshipRecord { UserLowId = 42, UserHighId = 99, CreatedAt = DateTimeOffset.UtcNow });
+        context.Messages.Add(new Message
+        {
+            ChannelId = DirectMessageChannels.BuildChannelId(42, 99),
+            Username = "Friend",
+            Content = "__CHAT_PAYLOAD__:{\"message\":\"hello\",\"authorUserId\":\"99\"}",
+            AuthorUserId = "99",
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        context.ChatChannelReadStates.Add(new ChatChannelReadStateRecord
+        {
+            UserId = "42",
+            ChannelId = DirectMessageChannels.BuildChannelId(42, 99),
+            LastReadMessageId = 321,
+            LastReadAt = DateTimeOffset.Parse("2026-05-13T10:00:00Z"),
+            UpdatedAt = DateTimeOffset.Parse("2026-05-13T10:00:00Z")
+        });
+        await context.SaveChangesAsync();
+        var controller = BuildController(context, userId: "42");
+
+        var result = await controller.GetMessages(
+            DirectMessageChannels.BuildChannelId(42, 99),
+            beforeMessageId: null,
+            limit: 20,
+            CancellationToken.None);
+
+        var actionResult = Assert.IsType<ActionResult<ChatMessagesPageDto>>(result);
+        Assert.NotNull(actionResult.Value);
+        var dto = actionResult.Value!;
+        Assert.NotNull(dto.ReadState);
+        Assert.Equal(321, dto.ReadState.LastReadMessageId);
+        Assert.Equal("42", dto.ReadState.UserId);
+    }
+
     private static ChatMessagesController BuildController(
         AppDbContext context,
         string userId,
@@ -112,7 +151,8 @@ public sealed class ChatMessagesControllerTests
             new ChatFileAccessService(context, new ServerStateService(context)),
             limiter ?? new ChatSpamBurstLimiter(),
             new MessageDeduplicationService(),
-            hubContext ?? new RecordingHubContext())
+            hubContext ?? new RecordingHubContext(),
+            new ChatReadStateService(context))
         {
             ControllerContext = new ControllerContext
             {

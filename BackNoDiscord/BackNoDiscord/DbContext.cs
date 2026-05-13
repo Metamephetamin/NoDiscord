@@ -43,6 +43,28 @@ public class Message
     public bool IsDeleted { get; set; }
 }
 
+[Table("chat_channel_read_states")]
+public class ChatChannelReadStateRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("user_id")]
+    public string UserId { get; set; } = string.Empty;
+
+    [Column("channel_id")]
+    public string ChannelId { get; set; } = string.Empty;
+
+    [Column("last_read_message_id")]
+    public int? LastReadMessageId { get; set; }
+
+    [Column("last_read_at")]
+    public DateTimeOffset LastReadAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 [Table("chat_file_uploads")]
 public class ChatFileUploadRecord
 {
@@ -643,6 +665,7 @@ public class AppDbContext : DbContext
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
     public DbSet<ServerAuditLogRecord> ServerAuditLogs => Set<ServerAuditLogRecord>();
     public DbSet<UserIntegrationRecord> UserIntegrations => Set<UserIntegrationRecord>();
+    public DbSet<ChatChannelReadStateRecord> ChatChannelReadStates => Set<ChatChannelReadStateRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -679,6 +702,16 @@ public class AppDbContext : DbContext
             entity.Property(x => x.OwnerUserId).IsRequired();
             entity.Property(x => x.DisplayFileName).IsRequired();
             entity.Property(x => x.ContentType).IsRequired();
+        });
+
+        modelBuilder.Entity<ChatChannelReadStateRecord>(entity =>
+        {
+            entity.ToTable("chat_channel_read_states");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.ChannelId }).IsUnique();
+            entity.HasIndex(x => new { x.ChannelId, x.LastReadAt });
+            entity.Property(x => x.UserId).IsRequired();
+            entity.Property(x => x.ChannelId).IsRequired();
         });
 
         modelBuilder.Entity<MessageReactionRecord>(entity =>

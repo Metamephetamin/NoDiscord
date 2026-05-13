@@ -114,10 +114,10 @@ Expected: status is `ok`.
 - [x] Persist local outbox per channel in IndexedDB or existing local cache layer.
 - [x] Add delivery states: `queued`, `sending`, `sent`, `delivered`, `failed`.
 - [x] Add resend after app restart when auth/session is valid.
-- [ ] Add "read by me" and "last read" server state for read receipts.
+- [x] Add "read by me" and "last read" server state for read receipts.
 - [x] Add minimal UI indicators without re-rendering entire message list.
-- [ ] Verify direct chat, server chat, image send, offline/reconnect, duplicate resend.
-- [ ] Commit: `Harden durable chat delivery`.
+- [x] Verify direct chat, server chat, image send, offline/reconnect, duplicate resend.
+- [x] Commit: `Harden durable chat delivery`.
 
 **Acceptance:**
 - Killing the app mid-send does not lose the message.

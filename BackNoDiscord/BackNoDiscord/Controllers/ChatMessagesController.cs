@@ -32,6 +32,7 @@ public sealed class ChatMessagesController : ControllerBase
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
     private readonly MessageDeduplicationService _messageDeduplication;
     private readonly IHubContext<ChatHub> _hubContext;
+    private readonly ChatReadStateService _chatReadState;
 
     public ChatMessagesController(
         AppDbContext context,
@@ -42,7 +43,8 @@ public sealed class ChatMessagesController : ControllerBase
         ChatFileAccessService chatFileAccess,
         ChatSpamBurstLimiter messageBurstLimiter,
         MessageDeduplicationService messageDeduplication,
-        IHubContext<ChatHub> hubContext)
+        IHubContext<ChatHub> hubContext,
+        ChatReadStateService chatReadState)
     {
         _context = context;
         _crypto = crypto;
@@ -53,6 +55,7 @@ public sealed class ChatMessagesController : ControllerBase
         _messageBurstLimiter = messageBurstLimiter;
         _messageDeduplication = messageDeduplication;
         _hubContext = hubContext;
+        _chatReadState = chatReadState;
     }
 
     [HttpGet]
@@ -132,6 +135,11 @@ public sealed class ChatMessagesController : ControllerBase
                 cancellationToken);
         }
 
+        var readState = await _chatReadState.GetReadStateAsync(
+            currentUser.UserId,
+            normalizedChannelId,
+            cancellationToken);
+
         return new ChatMessagesPageDto
         {
             Items = messagesWithPayloads
@@ -141,7 +149,16 @@ public sealed class ChatMessagesController : ControllerBase
                     reactionsByMessageId.TryGetValue(item.Message.Id, out var reactions) ? reactions : []))
                 .ToList(),
             HasMore = hasMore,
-            NextCursor = pageMessages.Count > 0 ? pageMessages.Min(message => message.Id) : null
+            NextCursor = pageMessages.Count > 0 ? pageMessages.Min(message => message.Id) : null,
+            ReadState = readState is null
+                ? null
+                : new ChatReadStateDto
+                {
+                    UserId = readState.UserId,
+                    ChannelId = readState.ChannelId,
+                    LastReadMessageId = readState.LastReadMessageId,
+                    LastReadAt = readState.LastReadAt
+                }
         };
     }
 
@@ -692,6 +709,15 @@ public sealed class ChatMessagesPageDto
     public List<MessageDto> Items { get; set; } = [];
     public bool HasMore { get; set; }
     public int? NextCursor { get; set; }
+    public ChatReadStateDto? ReadState { get; set; }
+}
+
+public sealed class ChatReadStateDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string ChannelId { get; set; } = string.Empty;
+    public int? LastReadMessageId { get; set; }
+    public DateTimeOffset LastReadAt { get; set; }
 }
 
 public sealed class ChatOutboxMessageRequest

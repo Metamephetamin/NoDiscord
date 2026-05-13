@@ -58,6 +58,7 @@ public class ChatHub : Hub
     private readonly ChatFileAccessService _chatFileAccess;
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
     private readonly MessageDeduplicationService _messageDeduplication;
+    private readonly ChatReadStateService _chatReadState;
 
     public ChatHub(
         AppDbContext context,
@@ -70,7 +71,8 @@ public class ChatHub : Hub
         UserBlockService userBlockService,
         ChatFileAccessService chatFileAccess,
         ChatSpamBurstLimiter messageBurstLimiter,
-        MessageDeduplicationService messageDeduplication)
+        MessageDeduplicationService messageDeduplication,
+        ChatReadStateService chatReadState)
     {
         _context = context;
         _crypto = crypto;
@@ -83,6 +85,7 @@ public class ChatHub : Hub
         _chatFileAccess = chatFileAccess;
         _messageBurstLimiter = messageBurstLimiter;
         _messageDeduplication = messageDeduplication;
+        _chatReadState = chatReadState;
     }
 
     public override async Task OnConnectedAsync()
@@ -1523,6 +1526,13 @@ public class ChatHub : Hub
 
         var readMessageIds = await LoadUnreadModernMessageIdsAsync([channelId], currentUser);
         readMessageIds.AddRange(await LoadUnreadLegacyMessageIdsAsync([channelId], currentUser));
+        var lastReadMessageId = await LoadLatestMessageIdAsync([channelId]);
+        await _chatReadState.MarkReadAsync(
+            currentUser.UserId,
+            channelId,
+            lastReadMessageId,
+            DateTimeOffset.UtcNow,
+            Context.ConnectionAborted);
 
         if (readMessageIds.Count == 0)
         {
@@ -1558,6 +1568,13 @@ public class ChatHub : Hub
         var readAtUtc = DateTime.UtcNow;
         var readMessageIds = await LoadUnreadModernMessageIdsAsync(equivalentChannelIds, currentUser);
         readMessageIds.AddRange(await LoadUnreadLegacyMessageIdsAsync(equivalentChannelIds, currentUser));
+        var lastReadMessageId = await LoadLatestMessageIdAsync(equivalentChannelIds);
+        await _chatReadState.MarkReadAsync(
+            currentUser.UserId,
+            normalizedChannelId,
+            lastReadMessageId,
+            DateTimeOffset.UtcNow,
+            Context.ConnectionAborted);
 
         if (readMessageIds.Count == 0)
         {
@@ -1592,6 +1609,16 @@ public class ChatHub : Hub
             .OrderBy(message => message.Timestamp)
             .Select(message => message.Id)
             .ToListAsync(Context.ConnectionAborted);
+    }
+
+    private async Task<int?> LoadLatestMessageIdAsync(IReadOnlyCollection<string> channelIds)
+    {
+        return await _context.Messages
+            .AsNoTracking()
+            .Where(message => channelIds.Contains(message.ChannelId) && !message.IsDeleted)
+            .OrderByDescending(message => message.Id)
+            .Select(message => (int?)message.Id)
+            .FirstOrDefaultAsync(Context.ConnectionAborted);
     }
 
     private async Task<List<int>> LoadUnreadLegacyMessageIdsAsync(IReadOnlyCollection<string> channelIds, AuthenticatedUser currentUser)

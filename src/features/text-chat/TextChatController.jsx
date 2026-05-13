@@ -1277,18 +1277,40 @@ export default function TextChat({
       throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить историю сообщений."));
     }
 
+    const readState = data?.readState || data?.ReadState || null;
+    const lastReadMessageId = Number(readState?.lastReadMessageId ?? readState?.LastReadMessageId ?? 0) || 0;
+    const readStateAt = readState?.lastReadAt || readState?.LastReadAt || null;
     const normalizedMessages = Array.isArray(data?.items)
       ? (await Promise.all(data.items.map((messageItem) => normalizeIncomingMessage(messageItem))))
         .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
         .filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs))
+        .map((messageItem) => {
+          const messageId = Number(messageItem?.id) || 0;
+          if (
+            !lastReadMessageId
+            || messageId <= 0
+            || messageId > lastReadMessageId
+            || String(messageItem?.authorUserId || "") === currentUserId
+          ) {
+            return messageItem;
+          }
+
+          return {
+            ...messageItem,
+            isRead: true,
+            readAt: messageItem.readAt || readStateAt,
+            readByUserId: messageItem.readByUserId || currentUserId,
+          };
+        })
       : [];
 
     return {
       items: normalizedMessages,
       hasMore: Boolean(data?.hasMore) && !localClearCutoffMs,
       nextCursor: data?.nextCursor || null,
+      readState,
     };
-  }, [localClearCutoffMs, serverMembers, serverRoles]);
+  }, [currentUserId, localClearCutoffMs, serverMembers, serverRoles]);
 
   const updateHistoryState = useCallback((channelId, updater) => {
     const normalizedChannelId = String(channelId || "").trim();
