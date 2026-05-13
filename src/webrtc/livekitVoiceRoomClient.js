@@ -36,6 +36,7 @@ import {
 } from "./voiceClientUtils";
 import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
 import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
+import { invokeVoiceSignalWithRetry } from "./voiceSignalRetry.mjs";
 import { getReusableVideoTrack } from "./localShareStreamReuse.mjs";
 import {
   AUDIO_PROCESSING_PROFILE_BROADCAST,
@@ -4179,6 +4180,22 @@ const handleDeviceChange = () => {
     await emitAudioDevices().catch(() => {});
   };
 
+  const invokeDirectCallSignal = async (user, methodName, ...args) => {
+    await ensureSignalConnection(user);
+    return invokeVoiceSignalWithRetry({
+      invoke: () => signalConnection.invoke(methodName, ...args),
+      reconnect: () => ensureSignalConnection(user),
+      onRetry: ({ attempt, error }) => {
+        logVoiceDebug("signal:direct-call-command-retry", {
+          methodName,
+          attempt,
+          errorName: error?.name || "",
+          error: error?.message || String(error),
+        });
+      },
+    });
+  };
+
   return {
     getCurrentChannel() {
       return currentChannel;
@@ -4317,8 +4334,8 @@ const handleDeviceChange = () => {
     },
 
     async startDirectCall(targetUserId, channelName, user) {
-      await ensureSignalConnection(user);
-      await signalConnection.invoke(
+      await invokeDirectCallSignal(
+        user,
         "StartDirectCall",
         String(targetUserId || ""),
         channelName,
@@ -4327,8 +4344,8 @@ const handleDeviceChange = () => {
     },
 
     async acceptDirectCall(targetUserId, channelName, user) {
-      await ensureSignalConnection(user);
-      await signalConnection.invoke(
+      await invokeDirectCallSignal(
+        user,
         "AcceptDirectCall",
         String(targetUserId || ""),
         channelName,
@@ -4337,8 +4354,8 @@ const handleDeviceChange = () => {
     },
 
     async declineDirectCall(targetUserId, channelName, reason = "declined", user = currentUser) {
-      await ensureSignalConnection(user);
-      await signalConnection.invoke(
+      await invokeDirectCallSignal(
+        user,
         "DeclineDirectCall",
         String(targetUserId || ""),
         channelName,
@@ -4347,8 +4364,8 @@ const handleDeviceChange = () => {
     },
 
     async endDirectCall(targetUserId, channelName, user = currentUser) {
-      await ensureSignalConnection(user);
-      await signalConnection.invoke(
+      await invokeDirectCallSignal(
+        user,
         "EndDirectCall",
         String(targetUserId || ""),
         channelName

@@ -2582,6 +2582,14 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   object-fit: contain;
 }
 
+.message-item--dm .msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single,
+.message-item--dm .msg-content--media-only:not(.msg-content--single-video-only) .message-media-overlay-anchor,
+.message-item--dm .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,
+.message-item--dm .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media,
+.message-item--dm .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single .message-media__image {
+  min-width: min(220px, calc(100vw - 128px));
+}
+
 .msg-content--media-only.msg-content--multi-visual-attachments,
 .message-item:not(.message-item--dm) .msg-content--media-only.msg-content--multi-visual-attachments,
 .message-item--dm .msg-content--media-only.msg-content--multi-visual-attachments,
