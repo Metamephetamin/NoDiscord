@@ -288,6 +288,7 @@ builder.Services.AddScoped<ChatFileMetadataRepairService>();
 builder.Services.AddScoped<MessageSearchService>();
 builder.Services.AddScoped<MessageDeduplicationService>();
 builder.Services.AddScoped<ChatReadStateService>();
+builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddScoped<ModerationService>();
 builder.Services.AddSingleton<ChatSpamBurstLimiter>();
 builder.Services.AddScoped<AuditLogService>();

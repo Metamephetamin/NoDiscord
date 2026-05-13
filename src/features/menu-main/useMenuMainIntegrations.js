@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import chatConnection from "../../SignalR/ChatConnect";
-import { API_BASE_URL } from "../../config/runtime";
 import {
-  authFetch,
-  getApiErrorMessage,
   getStoredAccessTokenExpiresAt,
   getStoredRefreshToken,
   getStoredToken,
-  parseApiResponse,
   storeSession,
 } from "../../utils/auth";
+import {
+  fetchAccountSessions,
+  revokeAccountSession,
+  revokeOtherAccountSessions,
+} from "../account-security/accountSecurityApi";
 import {
   connectIntegration,
   disconnectIntegration,
@@ -17,7 +18,6 @@ import {
   refreshIntegrationActivity,
   updateIntegrationSettings,
 } from "../../utils/integrations";
-import { DEVICE_SESSION_REFRESH_TOKEN_HEADER } from "./menuMainControllerUtils";
 
 export default function useMenuMainIntegrations({
   user,
@@ -30,6 +30,7 @@ export default function useMenuMainIntegrations({
   const [deviceSessions, setDeviceSessions] = useState([]);
   const [deviceSessionsLoading, setDeviceSessionsLoading] = useState(false);
   const [deviceSessionsError, setDeviceSessionsError] = useState("");
+  const [deviceSessionActionBusy, setDeviceSessionActionBusy] = useState("");
   const [integrations, setIntegrations] = useState([]);
   const [integrationsLoading, setIntegrationsLoading] = useState(false);
   const [integrationsStatus, setIntegrationsStatus] = useState("");
@@ -52,24 +53,46 @@ export default function useMenuMainIntegrations({
     setDeviceSessionsError("");
 
     try {
-      const refreshToken = getStoredRefreshToken();
-      const response = await authFetch(`${API_BASE_URL}/auth/devices`, {
-        method: "GET",
-        headers: refreshToken ? { [DEVICE_SESSION_REFRESH_TOKEN_HEADER]: refreshToken } : undefined,
-      });
-      const data = await parseApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить список устройств."));
-      }
-
-      setDeviceSessions(Array.isArray(data?.sessions) ? data.sessions : []);
+      setDeviceSessions(await fetchAccountSessions());
     } catch (error) {
       setDeviceSessionsError(error?.message || "Не удалось загрузить список устройств.");
     } finally {
       setDeviceSessionsLoading(false);
     }
   }, [user?.id]);
+
+  const revokeDeviceSession = useCallback(async (sessionId) => {
+    const normalizedSessionId = String(sessionId || "").trim();
+    if (!normalizedSessionId) {
+      return;
+    }
+
+    setDeviceSessionActionBusy(`revoke:${normalizedSessionId}`);
+    setDeviceSessionsError("");
+
+    try {
+      await revokeAccountSession(normalizedSessionId);
+      await refreshDeviceSessions();
+    } catch (error) {
+      setDeviceSessionsError(error?.message || "Не удалось завершить сессию.");
+    } finally {
+      setDeviceSessionActionBusy("");
+    }
+  }, [refreshDeviceSessions]);
+
+  const revokeOtherDeviceSessions = useCallback(async () => {
+    setDeviceSessionActionBusy("revoke-others");
+    setDeviceSessionsError("");
+
+    try {
+      await revokeOtherAccountSessions();
+      await refreshDeviceSessions();
+    } catch (error) {
+      setDeviceSessionsError(error?.message || "Не удалось завершить другие сессии.");
+    } finally {
+      setDeviceSessionActionBusy("");
+    }
+  }, [refreshDeviceSessions]);
 
   useEffect(() => {
     if (!openSettings || settingsTab !== "devices") {
@@ -350,7 +373,10 @@ export default function useMenuMainIntegrations({
     deviceSessions,
     deviceSessionsLoading,
     deviceSessionsError,
+    deviceSessionActionBusy,
     refreshDeviceSessions,
+    revokeDeviceSession,
+    revokeOtherDeviceSessions,
     integrations,
     integrationsLoading,
     integrationsStatus,

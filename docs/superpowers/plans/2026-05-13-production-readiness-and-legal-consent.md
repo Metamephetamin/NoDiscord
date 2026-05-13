@@ -202,14 +202,14 @@ Expected: status is `ok`.
 - Modify: `src/components/Auth.jsx`
 - Modify: `src/utils/auth.js`
 
-- [ ] Persist refresh/session records with device label, created_at, last_used_at, revoked_at.
-- [ ] Add `GET /api/auth/sessions`.
-- [ ] Add revoke one session and revoke all other sessions.
-- [ ] Rotate refresh tokens and invalidate reused/revoked tokens.
-- [ ] Add suspicious login signal: new device/IP family/email notification if email is configured.
-- [ ] Add UI in settings for active sessions.
-- [ ] Verify login, refresh, revoke current, revoke other, stolen refresh reuse.
-- [ ] Commit: `Add account session management`.
+- [x] Persist refresh/session records with device label, created_at, last_used_at, revoked_at.
+- [x] Add `GET /api/auth/sessions`.
+- [x] Add revoke one session and revoke all other sessions.
+- [x] Rotate refresh tokens and invalidate reused/revoked tokens.
+- [x] Add suspicious login signal: new device/IP family/email notification if email is configured.
+- [x] Add UI in settings for active sessions.
+- [x] Verify login, refresh, revoke current, revoke other, stolen refresh reuse.
+- [x] Commit: `Add account session management`.
 
 **Acceptance:**
 - User can log out all devices.

@@ -17,6 +17,7 @@ import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import AccountSessionsPanel from "../features/account-security/AccountSessionsPanel";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -713,6 +714,10 @@ export const DevicesSettings = ({
   deviceSessions,
   deviceSessionsLoading,
   deviceSessionsError,
+  deviceSessionActionBusy,
+  onRefreshDeviceSessions,
+  onRevokeDeviceSession,
+  onRevokeOtherDeviceSessions,
   onOpenQrScanner,
 }) => {
   const [accountQrState, setAccountQrState] = useState({
@@ -815,40 +820,15 @@ export const DevicesSettings = ({
         ) : null}
       </section>
 
-      <section className="voice-settings-card">
-        <div className="voice-settings-card__title">Активные сессии</div>
-
-        {deviceSessionsError ? (
-          <div className="profile-settings-form__status">{deviceSessionsError}</div>
-        ) : null}
-
-        {!deviceSessionsLoading && deviceSessions.length === 0 ? (
-          <div className="settings-empty-state">
-            <h3>Устройств пока нет</h3>
-            <p>После входа на новом телефоне, планшете или компьютере он появится здесь автоматически.</p>
-          </div>
-        ) : (
-          <div className="device-sessions-list">
-            {deviceSessions.map((session) => (
-              <div key={session.id} className={`device-session-card ${session.isCurrent ? "device-session-card--current" : ""}`}>
-                <div className="device-session-card__row">
-                  <div className="device-session-card__copy">
-                    <strong>{session.deviceLabel || "Устройство"}</strong>
-                    <span>{session.userAgent || "Браузер"}</span>
-                  </div>
-                  {session.isCurrent ? <span className="device-session-card__badge">Это устройство</span> : null}
-                </div>
-
-                <div className="device-session-card__meta">
-                  <span>Последняя активность: {formatDeviceSessionDate(session.lastUsedAt) || "недавно"}</span>
-                  <span>Истекает: {formatDeviceSessionDate(session.expiresAt) || "позже"}</span>
-                  {session.lastIp ? <span>IP: {session.lastIp}</span> : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <AccountSessionsPanel
+        sessions={deviceSessions}
+        loading={deviceSessionsLoading}
+        error={deviceSessionsError}
+        actionBusy={deviceSessionActionBusy}
+        onRefresh={onRefreshDeviceSessions}
+        onRevokeSession={onRevokeDeviceSession}
+        onRevokeOtherSessions={onRevokeOtherDeviceSessions}
+      />
     </div>
   );
 };

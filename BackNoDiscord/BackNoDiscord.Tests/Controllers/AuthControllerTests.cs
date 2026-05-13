@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace BackNoDiscord.Tests.Controllers;
@@ -228,6 +230,47 @@ public sealed class AuthControllerTests : IDisposable
         Assert.Empty(_context.EmailVerificationCodes);
     }
 
+    [Fact]
+    public async Task Refresh_WhenRotatedRefreshTokenIsReused_RevokesActiveSessions()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var user = BuildUser(13, "refresh-reuse@gmail.com");
+        _context.Users.Add(user);
+        _context.RefreshTokens.AddRange(
+            new RefreshTokenRecord
+            {
+                UserId = user.id,
+                TokenHash = HashRawToken("old-refresh-token"),
+                CreatedAt = now.AddHours(-2),
+                ExpiresAt = now.AddDays(7),
+                RevokedAt = now.AddMinutes(-5),
+                ReplacedByTokenHash = HashRawToken("replacement-token"),
+                UserAgent = "Old Browser",
+                DeviceLabel = "Old Browser",
+                LastIp = "127.0.0.1",
+                LastUsedAt = now.AddMinutes(-5)
+            },
+            new RefreshTokenRecord
+            {
+                UserId = user.id,
+                TokenHash = HashRawToken("active-refresh-token"),
+                CreatedAt = now.AddMinutes(-4),
+                ExpiresAt = now.AddDays(7),
+                UserAgent = "Current Browser",
+                DeviceLabel = "Current Browser",
+                LastIp = "127.0.0.1",
+                LastUsedAt = now.AddMinutes(-4)
+            });
+        await _context.SaveChangesAsync();
+        var controller = BuildController();
+
+        var result = await controller.Refresh(new RefreshTokenDto { refreshToken = "old-refresh-token" });
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+        var activeToken = await _context.RefreshTokens.SingleAsync(item => item.TokenHash == HashRawToken("active-refresh-token"));
+        Assert.NotNull(activeToken.RevokedAt);
+    }
+
     public void Dispose()
     {
         _context.Dispose();
@@ -254,7 +297,8 @@ public sealed class AuthControllerTests : IDisposable
             configuration,
             _emailSender,
             new TestWebHostEnvironment { EnvironmentName = environmentName },
-            new CryptoService(configuration));
+            new CryptoService(configuration),
+            new UserSessionService(_context));
     }
 
     private static User BuildUser(int id, string email)
@@ -279,6 +323,11 @@ public sealed class AuthControllerTests : IDisposable
             root.GetProperty("verificationToken").GetString() ?? string.Empty,
             root.GetProperty("debugCode").GetString() ?? string.Empty
         );
+    }
+
+    private static string HashRawToken(string rawToken)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken.Trim())));
     }
 
     private static AppDbContext CreateContext()

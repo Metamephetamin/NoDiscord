@@ -38,6 +38,7 @@ public class AuthController : ControllerBase
     private readonly IEmailVerificationSender _emailVerificationSender;
     private readonly IWebHostEnvironment _environment;
     private readonly CryptoService _crypto;
+    private readonly UserSessionService _userSessionService;
     private readonly PasswordHasher<User> _passwordHasher;
 
     public AuthController(
@@ -45,13 +46,15 @@ public class AuthController : ControllerBase
         IConfiguration config,
         IEmailVerificationSender emailVerificationSender,
         IWebHostEnvironment environment,
-        CryptoService crypto)
+        CryptoService crypto,
+        UserSessionService userSessionService)
     {
         _context = context;
         _config = config;
         _emailVerificationSender = emailVerificationSender;
         _environment = environment;
         _crypto = crypto;
+        _userSessionService = userSessionService;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -217,7 +220,6 @@ public class AuthController : ControllerBase
         user.is_email_verified = true;
         await _context.SaveChangesAsync();
 
-        await RevokeActiveRefreshTokensAsync(user.id);
         var authSession = await IssueAuthSessionAsync(user);
         return Ok(BuildAuthResponse(user, authSession));
     }
@@ -855,7 +857,6 @@ public class AuthController : ControllerBase
         //     }
         // }
 
-        await RevokeActiveRefreshTokensAsync(user.id);
         var authSession = await IssueAuthSessionAsync(user);
         return Ok(BuildAuthResponse(user, authSession));
     }
@@ -941,14 +942,13 @@ public class AuthController : ControllerBase
             return BadRequest(CreateTotpRequiredError());
         }
 
-        await RevokeActiveRefreshTokensAsync(user.id);
         var authSession = await IssueAuthSessionAsync(user);
         return Ok(BuildAuthResponse(user, authSession));
     }
 
     [HttpPost("refresh")]
     [EnableRateLimiting("auth")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto dto)
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto dto, CancellationToken cancellationToken = default)
     {
         if (!ModelState.IsValid)
         {
@@ -958,20 +958,26 @@ public class AuthController : ControllerBase
         var tokenHash = HashToken(dto.refreshToken);
         var storedToken = await _context.RefreshTokens
             .Include(item => item.User)
-            .FirstOrDefaultAsync(item => item.TokenHash == tokenHash);
+            .FirstOrDefaultAsync(item => item.TokenHash == tokenHash, cancellationToken);
 
         if (storedToken?.User == null)
         {
             return Unauthorized(new { message = "Refresh token is invalid." });
         }
 
-        if (storedToken.RevokedAt.HasValue || storedToken.ExpiresAt <= DateTimeOffset.UtcNow)
+        var now = DateTimeOffset.UtcNow;
+        if (storedToken.RevokedAt.HasValue)
+        {
+            await _userSessionService.RevokeActiveSessionsAfterRefreshTokenReuseAsync(tokenHash, now, cancellationToken);
+            return Unauthorized(new { message = "Refresh token has expired." });
+        }
+
+        if (storedToken.ExpiresAt <= now)
         {
             return Unauthorized(new { message = "Refresh token has expired." });
         }
 
-        var now = DateTimeOffset.UtcNow;
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         var authSession = await IssueAuthSessionAsync(storedToken.User);
         var revoked = await RevokeRefreshTokenForRotationAsync(
             storedToken.Id,
@@ -979,11 +985,11 @@ public class AuthController : ControllerBase
             now);
         if (!revoked)
         {
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
             return Unauthorized(new { message = "Refresh token has expired." });
         }
 
-        await transaction.CommitAsync();
+        await transaction.CommitAsync(cancellationToken);
 
         return Ok(BuildAuthResponse(storedToken.User, authSession));
     }
@@ -1014,8 +1020,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("devices")]
+    [HttpGet("sessions")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-    public async Task<IActionResult> GetDevices()
+    public async Task<IActionResult> GetDevices(CancellationToken cancellationToken = default)
     {
         var user = await GetCurrentUserAsync();
         if (user == null)
@@ -1023,28 +1030,23 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var now = DateTimeOffset.UtcNow;
         var currentRefreshTokenHash = GetCurrentRefreshTokenHash();
-        var sessions = await _context.RefreshTokens
-            .AsNoTracking()
-            .Where(item =>
-                item.UserId == user.id &&
-                !item.RevokedAt.HasValue &&
-                item.ExpiresAt > now)
-            .OrderByDescending(item => item.LastUsedAt)
-            .ThenByDescending(item => item.CreatedAt)
-            .ToListAsync();
+        var sessions = await _userSessionService.GetActiveSessionsAsync(
+            user.id,
+            currentRefreshTokenHash,
+            cancellationToken);
 
         return Ok(new
         {
-            sessions = sessions.Select(item => BuildDeviceSessionPayload(item, currentRefreshTokenHash))
+            sessions = sessions.Select(BuildDeviceSessionPayload)
         });
     }
 
     [HttpDelete("devices/{sessionId:int}")]
+    [HttpDelete("sessions/{sessionId:int}")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [EnableRateLimiting("auth")]
-    public async Task<IActionResult> RevokeDeviceSession([FromRoute] int sessionId)
+    public async Task<IActionResult> RevokeDeviceSession([FromRoute] int sessionId, CancellationToken cancellationToken = default)
     {
         var user = await GetCurrentUserAsync();
         if (user == null)
@@ -1052,21 +1054,39 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var session = await _context.RefreshTokens.FirstOrDefaultAsync(item => item.Id == sessionId && item.UserId == user.id);
-        if (session == null)
+        var revoked = await _userSessionService.RevokeSessionAsync(
+            user.id,
+            sessionId,
+            GetClientIp(),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (!revoked)
         {
             return NotFound(new { message = "Сессия не найдена." });
         }
 
-        if (!session.RevokedAt.HasValue)
+        return Ok(new { revoked = true, sessionId });
+    }
+
+    [HttpPost("sessions/revoke-others")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> RevokeOtherDeviceSessions(CancellationToken cancellationToken = default)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
         {
-            session.RevokedAt = DateTimeOffset.UtcNow;
-            session.LastUsedAt = DateTimeOffset.UtcNow;
-            session.LastIp = GetClientIp();
-            await _context.SaveChangesAsync();
+            return Unauthorized();
         }
 
-        return Ok(new { revoked = true, sessionId });
+        var revoked = await _userSessionService.RevokeOtherSessionsAsync(
+            user.id,
+            GetCurrentRefreshTokenHash(),
+            GetClientIp(),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+
+        return Ok(new { revoked });
     }
 
     [HttpGet("me")]
@@ -1118,6 +1138,13 @@ public class AuthController : ControllerBase
         var refreshToken = GenerateRefreshToken();
         var userAgent = GetUserAgent();
         var clientIp = GetClientIp();
+        var deviceLabel = BuildDeviceLabel(userAgent);
+        var securitySignal = await _userSessionService.DetectLoginSecuritySignalAsync(
+            user.id,
+            deviceLabel,
+            clientIp,
+            now,
+            CancellationToken.None);
 
         _context.RefreshTokens.Add(new RefreshTokenRecord
         {
@@ -1126,7 +1153,7 @@ public class AuthController : ControllerBase
             CreatedAt = now,
             ExpiresAt = refreshTokenExpiresAt,
             UserAgent = userAgent,
-            DeviceLabel = BuildDeviceLabel(userAgent),
+            DeviceLabel = deviceLabel,
             LastIp = clientIp,
             LastUsedAt = now,
         });
@@ -1138,7 +1165,8 @@ public class AuthController : ControllerBase
             AccessToken = GenerateJwtToken(user, accessTokenExpiresAt.UtcDateTime),
             RefreshToken = refreshToken,
             AccessTokenExpiresAt = accessTokenExpiresAt,
-            RefreshTokenExpiresAt = refreshTokenExpiresAt
+            RefreshTokenExpiresAt = refreshTokenExpiresAt,
+            SecuritySignal = securitySignal
         };
     }
 
@@ -1199,7 +1227,8 @@ public class AuthController : ControllerBase
             token = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
-            refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O")
+            refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O"),
+            securitySignal = authSession.SecuritySignal
         };
     }
 
@@ -1227,7 +1256,8 @@ public class AuthController : ControllerBase
             accessToken = authSession.AccessToken,
             refreshToken = authSession.RefreshToken,
             accessTokenExpiresAt = authSession.AccessTokenExpiresAt.ToString("O"),
-            refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O")
+            refreshTokenExpiresAt = authSession.RefreshTokenExpiresAt.ToString("O"),
+            securitySignal = authSession.SecuritySignal
         };
     }
 
@@ -1243,21 +1273,18 @@ public class AuthController : ControllerBase
         });
     }
 
-    private object BuildDeviceSessionPayload(RefreshTokenRecord session, string? currentRefreshTokenHash)
+    private object BuildDeviceSessionPayload(UserSessionSummary session)
     {
-        var isCurrent = !string.IsNullOrWhiteSpace(currentRefreshTokenHash)
-            && string.Equals(session.TokenHash, currentRefreshTokenHash, StringComparison.Ordinal);
-
         return new
         {
             id = session.Id,
             deviceLabel = string.IsNullOrWhiteSpace(session.DeviceLabel) ? "Устройство" : session.DeviceLabel,
-            userAgent = session.UserAgent ?? string.Empty,
-            lastIp = session.LastIp ?? string.Empty,
+            userAgent = session.UserAgent,
+            lastIp = session.LastIp,
             createdAt = session.CreatedAt.ToString("O"),
             lastUsedAt = session.LastUsedAt.ToString("O"),
             expiresAt = session.ExpiresAt.ToString("O"),
-            isCurrent,
+            isCurrent = session.IsCurrent,
         };
     }
 
@@ -1785,6 +1812,7 @@ public class AuthSessionResult
     public string RefreshToken { get; set; } = string.Empty;
     public DateTimeOffset AccessTokenExpiresAt { get; set; }
     public DateTimeOffset RefreshTokenExpiresAt { get; set; }
+    public LoginSecuritySignal? SecuritySignal { get; set; }
 }
 
 public sealed class EmailVerificationResult
