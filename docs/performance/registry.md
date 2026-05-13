@@ -82,3 +82,13 @@ Severity по умолчанию:
 - Приоритет: P0
 - Статус: in_progress
 - Связанный фикс: `memoized message list + perf traces`
+
+## Release budget guardrails 2026-05-13
+
+`npm run audit:perf` now fails on regressions in these release-sensitive paths:
+
+- long chat: virtualization threshold and feed image prefetch cap;
+- batch upload: pending shell before heavy work, chunked preview hydration, bounded initial/render chunks;
+- voice: optimistic join UI before client/media awaits, lazy voice stage, memoized profile panel;
+- settings/navigation: settings renderer stays in a lazy chunk;
+- bundle split: MenuMain, LiveKit, voice, MenuMain CSS, settings, and voice stage chunks stay inside explicit budgets.

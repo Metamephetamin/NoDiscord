@@ -284,13 +284,13 @@ Expected: status is `ok`.
 - Modify: `scripts/perf-audit.mjs`
 - Modify: `docs/performance/registry.md`
 
-- [ ] Measure long chat render, scroll, upload modal first paint, voice join, settings navigation.
-- [ ] Move heavy preview/media work out of render and into chunked async steps.
-- [ ] Keep direct call and voice state localized to avoid MenuMain-wide rerenders.
-- [ ] Split additional lazy chunks only where bundle audit proves value.
-- [ ] Add perf budget to `npm run audit:perf`.
-- [ ] Verify perf audit, lint, build, manual long-chat scroll.
-- [ ] Commit: `Tighten chat and voice performance budgets`.
+- [x] Measure long chat render, scroll, upload modal first paint, voice join, settings navigation.
+- [x] Move heavy preview/media work out of render and into chunked async steps.
+- [x] Keep direct call and voice state localized to avoid MenuMain-wide rerenders.
+- [x] Split additional lazy chunks only where bundle audit proves value.
+- [x] Add perf budget to `npm run audit:perf`.
+- [x] Verify perf audit, lint, build; manual long-chat scroll remains a local QA step.
+- [x] Commit: `Tighten chat and voice performance budgets`.
 
 **Acceptance:**
 - Long chat scroll stays responsive.

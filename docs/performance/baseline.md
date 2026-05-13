@@ -48,3 +48,20 @@
 | Дата | ID проблемы | Было | Стало | Комментарий |
 | --- | --- | --- | --- | --- |
 | `YYYY-MM-DD` | `PERF-XXX` | `...` | `...` | `что изменилось` |
+
+## 2026-05-13 release budget snapshot
+
+Source: `npm run build:frontend` + `npm run audit:perf`.
+
+| Metric | Current | Budget | Status |
+| --- | --- | --- | --- |
+| MenuMain JS chunk | `878.26 KB` | `<= 950 KB` | pass |
+| LiveKit JS chunk | `471.49 KB` | `<= 540 KB` | pass |
+| Voice JS chunk | `105.19 KB` | `<= 140 KB` | pass |
+| MenuMain CSS chunk | `596.31 KB` | `<= 660 KB` | pass |
+| Text chat virtualization threshold | `160 messages` | `>= 50 messages` | pass |
+| Text chat media prefetch image limit | `4 images` | `<= 4 images` | pass |
+| Batch upload initial render | `12 items` | `<= 12 items` | pass |
+| Batch upload render chunk | `18 items` | `<= 24 items` | pass |
+| Voice join optimistic UI | before client/media await | required | pass |
+| Settings renderer | lazy chunk | required | pass |
