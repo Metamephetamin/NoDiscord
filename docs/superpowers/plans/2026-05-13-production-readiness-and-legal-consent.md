@@ -312,8 +312,8 @@ Expected: status is `ok`.
 - Modify: `BackNoDiscord/BackNoDiscord/DbContext.cs`
 - Create migration SQL or EF migration for consent fields.
 
-- [ ] Add frontend state: `termsAccepted: false` to `initialRegisterForm`.
-- [ ] Render checkbox above the registration submit button:
+- [x] Add frontend state: `termsAccepted: false` to `initialRegisterForm`.
+- [x] Render checkbox above the registration submit button:
 
 ```jsx
 {mode === "register" && !shouldShowRegistrationCodeStep ? (
@@ -334,15 +334,15 @@ Expected: status is `ok`.
 ) : null}
 ```
 
-- [ ] Disable registration until checkbox is checked and show a clear error if submit is attempted without consent.
-- [ ] Add modal preview component with scrollable agreement text, close button, and "Понятно" action.
-- [ ] Add backend `termsAccepted` to `RegisterDto`.
-- [ ] Reject `/auth/register` with `400` if `termsAccepted != true`.
-- [ ] Store consent fields on user: `terms_accepted_at`, `terms_version`, `privacy_version`.
-- [ ] Add tests proving registration fails without terms and succeeds with terms.
-- [ ] Add frontend tests proving agreement text includes: collected data, purposes, retention, security, user content responsibility, limitation of liability, breach limitation wording.
-- [ ] Verify register flow manually: unchecked blocked, link opens modal, checked creates account.
-- [ ] Commit: `Require user agreement consent at registration`.
+- [x] Disable registration until checkbox is checked and show a clear error if submit is attempted without consent.
+- [x] Add modal preview component with scrollable agreement text, close button, and "Понятно" action.
+- [x] Add backend `termsAccepted` to `RegisterDto`.
+- [x] Reject `/auth/register` with `400` if `termsAccepted != true`.
+- [x] Store consent fields on user: `terms_accepted_at`, `terms_version`, `privacy_version`.
+- [x] Add tests proving registration fails without terms and succeeds with terms.
+- [x] Add frontend tests proving agreement text includes: collected data, purposes, retention, security, user content responsibility, limitation of liability, breach limitation wording.
+- [x] Verify register flow contract: unchecked payload is blocked by frontend/backend, link renders modal component, checked payload stores consent metadata. Manual click-through remains in Phase 10 QA.
+- [x] Commit: `Require user agreement consent at registration`.
 
 **Agreement Text Policy:**
 

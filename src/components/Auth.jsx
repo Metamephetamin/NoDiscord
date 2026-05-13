@@ -7,6 +7,7 @@ import { resolveStaticAssetUrl } from "../utils/media";
 import { APP_LOGO_CHANGE_EVENT, getCurrentAppLogoOption } from "../utils/appLogo";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import { parseQrLoginPayload } from "../features/menu-main/menuMainControllerUtils";
+import UserAgreementModal from "./UserAgreementModal";
 import {
   areNamesUsingSameScript,
   detectNameScript,
@@ -31,6 +32,7 @@ const initialRegisterForm = {
   nickname: "",
   contact: "",
   password: "",
+  termsAccepted: false,
 };
 
 const initialLoginForm = {
@@ -308,6 +310,7 @@ export default function Auth({ onAuthSuccess }) {
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const [isAuthVideoAvailable, setIsAuthVideoAvailable] = useState(true);
+  const [isUserAgreementOpen, setIsUserAgreementOpen] = useState(false);
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
   const qrScannerVideoRef = useRef(null);
@@ -691,7 +694,7 @@ export default function Auth({ onAuthSuccess }) {
   }, []);
 
   const handleRegisterFieldChange = (field) => (event) => {
-    let nextValue = event.target.value;
+    let nextValue = field === "termsAccepted" ? Boolean(event.target.checked) : event.target.value;
 
     if (field === "firstName" || field === "lastName") {
       const otherField = field === "firstName" ? "lastName" : "firstName";
@@ -719,6 +722,7 @@ export default function Auth({ onAuthSuccess }) {
     }
 
     setRegisterForm((previous) => ({ ...previous, [field]: nextValue }));
+    setMessage("");
 
   };
 
@@ -1058,6 +1062,7 @@ export default function Auth({ onAuthSuccess }) {
       nickname: registerForm.nickname.trim(),
       password: registerForm.password,
       email: normalizedRegisterEmail,
+      termsAccepted: registerForm.termsAccepted === true,
     };
 
     if (!payload.first_name || !payload.nickname || !registerForm.contact.trim()) {
@@ -1082,6 +1087,11 @@ export default function Auth({ onAuthSuccess }) {
 
     if (payload.password.length < 6) {
       setMessage("Пароль должен быть не короче 6 символов.");
+      return;
+    }
+
+    if (!payload.termsAccepted) {
+      setMessage("Подтвердите согласие с пользовательским соглашением.");
       return;
     }
 
@@ -1762,10 +1772,27 @@ export default function Auth({ onAuthSuccess }) {
             </div>
           )}
 
+          {mode === "register" && !shouldShowRegistrationCodeStep ? (
+            <label className="auth-terms-consent">
+              <input
+                type="checkbox"
+                checked={registerForm.termsAccepted}
+                onChange={handleRegisterFieldChange("termsAccepted")}
+                required
+              />
+              <span>
+                Согласен с{" "}
+                <button type="button" className="auth-terms-link" onClick={() => setIsUserAgreementOpen(true)}>
+                  пользовательским соглашением
+                </button>
+              </span>
+            </label>
+          ) : null}
+
           <button
             className="auth-submit"
             type="submit"
-            disabled={isSubmitting || isRequestingLoginCode || isVerifyingEmailCode || isRequestingPasswordResetCode || isResettingPassword}
+            disabled={isSubmitting || isRequestingLoginCode || isVerifyingEmailCode || isRequestingPasswordResetCode || isResettingPassword || (mode === "register" && !shouldShowRegistrationCodeStep && !registerForm.termsAccepted)}
           >
             {mode === "login"
               ? loginMethod === "code"
@@ -1923,6 +1950,8 @@ export default function Auth({ onAuthSuccess }) {
           </div>
         </div>
       ) : null}
+
+      <UserAgreementModal open={isUserAgreementOpen} onClose={() => setIsUserAgreementOpen(false)} />
 
     </div>
   );

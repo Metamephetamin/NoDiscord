@@ -26,6 +26,8 @@ public class AuthController : ControllerBase
     private static readonly TimeSpan QrLoginLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
+    private const string CurrentTermsVersion = "2026-05-13";
+    private const string CurrentPrivacyVersion = "2026-05-13";
     private const string MediaAccessTokenCookieName = "tend_access_token";
     private const int MaxEmailVerificationAttempts = 5;
     private const string EmailVerificationPurpose = "email_verification";
@@ -714,6 +716,11 @@ public class AuthController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
+        if (!dto.termsAccepted)
+        {
+            return BadRequest(new { message = "Нужно согласиться с пользовательским соглашением." });
+        }
+
         if (!AuthInputPolicies.TryNormalizeProfileName(dto.first_name, "Имя", out var firstName, out var firstNameError))
         {
             return BadRequest(new { message = firstNameError });
@@ -769,7 +776,10 @@ public class AuthController : ControllerBase
             email = normalizedEmail,
             is_email_verified = !RequireEmailRegistrationVerification,
             phone_number = null,
-            is_phone_verified = false
+            is_phone_verified = false,
+            terms_accepted_at = DateTimeOffset.UtcNow,
+            terms_version = CurrentTermsVersion,
+            privacy_version = CurrentPrivacyVersion
         };
 
         user.password_hash = _passwordHasher.HashPassword(user, dto.password);
@@ -1727,6 +1737,8 @@ public class RegisterDto
     [Required]
     [MinLength(6)]
     public string password { get; set; } = string.Empty;
+
+    public bool termsAccepted { get; set; }
 }
 
 public class LoginDto

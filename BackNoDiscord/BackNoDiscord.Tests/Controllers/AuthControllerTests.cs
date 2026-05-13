@@ -24,6 +24,47 @@ public sealed class AuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Register_WithoutTermsAccepted_ReturnsBadRequest()
+    {
+        var controller = BuildController();
+
+        var result = await controller.Register(new RegisterDto
+        {
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = "TermsMissing",
+            email = "terms-missing@gmail.com",
+            password = "password1",
+            termsAccepted = false
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(_context.Users);
+    }
+
+    [Fact]
+    public async Task Register_WithTermsAccepted_StoresConsentMetadata()
+    {
+        var controller = BuildController(emailMode: "mock");
+
+        var result = await controller.Register(new RegisterDto
+        {
+            first_name = "Lanaya",
+            last_name = "User",
+            nickname = "TermsAccepted",
+            email = "terms-accepted@gmail.com",
+            password = "password1",
+            termsAccepted = true
+        });
+
+        Assert.IsType<OkObjectResult>(result);
+        var user = Assert.Single(_context.Users);
+        Assert.NotNull(user.terms_accepted_at);
+        Assert.Equal("2026-05-13", user.terms_version);
+        Assert.Equal("2026-05-13", user.privacy_version);
+    }
+
+    [Fact]
     public async Task RequestPasswordResetCode_CreatesPasswordResetVerificationWithoutExposingDebugCodeOutsideMockMode()
     {
         var user = BuildUser(10, "reset-user@gmail.com");

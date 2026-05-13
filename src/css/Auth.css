@@ -811,7 +811,132 @@
 
 .auth-submit:disabled {
   opacity: 0.72;
-  cursor: wait;
+  cursor: not-allowed;
+}
+
+.auth-terms-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 2px;
+  color: #40506a;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.auth-terms-consent input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: #7657ff;
+}
+
+.auth-terms-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #6846d7;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-terms-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+}
+
+.auth-terms-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(12, 16, 28, 0.52);
+  backdrop-filter: blur(8px);
+}
+
+.auth-terms-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+  max-height: min(720px, calc(100vh - 44px));
+  border: 1px solid rgba(137, 150, 174, 0.24);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 70px rgba(17, 24, 39, 0.24);
+}
+
+.auth-terms-modal__header,
+.auth-terms-modal__footer {
+  padding: 18px 20px;
+  background: rgba(247, 249, 253, 0.92);
+}
+
+.auth-terms-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(137, 150, 174, 0.18);
+}
+
+.auth-terms-modal__header h2 {
+  margin: 0 0 4px;
+  color: #18263a;
+  font-size: 20px;
+}
+
+.auth-terms-modal__header span {
+  color: #637086;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-terms-modal__close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(20, 28, 44, 0.08);
+  color: #263247;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-terms-modal__body {
+  padding: 18px 20px;
+  overflow: auto;
+}
+
+.auth-terms-modal__section + .auth-terms-modal__section {
+  margin-top: 16px;
+}
+
+.auth-terms-modal__section h3 {
+  margin: 0 0 7px;
+  color: #18263a;
+  font-size: 15px;
+}
+
+.auth-terms-modal__section p {
+  margin: 0;
+  color: #40506a;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.auth-terms-modal__footer {
+  border-top: 1px solid rgba(137, 150, 174, 0.18);
 }
 
 .auth-submit--secondary {

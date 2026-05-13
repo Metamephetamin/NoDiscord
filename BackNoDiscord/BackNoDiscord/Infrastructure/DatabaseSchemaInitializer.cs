@@ -340,6 +340,12 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS last_seen_at timestamptz NULL;
             ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS terms_accepted_at timestamptz NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS terms_version text NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS privacy_version text NULL;
+            ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS nickname character varying(50) NULL;
             ALTER TABLE IF EXISTS refresh_tokens
                 ADD COLUMN IF NOT EXISTS user_agent text NOT NULL DEFAULT '';
