@@ -74,6 +74,33 @@ public static class UploadPolicies
         ".webm"
     };
 
+    private static readonly HashSet<string> DangerousChatFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".app",
+        ".bat",
+        ".cmd",
+        ".com",
+        ".deb",
+        ".dll",
+        ".exe",
+        ".hta",
+        ".jar",
+        ".js",
+        ".jse",
+        ".lnk",
+        ".msi",
+        ".msp",
+        ".ps1",
+        ".reg",
+        ".rpm",
+        ".scr",
+        ".sh",
+        ".vb",
+        ".vbe",
+        ".vbs",
+        ".wsf"
+    };
+
     public static string SanitizeIdentifier(string? value, string fallback = "user")
     {
         var sanitized = new string((value ?? string.Empty)
@@ -236,6 +263,18 @@ public static class UploadPolicies
         contentType = GetContentType(extension);
         error = string.Empty;
 
+        if (DangerousChatFileExtensions.Contains(extension))
+        {
+            error = "This file type is not allowed.";
+            return false;
+        }
+
+        if (HasDangerousDoubleExtension(file.FileName))
+        {
+            error = "Double-extension executable files are not allowed.";
+            return false;
+        }
+
         if (!HasExpectedFileSignature(file, extension))
         {
             var detectedExtension = string.Empty;
@@ -258,6 +297,22 @@ public static class UploadPolicies
         extension = NormalizeStorageExtension(extension);
         contentType = GetContentType(extension);
         return true;
+    }
+
+    private static bool HasDangerousDoubleExtension(string? fileName)
+    {
+        var name = Path.GetFileName(fileName ?? string.Empty);
+        var parts = name.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 3)
+        {
+            return false;
+        }
+
+        return parts
+            .Skip(1)
+            .Take(parts.Length - 2)
+            .Select(part => $".{part}")
+            .Any(DangerousChatFileExtensions.Contains);
     }
 
     public static bool TryValidateServerIcon(IFormFile file, out string extension, out string contentType, out string error)

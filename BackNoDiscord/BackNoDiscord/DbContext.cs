@@ -168,6 +168,12 @@ public class ChatFileUploadRecord
 
     [Column("bound_at")]
     public DateTimeOffset? BoundAt { get; set; }
+
+    [Column("checksum_sha256")]
+    public string ChecksumSha256 { get; set; } = string.Empty;
+
+    [Column("deleted_at")]
+    public DateTimeOffset? DeletedAt { get; set; }
 }
 
 [Table("users")]
@@ -771,10 +777,13 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => x.FileName).IsUnique();
             entity.HasIndex(x => new { x.OwnerUserId, x.CreatedAt });
             entity.HasIndex(x => new { x.ChannelId, x.MessageId });
+            entity.HasIndex(x => new { x.OwnerUserId, x.DeletedAt });
+            entity.HasIndex(x => new { x.ChannelId, x.DeletedAt });
             entity.Property(x => x.FileName).IsRequired();
             entity.Property(x => x.OwnerUserId).IsRequired();
             entity.Property(x => x.DisplayFileName).IsRequired();
             entity.Property(x => x.ContentType).IsRequired();
+            entity.Property(x => x.ChecksumSha256).IsRequired();
         });
 
         modelBuilder.Entity<ChatChannelReadStateRecord>(entity =>

@@ -282,6 +282,8 @@ builder.Services.AddSingleton<IEmailVerificationSender, SmtpEmailVerificationSen
 builder.Services.AddScoped<ServerInviteService>();
 builder.Services.AddScoped<ServerStateService>();
 builder.Services.AddScoped<ChatFileAccessService>();
+builder.Services.AddScoped<UserStorageQuotaService>();
+builder.Services.AddScoped<ChatFileCleanupService>();
 builder.Services.AddScoped<ChatFileMetadataRepairService>();
 builder.Services.AddScoped<MessageSearchService>();
 builder.Services.AddScoped<MessageDeduplicationService>();
@@ -291,6 +293,7 @@ builder.Services.AddSingleton<ChatSpamBurstLimiter>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<FriendRequestService>();
 builder.Services.AddScoped<UserBlockService>();
+builder.Services.AddHostedService<ChatFileCleanupHostedService>();
 builder.Services.AddHostedService<ChatFileMetadataRepairHostedService>();
 builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationService>();

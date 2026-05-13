@@ -140,7 +140,8 @@ public class UploadPoliciesTests
     [InlineData("script.ps1")]
     [InlineData("tool.msi")]
     [InlineData("payload.js")]
-    public void TryValidateChatFile_AllowsInstallerAndScriptExtensions(string fileName)
+    [InlineData("installer.exe")]
+    public void TryValidateChatFile_RejectsDangerousExecutableExtensions(string fileName)
     {
         using var stream = new MemoryStream([1, 2, 3]);
         IFormFile file = new FormFile(stream, 0, stream.Length, "file", fileName)
@@ -151,9 +152,9 @@ public class UploadPoliciesTests
 
         var success = UploadPolicies.TryValidateChatFile(file, out var extension, out _, out var error);
 
-        Assert.True(success);
+        Assert.False(success);
         Assert.Equal(Path.GetExtension(fileName), extension);
-        Assert.Equal(string.Empty, error);
+        Assert.Equal("This file type is not allowed.", error);
     }
 
     [Fact]
@@ -175,21 +176,21 @@ public class UploadPoliciesTests
     }
 
     [Fact]
-    public void TryValidateChatFile_AllowsExecutableFiles()
+    public void TryValidateChatFile_RejectsDoubleExtensionExecutableTrap()
     {
-        using var stream = new MemoryStream(new byte[] { 0x4D, 0x5A, 0x90, 0x00 });
-        IFormFile file = new FormFile(stream, 0, stream.Length, "file", "installer.exe")
+        using var stream = new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D });
+        IFormFile file = new FormFile(stream, 0, stream.Length, "file", "invoice.exe.pdf")
         {
             Headers = new HeaderDictionary(),
-            ContentType = "application/vnd.microsoft.portable-executable"
+            ContentType = "application/pdf"
         };
 
         var success = UploadPolicies.TryValidateChatFile(file, out var extension, out var contentType, out var error);
 
-        Assert.True(success);
-        Assert.Equal(".exe", extension);
-        Assert.Equal("application/vnd.microsoft.portable-executable", contentType);
-        Assert.Equal(string.Empty, error);
+        Assert.False(success);
+        Assert.Equal(".pdf", extension);
+        Assert.Equal("application/pdf", contentType);
+        Assert.Equal("Double-extension executable files are not allowed.", error);
     }
 
     [Fact]

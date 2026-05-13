@@ -76,6 +76,7 @@ public sealed class ChatFilesControllerTests : IDisposable
             configuration,
             new TestStorageMetrics(),
             new ChatFileAccessService(dbContext, new ServerStateService(dbContext)),
+            new UserStorageQuotaService(dbContext),
             NullLogger<ChatFilesController>.Instance)
         {
             ControllerContext = new ControllerContext

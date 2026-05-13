@@ -173,14 +173,14 @@ Expected: status is `ok`.
 - Modify: `src/features/text-chat/TextChatComposer.jsx`
 - Modify: `src/components/TextChatMessageList.jsx`
 
-- [ ] Add per-user and per-server storage usage counters.
-- [ ] Enforce quota before accepting large uploads.
-- [ ] Add background cleanup for orphaned temp files and failed uploads.
-- [ ] Store file metadata: owner, channel, size, mime, checksum, created_at, deleted_at.
-- [ ] Block dangerous executable types and double-extension traps.
-- [ ] Add UI error copy for quota exceeded and unsafe file type.
-- [ ] Verify upload under quota, quota exceed, blocked executable, cleanup.
-- [ ] Commit: `Add chat media quota and cleanup`.
+- [x] Add per-user and per-server storage usage counters.
+- [x] Enforce quota before accepting large uploads.
+- [x] Add background cleanup for orphaned temp files and failed uploads.
+- [x] Store file metadata: owner, channel, size, mime, checksum, created_at, deleted_at.
+- [x] Block dangerous executable types and double-extension traps.
+- [x] Add UI error copy for quota exceeded and unsafe file type.
+- [x] Verify upload under quota, quota exceed, blocked executable, cleanup.
+- [x] Commit: `Add chat media quota and cleanup`.
 
 **Acceptance:**
 - Storage cannot grow forever from failed uploads.

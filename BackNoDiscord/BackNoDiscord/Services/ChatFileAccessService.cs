@@ -37,6 +37,8 @@ public sealed class ChatFileAccessService
             existing.DisplayFileName = upload.DisplayFileName;
             existing.ContentType = upload.ContentType;
             existing.Size = upload.Size;
+            existing.ChecksumSha256 = upload.ChecksumSha256;
+            existing.DeletedAt = null;
             await _context.SaveChangesAsync(cancellationToken);
             return;
         }
@@ -48,6 +50,7 @@ public sealed class ChatFileAccessService
             DisplayFileName = upload.DisplayFileName,
             ContentType = upload.ContentType,
             Size = upload.Size,
+            ChecksumSha256 = upload.ChecksumSha256,
             CreatedAt = DateTimeOffset.UtcNow
         });
         await _context.SaveChangesAsync(cancellationToken);

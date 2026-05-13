@@ -44,6 +44,7 @@ public class ChatFilesController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly IChatFileUploadStorageMetrics _storageMetrics;
     private readonly ChatFileAccessService _chatFileAccess;
+    private readonly UserStorageQuotaService _quotaService;
     private readonly ILogger<ChatFilesController> _logger;
 
     public ChatFilesController(
@@ -51,12 +52,14 @@ public class ChatFilesController : ControllerBase
         IConfiguration configuration,
         IChatFileUploadStorageMetrics storageMetrics,
         ChatFileAccessService chatFileAccess,
+        UserStorageQuotaService quotaService,
         ILogger<ChatFilesController> logger)
     {
         _uploadStoragePaths = uploadStoragePaths;
         _configuration = configuration;
         _storageMetrics = storageMetrics;
         _chatFileAccess = chatFileAccess;
+        _quotaService = quotaService;
         _logger = logger;
     }
 
@@ -75,6 +78,16 @@ public class ChatFilesController : ControllerBase
         var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");
         try
         {
+            var estimatedUploadBytes = Math.Max(0, Request.ContentLength.GetValueOrDefault() - MultipartRequestOverheadBytes);
+            if (estimatedUploadBytes > 0)
+            {
+                await _quotaService.EnsureUserQuotaAsync(
+                    currentUser.UserId,
+                    estimatedUploadBytes,
+                    limits.MaxUserStorageBytes,
+                    cancellationToken);
+            }
+
             var upload = await StreamedChatFileUploadReader.UploadAsync(
                 Request,
                 uploadsDirectory,
@@ -89,8 +102,13 @@ public class ChatFilesController : ControllerBase
                 fileUrl = upload.FileUrl,
                 fileName = upload.DisplayFileName,
                 size = upload.Size,
-                contentType = upload.ContentType
+                contentType = upload.ContentType,
+                checksumSha256 = upload.ChecksumSha256
             });
+        }
+        catch (InvalidOperationException exception) when (string.Equals(exception.Message, "User storage quota exceeded.", StringComparison.Ordinal))
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = exception.Message });
         }
         catch (StreamedChatFileUploadException exception)
         {

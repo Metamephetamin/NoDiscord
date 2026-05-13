@@ -601,6 +601,17 @@ export function getChatErrorMessage(error, fallbackMessage) {
     return "Backend ещё не поддерживает новую возможность. Перезапустите сервер и повторите действие.";
   }
 
+  if (rawMessage.includes("User storage quota exceeded")) {
+    return "Место для файлов закончилось. Удалите старые вложения или отправьте файл поменьше.";
+  }
+
+  if (
+    rawMessage.includes("This file type is not allowed")
+    || rawMessage.includes("Double-extension executable files are not allowed")
+  ) {
+    return "Этот тип файла нельзя отправить из соображений безопасности.";
+  }
+
   if (rawMessage.includes("Forbidden")) {
     return "Нет доступа к этому чату.";
   }

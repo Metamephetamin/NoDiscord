@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Net.Http.Headers;
+using System.Security.Cryptography;
 
 namespace BackNoDiscord.Services;
 
@@ -29,7 +30,8 @@ public sealed record StreamedChatFileUploadResult(
     string FileUrl,
     string DisplayFileName,
     long Size,
-    string ContentType);
+    string ContentType,
+    string ChecksumSha256);
 
 public sealed record StreamedChatFileUploadLimits(
     long MaxFileSizeBytes,
@@ -219,6 +221,7 @@ public static class StreamedChatFileUploadReader
             {
                 await input.CopyToAsync(output, BufferSize, cancellationToken);
             }
+            var checksumSha256 = await ComputeSha256Async(tempFilePath, cancellationToken);
 
             File.Move(tempFilePath, finalFilePath);
 
@@ -226,7 +229,8 @@ public static class StreamedChatFileUploadReader
                 FileUrl: $"/chat-files/{fileName}",
                 DisplayFileName: UploadPolicies.SanitizeDisplayFileName(file.FileName),
                 Size: file.Length,
-                ContentType: contentType);
+                ContentType: contentType,
+                ChecksumSha256: checksumSha256);
         }
         catch
         {
@@ -305,13 +309,15 @@ public static class StreamedChatFileUploadReader
 
             var fileName = $"chat-{UploadPolicies.SanitizeIdentifier(userId)}-{Guid.NewGuid():N}{extension}";
             var finalFilePath = Path.Combine(uploadsDirectory, fileName);
+            var checksumSha256 = await ComputeSha256Async(tempFilePath, cancellationToken);
             File.Move(tempFilePath, finalFilePath);
 
             return new StreamedChatFileUploadResult(
                 FileUrl: $"/chat-files/{fileName}",
                 DisplayFileName: UploadPolicies.SanitizeDisplayFileName(originalFileName),
                 Size: totalBytes,
-                ContentType: contentType);
+                ContentType: contentType,
+                ChecksumSha256: checksumSha256);
         }
         catch
         {
@@ -332,6 +338,13 @@ public static class StreamedChatFileUploadReader
 
         boundary = HeaderUtilities.RemoveQuotes(mediaType.Boundary).Value ?? string.Empty;
         return !string.IsNullOrWhiteSpace(boundary);
+    }
+
+    private static async Task<string> ComputeSha256Async(string filePath, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.SequentialScan);
+        var hash = await SHA256.HashDataAsync(stream, cancellationToken);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static bool TryGetAlreadyParsedFormFile(HttpRequest request, out IFormFile? file)

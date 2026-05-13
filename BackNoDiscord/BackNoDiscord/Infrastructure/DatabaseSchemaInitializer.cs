@@ -426,14 +426,24 @@ public static class DatabaseSchemaInitializer
                 channel_id character varying(160) NULL,
                 message_id integer NULL,
                 created_at timestamptz NOT NULL DEFAULT NOW(),
-                bound_at timestamptz NULL
+                bound_at timestamptz NULL,
+                checksum_sha256 text NOT NULL DEFAULT '',
+                deleted_at timestamptz NULL
             );
+            ALTER TABLE IF EXISTS chat_file_uploads
+                ADD COLUMN IF NOT EXISTS checksum_sha256 text NOT NULL DEFAULT '';
+            ALTER TABLE IF EXISTS chat_file_uploads
+                ADD COLUMN IF NOT EXISTS deleted_at timestamptz NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS ix_chat_file_uploads_file_name
                 ON chat_file_uploads (file_name);
             CREATE INDEX IF NOT EXISTS ix_chat_file_uploads_owner_created_at
                 ON chat_file_uploads (owner_user_id, created_at);
             CREATE INDEX IF NOT EXISTS ix_chat_file_uploads_channel_message
                 ON chat_file_uploads (channel_id, message_id);
+            CREATE INDEX IF NOT EXISTS ix_chat_file_uploads_owner_deleted
+                ON chat_file_uploads (owner_user_id, deleted_at);
+            CREATE INDEX IF NOT EXISTS ix_chat_file_uploads_channel_deleted
+                ON chat_file_uploads (channel_id, deleted_at);
             DROP INDEX IF EXISTS "IX_users_email";
             DROP INDEX IF EXISTS ix_users_email;
             CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_not_null ON users (email) WHERE email IS NOT NULL;
