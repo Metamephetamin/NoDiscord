@@ -34,6 +34,7 @@ export function createVoiceSignalCommandQueue({
       id: command.id,
       key: command.key,
       methodName: command.methodName,
+      args: command.args,
       status,
       ...extra,
     });

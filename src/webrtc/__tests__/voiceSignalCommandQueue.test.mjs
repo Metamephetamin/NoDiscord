@@ -88,3 +88,26 @@ test("voice signal command queue forwards retrying and failed statuses", async (
 
   assert.deepEqual(statuses, [["queued", 0], ["running", 0], ["retrying", 1], ["failed", 0]]);
 });
+
+test("voice signal command queue forwards command args with statuses", async () => {
+  const statuses = [];
+  const queue = createVoiceSignalCommandQueue({
+    execute: async () => "ok",
+    onStatus: (status) => {
+      statuses.push(status);
+    },
+  });
+
+  await queue.enqueue({
+    id: "start",
+    methodName: "StartDirectCall",
+    key: "StartDirectCall:2:direct-call::1::2",
+    args: ["2", "direct-call::1::2"],
+  });
+
+  assert.deepEqual(statuses.map((status) => status.args), [
+    ["2", "direct-call::1::2"],
+    ["2", "direct-call::1::2"],
+    ["2", "direct-call::1::2"],
+  ]);
+});

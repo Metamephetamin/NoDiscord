@@ -45,6 +45,36 @@ export const getDirectCallConnectionQuality = (pingMs, phase) => {
 
 const isDirectCallChannel = (channelId) => /^direct-call::\d+::\d+$/i.test(String(channelId || "").trim());
 
+const DIRECT_CALL_SIGNAL_LABELS = {
+  StartDirectCall: {
+    queued: "Отправляем вызов",
+    running: "Отправляем вызов",
+    retrying: "Плохая сеть, повторяем вызов",
+    failed: "Не удалось отправить вызов",
+  },
+  AcceptDirectCall: {
+    queued: "Отправляем ответ",
+    running: "Отправляем ответ",
+    retrying: "Плохая сеть, повторяем ответ",
+    failed: "Не удалось отправить ответ",
+  },
+  DeclineDirectCall: {
+    queued: "Отправляем отмену",
+    running: "Отправляем отмену",
+    retrying: "Плохая сеть, повторяем отмену",
+    failed: "Не удалось отправить отмену",
+  },
+  EndDirectCall: {
+    queued: "Завершаем звонок",
+    running: "Завершаем звонок",
+    retrying: "Плохая сеть, повторяем завершение",
+    failed: "Не удалось завершить звонок",
+  },
+};
+
+const ACTIVE_SIGNAL_STATUSES = new Set(["queued", "running", "retrying", "failed"]);
+const CLEAR_SIGNAL_STATUSES = new Set(["sent", "superseded"]);
+
 export const createDirectCallState = () => ({
   phase: "idle",
   status: "idle",
@@ -62,6 +92,11 @@ export const createDirectCallState = () => ({
   startedAt: "",
   endedAt: "",
   lastReason: "",
+  signalStatus: "",
+  signalCommand: "",
+  signalAttempt: 0,
+  signalError: "",
+  signalErrorName: "",
 });
 
 export const normalizeMeasuredPingMs = (value) => {
@@ -90,6 +125,63 @@ export const buildDirectCallState = (overrides = {}) => {
     peerAvatar: peer.avatar,
     peerAvatarFrame: peer.avatarFrame,
     peer,
+  };
+};
+
+export const getDirectCallSignalStatusLabel = (methodName, status) => (
+  DIRECT_CALL_SIGNAL_LABELS[String(methodName || "").trim()]?.[String(status || "").trim()] || ""
+);
+
+export const deriveDirectCallStateFromSignalCommand = (previousState, signalStatus = {}) => {
+  const previous = previousState || createDirectCallState();
+  if (previous.phase === "idle") {
+    return previous;
+  }
+
+  const methodName = String(signalStatus?.methodName || "").trim();
+  const status = String(signalStatus?.status || "").trim();
+  const args = Array.isArray(signalStatus?.args) ? signalStatus.args : [];
+  const commandChannel = String(
+    signalStatus?.channelName
+      || signalStatus?.channelId
+      || args[1]
+      || "",
+  ).trim();
+
+  if (!methodName || !status || !commandChannel || commandChannel !== String(previous.channelId || "").trim()) {
+    return previous;
+  }
+
+  if (CLEAR_SIGNAL_STATUSES.has(status)) {
+    return {
+      ...previous,
+      signalStatus: "",
+      signalCommand: "",
+      signalAttempt: 0,
+      signalError: "",
+      signalErrorName: "",
+    };
+  }
+
+  if (!ACTIVE_SIGNAL_STATUSES.has(status)) {
+    return previous;
+  }
+
+  const label = getDirectCallSignalStatusLabel(methodName, status);
+  const attempt = Number(signalStatus?.attempt || 0);
+  const error = String(signalStatus?.error || "").trim();
+  const errorName = String(signalStatus?.errorName || "").trim();
+
+  return {
+    ...previous,
+    statusLabel: label || previous.statusLabel,
+    canRetry: status === "failed" ? true : previous.canRetry,
+    lastReason: status === "failed" ? (error || previous.lastReason) : previous.lastReason,
+    signalStatus: status,
+    signalCommand: methodName,
+    signalAttempt: Number.isFinite(attempt) && attempt > 0 ? Math.round(attempt) : 0,
+    signalError: error,
+    signalErrorName: errorName,
   };
 };
 

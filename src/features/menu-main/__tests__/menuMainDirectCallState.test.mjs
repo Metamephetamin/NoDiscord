@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildDirectCallState,
+  deriveDirectCallStateFromSignalCommand,
   deriveDirectCallStateFromVoiceConnection,
 } from "../menuMainDirectCallState.js";
 
@@ -60,4 +61,70 @@ test("deriveDirectCallStateFromVoiceConnection ignores unrelated channels", () =
   });
 
   assert.equal(next, previous);
+});
+
+test("deriveDirectCallStateFromSignalCommand marks matching command retry", () => {
+  const previous = buildDirectCallState({
+    phase: "outgoing",
+    statusLabel: "Ожидаем ответ",
+    channelId: "direct-call::1::2",
+    peerUserId: "2",
+    canRetry: true,
+  });
+
+  const next = deriveDirectCallStateFromSignalCommand(previous, {
+    methodName: "StartDirectCall",
+    status: "retrying",
+    args: ["2", "direct-call::1::2"],
+    attempt: 1,
+  });
+
+  assert.equal(next.phase, "outgoing");
+  assert.equal(next.signalStatus, "retrying");
+  assert.equal(next.signalCommand, "StartDirectCall");
+  assert.equal(next.signalAttempt, 1);
+  assert.equal(next.statusLabel, "Плохая сеть, повторяем вызов");
+  assert.equal(next.canRetry, true);
+});
+
+test("deriveDirectCallStateFromSignalCommand ignores unrelated command channel", () => {
+  const previous = buildDirectCallState({
+    phase: "outgoing",
+    statusLabel: "Ожидаем ответ",
+    channelId: "direct-call::1::2",
+    peerUserId: "2",
+  });
+
+  const next = deriveDirectCallStateFromSignalCommand(previous, {
+    methodName: "StartDirectCall",
+    status: "retrying",
+    args: ["3", "direct-call::1::3"],
+    attempt: 1,
+  });
+
+  assert.equal(next, previous);
+});
+
+test("deriveDirectCallStateFromSignalCommand preserves visible label after sent", () => {
+  const previous = buildDirectCallState({
+    phase: "connecting",
+    statusLabel: "Плохая сеть, повторяем ответ",
+    channelId: "direct-call::1::2",
+    peerUserId: "2",
+    signalStatus: "retrying",
+    signalCommand: "AcceptDirectCall",
+    signalAttempt: 1,
+  });
+
+  const next = deriveDirectCallStateFromSignalCommand(previous, {
+    methodName: "AcceptDirectCall",
+    status: "sent",
+    args: ["2", "direct-call::1::2"],
+  });
+
+  assert.equal(next.phase, "connecting");
+  assert.equal(next.statusLabel, "Плохая сеть, повторяем ответ");
+  assert.equal(next.signalStatus, "");
+  assert.equal(next.signalCommand, "");
+  assert.equal(next.signalAttempt, 0);
 });

@@ -460,6 +460,7 @@ export function createVoiceRoomClient({
   onVoicePingChanged,
   onVoiceRouteChanged,
   onVoiceConnectionStateChanged,
+  onVoiceSignalCommandStatusChanged,
   onIncomingDirectCall,
   onDirectCallAccepted,
   onDirectCallDeclined,
@@ -4202,10 +4203,34 @@ const handleDeviceChange = () => {
         },
       });
     },
-    onStatus: ({ methodName, status, errorName = "", error = "" }) => {
+    onStatus: (statusPayload = {}) => {
+      const {
+        methodName,
+        status,
+        args = [],
+        attempt = 0,
+        errorName = "",
+        error = "",
+      } = statusPayload;
+      const targetUserId = String(args?.[0] || "");
+      const channelName = String(args?.[1] || "");
       logVoiceDebug("signal:direct-call-command-status", {
         methodName,
         status,
+        attempt,
+        targetUserId,
+        channelName,
+        errorName,
+        error,
+      });
+      onVoiceSignalCommandStatusChanged?.({
+        ...statusPayload,
+        methodName,
+        status,
+        args,
+        targetUserId,
+        channelName,
+        attempt,
         errorName,
         error,
       });

@@ -96,6 +96,7 @@ import {
 import {
   buildDirectCallState,
   createDirectCallState,
+  deriveDirectCallStateFromSignalCommand,
   deriveDirectCallStateFromVoiceConnection,
   getDirectCallConnectionQuality,
   normalizeMeasuredPingMs,
@@ -1335,6 +1336,15 @@ export default function MenuMain({
       return nextState === previous ? previous : nextState;
     });
   }, [voiceConnectionState]);
+  const handleVoiceSignalCommandStatusChanged = useCallback((signalStatus) => {
+    setDirectCallState((previous) => {
+      const nextState = deriveDirectCallStateFromSignalCommand(previous, signalStatus);
+      if (nextState !== previous) {
+        directCallStateRef.current = nextState;
+      }
+      return nextState;
+    });
+  }, [directCallStateRef, setDirectCallState]);
   const {
     canNavigateBack,
     canNavigateForward,
@@ -3730,6 +3740,7 @@ export default function MenuMain({
         setVoiceRouteSnapshot(nextRouteSnapshot || null);
       },
       onVoiceConnectionStateChanged: handleVoiceConnectionStateChanged,
+      onVoiceSignalCommandStatusChanged: handleVoiceSignalCommandStatusChanged,
       onIncomingDirectCall: ({ channelName, fromUserId, fromName, fromAvatar }) => {
         if (!channelName || !fromUserId) {
           return;
@@ -3954,6 +3965,7 @@ export default function MenuMain({
     handleSelfVoiceStateChanged,
     handleSpeakingUsersChanged,
     handleVoiceConnectionStateChanged,
+    handleVoiceSignalCommandStatusChanged,
     ensureVoiceClientReady,
     flushQueuedSelfVoiceState,
     stableApplySelectedAudioDevicesToClient,
