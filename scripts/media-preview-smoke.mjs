@@ -32,6 +32,14 @@ assert(
   "Video preview must cache failed internal media URLs instead of retrying them repeatedly."
 );
 assert(
+  source.includes('preload="auto"'),
+  "Video preview must request playback data immediately after the user opens it."
+);
+assert(
+  source.includes("onCanPlay={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })"),
+  "Video preview must mark readiness at canplay so playback starts as soon as enough data is buffered."
+);
+assert(
   source.includes("window.addEventListener(MISSING_MEDIA_EVENT"),
   "Media preview must react when another mounted media component marks the same source missing."
 );

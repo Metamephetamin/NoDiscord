@@ -60,6 +60,34 @@ test("production nginx caches static auth media assets explicitly", () => {
   );
 });
 
+test("production nginx streams chat video files without proxy buffering", () => {
+  assert.match(
+    nginxSource,
+    /location\s+\^~\s+\/chat-files\//,
+    "nginx must have a dedicated chat-files location before the generic attachment proxy",
+  );
+  assert.match(
+    nginxSource,
+    /proxy_set_header\s+Range\s+\$http_range;/,
+    "chat-file proxy must forward Range headers for video seeking and progressive playback",
+  );
+  assert.match(
+    nginxSource,
+    /proxy_set_header\s+If-Range\s+\$http_if_range;/,
+    "chat-file proxy must forward If-Range headers for resumed video reads",
+  );
+  assert.match(
+    nginxSource,
+    /proxy_buffering\s+off;/,
+    "chat-file proxy must not buffer large media responses before sending them to the client",
+  );
+  assert.match(
+    nginxSource,
+    /proxy_max_temp_file_size\s+0;/,
+    "chat-file proxy must not spill large media responses to nginx temp files",
+  );
+});
+
 test("production nginx owns the lanaya.space TLS vhost", () => {
   assert.match(
     nginxSource,

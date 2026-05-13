@@ -340,6 +340,7 @@ function TextChatMediaPreview({
                 style={{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})` }}
                 onClick={stopEvent}
                 onLoadedData={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })}
+                onCanPlay={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })}
                 onError={() => {
                   markMediaUrlMissing(videoPreviewUrl);
                   setVideoLoadState({ url: videoPreviewUrl, failed: true });
@@ -347,7 +348,7 @@ function TextChatMediaPreview({
                 controls
                 autoPlay
                 playsInline
-                preload="metadata"
+                preload="auto"
               />
             )}
           </div>
