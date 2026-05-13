@@ -19,6 +19,7 @@ import {
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 const QR_LOGIN_POLL_INTERVAL_MS = 1800;
+const AUTH_VIDEO_IDLE_DELAY_MS = 1400;
 const MAX_AUTH_NAME_LENGTH = 32;
 const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
@@ -310,6 +311,7 @@ export default function Auth({ onAuthSuccess }) {
   const [isDeletingSlogan, setIsDeletingSlogan] = useState(false);
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const [isAuthVideoAvailable, setIsAuthVideoAvailable] = useState(true);
+  const [isAuthVideoLoadAllowed, setIsAuthVideoLoadAllowed] = useState(false);
   const [isUserAgreementOpen, setIsUserAgreementOpen] = useState(false);
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
@@ -343,7 +345,7 @@ export default function Auth({ onAuthSuccess }) {
   const isRegistrationEmailVerification = emailVerificationModal.purpose === "registration";
   const shouldShowRegistrationCodeStep = mode === "register" && isRegistrationEmailVerification && emailVerificationModal.open;
   const shouldShowPasswordResetStep = mode === "login" && loginMethod === "password" && passwordResetState.open;
-  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode;
+  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed;
   const canResendPasswordResetCode =
     Boolean(passwordResetState.email) &&
     passwordResetState.step !== "email" &&
@@ -447,6 +449,38 @@ export default function Auth({ onAuthSuccess }) {
       connection?.removeEventListener?.("change", updateVisualMode);
     };
   }, []);
+
+  useEffect(() => {
+    if (isLiteVisualMode || !isAuthVideoAvailable) {
+      setIsAuthVideoLoadAllowed(false);
+      return undefined;
+    }
+
+    let disposed = false;
+    let idleCallbackId = 0;
+    const timeoutId = window.setTimeout(() => {
+      const allowVideoLoad = () => {
+        if (!disposed) {
+          setIsAuthVideoLoadAllowed(true);
+        }
+      };
+
+      if (typeof window.requestIdleCallback === "function") {
+        idleCallbackId = window.requestIdleCallback(allowVideoLoad, { timeout: 1200 });
+        return;
+      }
+
+      allowVideoLoad();
+    }, AUTH_VIDEO_IDLE_DELAY_MS);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeoutId);
+      if (idleCallbackId && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, [isAuthVideoAvailable, isLiteVisualMode]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY);
@@ -1470,7 +1504,7 @@ export default function Auth({ onAuthSuccess }) {
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="none"
           disablePictureInPicture
           disableRemotePlayback
           aria-hidden="true"

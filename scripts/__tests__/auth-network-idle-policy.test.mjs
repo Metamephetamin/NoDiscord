@@ -19,6 +19,29 @@ test("auth page creates and polls QR login sessions only when QR panel is open",
   );
 });
 
+test("auth background video starts after initial auth page work is idle", () => {
+  assert.match(
+    authSource,
+    /const AUTH_VIDEO_IDLE_DELAY_MS = \d+;/,
+    "auth video loading must use an explicit idle delay",
+  );
+  assert.match(
+    authSource,
+    /requestIdleCallback/,
+    "auth video loading must wait for browser idle time when supported",
+  );
+  assert.match(
+    authSource,
+    /shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed/,
+    "auth video element must not mount before idle loading is allowed",
+  );
+  assert.match(
+    authSource,
+    /preload="none"/,
+    "auth video should not preload before it is intentionally mounted",
+  );
+});
+
 test("production nginx caches static auth media assets explicitly", () => {
   assert.match(
     nginxSource,
