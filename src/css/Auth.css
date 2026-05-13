@@ -467,6 +467,8 @@
 .auth-card--login .auth-qr-entry,
 .auth-card--login .auth-card__links,
 .auth-card--login .auth-card__forgot,
+.auth-card--login .auth-terms-consent,
+.auth-card--login .auth-beta-note,
 .auth-card--login .auth-message {
   width: min(100%, 300px);
 }

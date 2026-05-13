@@ -10,8 +10,10 @@ const requiredSourceMarkers = [
   "if (!isMobileAuthVisualMode)",
   'className="auth-video-bg"',
   "<source src={AUTH_BACKGROUND_VIDEO_URL} type=\"video/mp4\" />",
-  'mode === "login" ? "auth-page--login" : "auth-page--register"',
-  'className={`auth-card auth-card--wide ${mode === "login" ? "auth-card--login" : "auth-card--register"}`}',
+  'const authPageClassName = ["auth-page", "auth-page--login", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")',
+  'const authCardClassName = "auth-card auth-card--wide auth-card--login"',
+  "className={authPageClassName}",
+  "className={authCardClassName}",
   'className="auth-qr-login__svg"',
   'className="auth-qr-login__logo"',
   'className="auth-qr-login__status"',
@@ -22,6 +24,9 @@ const requiredSourceMarkers = [
 for (const marker of requiredSourceMarkers) {
   assert(authSource.includes(marker), `Missing auth render marker: ${marker}`);
 }
+
+assert(!authSource.includes("auth-page--register"), "Registration must share the login auth page shell.");
+assert(!authSource.includes("auth-card--register"), "Registration must share the login auth card shell.");
 
 for (const eventName of ["loadeddata", "canplay", "error"]) {
   assert(
@@ -44,7 +49,6 @@ for (const eventName of ["stalled", "emptied"]) {
 const requiredCssMarkers = [
   ".auth-video-bg",
   ".auth-page--login .auth-video-bg",
-  ".auth-page--register .auth-video-bg",
   ".auth-card--login:has(.auth-card__side--qr)",
   ".auth-qr-login__code",
   ".auth-qr-login__logo img",

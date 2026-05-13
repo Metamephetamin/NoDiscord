@@ -1494,8 +1494,11 @@ export default function Auth({ onAuthSuccess }) {
     handleLogin(event);
   };
 
+  const authPageClassName = ["auth-page", "auth-page--login", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ");
+  const authCardClassName = "auth-card auth-card--wide auth-card--login";
+
   return (
-    <div className={["auth-page", mode === "login" ? "auth-page--login" : "auth-page--register", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")}>
+    <div className={authPageClassName}>
       {shouldRenderAuthVideo ? (
         <video
           ref={authVideoRef}
@@ -1543,7 +1546,7 @@ export default function Auth({ onAuthSuccess }) {
       </div>
 
       <form
-        className={`auth-card auth-card--wide ${mode === "login" ? "auth-card--login" : "auth-card--register"}`}
+        className={authCardClassName}
         onSubmit={handleAuthSubmit}
       >
         <div className="auth-card__main">
