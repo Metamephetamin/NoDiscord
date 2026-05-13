@@ -46,6 +46,12 @@ import { buildForwardPayloadForTargetChannel as buildForwardPayloadForTargetChan
 import { TEXT_CHAT_INSERT_MENTION_EVENT } from "../../utils/textChatMentionInterop";
 import { sendMessagesCompat as sendMessagesCompatCore } from "../../utils/textChatSendCompat";
 import { normalizeClientMessageId } from "./messageDeliveryState.mjs";
+import {
+  markTextChatOutboxItemAttempt,
+  readTextChatOutboxItems,
+  removeTextChatOutboxItem,
+  upsertTextChatOutboxItem,
+} from "./textChatOutbox.mjs";
 import { finishPerfTrace, startPerfTrace } from "../../utils/perf";
 import useMediaPreviewKeyboardControls from "../../hooks/useMediaPreviewKeyboardControls";
 import useTextChatComposerPopovers from "../../hooks/useTextChatComposerPopovers";
@@ -575,6 +581,7 @@ export default function TextChat({
   const localEchoObjectUrlsByMessageIdRef = useRef(new Map());
   const localEchoObjectUrlRevokeTimersRef = useRef(new Map());
   const markLocalEchoReconciledRef = useRef(null);
+  const resumedTextOutboxChannelsRef = useRef(new Set());
   const scopedChannelId = useMemo(() => {
     const normalizedResolvedChannelId = normalizeDirectMessageChannelId(resolvedChannelId);
     if (normalizedResolvedChannelId) {
@@ -2401,7 +2408,7 @@ export default function TextChat({
     };
   }, []);
 
-  const applyDeliveredMessages = async (targetChannelId, deliveredMessages) => {
+  const applyDeliveredMessages = useCallback(async (targetChannelId, deliveredMessages) => {
     const normalizedTargetChannelId = String(targetChannelId || "").trim();
     if (!normalizedTargetChannelId || !Array.isArray(deliveredMessages) || deliveredMessages.length === 0) {
       return;
@@ -2424,7 +2431,7 @@ export default function TextChat({
         },
       })
     )));
-  };
+  }, [currentUserId, revokeLocalEchoObjectUrls]);
 
   const uploadAttachment = uploadChatAttachment;
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {
@@ -2784,6 +2791,22 @@ export default function TextChat({
     ));
   }, [scopedChannelId]);
 
+  const queueTextOutboxItem = useCallback((targetChannelId, item) => {
+    if (!currentUserId || !targetChannelId) {
+      return null;
+    }
+
+    return upsertTextChatOutboxItem(currentUserId, targetChannelId, item);
+  }, [currentUserId]);
+
+  const removeQueuedTextOutboxItem = useCallback((targetChannelId, clientMessageId) => {
+    if (!currentUserId || !targetChannelId) {
+      return;
+    }
+
+    removeTextChatOutboxItem(currentUserId, targetChannelId, clientMessageId);
+  }, [currentUserId]);
+
   const {
     startOptimisticAttachmentSend,
     retryLocalEchoUpload,
@@ -2803,6 +2826,89 @@ export default function TextChat({
     onRemoveLocalEchoMessages: removeLocalEchoMessages,
   });
   markLocalEchoReconciledRef.current = reconcileLocalEchoUpload;
+
+  useEffect(() => {
+    const normalizedUserId = String(currentUserId || "").trim();
+    const normalizedChannelId = String(scopedChannelId || "").trim();
+    if (!normalizedUserId || !normalizedChannelId || !user?.id) {
+      return undefined;
+    }
+
+    const resumeKey = `${normalizedUserId}:${normalizedChannelId}`;
+    if (resumedTextOutboxChannelsRef.current.has(resumeKey)) {
+      return undefined;
+    }
+    resumedTextOutboxChannelsRef.current.add(resumeKey);
+
+    const queuedItems = readTextChatOutboxItems(normalizedUserId, normalizedChannelId);
+    if (!queuedItems.length) {
+      return undefined;
+    }
+
+    const avatar = String(user?.avatarUrl || user?.avatar || "").trim();
+    appendLocalEchoMessages({
+      channelId: normalizedChannelId,
+      descriptors: queuedItems.flatMap((item) => (
+        item.payload.map((payloadItem) => ({
+          ...payloadItem,
+          clientMessageId: item.clientMessageId,
+          clientTempId: item.clientMessageId,
+        }))
+      )),
+    });
+
+    let cancelled = false;
+    const resendQueuedMessages = async () => {
+      try {
+        await ensureChannelJoined();
+      } catch {
+        return;
+      }
+
+      const latestItems = readTextChatOutboxItems(normalizedUserId, normalizedChannelId);
+      for (const item of latestItems) {
+        if (cancelled) {
+          return;
+        }
+
+        const payload = item.payload.map((payloadItem) => ({
+          ...payloadItem,
+          clientMessageId: item.clientMessageId,
+          clientTempId: item.clientMessageId,
+        }));
+
+        markTextChatOutboxItemAttempt(normalizedUserId, normalizedChannelId, item.clientMessageId);
+        try {
+          const deliveredMessages = await sendMessagesCompatCore({
+            targetChannelId: normalizedChannelId,
+            avatar: item.avatar || avatar,
+            payload,
+            user,
+            allowBatch: false,
+          });
+          removeTextChatOutboxItem(normalizedUserId, normalizedChannelId, item.clientMessageId);
+          await applyDeliveredMessages(normalizedChannelId, deliveredMessages);
+        } catch {
+          joinedChannelRef.current = "";
+          setIsChannelReady(false);
+          return;
+        }
+      }
+    };
+
+    resendQueuedMessages();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appendLocalEchoMessages,
+    applyDeliveredMessages,
+    currentUserId,
+    ensureChannelJoined,
+    scopedChannelId,
+    setIsChannelReady,
+    user,
+  ]);
 
   const {
     send,
@@ -2846,6 +2952,8 @@ export default function TextChat({
     sendMessagesCompat,
     playDirectMessageSound,
     onCreateLocalEchoMessages: appendLocalEchoMessages,
+    onQueueTextOutbox: queueTextOutboxItem,
+    onRemoveTextOutbox: removeQueuedTextOutboxItem,
     onRemoveLocalEchoMessages: removeLocalEchoMessages,
     onUpdateLocalEchoUploads: updateLocalEchoUploadProgress,
     startOptimisticAttachmentSend,

@@ -22,6 +22,10 @@ import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../
 const LOCATION_MESSAGE_DEFAULT_ZOOM = 15;
 const PENDING_UPLOAD_CREATION_CHUNK_SIZE = 12;
 
+function createClientMessageId(prefix = "client-text") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 export default function useTextChatSendActions({
   message,
   setMessage,
@@ -52,6 +56,9 @@ export default function useTextChatSendActions({
   uploadAttachment,
   sendMessagesCompat,
   playDirectMessageSound,
+  onCreateLocalEchoMessages,
+  onQueueTextOutbox,
+  onRemoveTextOutbox,
   startOptimisticAttachmentSend,
   discardSpeechRecognitionDraft,
 }) {
@@ -541,6 +548,7 @@ export default function useTextChatSendActions({
           });
         }
 
+        const clientMessageId = createClientMessageId();
         const payload = [{
           message: messageText,
           mentions: outgoingMentions,
@@ -555,7 +563,23 @@ export default function useTextChatSendActions({
           attachmentAsFile: false,
           attachmentEncryption: null,
           voiceMessage: null,
+          clientMessageId,
+          clientTempId: clientMessageId,
         }];
+
+        onQueueTextOutbox?.(scopedChannelId, {
+          clientMessageId,
+          message: messageText,
+          avatar,
+          payload,
+          queuedAt: Date.now(),
+        });
+        onCreateLocalEchoMessages?.({
+          channelId: scopedChannelId,
+          descriptors: payload,
+        });
+        postSendResetUiState();
+        didResetUiState = true;
 
         const invokeTraceId = startPerfTrace("text-chat", "send-message:invoke-send-message", {
           payloadCount: payload.length,
@@ -563,6 +587,7 @@ export default function useTextChatSendActions({
         });
         try {
           await sendMessagesCompat(scopedChannelId, avatar, payload);
+          onRemoveTextOutbox?.(scopedChannelId, clientMessageId);
         } finally {
           finishPerfTrace(invokeTraceId, {
             payloadCount: payload.length,

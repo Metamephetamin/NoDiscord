@@ -111,9 +111,9 @@ Expected: status is `ok`.
 
 - [x] Add `clientMessageId` to send paths and backend persistence.
 - [x] Add unique backend dedupe by `(authorUserId, channelId, clientMessageId)`.
-- [ ] Persist local outbox per channel in IndexedDB or existing local cache layer.
+- [x] Persist local outbox per channel in IndexedDB or existing local cache layer.
 - [x] Add delivery states: `queued`, `sending`, `sent`, `delivered`, `failed`.
-- [ ] Add resend after app restart when auth/session is valid.
+- [x] Add resend after app restart when auth/session is valid.
 - [ ] Add "read by me" and "last read" server state for read receipts.
 - [x] Add minimal UI indicators without re-rendering entire message list.
 - [ ] Verify direct chat, server chat, image send, offline/reconnect, duplicate resend.
