@@ -6,6 +6,7 @@ import TextChatProfileModal from "../../components/TextChatProfileModal";
 import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import AnimatedAvatar from "../../components/AnimatedAvatar";
 import ServerRailContextLayer from "../../components/ServerRailContextLayer";
+import { isServerRailItemActive } from "../../components/serverRailState.mjs";
 import {
   DesktopServerRail,
   MobileDirectChat,
@@ -95,6 +96,7 @@ import {
 import {
   buildDirectCallState,
   createDirectCallState,
+  deriveDirectCallStateFromVoiceConnection,
   getDirectCallConnectionQuality,
   normalizeMeasuredPingMs,
 } from "./menuMainDirectCallState";
@@ -865,7 +867,14 @@ export default function MenuMain({
     latestServersRef.current = servers;
   }, [servers]);
 
-  const activeServer = useMemo(() => servers.find((server) => server.id === activeServerId) || servers[0] || null, [servers, activeServerId]);
+  const activeServer = useMemo(
+    () => servers.find((server) => isServerRailItemActive({
+      workspaceMode: "servers",
+      serverId: server.id,
+      activeServerId,
+    })) || servers[0] || null,
+    [servers, activeServerId]
+  );
   const activeServerSyncFingerprint = useMemo(() => getServerSyncFingerprint(activeServer), [activeServer]);
   const currentTextChannel = useMemo(() => activeServer?.textChannels.find((channel) => channel.id === currentTextChannelId) || activeServer?.textChannels[0] || null, [activeServer, currentTextChannelId]);
   const selectedVoiceChannel = useMemo(
@@ -1320,6 +1329,12 @@ export default function MenuMain({
         : { ...previous, connectionQuality: nextQuality };
     });
   }, [activeLatencyMs]);
+  useEffect(() => {
+    setDirectCallState((previous) => {
+      const nextState = deriveDirectCallStateFromVoiceConnection(previous, voiceConnectionState);
+      return nextState === previous ? previous : nextState;
+    });
+  }, [voiceConnectionState]);
   const {
     canNavigateBack,
     canNavigateForward,

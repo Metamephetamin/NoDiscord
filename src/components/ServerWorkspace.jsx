@@ -6,6 +6,7 @@ import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { isServerRailItemActive } from "./serverRailState.mjs";
 
 const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
@@ -2882,12 +2883,17 @@ export const DesktopServerRail = ({
     <div className="sidebar__servers-list" onScroll={hideServerTooltip}>
       {servers.map((server) => {
         const hasVoiceActivity = serverVoiceActivityIds.has(String(server.id || ""));
+        const isActiveServer = isServerRailItemActive({
+          workspaceMode,
+          serverId: server.id,
+          activeServerId: activeServer?.id,
+        });
 
         return (
         <button
         key={server.id}
         type="button"
-        className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""} ${hasVoiceActivity ? "btn__server--voice-active" : ""}`}
+        className={`btn__server ${isActiveServer ? "btn__server--active" : ""} ${hasVoiceActivity ? "btn__server--voice-active" : ""}`}
         onClick={onServerShortcutClick(server)}
         onContextMenu={(event) => onServerContextMenu(event, server)}
         onPointerDown={(event) => onServerPointerDown(event, server)}
@@ -2952,12 +2958,17 @@ export const MobileServerStrip = ({
     <div className="mobile-server-strip__scroller">
       {servers.map((server) => {
         const hasVoiceActivity = serverVoiceActivityIds.has(String(server.id || ""));
+        const isActiveServer = isServerRailItemActive({
+          workspaceMode,
+          serverId: server.id,
+          activeServerId: activeServer?.id,
+        });
 
         return (
         <button
           key={server.id}
           type="button"
-          className={`btn__server ${workspaceMode === "servers" && server.id === activeServer?.id ? "btn__server--active" : ""} ${hasVoiceActivity ? "btn__server--voice-active" : ""}`}
+          className={`btn__server ${isActiveServer ? "btn__server--active" : ""} ${hasVoiceActivity ? "btn__server--voice-active" : ""}`}
           onClick={onServerShortcutClick(server)}
           onPointerDown={(event) => onServerPointerDown(event, server)}
           onPointerUp={onServerPointerUp}

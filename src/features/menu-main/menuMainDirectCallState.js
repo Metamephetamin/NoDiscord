@@ -43,6 +43,8 @@ export const getDirectCallConnectionQuality = (pingMs, phase) => {
   return "stable";
 };
 
+const isDirectCallChannel = (channelId) => /^direct-call::\d+::\d+$/i.test(String(channelId || "").trim());
+
 export const createDirectCallState = () => ({
   phase: "idle",
   status: "idle",
@@ -89,4 +91,43 @@ export const buildDirectCallState = (overrides = {}) => {
     peerAvatarFrame: peer.avatarFrame,
     peer,
   };
+};
+
+export const deriveDirectCallStateFromVoiceConnection = (previousState, voiceConnectionState = {}) => {
+  const previous = previousState || createDirectCallState();
+  const phase = String(previous.phase || "");
+  const channelId = String(previous.channelId || "").trim();
+  const connectionPhase = String(voiceConnectionState?.phase || "").trim();
+  const connectionChannel = String(voiceConnectionState?.channel || "").trim();
+
+  if (!isDirectCallChannel(channelId) || (connectionChannel && connectionChannel !== channelId)) {
+    return previous;
+  }
+
+  if (
+    connectionPhase === "reconnecting"
+    && (phase === "connected" || phase === "connecting")
+  ) {
+    return {
+      ...previous,
+      phase: "reconnecting",
+      status: "reconnecting",
+      statusLabel: "Восстанавливаем соединение",
+      connectionQuality: "reconnecting",
+      canRetry: false,
+    };
+  }
+
+  if (connectionPhase === "connected" && phase === "reconnecting") {
+    return {
+      ...previous,
+      phase: "connected",
+      status: "connected",
+      statusLabel: "Идет разговор",
+      connectionQuality: getDirectCallConnectionQuality(null, "connected"),
+      canRetry: false,
+    };
+  }
+
+  return previous;
 };

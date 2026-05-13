@@ -3993,6 +3993,16 @@ const handleDeviceChange = () => {
       });
     });
 
+    connection.onreconnecting(() => {
+      signalConnectPromise = null;
+      emitVoiceConnectionState({
+        phase: "reconnecting",
+        channel: currentChannel,
+        reason: "signalr-reconnecting",
+        message: "Восстанавливаем сигнальное соединение.",
+      });
+    });
+
     connection.onreconnected(async () => {
       if (!currentUser) {
         return;
@@ -4014,17 +4024,34 @@ const handleDeviceChange = () => {
         if ((localScreenStream || localCameraStream) && currentUser?.id) {
           await updateScreenShareStatus(true).catch(() => {});
         }
+
+        emitVoiceConnectionState({
+          phase: currentChannel ? "connected" : "idle",
+          channel: currentChannel,
+          reason: "signalr-reconnected",
+        });
       } catch (error) {
         logVoiceDebug("signal:reconnected-recovery-failed", {
           currentChannel,
           errorName: error?.name || "",
           error: error?.message || String(error),
         });
+        emitVoiceConnectionState({
+          phase: "disconnected",
+          channel: currentChannel,
+          reason: "signalr-recovery-failed",
+          message: error?.message || "Не удалось восстановить сигнальное соединение.",
+        });
       }
     });
 
     connection.onclose(() => {
       signalConnectPromise = null;
+      emitVoiceConnectionState({
+        phase: currentChannel ? "disconnected" : "idle",
+        channel: currentChannel,
+        reason: "signalr-closed",
+      });
     });
   };
 
