@@ -442,14 +442,20 @@ jobs:
           BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           NGINX_SOURCE="./infra/nginx/lanaya.space.conf"
+          NGINX_BOOTSTRAP_SOURCE="./infra/nginx/lanaya.space.bootstrap.conf"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           if [ ! -f "$NGINX_SOURCE" ]; then
             echo "Nginx domain template is missing: $NGINX_SOURCE" >&2
             exit 1
           fi
+          if [ ! -f "$NGINX_BOOTSTRAP_SOURCE" ]; then
+            echo "Nginx bootstrap template is missing: $NGINX_BOOTSTRAP_SOURCE" >&2
+            exit 1
+          fi
 
           rsync -az --checksum -e "ssh $SSH_OPTS" "$NGINX_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/lanaya.space.conf"
+          rsync -az --checksum -e "ssh $SSH_OPTS" "$NGINX_BOOTSTRAP_SOURCE" "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/lanaya.space.bootstrap.conf"
 
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 10m bash -lc '
             set -e
@@ -457,25 +463,34 @@ jobs:
             TEMP_ROOT='$TEMP_ROOT'
             NGINX_SITE=/etc/nginx/sites-available/lanaya.space.conf
             NGINX_ENABLED=/etc/nginx/sites-enabled/lanaya.space.conf
+            CERT_DIR=/etc/letsencrypt/live/lanaya.space
+
+            if [ ! -s \"\$CERT_DIR/fullchain.pem\" ] || [ ! -s \"\$CERT_DIR/privkey.pem\" ]; then
+              cp \"\$TEMP_ROOT/lanaya.space.bootstrap.conf\" \"\$NGINX_SITE\"
+              ln -sfn \"\$NGINX_SITE\" \"\$NGINX_ENABLED\"
+              nginx -t
+              systemctl reload nginx
+
+              if ! command -v certbot >/dev/null 2>&1; then
+                echo \"certbot is not installed on the server; cannot issue lanaya.space TLS certificate.\" >&2
+                exit 1
+              fi
+
+              certbot certonly --webroot -w /var/www/tend-app/current --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring -d lanaya.space -d www.lanaya.space
+            fi
+
+            if [ ! -s \"\$CERT_DIR/fullchain.pem\" ] || [ ! -s \"\$CERT_DIR/privkey.pem\" ]; then
+              echo \"lanaya.space TLS certificate files are missing after certbot.\" >&2
+              exit 1
+            fi
 
             if [ ! -f \"\$NGINX_SITE\" ] || ! cmp -s \"\$TEMP_ROOT/lanaya.space.conf\" \"\$NGINX_SITE\"; then
               cp \"\$TEMP_ROOT/lanaya.space.conf\" \"\$NGINX_SITE\"
             fi
 
             ln -sfn \"\$NGINX_SITE\" \"\$NGINX_ENABLED\"
-
             nginx -t
             systemctl reload nginx
-
-            if command -v certbot >/dev/null 2>&1; then
-              if ! certbot certificates 2>/dev/null | grep -q \"lanaya.space\"; then
-                certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d lanaya.space -d www.lanaya.space || true
-              fi
-            else
-              echo \"certbot is not installed on the server; assuming TLS is managed manually.\"
-            fi
-
-            nginx -t
             echo \"Production domain lanaya.space is configured on nginx\"
           '"
 
@@ -528,16 +543,26 @@ jobs:
           VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"
 
           echo "Running frontend healthcheck: $HEALTHCHECK"
-          curl --fail --silent --show-error --location "$HEALTHCHECK" > /dev/null
+          frontend_redirect="$(curl --silent --show-error --output /dev/null --write-out '%{redirect_url}' "$HEALTHCHECK")"
+          if [ -n "$frontend_redirect" ]; then
+            echo "Frontend healthcheck unexpectedly redirects to: $frontend_redirect" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error "$HEALTHCHECK" > /dev/null
 
           echo "Running backend API healthcheck: $API_HEALTHCHECK"
-          api_body="$(curl --fail --silent --show-error --location "$API_HEALTHCHECK")"
+          api_redirect="$(curl --silent --show-error --output /dev/null --write-out '%{redirect_url}' "$API_HEALTHCHECK")"
+          if [ -n "$api_redirect" ]; then
+            echo "Backend API healthcheck unexpectedly redirects to: $api_redirect" >&2
+            exit 1
+          fi
+          api_body="$(curl --fail --silent --show-error "$API_HEALTHCHECK")"
           if ! printf '%s\n' "$api_body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
             echo "Backend API ping did not return status ok: $api_body" >&2
             exit 1
           fi
           api_headers="$(mktemp)"
-          curl --fail --silent --show-error --location --dump-header "$api_headers" --output /dev/null "$API_HEALTHCHECK"
+          curl --fail --silent --show-error --dump-header "$api_headers" --output /dev/null "$API_HEALTHCHECK"
           if ! grep -iq "content-security-policy:.*wss://lanaya.space" "$api_headers"; then
             echo "Backend CSP does not allow lanaya.space websocket connections." >&2
             cat "$api_headers" >&2
@@ -545,14 +570,24 @@ jobs:
           fi
 
           echo "Running chat negotiate healthcheck: $CHAT_NEGOTIATE_HEALTHCHECK"
-          chat_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$CHAT_NEGOTIATE_HEALTHCHECK")"
+          chat_redirect="$(curl --silent --show-error --request POST --output /dev/null --write-out '%{redirect_url}' "$CHAT_NEGOTIATE_HEALTHCHECK")"
+          if [ -n "$chat_redirect" ]; then
+            echo "Chat hub negotiate healthcheck unexpectedly redirects to: $chat_redirect" >&2
+            exit 1
+          fi
+          chat_status="$(curl --silent --show-error --request POST --output /dev/null --write-out '%{http_code}' "$CHAT_NEGOTIATE_HEALTHCHECK")"
           if [ "$chat_status" -ge 500 ] || [ "$chat_status" -eq 000 ]; then
             echo "Chat hub negotiate endpoint is unhealthy (HTTP $chat_status)." >&2
             exit 1
           fi
 
           echo "Running voice negotiate healthcheck: $VOICE_NEGOTIATE_HEALTHCHECK"
-          voice_status="$(curl --silent --show-error --location --request POST --output /dev/null --write-out '%{http_code}' "$VOICE_NEGOTIATE_HEALTHCHECK")"
+          voice_redirect="$(curl --silent --show-error --request POST --output /dev/null --write-out '%{redirect_url}' "$VOICE_NEGOTIATE_HEALTHCHECK")"
+          if [ -n "$voice_redirect" ]; then
+            echo "Voice hub negotiate healthcheck unexpectedly redirects to: $voice_redirect" >&2
+            exit 1
+          fi
+          voice_status="$(curl --silent --show-error --request POST --output /dev/null --write-out '%{http_code}' "$VOICE_NEGOTIATE_HEALTHCHECK")"
           if [ "$voice_status" -ge 500 ] || [ "$voice_status" -eq 000 ]; then
             echo "Voice hub negotiate endpoint is unhealthy (HTTP $voice_status)." >&2
             exit 1

@@ -59,3 +59,39 @@ test("production nginx caches static auth media assets explicitly", () => {
     "deploy must update the existing nginx site when the checked-in template changes",
   );
 });
+
+test("production nginx owns the lanaya.space TLS vhost", () => {
+  assert.match(
+    nginxSource,
+    /listen\s+443\s+ssl/,
+    "lanaya.space nginx config must declare its own HTTPS server block",
+  );
+  assert.match(
+    nginxSource,
+    /ssl_certificate\s+\/etc\/letsencrypt\/live\/lanaya\.space\/fullchain\.pem;/,
+    "lanaya.space nginx config must use the lanaya.space certificate",
+  );
+  assert.match(
+    nginxSource,
+    /ssl_certificate_key\s+\/etc\/letsencrypt\/live\/lanaya\.space\/privkey\.pem;/,
+    "lanaya.space nginx config must use the lanaya.space private key",
+  );
+  assert.equal(
+    deployWorkflow.split(/\r?\n/).some((line) => /certbot/.test(line) && /\|\|\s*true/.test(line)),
+    false,
+    "deploy must not ignore certbot failures; otherwise HTTPS can fall back to another vhost",
+  );
+});
+
+test("production health checks fail on cross-domain redirects", () => {
+  assert.match(
+    deployWorkflow,
+    /%\{redirect_url\}/,
+    "deploy health checks must inspect redirect_url",
+  );
+  assert.doesNotMatch(
+    deployWorkflow,
+    /curl[^\n]*--location[^\n]*HEALTHCHECK/,
+    "production health checks must not follow redirects because that can hide a wrong nginx vhost",
+  );
+});
