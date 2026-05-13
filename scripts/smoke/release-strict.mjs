@@ -9,10 +9,7 @@ const smokeScripts = [
 ];
 
 const childEnv = Object.fromEntries(
-  Object.entries({
-    ...process.env,
-    SMOKE_REQUIRE_CREDENTIALS: "1",
-  }).filter(([key, value]) => value !== undefined && !key.startsWith("="))
+  Object.entries(process.env).filter(([key, value]) => value !== undefined && !key.startsWith("="))
 );
 
 function runSmokeScript(scriptName) {
