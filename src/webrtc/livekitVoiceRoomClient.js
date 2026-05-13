@@ -36,6 +36,7 @@ import {
 } from "./voiceClientUtils";
 import { getDisplayCaptureSupportInfo } from "../utils/browserMediaSupport";
 import { createVoiceSessionPrewarmCache } from "./voiceSessionPrewarmCache.mjs";
+import { createVoiceSignalCommandQueue } from "./voiceSignalCommandQueue.mjs";
 import { invokeVoiceSignalWithRetry } from "./voiceSignalRetry.mjs";
 import { getReusableVideoTrack } from "./localShareStreamReuse.mjs";
 import {
@@ -4180,21 +4181,43 @@ const handleDeviceChange = () => {
     await emitAudioDevices().catch(() => {});
   };
 
-  const invokeDirectCallSignal = async (user, methodName, ...args) => {
-    await ensureSignalConnection(user);
-    return invokeVoiceSignalWithRetry({
-      invoke: () => signalConnection.invoke(methodName, ...args),
-      reconnect: () => ensureSignalConnection(user),
-      onRetry: ({ attempt, error }) => {
-        logVoiceDebug("signal:direct-call-command-retry", {
-          methodName,
-          attempt,
-          errorName: error?.name || "",
-          error: error?.message || String(error),
-        });
-      },
-    });
-  };
+  const directCallSignalQueue = createVoiceSignalCommandQueue({
+    execute: async ({ methodName, args, user, reportStatus }) => {
+      await ensureSignalConnection(user);
+      return invokeVoiceSignalWithRetry({
+        invoke: () => signalConnection.invoke(methodName, ...args),
+        reconnect: () => ensureSignalConnection(user),
+        onRetry: ({ attempt, error }) => {
+          reportStatus?.("retrying", {
+            attempt,
+            errorName: error?.name || "",
+            error: error?.message || String(error),
+          });
+          logVoiceDebug("signal:direct-call-command-retry", {
+            methodName,
+            attempt,
+            errorName: error?.name || "",
+            error: error?.message || String(error),
+          });
+        },
+      });
+    },
+    onStatus: ({ methodName, status, errorName = "", error = "" }) => {
+      logVoiceDebug("signal:direct-call-command-status", {
+        methodName,
+        status,
+        errorName,
+        error,
+      });
+    },
+  });
+
+  const invokeDirectCallSignal = async (user, methodName, ...args) => directCallSignalQueue.enqueue({
+    key: [methodName, String(args[0] || ""), String(args[1] || "")].join(":"),
+    methodName,
+    args,
+    user,
+  });
 
   return {
     getCurrentChannel() {

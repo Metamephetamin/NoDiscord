@@ -39,7 +39,9 @@ test("voice signal reconnect updates visible connection state and recovers curre
 
 test("direct call signal commands use bounded retry helper", () => {
   assert.match(voiceClientSource, /import \{ invokeVoiceSignalWithRetry \} from "\.\/voiceSignalRetry\.mjs"/, "voice client must import retry helper");
+  assert.match(voiceClientSource, /import \{ createVoiceSignalCommandQueue \} from "\.\/voiceSignalCommandQueue\.mjs"/, "voice client must import signal command queue");
   assert.match(voiceClientSource, /const invokeDirectCallSignal = async/, "voice client must centralize direct call signaling");
+  assert.match(voiceClientSource, /createVoiceSignalCommandQueue\(/, "direct call signaling must enqueue commands");
   assert.match(voiceClientSource, /invokeVoiceSignalWithRetry\(/, "direct call signaling must use bounded retry helper");
   assert.match(voiceClientSource, /"StartDirectCall"/, "start direct call command must remain wired");
   assert.match(voiceClientSource, /"AcceptDirectCall"/, "accept direct call command must remain wired");
