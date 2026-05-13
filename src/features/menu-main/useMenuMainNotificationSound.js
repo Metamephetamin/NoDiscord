@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
+import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatencyAudio";
 import { NOTIFICATION_SOUND_OPTIONS } from "../../utils/menuMainModel";
 
 const DEFAULT_NOTIFICATION_SOUND_ID = NOTIFICATION_SOUND_OPTIONS[0].id;
@@ -85,10 +86,7 @@ function playSoundPath(soundPath, volume = 0.42) {
   }
 
   try {
-    const audio = new Audio(soundPath);
-    audio.volume = volume;
-    audio.preload = "auto";
-    audio.play().catch(() => {});
+    playLowLatencyAudio(soundPath, { volume, poolSize: 3 });
   } catch {
     // ignore sound failures
   }
@@ -229,6 +227,10 @@ export default function useMenuMainNotificationSound({
     () => getDirectMessageSoundOptions("receive").find((option) => option.id === soundState.directMessageReceiveSoundId)?.path || "",
     [soundState.directMessageReceiveSoundId]
   );
+
+  useEffect(() => {
+    primeLowLatencyAudio([activeNotificationSoundPath, directMessageReceiveSoundPath], { volume: 0.42, poolSize: 3 });
+  }, [activeNotificationSoundPath, directMessageReceiveSoundPath]);
 
   const playNotificationSound = useCallback(() => {
     if (!soundState.notificationSoundEnabled || !activeNotificationSoundPath) {

@@ -46,7 +46,7 @@ export default function useMenuMainLocalShareActions({
 
     try {
       await voiceClientRef.current.startScreenShare({ resolution, fps, shareAudio: shareStreamAudio });
-      scheduleScreenShareStartTone(140);
+      scheduleScreenShareStartTone(220);
       setShowModal(false);
       setSelectedStreamUserId(null);
       setIsLocalSharePreviewVisible(true);

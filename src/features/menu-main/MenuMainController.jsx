@@ -194,6 +194,7 @@ import {
 } from "../../utils/menuMainModel";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../../utils/perf";
 import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
+import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatencyAudio";
 
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
 const MAX_CHAT_BACKGROUND_BYTES = 1.5 * 1024 * 1024;
@@ -1799,10 +1800,16 @@ export default function MenuMain({
       const soundPath = UI_SOUND_PATHS[type];
       if (!soundPath) return;
 
+      if (playLowLatencyAudio(soundPath, { volume: 0.45, poolSize: 3 })) {
+        return;
+      }
+
       const previous = uiSoundCache.get(type);
       if (previous) {
         previous.pause();
         previous.currentTime = 0;
+        previous.play().catch(() => {});
+        return;
       }
 
       const audio = new Audio(soundPath);
@@ -1814,13 +1821,16 @@ export default function MenuMain({
       // ignore ui sound failures
     }
   };
+  useEffect(() => {
+    primeLowLatencyAudio(Object.values(UI_SOUND_PATHS), { volume: 0.45, poolSize: 3 });
+  }, []);
   const clearScreenShareStartToneTimeout = () => {
     if (screenShareStartToneTimeoutRef.current) {
       window.clearTimeout(screenShareStartToneTimeoutRef.current);
       screenShareStartToneTimeoutRef.current = null;
     }
   };
-  const scheduleScreenShareStartTone = (delayMs = 140) => {
+  const scheduleScreenShareStartTone = (delayMs = 220) => {
     clearScreenShareStartToneTimeout();
     screenShareStartToneTimeoutRef.current = window.setTimeout(() => {
       screenShareStartToneTimeoutRef.current = null;
@@ -1860,7 +1870,7 @@ export default function MenuMain({
       voiceTransitionSoundTimeoutRef.current = window.setTimeout(() => {
         playUiTone("join");
         voiceTransitionSoundTimeoutRef.current = null;
-      }, 90);
+      }, 220);
     }
   };
   const incrementDirectUnread = (channelId) => {
@@ -4068,7 +4078,7 @@ export default function MenuMain({
       voiceTransitionSoundTimeoutRef.current = window.setTimeout(() => {
         playUiTone("join");
         voiceTransitionSoundTimeoutRef.current = null;
-      }, 90);
+      }, 220);
     }
 
     pendingLocalVoiceTransitionRef.current = null;

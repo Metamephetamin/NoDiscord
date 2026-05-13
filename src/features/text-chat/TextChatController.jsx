@@ -8,6 +8,7 @@ import { revokePendingUploadPreviews, scheduleObjectUrlRevoke } from "../../util
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
 import { isDirectMessageChannelId, normalizeDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
+import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatencyAudio";
 import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
 import { copyTextToClipboard } from "../../utils/clipboard";
@@ -1910,14 +1911,21 @@ export default function TextChat({
     }
 
     try {
-      const audio = new Audio(soundPath);
-      audio.volume = type === "send" ? 0.34 : 0.4;
-      audio.preload = "auto";
-      audio.play().catch(() => {});
+      playLowLatencyAudio(soundPath, { volume: type === "send" ? 0.34 : 0.4, poolSize: 3 });
     } catch {
       // ignore DM sound failures
     }
   };
+  useEffect(() => {
+    if (!isDirectChat) {
+      return;
+    }
+
+    primeLowLatencyAudio([
+      resolveDirectMessageSoundPath(user, "send"),
+      resolveDirectMessageSoundPath(user, "receive"),
+    ], { volume: 0.4, poolSize: 3 });
+  }, [isDirectChat, user]);
 
   useTextChatComposerPopovers({
     composerEmojiPickerOpen,
