@@ -25,7 +25,7 @@ const PASSWORD_MIN_LENGTH_MESSAGE = "Пароль должен быть не к�
 const PASSWORD_ALLOWED_PATTERN = /^[\x21-\x7E]+$/;
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 const QR_LOGIN_POLL_INTERVAL_MS = 1800;
-const AUTH_VIDEO_IDLE_DELAY_MS = 1400;
+const AUTH_VIDEO_IDLE_DELAY_MS = 350;
 const MAX_AUTH_NAME_LENGTH = 32;
 const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
@@ -340,11 +340,9 @@ export default function Auth({ onAuthSuccess }) {
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const [isAuthVideoAvailable, setIsAuthVideoAvailable] = useState(true);
   const [isAuthVideoLoadAllowed, setIsAuthVideoLoadAllowed] = useState(false);
-  const [authVideoBlobUrl, setAuthVideoBlobUrl] = useState("");
   const [isUserAgreementOpen, setIsUserAgreementOpen] = useState(false);
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
-  const authVideoBlobUrlRef = useRef("");
   const qrScannerVideoRef = useRef(null);
   const qrScannerStreamRef = useRef(null);
   const qrScannerFrameRef = useRef(0);
@@ -375,7 +373,7 @@ export default function Auth({ onAuthSuccess }) {
   const isRegistrationEmailVerification = emailVerificationModal.purpose === "registration";
   const shouldShowRegistrationCodeStep = mode === "register" && isRegistrationEmailVerification && emailVerificationModal.open;
   const shouldShowPasswordResetStep = mode === "login" && loginMethod === "password" && passwordResetState.open;
-  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed && Boolean(authVideoBlobUrl);
+  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed;
   const canResendPasswordResetCode =
     Boolean(passwordResetState.email) &&
     passwordResetState.step !== "email" &&
@@ -511,65 +509,6 @@ export default function Auth({ onAuthSuccess }) {
       }
     };
   }, [isAuthVideoAvailable, isLiteVisualMode]);
-
-  useEffect(() => {
-    if (!isAuthVideoLoadAllowed || isLiteVisualMode || !isAuthVideoAvailable) {
-      return undefined;
-    }
-
-    if (authVideoBlobUrlRef.current) {
-      setAuthVideoBlobUrl(authVideoBlobUrlRef.current);
-      return undefined;
-    }
-
-    let disposed = false;
-    const abortController = new AbortController();
-
-    const loadAuthVideoBlob = async () => {
-      try {
-        const response = await fetch(AUTH_BACKGROUND_VIDEO_URL, {
-          cache: "force-cache",
-          signal: abortController.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`Auth background video request failed: ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        if (disposed || abortController.signal.aborted) {
-          return;
-        }
-
-        const nextBlobUrl = URL.createObjectURL(blob);
-        authVideoBlobUrlRef.current = nextBlobUrl;
-        setAuthVideoBlobUrl(nextBlobUrl);
-      } catch {
-        if (disposed || abortController.signal.aborted) {
-          return;
-        }
-
-        setIsLiteVisualMode(true);
-        setIsAuthVideoAvailable(false);
-      }
-    };
-
-    loadAuthVideoBlob();
-
-    return () => {
-      disposed = true;
-      abortController.abort();
-    };
-  }, [isAuthVideoAvailable, isAuthVideoLoadAllowed, isLiteVisualMode]);
-
-  useEffect(() => () => {
-    const blobUrl = authVideoBlobUrlRef.current;
-    if (!blobUrl) {
-      return;
-    }
-
-    URL.revokeObjectURL(blobUrl);
-    authVideoBlobUrlRef.current = "";
-  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY);
@@ -1579,7 +1518,7 @@ export default function Auth({ onAuthSuccess }) {
           loop
           playsInline
           preload="auto"
-          src={authVideoBlobUrl}
+          src={AUTH_BACKGROUND_VIDEO_URL}
           disablePictureInPicture
           disableRemotePlayback
           aria-hidden="true"

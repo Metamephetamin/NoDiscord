@@ -32,18 +32,18 @@ test("auth background video starts after initial auth page work is idle", () => 
   );
   assert.match(
     authSource,
-    /shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed && Boolean\(authVideoBlobUrl\)/,
-    "auth video element must not mount before the idle-loaded blob URL is ready",
+    /shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed/,
+    "auth video element must not mount before the idle gate allows progressive loading",
+  );
+  assert.doesNotMatch(
+    authSource,
+    /response\.blob\(\)|URL\.createObjectURL|authVideoBlobUrl/,
+    "auth video must not wait for a full blob download before playback",
   );
   assert.match(
     authSource,
-    /fetch\(AUTH_BACKGROUND_VIDEO_URL,[\s\S]*?cache:\s*"force-cache"/,
-    "auth video should be fetched once through the browser cache before being attached as a blob URL",
-  );
-  assert.match(
-    authSource,
-    /src=\{authVideoBlobUrl\}/,
-    "auth video element must play from a blob URL instead of repeatedly opening the remote MP4",
+    /src=\{AUTH_BACKGROUND_VIDEO_URL\}/,
+    "auth video element must stream directly from the cacheable static video URL",
   );
 });
 

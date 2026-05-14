@@ -9,7 +9,7 @@ const requiredSourceMarkers = [
   'const MOBILE_AUTH_VISUAL_MODE_QUERY = "(max-width: 640px), (pointer: coarse)"',
   "if (!isMobileAuthVisualMode)",
   'className="auth-video-bg"',
-  "src={authVideoBlobUrl}",
+  "src={AUTH_BACKGROUND_VIDEO_URL}",
   'const authPageClassName = ["auth-page", "auth-page--login", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ")',
   'const authCardClassName = "auth-card auth-card--wide auth-card--login"',
   "className={authPageClassName}",
