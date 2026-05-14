@@ -252,7 +252,7 @@
   gap: 16px;
   padding: 20px;
   border-radius: 26px;
-  background: rgba(216, 216, 216, 0.548);
+  background: rgba(238, 241, 248, 0.94);
   /* box-shadow: 0 24px 60px rgba(4, 13, 27, 0.22); */
   backdrop-filter: none;
   transform: translate(var(--auth-card-shift-x), var(--auth-card-shift-y));
@@ -268,7 +268,7 @@
 }
 
 .auth-page--register .auth-card {
-  background: rgba(249, 251, 255, 0.88);
+  background: rgba(249, 251, 255, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow:
     0 24px 60px rgba(2, 9, 22, 0.2),
@@ -294,7 +294,7 @@
 }
 
 .auth-page--lite .auth-card {
-  background: rgba(224, 224, 228, 0.42);
+  background: rgba(238, 241, 248, 0.92);
   backdrop-filter: none;
 }
 
@@ -320,7 +320,7 @@
 }
 
 .auth-card--register {
-  width: min(100%, 628px);
+  width: min(100%, 560px);
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
   padding: 20px;
@@ -328,7 +328,7 @@
   margin-right: 0;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(249, 251, 255, 0.88);
+  background: rgba(249, 251, 255, 0.96);
   box-shadow:
     0 24px 60px rgba(2, 9, 22, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
@@ -426,7 +426,7 @@
 .auth-page--login .auth-card {
   margin: 0;
   transform: translateY(var(--auth-card-shift-y));
-  background: rgba(249, 251, 255, 0.7);
+  background: rgba(249, 251, 255, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow:
     0 24px 60px rgba(2, 9, 22, 0.2),
