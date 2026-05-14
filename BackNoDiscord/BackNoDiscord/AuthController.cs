@@ -41,6 +41,7 @@ public class AuthController : ControllerBase
     private readonly IWebHostEnvironment _environment;
     private readonly CryptoService _crypto;
     private readonly UserSessionService _userSessionService;
+    private readonly AccountBanService _accountBanService;
     private readonly PasswordHasher<User> _passwordHasher;
 
     public AuthController(
@@ -49,7 +50,8 @@ public class AuthController : ControllerBase
         IEmailVerificationSender emailVerificationSender,
         IWebHostEnvironment environment,
         CryptoService crypto,
-        UserSessionService userSessionService)
+        UserSessionService userSessionService,
+        AccountBanService accountBanService)
     {
         _context = context;
         _config = config;
@@ -57,6 +59,7 @@ public class AuthController : ControllerBase
         _environment = environment;
         _crypto = crypto;
         _userSessionService = userSessionService;
+        _accountBanService = accountBanService;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -85,6 +88,11 @@ public class AuthController : ControllerBase
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
+        }
+
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse();
         }
 
         var authSession = await IssueAuthSessionAsync(user);
@@ -164,6 +172,11 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return BadRequest(new { message = "Пользователь с такой почтой не найден." });
+        }
+
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse();
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -423,6 +436,11 @@ public class AuthController : ControllerBase
             return BadRequest(new { status = "invalid", message = "QR-код устарел или уже использован." });
         }
 
+        if (record.ApprovedUser.IsBanned)
+        {
+            return CreateAccountBannedResponse();
+        }
+
         record.ConsumedAt = now;
         var authSession = await IssueAuthSessionAsync(record.ApprovedUser);
         await _context.SaveChangesAsync();
@@ -456,6 +474,11 @@ public class AuthController : ControllerBase
         var status = GetQrLoginStatus(record, DateTimeOffset.UtcNow);
         if (status == "approved" && record.ApprovedUser != null)
         {
+            if (record.ApprovedUser.IsBanned)
+            {
+                return CreateAccountBannedResponse();
+            }
+
             record.ConsumedAt = DateTimeOffset.UtcNow;
             var authSession = await IssueAuthSessionAsync(record.ApprovedUser);
             await _context.SaveChangesAsync();
@@ -551,6 +574,11 @@ public class AuthController : ControllerBase
             return BadRequest(CreateInvalidCredentialsError());
         }
 
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse();
+        }
+
         if (string.IsNullOrWhiteSpace(user.email))
         {
             return BadRequest(CreateLoginError(
@@ -600,6 +628,11 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return BadRequest(new { message = "Пользователь с такой почтой не найден.", fieldErrors = new { email = "Пользователь с такой почтой не найден." } });
+        }
+
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse();
         }
 
         try
@@ -655,6 +688,11 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return BadRequest(new { message = "Сессия восстановления пароля не найдена. Запросите код заново." });
+        }
+
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse();
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -925,6 +963,11 @@ public class AuthController : ControllerBase
             await _context.SaveChangesAsync();
         }
 
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse();
+        }
+
         if (RequireEmailRegistrationVerification && !string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
         {
             try
@@ -976,6 +1019,12 @@ public class AuthController : ControllerBase
         }
 
         var now = DateTimeOffset.UtcNow;
+        if (storedToken.User.IsBanned)
+        {
+            await _accountBanService.RevokeActiveSessionsAsync(storedToken.User.id, now, cancellationToken);
+            return CreateAccountBannedResponse();
+        }
+
         if (storedToken.RevokedAt.HasValue)
         {
             await _userSessionService.RevokeActiveSessionsAfterRefreshTokenReuseAsync(tokenHash, now, cancellationToken);
@@ -1229,6 +1278,8 @@ public class AuthController : ControllerBase
             user.phone_number,
             user.is_phone_verified,
             is_totp_enabled = user.is_totp_enabled,
+            is_admin = _accountBanService.IsAdmin(user),
+            is_banned = user.IsBanned,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1257,6 +1308,8 @@ public class AuthController : ControllerBase
             user.phone_number,
             user.is_phone_verified,
             is_totp_enabled = user.is_totp_enabled,
+            is_admin = _accountBanService.IsAdmin(user),
+            is_banned = user.IsBanned,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1311,6 +1364,8 @@ public class AuthController : ControllerBase
             phone_number = user.phone_number ?? string.Empty,
             is_phone_verified = user.is_phone_verified,
             is_totp_enabled = user.is_totp_enabled,
+            is_admin = _accountBanService.IsAdmin(user),
+            is_banned = user.IsBanned,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1675,6 +1730,15 @@ public class AuthController : ControllerBase
             message,
             fieldErrors
         };
+    }
+
+    private ObjectResult CreateAccountBannedResponse()
+    {
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            code = "account_banned",
+            message = "Аккаунт заблокирован. Доступ к приложению закрыт."
+        });
     }
 
     private static object CreateInvalidCredentialsError()

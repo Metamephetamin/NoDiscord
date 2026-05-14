@@ -25,7 +25,7 @@ const PASSWORD_MIN_LENGTH_MESSAGE = "Пароль должен быть не к�
 const PASSWORD_ALLOWED_PATTERN = /^[\x21-\x7E]+$/;
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 const QR_LOGIN_POLL_INTERVAL_MS = 1800;
-const AUTH_VIDEO_IDLE_DELAY_MS = 350;
+const AUTH_VIDEO_IDLE_DELAY_MS = 80;
 const MAX_AUTH_NAME_LENGTH = 32;
 const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
@@ -217,6 +217,10 @@ function mapAuthUser(data) {
     phoneNumber: data?.phone_number || "",
     isPhoneVerified: Boolean(data?.is_phone_verified),
     isTotpEnabled: Boolean(data?.is_totp_enabled),
+    isAdmin: Boolean(data?.is_admin ?? data?.isAdmin),
+    is_admin: Boolean(data?.is_admin ?? data?.isAdmin),
+    isBanned: Boolean(data?.is_banned ?? data?.isBanned),
+    is_banned: Boolean(data?.is_banned ?? data?.isBanned),
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
     avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
@@ -1504,8 +1508,13 @@ export default function Auth({ onAuthSuccess }) {
     handleLogin(event);
   };
 
-  const authPageClassName = ["auth-page", "auth-page--login", isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ");
-  const authCardClassName = "auth-card auth-card--wide auth-card--login";
+  const authPanelKey = shouldShowRegistrationCodeStep
+    ? "register-code"
+    : shouldShowPasswordResetStep
+      ? `password-reset-${passwordResetState.step}`
+      : `${mode}-${loginMethod}`;
+  const authPageClassName = ["auth-page", `auth-page--${mode}`, isLiteVisualMode ? "auth-page--lite" : ""].filter(Boolean).join(" ");
+  const authCardClassName = ["auth-card", "auth-card--wide", `auth-card--${mode}`].join(" ");
 
   return (
     <div className={authPageClassName}>
@@ -1517,7 +1526,7 @@ export default function Auth({ onAuthSuccess }) {
           muted
           loop
           playsInline
-          preload="auto"
+          preload="metadata"
           src={AUTH_BACKGROUND_VIDEO_URL}
           disablePictureInPicture
           disableRemotePlayback
@@ -1558,7 +1567,7 @@ export default function Auth({ onAuthSuccess }) {
         className={authCardClassName}
         onSubmit={handleAuthSubmit}
       >
-        <div className="auth-card__main">
+        <div key={authPanelKey} className="auth-card__main">
           <div className="auth-card__heading">
             {mode === "login" ? (
               <h2 className="auth-card__title auth-card__title--login">Вход</h2>

@@ -289,6 +289,7 @@ builder.Services.AddScoped<MessageSearchService>();
 builder.Services.AddScoped<MessageDeduplicationService>();
 builder.Services.AddScoped<ChatReadStateService>();
 builder.Services.AddScoped<UserSessionService>();
+builder.Services.AddScoped<AccountBanService>();
 builder.Services.AddScoped<ModerationService>();
 builder.Services.AddSingleton<ChatSpamBurstLimiter>();
 builder.Services.AddScoped<AuditLogService>();
@@ -388,6 +389,39 @@ app.UseRouting();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var userId = AccountBanService.GetUserId(context.User);
+    if (!userId.HasValue)
+    {
+        await next();
+        return;
+    }
+
+    var path = context.Request.Path;
+    if (!path.StartsWithSegments("/api") &&
+        !path.StartsWithSegments("/chatHub") &&
+        !path.StartsWithSegments("/voiceHub"))
+    {
+        await next();
+        return;
+    }
+
+    var accountBanService = context.RequestServices.GetRequiredService<AccountBanService>();
+    if (await accountBanService.IsUserBannedAsync(userId.Value, context.RequestAborted))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            code = "account_banned",
+            message = "Аккаунт заблокирован. Доступ к приложению закрыт."
+        });
+        return;
+    }
+
+    await next();
+});
 app.Use(async (context, next) =>
 {
     var authorization = context.Request.Headers.Authorization.ToString();

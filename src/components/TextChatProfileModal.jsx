@@ -141,7 +141,8 @@ export default function TextChatProfileModal({
   const relationshipLabel = getRelationshipLabel(profile);
   const canAddFriend = !profile.isSelf && !profile.isFriend && typeof onAddFriend === "function";
   const canMessage = Boolean(profile.canOpenDirectChat && profile.isFriend && !profile.isBlocked && !profile.blockedYou);
-  const canCall = Boolean(canMessage && typeof onStartDirectCall === "function");
+  const showCallAction = Boolean(canMessage && typeof onStartDirectCall === "function");
+  const canCall = Boolean(showCallAction && isOnline);
   const showMessageAction = !canAddFriend;
   const detailCards = [
     { id: "activity", icon: "activity", label: "Активность", value: presenceLabel },
@@ -291,11 +292,13 @@ export default function TextChatProfileModal({
                   Сообщение
                 </button>
               ) : null}
-              {canCall ? (
+              {showCallAction ? (
                 <button
                   type="button"
                   className="chat-profile-modal__action"
                   onClick={onStartDirectCall}
+                  disabled={!canCall}
+                  title={canCall ? "Позвонить" : "Пользователь не в сети"}
                 >
                   <ProfileIcon kind="call" className="chat-profile-modal__action-icon" />
                   Позвонить

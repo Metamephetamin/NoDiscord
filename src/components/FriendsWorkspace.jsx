@@ -669,6 +669,7 @@ export const FriendsMain = ({
   const [friendDirectorySearch, setFriendDirectorySearch] = useState("");
   const [friendDirectoryFilter, setFriendDirectoryFilter] = useState("all");
   const directBlockNotice = currentConversationTarget ? null : getDirectBlockNotice(currentDirectFriend);
+  const currentDirectFriendOnline = Boolean(currentDirectFriend && isUserCurrentlyOnline(currentDirectFriend));
   const activeDirectCall = directCallPanelProps?.call;
   const activeDirectCallPanelProps =
     !currentConversationTarget &&
@@ -1360,9 +1361,9 @@ export const FriendsMain = ({
                     type="button"
                     className="chat__topbar-icon"
                     onClick={() => onStartDirectCall?.(currentDirectFriend.id)}
-                    disabled={Boolean(directBlockNotice)}
+                    disabled={Boolean(directBlockNotice || !currentDirectFriendOnline)}
                     aria-label="Позвонить"
-                    title="Позвонить"
+                    title={currentDirectFriendOnline ? "Позвонить" : "Пользователь не в сети"}
                   >
                     {phoneIcon ? <img src={phoneIcon} alt="" /> : <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">📞</span>}
                   </button>
@@ -1609,6 +1610,7 @@ export const FriendsMain = ({
                   {friendDirectoryRows.map((friend) => {
                     const status = getFriendDirectoryStatus(friend);
                     const actionDisabled = Boolean(friend?.isBlocked || friend?.blockedYou);
+                    const callDisabled = Boolean(actionDisabled || !isUserCurrentlyOnline(friend));
 
                     return (
                       <div
@@ -1662,7 +1664,7 @@ export const FriendsMain = ({
                           <button type="button" className="friends-directory__action" disabled={actionDisabled} onClick={() => onOpenDirectChat(friend.id)} aria-label={`Открыть чат с ${getDisplayName(friend)}`} title="Открыть чат">
                             <FriendsActionIcon kind="chat" />
                           </button>
-                          <button type="button" className="friends-directory__action" disabled={actionDisabled} onClick={() => onStartDirectCall?.(friend.id)} aria-label={`Позвонить ${getDisplayName(friend)}`} title="Позвонить">
+                          <button type="button" className="friends-directory__action" disabled={callDisabled} onClick={() => onStartDirectCall?.(friend.id)} aria-label={`Позвонить ${getDisplayName(friend)}`} title={callDisabled ? "Пользователь не в сети" : "Позвонить"}>
                             <FriendsActionIcon kind="call" />
                           </button>
                           <button type="button" className="friends-directory__action" onClick={(event) => onOpenDirectActions?.(event, friend)} aria-label={`Действия с ${getDisplayName(friend)}`} title="Действия">

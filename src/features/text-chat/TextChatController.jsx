@@ -32,6 +32,7 @@ import {
 } from "../../utils/textChatHelpers";
 import { normalizeVoiceMessageMetadata } from "../../utils/voiceMessages";
 import { shouldTrackIncomingUnread } from "../../utils/unreadState";
+import { isUserCurrentlyOnline } from "../../utils/menuMainModel";
 
 import {
   createPinnedSnapshot,
@@ -1587,7 +1588,7 @@ export default function TextChat({
   };
 
   const handleStartDirectCallFromUserMenu = () => {
-    if (!userContextMenu?.userId || typeof onStartDirectCall !== "function" || userContextMenu.isSelf || userContextMenu.isBlocked || userContextMenu.blockedYou) {
+    if (!userContextMenu?.userId || typeof onStartDirectCall !== "function" || userContextMenu.isSelf || userContextMenu.isBlocked || userContextMenu.blockedYou || !isUserCurrentlyOnline(userContextMenu)) {
       return;
     }
 
@@ -1607,7 +1608,7 @@ export default function TextChat({
   };
 
   const handleStartDirectCallFromProfileModal = () => {
-    if (!profileModal?.userId || typeof onStartDirectCall !== "function" || profileModal.isSelf || profileModal.isBlocked || profileModal.blockedYou) {
+    if (!profileModal?.userId || typeof onStartDirectCall !== "function" || profileModal.isSelf || profileModal.isBlocked || profileModal.blockedYou || !isUserCurrentlyOnline(profileModal)) {
       return;
     }
 
@@ -1747,7 +1748,7 @@ export default function TextChat({
         id: "direct-call",
         label: "Позвонить",
         icon: "☎",
-        disabled: Boolean(userContextMenu?.isSelf || userContextMenu?.isBlocked || userContextMenu?.blockedYou || typeof onStartDirectCall !== "function"),
+        disabled: Boolean(userContextMenu?.isSelf || userContextMenu?.isBlocked || userContextMenu?.blockedYou || !isUserCurrentlyOnline(userContextMenu) || typeof onStartDirectCall !== "function"),
         onClick: handleStartDirectCallFromUserMenu,
       },
     ],

@@ -339,7 +339,8 @@ public sealed class AuthControllerTests : IDisposable
             _emailSender,
             new TestWebHostEnvironment { EnvironmentName = environmentName },
             new CryptoService(configuration),
-            new UserSessionService(_context));
+            new UserSessionService(_context),
+            new AccountBanService(_context, configuration));
     }
 
     private static User BuildUser(int id, string email)

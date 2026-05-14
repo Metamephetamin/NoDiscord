@@ -51,6 +51,10 @@ function mapLocalDevAuthUser(data) {
     phoneNumber: data?.phone_number || "",
     isPhoneVerified: Boolean(data?.is_phone_verified),
     isTotpEnabled: Boolean(data?.is_totp_enabled),
+    isAdmin: Boolean(data?.is_admin ?? data?.isAdmin),
+    is_admin: Boolean(data?.is_admin ?? data?.isAdmin),
+    isBanned: Boolean(data?.is_banned ?? data?.isBanned),
+    is_banned: Boolean(data?.is_banned ?? data?.isBanned),
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
     avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
@@ -710,6 +714,10 @@ export async function refreshAccessToken() {
               data.is_phone_verified ?? sessionCache.user?.isPhoneVerified ?? sessionCache.user?.phone_verified ?? false
             ),
             isTotpEnabled: Boolean(data.is_totp_enabled ?? sessionCache.user?.isTotpEnabled ?? false),
+            isAdmin: Boolean(data.is_admin ?? data.isAdmin ?? sessionCache.user?.isAdmin ?? sessionCache.user?.is_admin ?? false),
+            is_admin: Boolean(data.is_admin ?? data.isAdmin ?? sessionCache.user?.isAdmin ?? sessionCache.user?.is_admin ?? false),
+            isBanned: Boolean(data.is_banned ?? data.isBanned ?? sessionCache.user?.isBanned ?? sessionCache.user?.is_banned ?? false),
+            is_banned: Boolean(data.is_banned ?? data.isBanned ?? sessionCache.user?.isBanned ?? sessionCache.user?.is_banned ?? false),
             avatarUrl: data.avatar_url || sessionCache.user?.avatarUrl || sessionCache.user?.avatar || "",
             avatar: data.avatar_url || sessionCache.user?.avatar || sessionCache.user?.avatarUrl || "",
             avatarFrame: parseMediaFrame(
@@ -786,6 +794,12 @@ export async function authFetch(input, init = {}) {
     throw wrappedError;
   }
 
+  if (response.status === 403 && await isAccountBannedResponse(response)) {
+    await clearStoredSession();
+    notifyUnauthorizedSession("account_banned");
+    return response;
+  }
+
   if (response.status !== 401) {
     return response;
   }
@@ -820,9 +834,21 @@ export async function authFetch(input, init = {}) {
 
   if (response.status === 401) {
     notifyUnauthorizedSession("http_401");
+  } else if (response.status === 403 && await isAccountBannedResponse(response)) {
+    await clearStoredSession();
+    notifyUnauthorizedSession("account_banned");
   }
 
   return response;
+}
+
+async function isAccountBannedResponse(response) {
+  try {
+    const data = await response.clone().json();
+    return data?.code === "account_banned";
+  } catch {
+    return false;
+  }
 }
 
 

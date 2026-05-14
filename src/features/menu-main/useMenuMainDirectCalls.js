@@ -4,6 +4,7 @@ import {
   getDisplayName,
   getUserAvatar,
   getUserAvatarFrame,
+  isUserCurrentlyOnline,
 } from "../../utils/menuMainModel";
 import {
   buildDirectCallState,
@@ -74,6 +75,12 @@ export default function useMenuMainDirectCalls({
     if (!targetUser || !channelId) {
       directCallActionInFlightRef.current = false;
       showServerInviteFeedback("Не удалось подготовить личный звонок.");
+      return;
+    }
+
+    if (!isUserCurrentlyOnline(targetUser)) {
+      directCallActionInFlightRef.current = false;
+      showServerInviteFeedback(`${getDisplayName(targetUser)} сейчас не в сети. Звонок недоступен.`);
       return;
     }
 

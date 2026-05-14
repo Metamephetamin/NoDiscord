@@ -239,6 +239,18 @@ public class User
     [Column("privacy_version")]
     public string? privacy_version { get; set; }
 
+    [Column("is_banned")]
+    public bool IsBanned { get; set; }
+
+    [Column("banned_at")]
+    public DateTimeOffset? BannedAt { get; set; }
+
+    [Column("banned_by_user_id")]
+    public int? BannedByUserId { get; set; }
+
+    [Column("ban_reason")]
+    public string? BanReason { get; set; }
+
     [Column("password_hash")]
     public string password_hash { get; set; } = null!;
 }
@@ -926,6 +938,11 @@ public class AppDbContext : DbContext
             entity.Property(x => x.terms_accepted_at).IsRequired(false);
             entity.Property(x => x.terms_version).IsRequired(false);
             entity.Property(x => x.privacy_version).IsRequired(false);
+            entity.Property(x => x.IsBanned).HasDefaultValue(false);
+            entity.Property(x => x.BannedAt).IsRequired(false);
+            entity.Property(x => x.BannedByUserId).IsRequired(false);
+            entity.Property(x => x.BanReason).IsRequired(false);
+            entity.HasIndex(x => new { x.IsBanned, x.BannedAt });
             entity.Property(x => x.password_hash).IsRequired();
         });
 

@@ -1,5 +1,6 @@
 import {
   AccountSettings,
+  AdminSettingsPanel,
   AppearanceAccessibilitySettings,
   DevicesSettings,
   IntegrationsSettings,
@@ -354,6 +355,10 @@ export function MenuMainSettingsContent({
           canManage={Boolean(canManageServer || canManageMessages)}
         />
       );
+    case "admin":
+      return user?.isAdmin || user?.is_admin ? (
+        <AdminSettingsPanel currentUserId={currentUserId} />
+      ) : null;
     case "voice_video":
     default:
       return (

@@ -165,6 +165,7 @@ import {
   getUserProfileBackgroundFrame,
   hasServerPermission,
   HEADPHONES_ICON_URL,
+  isUserCurrentlyOnline,
   isPersonalDefaultServer,
   isServerOwnedByUser,
   isValidProfileName,
@@ -199,7 +200,7 @@ import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatenc
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
 const MAX_CHAT_BACKGROUND_BYTES = 1.5 * 1024 * 1024;
 const CHAT_BACKGROUND_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-const SETTINGS_NAV_SECTIONS = SETTINGS_NAV_ITEMS.reduce((sections, item) => {
+const groupSettingsNavItems = (items) => items.reduce((sections, item) => {
   if (!sections[item.section]) {
     sections[item.section] = [];
   }
@@ -4693,6 +4694,11 @@ export default function MenuMain({
       return;
     }
 
+    if (targetFriend && !isUserCurrentlyOnline(targetFriend)) {
+      showServerInviteFeedback(`${getDisplayName(targetFriend)} сейчас не в сети. Звонок недоступен.`);
+      return;
+    }
+
     return startDirectCallWithUser(targetUserId);
   }, [friendsWithRelationState, showServerInviteFeedback, startDirectCallWithUser]);
   useMenuMainKeyboardShortcuts({
@@ -5643,14 +5649,20 @@ export default function MenuMain({
   };
 
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
-  const settingsNavSections = SETTINGS_NAV_SECTIONS;
+  const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
+  const settingsNavItems = useMemo(
+    () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "admin" || isCurrentUserAdmin),
+    [isCurrentUserAdmin]
+  );
+  const settingsNavSections = useMemo(() => groupSettingsNavItems(settingsNavItems), [settingsNavItems]);
   const mobileSettingsNavItems = useMemo(
-    () => SETTINGS_NAV_ITEMS.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation")),
-    [activeServer]
+    () => settingsNavItems.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation")),
+    [activeServer, settingsNavItems]
   );
   const activeSettingsTabMeta =
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
-    SETTINGS_NAV_ITEMS.find((item) => item.id === settingsTab) ||
+    settingsNavItems.find((item) => item.id === settingsTab) ||
+    settingsNavItems[0] ||
     SETTINGS_NAV_ITEMS[0];
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
   const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
@@ -6338,7 +6350,7 @@ export default function MenuMain({
           id: "direct-call",
           label: "Позвонить",
           icon: "☎",
-          disabled: Boolean(!friendListUserContextMenu?.userId || friendListUserContextMenu?.isBlocked || friendListUserContextMenu?.blockedYou),
+          disabled: Boolean(!friendListUserContextMenu?.userId || friendListUserContextMenu?.isBlocked || friendListUserContextMenu?.blockedYou || !isUserCurrentlyOnline(friendListUserContextMenu)),
           onClick: () => {
             const targetUserId = friendListUserContextMenu?.userId;
             if (!targetUserId) {
@@ -6418,7 +6430,7 @@ export default function MenuMain({
           setFriendListProfileModal(null);
         }}
         onStartDirectCall={() => {
-          if (!friendListProfileModal?.userId || friendListProfileModal.isSelf || friendListProfileModal.isBlocked || friendListProfileModal.blockedYou) {
+          if (!friendListProfileModal?.userId || friendListProfileModal.isSelf || friendListProfileModal.isBlocked || friendListProfileModal.blockedYou || !isUserCurrentlyOnline(friendListProfileModal)) {
             return;
           }
 

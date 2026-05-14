@@ -181,6 +181,12 @@ const SETTINGS_NAV_ICON_PATHS = {
       <path d="M4.5 19.5h15" />
     </>
   ),
+  admin: (
+    <>
+      <path d="M12 3.8 18.5 6v5.2c0 4.1-2.4 7.4-6.5 9-4.1-1.6-6.5-4.9-6.5-9V6L12 3.8Z" />
+      <path d="M9.3 12.1 11.2 14l3.7-4" />
+    </>
+  ),
   server: (
     <>
       <rect x="5" y="4.5" width="14" height="5" rx="1.5" />

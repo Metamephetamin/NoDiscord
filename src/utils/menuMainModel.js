@@ -914,6 +914,7 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "notifications", label: "Уведомления", section: "Пользователь" },
   { id: "voice_video", label: "Голос и видео", section: "Приложение" },
   { id: "appearance_accessibility", label: "Внешний вид и доступность", section: "Приложение" },
+  { id: "admin", label: "Админка", section: "Администрирование" },
   { id: "server", label: "Сервер", section: "Текущий сервер" },
   { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
   { id: "moderation", label: "Модерация", section: "Текущий сервер" },

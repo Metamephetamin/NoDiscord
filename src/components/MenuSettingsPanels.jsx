@@ -1015,6 +1015,181 @@ export const IntegrationsSettings = ({
   );
 };
 
+const formatAdminDate = (value) => {
+  if (!value) {
+    return "нет данных";
+  }
+
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "нет данных";
+};
+
+export const AdminSettingsPanel = ({ currentUserId }) => {
+  const [query, setQuery] = useState("");
+  const [reason, setReason] = useState("");
+  const [users, setUsers] = useState([]);
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [busyUserId, setBusyUserId] = useState("");
+
+  const loadUsers = async (nextQuery = query) => {
+    setLoading(true);
+    setStatus("");
+    try {
+      const params = new URLSearchParams();
+      const normalizedQuery = String(nextQuery || "").trim();
+      if (normalizedQuery) {
+        params.set("query", normalizedQuery);
+      }
+      params.set("limit", "60");
+
+      const response = await authFetch(`${API_BASE_URL}/admin/users?${params.toString()}`, { method: "GET" });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(data, "Не удалось загрузить пользователей."));
+      }
+
+      setUsers(Array.isArray(data?.users) ? data.users : []);
+    } catch (error) {
+      setStatus(error?.message || "Не удалось загрузить пользователей.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    loadUsers(query);
+  };
+
+  const updateBanState = async (targetUser, shouldBan) => {
+    const userId = String(targetUser?.id || "").trim();
+    if (!userId || (String(userId) === String(currentUserId || "") && shouldBan)) {
+      return;
+    }
+
+    setBusyUserId(userId);
+    setStatus("");
+    try {
+      const response = await authFetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/${shouldBan ? "ban" : "unban"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: shouldBan ? JSON.stringify({ reason }) : undefined,
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(data, shouldBan ? "Не удалось заблокировать пользователя." : "Не удалось снять блокировку."));
+      }
+
+      setUsers((previousUsers) => previousUsers.map((user) => (
+        String(user.id) === userId
+          ? {
+              ...user,
+              isBanned: shouldBan,
+              bannedAt: shouldBan ? new Date().toISOString() : "",
+              banReason: shouldBan ? reason.trim() : "",
+              bannedByUserId: shouldBan ? currentUserId : null,
+            }
+          : user
+      )));
+      setStatus(shouldBan ? "Пользователь заблокирован, активные сессии отозваны." : "Блокировка снята.");
+    } catch (error) {
+      setStatus(error?.message || "Не удалось изменить блокировку.");
+    } finally {
+      setBusyUserId("");
+    }
+  };
+
+  return (
+    <div className="settings-shell__content settings-shell__content--admin">
+      <div className="settings-shell__content-header">
+        <h2>Админка</h2>
+        <p>Блокировка аккаунта закрывает вход, refresh, QR-вход и отзывает активные сессии пользователя.</p>
+      </div>
+
+      <section className="admin-settings-card">
+        <form className="admin-settings-search" onSubmit={submitSearch}>
+          <label className="admin-settings-field">
+            <span>Поиск пользователя</span>
+            <input
+              className="settings-input"
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="ID, ник или email"
+            />
+          </label>
+          <button type="submit" className="settings-inline-button" disabled={loading}>
+            {loading ? "Ищем..." : "Найти"}
+          </button>
+        </form>
+
+        <label className="admin-settings-field admin-settings-field--reason">
+          <span>Причина бана</span>
+          <textarea
+            className="settings-input admin-settings-reason"
+            value={reason}
+            maxLength={500}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Необязательно, будет видно только в админке"
+          />
+        </label>
+      </section>
+
+      {status ? <div className="admin-settings-status">{status}</div> : null}
+
+      <section className="admin-users-list" aria-busy={loading}>
+        {users.map((targetUser) => {
+          const userId = String(targetUser.id || "");
+          const isSelf = String(currentUserId || "") === userId || targetUser.isSelf;
+          const busy = busyUserId === userId;
+
+          return (
+            <article key={userId} className={`admin-user-row ${targetUser.isBanned ? "admin-user-row--banned" : ""}`}>
+              <AnimatedAvatar className="admin-user-row__avatar" src={targetUser.avatarUrl} alt={targetUser.displayName || targetUser.nickname || userId} />
+              <div className="admin-user-row__body">
+                <div className="admin-user-row__title">
+                  <strong>{targetUser.displayName || targetUser.nickname || `User ${userId}`}</strong>
+                  <span>ID {userId}</span>
+                  {targetUser.isAdmin ? <span className="admin-user-row__badge">admin</span> : null}
+                  {targetUser.isBanned ? <span className="admin-user-row__badge admin-user-row__badge--danger">ban</span> : null}
+                </div>
+                <div className="admin-user-row__meta">
+                  <span>{targetUser.email || "email не указан"}</span>
+                  <span>последний визит: {formatAdminDate(targetUser.lastSeenAt)}</span>
+                  {targetUser.isBanned ? <span>бан: {formatAdminDate(targetUser.bannedAt)}</span> : null}
+                </div>
+                {targetUser.isBanned && targetUser.banReason ? (
+                  <p className="admin-user-row__reason">{targetUser.banReason}</p>
+                ) : null}
+              </div>
+              <div className="admin-user-row__actions">
+                {targetUser.isBanned ? (
+                  <button type="button" className="settings-inline-button" disabled={busy} onClick={() => updateBanState(targetUser, false)}>
+                    {busy ? "Снимаем..." : "Разбанить"}
+                  </button>
+                ) : (
+                  <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={busy || isSelf} onClick={() => updateBanState(targetUser, true)}>
+                    {busy ? "Баним..." : "Забанить"}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+        {!loading && users.length === 0 ? <div className="admin-users-list__empty">Пользователи не найдены.</div> : null}
+      </section>
+    </div>
+  );
+};
+
 export const VoiceSettingsPanel = ({
   audioInputDevices,
   audioOutputDevices,

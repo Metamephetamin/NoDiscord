@@ -486,6 +486,10 @@ export default function Renderer() {
             data.is_phone_verified ?? savedUser.isPhoneVerified ?? savedUser.phone_verified ?? false
           ),
           isTotpEnabled: Boolean(data.is_totp_enabled ?? savedUser.isTotpEnabled ?? false),
+          isAdmin: Boolean(data.is_admin ?? data.isAdmin ?? savedUser.isAdmin ?? savedUser.is_admin ?? false),
+          is_admin: Boolean(data.is_admin ?? data.isAdmin ?? savedUser.isAdmin ?? savedUser.is_admin ?? false),
+          isBanned: Boolean(data.is_banned ?? data.isBanned ?? savedUser.isBanned ?? savedUser.is_banned ?? false),
+          is_banned: Boolean(data.is_banned ?? data.isBanned ?? savedUser.isBanned ?? savedUser.is_banned ?? false),
           avatarUrl: data.avatar_url || savedUser.avatarUrl || savedUser.avatar || "",
           avatar: data.avatar_url || savedUser.avatar || savedUser.avatarUrl || "",
           avatarFrame: parseMediaFrame(data.avatar_frame, data.avatarFrame, savedUser.avatarFrame, savedUser.avatar_frame),

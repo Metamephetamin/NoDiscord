@@ -19517,3 +19517,145 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 ):focus-visible {
   outline: none !important;
 }
+
+.settings-shell__content--admin {
+  gap: 16px;
+}
+
+.admin-settings-card,
+.admin-user-row {
+  border: 1px solid rgba(139, 152, 178, 0.22);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.12);
+}
+
+.admin-settings-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.admin-settings-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.admin-settings-field {
+  display: grid;
+  gap: 8px;
+  color: var(--app-text);
+  font-weight: 800;
+}
+
+.admin-settings-reason {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.admin-settings-status,
+.admin-users-list__empty {
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.admin-users-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+
+.admin-user-row--banned {
+  border-color: rgba(255, 92, 92, 0.32);
+  background: rgba(255, 72, 72, 0.08);
+}
+
+.admin-user-row__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+}
+
+.admin-user-row__body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-user-row__title,
+.admin-user-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-user-row__title strong {
+  color: var(--app-text);
+}
+
+.admin-user-row__title span,
+.admin-user-row__meta,
+.admin-user-row__reason {
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.admin-user-row__badge {
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(102, 119, 255, 0.16);
+  color: #9ba8ff;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.admin-user-row__badge--danger {
+  background: rgba(255, 77, 95, 0.16);
+  color: #ff8c98;
+}
+
+.admin-user-row__reason {
+  margin: 0;
+}
+
+.admin-user-row__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-inline-button--danger {
+  color: #ffdfe3;
+  background: linear-gradient(180deg, rgba(255, 79, 98, 0.88), rgba(190, 45, 61, 0.88));
+}
+
+html[data-ui-theme="light"] .admin-settings-card,
+html[data-ui-theme="light"] .admin-user-row {
+  border-color: #d8e0ee;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+html[data-ui-theme="light"] .admin-user-row--banned {
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+html[data-ui-theme="light"] .admin-user-row__badge {
+  color: #3347d8;
+  background: #eef3ff;
+}
+
+html[data-ui-theme="light"] .admin-user-row__badge--danger {
+  color: #b42336;
+  background: #ffe4e8;
+}

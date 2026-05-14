@@ -225,6 +225,20 @@
   }
 }
 
+@keyframes authPanelSwapIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+    filter: blur(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
 .auth-card {
   position: relative;
   z-index: 2;
@@ -240,6 +254,13 @@
   transform: translate(var(--auth-card-shift-x), var(--auth-card-shift-y));
   margin-top: -80px;
   margin-right: -20px;
+  transition:
+    width 0.22s ease,
+    max-width 0.22s ease,
+    margin 0.22s ease,
+    transform 0.22s ease,
+    border-radius 0.22s ease,
+    background-color 0.22s ease;
 }
 
 .auth-page--register .auth-card {
@@ -414,6 +435,8 @@
   flex-direction: column;
   gap: 18px;
   min-width: 0;
+  animation: authPanelSwapIn 0.24s ease both;
+  will-change: opacity, transform;
 }
 
 .auth-card__heading {
