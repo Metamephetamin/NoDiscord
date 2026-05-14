@@ -2650,3 +2650,71 @@
   width: 100%;
   min-width: 0;
 }
+
+@media (min-width: 641px) {
+  .auth-page--login,
+  .auth-page--register {
+    --auth-brand-shift-y: 0px;
+    --auth-card-shift-x: 0px;
+    --auth-card-shift-y: 0px;
+    justify-content: flex-start;
+    align-items: center;
+    gap: clamp(42px, 7vh, 84px);
+    padding:
+      calc(clamp(48px, 7vh, 76px) + env(safe-area-inset-top, 0px))
+      24px
+      calc(32px + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .auth-page--login .auth-brand,
+  .auth-page--register .auth-brand {
+    width: min(100%, 1040px);
+    max-width: calc(100vw - 48px);
+    margin: 0 auto;
+    align-items: center;
+    transform: none;
+  }
+
+  .auth-page--login .auth-card,
+  .auth-page--register .auth-card,
+  .auth-card--login,
+  .auth-card--register {
+    box-sizing: border-box;
+    width: 400px;
+    max-width: calc(100vw - 48px);
+    margin: 0;
+    transform: none;
+  }
+
+  .auth-card--login,
+  .auth-card--register {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px;
+    border-radius: 18px;
+  }
+
+  .auth-page--login .auth-card.auth-card--login:has(.auth-card__side--qr) {
+    width: min(100%, 624px);
+    max-width: calc(100vw - 48px);
+  }
+
+  .auth-card--login .auth-card__main,
+  .auth-card--register .auth-card__main {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .auth-page--login .auth-card--login .auth-card__heading,
+  .auth-page--login .auth-card--login .auth-section,
+  .auth-page--login .auth-card--login .auth-submit,
+  .auth-page--login .auth-card--login .auth-login-divider,
+  .auth-page--login .auth-card--login .auth-qr-entry,
+  .auth-page--login .auth-card--login .auth-card__links,
+  .auth-page--login .auth-card--login .auth-card__forgot,
+  .auth-page--login .auth-card--login .auth-message {
+    max-width: none;
+  }
+}
