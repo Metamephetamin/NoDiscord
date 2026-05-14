@@ -30,6 +30,20 @@ test("getTelegramUploadOverlayState exposes cancel action while uploading", () =
   assert.equal(state.progress, 58);
 });
 
+test("getTelegramUploadOverlayState exposes uploaded and total size while uploading", () => {
+  const state = getTelegramUploadOverlayState({
+    localEchoStatus: "uploading",
+    localEchoProgress: 73,
+    localEchoUploadedBytes: 7.1 * 1024 * 1024,
+    attachmentSize: 9.7 * 1024 * 1024,
+  });
+
+  assert.equal(state.visible, true);
+  assert.equal(state.primaryAction, "cancel");
+  assert.equal(state.progress, 73);
+  assert.equal(state.progressLabel, "7.1 MB / 9.7 MB");
+});
+
 test("getTelegramUploadOverlayState hides sent overlays", () => {
   const state = getTelegramUploadOverlayState({
     localEchoStatus: "sent",

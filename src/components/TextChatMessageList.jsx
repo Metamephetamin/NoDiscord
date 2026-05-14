@@ -502,6 +502,9 @@ function SimplifiedLocalEchoMediaOverlay({ attachmentItem, onCancel, onRetry }) 
 
   return (
     <span className={`message-media__upload-overlay-simple ${overlayState.failed ? "message-media__upload-overlay-simple--failed" : ""}`}>
+      <span className="message-media__upload-progress-chip-simple">
+        {overlayState.progressLabel || overlayState.label}
+      </span>
       <button
         type="button"
         className={`message-media__upload-action ${overlayState.failed ? "message-media__upload-action--retry" : "message-media__upload-action--loading"}`}
@@ -1836,12 +1839,16 @@ function TextChatMessageList({
         const cacheKey = getAttachmentCacheKey(messageItem?.id, attachmentIndex);
         const attachmentView = decryptedAttachmentsByMessageId[cacheKey] || null;
         const attachmentUnavailable = Boolean(attachmentView?.unavailable);
-        const attachmentUrl = attachmentView?.objectUrl || (
+        const remoteAttachmentUrl = attachmentItem.attachmentUrl
+          ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+          : "";
+        const localPreviewUrl = String(attachmentItem?.localPreviewUrl || "").startsWith("blob:")
+          ? String(attachmentItem.localPreviewUrl)
+          : "";
+        const attachmentUrl = attachmentView?.objectUrl || localPreviewUrl || (
           attachmentItem.attachmentEncryption
             ? ""
-            : attachmentItem.attachmentUrl
-              ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
-              : ""
+            : remoteAttachmentUrl
         );
         const attachmentName = attachmentView?.name || attachmentItem.attachmentName || "";
         const attachmentContentType = attachmentView?.contentType || attachmentItem.attachmentContentType || "";
@@ -1868,7 +1875,7 @@ function TextChatMessageList({
           attachmentUnavailable,
           attachmentUrl,
           attachmentSourceUrl: attachmentItem.attachmentUrl
-            ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+            ? remoteAttachmentUrl
             : attachmentUrl,
           attachmentName,
           attachmentContentType,

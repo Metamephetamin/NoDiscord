@@ -646,9 +646,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Введите корректный шестизначный код." });
         }
 
-        if (dto.password.Trim().Length < 6)
+        if (!AuthInputPolicies.TryValidateNewPassword(dto.password, out var passwordError))
         {
-            return BadRequest(new { message = "Пароль должен быть не короче 6 символов.", fieldErrors = new { password = "Пароль должен быть не короче 6 символов." } });
+            return BadRequest(new { message = passwordError, fieldErrors = new { password = passwordError } });
         }
 
         var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail, cancellationToken);
@@ -752,9 +752,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = emailError });
         }
 
-        if (dto.password.Trim().Length < 6)
+        if (!AuthInputPolicies.TryValidateNewPassword(dto.password, out var passwordError))
         {
-            return BadRequest(new { message = "Пароль должен быть не короче 6 символов." });
+            return BadRequest(new { message = passwordError });
         }
 
         if (await _context.Users.AnyAsync(u => u.email == normalizedEmail, cancellationToken))

@@ -29,6 +29,28 @@ public class AuthInputPoliciesTests
     }
 
     [Theory]
+    [InlineData("password1")]
+    [InlineData("Passw0rd!")]
+    public void TryValidateNewPassword_AllowsAsciiPassword(string password)
+    {
+        var result = AuthInputPolicies.TryValidateNewPassword(password, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Theory]
+    [InlineData("пароль123")]
+    [InlineData("pass word")]
+    public void TryValidateNewPassword_RejectsNonAsciiOrWhitespacePassword(string password)
+    {
+        var result = AuthInputPolicies.TryValidateNewPassword(password, out var error);
+
+        Assert.False(result);
+        Assert.Contains("английские", error);
+    }
+
+    [Theory]
     [InlineData("+7 (999) 123-45-67", "+79991234567")]
     [InlineData("8 999 123 45 67", "+79991234567")]
     [InlineData("79991234567", "+79991234567")]

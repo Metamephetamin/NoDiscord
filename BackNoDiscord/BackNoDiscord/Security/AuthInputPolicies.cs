@@ -225,6 +225,25 @@ public static partial class AuthInputPolicies
         return true;
     }
 
+    public static bool TryValidateNewPassword(string? value, out string error)
+    {
+        error = string.Empty;
+        var password = value ?? string.Empty;
+        if (password.Trim().Length < 6)
+        {
+            error = "Пароль должен быть не короче 6 символов.";
+            return false;
+        }
+
+        if (password.Any(character => character < 33 || character > 126))
+        {
+            error = "Пароль может содержать только английские буквы, цифры и символы.";
+            return false;
+        }
+
+        return true;
+    }
+
     public static string HashSecret(string value)
     {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((value ?? string.Empty).Trim())));

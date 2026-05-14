@@ -17,6 +17,12 @@ import {
 } from "../utils/nameScripts";
 
 const SUPPORTED_EMAIL_DOMAINS = ["gmail.com", "yandex.ru", "list.ru", "mail.ru"];
+const SUPPORTED_EMAIL_DOMAINS_LABEL = "gmail.com, yandex.ru, list.ru и mail.ru";
+const INVALID_EMAIL_MESSAGE = "Введите корректный email.";
+const UNSUPPORTED_EMAIL_DOMAIN_MESSAGE = `Разрешены только эти домены: ${SUPPORTED_EMAIL_DOMAINS_LABEL}.`;
+const PASSWORD_ASCII_MESSAGE = "Пароль может содержать только английские буквы, цифры и символы.";
+const PASSWORD_MIN_LENGTH_MESSAGE = "Пароль должен быть не короче 6 символов.";
+const PASSWORD_ALLOWED_PATTERN = /^[\x21-\x7E]+$/;
 const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
 const QR_LOGIN_POLL_INTERVAL_MS = 1800;
 const AUTH_VIDEO_IDLE_DELAY_MS = 1400;
@@ -143,14 +149,36 @@ function normalizeIdentifierInput(value) {
     .slice(0, MAX_AUTH_IDENTIFIER_LENGTH);
 }
 
-function isSupportedEmail(value) {
+function getEmailValidationError(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  const separatorIndex = normalized.lastIndexOf("@");
-  if (separatorIndex <= 0 || separatorIndex === normalized.length - 1) {
-    return false;
+  if (!normalized) {
+    return "Введите email.";
   }
 
-  return SUPPORTED_EMAIL_DOMAINS.includes(normalized.slice(separatorIndex + 1));
+  const separatorIndex = normalized.lastIndexOf("@");
+  const hasSingleSeparator = separatorIndex > 0
+    && separatorIndex === normalized.indexOf("@")
+    && separatorIndex < normalized.length - 1;
+  if (!hasSingleSeparator) {
+    return INVALID_EMAIL_MESSAGE;
+  }
+
+  const localPart = normalized.slice(0, separatorIndex);
+  const domain = normalized.slice(separatorIndex + 1);
+  if (!localPart || !domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) {
+    return INVALID_EMAIL_MESSAGE;
+  }
+
+  return SUPPORTED_EMAIL_DOMAINS.includes(domain) ? "" : UNSUPPORTED_EMAIL_DOMAIN_MESSAGE;
+}
+
+function getNewPasswordValidationError(value) {
+  const password = String(value || "");
+  if (password.length < 6) {
+    return PASSWORD_MIN_LENGTH_MESSAGE;
+  }
+
+  return PASSWORD_ALLOWED_PATTERN.test(password) ? "" : PASSWORD_ASCII_MESSAGE;
 }
 
 function shouldUseLiteAuthVisualMode() {
@@ -312,9 +340,11 @@ export default function Auth({ onAuthSuccess }) {
   const [isLiteVisualMode, setIsLiteVisualMode] = useState(() => shouldUseLiteAuthVisualMode());
   const [isAuthVideoAvailable, setIsAuthVideoAvailable] = useState(true);
   const [isAuthVideoLoadAllowed, setIsAuthVideoLoadAllowed] = useState(false);
+  const [authVideoBlobUrl, setAuthVideoBlobUrl] = useState("");
   const [isUserAgreementOpen, setIsUserAgreementOpen] = useState(false);
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
   const authVideoRef = useRef(null);
+  const authVideoBlobUrlRef = useRef("");
   const qrScannerVideoRef = useRef(null);
   const qrScannerStreamRef = useRef(null);
   const qrScannerFrameRef = useRef(0);
@@ -345,7 +375,7 @@ export default function Auth({ onAuthSuccess }) {
   const isRegistrationEmailVerification = emailVerificationModal.purpose === "registration";
   const shouldShowRegistrationCodeStep = mode === "register" && isRegistrationEmailVerification && emailVerificationModal.open;
   const shouldShowPasswordResetStep = mode === "login" && loginMethod === "password" && passwordResetState.open;
-  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed;
+  const shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed && Boolean(authVideoBlobUrl);
   const canResendPasswordResetCode =
     Boolean(passwordResetState.email) &&
     passwordResetState.step !== "email" &&
@@ -483,6 +513,65 @@ export default function Auth({ onAuthSuccess }) {
   }, [isAuthVideoAvailable, isLiteVisualMode]);
 
   useEffect(() => {
+    if (!isAuthVideoLoadAllowed || isLiteVisualMode || !isAuthVideoAvailable) {
+      return undefined;
+    }
+
+    if (authVideoBlobUrlRef.current) {
+      setAuthVideoBlobUrl(authVideoBlobUrlRef.current);
+      return undefined;
+    }
+
+    let disposed = false;
+    const abortController = new AbortController();
+
+    const loadAuthVideoBlob = async () => {
+      try {
+        const response = await fetch(AUTH_BACKGROUND_VIDEO_URL, {
+          cache: "force-cache",
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Auth background video request failed: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        if (disposed || abortController.signal.aborted) {
+          return;
+        }
+
+        const nextBlobUrl = URL.createObjectURL(blob);
+        authVideoBlobUrlRef.current = nextBlobUrl;
+        setAuthVideoBlobUrl(nextBlobUrl);
+      } catch {
+        if (disposed || abortController.signal.aborted) {
+          return;
+        }
+
+        setIsLiteVisualMode(true);
+        setIsAuthVideoAvailable(false);
+      }
+    };
+
+    loadAuthVideoBlob();
+
+    return () => {
+      disposed = true;
+      abortController.abort();
+    };
+  }, [isAuthVideoAvailable, isAuthVideoLoadAllowed, isLiteVisualMode]);
+
+  useEffect(() => () => {
+    const blobUrl = authVideoBlobUrlRef.current;
+    if (!blobUrl) {
+      return;
+    }
+
+    URL.revokeObjectURL(blobUrl);
+    authVideoBlobUrlRef.current = "";
+  }, []);
+
+  useEffect(() => {
     const mediaQuery = window.matchMedia(MOBILE_AUTH_VISUAL_MODE_QUERY);
     const updateQrMode = () => setIsQrCameraPreferred(shouldPreferQrCameraLogin());
 
@@ -505,7 +594,7 @@ export default function Auth({ onAuthSuccess }) {
     return () => {
       window.removeEventListener(APP_LOGO_CHANGE_EVENT, handleLogoChange);
     };
-  }, []);
+  }, [shouldRenderAuthVideo]);
 
   useEffect(() => {
     const videoNode = authVideoRef.current;
@@ -793,18 +882,11 @@ export default function Auth({ onAuthSuccess }) {
       totpCode: loginForm.totpCode.trim(),
     };
 
-    if (!payload.identifier || !payload.password) {
+    const identifierValidationError = getEmailValidationError(payload.identifier);
+    if (identifierValidationError || !payload.password) {
       setLoginErrors({
-        identifier: payload.identifier ? "" : "Введите email.",
+        identifier: identifierValidationError,
         password: payload.password ? "" : "Введите пароль.",
-      });
-      return;
-    }
-
-    if (!isSupportedEmail(payload.identifier)) {
-      setLoginErrors({
-        identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
-        password: "",
       });
       return;
     }
@@ -867,17 +949,10 @@ export default function Auth({ onAuthSuccess }) {
     setLoginErrors(initialLoginErrors);
 
     const identifier = loginForm.identifier.trim();
-    if (!identifier) {
+    const identifierValidationError = getEmailValidationError(identifier);
+    if (identifierValidationError) {
       setLoginErrors({
-        identifier: "Введите email.",
-        password: "",
-      });
-      return;
-    }
-
-    if (!isSupportedEmail(identifier)) {
-      setLoginErrors({
-        identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
+        identifier: identifierValidationError,
         password: "",
       });
       return;
@@ -929,17 +1004,10 @@ export default function Auth({ onAuthSuccess }) {
 
   const requestPasswordResetCode = async (email, { resend = false } = {}) => {
     const normalizedEmail = String(email || "").trim().toLowerCase();
-    if (!normalizedEmail) {
+    const emailValidationError = getEmailValidationError(normalizedEmail);
+    if (emailValidationError) {
       setLoginErrors({
-        identifier: "Введите email.",
-        password: "",
-      });
-      return;
-    }
-
-    if (!isSupportedEmail(normalizedEmail)) {
-      setLoginErrors({
-        identifier: "Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.",
+        identifier: emailValidationError,
         password: "",
       });
       return;
@@ -1036,8 +1104,9 @@ export default function Auth({ onAuthSuccess }) {
       return;
     }
 
-    if (passwordResetPassword.length < 6) {
-      setLoginErrors((previous) => ({ ...previous, password: "Пароль должен быть не короче 6 символов." }));
+    const passwordValidationError = getNewPasswordValidationError(passwordResetPassword);
+    if (passwordValidationError) {
+      setLoginErrors((previous) => ({ ...previous, password: passwordValidationError }));
       return;
     }
 
@@ -1115,13 +1184,15 @@ export default function Auth({ onAuthSuccess }) {
       return;
     }
 
-    if (!isSupportedEmail(payload.email)) {
-      setMessage("Разрешены только gmail.com, yandex.ru, list.ru и mail.ru.");
+    const emailValidationError = getEmailValidationError(payload.email);
+    if (emailValidationError) {
+      setMessage(emailValidationError);
       return;
     }
 
-    if (payload.password.length < 6) {
-      setMessage("Пароль должен быть не короче 6 символов.");
+    const passwordValidationError = getNewPasswordValidationError(payload.password);
+    if (passwordValidationError) {
+      setMessage(passwordValidationError);
       return;
     }
 
@@ -1507,13 +1578,12 @@ export default function Auth({ onAuthSuccess }) {
           muted
           loop
           playsInline
-          preload="none"
+          preload="auto"
+          src={authVideoBlobUrl}
           disablePictureInPicture
           disableRemotePlayback
           aria-hidden="true"
-        >
-          <source src={AUTH_BACKGROUND_VIDEO_URL} type="video/mp4" />
-        </video>
+        />
       ) : null}
 
       <div className="auth-brand">
@@ -1913,8 +1983,6 @@ export default function Auth({ onAuthSuccess }) {
               </button>
             </div>
           ) : null}
-
-          {mode === "register" ? <div className="auth-beta-note">Beta 0.1</div> : null}
 
           {message ? <p className={`auth-message auth-message--${authMessageTone}`}>{message}</p> : null}
         </div>

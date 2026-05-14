@@ -392,6 +392,7 @@ export function normalizeAttachmentItems(messageItem) {
         attachmentContentType: String(attachment?.attachmentContentType || attachment?.AttachmentContentType || attachment?.attachment_content_type || attachment?.contentType || attachment?.ContentType || attachment?.content_type || attachment?.type || attachment?.Type || "").trim(),
         attachmentAsFile: Boolean(attachment?.attachmentAsFile || attachment?.AttachmentAsFile || attachment?.attachment_as_file),
         attachmentEncryption: attachment?.attachmentEncryption || attachment?.AttachmentEncryption || attachment?.attachment_encryption || null,
+        localPreviewUrl: normalizeAttachmentUrlValue(attachment?.localPreviewUrl || attachment?.LocalPreviewUrl || attachment?.local_preview_url),
         voiceMessage: normalizeVoiceMessageMetadata(attachment?.voiceMessage || attachment?.VoiceMessage || attachment?.voice_message),
         attachmentIndex: Number.isFinite(Number(attachment?.attachmentIndex))
           ? Number(attachment.attachmentIndex)
@@ -436,6 +437,7 @@ export function normalizeAttachmentItems(messageItem) {
     attachmentContentType: String(messageItem?.attachmentContentType || messageItem?.AttachmentContentType || messageItem?.attachment_content_type || messageItem?.contentType || messageItem?.ContentType || messageItem?.content_type || messageItem?.type || messageItem?.Type || "").trim(),
     attachmentAsFile: legacyAttachmentAsFile,
     attachmentEncryption: legacyAttachmentEncryption,
+    localPreviewUrl: normalizeAttachmentUrlValue(messageItem?.localPreviewUrl || messageItem?.LocalPreviewUrl || messageItem?.local_preview_url),
     voiceMessage: legacyVoiceMessage,
     attachmentIndex: 0,
   }];

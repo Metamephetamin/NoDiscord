@@ -259,8 +259,8 @@ function mergeChannelMessages(existingMessages, incomingMessages, options = {}) 
       : -1;
     if (matchingLocalEchoIndex >= 0) {
       const replacedMessage = mergedMessages[matchingLocalEchoIndex];
-      onLocalEchoReplaced?.(replacedMessage, messageItem);
-      mergedMessages[matchingLocalEchoIndex] = messageItem;
+      const replacementMessage = onLocalEchoReplaced?.(replacedMessage, messageItem) || messageItem;
+      mergedMessages[matchingLocalEchoIndex] = replacementMessage;
       if (normalizedId) {
         indexById.set(normalizedId, matchingLocalEchoIndex);
       }
@@ -372,6 +372,59 @@ function buildLocalEchoSignature(messageItem) {
     replyToMessageId: messageItem?.replyToMessageId || "",
     attachments: normalizeAttachmentItems(messageItem),
   });
+}
+
+function isBlobObjectUrl(value) {
+  return String(value || "").startsWith("blob:");
+}
+
+function getLocalEchoPreviewObjectUrls(messageItem) {
+  return normalizeAttachmentItems(messageItem)
+    .map((attachmentItem) => attachmentItem?.attachmentUrl)
+    .filter(isBlobObjectUrl);
+}
+
+function mergeLocalEchoPreviewSources(localEchoMessage, serverMessage) {
+  const localAttachments = normalizeAttachmentItems(localEchoMessage);
+  if (!localAttachments.some((attachmentItem) => isBlobObjectUrl(attachmentItem?.attachmentUrl))) {
+    return serverMessage;
+  }
+
+  const sourceAttachments = Array.isArray(serverMessage?.attachments)
+    ? serverMessage.attachments
+    : Array.isArray(serverMessage?.Attachments)
+      ? serverMessage.Attachments
+      : [];
+  if (!sourceAttachments.length) {
+    return serverMessage;
+  }
+
+  const nextAttachments = sourceAttachments.map((attachmentItem, index) => {
+    const localAttachment = localAttachments[index] || null;
+    const localPreviewUrl = isBlobObjectUrl(localAttachment?.attachmentUrl)
+      ? localAttachment.attachmentUrl
+      : "";
+    if (!localPreviewUrl) {
+      return attachmentItem;
+    }
+
+    return {
+      ...attachmentItem,
+      localPreviewUrl,
+      LocalPreviewUrl: localPreviewUrl,
+    };
+  });
+  const hasPreviewSources = nextAttachments.some((attachmentItem, index) => attachmentItem !== sourceAttachments[index]);
+  if (!hasPreviewSources) {
+    return serverMessage;
+  }
+
+  return {
+    ...serverMessage,
+    attachments: nextAttachments,
+    Attachments: Array.isArray(serverMessage?.Attachments) ? nextAttachments : serverMessage?.Attachments,
+    localPreviewUrl: String(nextAttachments[0]?.localPreviewUrl || serverMessage?.localPreviewUrl || ""),
+  };
 }
 
 function normalizeChatSystemEvent(rawEvent) {
@@ -875,6 +928,45 @@ export default function TextChat({
       }
     });
     localEchoObjectUrlsByMessageIdRef.current.delete(normalizedMessageId);
+  }, []);
+
+  const migrateLocalEchoObjectUrls = useCallback((localEchoMessage, serverMessage) => {
+    const localEchoMessageId = String(localEchoMessage?.id || "");
+    const serverMessageId = String(serverMessage?.id || "");
+    const existingObjectUrls = localEchoObjectUrlsByMessageIdRef.current.get(localEchoMessageId) || [];
+    const nextObjectUrls = Array.from(new Set([
+      ...existingObjectUrls,
+      ...getLocalEchoPreviewObjectUrls(localEchoMessage),
+    ])).filter(isBlobObjectUrl);
+
+    localEchoObjectUrlsByMessageIdRef.current.delete(localEchoMessageId);
+    nextObjectUrls.forEach((objectUrl) => {
+      const revokeTimerId = localEchoObjectUrlRevokeTimersRef.current.get(objectUrl);
+      if (!revokeTimerId) {
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        window.clearTimeout(revokeTimerId);
+      } else {
+        clearTimeout(revokeTimerId);
+      }
+      localEchoObjectUrlRevokeTimersRef.current.delete(objectUrl);
+    });
+
+    if (!serverMessageId || !nextObjectUrls.length) {
+      nextObjectUrls.forEach((objectUrl) => {
+        const timerId = scheduleObjectUrlRevoke(objectUrl, LOCAL_ECHO_OBJECT_URL_REVOKE_DELAY_MS, () => {
+          localEchoObjectUrlRevokeTimersRef.current.delete(objectUrl);
+        });
+        if (timerId !== null) {
+          localEchoObjectUrlRevokeTimersRef.current.set(objectUrl, timerId);
+        }
+      });
+      return;
+    }
+
+    localEchoObjectUrlsByMessageIdRef.current.set(serverMessageId, nextObjectUrls);
   }, []);
 
   useEffect(() => () => {
@@ -1395,8 +1487,10 @@ export default function TextChat({
         (channelMessages) => mergeChannelMessages(channelMessages, page.items, {
           currentUserId,
           onLocalEchoReplaced: (localEchoMessage, serverMessage) => {
-            revokeLocalEchoObjectUrls(localEchoMessage?.id);
+            const nextServerMessage = mergeLocalEchoPreviewSources(localEchoMessage, serverMessage);
+            migrateLocalEchoObjectUrls(localEchoMessage, nextServerMessage);
             markLocalEchoReconciledRef.current?.(localEchoMessage, serverMessage);
+            return nextServerMessage;
           },
         })
       ));
@@ -2086,8 +2180,10 @@ export default function TextChat({
           keep: "latest",
           currentUserId,
           onLocalEchoReplaced: (localEchoMessage, serverMessage) => {
-            revokeLocalEchoObjectUrls(localEchoMessage?.id);
+            const nextServerMessage = mergeLocalEchoPreviewSources(localEchoMessage, serverMessage);
+            migrateLocalEchoObjectUrls(localEchoMessage, nextServerMessage);
             markLocalEchoReconciledRef.current?.(localEchoMessage, serverMessage);
+            return nextServerMessage;
           },
         }
       )
@@ -2148,9 +2244,10 @@ export default function TextChat({
           if (matchingLocalEchoIndex >= 0) {
             const nextChannelMessages = [...channelMessages];
             const replacedMessage = nextChannelMessages[matchingLocalEchoIndex];
-            revokeLocalEchoObjectUrls(replacedMessage?.id);
+            const nextNormalizedMessage = mergeLocalEchoPreviewSources(replacedMessage, normalizedMessage);
+            migrateLocalEchoObjectUrls(replacedMessage, nextNormalizedMessage);
             markLocalEchoReconciledRef.current?.(replacedMessage, normalizedMessage);
-            nextChannelMessages[matchingLocalEchoIndex] = normalizedMessage;
+            nextChannelMessages[matchingLocalEchoIndex] = nextNormalizedMessage;
             return trimChannelMessageWindow(nextChannelMessages, {
               maxMessages: MAX_ACTIVE_CHANNEL_MESSAGES,
               keep: "latest",
@@ -2379,7 +2476,7 @@ export default function TextChat({
       chatConnection.off("MessagesRead", handleMessagesRead);
       chatConnection.off("MessageReactionsUpdated", handleMessageReactionsUpdated);
     };
-  }, [currentUserId, isDirectChat, revokeLocalEchoObjectUrls, scopedChannelId]);
+  }, [currentUserId, isDirectChat, migrateLocalEchoObjectUrls, scopedChannelId]);
 
   useEffect(() => {
     const handleProfileUpdated = (payload) => {
@@ -2456,12 +2553,14 @@ export default function TextChat({
         keep: "latest",
         currentUserId,
         onLocalEchoReplaced: (replacedMessage, normalizedMessage) => {
-          revokeLocalEchoObjectUrls(replacedMessage?.id);
+          const nextNormalizedMessage = mergeLocalEchoPreviewSources(replacedMessage, normalizedMessage);
+          migrateLocalEchoObjectUrls(replacedMessage, nextNormalizedMessage);
           markLocalEchoReconciledRef.current?.(replacedMessage, normalizedMessage);
+          return nextNormalizedMessage;
         },
       })
     )));
-  }, [currentUserId, revokeLocalEchoObjectUrls]);
+  }, [currentUserId, migrateLocalEchoObjectUrls]);
 
   const uploadAttachment = uploadChatAttachment;
   const sendMessagesCompat = async (targetChannelId, avatar, payload, { allowBatch = true } = {}) => {

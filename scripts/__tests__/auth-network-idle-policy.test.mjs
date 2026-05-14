@@ -32,13 +32,18 @@ test("auth background video starts after initial auth page work is idle", () => 
   );
   assert.match(
     authSource,
-    /shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed/,
-    "auth video element must not mount before idle loading is allowed",
+    /shouldRenderAuthVideo = isAuthVideoAvailable && !isLiteVisualMode && isAuthVideoLoadAllowed && Boolean\(authVideoBlobUrl\)/,
+    "auth video element must not mount before the idle-loaded blob URL is ready",
   );
   assert.match(
     authSource,
-    /preload="none"/,
-    "auth video should not preload before it is intentionally mounted",
+    /fetch\(AUTH_BACKGROUND_VIDEO_URL,[\s\S]*?cache:\s*"force-cache"/,
+    "auth video should be fetched once through the browser cache before being attached as a blob URL",
+  );
+  assert.match(
+    authSource,
+    /src=\{authVideoBlobUrl\}/,
+    "auth video element must play from a blob URL instead of repeatedly opening the remote MP4",
   );
 });
 

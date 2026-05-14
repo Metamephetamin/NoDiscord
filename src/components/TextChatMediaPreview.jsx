@@ -7,6 +7,29 @@ import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const WHEEL_NAVIGATION_COOLDOWN_MS = 180;
 const CLICK_CLOSE_DRAG_THRESHOLD = 6;
+const DEFAULT_VIDEO_CONTROL_STATE = {
+  sourceUrl: "",
+  currentTime: 0,
+  duration: 0,
+  playing: false,
+  muted: false,
+  volume: 1,
+};
+
+function formatPreviewTime(value) {
+  const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function setMediaElementProperty(mediaNode, propertyName, value) {
+  if (!mediaNode) {
+    return;
+  }
+
+  Reflect.set(mediaNode, propertyName, value);
+}
 
 function TextChatMediaPreview({
   mediaPreview,
@@ -36,6 +59,7 @@ function TextChatMediaPreview({
   const [videoLoadState, setVideoLoadState] = useState({ url: "", failed: false });
   const [missingMediaVersion, setMissingMediaVersion] = useState(0);
   const [loadedImageUrls, setLoadedImageUrls] = useState(() => new Set());
+  const [videoControlState, setVideoControlState] = useState(DEFAULT_VIDEO_CONTROL_STATE);
   const zoom = Number(mediaPreview?.zoom) || 1;
   const hasGallery = (mediaPreview?.items?.length || 0) > 1;
   const canPan = zoom > 1;
@@ -49,14 +73,110 @@ function TextChatMediaPreview({
   const canLoadPreviewVideo = canLoadVideoPreviewUrl(videoPreviewUrl);
   const isImageKnownMissing = Boolean(missingMediaVersion >= 0 && imagePreviewUrl && isMediaUrlKnownMissing(imagePreviewUrl));
   const isVideoKnownMissing = Boolean(missingMediaVersion >= 0 && videoPreviewUrl && isMediaUrlKnownMissing(videoPreviewUrl));
+  const currentVideoControlState = videoControlState.sourceUrl === videoPreviewUrl
+    ? videoControlState
+    : DEFAULT_VIDEO_CONTROL_STATE;
+  const videoDuration = Math.max(0, Number(currentVideoControlState.duration) || 0);
+  const videoCurrentTime = Math.max(0, Math.min(videoDuration || Number.MAX_SAFE_INTEGER, Number(currentVideoControlState.currentTime) || 0));
+  const remainingVideoTime = videoDuration > 0 ? Math.max(0, videoDuration - videoCurrentTime) : 0;
+  const videoProgress = videoDuration > 0 ? (videoCurrentTime / videoDuration) * 100 : 0;
   const isCachedImageReady = imagePreviewUrl && loadedImageUrls.has(imagePreviewUrl);
   const isImageReady = !isImagePreview || (imagePreviewUrl && (isCachedImageReady || imageLoadState.url === imagePreviewUrl) && !imageLoadState.failed && !isImageKnownMissing);
   const imageLoadFailed = isImagePreview && imagePreviewUrl && (isImageKnownMissing || (imageLoadState.url === imagePreviewUrl && imageLoadState.failed));
   const videoLoadFailed = isVideoPreview && videoPreviewUrl && (!canLoadPreviewVideo || isVideoKnownMissing || (videoLoadState.url === videoPreviewUrl && videoLoadState.failed));
 
-  const stopEvent = (event) => {
+  const stopEvent = useCallback((event) => {
     event.stopPropagation();
-  };
+  }, []);
+
+  const syncVideoControlState = useCallback(() => {
+    const mediaNode = videoRef?.current;
+    if (!mediaNode) {
+      return;
+    }
+
+    setVideoControlState({
+      sourceUrl: videoPreviewUrl,
+      currentTime: Number(mediaNode.currentTime) || 0,
+      duration: Number.isFinite(Number(mediaNode.duration)) ? Number(mediaNode.duration) : 0,
+      playing: !mediaNode.paused && !mediaNode.ended,
+      muted: Boolean(mediaNode.muted),
+      volume: Number.isFinite(Number(mediaNode.volume)) ? Number(mediaNode.volume) : 1,
+    });
+  }, [videoPreviewUrl, videoRef]);
+
+  const toggleVideoPlayback = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    if (!mediaNode) {
+      return;
+    }
+
+    if (mediaNode.paused || mediaNode.ended) {
+      mediaNode.play?.().catch?.(() => {});
+      return;
+    }
+
+    mediaNode.pause?.();
+  }, [stopEvent, videoRef]);
+
+  const toggleVideoMute = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    if (!mediaNode) {
+      return;
+    }
+
+    setMediaElementProperty(mediaNode, "muted", !mediaNode.muted);
+    syncVideoControlState();
+  }, [stopEvent, syncVideoControlState, videoRef]);
+
+  const handleVideoVolumeChange = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    if (!mediaNode) {
+      return;
+    }
+
+    const nextVolume = Math.max(0, Math.min(1, Number(event.currentTarget.value) / 100 || 0));
+    setMediaElementProperty(mediaNode, "volume", nextVolume);
+    setMediaElementProperty(mediaNode, "muted", nextVolume <= 0);
+    syncVideoControlState();
+  }, [stopEvent, syncVideoControlState, videoRef]);
+
+  const handleVideoSeek = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    const nextTime = Number(event.currentTarget.value) || 0;
+    if (!mediaNode) {
+      return;
+    }
+
+    setMediaElementProperty(mediaNode, "currentTime", nextTime);
+    syncVideoControlState();
+  }, [stopEvent, syncVideoControlState, videoRef]);
+
+  const handleVideoFullscreen = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    const fullscreenTarget = mediaNode || viewportRef.current;
+    fullscreenTarget?.requestFullscreen?.().catch?.(() => {});
+  }, [stopEvent, videoRef]);
+
+  const handleVideoPictureInPicture = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    if (!mediaNode || typeof document === "undefined" || !document.pictureInPictureEnabled) {
+      return;
+    }
+
+    if (document.pictureInPictureElement) {
+      document.exitPictureInPicture?.().catch?.(() => {});
+      return;
+    }
+
+    mediaNode.requestPictureInPicture?.().catch?.(() => {});
+  }, [stopEvent, videoRef]);
 
   const buildZoomAnchor = useCallback((event) => {
     const rect = viewportRef.current?.getBoundingClientRect?.();
@@ -339,13 +459,24 @@ function TextChatMediaPreview({
                 src={mediaPreview.url}
                 style={{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})` }}
                 onClick={stopEvent}
-                onLoadedData={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })}
-                onCanPlay={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })}
+                onLoadedMetadata={syncVideoControlState}
+                onLoadedData={() => {
+                  setVideoLoadState({ url: videoPreviewUrl, failed: false });
+                  syncVideoControlState();
+                }}
+                onCanPlay={() => {
+                  setVideoLoadState({ url: videoPreviewUrl, failed: false });
+                  syncVideoControlState();
+                }}
+                onPlay={syncVideoControlState}
+                onPause={syncVideoControlState}
+                onTimeUpdate={syncVideoControlState}
+                onDurationChange={syncVideoControlState}
+                onVolumeChange={syncVideoControlState}
                 onError={() => {
                   markMediaUrlMissing(videoPreviewUrl);
                   setVideoLoadState({ url: videoPreviewUrl, failed: true });
                 }}
-                controls
                 autoPlay
                 playsInline
                 preload="auto"
@@ -353,6 +484,92 @@ function TextChatMediaPreview({
             )}
           </div>
 
+          {isVideoPreview && !videoLoadFailed ? (
+            <div className="media-preview__video-controls" onClick={stopEvent} onPointerDown={stopEvent}>
+              <div className="media-preview__video-volume">
+                <button
+                  type="button"
+                  className="media-preview__video-control-button"
+                  onClick={toggleVideoMute}
+                  aria-label={currentVideoControlState.muted ? "Unmute video" : "Mute video"}
+                >
+                  <span className={`media-preview__video-icon ${currentVideoControlState.muted ? "media-preview__video-icon--muted" : "media-preview__video-icon--volume"}`} aria-hidden="true" />
+                </button>
+                <input
+                  className="media-preview__video-volume-slider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={currentVideoControlState.muted ? 0 : Math.round(currentVideoControlState.volume * 100)}
+                  onChange={handleVideoVolumeChange}
+                  aria-label="Video volume"
+                />
+              </div>
+
+              <button
+                type="button"
+                className="media-preview__video-play"
+                onClick={toggleVideoPlayback}
+                aria-label={currentVideoControlState.playing ? "Pause video" : "Play video"}
+              >
+                <span className={`media-preview__video-play-icon ${currentVideoControlState.playing ? "media-preview__video-play-icon--pause" : "media-preview__video-play-icon--play"}`} aria-hidden="true" />
+              </button>
+
+              <div className="media-preview__video-tools">
+                <button
+                  type="button"
+                  className="media-preview__video-control-button"
+                  onClick={handleVideoFullscreen}
+                  aria-label="Fullscreen video"
+                >
+                  <span className="media-preview__video-icon media-preview__video-icon--fullscreen" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__video-control-button"
+                  onClick={handleVideoPictureInPicture}
+                  aria-label="Picture in picture"
+                >
+                  <span className="media-preview__video-icon media-preview__video-icon--pip" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__video-control-button"
+                  onClick={() => onDownload?.()}
+                  aria-label="Download video"
+                >
+                  <span className="media-preview__download-icon" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__video-control-button media-preview__video-control-button--danger"
+                  onClick={() => onDeleteActive?.()}
+                  aria-label="Delete video"
+                >
+                  <span className="media-preview__delete-icon" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="media-preview__video-timeline">
+                <span className="media-preview__video-time">{formatPreviewTime(videoCurrentTime)}</span>
+                <input
+                  className="media-preview__video-seek"
+                  type="range"
+                  min="0"
+                  max={videoDuration || 0}
+                  step="0.1"
+                  value={videoCurrentTime}
+                  onChange={handleVideoSeek}
+                  style={{ "--media-preview-progress": `${videoProgress}%` }}
+                  aria-label="Video progress"
+                />
+                <span className="media-preview__video-time">-{formatPreviewTime(remainingVideoTime)}</span>
+              </div>
+            </div>
+          ) : null}
+
+          {!isVideoPreview ? (
           <div className="media-preview__dock media-preview__dock--bottom-right" onClick={stopEvent}>
             <button
               type="button"
@@ -384,6 +601,7 @@ function TextChatMediaPreview({
               </button>
             ) : null}
           </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -34,6 +34,16 @@ function formatUploadFileSize(size) {
 export function getTelegramUploadOverlayState(attachmentItem = {}) {
   const status = String(attachmentItem?.localEchoStatus || "uploading").trim() || "uploading";
   const progress = Math.max(0, Math.min(100, Math.round(Number(attachmentItem?.localEchoProgress) || 0)));
+  const totalBytes = Math.max(0, Number(attachmentItem?.localEchoTotalBytes || attachmentItem?.attachmentSize) || 0);
+  const uploadedBytes = Math.max(
+    0,
+    Math.min(
+      totalBytes || Number.MAX_SAFE_INTEGER,
+      Number(attachmentItem?.localEchoUploadedBytes) || (
+        totalBytes > 0 ? Math.round((totalBytes * progress) / 100) : 0
+      )
+    )
+  );
 
   if (status === "sent") {
     return {
@@ -43,6 +53,7 @@ export function getTelegramUploadOverlayState(attachmentItem = {}) {
       status,
       progress,
       label: "",
+      progressLabel: "",
       primaryAction: "",
       ariaLabel: "",
     };
@@ -55,6 +66,11 @@ export function getTelegramUploadOverlayState(attachmentItem = {}) {
   const label = failed
     ? (errorLabel || statusLabel)
     : `${statusLabel} ${progress}%`;
+  const progressLabel = failed
+    ? (errorLabel || statusLabel)
+    : totalBytes > 0
+      ? `${formatUploadFileSize(uploadedBytes)} / ${formatUploadFileSize(totalBytes)}`
+      : `${progress}%`;
 
   return {
     visible: true,
@@ -63,6 +79,7 @@ export function getTelegramUploadOverlayState(attachmentItem = {}) {
     status,
     progress,
     label,
+    progressLabel,
     primaryAction: failed ? "retry" : "cancel",
     ariaLabel: failed ? RETRY_LABEL : CANCEL_LABEL,
   };

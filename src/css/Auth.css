@@ -468,7 +468,6 @@
 .auth-card--login .auth-card__links,
 .auth-card--login .auth-card__forgot,
 .auth-card--login .auth-terms-consent,
-.auth-card--login .auth-beta-note,
 .auth-card--login .auth-message {
   width: min(100%, 300px);
 }
@@ -814,19 +813,20 @@
 
 .auth-terms-consent {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   margin-top: 2px;
   color: #40506a;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.2;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .auth-terms-consent input {
   width: 16px;
   height: 16px;
-  margin: 2px 0 0;
+  margin: 0;
   flex: 0 0 auto;
   accent-color: #7657ff;
 }
@@ -1189,15 +1189,6 @@
 .auth-switch-link:disabled {
   opacity: 0.58;
   cursor: wait;
-}
-
-.auth-beta-note {
-  align-self: center;
-  margin-top: -2px;
-  color: rgba(215, 220, 229, 0.82);
-  font-size: 12px;
-  line-height: 1;
-  letter-spacing: 0.02em;
 }
 
 @keyframes authVerifyFadeIn {
@@ -1984,7 +1975,6 @@
     font-size: 13px;
   }
 
-  .auth-beta-note,
   .auth-message,
   .auth-hint,
   .auth-field__error {
