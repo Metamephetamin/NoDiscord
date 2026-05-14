@@ -14,13 +14,20 @@ const DEFAULT_VIDEO_CONTROL_STATE = {
   playing: false,
   muted: false,
   volume: 1,
+  playbackRate: 1,
 };
+const VIDEO_PLAYBACK_RATES = [1, 1.25, 1.5, 2];
 
 function formatPreviewTime(value) {
   const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatPlaybackRate(value) {
+  const rate = Number(value) || 1;
+  return `${Number.isInteger(rate) ? rate.toFixed(0) : rate.toFixed(2).replace(/0$/, "")}x`;
 }
 
 function setMediaElementProperty(mediaNode, propertyName, value) {
@@ -102,6 +109,7 @@ function TextChatMediaPreview({
       playing: !mediaNode.paused && !mediaNode.ended,
       muted: Boolean(mediaNode.muted),
       volume: Number.isFinite(Number(mediaNode.volume)) ? Number(mediaNode.volume) : 1,
+      playbackRate: Number.isFinite(Number(mediaNode.playbackRate)) ? Number(mediaNode.playbackRate) : 1,
     });
   }, [videoPreviewUrl, videoRef]);
 
@@ -158,10 +166,23 @@ function TextChatMediaPreview({
 
   const handleVideoFullscreen = useCallback((event) => {
     stopEvent(event);
-    const mediaNode = videoRef?.current;
-    const fullscreenTarget = mediaNode || viewportRef.current;
+    const fullscreenTarget = viewportRef.current?.closest?.(".media-preview__content") || viewportRef.current;
     fullscreenTarget?.requestFullscreen?.().catch?.(() => {});
-  }, [stopEvent, videoRef]);
+  }, [stopEvent]);
+
+  const cycleVideoPlaybackRate = useCallback((event) => {
+    stopEvent(event);
+    const mediaNode = videoRef?.current;
+    if (!mediaNode) {
+      return;
+    }
+
+    const currentRate = Number(mediaNode.playbackRate) || 1;
+    const currentIndex = VIDEO_PLAYBACK_RATES.findIndex((rate) => Math.abs(rate - currentRate) < 0.01);
+    const nextRate = VIDEO_PLAYBACK_RATES[(currentIndex + 1) % VIDEO_PLAYBACK_RATES.length];
+    setMediaElementProperty(mediaNode, "playbackRate", nextRate);
+    syncVideoControlState();
+  }, [stopEvent, syncVideoControlState, videoRef]);
 
   const handleVideoPictureInPicture = useCallback((event) => {
     stopEvent(event);
@@ -473,6 +494,7 @@ function TextChatMediaPreview({
                 onTimeUpdate={syncVideoControlState}
                 onDurationChange={syncVideoControlState}
                 onVolumeChange={syncVideoControlState}
+                onRateChange={syncVideoControlState}
                 onError={() => {
                   markMediaUrlMissing(videoPreviewUrl);
                   setVideoLoadState({ url: videoPreviewUrl, failed: true });
@@ -480,6 +502,9 @@ function TextChatMediaPreview({
                 autoPlay
                 playsInline
                 preload="auto"
+                controls={false}
+                disablePictureInPicture
+                controlsList="nodownload nofullscreen noremoteplayback"
               />
             )}
           </div>
@@ -536,18 +561,18 @@ function TextChatMediaPreview({
                 <button
                   type="button"
                   className="media-preview__video-control-button"
+                  onClick={cycleVideoPlaybackRate}
+                  aria-label="Change video speed"
+                >
+                  <span className="media-preview__video-speed-label">{formatPlaybackRate(currentVideoControlState.playbackRate)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="media-preview__video-control-button"
                   onClick={() => onDownload?.()}
                   aria-label="Download video"
                 >
                   <span className="media-preview__download-icon" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="media-preview__video-control-button media-preview__video-control-button--danger"
-                  onClick={() => onDeleteActive?.()}
-                  aria-label="Delete video"
-                >
-                  <span className="media-preview__delete-icon" aria-hidden="true" />
                 </button>
               </div>
 

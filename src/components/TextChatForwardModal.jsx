@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { getTargetDisplayName } from "../utils/textChatHelpers";
 
@@ -14,7 +15,7 @@ export default function TextChatForwardModal({
     return null;
   }
 
-  return (
+  const modal = (
     <div className="forward-modal__backdrop" onClick={onClose} role="presentation">
       <div className="forward-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Переслать сообщения">
         <div className="forward-modal__header">
@@ -81,4 +82,6 @@ export default function TextChatForwardModal({
       </div>
     </div>
   );
+
+  return typeof document === "undefined" ? modal : createPortal(modal, document.body);
 }
