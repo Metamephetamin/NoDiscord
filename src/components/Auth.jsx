@@ -31,6 +31,7 @@ const MAX_AUTH_NICKNAME_LENGTH = 50;
 const MAX_AUTH_IDENTIFIER_LENGTH = 50;
 const MAX_AUTH_PASSWORD_LENGTH = 128;
 const AUTH_BACKGROUND_VIDEO_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2.mp4");
+const AUTH_BACKGROUND_POSTER_URL = resolveStaticAssetUrl("/video/GoldenDustGlow2-poster.jpg");
 const SLOW_CONNECTION_TYPES = new Set(["slow-2g", "2g", "3g"]);
 const MOBILE_AUTH_VISUAL_MODE_QUERY = "(max-width: 640px), (pointer: coarse)";
 const initialRegisterForm = {
@@ -1528,6 +1529,7 @@ export default function Auth({ onAuthSuccess }) {
           playsInline
           preload="metadata"
           src={AUTH_BACKGROUND_VIDEO_URL}
+          poster={AUTH_BACKGROUND_POSTER_URL}
           disablePictureInPicture
           disableRemotePlayback
           aria-hidden="true"
