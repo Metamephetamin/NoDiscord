@@ -1,4 +1,4 @@
-import { USER_AGREEMENT_SECTIONS, USER_AGREEMENT_VERSION } from "../legal/userAgreementText";
+import { USER_AGREEMENT_SECTIONS } from "../legal/userAgreementText";
 
 export default function UserAgreementModal({ open, onClose }) {
   if (!open) {
@@ -13,11 +13,6 @@ export default function UserAgreementModal({ open, onClose }) {
           <div>
             <span className="auth-terms-modal__badge">Редакция РФ · физическое лицо</span>
             <h2 id="auth-terms-title">Пользовательское соглашение</h2>
-            <p>
-              Кратко описывает правила сервиса, обработку данных, ответственность пользователя
-              и технические ограничения Lanaya.
-            </p>
-            <span className="auth-terms-modal__version">Версия {USER_AGREEMENT_VERSION}</span>
           </div>
           <button type="button" className="auth-terms-modal__close" onClick={onClose} aria-label="Закрыть соглашение">
             x

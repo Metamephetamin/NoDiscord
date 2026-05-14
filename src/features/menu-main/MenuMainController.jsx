@@ -4683,24 +4683,26 @@ export default function MenuMain({
   });
   const startDirectCallIfAllowed = useCallback((targetUserId) => {
     const normalizedUserId = String(targetUserId || "").trim();
-    const targetFriend = friendsWithRelationState.find((friend) => String(friend?.id || "") === normalizedUserId);
-    if (targetFriend?.isBlocked) {
+    const targetUser =
+      directConversationTargets.find((friend) => String(friend?.id || "") === normalizedUserId)
+      || friendsWithRelationState.find((friend) => String(friend?.id || "") === normalizedUserId);
+    if (targetUser?.isBlocked) {
       showServerInviteFeedback("Вы заблокировали этого пользователя. Звонок недоступен.");
       return;
     }
 
-    if (targetFriend?.blockedYou) {
+    if (targetUser?.blockedYou) {
       showServerInviteFeedback("Пользователь ограничил общение с вами. Звонок недоступен.");
       return;
     }
 
-    if (targetFriend && !isUserCurrentlyOnline(targetFriend)) {
-      showServerInviteFeedback(`${getDisplayName(targetFriend)} сейчас не в сети. Звонок недоступен.`);
+    if (targetUser && !targetUser.isSelf && !isUserCurrentlyOnline(targetUser)) {
+      showServerInviteFeedback(`${getDisplayName(targetUser)} сейчас не в сети. Звонок недоступен.`);
       return;
     }
 
     return startDirectCallWithUser(targetUserId);
-  }, [friendsWithRelationState, showServerInviteFeedback, startDirectCallWithUser]);
+  }, [directConversationTargets, friendsWithRelationState, showServerInviteFeedback, startDirectCallWithUser]);
   useMenuMainKeyboardShortcuts({
     quickSwitcherOpen,
     quickSwitcherItems,
