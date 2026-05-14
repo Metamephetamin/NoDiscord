@@ -138,6 +138,29 @@ public static class ServerPermissionEvaluator
                actorPriority > nextRolePriority;
     }
 
+    public static int GetUserRolePriority(ServerSnapshot? snapshot, string userId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return 0;
+        }
+
+        var member = snapshot.Members?.FirstOrDefault(item =>
+            string.Equals(item.UserId, userId, StringComparison.Ordinal));
+
+        return member is null ? 0 : GetRolePriority(snapshot, member.RoleId);
+    }
+
+    public static int GetRolePriorityValue(ServerSnapshot? snapshot, string roleId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(roleId))
+        {
+            return 0;
+        }
+
+        return GetRolePriority(snapshot, roleId);
+    }
+
     public static bool CanCreateInvite(ServerSnapshot? existingSnapshot, ServerSnapshot? requestedSnapshot, string userId)
     {
         if (requestedSnapshot is null || string.IsNullOrWhiteSpace(userId))

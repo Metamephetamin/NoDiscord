@@ -6,6 +6,19 @@ namespace BackNoDiscord.Services;
 
 public class ServerStateService
 {
+    private static readonly HashSet<string> AllowedRolePermissions = new(StringComparer.Ordinal)
+    {
+        "manage_server",
+        "manage_channels",
+        "manage_roles",
+        "manage_messages",
+        "manage_nicknames",
+        "invite_members",
+        "mute_members",
+        "deafen_members",
+        "move_members"
+    };
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -133,6 +146,110 @@ public class ServerStateService
         return true;
     }
 
+    public ServerSnapshot SaveRole(string serverId, ServerRoleSnapshot role, bool create)
+    {
+        var (record, snapshot) = GetMutableSnapshot(serverId);
+        snapshot.Roles ??= new List<ServerRoleSnapshot>();
+
+        var normalizedRole = NormalizeRole(role);
+        if (string.IsNullOrWhiteSpace(normalizedRole.Id))
+        {
+            throw new ArgumentException("Role id is required.", nameof(role));
+        }
+
+        var existingIndex = snapshot.Roles.FindIndex(item =>
+            string.Equals(item.Id, normalizedRole.Id, StringComparison.Ordinal));
+        if (create)
+        {
+            if (existingIndex >= 0)
+            {
+                throw new InvalidOperationException("Role already exists.");
+            }
+
+            snapshot.Roles.Add(normalizedRole);
+        }
+        else
+        {
+            if (existingIndex < 0)
+            {
+                throw new KeyNotFoundException("Role not found.");
+            }
+
+            normalizedRole.Priority = snapshot.Roles[existingIndex].Priority;
+            snapshot.Roles[existingIndex] = normalizedRole;
+        }
+
+        return SaveMutableSnapshot(record, snapshot);
+    }
+
+    public ServerSnapshot DeleteRole(string serverId, string roleId)
+    {
+        var (record, snapshot) = GetMutableSnapshot(serverId);
+        var normalizedRoleId = roleId.Trim();
+        var removed = snapshot.Roles.RemoveAll(role =>
+            string.Equals(role.Id, normalizedRoleId, StringComparison.Ordinal));
+        if (removed <= 0)
+        {
+            throw new KeyNotFoundException("Role not found.");
+        }
+
+        foreach (var member in snapshot.Members.Where(member =>
+                     string.Equals(member.RoleId, normalizedRoleId, StringComparison.Ordinal)))
+        {
+            member.RoleId = "member";
+        }
+
+        return SaveMutableSnapshot(record, snapshot);
+    }
+
+    public ServerSnapshot UpdateMemberRole(string serverId, string memberUserId, string roleId)
+    {
+        var (record, snapshot) = GetMutableSnapshot(serverId);
+        var normalizedMemberUserId = memberUserId.Trim();
+        var normalizedRoleId = roleId.Trim();
+        if (!snapshot.Roles.Any(role => string.Equals(role.Id, normalizedRoleId, StringComparison.Ordinal)))
+        {
+            throw new KeyNotFoundException("Role not found.");
+        }
+
+        var member = snapshot.Members.FirstOrDefault(item =>
+            string.Equals(item.UserId, normalizedMemberUserId, StringComparison.Ordinal));
+        if (member is null)
+        {
+            throw new KeyNotFoundException("Member not found.");
+        }
+
+        member.RoleId = normalizedRoleId;
+        return SaveMutableSnapshot(record, snapshot);
+    }
+
+    private (SharedServerSnapshotRecord Record, ServerSnapshot Snapshot) GetMutableSnapshot(string serverId)
+    {
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            throw new KeyNotFoundException("Server snapshot not found.");
+        }
+
+        var record = FindSnapshotRecordByServerId(serverId.Trim());
+        if (record is null)
+        {
+            throw new KeyNotFoundException("Server snapshot not found.");
+        }
+
+        return (record, NormalizeSnapshot(DeserializeSnapshot(record.SnapshotJson), record.OwnerUserId));
+    }
+
+    private ServerSnapshot SaveMutableSnapshot(SharedServerSnapshotRecord record, ServerSnapshot snapshot)
+    {
+        var normalized = NormalizeSnapshot(snapshot, record.OwnerUserId);
+        record.OwnerUserId = normalized.OwnerId;
+        record.SnapshotJson = SerializeSnapshot(normalized);
+        record.UpdatedAt = DateTimeOffset.UtcNow;
+        _context.SaveChanges();
+
+        return CloneSnapshot(normalized);
+    }
+
     private SharedServerSnapshotRecord? FindSnapshotRecordByServerId(string serverId, bool asNoTracking = false)
     {
         var query = asNoTracking
@@ -178,6 +295,19 @@ public class ServerStateService
         normalized.TextChannels ??= new List<ChannelSnapshot>();
         normalized.VoiceChannels ??= new List<ChannelSnapshot>();
 
+        normalized.Roles = normalized.Roles
+            .Where(role => !string.IsNullOrWhiteSpace(role.Id))
+            .Select(NormalizeRole)
+            .ToList();
+
+        foreach (var member in normalized.Members)
+        {
+            member.UserId = member.UserId?.Trim() ?? string.Empty;
+            member.Name = string.IsNullOrWhiteSpace(member.Name) ? "Member" : member.Name.Trim();
+            member.Avatar = member.Avatar?.Trim() ?? string.Empty;
+            member.RoleId = string.IsNullOrWhiteSpace(member.RoleId) ? "member" : member.RoleId.Trim();
+        }
+
         for (var index = 0; index < normalized.ChannelCategories.Count; index++)
         {
             var category = normalized.ChannelCategories[index];
@@ -214,6 +344,39 @@ public class ServerStateService
         }
 
         return normalized;
+    }
+
+    private static ServerRoleSnapshot NormalizeRole(ServerRoleSnapshot role)
+    {
+        var normalized = CloneRole(role);
+        normalized.Id = normalized.Id?.Trim() ?? string.Empty;
+        normalized.Name = string.IsNullOrWhiteSpace(normalized.Name) ? "Role" : normalized.Name.Trim();
+        if (normalized.Name.Length > 40)
+        {
+            normalized.Name = normalized.Name[..40];
+        }
+
+        normalized.Color = NormalizeRoleColor(normalized.Color);
+        normalized.Priority = Math.Max(0, normalized.Priority);
+        normalized.Permissions = (normalized.Permissions ?? new List<string>())
+            .Where(permission => !string.IsNullOrWhiteSpace(permission))
+            .Select(permission => permission.Trim())
+            .Where(permission => AllowedRolePermissions.Contains(permission))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return normalized;
+    }
+
+    private static string NormalizeRoleColor(string? value)
+    {
+        var color = string.IsNullOrWhiteSpace(value) ? "#7b89a8" : value.Trim();
+        if (color.Length == 7 && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit))
+        {
+            return color.ToLowerInvariant();
+        }
+
+        return "#7b89a8";
     }
 
     private static ServerSnapshot MergeSnapshots(ServerSnapshot existing, ServerSnapshot incoming, string fallbackOwnerUserId)

@@ -4519,19 +4519,54 @@ export default function MenuMain({
       y: Math.max(12, Math.min(triggerRect.bottom + 8, window.innerHeight - 320)),
     });
   };
-  const updateMemberRole = (memberUserId, roleId) => {
-    if (!activeServer || !canAssignRoleToMember(activeServer, currentUserId, memberUserId, roleId)) return;
-    const nextServer = {
-      ...activeServer,
-      members: activeServer.members.map((member) =>
-        String(member.userId) === String(memberUserId) ? { ...member, roleId } : member
-      ),
-    };
-    updateServer(() => nextServer);
-    if (nextServer.isShared) {
-      syncServerSnapshot(nextServer);
+  const mutateServerRoles = async (path, options, fallbackMessage) => {
+    if (!activeServer?.id) {
+      throw new Error("Сервер не выбран.");
     }
-    setMemberRoleMenu(null);
+
+    const requestServer = activeServer.isShared ? activeServer : await syncServerSnapshot(activeServer);
+    if (!requestServer?.id) {
+      throw new Error("Сначала нужно синхронизировать сервер.");
+    }
+
+    const response = await authFetch(`${API_BASE_URL}/server-invites/server/${encodeURIComponent(requestServer.id)}${path}`, options);
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, fallbackMessage));
+    }
+
+    if (data) {
+      replaceServerSnapshot(data);
+    }
+
+    return data;
+  };
+  const createServerRole = async (roleDraft) => mutateServerRoles("/roles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(roleDraft),
+  }, "Не удалось создать роль.");
+  const updateServerRole = async (roleId, roleDraft) => mutateServerRoles(`/roles/${encodeURIComponent(roleId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(roleDraft),
+  }, "Не удалось обновить роль.");
+  const deleteServerRole = async (roleId) => mutateServerRoles(`/roles/${encodeURIComponent(roleId)}`, {
+    method: "DELETE",
+  }, "Не удалось удалить роль.");
+  const updateMemberRole = async (memberUserId, roleId) => {
+    if (!activeServer || !canAssignRoleToMember(activeServer, currentUserId, memberUserId, roleId)) return;
+    try {
+      await mutateServerRoles(`/members/${encodeURIComponent(String(memberUserId))}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleId }),
+      }, "Не удалось назначить роль.");
+      setMemberRoleMenu(null);
+    } catch (error) {
+      console.error("Ошибка назначения роли:", error);
+      window.alert(error instanceof Error ? error.message : "Не удалось назначить роль.");
+    }
   };
   const updateMemberNickname = (memberUserId) => {
     if (!activeServer || !canManageTargetMember(activeServer, currentUserId, memberUserId, "manage_nicknames")) return;
@@ -5833,6 +5868,7 @@ export default function MenuMain({
     handleAppLogoChange,
     activeServer,
     canManageServer,
+    canManageRoles,
     canManageMessages,
     canInviteMembers,
     isDefaultServer,
@@ -5845,6 +5881,10 @@ export default function MenuMain({
     canAssignRoleToMember,
     openMemberActionsMenu,
     syncServerSnapshot,
+    createServerRole,
+    updateServerRole,
+    deleteServerRole,
+    updateMemberRole,
     handleImportServer,
     markServerAsShared,
     currentServerRole,

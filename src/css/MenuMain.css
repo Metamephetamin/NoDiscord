@@ -12084,6 +12084,95 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   color: #d7ddef;
 }
 
+.settings-roles-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr);
+  gap: 16px;
+}
+
+.settings-role-row {
+  width: 100%;
+  border: 1px solid transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-role-row--active {
+  border-color: rgba(126, 143, 255, 0.55);
+  background: rgba(126, 143, 255, 0.14);
+}
+
+.settings-role-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  background: var(--app-panel-strong, rgba(255, 255, 255, 0.045));
+}
+
+.settings-role-editor h5 {
+  margin: 0;
+  color: var(--app-text-strong, #f7f9ff);
+  font-size: 16px;
+}
+
+.settings-role-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--app-text-muted, #b8c1d8);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-role-color-input {
+  width: 58px;
+  height: 42px;
+  padding: 4px;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  background: transparent;
+}
+
+.settings-role-permissions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-role-permission {
+  flex-direction: row !important;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.settings-role-permission input,
+.settings-role-select {
+  accent-color: #7d6cff;
+}
+
+.settings-role-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-role-select {
+  min-height: 38px;
+  margin-top: 10px;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--app-text-strong, #ffffff);
+  padding: 0 10px;
+  font: inherit;
+}
+
 .settings-audit-list {
   display: flex;
   flex-direction: column;
@@ -18797,6 +18886,23 @@ html[data-ui-theme="light"] .settings-shell__content .settings-list__row,
 html[data-ui-theme="light"] .settings-shell__content .server-members-panel__item--settings {
   border-color: #d9e0ec;
   background: #ffffff;
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .settings-shell__content .settings-role-editor,
+html[data-ui-theme="light"] .settings-shell__content .settings-role-select {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .settings-shell__content .settings-role-row--active {
+  border-color: rgba(99, 102, 241, 0.45);
+  background: #eef2ff;
+}
+
+html[data-ui-theme="light"] .settings-shell__content .settings-role-permission {
+  background: #f1f5f9;
   color: #0f172a;
 }
 

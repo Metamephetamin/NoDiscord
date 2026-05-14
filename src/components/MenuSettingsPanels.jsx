@@ -1,5 +1,5 @@
 ﻿import AnimatedAvatar from "./AnimatedAvatar";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
@@ -1762,90 +1762,296 @@ const formatAuditDate = (value) => {
   });
 };
 
-export const RolesSettings = ({ activeServer, currentServerRole, rolePermissionLabels, auditLogs = [] }) => (
-  <div className="settings-shell__content">
-    <div className="settings-shell__content-header">
-      <div>
-        <h2>Роли и участники</h2>
-        <p>Иерархия ролей, участники сервера и быстрый обзор прав без длинных полотен текста.</p>
-      </div>
-    </div>
+const SYSTEM_ROLE_IDS = new Set(["owner", "member"]);
+const normalizeRoleForm = (role) => ({
+  name: role?.name || "",
+  color: role?.color || "#7b89a8",
+  permissions: Array.isArray(role?.permissions) ? role.permissions : [],
+});
 
-    {!activeServer ? (
-      <section className="voice-settings-card">
-        <div className="settings-empty-state">
-          <h3>Нет активного сервера</h3>
-          <p>Когда сервер будет выбран, здесь появятся роли, участники и обзор прав.</p>
+export const RolesSettings = ({
+  activeServer,
+  currentUserId,
+  canManageRoles,
+  currentServerRole,
+  rolePermissionLabels,
+  auditLogs = [],
+  canAssignRoleToMember,
+  onCreateRole,
+  onUpdateRole,
+  onDeleteRole,
+  onUpdateMemberRole,
+}) => {
+  const roles = activeServer?.roles || [];
+  const members = activeServer?.members || [];
+  const isOwner = String(activeServer?.ownerId || "") === String(currentUserId || "");
+  const permissionEntries = useMemo(() => Object.entries(rolePermissionLabels || {}), [rolePermissionLabels]);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [roleForm, setRoleForm] = useState(() => normalizeRoleForm(null));
+  const [isCreatingRole, setIsCreatingRole] = useState(false);
+  const [roleStatus, setRoleStatus] = useState("");
+  const [roleBusy, setRoleBusy] = useState(false);
+
+  const selectedRole = useMemo(
+    () => roles.find((role) => String(role.id) === String(selectedRoleId)) || roles[0] || null,
+    [roles, selectedRoleId]
+  );
+  const selectedRoleIsSystem = SYSTEM_ROLE_IDS.has(selectedRole?.id);
+  const canEditSelectedRole = Boolean(canManageRoles && selectedRole && !selectedRoleIsSystem);
+
+  useEffect(() => {
+    if (!activeServer) {
+      setSelectedRoleId("");
+      setRoleForm(normalizeRoleForm(null));
+      setIsCreatingRole(false);
+      return;
+    }
+
+    if (!isCreatingRole && selectedRole) {
+      setRoleForm(normalizeRoleForm(selectedRole));
+    }
+  }, [activeServer, isCreatingRole, selectedRole]);
+
+  const startCreateRole = () => {
+    setIsCreatingRole(true);
+    setSelectedRoleId("");
+    setRoleStatus("");
+    setRoleForm({ name: "", color: "#7b89a8", permissions: [] });
+  };
+
+  const selectRole = (role) => {
+    setIsCreatingRole(false);
+    setSelectedRoleId(role.id);
+    setRoleStatus("");
+    setRoleForm(normalizeRoleForm(role));
+  };
+
+  const togglePermission = (permission) => {
+    if (!isOwner && (permission === "manage_server" || permission === "manage_roles")) {
+      return;
+    }
+
+    setRoleForm((previous) => ({
+      ...previous,
+      permissions: previous.permissions.includes(permission)
+        ? previous.permissions.filter((item) => item !== permission)
+        : [...previous.permissions, permission],
+    }));
+  };
+
+  const submitRole = async (event) => {
+    event.preventDefault();
+    if (!canManageRoles || (!isCreatingRole && !canEditSelectedRole)) {
+      return;
+    }
+
+    setRoleBusy(true);
+    setRoleStatus("");
+    try {
+      const payload = {
+        name: roleForm.name.trim(),
+        color: roleForm.color,
+        permissions: roleForm.permissions,
+      };
+      const snapshot = isCreatingRole
+        ? await onCreateRole?.(payload)
+        : await onUpdateRole?.(selectedRole.id, payload);
+      const nextRole = snapshot?.roles?.find((role) => role.name === payload.name) || snapshot?.roles?.find((role) => role.id === selectedRole?.id);
+      setIsCreatingRole(false);
+      setSelectedRoleId(nextRole?.id || selectedRole?.id || "");
+      setRoleStatus("Сохранено.");
+    } catch (error) {
+      setRoleStatus(error instanceof Error ? error.message : "Не удалось сохранить роль.");
+    } finally {
+      setRoleBusy(false);
+    }
+  };
+
+  const removeSelectedRole = async () => {
+    if (!canEditSelectedRole || !selectedRole || !window.confirm(`Удалить роль ${selectedRole.name}?`)) {
+      return;
+    }
+
+    setRoleBusy(true);
+    setRoleStatus("");
+    try {
+      await onDeleteRole?.(selectedRole.id);
+      setSelectedRoleId("");
+      setRoleStatus("Роль удалена.");
+    } catch (error) {
+      setRoleStatus(error instanceof Error ? error.message : "Не удалось удалить роль.");
+    } finally {
+      setRoleBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-shell__content">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Роли и участники</h2>
+          <p>Создавайте роли, задавайте цвет и права, затем назначайте их участникам сервера.</p>
         </div>
-      </section>
-    ) : (
-      <>
+      </div>
+
+      {!activeServer ? (
         <section className="voice-settings-card">
-          <div className="settings-section__header">
-            <h4>Роли</h4>
-            <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
+          <div className="settings-empty-state">
+            <h3>Нет активного сервера</h3>
+            <p>Когда сервер будет выбран, здесь появятся роли, участники и обзор прав.</p>
           </div>
-          <div className="settings-list">
-            {(activeServer?.roles || []).map((role) => (
-              <div key={role.id} className="settings-list__row settings-list__row--stacked">
-                <div className="settings-role-meta">
-                  <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
-                  <span className="settings-role-description">
-                    {(role.permissions || []).length
-                      ? role.permissions.map((permission) => rolePermissionLabels[permission] || permission).join(", ")
-                      : "Базовый доступ"}
-                  </span>
-                </div>
+        </section>
+      ) : (
+        <>
+          <section className="voice-settings-card settings-roles-layout">
+            <div className="settings-section__header">
+              <h4>Роли</h4>
+              <span className="settings-role-current">{currentServerRole?.name || "Member"}</span>
+            </div>
+            <div className="settings-roles-grid">
+              <div className="settings-list settings-roles-list">
+                {canManageRoles ? (
+                  <button type="button" className="settings-inline-button" onClick={startCreateRole}>
+                    Создать роль
+                  </button>
+                ) : null}
+                {roles.map((role) => (
+                  <button
+                    key={role.id}
+                    type="button"
+                    className={`settings-list__row settings-list__row--stacked settings-role-row ${selectedRole?.id === role.id && !isCreatingRole ? "settings-role-row--active" : ""}`}
+                    onClick={() => selectRole(role)}
+                  >
+                    <div className="settings-role-meta">
+                      <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
+                      <span className="settings-role-description">
+                        {(role.permissions || []).length
+                          ? role.permissions.map((permission) => rolePermissionLabels[permission] || permission).join(", ")
+                          : "Базовый доступ"}
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
 
-        <section className="voice-settings-card">
-          <div className="settings-section__header">
-            <h4>Участники</h4>
-            <span className="settings-role-current">{activeServer?.members?.length || 0}</span>
-          </div>
-          <div className="settings-list">
-            {(activeServer?.members || []).map((member) => {
-              const memberRole = activeServer?.roles?.find((role) => role.id === member.roleId);
-              return (
-                <div key={member.userId} className="settings-list__row settings-list__row--stacked">
-                  <div className="settings-role-meta">
-                    <span className="settings-member-name">{member.name}</span>
-                    <span className="settings-role-description">{memberRole?.name || member.roleId || "Member"}</span>
-                  </div>
+              <form className="settings-role-editor" onSubmit={submitRole}>
+                <h5>{isCreatingRole ? "Новая роль" : selectedRole?.name || "Выберите роль"}</h5>
+                <label>
+                  Имя роли
+                  <input
+                    className="settings-input"
+                    value={roleForm.name}
+                    maxLength={40}
+                    disabled={!canManageRoles || (!isCreatingRole && !canEditSelectedRole)}
+                    onChange={(event) => setRoleForm((previous) => ({ ...previous, name: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Цвет
+                  <input
+                    type="color"
+                    className="settings-role-color-input"
+                    value={roleForm.color}
+                    disabled={!canManageRoles || (!isCreatingRole && !canEditSelectedRole)}
+                    onChange={(event) => setRoleForm((previous) => ({ ...previous, color: event.target.value }))}
+                  />
+                </label>
+                <div className="settings-role-permissions">
+                  {permissionEntries.map(([permission, label]) => {
+                    const lockedSensitivePermission = !isOwner && (permission === "manage_server" || permission === "manage_roles");
+                    return (
+                      <label key={permission} className="settings-role-permission">
+                        <input
+                          type="checkbox"
+                          checked={roleForm.permissions.includes(permission)}
+                          disabled={!canManageRoles || (!isCreatingRole && !canEditSelectedRole) || lockedSensitivePermission}
+                          onChange={() => togglePermission(permission)}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        </section>
+                {roleStatus ? <span className="settings-role-description">{roleStatus}</span> : null}
+                <div className="settings-role-actions">
+                  <button type="submit" className="settings-inline-button" disabled={roleBusy || !canManageRoles || (!isCreatingRole && !canEditSelectedRole)}>
+                    Сохранить
+                  </button>
+                  {!isCreatingRole && selectedRole ? (
+                    <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={roleBusy || !canEditSelectedRole} onClick={removeSelectedRole}>
+                      Удалить
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+            </div>
+          </section>
 
-        <section className="voice-settings-card">
-          <div className="settings-section__header">
-            <h4>Журнал действий</h4>
-            <span className="settings-role-current">{auditLogs.length}</span>
-          </div>
-          <div className="settings-audit-list">
-            {auditLogs.length ? (
-              auditLogs.slice(0, 20).map((entry) => (
-                <div key={entry.id || `${entry.actionType}-${entry.createdAt}`} className="settings-audit-item">
-                  <div className="settings-audit-item__main">
-                    <strong>{formatAuditAction(entry.actionType)}</strong>
-                    <span>{formatAuditDate(entry.createdAt)}</span>
+          <section className="voice-settings-card">
+            <div className="settings-section__header">
+              <h4>Участники</h4>
+              <span className="settings-role-current">{members.length}</span>
+            </div>
+            <div className="settings-list">
+              {members.map((member) => {
+                const memberRole = roles.find((role) => role.id === member.roleId);
+                const canChangeThisMember = canManageRoles && String(member.userId) !== String(currentUserId) && member.roleId !== "owner";
+                return (
+                  <div key={member.userId} className="settings-list__row settings-list__row--stacked">
+                    <div className="settings-role-meta">
+                      <span className="settings-member-name">{member.name}</span>
+                      <span className="settings-role-description">{memberRole?.name || member.roleId || "Member"}</span>
+                    </div>
+                    {canManageRoles ? (
+                      <select
+                        className="settings-role-select"
+                        value={member.roleId}
+                        disabled={!canChangeThisMember}
+                        onChange={(event) => onUpdateMemberRole?.(member.userId, event.target.value)}
+                      >
+                        {roles.map((role) => (
+                          <option
+                            key={role.id}
+                            value={role.id}
+                            disabled={role.id === "owner" || !canAssignRoleToMember?.(activeServer, currentUserId, member.userId, role.id)}
+                          >
+                            {role.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
                   </div>
-                  <span className="settings-role-description">Пользователь ID: {entry.actorUserId || "unknown"}</span>
-                </div>
-              ))
-            ) : (
-              <span className="settings-role-description">Пока нет записей.</span>
-            )}
-          </div>
-        </section>
-      </>
-    )}
-  </div>
-);
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="voice-settings-card">
+            <div className="settings-section__header">
+              <h4>Журнал действий</h4>
+              <span className="settings-role-current">{auditLogs.length}</span>
+            </div>
+            <div className="settings-audit-list">
+              {auditLogs.length ? (
+                auditLogs.slice(0, 20).map((entry) => (
+                  <div key={entry.id || `${entry.actionType}-${entry.createdAt}`} className="settings-audit-item">
+                    <div className="settings-audit-item__main">
+                      <strong>{formatAuditAction(entry.actionType)}</strong>
+                      <span>{formatAuditDate(entry.createdAt)}</span>
+                    </div>
+                    <span className="settings-role-description">Пользователь ID: {entry.actorUserId || "unknown"}</span>
+                  </div>
+                ))
+              ) : (
+                <span className="settings-role-description">Пока нет записей.</span>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
+};
 
 export const ServerSettings = ({
   activeServer,

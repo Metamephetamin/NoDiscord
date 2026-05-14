@@ -210,6 +210,97 @@ public class ServerStateServiceTests
     }
 
     [Fact]
+    public void SaveRole_CreatesRoleAndSanitizesPermissions()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-team",
+            OwnerId = "owner-5",
+            Name = "Team",
+            Members = new List<ServerMemberSnapshot>
+            {
+                new() { UserId = "owner-5", Name = "Owner", RoleId = "owner" }
+            }
+        }, "owner-5");
+
+        var snapshot = service.SaveRole("server-team", new ServerRoleSnapshot
+        {
+            Id = "role-custom",
+            Name = "Custom",
+            Color = "#AABBCC",
+            Priority = 250,
+            Permissions = new List<string> { "manage_channels", "bad_permission", "manage_channels" }
+        }, create: true);
+
+        var role = Assert.Single(snapshot.Roles.Where(item => item.Id == "role-custom"));
+        Assert.Equal("#aabbcc", role.Color);
+        Assert.Equal(new[] { "manage_channels" }, role.Permissions);
+    }
+
+    [Fact]
+    public void DeleteRole_ReassignsMembersToMemberRole()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-team",
+            OwnerId = "owner-5",
+            Name = "Team",
+            Roles = new List<ServerRoleSnapshot>
+            {
+                new() { Id = "owner", Name = "Owner", Priority = 400 },
+                new() { Id = "member", Name = "Member", Priority = 100 },
+                new() { Id = "role-custom", Name = "Custom", Priority = 250 }
+            },
+            Members = new List<ServerMemberSnapshot>
+            {
+                new() { UserId = "owner-5", Name = "Owner", RoleId = "owner" }
+            }
+        }, "owner-5");
+        service.AddMember("server-team", "member-7", "Alice", "");
+        service.UpdateMemberRole("server-team", "member-7", "role-custom");
+
+        var snapshot = service.DeleteRole("server-team", "role-custom");
+
+        Assert.DoesNotContain(snapshot.Roles, role => role.Id == "role-custom");
+        Assert.Contains(snapshot.Members, member => member.UserId == "member-7" && member.RoleId == "member");
+    }
+
+    [Fact]
+    public void UpdateMemberRole_AssignsExistingRole()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-team",
+            OwnerId = "owner-5",
+            Name = "Team",
+            Roles = new List<ServerRoleSnapshot>
+            {
+                new() { Id = "owner", Name = "Owner", Priority = 400 },
+                new() { Id = "member", Name = "Member", Priority = 100 },
+                new() { Id = "moderator", Name = "Moderator", Priority = 200 }
+            },
+            Members = new List<ServerMemberSnapshot>
+            {
+                new() { UserId = "owner-5", Name = "Owner", RoleId = "owner" }
+            }
+        }, "owner-5");
+        service.AddMember("server-team", "member-7", "Alice", "");
+
+        var snapshot = service.UpdateMemberRole("server-team", "member-7", "moderator");
+
+        Assert.Contains(snapshot.Members, member => member.UserId == "member-7" && member.RoleId == "moderator");
+    }
+
+    [Fact]
     public void DeleteSnapshot_RemovesSnapshotRecord()
     {
         using var context = CreateContext();

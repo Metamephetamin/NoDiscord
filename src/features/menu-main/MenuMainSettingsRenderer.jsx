@@ -147,6 +147,7 @@ export function MenuMainSettingsContent({
   handleAppLogoChange,
   activeServer,
   canManageServer,
+  canManageRoles,
   canManageMessages,
   canInviteMembers,
   isDefaultServer,
@@ -159,6 +160,10 @@ export function MenuMainSettingsContent({
   canAssignRoleToMember,
   openMemberActionsMenu,
   syncServerSnapshot,
+  createServerRole,
+  updateServerRole,
+  deleteServerRole,
+  updateMemberRole,
   handleImportServer,
   markServerAsShared,
   currentServerRole,
@@ -343,9 +348,16 @@ export function MenuMainSettingsContent({
       return (
         <RolesSettings
           activeServer={activeServer}
+          currentUserId={currentUserId}
+          canManageRoles={canManageRoles}
           currentServerRole={currentServerRole}
           rolePermissionLabels={ROLE_PERMISSION_LABELS}
           auditLogs={serverAuditLogs}
+          canAssignRoleToMember={canAssignRoleToMember}
+          onCreateRole={createServerRole}
+          onUpdateRole={updateServerRole}
+          onDeleteRole={deleteServerRole}
+          onUpdateMemberRole={updateMemberRole}
         />
       );
     case "moderation":

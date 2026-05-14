@@ -230,6 +230,165 @@ public class ServerInvitesController : ControllerBase
         return Ok(entries);
     }
 
+    [HttpPost("server/{serverId}/roles", Order = -1)]
+    public async Task<IActionResult> CreateServerRole(
+        [FromRoute] string serverId,
+        [FromBody] UpsertServerRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is null)
+        {
+            return NotFound(new { message = "Server snapshot not found." });
+        }
+
+        var validation = ValidateRoleMutation(snapshot, currentUser.UserId, null, request, isCreate: true);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        var isOwner = string.Equals(snapshot.OwnerId, currentUser.UserId, StringComparison.Ordinal);
+        var actorPriority = ServerPermissionEvaluator.GetUserRolePriority(snapshot, currentUser.UserId);
+        var nextPriority = isOwner
+            ? Math.Min(350, Math.Max(110, snapshot.Roles.Where(role => role.Id != "owner").Select(role => role.Priority).DefaultIfEmpty(100).Max() + 10))
+            : Math.Max(101, actorPriority - 1);
+
+        var role = new ServerRoleSnapshot
+        {
+            Id = $"role-{Guid.NewGuid():N}",
+            Name = request.Name ?? string.Empty,
+            Color = request.Color ?? string.Empty,
+            Priority = nextPriority,
+            Permissions = request.Permissions ?? new List<string>()
+        };
+        var updatedSnapshot = _serverState.SaveRole(snapshot.Id, role, create: true);
+        await RecordRolesAuditAsync(updatedSnapshot, currentUser.UserId, "server.roles.create", role.Id, role.Name, cancellationToken);
+        return Ok(updatedSnapshot);
+    }
+
+    [HttpPatch("server/{serverId}/roles/{roleId}", Order = -1)]
+    public async Task<IActionResult> UpdateServerRole(
+        [FromRoute] string serverId,
+        [FromRoute] string roleId,
+        [FromBody] UpsertServerRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is null)
+        {
+            return NotFound(new { message = "Server snapshot not found." });
+        }
+
+        var existingRole = snapshot.Roles.FirstOrDefault(role => string.Equals(role.Id, roleId, StringComparison.Ordinal));
+        var validation = ValidateRoleMutation(snapshot, currentUser.UserId, existingRole, request, isCreate: false);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        var role = new ServerRoleSnapshot
+        {
+            Id = roleId,
+            Name = request.Name ?? string.Empty,
+            Color = request.Color ?? string.Empty,
+            Priority = existingRole?.Priority ?? 0,
+            Permissions = request.Permissions ?? new List<string>()
+        };
+        var updatedSnapshot = _serverState.SaveRole(snapshot.Id, role, create: false);
+        await RecordRolesAuditAsync(updatedSnapshot, currentUser.UserId, "server.roles.update", role.Id, role.Name, cancellationToken);
+        return Ok(updatedSnapshot);
+    }
+
+    [HttpDelete("server/{serverId}/roles/{roleId}", Order = -1)]
+    public async Task<IActionResult> DeleteServerRole(
+        [FromRoute] string serverId,
+        [FromRoute] string roleId,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is null)
+        {
+            return NotFound(new { message = "Server snapshot not found." });
+        }
+
+        if (IsProtectedRoleId(roleId))
+        {
+            return BadRequest(new { message = "System role cannot be deleted." });
+        }
+
+        if (!ServerPermissionEvaluator.CanManageRoles(snapshot, currentUser.UserId))
+        {
+            return Forbid();
+        }
+
+        var existingRole = snapshot.Roles.FirstOrDefault(role => string.Equals(role.Id, roleId, StringComparison.Ordinal));
+        if (existingRole is null)
+        {
+            return NotFound(new { message = "Role not found." });
+        }
+
+        if (!CanTouchRole(snapshot, currentUser.UserId, existingRole))
+        {
+            return Forbid();
+        }
+
+        var updatedSnapshot = _serverState.DeleteRole(snapshot.Id, roleId);
+        await RecordRolesAuditAsync(updatedSnapshot, currentUser.UserId, "server.roles.delete", roleId, existingRole.Name, cancellationToken);
+        return Ok(updatedSnapshot);
+    }
+
+    [HttpPatch("server/{serverId}/members/{memberUserId}/role", Order = -1)]
+    public async Task<IActionResult> UpdateServerMemberRole(
+        [FromRoute] string serverId,
+        [FromRoute] string memberUserId,
+        [FromBody] UpdateServerMemberRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var snapshot = _serverState.GetSnapshot(serverId);
+        if (snapshot is null)
+        {
+            return NotFound(new { message = "Server snapshot not found." });
+        }
+
+        var nextRoleId = request?.RoleId?.Trim() ?? string.Empty;
+        if (!ServerPermissionEvaluator.CanAssignRole(snapshot, currentUser.UserId, memberUserId, nextRoleId))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var updatedSnapshot = _serverState.UpdateMemberRole(snapshot.Id, memberUserId, nextRoleId);
+            await RecordRolesAuditAsync(updatedSnapshot, currentUser.UserId, "server.member.role.update", nextRoleId, memberUserId, cancellationToken);
+            return Ok(updatedSnapshot);
+        }
+        catch (KeyNotFoundException error)
+        {
+            return NotFound(new { message = error.Message });
+        }
+    }
+
     [HttpGet("my-servers", Order = -1)]
     public IActionResult GetMyServers()
     {
@@ -328,6 +487,102 @@ public class ServerInvitesController : ControllerBase
         return !string.IsNullOrWhiteSpace(serverId)
                && serverId.StartsWith("server-main", StringComparison.OrdinalIgnoreCase);
     }
+
+    private IActionResult? ValidateRoleMutation(
+        ServerSnapshot snapshot,
+        string actorUserId,
+        ServerRoleSnapshot? existingRole,
+        UpsertServerRoleRequest request,
+        bool isCreate)
+    {
+        if (request is null)
+        {
+            return BadRequest(new { message = "Role payload is required." });
+        }
+
+        if (!ServerPermissionEvaluator.CanManageRoles(snapshot, actorUserId))
+        {
+            return Forbid();
+        }
+
+        var roleName = request.Name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(roleName))
+        {
+            return BadRequest(new { message = "Role name is required." });
+        }
+
+        if (!isCreate)
+        {
+            if (existingRole is null)
+            {
+                return NotFound(new { message = "Role not found." });
+            }
+
+            if (IsProtectedRoleId(existingRole.Id))
+            {
+                return BadRequest(new { message = "System role cannot be edited." });
+            }
+
+            if (!CanTouchRole(snapshot, actorUserId, existingRole))
+            {
+                return Forbid();
+            }
+        }
+
+        var isOwner = string.Equals(snapshot.OwnerId, actorUserId, StringComparison.Ordinal);
+        var permissions = request.Permissions ?? new List<string>();
+        if (!isOwner && permissions.Any(permission =>
+                string.Equals(permission, "manage_server", StringComparison.Ordinal) ||
+                string.Equals(permission, "manage_roles", StringComparison.Ordinal)))
+        {
+            return StatusCode(403, new { message = "Only server owner can grant server or role management permissions." });
+        }
+
+        if (!isOwner && isCreate && ServerPermissionEvaluator.GetUserRolePriority(snapshot, actorUserId) <= 101)
+        {
+            return Forbid();
+        }
+
+        return null;
+    }
+
+    private static bool CanTouchRole(ServerSnapshot snapshot, string actorUserId, ServerRoleSnapshot role)
+    {
+        if (string.Equals(snapshot.OwnerId, actorUserId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var actorPriority = ServerPermissionEvaluator.GetUserRolePriority(snapshot, actorUserId);
+        return actorPriority > 0 && actorPriority > role.Priority;
+    }
+
+    private static bool IsProtectedRoleId(string? roleId)
+    {
+        return string.Equals(roleId, "owner", StringComparison.Ordinal) ||
+               string.Equals(roleId, "member", StringComparison.Ordinal);
+    }
+
+    private Task RecordRolesAuditAsync(
+        ServerSnapshot snapshot,
+        string actorUserId,
+        string actionType,
+        string roleId,
+        string? roleName,
+        CancellationToken cancellationToken)
+    {
+        return _auditLog.RecordAsync(
+            snapshot.Id,
+            actorUserId,
+            actionType,
+            metadata: new Dictionary<string, string?>
+            {
+                ["serverName"] = snapshot.Name,
+                ["roleId"] = roleId,
+                ["roleName"] = roleName
+            },
+            cancellationToken: cancellationToken);
+    }
 }
 
 public class CreateServerInviteRequest
@@ -348,4 +603,16 @@ public class SyncServerSnapshotRequest
 {
     public string ActorUserId { get; set; } = string.Empty;
     public ServerSnapshot? ServerSnapshot { get; set; }
+}
+
+public class UpsertServerRoleRequest
+{
+    public string? Name { get; set; }
+    public string? Color { get; set; }
+    public List<string>? Permissions { get; set; }
+}
+
+public class UpdateServerMemberRoleRequest
+{
+    public string? RoleId { get; set; }
 }
