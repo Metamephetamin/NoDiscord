@@ -729,6 +729,14 @@
   backdrop-filter: none;
 }
 
+.auth-page--login .auth-field--with-error-slot {
+  min-height: 0;
+}
+
+.auth-page--login .auth-field__error-slot:empty {
+  min-height: 0;
+}
+
 .auth-login-divider {
   display: flex;
   align-items: center;
@@ -1285,10 +1293,10 @@
 .auth-card__side--qr {
   position: relative;
   justify-content: center;
-  padding: 12px 14px;
+  padding: 18px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.42);
-  border-color: rgba(137, 150, 174, 0.2);
+  background: rgba(255, 255, 255, 0.66);
+  border-color: rgba(255, 255, 255, 0.78);
   box-shadow: 0 12px 24px rgba(21, 32, 51, 0.05);
 }
 
@@ -1298,11 +1306,11 @@
 
 .auth-qr-login {
   display: flex;
-  min-height: 0;
+  min-height: 100%;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 14px;
   text-align: center;
 }
 
@@ -1322,15 +1330,15 @@
 
 .auth-qr-login__code {
   position: relative;
-  width: 148px;
-  height: 148px;
-  padding: 12px;
+  width: 178px;
+  height: 178px;
+  padding: 10px;
   box-sizing: border-box;
   display: grid;
   place-items: center;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(216, 223, 237, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.94);
   box-shadow: 0 8px 20px rgba(18, 26, 43, 0.08);
   overflow: hidden;
 }
@@ -1342,8 +1350,8 @@
 .auth-qr-login__svg,
 .auth-qr-login__svg svg {
   display: block;
-  width: 124px;
-  height: 124px;
+  width: 158px;
+  height: 158px;
   border-radius: 8px;
 }
 
@@ -2685,7 +2693,7 @@
     width: 400px;
     max-width: calc(100vw - 48px);
     margin: 0;
-    transform: none;
+    transform: translateY(56px);
   }
 
   .auth-card--login,
@@ -2699,6 +2707,11 @@
   .auth-page--login .auth-card.auth-card--login:has(.auth-card__side--qr) {
     width: min(100%, 624px);
     max-width: calc(100vw - 48px);
+    align-items: center;
+  }
+
+  .auth-page--login .auth-card__side--qr {
+    align-self: center;
   }
 
   .auth-card--login .auth-card__main,
