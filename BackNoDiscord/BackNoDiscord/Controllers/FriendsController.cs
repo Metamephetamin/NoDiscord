@@ -21,6 +21,7 @@ public class FriendsController : ControllerBase
     private readonly UserBlockService _userBlockService;
     private readonly UserPresenceService _userPresenceService;
     private readonly CryptoService _crypto;
+    private readonly AbuseAutoBanService _abuseAutoBan;
     private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
     private const int FriendSearchCandidateLimit = 200;
 
@@ -30,7 +31,8 @@ public class FriendsController : ControllerBase
         FriendRequestService friendRequestService,
         UserBlockService userBlockService,
         UserPresenceService userPresenceService,
-        CryptoService crypto)
+        CryptoService crypto,
+        AbuseAutoBanService abuseAutoBan)
     {
         _context = context;
         _chatHubContext = chatHubContext;
@@ -38,6 +40,7 @@ public class FriendsController : ControllerBase
         _userBlockService = userBlockService;
         _userPresenceService = userPresenceService;
         _crypto = crypto;
+        _abuseAutoBan = abuseAutoBan;
     }
 
     [HttpGet]
@@ -243,6 +246,21 @@ public class FriendsController : ControllerBase
         }
 
         var result = await _friendRequestService.CreateOrAcceptRequestAsync(currentUserId, friend.id);
+        if (result.Status == FriendRequestActionStatuses.RequestSent)
+        {
+            var autoBan = await _abuseAutoBan.RecordOutgoingFriendRequestAsync(
+                currentUserId,
+                DateTimeOffset.UtcNow,
+                HttpContext.RequestAborted);
+            if (autoBan.IsBanned)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    code = "account_banned",
+                    message = "Аккаунт заблокирован за массовую рассылку заявок."
+                });
+            }
+        }
 
         if (result.Status == FriendRequestActionStatuses.AlreadyFriends)
         {

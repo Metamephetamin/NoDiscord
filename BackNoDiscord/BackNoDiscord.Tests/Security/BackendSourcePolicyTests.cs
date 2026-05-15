@@ -105,7 +105,8 @@ public sealed class BackendSourcePolicyTests
             "ChatSpamBurstLimiter.cs"));
 
         Assert.Contains("ChatSpamBurstLimiter", chatHubSource);
-        Assert.Contains("EnsureMessageBurstAllowed(currentUser.UserId, nowUtc)", chatHubSource);
+        Assert.Contains("EnsureMessageBurstAllowedAsync(currentUser.UserId, nowUtc)", chatHubSource);
+        Assert.Contains("RecordMessageBurstViolationAsync", chatHubSource);
         Assert.Contains("MaxMessagesPerWindow = 12", limiterSource);
         Assert.Contains("Window = TimeSpan.FromSeconds(10)", limiterSource);
     }

@@ -114,6 +114,7 @@ out/
 *.suo
 *.wsuo
 *.vsidx
+*.lscache
 slnx.sqlite
 
 # Backend runtime data

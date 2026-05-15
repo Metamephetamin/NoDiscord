@@ -1026,13 +1026,53 @@ const formatAdminDate = (value) => {
     : "нет данных";
 };
 
+const formatAdminNumber = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toLocaleString("ru-RU") : "0";
+};
+
+const formatAdminBytes = (value) => {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 Б";
+  }
+
+  const units = ["Б", "КБ", "МБ", "ГБ"];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toLocaleString("ru-RU", { maximumFractionDigits: unitIndex === 0 ? 0 : 1 })} ${units[unitIndex]}`;
+};
+
+const getAdminOverviewArray = (overview, key) => (
+  Array.isArray(overview?.[key]) ? overview[key] : []
+);
+
 export const AdminSettingsPanel = ({ currentUserId }) => {
   const [query, setQuery] = useState("");
   const [reason, setReason] = useState("");
   const [users, setUsers] = useState([]);
+  const [overview, setOverview] = useState(null);
   const [status, setStatus] = useState("");
+  const [overviewStatus, setOverviewStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [busyUserId, setBusyUserId] = useState("");
+  const suspiciousUsers = useMemo(() => getAdminOverviewArray(overview, "suspiciousUsers"), [overview]);
+  const recentMessages = useMemo(() => getAdminOverviewArray(overview, "recentMessages"), [overview]);
+  const recentFiles = useMemo(() => getAdminOverviewArray(overview, "recentFiles"), [overview]);
+  const recentReports = useMemo(() => getAdminOverviewArray(overview, "recentReports"), [overview]);
+  const overviewMetrics = useMemo(() => ([
+    { label: "Пользователи", value: overview?.totalUsers },
+    { label: "В бане", value: overview?.bannedUsers },
+    { label: "Сообщения за 24ч", value: overview?.recentMessageCount24h },
+    { label: "Файлы за 7д", value: overview?.recentFileCount7d },
+    { label: "Открытые жалобы", value: overview?.openReportCount },
+  ]), [overview]);
 
   const loadUsers = async (nextQuery = query) => {
     setLoading(true);
@@ -1048,7 +1088,7 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
       const response = await authFetch(`${API_BASE_URL}/admin/users?${params.toString()}`, { method: "GET" });
       const data = await parseApiResponse(response);
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, "Не удалось загрузить пользователей."));
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить пользователей."));
       }
 
       setUsers(Array.isArray(data?.users) ? data.users : []);
@@ -1059,8 +1099,31 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
     }
   };
 
+  const loadSecurityOverview = async () => {
+    setOverviewLoading(true);
+    setOverviewStatus("");
+    try {
+      const response = await authFetch(`${API_BASE_URL}/admin/security-overview`, { method: "GET" });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить безопасность."));
+      }
+
+      setOverview(data || null);
+      const overviewUsers = Array.isArray(data?.users) ? data.users : [];
+      if (!query.trim() && overviewUsers.length) {
+        setUsers(overviewUsers);
+      }
+    } catch (error) {
+      setOverviewStatus(error?.message || "Не удалось загрузить безопасность.");
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadUsers("");
+    loadSecurityOverview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1085,7 +1148,7 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
       });
       const data = await parseApiResponse(response);
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, shouldBan ? "Не удалось заблокировать пользователя." : "Не удалось снять блокировку."));
+        throw new Error(getApiErrorMessage(response, data, shouldBan ? "Не удалось заблокировать пользователя." : "Не удалось снять блокировку."));
       }
 
       setUsers((previousUsers) => previousUsers.map((user) => (
@@ -1100,6 +1163,7 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
           : user
       )));
       setStatus(shouldBan ? "Пользователь заблокирован, активные сессии отозваны." : "Блокировка снята.");
+      void loadSecurityOverview();
     } catch (error) {
       setStatus(error?.message || "Не удалось изменить блокировку.");
     } finally {
@@ -1110,9 +1174,48 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
   return (
     <div className="settings-shell__content settings-shell__content--admin">
       <div className="settings-shell__content-header">
-        <h2>Админка</h2>
-        <p>Блокировка аккаунта закрывает вход, refresh, QR-вход и отзывает активные сессии пользователя.</p>
+        <h2>Безопасность</h2>
+        <p>Отдельная страница для просмотра пользователей, подозрительных сигналов, сообщений, файлов и жалоб.</p>
       </div>
+
+      <section className="admin-security-metrics" aria-busy={overviewLoading}>
+        {overviewMetrics.map((metric) => (
+          <article key={metric.label} className="admin-security-metric">
+            <span>{metric.label}</span>
+            <strong>{overviewLoading && !overview ? "..." : formatAdminNumber(metric.value)}</strong>
+          </article>
+        ))}
+      </section>
+
+      {overviewStatus ? <div className="admin-settings-status">{overviewStatus}</div> : null}
+
+      <section className="admin-security-section">
+        <div className="admin-security-section__header">
+          <div>
+            <h3>Подозрительные профили</h3>
+            <p>Скоринг строится по массовым сообщениям, файлам, жалобам и совпадениям с бан-сигналами.</p>
+          </div>
+          <button type="button" className="settings-inline-button" disabled={overviewLoading} onClick={loadSecurityOverview}>
+            {overviewLoading ? "Обновляем..." : "Обновить"}
+          </button>
+        </div>
+        <div className="admin-security-list admin-security-list--compact">
+          {suspiciousUsers.map((targetUser) => (
+            <article key={targetUser.id} className="admin-security-suspect">
+              <div>
+                <strong>{targetUser.displayName || targetUser.nickname || `User ${targetUser.id}`}</strong>
+                <span>ID {targetUser.id} · score {targetUser.suspicionScore || 0}</span>
+              </div>
+              <div className="admin-security-suspect__signals">
+                {(Array.isArray(targetUser.suspicionReasons) ? targetUser.suspicionReasons : []).map((signal) => (
+                  <span key={signal}>{signal}</span>
+                ))}
+              </div>
+            </article>
+          ))}
+          {!overviewLoading && suspiciousUsers.length === 0 ? <div className="admin-users-list__empty">Сильных подозрительных сигналов нет.</div> : null}
+        </div>
+      </section>
 
       <section className="admin-settings-card">
         <form className="admin-settings-search" onSubmit={submitSearch}>
@@ -1185,6 +1288,56 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
           );
         })}
         {!loading && users.length === 0 ? <div className="admin-users-list__empty">Пользователи не найдены.</div> : null}
+      </section>
+
+      <section className="admin-security-columns">
+        <div className="admin-security-section">
+          <div className="admin-security-section__header">
+            <h3>Последние сообщения</h3>
+          </div>
+          <div className="admin-security-list">
+            {recentMessages.map((message) => (
+              <article key={message.id} className="admin-security-event">
+                <strong>{message.username || `User ${message.authorUserId}`}</strong>
+                <span>{formatAdminDate(message.timestamp)} · {message.channelId || "канал не указан"}</span>
+                <p>{message.isEncrypted ? "Зашифровано: " : ""}{message.preview || "без превью"}</p>
+              </article>
+            ))}
+            {!overviewLoading && recentMessages.length === 0 ? <div className="admin-users-list__empty">Сообщений пока нет.</div> : null}
+          </div>
+        </div>
+
+        <div className="admin-security-section">
+          <div className="admin-security-section__header">
+            <h3>Последние файлы</h3>
+          </div>
+          <div className="admin-security-list">
+            {recentFiles.map((file) => (
+              <article key={file.id} className="admin-security-event">
+                <strong>{file.displayFileName || "Файл"}</strong>
+                <span>User {file.ownerUserId || "?"} · {formatAdminBytes(file.size)} · {file.contentType || "type unknown"}</span>
+                <p>{formatAdminDate(file.createdAt)} · {file.channelId || "канал не указан"}</p>
+              </article>
+            ))}
+            {!overviewLoading && recentFiles.length === 0 ? <div className="admin-users-list__empty">Файлов пока нет.</div> : null}
+          </div>
+        </div>
+
+        <div className="admin-security-section admin-security-section--wide">
+          <div className="admin-security-section__header">
+            <h3>Жалобы</h3>
+          </div>
+          <div className="admin-security-list">
+            {recentReports.map((report) => (
+              <article key={report.id} className="admin-security-event">
+                <strong>Target {report.targetUserId || "?"}</strong>
+                <span>{report.status || "open"} · reporter {report.reporterUserId || "?"} · {formatAdminDate(report.createdAt)}</span>
+                <p>{report.reason || "без причины"}</p>
+              </article>
+            ))}
+            {!overviewLoading && recentReports.length === 0 ? <div className="admin-users-list__empty">Жалоб пока нет.</div> : null}
+          </div>
+        </div>
       </section>
     </div>
   );

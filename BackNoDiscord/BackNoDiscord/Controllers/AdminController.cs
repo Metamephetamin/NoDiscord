@@ -15,11 +15,16 @@ public sealed class AdminController : ControllerBase
 
     private readonly AppDbContext _context;
     private readonly AccountBanService _accountBanService;
+    private readonly AdminSecurityOverviewService _securityOverviewService;
 
-    public AdminController(AppDbContext context, AccountBanService accountBanService)
+    public AdminController(
+        AppDbContext context,
+        AccountBanService accountBanService,
+        AdminSecurityOverviewService securityOverviewService)
     {
         _context = context;
         _accountBanService = accountBanService;
+        _securityOverviewService = securityOverviewService;
     }
 
     [HttpGet("users")]
@@ -58,6 +63,18 @@ public sealed class AdminController : ControllerBase
         });
     }
 
+    [HttpGet("security-overview")]
+    public async Task<IActionResult> GetSecurityOverview(CancellationToken cancellationToken)
+    {
+        var currentUser = await RequireAdminAsync(cancellationToken);
+        if (currentUser == null)
+        {
+            return Forbid();
+        }
+
+        return Ok(await _securityOverviewService.GetOverviewAsync(cancellationToken));
+    }
+
     [HttpPost("users/{userId:int}/ban")]
     public async Task<IActionResult> BanUser([FromRoute] int userId, [FromBody] AdminBanRequest? request, CancellationToken cancellationToken)
     {
@@ -72,6 +89,7 @@ public sealed class AdminController : ControllerBase
         {
             AccountBanResult.Success => Ok(new { banned = true }),
             AccountBanResult.SelfBanDenied => BadRequest(new { message = "Нельзя заблокировать собственную учётную запись." }),
+            AccountBanResult.AdminBanDenied => BadRequest(new { message = "Нельзя заблокировать администратора." }),
             _ => NotFound(new { message = "Пользователь не найден." })
         };
     }

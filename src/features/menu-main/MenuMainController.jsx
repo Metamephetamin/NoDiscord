@@ -4366,6 +4366,9 @@ export default function MenuMain({
   const openServerSettingsPanel = useCallback(() => {
     openSettingsPanel("server");
   }, [openSettingsPanel]);
+  const openServerRolesPanel = useCallback(() => {
+    openSettingsPanel("roles");
+  }, [openSettingsPanel]);
   const openCreateServerModal = () => {
     setCreateServerName("");
     setCreateServerIcon("");
@@ -5687,18 +5690,23 @@ export default function MenuMain({
 
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
   const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
+  const adminSettingsItem = useMemo(() => SETTINGS_NAV_ITEMS.find((item) => item.id === "admin"), []);
   const settingsNavItems = useMemo(
-    () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "admin" || isCurrentUserAdmin),
-    [isCurrentUserAdmin]
+    () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "roles" && item.id !== "admin"),
+    []
   );
   const settingsNavSections = useMemo(() => groupSettingsNavItems(settingsNavItems), [settingsNavItems]);
   const mobileSettingsNavItems = useMemo(
-    () => settingsNavItems.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation")),
-    [activeServer, settingsNavItems]
+    () => {
+      const items = settingsNavItems.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation"));
+      return isCurrentUserAdmin && adminSettingsItem ? [...items, adminSettingsItem] : items;
+    },
+    [activeServer, adminSettingsItem, isCurrentUserAdmin, settingsNavItems]
   );
   const activeSettingsTabMeta =
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
     settingsNavItems.find((item) => item.id === settingsTab) ||
+    SETTINGS_NAV_ITEMS.find((item) => item.id === settingsTab) ||
     settingsNavItems[0] ||
     SETTINGS_NAV_ITEMS[0];
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
@@ -6558,7 +6566,9 @@ export default function MenuMain({
       watchedStreamUserId={selectedStreamUserId}
       joiningVoiceChannelId={joiningVoiceChannelId}
       icons={serverSidebarIcons}
+      canManageRoles={canManageRoles}
       onOpenServerSettings={openServerSettingsPanel}
+      onOpenServerRoles={openServerRolesPanel}
       onOpenNotificationSettings={() => openSettingsPanel("notifications")}
       onOpenPersonalProfileSettings={() => openSettingsPanel("personal_profile")}
       onShowServerFeedback={showServerInviteFeedback}
@@ -7131,6 +7141,7 @@ export default function MenuMain({
       openSettings={openSettings}
       popupRef={popupRef}
       user={user}
+      showAdminSettingsLink={isCurrentUserAdmin}
       settingsNavSections={settingsNavSections}
       settingsTab={settingsTab}
       setOpenSettings={setOpenSettings}

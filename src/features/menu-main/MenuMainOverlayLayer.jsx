@@ -36,6 +36,7 @@ export default function MenuMainOverlayLayer({
   openSettings,
   popupRef,
   user,
+  showAdminSettingsLink,
   settingsNavSections,
   settingsTab,
   setOpenSettings,
@@ -236,6 +237,7 @@ export default function MenuMainOverlayLayer({
         userAvatarSrc={user?.avatarUrl || user?.avatar}
         userAvatarFrame={getUserAvatarFrame(user)}
         displayName={getDisplayName(user)}
+        showAdminSettingsLink={showAdminSettingsLink}
         settingsNavSections={settingsNavSections}
         settingsTab={settingsTab}
         onClose={() => setOpenSettings(false)}

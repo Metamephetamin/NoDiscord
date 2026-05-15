@@ -279,6 +279,7 @@ export const SettingsOverlay = ({
   userAvatarSrc,
   userAvatarFrame,
   displayName,
+  showAdminSettingsLink = false,
   settingsNavSections,
   settingsTab,
   onClose,
@@ -407,6 +408,21 @@ export const SettingsOverlay = ({
               ))}
               {normalizedSearchQuery && filteredSections.length === 0 ? (
                 <div className="settings-shell__search-empty">Ничего не найдено</div>
+              ) : null}
+              {showAdminSettingsLink ? (
+                <div className="settings-shell__admin-entry">
+                  <button
+                    type="button"
+                    className={`settings-shell__admin-link ${settingsTab === "admin" ? "settings-shell__admin-link--active" : ""}`}
+                    onClick={() => onSelectSettingsTab("admin")}
+                  >
+                    <SettingsNavIcon id="admin" />
+                    <span>
+                      <strong>Безопасность</strong>
+                      <small>Пользователи, баны, сигналы</small>
+                    </span>
+                  </button>
+                </div>
               ) : null}
             </aside>
 

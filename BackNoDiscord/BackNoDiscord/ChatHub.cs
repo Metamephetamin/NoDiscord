@@ -57,6 +57,7 @@ public class ChatHub : Hub
     private readonly UserBlockService _userBlockService;
     private readonly ChatFileAccessService _chatFileAccess;
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
+    private readonly AbuseAutoBanService _abuseAutoBan;
     private readonly MessageDeduplicationService _messageDeduplication;
     private readonly ChatReadStateService _chatReadState;
     private readonly ModerationService _moderation;
@@ -72,6 +73,7 @@ public class ChatHub : Hub
         UserBlockService userBlockService,
         ChatFileAccessService chatFileAccess,
         ChatSpamBurstLimiter messageBurstLimiter,
+        AbuseAutoBanService abuseAutoBan,
         MessageDeduplicationService messageDeduplication,
         ChatReadStateService chatReadState,
         ModerationService moderation)
@@ -86,6 +88,7 @@ public class ChatHub : Hub
         _userBlockService = userBlockService;
         _chatFileAccess = chatFileAccess;
         _messageBurstLimiter = messageBurstLimiter;
+        _abuseAutoBan = abuseAutoBan;
         _messageDeduplication = messageDeduplication;
         _chatReadState = chatReadState;
         _moderation = moderation;
@@ -194,7 +197,7 @@ public class ChatHub : Hub
 
             var nowUtc = DateTime.UtcNow;
             TrimCooldownState(nowUtc);
-            EnsureMessageBurstAllowed(currentUser.UserId, nowUtc);
+            await EnsureMessageBurstAllowedAsync(currentUser.UserId, nowUtc);
             if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
                 && nowUtc - lastMessageSentAtUtc < MessageSendCooldown)
             {
@@ -336,7 +339,7 @@ public class ChatHub : Hub
 
         var nowUtc = DateTime.UtcNow;
         TrimCooldownState(nowUtc);
-        EnsureMessageBurstAllowed(currentUser.UserId, nowUtc);
+        await EnsureMessageBurstAllowedAsync(currentUser.UserId, nowUtc);
         if (LastMessageSentAtByUser.TryGetValue(currentUser.UserId, out var lastMessageSentAtUtc)
             && nowUtc - lastMessageSentAtUtc < MessageSendCooldown)
         {
@@ -1148,11 +1151,23 @@ public class ChatHub : Hub
         LastActionAtByUserAndName[actionKey] = nowUtc;
     }
 
-    private void EnsureMessageBurstAllowed(string userId, DateTime nowUtc)
+    private async Task EnsureMessageBurstAllowedAsync(string userId, DateTime nowUtc)
     {
         if (_messageBurstLimiter.TryRecord(userId, nowUtc, out var retryAfter))
         {
             return;
+        }
+
+        if (int.TryParse(userId, out var userIdValue))
+        {
+            var autoBan = await _abuseAutoBan.RecordMessageBurstViolationAsync(
+                userIdValue,
+                new DateTimeOffset(nowUtc, TimeSpan.Zero),
+                Context.ConnectionAborted);
+            if (autoBan.IsBanned)
+            {
+                throw new HubException("Аккаунт заблокирован за повторный спам сообщениями.");
+            }
         }
 
         var seconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));

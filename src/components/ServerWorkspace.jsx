@@ -1526,7 +1526,9 @@ export const ServersSidebar = memo(({
   watchedStreamUserId,
   joiningVoiceChannelId,
   icons,
+  canManageRoles = false,
   onOpenServerSettings,
+  onOpenServerRoles,
   onOpenNotificationSettings,
   onOpenPersonalProfileSettings,
   onShowServerFeedback,
@@ -2151,6 +2153,10 @@ export const ServersSidebar = memo(({
                 <span>Настройки сервера</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">⚙</span>
               </button>
+              <button type="button" onClick={() => runServerMenuAction(onOpenServerRoles)} disabled={!canManageRoles}>
+                <span>Роли и участники</span>
+                <span className="server-summary-menu__icon" aria-hidden="true">◆</span>
+              </button>
               <button type="button" onClick={() => runServerMenuAction(() => openCreateChannelModal("", "text"))} disabled={!canManageChannels}>
                 <span>Создать канал</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">＋</span>
@@ -2159,7 +2165,7 @@ export const ServersSidebar = memo(({
                 <span>Создать категорию</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">▣</span>
               </button>
-              <span className={`server-summary-menu__separator ${!canInviteToServer(activeServer) && !canManageServer && !canManageChannels ? "is-hidden" : ""}`} aria-hidden="true" />
+              <span className={`server-summary-menu__separator ${!canInviteToServer(activeServer) && !canManageServer && !canManageRoles && !canManageChannels ? "is-hidden" : ""}`} aria-hidden="true" />
               <button type="button" onClick={() => runServerMenuAction(onOpenNotificationSettings)}>
                 <span>Параметры уведомлений</span>
                 <span className="server-summary-menu__icon" aria-hidden="true">●</span>

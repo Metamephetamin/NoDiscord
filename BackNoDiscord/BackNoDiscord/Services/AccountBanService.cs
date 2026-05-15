@@ -87,15 +87,30 @@ public sealed class AccountBanService
 
     public async Task<AccountBanResult> BanUserAsync(int actorUserId, int targetUserId, string? reason, CancellationToken cancellationToken)
     {
+        return await BanUserCoreAsync(actorUserId, targetUserId, reason, denySelfBan: true, cancellationToken);
+    }
+
+    public async Task<AccountBanResult> BanUserForAbuseAsync(int targetUserId, string? reason, CancellationToken cancellationToken)
+    {
+        return await BanUserCoreAsync(null, targetUserId, reason, denySelfBan: false, cancellationToken);
+    }
+
+    private async Task<AccountBanResult> BanUserCoreAsync(int? actorUserId, int targetUserId, string? reason, bool denySelfBan, CancellationToken cancellationToken)
+    {
         var target = await _context.Users.FirstOrDefaultAsync(user => user.id == targetUserId, cancellationToken);
         if (target == null)
         {
             return AccountBanResult.NotFound;
         }
 
-        if (target.id == actorUserId)
+        if (denySelfBan && target.id == actorUserId)
         {
             return AccountBanResult.SelfBanDenied;
+        }
+
+        if (IsAdmin(target))
+        {
+            return AccountBanResult.AdminBanDenied;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -231,7 +246,7 @@ public sealed class AccountBanService
     private async Task AddBannedIdentitiesForUserAsync(
         User user,
         IReadOnlyCollection<RefreshTokenRecord> sessions,
-        int actorUserId,
+        int? actorUserId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -406,5 +421,6 @@ public enum AccountBanResult
 {
     Success,
     NotFound,
-    SelfBanDenied
+    SelfBanDenied,
+    AdminBanDenied
 }
