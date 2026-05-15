@@ -1,5 +1,6 @@
 ﻿import { API_BASE_URL } from "../config/runtime";
 import { API_URL } from "../config/runtime";
+import { normalizeBannedAccount } from "./accountBan";
 import { parseMediaFrame } from "./mediaFrames";
 
 const TOKEN_STORAGE_KEY = "token";
@@ -55,6 +56,10 @@ function mapLocalDevAuthUser(data) {
     is_admin: Boolean(data?.is_admin ?? data?.isAdmin),
     isBanned: Boolean(data?.is_banned ?? data?.isBanned),
     is_banned: Boolean(data?.is_banned ?? data?.isBanned),
+    bannedAt: data?.banned_at || data?.bannedAt || "",
+    banned_at: data?.banned_at || data?.bannedAt || "",
+    banReason: data?.ban_reason || data?.banReason || "",
+    ban_reason: data?.ban_reason || data?.banReason || "",
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
     avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
@@ -547,7 +552,7 @@ export async function clearStoredSession() {
   }
 }
 
-export function notifyUnauthorizedSession(reason = "unauthorized") {
+export function notifyUnauthorizedSession(reason = "unauthorized", detail = {}) {
   if (isLocalAuthBypassSession()) {
     return;
   }
@@ -560,7 +565,7 @@ export function notifyUnauthorizedSession(reason = "unauthorized") {
 
   window.dispatchEvent(
     new CustomEvent(AUTH_UNAUTHORIZED_EVENT, {
-      detail: { reason },
+      detail: { reason, ...detail },
     })
   );
 }
@@ -695,9 +700,13 @@ export async function refreshAccessToken() {
         body: JSON.stringify({ refreshToken }),
       });
       const data = await parseApiResponse(response);
+      const bannedAccount = normalizeBannedAccount(data);
 
       if (!response.ok || !data?.token) {
         await clearStoredSession();
+        if (bannedAccount) {
+          notifyUnauthorizedSession("account_banned", { bannedAccount });
+        }
         return false;
       }
 
@@ -718,6 +727,10 @@ export async function refreshAccessToken() {
             is_admin: Boolean(data.is_admin ?? data.isAdmin ?? sessionCache.user?.isAdmin ?? sessionCache.user?.is_admin ?? false),
             isBanned: Boolean(data.is_banned ?? data.isBanned ?? sessionCache.user?.isBanned ?? sessionCache.user?.is_banned ?? false),
             is_banned: Boolean(data.is_banned ?? data.isBanned ?? sessionCache.user?.isBanned ?? sessionCache.user?.is_banned ?? false),
+            bannedAt: data.banned_at || data.bannedAt || sessionCache.user?.bannedAt || sessionCache.user?.banned_at || "",
+            banned_at: data.banned_at || data.bannedAt || sessionCache.user?.banned_at || sessionCache.user?.bannedAt || "",
+            banReason: data.ban_reason || data.banReason || sessionCache.user?.banReason || sessionCache.user?.ban_reason || "",
+            ban_reason: data.ban_reason || data.banReason || sessionCache.user?.ban_reason || sessionCache.user?.banReason || "",
             avatarUrl: data.avatar_url || sessionCache.user?.avatarUrl || sessionCache.user?.avatar || "",
             avatar: data.avatar_url || sessionCache.user?.avatar || sessionCache.user?.avatarUrl || "",
             avatarFrame: parseMediaFrame(
@@ -794,9 +807,10 @@ export async function authFetch(input, init = {}) {
     throw wrappedError;
   }
 
-  if (response.status === 403 && await isAccountBannedResponse(response)) {
+  const bannedAccount = response.status === 403 ? await readAccountBannedPayload(response) : null;
+  if (bannedAccount) {
     await clearStoredSession();
-    notifyUnauthorizedSession("account_banned");
+    notifyUnauthorizedSession("account_banned", { bannedAccount });
     return response;
   }
 
@@ -834,21 +848,22 @@ export async function authFetch(input, init = {}) {
 
   if (response.status === 401) {
     notifyUnauthorizedSession("http_401");
-  } else if (response.status === 403 && await isAccountBannedResponse(response)) {
-    await clearStoredSession();
-    notifyUnauthorizedSession("account_banned");
+  } else {
+    const retriedBannedAccount = response.status === 403 ? await readAccountBannedPayload(response) : null;
+    if (retriedBannedAccount) {
+      await clearStoredSession();
+      notifyUnauthorizedSession("account_banned", { bannedAccount: retriedBannedAccount });
+    }
   }
 
   return response;
 }
 
-async function isAccountBannedResponse(response) {
+async function readAccountBannedPayload(response) {
   try {
     const data = await response.clone().json();
-    return data?.code === "account_banned";
+    return normalizeBannedAccount(data);
   } catch {
-    return false;
+    return null;
   }
 }
-
-

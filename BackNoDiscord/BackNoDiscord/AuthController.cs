@@ -92,7 +92,7 @@ public class AuthController : ControllerBase
 
         if (user.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(user);
         }
 
         var authSession = await IssueAuthSessionAsync(user);
@@ -176,7 +176,7 @@ public class AuthController : ControllerBase
 
         if (user.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(user);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -438,7 +438,7 @@ public class AuthController : ControllerBase
 
         if (record.ApprovedUser.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(record.ApprovedUser);
         }
 
         record.ConsumedAt = now;
@@ -476,7 +476,7 @@ public class AuthController : ControllerBase
         {
             if (record.ApprovedUser.IsBanned)
             {
-                return CreateAccountBannedResponse();
+                return CreateAccountBannedResponse(record.ApprovedUser);
             }
 
             record.ConsumedAt = DateTimeOffset.UtcNow;
@@ -576,7 +576,7 @@ public class AuthController : ControllerBase
 
         if (user.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(user);
         }
 
         if (string.IsNullOrWhiteSpace(user.email))
@@ -632,7 +632,7 @@ public class AuthController : ControllerBase
 
         if (user.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(user);
         }
 
         try
@@ -692,7 +692,7 @@ public class AuthController : ControllerBase
 
         if (user.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(user);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -965,7 +965,7 @@ public class AuthController : ControllerBase
 
         if (user.IsBanned)
         {
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(user);
         }
 
         if (RequireEmailRegistrationVerification && !string.IsNullOrWhiteSpace(user.email) && !user.is_email_verified)
@@ -1022,7 +1022,7 @@ public class AuthController : ControllerBase
         if (storedToken.User.IsBanned)
         {
             await _accountBanService.RevokeActiveSessionsAsync(storedToken.User.id, now, cancellationToken);
-            return CreateAccountBannedResponse();
+            return CreateAccountBannedResponse(storedToken.User);
         }
 
         if (storedToken.RevokedAt.HasValue)
@@ -1280,6 +1280,8 @@ public class AuthController : ControllerBase
             is_totp_enabled = user.is_totp_enabled,
             is_admin = _accountBanService.IsAdmin(user),
             is_banned = user.IsBanned,
+            banned_at = user.BannedAt?.ToString("O"),
+            ban_reason = user.BanReason ?? string.Empty,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1310,6 +1312,8 @@ public class AuthController : ControllerBase
             is_totp_enabled = user.is_totp_enabled,
             is_admin = _accountBanService.IsAdmin(user),
             is_banned = user.IsBanned,
+            banned_at = user.BannedAt?.ToString("O"),
+            ban_reason = user.BanReason ?? string.Empty,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1366,6 +1370,8 @@ public class AuthController : ControllerBase
             is_totp_enabled = user.is_totp_enabled,
             is_admin = _accountBanService.IsAdmin(user),
             is_banned = user.IsBanned,
+            banned_at = user.BannedAt?.ToString("O"),
+            ban_reason = user.BanReason ?? string.Empty,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
             profile_background_url = user.profile_background_url ?? string.Empty,
@@ -1732,13 +1738,33 @@ public class AuthController : ControllerBase
         };
     }
 
-    private ObjectResult CreateAccountBannedResponse()
+    private ObjectResult CreateAccountBannedResponse(User user)
     {
         return StatusCode(StatusCodes.Status403Forbidden, new
         {
             code = "account_banned",
-            message = "Аккаунт заблокирован. Доступ к приложению закрыт."
+            message = "Аккаунт заблокирован. Доступ к приложению закрыт.",
+            user = BuildBannedAccountPayload(user)
         });
+    }
+
+    private object BuildBannedAccountPayload(User user)
+    {
+        return new
+        {
+            id = user.id,
+            first_name = user.first_name ?? string.Empty,
+            last_name = user.last_name ?? string.Empty,
+            nickname = user.nickname ?? string.Empty,
+            email = user.email ?? string.Empty,
+            is_banned = true,
+            banned_at = user.BannedAt?.ToString("O"),
+            ban_reason = user.BanReason ?? string.Empty,
+            avatar_url = user.avatar_url ?? string.Empty,
+            avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
+            profile_background_url = user.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true)
+        };
     }
 
     private static object CreateInvalidCredentialsError()

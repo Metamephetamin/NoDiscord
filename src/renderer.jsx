@@ -1,6 +1,7 @@
 import { Profiler, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Auth from "./components/Auth";
+import AccountBannedScreen from "./components/AccountBannedScreen";
 import AppUpdateBanner from "./components/AppUpdateBanner";
 import { API_BASE_URL } from "./config/runtime";
 import { installChunkLoadRecovery, lazyWithChunkRecovery } from "./utils/chunkLoadRecovery";
@@ -9,6 +10,7 @@ import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./uti
 import "./index.css";
 import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
 import { parseMediaFrame } from "./utils/mediaFrames";
+import { normalizeBannedAccount } from "./utils/accountBan";
 import {
   finishPerfTraceOnNextFrame,
   initRendererPerfMonitoring,
@@ -338,6 +340,7 @@ export default function Renderer() {
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [bannedAccount, setBannedAccount] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
@@ -348,6 +351,21 @@ export default function Renderer() {
 
   const isInviteRoute = /^\/invite\/[^/]+$/i.test(location.pathname);
   const isQrLoginRoute = /^\/qr-login$/i.test(location.pathname);
+  const handleAccountBanned = useCallback((account) => {
+    const normalizedAccount = normalizeBannedAccount(account);
+    if (!normalizedAccount) {
+      return;
+    }
+
+    clearPendingInviteAcceptCode();
+    setBannedAccount(normalizedAccount);
+    setUser(null);
+    setIsAuthenticated(false);
+    setSessionHydrated(true);
+    setLoading(false);
+    void clearStoredSession();
+    navigate("/", { replace: true });
+  }, [navigate]);
   const handleRootProfilerRender = useCallback((id, phase, actualDuration, baseDuration, startTime, commitTime) => {
     recordReactCommit("app-shell", id, phase, actualDuration, baseDuration, startTime, commitTime, {
       path: location.pathname,
@@ -387,6 +405,7 @@ export default function Renderer() {
       void clearStoredSession();
 
       if (!disposed) {
+        setBannedAccount(null);
         setUser(null);
         setIsAuthenticated(false);
         setSessionHydrated(true);
@@ -406,6 +425,12 @@ export default function Renderer() {
           await storeSession(localDevSession.user, localDevSession.session);
 
           if (!disposed) {
+            if (localDevSession.user?.isBanned || localDevSession.user?.is_banned) {
+              handleAccountBanned(localDevSession.user);
+              return;
+            }
+
+            setBannedAccount(null);
             setUser(localDevSession.user);
             setIsAuthenticated(Boolean(localDevSession.session.accessToken));
             setSessionHydrated(true);
@@ -428,6 +453,12 @@ export default function Renderer() {
           await storeSession(localDevSession.user, localDevSession.session);
 
           if (!disposed) {
+            if (localDevSession.user?.isBanned || localDevSession.user?.is_banned) {
+              handleAccountBanned(localDevSession.user);
+              return;
+            }
+
+            setBannedAccount(null);
             setUser(localDevSession.user);
             setIsAuthenticated(Boolean(localDevSession.session.accessToken));
             setSessionHydrated(true);
@@ -439,6 +470,7 @@ export default function Renderer() {
 
       if (!savedToken || !savedUser) {
         if (!disposed) {
+          setBannedAccount(null);
           setSessionHydrated(true);
           setLoading(false);
         }
@@ -447,6 +479,12 @@ export default function Renderer() {
 
       const restoreCachedSession = () => {
         if (!disposed) {
+          if (savedUser?.isBanned || savedUser?.is_banned) {
+            handleAccountBanned(savedUser);
+            return;
+          }
+
+          setBannedAccount(null);
           setUser(savedUser);
           setIsAuthenticated(Boolean(getStoredToken() || savedToken));
           setSessionHydrated(true);
@@ -490,6 +528,10 @@ export default function Renderer() {
           is_admin: Boolean(data.is_admin ?? data.isAdmin ?? savedUser.isAdmin ?? savedUser.is_admin ?? false),
           isBanned: Boolean(data.is_banned ?? data.isBanned ?? savedUser.isBanned ?? savedUser.is_banned ?? false),
           is_banned: Boolean(data.is_banned ?? data.isBanned ?? savedUser.isBanned ?? savedUser.is_banned ?? false),
+          bannedAt: data.banned_at || data.bannedAt || savedUser.bannedAt || savedUser.banned_at || "",
+          banned_at: data.banned_at || data.bannedAt || savedUser.banned_at || savedUser.bannedAt || "",
+          banReason: data.ban_reason || data.banReason || savedUser.banReason || savedUser.ban_reason || "",
+          ban_reason: data.ban_reason || data.banReason || savedUser.ban_reason || savedUser.banReason || "",
           avatarUrl: data.avatar_url || savedUser.avatarUrl || savedUser.avatar || "",
           avatar: data.avatar_url || savedUser.avatar || savedUser.avatarUrl || "",
           avatarFrame: parseMediaFrame(data.avatar_frame, data.avatarFrame, savedUser.avatarFrame, savedUser.avatar_frame),
@@ -521,6 +563,12 @@ export default function Renderer() {
         };
 
         if (!disposed) {
+          if (nextUser.isBanned || nextUser.is_banned) {
+            handleAccountBanned(nextUser);
+            return;
+          }
+
+          setBannedAccount(null);
           setUser(nextUser);
           setIsAuthenticated(Boolean(getStoredToken() || savedToken));
           setSessionHydrated(true);
@@ -543,7 +591,12 @@ export default function Renderer() {
       }
     };
 
-    const handleUnauthorized = () => {
+    const handleUnauthorized = (event) => {
+      if (event?.detail?.reason === "account_banned" && event.detail.bannedAccount) {
+        handleAccountBanned(event.detail.bannedAccount);
+        return;
+      }
+
       resetSession();
     };
 
@@ -554,7 +607,7 @@ export default function Renderer() {
       disposed = true;
       window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
     };
-  }, []);
+  }, [handleAccountBanned]);
 
   useEffect(() => {
     if (!sessionHydrated || !isAuthenticated || !user) {
@@ -597,6 +650,38 @@ export default function Renderer() {
       disposed = true;
     };
   }, [isAuthenticated, sessionHydrated, user]);
+
+  useEffect(() => {
+    if (!sessionHydrated || !isAuthenticated || !user || bannedAccount) {
+      return undefined;
+    }
+
+    let disposed = false;
+    const checkBanState = async () => {
+      try {
+        const response = await authFetch(`${API_BASE_URL}/auth/me`, { method: "GET" });
+        const data = await parseApiResponse(response);
+        if (disposed || !response.ok) {
+          return;
+        }
+
+        const nextBannedAccount = normalizeBannedAccount(data);
+        if (nextBannedAccount) {
+          handleAccountBanned(nextBannedAccount);
+        }
+      } catch {
+        // Session errors are handled by authFetch/global auth events.
+      }
+    };
+
+    const intervalId = window.setInterval(checkBanState, 45000);
+    void checkBanState();
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [bannedAccount, handleAccountBanned, isAuthenticated, sessionHydrated, user]);
 
   useEffect(() => {
     if (!sessionHydrated) {
@@ -708,6 +793,12 @@ export default function Renderer() {
     const accessToken =
       nextSession && typeof nextSession === "object" ? nextSession.accessToken || nextSession.token || "" : nextSession;
 
+    if (nextUser?.isBanned || nextUser?.is_banned) {
+      handleAccountBanned(nextUser);
+      return;
+    }
+
+    setBannedAccount(null);
     setUser(nextUser);
     setIsAuthenticated(Boolean(accessToken));
     setSessionHydrated(true);
@@ -722,6 +813,7 @@ export default function Renderer() {
 
   const handleLogout = () => {
     clearPendingInviteAcceptCode();
+    setBannedAccount(null);
     setUser(null);
     setIsAuthenticated(false);
     setSessionHydrated(true);
@@ -764,6 +856,19 @@ export default function Renderer() {
           <div className="app-loader__subtitle">Поднимаем сессию и готовим интерфейс.</div>
         </div>
       </div>
+    );
+  }
+
+  if (bannedAccount) {
+    return (
+      <>
+        <AppUpdateBanner
+          state={appUpdateState}
+          onInstall={handleInstallDownloadedUpdate}
+          onRetry={handleRetryAppUpdateCheck}
+        />
+        <AccountBannedScreen account={bannedAccount} onBackToLogin={handleLogout} />
+      </>
     );
   }
 
@@ -849,10 +954,10 @@ export default function Renderer() {
       ) : (
         PERF_ENABLED ? (
           <Profiler id="Auth" onRender={handleRootProfilerRender}>
-            <Auth onAuthSuccess={handleAuthSuccess} />
+            <Auth onAuthSuccess={handleAuthSuccess} onAccountBanned={handleAccountBanned} />
           </Profiler>
         ) : (
-          <Auth onAuthSuccess={handleAuthSuccess} />
+          <Auth onAuthSuccess={handleAuthSuccess} onAccountBanned={handleAccountBanned} />
         )
       )}
     </>

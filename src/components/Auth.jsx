@@ -5,6 +5,7 @@ import { API_BASE_URL, API_URL } from "../config/runtime";
 import { getApiErrorMessage, getNetworkErrorMessage, parseApiResponse } from "../utils/auth";
 import { resolveStaticAssetUrl } from "../utils/media";
 import { APP_LOGO_CHANGE_EVENT, getCurrentAppLogoOption } from "../utils/appLogo";
+import { normalizeBannedAccount } from "../utils/accountBan";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import { parseQrLoginPayload } from "../features/menu-main/menuMainControllerUtils";
 import UserAgreementModal from "./UserAgreementModal";
@@ -222,6 +223,10 @@ function mapAuthUser(data) {
     is_admin: Boolean(data?.is_admin ?? data?.isAdmin),
     isBanned: Boolean(data?.is_banned ?? data?.isBanned),
     is_banned: Boolean(data?.is_banned ?? data?.isBanned),
+    bannedAt: data?.banned_at || data?.bannedAt || "",
+    banned_at: data?.banned_at || data?.bannedAt || "",
+    banReason: data?.ban_reason || data?.banReason || "",
+    ban_reason: data?.ban_reason || data?.banReason || "",
     avatarUrl: data?.avatar_url || data?.avatarUrl || "",
     avatar: data?.avatar_url || data?.avatarUrl || "",
     avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame),
@@ -305,7 +310,7 @@ async function submitAuthRequest(endpoint, payload, fallbackMessage) {
   return data;
 }
 
-export default function Auth({ onAuthSuccess }) {
+export default function Auth({ onAuthSuccess, onAccountBanned }) {
   const [mode, setMode] = useState("login");
   const [loginMethod, setLoginMethod] = useState("code");
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
@@ -355,6 +360,15 @@ export default function Auth({ onAuthSuccess }) {
   const emailAutoSubmitKeyRef = useRef("");
   const loginErrorMessage = loginErrors.password || loginErrors.identifier || "";
   const authMessageTone = useMemo(() => getAuthMessageTone(message), [message]);
+  const handleAccountBannedError = useMemo(() => (error) => {
+    const bannedAccount = normalizeBannedAccount(error?.data);
+    if (!bannedAccount) {
+      return false;
+    }
+
+    onAccountBanned?.(bannedAccount);
+    return true;
+  }, [onAccountBanned]);
 
   const normalizedRegisterEmail = useMemo(
     () => registerForm.contact.trim().toLowerCase(),
@@ -719,7 +733,10 @@ export default function Auth({ onAuthSuccess }) {
         }
 
         if (!response.ok) {
-          throw new Error(getApiErrorMessage(response, data, "Не удалось проверить QR-вход."));
+          const error = new Error(getApiErrorMessage(response, data, "Не удалось проверить QR-вход."));
+          error.response = response;
+          error.data = data;
+          throw error;
         }
 
         const status = String(data?.status || "").trim().toLowerCase();
@@ -740,6 +757,10 @@ export default function Auth({ onAuthSuccess }) {
         }
       } catch (error) {
         if (!disposed) {
+          if (handleAccountBannedError(error)) {
+            return;
+          }
+
           setQrLoginStatus("error");
           setQrLoginError(error.message || "Не удалось проверить QR-вход.");
         }
@@ -755,7 +776,7 @@ export default function Auth({ onAuthSuccess }) {
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [isQrLoginOpen, mode, onAuthSuccess, qrLoginSession, qrLoginStatus]);
+  }, [handleAccountBannedError, isQrLoginOpen, mode, onAuthSuccess, qrLoginSession, qrLoginStatus]);
 
   useEffect(() => () => {
     stopQrScanner();
@@ -841,6 +862,11 @@ export default function Auth({ onAuthSuccess }) {
       const data = await submitAuthRequest("/auth/login", payload, "Не удалось войти в аккаунт.");
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        setIsSubmitting(false);
+        return;
+      }
+
       const pendingEmailVerification = error?.data?.pendingEmailVerification === true;
       const verification = error?.data?.verification && typeof error.data.verification === "object"
         ? error.data.verification
@@ -928,6 +954,10 @@ export default function Auth({ onAuthSuccess }) {
 
       setMessage("");
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        return;
+      }
+
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
         : null;
@@ -986,6 +1016,10 @@ export default function Auth({ onAuthSuccess }) {
       });
       setMessage(canExposeDebugCode ? `Тестовый код восстановления: ${data.debugCode}` : "");
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        return;
+      }
+
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
         : null;
@@ -1083,6 +1117,10 @@ export default function Auth({ onAuthSuccess }) {
       }));
       setMessage("Пароль изменён. Войдите с новым паролем.");
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        return;
+      }
+
       const backendFieldErrors = error?.data?.fieldErrors && typeof error.data.fieldErrors === "object"
         ? error.data.fieldErrors
         : null;
@@ -1177,6 +1215,11 @@ export default function Auth({ onAuthSuccess }) {
       );
       setIsSubmitting(false);
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        setIsSubmitting(false);
+        return;
+      }
+
       setMessage(error.message || "Не удалось создать аккаунт.");
       setIsSubmitting(false);
     }
@@ -1226,6 +1269,10 @@ export default function Auth({ onAuthSuccess }) {
 
       setMessage(canExposeDebugCode ? `Новый тестовый email-код: ${data.debugCode}` : "");
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        return;
+      }
+
       setMessage(error.message || "Не удалось повторно отправить код на почту.");
     } finally {
       setIsResendingEmailCode(false);
@@ -1262,6 +1309,10 @@ export default function Auth({ onAuthSuccess }) {
       resetEmailVerificationModal();
       onAuthSuccess(mapAuthUser(data), mapAuthSession(data));
     } catch (error) {
+      if (handleAccountBannedError(error)) {
+        return;
+      }
+
       if (error?.data?.requiresTotp) {
         setEmailVerificationModal((previous) => ({ ...previous, requiresTotp: true }));
       }
@@ -1379,6 +1430,10 @@ export default function Auth({ onAuthSuccess }) {
           setQrScannerError("Это не QR-код входа Lanaya.");
         }
       } catch (error) {
+        if (handleAccountBannedError(error)) {
+          return;
+        }
+
         console.error("Ошибка распознавания QR-кода:", error);
         setQrScannerError("Не удалось распознать QR-код. Попробуйте ещё раз.");
       } finally {
