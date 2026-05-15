@@ -253,7 +253,7 @@ export default function MenuMainOverlayLayer({
       />
 
       <AdminSecurityPageOverlay
-        open={openAdminSecurityPage}
+        open={openAdminSecurityPage && showAdminSettingsLink}
         onClose={() => setOpenAdminSecurityPage(false)}
         renderAdminSecurityPage={renderAdminSecurityPage}
       />

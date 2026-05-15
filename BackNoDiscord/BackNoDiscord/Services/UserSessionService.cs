@@ -147,6 +147,7 @@ public sealed class UserSessionService
     public async Task<LoginSecuritySignal?> DetectLoginSecuritySignalAsync(
         int userId,
         string deviceLabel,
+        string deviceTokenHash,
         string clientIp,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -164,9 +165,16 @@ public sealed class UserSessionService
         }
 
         var normalizedDeviceLabel = (deviceLabel ?? string.Empty).Trim();
+        var normalizedDeviceTokenHash = NormalizeDeviceTokenHash(deviceTokenHash);
+        var knownDeviceTokenHashes = activeSessions
+            .Select(item => NormalizeDeviceTokenHash(item.DeviceTokenHash))
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToList();
         var normalizedIpFamily = NormalizeIpFamily(clientIp);
-        var isNewDevice = activeSessions.All(item =>
-            !string.Equals(item.DeviceLabel, normalizedDeviceLabel, StringComparison.OrdinalIgnoreCase));
+        var isNewDevice = !string.IsNullOrWhiteSpace(normalizedDeviceTokenHash) && knownDeviceTokenHashes.Count > 0
+            ? knownDeviceTokenHashes.All(item => !string.Equals(item, normalizedDeviceTokenHash, StringComparison.OrdinalIgnoreCase))
+            : activeSessions.All(item =>
+                !string.Equals(item.DeviceLabel, normalizedDeviceLabel, StringComparison.OrdinalIgnoreCase));
         var isNewIpFamily = !string.IsNullOrWhiteSpace(normalizedIpFamily) &&
             activeSessions
                 .Select(item => NormalizeIpFamily(item.LastIp))
@@ -176,6 +184,14 @@ public sealed class UserSessionService
         return isNewDevice || isNewIpFamily
             ? new LoginSecuritySignal(true, isNewDevice, isNewIpFamily)
             : null;
+    }
+
+    private static string NormalizeDeviceTokenHash(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+        return normalized.Length == 64 && normalized.All(Uri.IsHexDigit)
+            ? normalized.ToUpperInvariant()
+            : string.Empty;
     }
 
     private static string NormalizeIpFamily(string? value)

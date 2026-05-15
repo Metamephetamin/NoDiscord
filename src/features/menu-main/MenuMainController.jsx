@@ -737,6 +737,7 @@ export default function MenuMain({
     chatBackgroundNameStorageKey,
     chatBackgroundFitStorageKey,
   } = useMenuMainStorageKeys(user);
+  const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
   const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {
     notificationSoundEnabled,
@@ -871,6 +872,7 @@ export default function MenuMain({
     verifyTotpSetup,
     disableTotp,
   } = useMenuMainTotpSettings({ user, setUser });
+  const canUseAdminSecurity = isCurrentUserAdmin && isTotpEnabled;
   const stableApplySelectedAudioDevicesToClient = useStableEvent(applySelectedAudioDevicesToClient);
   const stableApplyVoiceProcessingToClient = useStableEvent(applyVoiceProcessingToClient);
 
@@ -4373,12 +4375,16 @@ export default function MenuMain({
     });
   }, []);
   const openAdminSecurityPageFromSettings = useCallback(() => {
+    if (!canUseAdminSecurity) {
+      return;
+    }
+
     setOpenSettings(false);
     setOpenAdminSecurityPage(true);
     setShowServerMembersPanel(false);
     setShowMicMenu(false);
     setShowSoundMenu(false);
-  }, []);
+  }, [canUseAdminSecurity]);
   const openServerSettingsPanel = useCallback(() => {
     openSettingsPanel("server");
   }, [openSettingsPanel]);
@@ -5705,7 +5711,6 @@ export default function MenuMain({
   };
 
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
-  const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
   const adminSettingsItem = useMemo(() => SETTINGS_NAV_ITEMS.find((item) => item.id === "admin"), []);
   const settingsNavItems = useMemo(
     () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "roles" && item.id !== "admin" && item.id !== "moderation"),
@@ -5715,9 +5720,9 @@ export default function MenuMain({
   const mobileSettingsNavItems = useMemo(
     () => {
       const items = settingsNavItems.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation"));
-      return isCurrentUserAdmin && adminSettingsItem ? [...items, adminSettingsItem] : items;
+      return canUseAdminSecurity && adminSettingsItem ? [...items, adminSettingsItem] : items;
     },
-    [activeServer, adminSettingsItem, isCurrentUserAdmin, settingsNavItems]
+    [activeServer, adminSettingsItem, canUseAdminSecurity, settingsNavItems]
   );
   const activeSettingsTabMeta =
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
@@ -7188,7 +7193,7 @@ export default function MenuMain({
       openSettings={openSettings}
       popupRef={popupRef}
       user={user}
-      showAdminSettingsLink={isCurrentUserAdmin}
+      showAdminSettingsLink={canUseAdminSecurity}
       settingsNavSections={settingsNavSections}
       settingsTab={settingsTab}
       setOpenAdminSecurityPage={setOpenAdminSecurityPage}

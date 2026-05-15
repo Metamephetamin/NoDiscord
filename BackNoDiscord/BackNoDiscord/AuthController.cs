@@ -42,6 +42,7 @@ public class AuthController : ControllerBase
     private readonly CryptoService _crypto;
     private readonly UserSessionService _userSessionService;
     private readonly AccountBanService _accountBanService;
+    private readonly AbuseAutoBanService _abuseAutoBan;
     private readonly PasswordHasher<User> _passwordHasher;
 
     public AuthController(
@@ -51,7 +52,8 @@ public class AuthController : ControllerBase
         IWebHostEnvironment environment,
         CryptoService crypto,
         UserSessionService userSessionService,
-        AccountBanService accountBanService)
+        AccountBanService accountBanService,
+        AbuseAutoBanService abuseAutoBan)
     {
         _context = context;
         _config = config;
@@ -60,6 +62,7 @@ public class AuthController : ControllerBase
         _crypto = crypto;
         _userSessionService = userSessionService;
         _accountBanService = accountBanService;
+        _abuseAutoBan = abuseAutoBan;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -1255,7 +1258,13 @@ public class AuthController : ControllerBase
         var securitySignal = await _userSessionService.DetectLoginSecuritySignalAsync(
             user.id,
             deviceLabel,
+            deviceTokenHash,
             clientIp,
+            now,
+            cancellationToken);
+        await _abuseAutoBan.RecordLoginSecuritySignalAsync(
+            user.id,
+            securitySignal,
             now,
             cancellationToken);
 

@@ -66,6 +66,7 @@ public sealed class UserSessionServiceTests
         var signal = await service.DetectLoginSecuritySignalAsync(
             userId: 42,
             deviceLabel: "New Browser",
+            deviceTokenHash: string.Empty,
             clientIp: "172.16.10.4",
             now,
             CancellationToken.None);
@@ -76,13 +77,41 @@ public sealed class UserSessionServiceTests
         Assert.True(signal.IsNewIpFamily);
     }
 
+    [Fact]
+    public async Task DetectLoginSecuritySignalAsync_FlagsNewDeviceTokenEvenWithSameUserAgent()
+    {
+        await using var context = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        context.RefreshTokens.Add(BuildToken(
+            id: 1,
+            userId: 42,
+            tokenHash: "known",
+            now,
+            deviceTokenHash: new string('A', 64)));
+        await context.SaveChangesAsync();
+        var service = new UserSessionService(context);
+
+        var signal = await service.DetectLoginSecuritySignalAsync(
+            userId: 42,
+            deviceLabel: "Test Browser",
+            deviceTokenHash: new string('B', 64),
+            clientIp: "127.0.0.2",
+            now: now,
+            cancellationToken: CancellationToken.None);
+
+        Assert.NotNull(signal);
+        Assert.True(signal.IsSuspicious);
+        Assert.True(signal.IsNewDevice);
+    }
+
     private static RefreshTokenRecord BuildToken(
         int id,
         int userId,
         string tokenHash,
         DateTimeOffset now,
         DateTimeOffset? revokedAt = null,
-        string? replacedByTokenHash = null)
+        string? replacedByTokenHash = null,
+        string deviceTokenHash = "")
     {
         return new RefreshTokenRecord
         {
@@ -95,6 +124,7 @@ public sealed class UserSessionServiceTests
             ReplacedByTokenHash = replacedByTokenHash,
             UserAgent = "Test Browser",
             DeviceLabel = "Test Browser",
+            DeviceTokenHash = deviceTokenHash,
             LastIp = "127.0.0.1",
             LastUsedAt = now.AddMinutes(-10)
         };

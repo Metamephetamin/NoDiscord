@@ -112,7 +112,7 @@ public sealed class AdminController : ControllerBase
     private async Task<User?> RequireAdminAsync(CancellationToken cancellationToken)
     {
         var user = await _accountBanService.GetCurrentUserAsync(User, cancellationToken);
-        return user != null && _accountBanService.IsAdmin(user) ? user : null;
+        return user != null && user.is_totp_enabled && _accountBanService.IsAdmin(user) ? user : null;
     }
 
     private object BuildAdminUserPayload(User user, int currentUserId)

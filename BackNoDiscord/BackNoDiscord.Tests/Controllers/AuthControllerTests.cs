@@ -1,3 +1,4 @@
+using BackNoDiscord.Security;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -6,7 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -333,6 +336,15 @@ public sealed class AuthControllerTests : IDisposable
             .AddInMemoryCollection(values)
             .Build();
 
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddSingleton(_context);
+        services.AddScoped<AccountBanService>();
+        var serviceProvider = services.BuildServiceProvider();
+        var abuseAutoBan = new AbuseAutoBanService(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<AbuseAutoBanService>.Instance);
+
         return new AuthController(
             _context,
             configuration,
@@ -340,7 +352,8 @@ public sealed class AuthControllerTests : IDisposable
             new TestWebHostEnvironment { EnvironmentName = environmentName },
             new CryptoService(configuration),
             new UserSessionService(_context),
-            new AccountBanService(_context, configuration));
+            new AccountBanService(_context, configuration),
+            abuseAutoBan);
     }
 
     private static User BuildUser(int id, string email)

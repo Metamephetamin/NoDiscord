@@ -48,6 +48,48 @@ public sealed class AbuseAutoBanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecordLoginSecuritySignalAsync_DoesNotBanByItself()
+    {
+        await SeedUserAsync(12);
+        var now = new DateTimeOffset(2026, 5, 15, 12, 0, 0, TimeSpan.Zero);
+
+        var result = await _abuse.RecordLoginSecuritySignalAsync(
+            12,
+            new LoginSecuritySignal(true, IsNewDevice: true, IsNewIpFamily: true),
+            now,
+            CancellationToken.None);
+
+        Assert.False(result.IsBanned);
+        Assert.True(result.RiskScore > 0);
+
+        await using var scope = _services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.False((await context.Users.SingleAsync(item => item.id == 12)).IsBanned);
+    }
+
+    [Fact]
+    public async Task RecordMessageBurstViolationAsync_BansSoonerAfterNewDeviceAndIp()
+    {
+        await SeedUserAsync(13);
+        var now = new DateTimeOffset(2026, 5, 15, 12, 0, 0, TimeSpan.Zero);
+
+        await _abuse.RecordLoginSecuritySignalAsync(
+            13,
+            new LoginSecuritySignal(true, IsNewDevice: true, IsNewIpFamily: true),
+            now,
+            CancellationToken.None);
+        var firstBurst = await _abuse.RecordMessageBurstViolationAsync(13, now.AddSeconds(30), CancellationToken.None);
+        var secondBurst = await _abuse.RecordMessageBurstViolationAsync(13, now.AddSeconds(45), CancellationToken.None);
+
+        Assert.False(firstBurst.IsBanned);
+        Assert.True(secondBurst.IsBanned);
+
+        await using var scope = _services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.True((await context.Users.SingleAsync(item => item.id == 13)).IsBanned);
+    }
+
+    [Fact]
     public async Task RecordOutgoingFriendRequestAsync_BansMassOutgoingRequests()
     {
         await SeedUserAsync(11);
