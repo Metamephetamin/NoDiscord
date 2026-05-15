@@ -6,6 +6,7 @@ import { getApiErrorMessage, getNetworkErrorMessage, parseApiResponse } from "..
 import { resolveStaticAssetUrl } from "../utils/media";
 import { APP_LOGO_CHANGE_EVENT, getCurrentAppLogoOption } from "../utils/appLogo";
 import { normalizeBannedAccount } from "../utils/accountBan";
+import { getAuthDeviceToken } from "../utils/deviceIdentity";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import { parseQrLoginPayload } from "../features/menu-main/menuMainControllerUtils";
 import UserAgreementModal from "./UserAgreementModal";
@@ -285,12 +286,16 @@ function buildQrLoginLink(session) {
 
 async function submitAuthRequest(endpoint, payload, fallbackMessage) {
   let response;
+  const deviceToken = await getAuthDeviceToken();
+  const requestPayload = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? { ...payload, deviceToken }
+    : payload;
 
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestPayload),
     });
   } catch (error) {
     const wrappedError = new Error(getNetworkErrorMessage(error, fallbackMessage));
@@ -725,6 +730,10 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
       isPolling = true;
       try {
         const params = new URLSearchParams({ browserToken: qrLoginSession.browserToken });
+        const deviceToken = await getAuthDeviceToken();
+        if (deviceToken) {
+          params.set("deviceToken", deviceToken);
+        }
         const response = await fetch(`${API_BASE_URL}/auth/qr-login/session/${encodeURIComponent(qrLoginSession.sessionId)}?${params}`);
         const data = await parseApiResponse(response);
 

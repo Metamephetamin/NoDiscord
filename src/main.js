@@ -23,6 +23,7 @@ const SECURE_KEY_VALUE_STORE_FILE_NAME = "secure-store.json";
 const APP_UPDATE_CACHE_FILE_NAME = "app-update-cache.json";
 const DOWNLOAD_PREFERENCES_STORE_KEY = "downloads.preferences";
 const BACKGROUND_PREFERENCES_STORE_KEY = "app.background.preferences";
+const DEVICE_IDENTITY_STORE_KEY = "auth.device.identity";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 const MAX_ELECTRON_DOWNLOAD_BYTES = 500 * 1024 * 1024;
@@ -2014,6 +2015,19 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("secure-session:clear", async () => {
     await clearSecureSession();
+    return true;
+  });
+  ipcMain.handle("device-identity:get", async () => {
+    const secureStore = await readSecureKeyValueStore();
+    return typeof secureStore[DEVICE_IDENTITY_STORE_KEY] === "string"
+      ? secureStore[DEVICE_IDENTITY_STORE_KEY]
+      : "";
+  });
+  ipcMain.handle("device-identity:set", async (_event, value) => {
+    const normalizedValue = String(value ?? "").trim();
+    const secureStore = await readSecureKeyValueStore();
+    secureStore[DEVICE_IDENTITY_STORE_KEY] = normalizedValue;
+    await writeSecureKeyValueStore(secureStore);
     return true;
   });
   ipcMain.handle("clipboard:write-text", async (_event, value) => {

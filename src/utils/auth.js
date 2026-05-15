@@ -1,6 +1,7 @@
 ﻿import { API_BASE_URL } from "../config/runtime";
 import { API_URL } from "../config/runtime";
 import { normalizeBannedAccount } from "./accountBan";
+import { getAuthDeviceToken } from "./deviceIdentity";
 import { parseMediaFrame } from "./mediaFrames";
 
 const TOKEN_STORAGE_KEY = "token";
@@ -697,7 +698,7 @@ export async function refreshAccessToken() {
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({ refreshToken, deviceToken: await getAuthDeviceToken() }),
       });
       const data = await parseApiResponse(response);
       const bannedAccount = normalizeBannedAccount(data);

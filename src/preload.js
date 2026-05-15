@@ -147,6 +147,15 @@ contextBridge.exposeInMainWorld("electronSecureSession", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronDeviceIdentity", {
+  async get() {
+    return ipcRenderer.invoke("device-identity:get");
+  },
+  async set(value) {
+    return ipcRenderer.invoke("device-identity:set", value);
+  },
+});
+
 contextBridge.exposeInMainWorld("electronDownloads", {
   async saveFile(payload) {
     return ipcRenderer.invoke("downloads:save-file", payload);

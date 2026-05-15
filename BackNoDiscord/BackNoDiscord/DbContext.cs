@@ -407,6 +407,9 @@ public class RefreshTokenRecord
     [Column("device_label")]
     public string DeviceLabel { get; set; } = string.Empty;
 
+    [Column("device_token_hash")]
+    public string DeviceTokenHash { get; set; } = string.Empty;
+
     [Column("last_ip")]
     public string LastIp { get; set; } = string.Empty;
 
@@ -414,6 +417,43 @@ public class RefreshTokenRecord
     public DateTimeOffset LastUsedAt { get; set; }
 
     public User? User { get; set; }
+}
+
+[Table("banned_identity_records")]
+public class BannedIdentityRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("identity_type")]
+    public string IdentityType { get; set; } = string.Empty;
+
+    [Column("identity_hash")]
+    public string IdentityHash { get; set; } = string.Empty;
+
+    [Column("source_user_id")]
+    public int SourceUserId { get; set; }
+
+    [Column("created_by_user_id")]
+    public int? CreatedByUserId { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("revoked_at")]
+    public DateTimeOffset? RevokedAt { get; set; }
+
+    [Column("revoked_by_user_id")]
+    public int? RevokedByUserId { get; set; }
+
+    [Column("last_matched_at")]
+    public DateTimeOffset? LastMatchedAt { get; set; }
+
+    [Column("match_count")]
+    public int MatchCount { get; set; }
+
+    [Column("reason")]
+    public string Reason { get; set; } = string.Empty;
 }
 
 [Table("shared_server_snapshots")]
@@ -749,6 +789,7 @@ public class AppDbContext : DbContext
     public DbSet<ChatFileUploadRecord> ChatFileUploads => Set<ChatFileUploadRecord>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
+    public DbSet<BannedIdentityRecord> BannedIdentityRecords => Set<BannedIdentityRecord>();
     public DbSet<SharedServerSnapshotRecord> SharedServerSnapshots => Set<SharedServerSnapshotRecord>();
     public DbSet<ServerInviteRecordEntity> ServerInvites => Set<ServerInviteRecordEntity>();
     public DbSet<FriendshipRecord> Friendships => Set<FriendshipRecord>();
@@ -944,6 +985,21 @@ public class AppDbContext : DbContext
             entity.Property(x => x.BanReason).IsRequired(false);
             entity.HasIndex(x => new { x.IsBanned, x.BannedAt });
             entity.Property(x => x.password_hash).IsRequired();
+        });
+
+        modelBuilder.Entity<BannedIdentityRecord>(entity =>
+        {
+            entity.ToTable("banned_identity_records");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.IdentityType, x.IdentityHash })
+                .IsUnique()
+                .HasFilter("revoked_at IS NULL");
+            entity.HasIndex(x => new { x.SourceUserId, x.RevokedAt });
+            entity.HasIndex(x => new { x.IdentityType, x.RevokedAt });
+            entity.Property(x => x.IdentityType).IsRequired();
+            entity.Property(x => x.IdentityHash).IsRequired();
+            entity.Property(x => x.Reason).IsRequired();
+            entity.Property(x => x.MatchCount).HasDefaultValue(0);
         });
 
         modelBuilder.Entity<FriendRequestRecord>(entity =>

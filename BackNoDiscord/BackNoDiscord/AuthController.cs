@@ -95,7 +95,7 @@ public class AuthController : ControllerBase
             return CreateAccountBannedResponse(user);
         }
 
-        var authSession = await IssueAuthSessionAsync(user);
+        var authSession = await IssueAuthSessionAsync(user, null, cancellationToken: HttpContext.RequestAborted);
         return Ok(BuildAuthResponse(user, authSession));
     }
 
@@ -235,7 +235,7 @@ public class AuthController : ControllerBase
         user.is_email_verified = true;
         await _context.SaveChangesAsync();
 
-        var authSession = await IssueAuthSessionAsync(user);
+        var authSession = await IssueAuthSessionAsync(user, dto.deviceToken, cancellationToken: HttpContext.RequestAborted);
         return Ok(BuildAuthResponse(user, authSession));
     }
 
@@ -442,7 +442,7 @@ public class AuthController : ControllerBase
         }
 
         record.ConsumedAt = now;
-        var authSession = await IssueAuthSessionAsync(record.ApprovedUser);
+        var authSession = await IssueAuthSessionAsync(record.ApprovedUser, dto.deviceToken, cancellationToken: HttpContext.RequestAborted);
         await _context.SaveChangesAsync();
 
         return Ok(BuildQrAuthResponse(record.ApprovedUser, authSession));
@@ -450,7 +450,7 @@ public class AuthController : ControllerBase
 
     [HttpGet("qr-login/session/{sessionId}")]
     [EnableRateLimiting("qr-login-poll")]
-    public async Task<IActionResult> GetQrLoginSessionStatus([FromRoute] string sessionId, [FromQuery] string? browserToken)
+    public async Task<IActionResult> GetQrLoginSessionStatus([FromRoute] string sessionId, [FromQuery] string? browserToken, [FromQuery] string? deviceToken)
     {
         var normalizedSessionId = NormalizeQrLoginToken(sessionId);
         var normalizedBrowserToken = NormalizeQrLoginToken(browserToken);
@@ -480,7 +480,20 @@ public class AuthController : ControllerBase
             }
 
             record.ConsumedAt = DateTimeOffset.UtcNow;
-            var authSession = await IssueAuthSessionAsync(record.ApprovedUser);
+            var clientBan = await _accountBanService.EvaluateClientBanAsync(
+                record.ApprovedUser,
+                record.ApprovedUser.email,
+                record.ApprovedUser.phone_number,
+                deviceToken,
+                GetClientIp(),
+                DateTimeOffset.UtcNow,
+                HttpContext.RequestAborted);
+            if (!clientBan.IsAllowed || record.ApprovedUser.IsBanned)
+            {
+                return CreateAccountBannedResponse(record.ApprovedUser);
+            }
+
+            var authSession = await IssueAuthSessionAsync(record.ApprovedUser, deviceToken, cancellationToken: HttpContext.RequestAborted);
             await _context.SaveChangesAsync();
 
             return Ok(BuildQrAuthResponse(record.ApprovedUser, authSession));
@@ -795,6 +808,19 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = passwordError });
         }
 
+        var registrationBan = await _accountBanService.EvaluateClientBanAsync(
+            null,
+            normalizedEmail,
+            null,
+            dto.deviceToken,
+            GetClientIp(),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (!registrationBan.IsAllowed)
+        {
+            return CreateIdentityBannedResponse(registrationBan);
+        }
+
         if (await _context.Users.AnyAsync(u => u.email == normalizedEmail, cancellationToken))
         {
             return CreateEmailAlreadyRegisteredResponse();
@@ -905,7 +931,7 @@ public class AuthController : ControllerBase
         //     }
         // }
 
-        var authSession = await IssueAuthSessionAsync(user);
+        var authSession = await IssueAuthSessionAsync(user, dto.deviceToken, cancellationToken);
         return Ok(BuildAuthResponse(user, authSession));
     }
 
@@ -963,6 +989,19 @@ public class AuthController : ControllerBase
             await _context.SaveChangesAsync();
         }
 
+        var clientBan = await _accountBanService.EvaluateClientBanAsync(
+            user,
+            user.email,
+            user.phone_number,
+            dto.deviceToken,
+            GetClientIp(),
+            DateTimeOffset.UtcNow,
+            HttpContext.RequestAborted);
+        if (!clientBan.IsAllowed || user.IsBanned)
+        {
+            return CreateAccountBannedResponse(user);
+        }
+
         if (user.IsBanned)
         {
             return CreateAccountBannedResponse(user);
@@ -995,7 +1034,7 @@ public class AuthController : ControllerBase
             return BadRequest(CreateTotpRequiredError());
         }
 
-        var authSession = await IssueAuthSessionAsync(user);
+        var authSession = await IssueAuthSessionAsync(user, dto.deviceToken, cancellationToken: HttpContext.RequestAborted);
         return Ok(BuildAuthResponse(user, authSession));
     }
 
@@ -1025,6 +1064,20 @@ public class AuthController : ControllerBase
             return CreateAccountBannedResponse(storedToken.User);
         }
 
+        var refreshBan = await _accountBanService.EvaluateClientBanAsync(
+            storedToken.User,
+            storedToken.User.email,
+            storedToken.User.phone_number,
+            dto.deviceToken,
+            GetClientIp(),
+            now,
+            cancellationToken);
+        if (!refreshBan.IsAllowed || storedToken.User.IsBanned)
+        {
+            await _accountBanService.RevokeActiveSessionsAsync(storedToken.User.id, now, cancellationToken);
+            return CreateAccountBannedResponse(storedToken.User);
+        }
+
         if (storedToken.RevokedAt.HasValue)
         {
             await _userSessionService.RevokeActiveSessionsAfterRefreshTokenReuseAsync(tokenHash, now, cancellationToken);
@@ -1037,7 +1090,7 @@ public class AuthController : ControllerBase
         }
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        var authSession = await IssueAuthSessionAsync(storedToken.User);
+        var authSession = await IssueAuthSessionAsync(storedToken.User, dto.deviceToken, cancellationToken);
         var revoked = await RevokeRefreshTokenForRotationAsync(
             storedToken.Id,
             authSession.RefreshToken,
@@ -1189,7 +1242,7 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
     }
 
-    private async Task<AuthSessionResult> IssueAuthSessionAsync(User user)
+    private async Task<AuthSessionResult> IssueAuthSessionAsync(User user, string? deviceToken = null, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var accessTokenExpiresAt = now.AddMinutes(GetAccessTokenLifetimeMinutes());
@@ -1198,12 +1251,13 @@ public class AuthController : ControllerBase
         var userAgent = GetUserAgent();
         var clientIp = GetClientIp();
         var deviceLabel = BuildDeviceLabel(userAgent);
+        var deviceTokenHash = GetDeviceTokenHash(deviceToken);
         var securitySignal = await _userSessionService.DetectLoginSecuritySignalAsync(
             user.id,
             deviceLabel,
             clientIp,
             now,
-            CancellationToken.None);
+            cancellationToken);
 
         _context.RefreshTokens.Add(new RefreshTokenRecord
         {
@@ -1213,6 +1267,7 @@ public class AuthController : ControllerBase
             ExpiresAt = refreshTokenExpiresAt,
             UserAgent = userAgent,
             DeviceLabel = deviceLabel,
+            DeviceTokenHash = deviceTokenHash,
             LastIp = clientIp,
             LastUsedAt = now,
         });
@@ -1657,12 +1712,12 @@ public class AuthController : ControllerBase
 
     private string GetClientIp()
     {
-        return (HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown").Trim();
+        return (HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown").Trim();
     }
 
     private string GetUserAgent()
     {
-        var userAgent = Request.Headers.UserAgent.ToString().Trim();
+        var userAgent = (HttpContext?.Request.Headers.UserAgent.ToString() ?? string.Empty).Trim();
         return userAgent.Length <= 512 ? userAgent : userAgent[..512];
     }
 
@@ -1767,6 +1822,24 @@ public class AuthController : ControllerBase
         };
     }
 
+    private ObjectResult CreateIdentityBannedResponse(ClientBanDecision decision)
+    {
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            code = "account_banned",
+            message = "Аккаунт или устройство заблокированы. Доступ к приложению закрыт.",
+            identityType = decision.IdentityType
+        });
+    }
+
+    private static string GetDeviceTokenHash(string? deviceToken)
+    {
+        var normalizedDeviceToken = AccountBanService.NormalizeDeviceToken(deviceToken);
+        return string.IsNullOrWhiteSpace(normalizedDeviceToken)
+            ? string.Empty
+            : AccountBanService.HashIdentityValue(AccountBanService.IdentityTypeDeviceToken, normalizedDeviceToken);
+    }
+
     private static object CreateInvalidCredentialsError()
     {
         const string message = "Неверный email или пароль.";
@@ -1829,6 +1902,8 @@ public class RegisterDto
     public string password { get; set; } = string.Empty;
 
     public bool termsAccepted { get; set; }
+
+    public string? deviceToken { get; set; }
 }
 
 public class LoginDto
@@ -1841,6 +1916,8 @@ public class LoginDto
     public string password { get; set; } = string.Empty;
 
     public string? totpCode { get; set; }
+
+    public string? deviceToken { get; set; }
 }
 
 public class LoginCodeRequestDto
@@ -1875,6 +1952,8 @@ public class QrLoginApproveDto
     public string? sessionId { get; set; }
 
     public string? scannerToken { get; set; }
+
+    public string? deviceToken { get; set; }
 }
 
 public class TotpCodeDto
@@ -1900,12 +1979,16 @@ public class VerifyEmailCodeDto
     public string code { get; set; } = string.Empty;
 
     public string? totpCode { get; set; }
+
+    public string? deviceToken { get; set; }
 }
 
 public class RefreshTokenDto
 {
     [Required]
     public string refreshToken { get; set; } = string.Empty;
+
+    public string? deviceToken { get; set; }
 }
 
 public class AuthSessionResult
