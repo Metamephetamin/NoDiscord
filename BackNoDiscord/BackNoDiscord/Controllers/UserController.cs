@@ -52,6 +52,11 @@ public class ConfirmEmailChangeRequest
     public string? TotpCode { get; set; }
 }
 
+public class CreateUserReportRequest
+{
+    public string? Reason { get; set; }
+}
+
 [ApiController]
 [Route("api/user")]
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
@@ -82,6 +87,72 @@ public class UserController : ControllerBase
         _uploadStoragePaths = uploadStoragePaths;
         _emailVerificationSender = emailVerificationSender;
         _crypto = crypto;
+    }
+
+    [HttpPost("{targetUserId:int}/report")]
+    public async Task<IActionResult> ReportUser([FromRoute] int targetUserId, [FromBody] CreateUserReportRequest? request, CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        if (targetUserId <= 0)
+        {
+            return BadRequest(new { message = "Пользователь не найден." });
+        }
+
+        if (targetUserId == currentUserId)
+        {
+            return BadRequest(new { message = "Нельзя пожаловаться на свой профиль." });
+        }
+
+        var reason = UploadPolicies.TrimToLength(request?.Reason, 700).Trim();
+        if (reason.Length < 4)
+        {
+            return BadRequest(new { message = "Укажите причину жалобы." });
+        }
+
+        var targetExists = await _dbContext.Users.AsNoTracking().AnyAsync(user => user.id == targetUserId, cancellationToken);
+        if (!targetExists)
+        {
+            return NotFound(new { message = "Пользователь не найден." });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var duplicateCutoff = now.AddMinutes(-10);
+        var duplicateExists = await _dbContext.UserReports.AsNoTracking().AnyAsync(report =>
+            report.ReporterUserId == currentUserId &&
+            report.TargetUserId == targetUserId &&
+            report.Status == "open" &&
+            report.CreatedAt >= duplicateCutoff,
+            cancellationToken);
+        if (duplicateExists)
+        {
+            return BadRequest(new { message = "Жалоба уже отправлена. Подождите перед повторной отправкой." });
+        }
+
+        var report = new UserReportRecord
+        {
+            ReporterUserId = currentUserId,
+            TargetUserId = targetUserId,
+            Reason = reason,
+            Status = "open",
+            CreatedAt = now
+        };
+        _dbContext.UserReports.Add(report);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            id = report.Id,
+            reporterUserId = report.ReporterUserId,
+            targetUserId = report.TargetUserId,
+            reason = report.Reason,
+            status = report.Status,
+            createdAt = report.CreatedAt.ToString("O")
+        });
     }
 
     [HttpPut("profile")]

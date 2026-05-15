@@ -5394,6 +5394,14 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   color: #bec8db;
 }
 
+.chat-profile-modal__action--danger {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, calc(var(--profile-action-hover) * 0.08)), rgba(255, 255, 255, calc(var(--profile-action-hover) * 0.02))),
+    linear-gradient(135deg, rgba(95, 27, 37, 0.86), rgba(42, 16, 24, 0.9));
+  border-color: rgba(255, 92, 112, 0.26);
+  color: #ffd7dd;
+}
+
 .chat-profile-modal__action-icon {
   width: 21px;
   height: 21px;
@@ -5405,6 +5413,80 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   stroke-linejoin: round;
   opacity: 0.92;
   flex: 0 0 auto;
+}
+
+.chat-profile-modal__report,
+.chat-profile-modal__report-status {
+  padding: 14px;
+  border: 1px solid rgba(255, 92, 112, 0.22);
+  border-radius: 14px;
+  background: rgba(42, 16, 24, 0.62);
+}
+
+.chat-profile-modal__report {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-profile-modal__report label {
+  display: grid;
+  gap: 8px;
+  color: #ffd7dd;
+  font-weight: 800;
+}
+
+.chat-profile-modal__report textarea {
+  min-height: 92px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(8, 10, 16, 0.68);
+  color: #f7f9ff;
+  font: inherit;
+  line-height: 1.35;
+}
+
+.chat-profile-modal__report textarea::placeholder {
+  color: rgba(218, 226, 242, 0.52);
+}
+
+.chat-profile-modal__report p,
+.chat-profile-modal__report-status {
+  margin: 0;
+  color: #ffc5ce;
+  font-weight: 700;
+}
+
+.chat-profile-modal__report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-profile-modal__report-cancel,
+.chat-profile-modal__report-submit {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f7f9ff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chat-profile-modal__report-cancel {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-profile-modal__report-submit {
+  background: linear-gradient(135deg, rgba(255, 79, 98, 0.88), rgba(190, 45, 61, 0.88));
+}
+
+.chat-profile-modal__report-cancel:disabled,
+.chat-profile-modal__report-submit:disabled {
+  opacity: 0.46;
+  cursor: default;
 }
 
 .chat-profile-modal__side-widget {

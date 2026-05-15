@@ -102,6 +102,34 @@ public class ChatModerationReportRecord
     public string? ReviewedByUserId { get; set; }
 }
 
+[Table("user_reports")]
+public class UserReportRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("reporter_user_id")]
+    public int ReporterUserId { get; set; }
+
+    [Column("target_user_id")]
+    public int TargetUserId { get; set; }
+
+    [Column("reason")]
+    public string Reason { get; set; } = string.Empty;
+
+    [Column("status")]
+    public string Status { get; set; } = "open";
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("reviewed_at")]
+    public DateTimeOffset? ReviewedAt { get; set; }
+
+    [Column("reviewed_by_user_id")]
+    public int? ReviewedByUserId { get; set; }
+}
+
 [Table("chat_moderation_actions")]
 public class ChatModerationActionRecord
 {
@@ -806,6 +834,7 @@ public class AppDbContext : DbContext
     public DbSet<UserIntegrationRecord> UserIntegrations => Set<UserIntegrationRecord>();
     public DbSet<ChatChannelReadStateRecord> ChatChannelReadStates => Set<ChatChannelReadStateRecord>();
     public DbSet<ChatModerationReportRecord> ChatModerationReports => Set<ChatModerationReportRecord>();
+    public DbSet<UserReportRecord> UserReports => Set<UserReportRecord>();
     public DbSet<ChatModerationActionRecord> ChatModerationActions => Set<ChatModerationActionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -868,6 +897,17 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ChannelId).IsRequired();
             entity.Property(x => x.ReporterUserId).IsRequired();
             entity.Property(x => x.TargetUserId).IsRequired();
+            entity.Property(x => x.Reason).IsRequired();
+            entity.Property(x => x.Status).IsRequired();
+        });
+
+        modelBuilder.Entity<UserReportRecord>(entity =>
+        {
+            entity.ToTable("user_reports");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.TargetUserId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.ReporterUserId, x.TargetUserId, x.CreatedAt });
             entity.Property(x => x.Reason).IsRequired();
             entity.Property(x => x.Status).IsRequired();
         });

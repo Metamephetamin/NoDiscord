@@ -9,8 +9,12 @@ public sealed class AdminSecurityOverviewService
     private const int RecentMessagesLimit = 40;
     private const int RecentFilesLimit = 40;
     private const int RecentReportsLimit = 40;
+    private const int RecentUserReportsLimit = 60;
     private const int SuspiciousUsersLimit = 50;
     private const int UserRowsLimit = 120;
+    private const int MessageSpikeAlertThreshold = 500;
+    private const int FileSpikeAlertThreshold = 120;
+    private const int OpenReportAlertThreshold = 8;
 
     private readonly AppDbContext _context;
 
@@ -31,8 +35,11 @@ public sealed class AdminSecurityOverviewService
             .CountAsync(message => !message.IsDeleted && message.Timestamp >= messagesSinceUtc, cancellationToken);
         var recentFileCount = await _context.ChatFileUploads.AsNoTracking()
             .CountAsync(file => file.DeletedAt == null && file.CreatedAt >= filesSinceUtc, cancellationToken);
-        var openReportCount = await _context.ChatModerationReports.AsNoTracking()
+        var openChatReportCount = await _context.ChatModerationReports.AsNoTracking()
             .CountAsync(report => report.Status == "open", cancellationToken);
+        var openUserReportCount = await _context.UserReports.AsNoTracking()
+            .CountAsync(report => report.Status == "open", cancellationToken);
+        var openReportCount = openChatReportCount + openUserReportCount;
 
         var messageActivity = await _context.Messages.AsNoTracking()
             .Where(message => !message.IsDeleted && message.AuthorUserId != null && message.Timestamp >= messagesSinceUtc)
@@ -52,13 +59,19 @@ public sealed class AdminSecurityOverviewService
             .Select(group => new UserOffsetActivityAggregate(group.Key, group.Count(), 0, group.Max(report => report.CreatedAt)))
             .ToListAsync(cancellationToken);
 
+        var userReportActivity = await _context.UserReports.AsNoTracking()
+            .Where(report => report.Status == "open")
+            .GroupBy(report => report.TargetUserId)
+            .Select(group => new UserOffsetActivityAggregate(group.Key.ToString(), group.Count(), 0, group.Max(report => report.CreatedAt)))
+            .ToListAsync(cancellationToken);
+
         var identityMatchActivity = await _context.BannedIdentityRecords.AsNoTracking()
             .Where(identity => identity.RevokedAt == null && identity.MatchCount > 0)
             .GroupBy(identity => identity.SourceUserId)
             .Select(group => new UserIdentityMatchAggregate(group.Key, group.Sum(identity => identity.MatchCount), group.Max(identity => identity.LastMatchedAt)))
             .ToListAsync(cancellationToken);
 
-        var signalsByUserId = BuildSuspicionSignals(messageActivity, fileActivity, reportActivity, identityMatchActivity);
+        var signalsByUserId = BuildSuspicionSignals(messageActivity, fileActivity, reportActivity, userReportActivity, identityMatchActivity);
         var suspiciousUserIds = signalsByUserId
             .OrderByDescending(pair => pair.Value.Score)
             .ThenBy(pair => pair.Key)
@@ -102,6 +115,8 @@ public sealed class AdminSecurityOverviewService
         var recentMessages = await LoadRecentMessagesAsync(cancellationToken);
         var recentFiles = await LoadRecentFilesAsync(cancellationToken);
         var recentReports = await LoadRecentReportsAsync(cancellationToken);
+        var recentUserReports = await LoadRecentUserReportsAsync(cancellationToken);
+        var alerts = BuildAlerts(recentMessageCount, recentFileCount, openChatReportCount, openUserReportCount, now);
 
         return new AdminSecurityOverviewDto(
             totalUsers,
@@ -113,7 +128,9 @@ public sealed class AdminSecurityOverviewService
             suspiciousUsers,
             recentMessages,
             recentFiles,
-            recentReports);
+            recentReports,
+            recentUserReports,
+            alerts);
     }
 
     private async Task<IReadOnlyList<AdminSecurityMessageDto>> LoadRecentMessagesAsync(CancellationToken cancellationToken)
@@ -184,10 +201,98 @@ public sealed class AdminSecurityOverviewService
             .ToListAsync(cancellationToken);
     }
 
+    private async Task<IReadOnlyList<AdminSecurityUserReportDto>> LoadRecentUserReportsAsync(CancellationToken cancellationToken)
+    {
+        var reports = await _context.UserReports.AsNoTracking()
+            .OrderByDescending(report => report.CreatedAt)
+            .Take(RecentUserReportsLimit)
+            .ToListAsync(cancellationToken);
+        if (reports.Count == 0)
+        {
+            return [];
+        }
+
+        var userIds = reports
+            .SelectMany(report => new[] { report.ReporterUserId, report.TargetUserId })
+            .Distinct()
+            .ToArray();
+        var usersById = await _context.Users.AsNoTracking()
+            .Where(user => userIds.Contains(user.id))
+            .ToDictionaryAsync(user => user.id, user => GetDisplayName(user), cancellationToken);
+
+        return reports
+            .Select(report => new AdminSecurityUserReportDto(
+                report.Id,
+                report.ReporterUserId,
+                usersById.TryGetValue(report.ReporterUserId, out var reporterName) ? reporterName : $"User {report.ReporterUserId}",
+                report.TargetUserId,
+                usersById.TryGetValue(report.TargetUserId, out var targetName) ? targetName : $"User {report.TargetUserId}",
+                report.Reason,
+                report.Status,
+                report.CreatedAt.ToString("O")))
+            .ToList();
+    }
+
+    private static IReadOnlyList<AdminSecurityAlertDto> BuildAlerts(
+        int recentMessageCount,
+        int recentFileCount,
+        int openChatReportCount,
+        int openUserReportCount,
+        DateTimeOffset now)
+    {
+        var alerts = new List<AdminSecurityAlertDto>();
+        if (recentMessageCount >= MessageSpikeAlertThreshold)
+        {
+            alerts.Add(new AdminSecurityAlertDto(
+                "message_spike",
+                "Всплеск сообщений",
+                $"За 24 часа отправлено {recentMessageCount} сообщений.",
+                "warning",
+                recentMessageCount,
+                now.ToString("O")));
+        }
+
+        if (recentFileCount >= FileSpikeAlertThreshold)
+        {
+            alerts.Add(new AdminSecurityAlertDto(
+                "file_spike",
+                "Всплеск файлов",
+                $"За 7 дней загружено {recentFileCount} файлов.",
+                "warning",
+                recentFileCount,
+                now.ToString("O")));
+        }
+
+        if (openChatReportCount + openUserReportCount >= OpenReportAlertThreshold)
+        {
+            alerts.Add(new AdminSecurityAlertDto(
+                "report_spike",
+                "Много открытых жалоб",
+                $"Открытых жалоб: {openChatReportCount + openUserReportCount}.",
+                "danger",
+                openChatReportCount + openUserReportCount,
+                now.ToString("O")));
+        }
+
+        if (openUserReportCount > 0)
+        {
+            alerts.Add(new AdminSecurityAlertDto(
+                "user_reports",
+                "Новые жалобы на пользователей",
+                $"Открытых профильных жалоб: {openUserReportCount}.",
+                "danger",
+                openUserReportCount,
+                now.ToString("O")));
+        }
+
+        return alerts;
+    }
+
     private static Dictionary<int, UserSuspicionSignals> BuildSuspicionSignals(
         IReadOnlyCollection<UserActivityAggregate> messageActivity,
         IReadOnlyCollection<UserOffsetActivityAggregate> fileActivity,
         IReadOnlyCollection<UserOffsetActivityAggregate> reportActivity,
+        IReadOnlyCollection<UserOffsetActivityAggregate> userReportActivity,
         IReadOnlyCollection<UserIdentityMatchAggregate> identityMatchActivity)
     {
         var signals = new Dictionary<int, UserSuspicionSignals>();
@@ -220,6 +325,16 @@ public sealed class AdminSecurityOverviewService
                 var current = GetSignals(signals, userId);
                 current.OpenReportCount = activity.Count;
                 current.LastReportAt = activity.LastAt;
+            }
+        }
+
+        foreach (var activity in userReportActivity)
+        {
+            if (TryParseUserId(activity.UserId, out var userId))
+            {
+                var current = GetSignals(signals, userId);
+                current.OpenUserReportCount = activity.Count;
+                current.LastUserReportAt = activity.LastAt;
             }
         }
 
@@ -259,6 +374,11 @@ public sealed class AdminSecurityOverviewService
             score += Math.Min(40, signals.OpenReportCount * 20);
         }
 
+        if (signals.OpenUserReportCount > 0)
+        {
+            score += Math.Min(50, 25 + signals.OpenUserReportCount * 15);
+        }
+
         if (signals.BannedIdentityMatchCount > 0)
         {
             score += Math.Min(60, 30 + signals.BannedIdentityMatchCount * 5);
@@ -285,6 +405,11 @@ public sealed class AdminSecurityOverviewService
             reasons.Add($"открытые жалобы: {signals.OpenReportCount}");
         }
 
+        if (signals.OpenUserReportCount > 0)
+        {
+            reasons.Add($"жалобы на профиль: {signals.OpenUserReportCount}");
+        }
+
         if (signals.BannedIdentityMatchCount > 0)
         {
             reasons.Add($"совпадения с бан-сигналами: {signals.BannedIdentityMatchCount}");
@@ -308,7 +433,7 @@ public sealed class AdminSecurityOverviewService
             signals.Score,
             signals.MessageCount24h,
             signals.FileCount7d,
-            signals.OpenReportCount,
+            signals.OpenReportCount + signals.OpenUserReportCount,
             signals.BannedIdentityMatchCount,
             signals.Reasons);
     }
@@ -427,10 +552,12 @@ public sealed class AdminSecurityOverviewService
         public int FileCount7d { get; set; }
         public long FileBytes7d { get; set; }
         public int OpenReportCount { get; set; }
+        public int OpenUserReportCount { get; set; }
         public int BannedIdentityMatchCount { get; set; }
         public DateTimeOffset? LastMessageAt { get; set; }
         public DateTimeOffset? LastFileAt { get; set; }
         public DateTimeOffset? LastReportAt { get; set; }
+        public DateTimeOffset? LastUserReportAt { get; set; }
         public DateTimeOffset? LastBannedIdentityMatchAt { get; set; }
         public IReadOnlyList<string> Reasons { get; set; } = [];
     }
@@ -446,7 +573,9 @@ public sealed record AdminSecurityOverviewDto(
     IReadOnlyList<AdminSecurityUserDto> SuspiciousUsers,
     IReadOnlyList<AdminSecurityMessageDto> RecentMessages,
     IReadOnlyList<AdminSecurityFileDto> RecentFiles,
-    IReadOnlyList<AdminSecurityReportDto> RecentReports);
+    IReadOnlyList<AdminSecurityReportDto> RecentReports,
+    IReadOnlyList<AdminSecurityUserReportDto> RecentUserReports,
+    IReadOnlyList<AdminSecurityAlertDto> Alerts);
 
 public sealed record AdminSecurityUserDto(
     int Id,
@@ -495,4 +624,22 @@ public sealed record AdminSecurityReportDto(
     string TargetUserId,
     string Reason,
     string Status,
+    string CreatedAt);
+
+public sealed record AdminSecurityUserReportDto(
+    int Id,
+    int ReporterUserId,
+    string ReporterName,
+    int TargetUserId,
+    string TargetName,
+    string Reason,
+    string Status,
+    string CreatedAt);
+
+public sealed record AdminSecurityAlertDto(
+    string Kind,
+    string Title,
+    string Description,
+    string Severity,
+    int Count,
     string CreatedAt);

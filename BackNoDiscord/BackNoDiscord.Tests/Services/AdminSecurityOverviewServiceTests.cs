@@ -42,6 +42,14 @@ public sealed class AdminSecurityOverviewServiceTests : IDisposable
             Status = "open",
             CreatedAt = now.AddMinutes(-2)
         });
+        _context.UserReports.Add(new UserReportRecord
+        {
+            ReporterUserId = 1,
+            TargetUserId = 2,
+            Reason = "profile spam",
+            Status = "open",
+            CreatedAt = now.AddMinutes(-1)
+        });
         await _context.SaveChangesAsync();
 
         var overview = await new AdminSecurityOverviewService(_context).GetOverviewAsync(CancellationToken.None);
@@ -51,6 +59,8 @@ public sealed class AdminSecurityOverviewServiceTests : IDisposable
         Assert.Contains(overview.RecentMessages, message => message.AuthorUserId == "2" && message.Preview.Length > 0);
         Assert.Contains(overview.RecentFiles, file => file.OwnerUserId == "2");
         Assert.Contains(overview.RecentReports, report => report.TargetUserId == "2");
+        Assert.Contains(overview.RecentUserReports, report => report.ReporterUserId == 1 && report.TargetUserId == 2);
+        Assert.Contains(overview.Alerts, alert => alert.Kind == "user_reports");
     }
 
     public void Dispose()

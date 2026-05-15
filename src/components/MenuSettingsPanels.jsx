@@ -1066,6 +1066,8 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
   const recentMessages = useMemo(() => getAdminOverviewArray(overview, "recentMessages"), [overview]);
   const recentFiles = useMemo(() => getAdminOverviewArray(overview, "recentFiles"), [overview]);
   const recentReports = useMemo(() => getAdminOverviewArray(overview, "recentReports"), [overview]);
+  const recentUserReports = useMemo(() => getAdminOverviewArray(overview, "recentUserReports"), [overview]);
+  const alerts = useMemo(() => getAdminOverviewArray(overview, "alerts"), [overview]);
   const overviewMetrics = useMemo(() => ([
     { label: "Пользователи", value: overview?.totalUsers },
     { label: "В бане", value: overview?.bannedUsers },
@@ -1188,6 +1190,27 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
       </section>
 
       {overviewStatus ? <div className="admin-settings-status">{overviewStatus}</div> : null}
+
+      <section className="admin-security-section">
+        <div className="admin-security-section__header">
+          <div>
+            <h3>Алерты</h3>
+            <p>Всплески сообщений, файлов и жалоб, которые требуют быстрой проверки.</p>
+          </div>
+        </div>
+        <div className="admin-security-list admin-security-list--compact">
+          {alerts.map((alert) => (
+            <article key={`${alert.kind}-${alert.createdAt}`} className={`admin-security-alert admin-security-alert--${alert.severity || "warning"}`}>
+              <div>
+                <strong>{alert.title || "Алерт"}</strong>
+                <span>{formatAdminDate(alert.createdAt)} · {formatAdminNumber(alert.count)}</span>
+              </div>
+              <p>{alert.description || "Есть подозрительная активность."}</p>
+            </article>
+          ))}
+          {!overviewLoading && alerts.length === 0 ? <div className="admin-users-list__empty">Активных алертов нет.</div> : null}
+        </div>
+      </section>
 
       <section className="admin-security-section">
         <div className="admin-security-section__header">
@@ -1325,7 +1348,23 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
 
         <div className="admin-security-section admin-security-section--wide">
           <div className="admin-security-section__header">
-            <h3>Жалобы</h3>
+            <h3>Жалобы на пользователей</h3>
+          </div>
+          <div className="admin-security-list">
+            {recentUserReports.map((report) => (
+              <article key={report.id} className="admin-security-event admin-security-event--report">
+                <strong>{report.reporterName || `User ${report.reporterUserId}`} → {report.targetName || `User ${report.targetUserId}`}</strong>
+                <span>{report.status || "open"} · {formatAdminDate(report.createdAt)}</span>
+                <p>{report.reason || "без причины"}</p>
+              </article>
+            ))}
+            {!overviewLoading && recentUserReports.length === 0 ? <div className="admin-users-list__empty">Жалоб на профили пока нет.</div> : null}
+          </div>
+        </div>
+
+        <div className="admin-security-section admin-security-section--wide">
+          <div className="admin-security-section__header">
+            <h3>Жалобы на сообщения</h3>
           </div>
           <div className="admin-security-list">
             {recentReports.map((report) => (

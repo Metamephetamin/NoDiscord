@@ -6242,6 +6242,24 @@ export default function MenuMain({
       return;
     }
   };
+  const handleReportFriendListUser = async (targetProfile, reason) => {
+    const targetUserId = String(targetProfile?.userId || "").trim();
+    if (!targetUserId || targetProfile?.isSelf) {
+      return;
+    }
+
+    const response = await authFetch(`${API_BASE_URL}/user/${encodeURIComponent(targetUserId)}/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось отправить жалобу."));
+    }
+
+    setFriendActionStatus("Жалоба отправлена администратору.");
+  };
   const handleClearDirectChatForCurrentUser = () => {
     const normalizedChannelId = String(friendListUserContextMenu?.directChannelId || "").trim();
     if (!currentUserId || !normalizedChannelId || !friendListUserContextMenu?.hasClearableChat) {
@@ -6499,6 +6517,7 @@ export default function MenuMain({
           });
         }}
         onCopyUserId={() => handleCopyFriendListUserId(friendListProfileModal?.userId)}
+        onReportUser={handleReportFriendListUser}
       />
     </>
   );

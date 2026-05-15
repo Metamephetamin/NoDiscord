@@ -19757,7 +19757,8 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 }
 
 .admin-security-suspect,
-.admin-security-event {
+.admin-security-event,
+.admin-security-alert {
   min-width: 0;
   padding: 11px 12px;
   border: 1px solid rgba(139, 152, 178, 0.16);
@@ -19802,14 +19803,36 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   grid-column: 1 / -1;
 }
 
-.admin-security-event {
+.admin-security-event,
+.admin-security-alert {
   display: grid;
   gap: 5px;
 }
 
-.admin-security-event p {
+.admin-security-event p,
+.admin-security-alert p {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.admin-security-alert {
+  border-color: rgba(255, 184, 77, 0.25);
+  background: rgba(255, 184, 77, 0.08);
+}
+
+.admin-security-alert--danger {
+  border-color: rgba(255, 91, 110, 0.28);
+  background: rgba(255, 91, 110, 0.1);
+}
+
+.admin-security-alert strong {
+  color: var(--app-text);
+}
+
+.admin-security-alert span,
+.admin-security-alert p {
+  color: var(--app-text-muted);
+  font-weight: 700;
 }
 
 @media (max-width: 920px) {
@@ -19956,9 +19979,20 @@ html[data-ui-theme="light"] .settings-shell__admin-link small {
 }
 
 html[data-ui-theme="light"] .admin-security-suspect,
-html[data-ui-theme="light"] .admin-security-event {
+html[data-ui-theme="light"] .admin-security-event,
+html[data-ui-theme="light"] .admin-security-alert {
   border-color: #e2e8f0;
   background: #f8fafc;
+}
+
+html[data-ui-theme="light"] .admin-security-alert {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+html[data-ui-theme="light"] .admin-security-alert--danger {
+  border-color: #fecdd3;
+  background: #fff1f2;
 }
 
 html[data-ui-theme="light"] .admin-security-suspect__signals span {

@@ -161,6 +161,7 @@ export default function TextChatView(props) {
     handleProfileModalStartCall,
     handleProfileModalAddFriend,
     handleProfileModalCopyUserId,
+    handleProfileModalReportUser,
     primaryReactions,
     stickerReactions,
     reactionStickerPanelOpen,
@@ -704,6 +705,7 @@ export default function TextChatView(props) {
         onStartDirectCall={handleProfileModalStartCall}
         onAddFriend={handleProfileModalAddFriend}
         onCopyUserId={handleProfileModalCopyUserId}
+        onReportUser={handleProfileModalReportUser}
       />
       <Suspense fallback={null}>
         <TextChatForwardModal

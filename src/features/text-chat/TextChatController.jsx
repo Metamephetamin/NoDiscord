@@ -1698,6 +1698,25 @@ export default function TextChat({
     }
   };
 
+  const handleReportUserFromProfileModal = async (targetProfile, reason) => {
+    const targetUserId = String(targetProfile?.userId || "").trim();
+    if (!targetUserId || targetProfile?.isSelf) {
+      return;
+    }
+
+    const response = await authFetch(`${API_BASE_URL}/user/${encodeURIComponent(targetUserId)}/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось отправить жалобу."));
+    }
+
+    setActionFeedback({ tone: "success", message: "Жалоба отправлена администратору." });
+  };
+
   const handleOpenProfileFromUserMenu = () => {
     if (!userContextMenu) {
       return;
@@ -3567,6 +3586,7 @@ export default function TextChat({
       handleProfileModalStartCall={handleStartDirectCallFromProfileModal}
       handleProfileModalAddFriend={handleAddFriendFromProfileModal}
       handleProfileModalCopyUserId={handleCopyUserIdFromProfileModal}
+      handleProfileModalReportUser={handleReportUserFromProfileModal}
       primaryReactions={primaryReactions}
       stickerReactions={stickerReactions}
       reactionStickerPanelOpen={reactionStickerPanelOpen}

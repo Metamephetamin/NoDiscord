@@ -1,3 +1,4 @@
+import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { getProfileCustomizationClassName } from "../utils/profileCustomization";
@@ -66,6 +67,13 @@ const PROFILE_ICON_PATHS = {
       <path d="M6.8 8h6.4A2.8 2.8 0 0 1 16 10.8v6.4a2.8 2.8 0 0 1-2.8 2.8H6.8A2.8 2.8 0 0 1 4 17.2v-6.4A2.8 2.8 0 0 1 6.8 8Z" />
     </>
   ),
+  report: (
+    <>
+      <path d="M12 3.5 20 18.5H4L12 3.5Z" />
+      <path d="M12 8.5v4.5" />
+      <path d="M12 16h.01" />
+    </>
+  ),
 };
 
 const ProfileIcon = ({ kind, className = "" }) => (
@@ -128,7 +136,13 @@ export default function TextChatProfileModal({
   onStartDirectCall,
   onAddFriend,
   onCopyUserId,
+  onReportUser,
 }) {
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportStatus, setReportStatus] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
+
   if (!profile) {
     return null;
   }
@@ -144,6 +158,7 @@ export default function TextChatProfileModal({
   const showCallAction = Boolean(canMessage && typeof onStartDirectCall === "function");
   const canCall = Boolean(showCallAction && isOnline);
   const showMessageAction = !canAddFriend;
+  const canReport = !profile.isSelf && typeof onReportUser === "function";
   const detailCards = [
     { id: "activity", icon: "activity", label: "Активность", value: presenceLabel },
     { id: "contact", icon: "contact", label: "Связь", value: canMessage ? (canCall ? "Сообщения и звонки" : "Личные сообщения") : "Недоступно" },
@@ -160,6 +175,31 @@ export default function TextChatProfileModal({
       { id: "known-since", label: "Вы знакомы", value: "Неизвестно" },
       { id: "last-dialog", label: "Последний диалог", value: "Нет данных" },
     ];
+  const submitReport = async (event) => {
+    event.preventDefault();
+    if (!canReport || reportBusy) {
+      return;
+    }
+
+    const reason = reportReason.trim();
+    if (reason.length < 4) {
+      setReportStatus("Укажите причину жалобы.");
+      return;
+    }
+
+    setReportBusy(true);
+    setReportStatus("");
+    try {
+      await onReportUser(profile, reason);
+      setReportStatus("Жалоба отправлена.");
+      setReportReason("");
+      setReportOpen(false);
+    } catch (error) {
+      setReportStatus(error?.message || "Не удалось отправить жалобу.");
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   return (
     <div className="chat-profile-modal-backdrop" onClick={onClose}>
@@ -308,7 +348,42 @@ export default function TextChatProfileModal({
                 <ProfileIcon kind="copy" className="chat-profile-modal__action-icon" />
                 Копировать ID
               </button>
+              {canReport ? (
+                <button type="button" className="chat-profile-modal__action chat-profile-modal__action--danger" onClick={() => setReportOpen((value) => !value)}>
+                  <ProfileIcon kind="report" className="chat-profile-modal__action-icon" />
+                  Пожаловаться
+                </button>
+              ) : null}
             </div>
+            {reportOpen ? (
+              <form className="chat-profile-modal__report" onSubmit={submitReport}>
+                <label>
+                  <span>Причина жалобы</span>
+                  <textarea
+                    value={reportReason}
+                    maxLength={700}
+                    onChange={(event) => {
+                      setReportReason(event.target.value);
+                      if (reportStatus) {
+                        setReportStatus("");
+                      }
+                    }}
+                    placeholder="Спам, оскорбления, подозрительное поведение"
+                  />
+                </label>
+                {reportStatus ? <p>{reportStatus}</p> : null}
+                <div className="chat-profile-modal__report-actions">
+                  <button type="button" className="chat-profile-modal__report-cancel" onClick={() => setReportOpen(false)} disabled={reportBusy}>
+                    Отмена
+                  </button>
+                  <button type="submit" className="chat-profile-modal__report-submit" disabled={reportBusy || reportReason.trim().length < 4}>
+                    {reportBusy ? "Отправляем..." : "Отправить"}
+                  </button>
+                </div>
+              </form>
+            ) : reportStatus ? (
+              <div className="chat-profile-modal__report-status">{reportStatus}</div>
+            ) : null}
             <section className="chat-profile-modal__side-widget" aria-label="Общая статистика">
               <div className="chat-profile-modal__side-widget-header">
                 <ProfileIcon kind="info" className="chat-profile-modal__side-widget-icon" />
