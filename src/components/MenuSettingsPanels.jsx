@@ -1052,7 +1052,7 @@ const getAdminOverviewArray = (overview, key) => (
   Array.isArray(overview?.[key]) ? overview[key] : []
 );
 
-export const AdminSettingsPanel = ({ currentUserId }) => {
+export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
   const [query, setQuery] = useState("");
   const [reason, setReason] = useState("");
   const [users, setUsers] = useState([]);
@@ -1175,10 +1175,12 @@ export const AdminSettingsPanel = ({ currentUserId }) => {
 
   return (
     <div className="settings-shell__content settings-shell__content--admin">
-      <div className="settings-shell__content-header">
-        <h2>Безопасность</h2>
-        <p>Отдельная страница для просмотра пользователей, подозрительных сигналов, сообщений, файлов и жалоб.</p>
-      </div>
+      {showHeader ? (
+        <div className="settings-shell__content-header">
+          <h2>Безопасность</h2>
+          <p>Отдельная страница для просмотра пользователей, подозрительных сигналов, сообщений, файлов и жалоб.</p>
+        </div>
+      ) : null}
 
       <section className="admin-security-metrics" aria-busy={overviewLoading}>
         {overviewMetrics.map((metric) => (

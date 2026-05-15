@@ -19597,39 +19597,39 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   background: #dfe7ff;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) * {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) * {
   scrollbar-color: transparent transparent !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) *::-webkit-scrollbar {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) *::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) *::-webkit-scrollbar-track {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) *::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) *::-webkit-scrollbar-thumb {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) *::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: transparent !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) *::-webkit-scrollbar-button {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) *::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) .is-scroll-active {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) .is-scroll-active {
   scrollbar-color: rgba(150, 160, 184, 0.42) transparent !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) .is-scroll-active::-webkit-scrollbar-thumb {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) .is-scroll-active::-webkit-scrollbar-thumb {
   background: rgba(150, 160, 184, 0.42) !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) .is-scroll-active::-webkit-scrollbar-thumb:hover {
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) .is-scroll-active::-webkit-scrollbar-thumb:hover {
   background: rgba(180, 190, 214, 0.58) !important;
 }
 
@@ -19645,7 +19645,7 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   background: rgba(180, 190, 214, 0.28) !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) :where(
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) :where(
   button,
   [role="button"],
   a,
@@ -19658,7 +19658,7 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   outline: none !important;
 }
 
-:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell) :where(
+:where(.menu-shell, .modal-backdrop, .settings-backdrop, .server-invite-modal-layer, .channel-settings-shell, .admin-security-page-backdrop) :where(
   button,
   [role="button"],
   a,
@@ -19669,6 +19669,222 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   [tabindex]:not([tabindex="-1"])
 ):focus-visible {
   outline: none !important;
+}
+
+.admin-security-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: flex;
+  background: rgba(3, 5, 10, 0.78);
+  backdrop-filter: blur(18px);
+}
+
+.admin-security-page {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  color: var(--app-text);
+  background:
+    radial-gradient(circle at 22% 0%, rgba(219, 57, 83, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(14, 17, 25, 0.98), rgba(6, 8, 13, 0.98));
+}
+
+.admin-security-page__topbar {
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px clamp(18px, 4vw, 56px);
+  border-bottom: 1px solid rgba(139, 152, 178, 0.16);
+  background: rgba(7, 9, 14, 0.78);
+}
+
+.admin-security-page__topbar div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-security-page__topbar span,
+.admin-security-page__hero p,
+.admin-security-page__server {
+  color: var(--app-text-muted);
+  font-weight: 800;
+}
+
+.admin-security-page__topbar strong {
+  font-size: 18px;
+}
+
+.admin-security-page__close {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.admin-security-page__close::before,
+.admin-security-page__close::after {
+  content: "";
+  position: absolute;
+  top: 20px;
+  left: 11px;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--app-text-muted);
+}
+
+.admin-security-page__close::before {
+  transform: rotate(45deg);
+}
+
+.admin-security-page__close::after {
+  transform: rotate(-45deg);
+}
+
+.admin-security-page__close:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.admin-security-page__body {
+  min-height: 0;
+  overflow: auto;
+  padding: 24px clamp(16px, 4vw, 56px) 48px;
+}
+
+.admin-security-page__content {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.admin-security-page__hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0 4px;
+}
+
+.admin-security-page__hero h1,
+.admin-security-page__hero p {
+  margin: 0;
+}
+
+.admin-security-page__hero h1 {
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.admin-security-page__server {
+  flex: 0 0 auto;
+  max-width: 360px;
+  padding: 9px 12px;
+  border: 1px solid rgba(139, 152, 178, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-security-page__content .settings-shell__content--admin {
+  overflow: visible;
+  padding: 0;
+}
+
+.admin-security-page__reports .moderation-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.moderation-panel__toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.moderation-panel__toolbar select {
+  min-width: 190px;
+  border: 1px solid rgba(139, 152, 178, 0.22);
+  border-radius: 12px;
+  background: rgba(7, 9, 14, 0.45);
+  color: var(--app-text);
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.moderation-panel__list {
+  display: grid;
+  gap: 10px;
+}
+
+.moderation-panel__item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(139, 152, 178, 0.18);
+  border-radius: 14px;
+  background: rgba(7, 9, 14, 0.28);
+}
+
+.moderation-panel__meta {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.moderation-panel__meta strong {
+  color: var(--app-text);
+}
+
+.moderation-panel__meta span {
+  color: var(--app-text-muted);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.moderation-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.moderation-panel__actions button {
+  border: 0;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--app-text);
+  font-weight: 900;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+
+.moderation-panel__actions button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.admin-security-page__empty {
+  width: min(520px, 100%);
+  margin: 18vh auto 0;
+  padding: 18px;
+  border: 1px solid rgba(139, 152, 178, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--app-text-muted);
+  font-weight: 800;
+  text-align: center;
 }
 
 .settings-shell__content--admin {
@@ -19836,6 +20052,27 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 }
 
 @media (max-width: 920px) {
+  .admin-security-page__topbar {
+    padding-inline: 14px;
+  }
+
+  .admin-security-page__body {
+    padding: 18px 12px 32px;
+  }
+
+  .admin-security-page__hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-security-page__hero h1 {
+    font-size: 25px;
+  }
+
+  .admin-security-page__server {
+    max-width: none;
+  }
+
   .admin-security-columns,
   .admin-security-suspect {
     grid-template-columns: 1fr;
@@ -19844,6 +20081,14 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   .admin-security-section__header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .moderation-panel__item {
+    grid-template-columns: 1fr;
+  }
+
+  .moderation-panel__actions {
+    justify-content: flex-start;
   }
 }
 
@@ -19958,6 +20203,25 @@ html[data-ui-theme="light"] .admin-user-row {
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
 }
 
+html[data-ui-theme="light"] .admin-security-page-backdrop {
+  background: rgba(226, 232, 240, 0.72);
+}
+
+html[data-ui-theme="light"] .admin-security-page {
+  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+}
+
+html[data-ui-theme="light"] .admin-security-page__topbar {
+  border-bottom-color: #d8e0ee;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+html[data-ui-theme="light"] .admin-security-page__close,
+html[data-ui-theme="light"] .admin-security-page__server {
+  border-color: #d8e0ee;
+  background: #ffffff;
+}
+
 html[data-ui-theme="light"] .settings-shell__admin-entry {
   border-top-color: #d8e0ee;
 }
@@ -19980,9 +20244,17 @@ html[data-ui-theme="light"] .settings-shell__admin-link small {
 
 html[data-ui-theme="light"] .admin-security-suspect,
 html[data-ui-theme="light"] .admin-security-event,
-html[data-ui-theme="light"] .admin-security-alert {
+html[data-ui-theme="light"] .admin-security-alert,
+html[data-ui-theme="light"] .moderation-panel__item {
   border-color: #e2e8f0;
   background: #f8fafc;
+}
+
+html[data-ui-theme="light"] .moderation-panel__toolbar select,
+html[data-ui-theme="light"] .moderation-panel__actions button {
+  border-color: #d8e0ee;
+  background: #ffffff;
+  color: #1f2937;
 }
 
 html[data-ui-theme="light"] .admin-security-alert {

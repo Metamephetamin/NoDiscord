@@ -1,4 +1,5 @@
 import {
+  AdminSecurityPageOverlay,
   CameraModal,
   CreateServerModal,
   DirectCallOverlayView,
@@ -33,14 +34,18 @@ export default function MenuMainOverlayLayer({
   handleServerIconChange,
   serverInviteFeedback,
   isMobileViewport,
+  openAdminSecurityPage,
   openSettings,
   popupRef,
   user,
   showAdminSettingsLink,
   settingsNavSections,
   settingsTab,
+  setOpenAdminSecurityPage,
   setOpenSettings,
   setSettingsTab,
+  openAdminSecurityPageFromSettings,
+  renderAdminSecurityPage,
   renderMobileSettingsShell,
   renderSettingsContent,
   showCreateServerModal,
@@ -242,8 +247,15 @@ export default function MenuMainOverlayLayer({
         settingsTab={settingsTab}
         onClose={() => setOpenSettings(false)}
         onSelectSettingsTab={setSettingsTab}
+        onOpenAdminSecurityPage={openAdminSecurityPageFromSettings}
         renderMobileSettingsShell={renderMobileSettingsShell}
         renderSettingsContent={renderSettingsContent}
+      />
+
+      <AdminSecurityPageOverlay
+        open={openAdminSecurityPage}
+        onClose={() => setOpenAdminSecurityPage(false)}
+        renderAdminSecurityPage={renderAdminSecurityPage}
       />
 
       <CreateServerModal

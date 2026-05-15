@@ -148,7 +148,6 @@ export function MenuMainSettingsContent({
   activeServer,
   canManageServer,
   canManageRoles,
-  canManageMessages,
   canInviteMembers,
   isDefaultServer,
   currentUserId,
@@ -360,17 +359,6 @@ export function MenuMainSettingsContent({
           onUpdateMemberRole={updateMemberRole}
         />
       );
-    case "moderation":
-      return (
-        <ModerationPanel
-          serverId={activeServer?.id || ""}
-          canManage={Boolean(canManageServer || canManageMessages)}
-        />
-      );
-    case "admin":
-      return user?.isAdmin || user?.is_admin ? (
-        <AdminSettingsPanel currentUserId={currentUserId} />
-      ) : null;
     case "voice_video":
     default:
       return (
@@ -406,6 +394,56 @@ export function MenuMainSettingsContent({
   }
 }
 
+export function MenuMainAdminSecurityPage({
+  user,
+  currentUserId,
+  activeServer,
+  canManageReports,
+}) {
+  if (!(user?.isAdmin || user?.is_admin)) {
+    return (
+      <div className="admin-security-page__empty">
+        Нет доступа к странице безопасности.
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-security-page__content">
+      <section className="admin-security-page__hero">
+        <div>
+          <h1>Безопасность</h1>
+          <p>Пользователи, баны, подозрительные сигналы и жалобы собраны отдельно от обычных настроек.</p>
+        </div>
+        {activeServer?.name ? (
+          <span className="admin-security-page__server">Текущий сервер: {activeServer.name}</span>
+        ) : null}
+      </section>
+
+      <AdminSettingsPanel currentUserId={currentUserId} showHeader={false} />
+
+      <section className="admin-security-section admin-security-page__reports">
+        <div className="admin-security-section__header">
+          <div>
+            <h3>Жалобы текущего сервера</h3>
+            <p>Здесь теперь находится бывший раздел модерации из настроек сервера.</p>
+          </div>
+        </div>
+        {activeServer?.id && canManageReports ? (
+          <ModerationPanel
+            serverId={activeServer.id}
+            canManage={canManageReports}
+          />
+        ) : (
+          <div className="admin-users-list__empty">
+            Выберите сервер с правами модерации, чтобы увидеть его жалобы.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function MenuMainMobileSettingsShell({
   activeSettingsTabMeta,
   user,
@@ -413,8 +451,18 @@ export function MenuMainMobileSettingsShell({
   settingsTab,
   setOpenSettings,
   setSettingsTab,
+  onOpenAdminSecurityPage,
   children,
 }) {
+  const handleSelectTab = (tabId) => {
+    if (tabId === "admin") {
+      onOpenAdminSecurityPage?.();
+      return;
+    }
+
+    setSettingsTab(tabId);
+  };
+
   return (
     <MobileSettingsShell
       activeSettingsTabMeta={activeSettingsTabMeta}
@@ -425,7 +473,7 @@ export function MenuMainMobileSettingsShell({
       navItems={mobileSettingsNavItems}
       settingsTab={settingsTab}
       onClose={() => setOpenSettings(false)}
-      onSelectTab={setSettingsTab}
+      onSelectTab={handleSelectTab}
     >
       {children}
     </MobileSettingsShell>

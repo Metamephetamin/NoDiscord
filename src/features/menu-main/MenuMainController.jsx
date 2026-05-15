@@ -332,6 +332,9 @@ const MenuMainSettingsContent = lazy(() =>
 const MenuMainMobileSettingsShell = lazy(() =>
   recoverChunkImport(() => import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainMobileSettingsShell })))
 );
+const MenuMainAdminSecurityPage = lazy(() =>
+  recoverChunkImport(() => import("./MenuMainSettingsRenderer").then((module) => ({ default: module.MenuMainAdminSecurityPage })))
+);
 const FriendsSidebar = lazy(() =>
   recoverChunkImport(() => import("../../components/FriendsWorkspace").then((module) => ({ default: module.FriendsSidebar })))
 );
@@ -473,6 +476,7 @@ export default function MenuMain({
   const [participantsMap, setParticipantsMap] = useState({});
   const [roomVoiceParticipants, setRoomVoiceParticipants] = useState({ channel: "", participants: [] });
   const [openSettings, setOpenSettings] = useState(false);
+  const [openAdminSecurityPage, setOpenAdminSecurityPage] = useState(false);
   const [profileCustomization, setProfileCustomization] = useState(() => readProfileCustomization(user));
   const [micVolume, setMicVolume] = useState(100);
   const [audioVolume, setAudioVolume] = useState(100);
@@ -1408,6 +1412,11 @@ export default function MenuMain({
     return () => mediaQueryList.removeListener(handleViewportChange);
   }, []);
   useEffect(() => {
+    if (settingsTab === "admin" || settingsTab === "moderation") {
+      setSettingsTab("voice_video");
+      return;
+    }
+
     if (!activeServer && (settingsTab === "server" || settingsTab === "roles")) {
       setSettingsTab("voice_video");
     }
@@ -4363,6 +4372,13 @@ export default function MenuMain({
       tab: String(tab || "voice_video"),
     });
   }, []);
+  const openAdminSecurityPageFromSettings = useCallback(() => {
+    setOpenSettings(false);
+    setOpenAdminSecurityPage(true);
+    setShowServerMembersPanel(false);
+    setShowMicMenu(false);
+    setShowSoundMenu(false);
+  }, []);
   const openServerSettingsPanel = useCallback(() => {
     openSettingsPanel("server");
   }, [openSettingsPanel]);
@@ -5692,7 +5708,7 @@ export default function MenuMain({
   const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
   const adminSettingsItem = useMemo(() => SETTINGS_NAV_ITEMS.find((item) => item.id === "admin"), []);
   const settingsNavItems = useMemo(
-    () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "roles" && item.id !== "admin"),
+    () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "roles" && item.id !== "admin" && item.id !== "moderation"),
     []
   );
   const settingsNavSections = useMemo(() => groupSettingsNavItems(settingsNavItems), [settingsNavItems]);
@@ -5904,6 +5920,16 @@ export default function MenuMain({
       <MenuMainSettingsContent {...settingsContentProps} />
     </Suspense>
   );
+  const renderAdminSecurityPage = () => (
+    <Suspense fallback={settingsContentFallback}>
+      <MenuMainAdminSecurityPage
+        user={user}
+        currentUserId={currentUserId}
+        activeServer={activeServer}
+        canManageReports={Boolean(canManageServer || canManageMessages)}
+      />
+    </Suspense>
+  );
   const renderMobileSettingsShell = () => (
     <Suspense fallback={settingsContentFallback}>
       <MenuMainMobileSettingsShell
@@ -5913,6 +5939,7 @@ export default function MenuMain({
         settingsTab={settingsTab}
         setOpenSettings={setOpenSettings}
         setSettingsTab={setSettingsTab}
+        onOpenAdminSecurityPage={openAdminSecurityPageFromSettings}
       >
         {renderSettingsContent()}
       </MenuMainMobileSettingsShell>
@@ -7157,14 +7184,18 @@ export default function MenuMain({
       handleServerIconChange={handleServerIconChange}
       serverInviteFeedback={serverInviteFeedback}
       isMobileViewport={isMobileViewport}
+      openAdminSecurityPage={openAdminSecurityPage}
       openSettings={openSettings}
       popupRef={popupRef}
       user={user}
       showAdminSettingsLink={isCurrentUserAdmin}
       settingsNavSections={settingsNavSections}
       settingsTab={settingsTab}
+      setOpenAdminSecurityPage={setOpenAdminSecurityPage}
       setOpenSettings={setOpenSettings}
       setSettingsTab={setSettingsTab}
+      openAdminSecurityPageFromSettings={openAdminSecurityPageFromSettings}
+      renderAdminSecurityPage={renderAdminSecurityPage}
       renderMobileSettingsShell={renderMobileSettingsShell}
       renderSettingsContent={renderSettingsContent}
       showCreateServerModal={showCreateServerModal}

@@ -284,6 +284,7 @@ export const SettingsOverlay = ({
   settingsTab,
   onClose,
   onSelectSettingsTab,
+  onOpenAdminSecurityPage,
   renderMobileSettingsShell,
   renderSettingsContent,
 }) => {
@@ -413,8 +414,8 @@ export const SettingsOverlay = ({
                 <div className="settings-shell__admin-entry">
                   <button
                     type="button"
-                    className={`settings-shell__admin-link ${settingsTab === "admin" ? "settings-shell__admin-link--active" : ""}`}
-                    onClick={() => onSelectSettingsTab("admin")}
+                    className="settings-shell__admin-link"
+                    onClick={onOpenAdminSecurityPage}
                   >
                     <SettingsNavIcon id="admin" />
                     <span>
@@ -435,6 +436,33 @@ export const SettingsOverlay = ({
           </>
         )}
       </div>
+    </div>
+  );
+};
+
+export const AdminSecurityPageOverlay = ({
+  open,
+  onClose,
+  renderAdminSecurityPage,
+}) => {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="admin-security-page-backdrop">
+      <main className="admin-security-page" aria-label="Страница безопасности">
+        <div className="admin-security-page__topbar">
+          <div>
+            <span>Администрирование</span>
+            <strong>Безопасность</strong>
+          </div>
+          <button type="button" className="admin-security-page__close" onClick={onClose} aria-label="Закрыть страницу безопасности" />
+        </div>
+        <div className="admin-security-page__body">
+          {renderAdminSecurityPage?.()}
+        </div>
+      </main>
     </div>
   );
 };
