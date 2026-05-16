@@ -9,7 +9,7 @@ public static class TotpService
     private const int SecretBytesLength = 20;
     private const int CodeDigits = 6;
     private const int TimeStepSeconds = 30;
-    private const int VerificationWindowSteps = 2;
+    private const int VerificationWindowSteps = 30;
     private const string Base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
     public static string GenerateSecret()

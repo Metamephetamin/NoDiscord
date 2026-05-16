@@ -23,6 +23,15 @@ public sealed class TotpServiceTests
     }
 
     [Fact]
+    public void VerifyCode_AllowsTemporaryProductionClockSkew()
+    {
+        const string secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+        var serverTime = DateTimeOffset.FromUnixTimeSeconds(779);
+
+        Assert.True(TotpService.VerifyCode(secret, "287082", serverTime));
+    }
+
+    [Fact]
     public void BuildOtpAuthUri_LeavesIssuerSeparatorReadable()
     {
         var uri = TotpService.BuildOtpAuthUri("MAX", "user@example.com", "JBSWY3DPEHPK3PXP");
