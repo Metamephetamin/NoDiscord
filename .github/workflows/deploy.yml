@@ -507,6 +507,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          RUNNER_UTC_EPOCH="$(date -u +%s)"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Restarting backend service and reloading nginx"
@@ -514,6 +515,7 @@ jobs:
             set -e
             BACKEND_SERVICE='$BACKEND_SERVICE'
             TEMP_ROOT='$TEMP_ROOT'
+            RUNNER_UTC_EPOCH='$RUNNER_UTC_EPOCH'
             run_root() {
               if \"\$@\"; then
                 return 0
@@ -541,6 +543,15 @@ jobs:
             fi
             if command -v ntpdate >/dev/null 2>&1; then
               run_root ntpdate -u pool.ntp.org || true
+            fi
+            server_epoch=\"\$(date -u +%s)\"
+            clock_skew=\"\$((server_epoch - RUNNER_UTC_EPOCH))\"
+            if [ \"\$clock_skew\" -lt 0 ]; then
+              clock_skew=\"\$((-clock_skew))\"
+            fi
+            if [ \"\$clock_skew\" -gt 120 ]; then
+              echo \"NTP did not correct clock quickly enough; attempting manual UTC step from runner time\"
+              run_root date -u -s \"@\${RUNNER_UTC_EPOCH}\" || true
             fi
             echo \"Server clock after sync: \$(date -u -R)\"
             run_root systemctl restart \"\$BACKEND_SERVICE\"
