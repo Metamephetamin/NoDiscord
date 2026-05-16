@@ -514,16 +514,38 @@ jobs:
             set -e
             BACKEND_SERVICE='$BACKEND_SERVICE'
             TEMP_ROOT='$TEMP_ROOT'
+            run_root() {
+              if \"\$@\"; then
+                return 0
+              fi
+              if command -v sudo >/dev/null 2>&1; then
+                sudo -n \"\$@\"
+                return \$?
+              fi
+              return 1
+            }
+
+            echo \"Server clock before sync: \$(date -u -R)\"
             if command -v timedatectl >/dev/null 2>&1; then
-              timedatectl set-ntp true || true
+              run_root timedatectl set-ntp true || true
               timedatectl status || true
+              timedatectl timesync-status || true
+            fi
+            if systemctl list-unit-files systemd-timesyncd.service >/dev/null 2>&1; then
+              run_root systemctl restart systemd-timesyncd.service || true
             fi
             if command -v chronyc >/dev/null 2>&1; then
+              chronyc -a \"burst 4/4\" || true
               chronyc -a makestep || true
+              chronyc tracking || true
             fi
-            systemctl restart \"\$BACKEND_SERVICE\"
+            if command -v ntpdate >/dev/null 2>&1; then
+              run_root ntpdate -u pool.ntp.org || true
+            fi
+            echo \"Server clock after sync: \$(date -u -R)\"
+            run_root systemctl restart \"\$BACKEND_SERVICE\"
             systemctl is-active \"\$BACKEND_SERVICE\"
-            systemctl reload nginx
+            run_root systemctl reload nginx
             rm -rf \"\$TEMP_ROOT\"
             echo \"Backend restart and nginx reload completed\"
           '"
@@ -635,6 +657,11 @@ jobs:
           ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "bash -lc '
+            echo \"=== server clock ===\"
+            date -u -R || true
+            timedatectl status || true
+            timedatectl timesync-status || true
+            chronyc tracking || true
             echo \"=== systemctl status ===\"
             systemctl status \"$BACKEND_SERVICE\" --no-pager || true
             echo \"=== journalctl ===\"
