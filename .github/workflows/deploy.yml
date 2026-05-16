@@ -514,6 +514,13 @@ jobs:
             set -e
             BACKEND_SERVICE='$BACKEND_SERVICE'
             TEMP_ROOT='$TEMP_ROOT'
+            if command -v timedatectl >/dev/null 2>&1; then
+              timedatectl set-ntp true || true
+              timedatectl status || true
+            fi
+            if command -v chronyc >/dev/null 2>&1; then
+              chronyc -a makestep || true
+            fi
             systemctl restart \"\$BACKEND_SERVICE\"
             systemctl is-active \"\$BACKEND_SERVICE\"
             systemctl reload nginx
@@ -563,6 +570,22 @@ jobs:
           fi
           api_headers="$(mktemp)"
           curl --fail --silent --show-error --dump-header "$api_headers" --output /dev/null "$API_HEALTHCHECK"
+          api_date="$(awk 'BEGIN{IGNORECASE=1} /^date:/ { sub(/^[Dd]ate:[[:space:]]*/, ""); gsub(/\r$/, ""); print; exit }' "$api_headers")"
+          if [ -z "$api_date" ]; then
+            echo "Backend API response did not include a Date header." >&2
+            cat "$api_headers" >&2
+            exit 1
+          fi
+          api_date_epoch="$(date -u -d "$api_date" +%s)"
+          now_epoch="$(date -u +%s)"
+          clock_skew="$((now_epoch - api_date_epoch))"
+          if [ "$clock_skew" -lt 0 ]; then
+            clock_skew="$((-clock_skew))"
+          fi
+          if [ "$clock_skew" -gt 120 ]; then
+            echo "Production clock skew is too high: ${clock_skew}s (server Date: $api_date)." >&2
+            exit 1
+          fi
           if ! grep -iq "content-security-policy:.*wss://lanaya.space" "$api_headers"; then
             echo "Backend CSP does not allow lanaya.space websocket connections." >&2
             cat "$api_headers" >&2
