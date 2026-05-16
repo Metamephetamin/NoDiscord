@@ -250,9 +250,13 @@ const TotpAuthenticatorCard = ({
   isTotpEnabled,
   totpSetup,
   onTotpCodeChange,
+  onTotpResetPasswordChange,
+  onTotpResetCodeChange,
   onStartTotpSetup,
   onVerifyTotpSetup,
   onDisableTotp,
+  onRequestTotpResetCode,
+  onResetTotp,
 }) => {
   const [qrState, setQrState] = useState({ uri: "", svg: "" });
   const isSetupOpen = Boolean(totpSetup?.secret || totpSetup?.otpauthUri);
@@ -309,18 +313,48 @@ const TotpAuthenticatorCard = ({
           </button>
         ) : null}
         {!isSetupOpen && isTotpEnabled ? (
-          <div className="totp-settings-card__inline-code">
-            <input
-              className="settings-input"
-              inputMode="numeric"
-              value={totpSetup?.code || ""}
-              onChange={(event) => onTotpCodeChange?.(event.target.value)}
-              maxLength={6}
-              placeholder="123456"
-            />
-            <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
-              {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
-            </button>
+          <div className="totp-settings-card__enabled-actions">
+            <div className="totp-settings-card__inline-code">
+              <input
+                className="settings-input"
+                inputMode="numeric"
+                value={totpSetup?.code || ""}
+                onChange={(event) => onTotpCodeChange?.(event.target.value)}
+                maxLength={6}
+                placeholder="123456"
+              />
+              <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
+                {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
+              </button>
+            </div>
+            <div className="totp-settings-card__reset">
+              <input
+                className="settings-input"
+                type="password"
+                value={totpSetup?.resetPassword || ""}
+                onChange={(event) => onTotpResetPasswordChange?.(event.target.value)}
+                placeholder="Пароль"
+                autoComplete="current-password"
+              />
+              {totpSetup?.resetRequested ? (
+                <input
+                  className="settings-input"
+                  inputMode="numeric"
+                  value={totpSetup?.resetCode || ""}
+                  onChange={(event) => onTotpResetCodeChange?.(event.target.value)}
+                  maxLength={6}
+                  placeholder="Код из письма"
+                />
+              ) : null}
+              <button
+                type="button"
+                className="settings-inline-button"
+                onClick={totpSetup?.resetRequested ? onResetTotp : onRequestTotpResetCode}
+                disabled={totpSetup?.isBusy}
+              >
+                {totpSetup?.isBusy ? "Проверяем..." : totpSetup?.resetRequested ? "Сбросить" : "Код на почту"}
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -371,6 +405,8 @@ export const AccountSettings = ({
   isTotpEnabled,
   totpSetup,
   onTotpCodeChange,
+  onTotpResetPasswordChange,
+  onTotpResetCodeChange,
   onOpenProfileSettings,
   onSaveProfile,
   onUpdateProfileDraft,
@@ -380,6 +416,8 @@ export const AccountSettings = ({
   onStartTotpSetup,
   onVerifyTotpSetup,
   onDisableTotp,
+  onRequestTotpResetCode,
+  onResetTotp,
   onLogout,
 }) => {
   const [editingAccountField, setEditingAccountField] = useState("");
@@ -557,9 +595,13 @@ export const AccountSettings = ({
           isTotpEnabled={isTotpEnabled}
           totpSetup={totpSetup}
           onTotpCodeChange={onTotpCodeChange}
+          onTotpResetPasswordChange={onTotpResetPasswordChange}
+          onTotpResetCodeChange={onTotpResetCodeChange}
           onStartTotpSetup={onStartTotpSetup}
           onVerifyTotpSetup={onVerifyTotpSetup}
           onDisableTotp={onDisableTotp}
+          onRequestTotpResetCode={onRequestTotpResetCode}
+          onResetTotp={onResetTotp}
         />
       </section>
 

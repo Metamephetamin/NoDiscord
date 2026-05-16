@@ -33,6 +33,7 @@ public class AuthController : ControllerBase
     private const string EmailVerificationPurpose = "email_verification";
     private const string LoginCodePurpose = "login";
     private const string PasswordResetPurpose = "password_reset";
+    private const string TotpResetPurpose = "totp_reset";
     private bool RequireEmailRegistrationVerification => _config.GetValue<bool?>("Auth:RequireEmailVerification") ?? true;
 
     private readonly AppDbContext _context;
@@ -320,6 +321,151 @@ public class AuthController : ControllerBase
         user.is_totp_enabled = false;
         user.totp_enabled_at = null;
         await _context.SaveChangesAsync();
+
+        return Ok(new { isTotpEnabled = false });
+    }
+
+    [HttpPost("totp/reset-code")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("email-send")]
+    public async Task<IActionResult> RequestTotpResetCode([FromBody] TotpResetCodeRequestDto dto, CancellationToken cancellationToken = default)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse(user);
+        }
+
+        if (!user.is_totp_enabled)
+        {
+            return BadRequest(new { message = "Google Authenticator is not enabled." });
+        }
+
+        if (string.IsNullOrWhiteSpace(user.email) || !user.is_email_verified)
+        {
+            return BadRequest(new { message = "A verified email is required to reset Google Authenticator." });
+        }
+
+        var passwordResult = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password ?? string.Empty);
+        if (passwordResult == PasswordVerificationResult.Failed)
+        {
+            return BadRequest(new { message = "Invalid password." });
+        }
+
+        if (passwordResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.password_hash = _passwordHasher.HashPassword(user, dto.password ?? string.Empty);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        try
+        {
+            var payload = await CreateEmailVerificationAsync(user, purpose: TotpResetPurpose, cancellationToken: cancellationToken);
+            if (payload.IsRateLimited)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    message = "Code can be resent in 60 seconds.",
+                    resendAvailableAt = payload.ResendAvailableAt
+                });
+            }
+
+            return Ok(payload.ToResponse());
+        }
+        catch (EmailDeliveryException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Failed to send Google Authenticator reset code."
+            });
+        }
+    }
+
+    [HttpPost("totp/reset")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("email-verify")]
+    public async Task<IActionResult> ResetTotp([FromBody] TotpResetDto dto, CancellationToken cancellationToken = default)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
+        if (user.IsBanned)
+        {
+            return CreateAccountBannedResponse(user);
+        }
+
+        var verificationToken = (dto.verificationToken ?? string.Empty).Trim();
+        var code = new string((dto.code ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(verificationToken) || code.Length != 6)
+        {
+            return BadRequest(new { message = "Enter a valid 6-digit email code." });
+        }
+
+        var passwordResult = _passwordHasher.VerifyHashedPassword(user, user.password_hash, dto.password ?? string.Empty);
+        if (passwordResult == PasswordVerificationResult.Failed)
+        {
+            return BadRequest(new { message = "Invalid password." });
+        }
+
+        if (string.IsNullOrWhiteSpace(user.email))
+        {
+            return BadRequest(new { message = "A verified email is required to reset Google Authenticator." });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var record = await _context.EmailVerificationCodes
+            .Where(item =>
+                item.UserId == user.id &&
+                item.Email == user.email &&
+                item.Purpose == TotpResetPurpose &&
+                item.VerificationTokenHash == AuthInputPolicies.HashSecret(verificationToken) &&
+                !item.ConsumedAt.HasValue)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (record == null)
+        {
+            return BadRequest(new { message = "Google Authenticator reset session was not found. Request a new code." });
+        }
+
+        if (record.ExpiresAt <= now)
+        {
+            record.ConsumedAt = now;
+            await _context.SaveChangesAsync(cancellationToken);
+            return BadRequest(new { message = "Email code has expired. Request a new code." });
+        }
+
+        if (record.AttemptCount >= MaxEmailVerificationAttempts)
+        {
+            return BadRequest(new { message = "Attempt limit exceeded. Request a new code." });
+        }
+
+        if (!string.Equals(record.CodeHash, AuthInputPolicies.HashSecret(code), StringComparison.Ordinal))
+        {
+            record.AttemptCount += 1;
+            if (record.AttemptCount >= MaxEmailVerificationAttempts)
+            {
+                record.ConsumedAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return BadRequest(new { message = "Invalid email code." });
+        }
+
+        record.VerifiedAt = now;
+        record.ConsumedAt = now;
+        user.totp_secret = null;
+        user.is_totp_enabled = false;
+        user.totp_enabled_at = null;
+        await _context.SaveChangesAsync(cancellationToken);
 
         return Ok(new { isTotpEnabled = false });
     }
@@ -1968,6 +2114,24 @@ public class QrLoginApproveDto
 public class TotpCodeDto
 {
     public string? code { get; set; }
+}
+
+public class TotpResetCodeRequestDto
+{
+    [Required]
+    public string? password { get; set; }
+}
+
+public class TotpResetDto
+{
+    [Required]
+    public string? password { get; set; }
+
+    [Required]
+    public string verificationToken { get; set; } = string.Empty;
+
+    [Required]
+    public string code { get; set; } = string.Empty;
 }
 
 public class ResendEmailVerificationDto

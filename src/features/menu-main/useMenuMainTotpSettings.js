@@ -14,6 +14,10 @@ const initialTotpSetup = {
   secret: "",
   otpauthUri: "",
   code: "",
+  resetPassword: "",
+  resetCode: "",
+  resetVerificationToken: "",
+  resetRequested: false,
   status: "",
   isBusy: false,
 };
@@ -49,6 +53,22 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     setTotpSetup((previous) => ({
       ...previous,
       code: String(value || "").replace(/\D/g, "").slice(0, 6),
+      status: "",
+    }));
+  };
+
+  const updateTotpResetPassword = (value) => {
+    setTotpSetup((previous) => ({
+      ...previous,
+      resetPassword: String(value || ""),
+      status: "",
+    }));
+  };
+
+  const updateTotpResetCode = (value) => {
+    setTotpSetup((previous) => ({
+      ...previous,
+      resetCode: String(value || "").replace(/\D/g, "").slice(0, 6),
       status: "",
     }));
   };
@@ -149,12 +169,88 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     }
   };
 
+  const requestTotpResetCode = async () => {
+    const password = String(totpSetup.resetPassword || "");
+    if (!password) {
+      setTotpSetup((previous) => ({ ...previous, status: "Введите пароль от аккаунта." }));
+      return;
+    }
+
+    setTotpSetup((previous) => ({ ...previous, isBusy: true, status: "" }));
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/auth/totp/reset-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось отправить код сброса Google Authenticator."));
+      }
+
+      setTotpSetup((previous) => ({
+        ...previous,
+        resetVerificationToken: data?.verificationToken || "",
+        resetRequested: true,
+        isBusy: false,
+        status: "Код сброса отправлен на почту.",
+      }));
+    } catch (error) {
+      setTotpSetup((previous) => ({
+        ...previous,
+        isBusy: false,
+        status: error?.message || "Не удалось отправить код сброса Google Authenticator.",
+      }));
+    }
+  };
+
+  const resetTotp = async () => {
+    const password = String(totpSetup.resetPassword || "");
+    const code = String(totpSetup.resetCode || "").trim();
+    const verificationToken = String(totpSetup.resetVerificationToken || "").trim();
+    if (!password || !verificationToken || code.length !== 6) {
+      setTotpSetup((previous) => ({ ...previous, status: "Введите пароль и шестизначный код из письма." }));
+      return;
+    }
+
+    setTotpSetup((previous) => ({ ...previous, isBusy: true, status: "" }));
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/auth/totp/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, verificationToken, code }),
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось сбросить Google Authenticator."));
+      }
+
+      await updateStoredUserTotpState(false);
+      setTotpSetup({
+        ...initialTotpSetup,
+        status: "Google Authenticator сброшен. Подключите его заново.",
+      });
+    } catch (error) {
+      setTotpSetup((previous) => ({
+        ...previous,
+        isBusy: false,
+        status: error?.message || "Не удалось сбросить Google Authenticator.",
+      }));
+    }
+  };
+
   return {
     isTotpEnabled: Boolean(user?.isTotpEnabled || user?.is_totp_enabled),
     totpSetup,
     updateTotpCode,
+    updateTotpResetPassword,
+    updateTotpResetCode,
     startTotpSetup,
     verifyTotpSetup,
     disableTotp,
+    requestTotpResetCode,
+    resetTotp,
   };
 }

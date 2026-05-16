@@ -52,9 +52,13 @@ export function MenuMainSettingsContent({
   startEmailChange,
   confirmEmailChange,
   updateTotpCode,
+  updateTotpResetPassword,
+  updateTotpResetCode,
   startTotpSetup,
   verifyTotpSetup,
   disableTotp,
+  requestTotpResetCode,
+  resetTotp,
   handleLogout,
   deviceSessions,
   deviceSessionsLoading,
@@ -187,6 +191,8 @@ export function MenuMainSettingsContent({
           isTotpEnabled={isTotpEnabled}
           totpSetup={totpSetup}
           onTotpCodeChange={updateTotpCode}
+          onTotpResetPasswordChange={updateTotpResetPassword}
+          onTotpResetCodeChange={updateTotpResetCode}
           onOpenProfileSettings={() => setSettingsTab?.("personal_profile")}
           onSaveProfile={handleProfileSave}
           onUpdateProfileDraft={updateProfileDraft}
@@ -196,6 +202,8 @@ export function MenuMainSettingsContent({
           onStartTotpSetup={startTotpSetup}
           onVerifyTotpSetup={verifyTotpSetup}
           onDisableTotp={disableTotp}
+          onRequestTotpResetCode={requestTotpResetCode}
+          onResetTotp={resetTotp}
           onLogout={handleLogout}
         />
       );
@@ -222,9 +230,13 @@ export function MenuMainSettingsContent({
           onResetCustomization={handleResetProfileCustomization}
           onUpdateDraft={updateProfileDraft}
           onTotpCodeChange={updateTotpCode}
+          onTotpResetPasswordChange={updateTotpResetPassword}
+          onTotpResetCodeChange={updateTotpResetCode}
           onStartTotpSetup={startTotpSetup}
           onVerifyTotpSetup={verifyTotpSetup}
           onDisableTotp={disableTotp}
+          onRequestTotpResetCode={requestTotpResetCode}
+          onResetTotp={resetTotp}
           onLogout={handleLogout}
         />
       );

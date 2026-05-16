@@ -9,6 +9,7 @@ public static class TotpService
     private const int SecretBytesLength = 20;
     private const int CodeDigits = 6;
     private const int TimeStepSeconds = 30;
+    private const int VerificationWindowSteps = 2;
     private const string Base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
     public static string GenerateSecret()
@@ -20,7 +21,7 @@ public static class TotpService
     {
         var safeIssuer = string.IsNullOrWhiteSpace(issuer) ? "MAX" : issuer.Trim();
         var safeAccount = string.IsNullOrWhiteSpace(accountName) ? "account" : accountName.Trim();
-        var label = Uri.EscapeDataString($"{safeIssuer}:{safeAccount}");
+        var label = $"{Uri.EscapeDataString(safeIssuer)}:{Uri.EscapeDataString(safeAccount)}";
         return $"otpauth://totp/{label}?secret={Uri.EscapeDataString(secret)}&issuer={Uri.EscapeDataString(safeIssuer)}&algorithm=SHA1&digits={CodeDigits}&period={TimeStepSeconds}";
     }
 
@@ -43,7 +44,7 @@ public static class TotpService
         }
 
         var currentStep = now.ToUnixTimeSeconds() / TimeStepSeconds;
-        for (var offset = -1; offset <= 1; offset += 1)
+        for (var offset = -VerificationWindowSteps; offset <= VerificationWindowSteps; offset += 1)
         {
             var expectedCode = GenerateCode(secretBytes, currentStep + offset);
             if (CryptographicOperations.FixedTimeEquals(

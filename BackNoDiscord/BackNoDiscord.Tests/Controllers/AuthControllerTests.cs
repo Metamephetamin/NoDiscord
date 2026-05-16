@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 
@@ -315,12 +316,63 @@ public sealed class AuthControllerTests : IDisposable
         Assert.NotNull(activeToken.RevokedAt);
     }
 
+    [Fact]
+    public async Task ResetTotp_WithPasswordAndEmailCode_DisablesTotp()
+    {
+        var passwordHasher = new PasswordHasher<User>();
+        var user = BuildUser(14, "totp-reset@gmail.com");
+        user.password_hash = passwordHasher.HashPassword(user, "current-password");
+        user.is_totp_enabled = true;
+        user.totp_secret = "broken-secret";
+        user.totp_enabled_at = DateTimeOffset.UtcNow.AddDays(-1);
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        var controller = BuildController(currentUserId: user.id);
+
+        var codeResult = await controller.RequestTotpResetCode(
+            new TotpResetCodeRequestDto { password = "current-password" },
+            CancellationToken.None);
+        var (verificationToken, debugCode) = ReadVerificationPayload(Assert.IsType<OkObjectResult>(codeResult));
+
+        var result = await controller.ResetTotp(new TotpResetDto
+        {
+            password = "current-password",
+            verificationToken = verificationToken,
+            code = debugCode
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        var updatedUser = await _context.Users.SingleAsync(item => item.id == user.id);
+        Assert.False(updatedUser.is_totp_enabled);
+        Assert.Null(updatedUser.totp_secret);
+        Assert.Null(updatedUser.totp_enabled_at);
+    }
+
+    [Fact]
+    public async Task RequestTotpResetCode_WithWrongPassword_DoesNotSendCode()
+    {
+        var passwordHasher = new PasswordHasher<User>();
+        var user = BuildUser(15, "totp-wrong-password@gmail.com");
+        user.password_hash = passwordHasher.HashPassword(user, "current-password");
+        user.is_totp_enabled = true;
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        var controller = BuildController(currentUserId: user.id);
+
+        var result = await controller.RequestTotpResetCode(
+            new TotpResetCodeRequestDto { password = "wrong-password" },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(0, _emailSender.SendCount);
+    }
+
     public void Dispose()
     {
         _context.Dispose();
     }
 
-    private AuthController BuildController(string? emailMode = "mock", string environmentName = "Development")
+    private AuthController BuildController(string? emailMode = "mock", string environmentName = "Development", int? currentUserId = null)
     {
         var values = new Dictionary<string, string?>
         {
@@ -345,7 +397,7 @@ public sealed class AuthControllerTests : IDisposable
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<AbuseAutoBanService>.Instance);
 
-        return new AuthController(
+        var controller = new AuthController(
             _context,
             configuration,
             _emailSender,
@@ -354,6 +406,20 @@ public sealed class AuthControllerTests : IDisposable
             new UserSessionService(_context),
             new AccountBanService(_context, configuration),
             abuseAutoBan);
+        var claims = new List<Claim>();
+        if (currentUserId.HasValue)
+        {
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, currentUserId.Value.ToString()));
+        }
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"))
+            }
+        };
+        return controller;
     }
 
     private static User BuildUser(int id, string email)

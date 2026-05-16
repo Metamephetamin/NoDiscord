@@ -868,9 +868,13 @@ export default function MenuMain({
     isTotpEnabled,
     totpSetup,
     updateTotpCode,
+    updateTotpResetPassword,
+    updateTotpResetCode,
     startTotpSetup,
     verifyTotpSetup,
     disableTotp,
+    requestTotpResetCode,
+    resetTotp,
   } = useMenuMainTotpSettings({ user, setUser });
   const canUseAdminSecurity = isCurrentUserAdmin && isTotpEnabled;
   const stableApplySelectedAudioDevicesToClient = useStableEvent(applySelectedAudioDevicesToClient);
@@ -5802,9 +5806,13 @@ export default function MenuMain({
     startEmailChange,
     confirmEmailChange,
     updateTotpCode,
+    updateTotpResetPassword,
+    updateTotpResetCode,
     startTotpSetup,
     verifyTotpSetup,
     disableTotp,
+    requestTotpResetCode,
+    resetTotp,
     handleLogout,
     deviceSessions,
     deviceSessionsLoading,

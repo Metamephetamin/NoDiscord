@@ -12623,9 +12623,26 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   gap: 10px;
 }
 
+.totp-settings-card__enabled-actions,
+.totp-settings-card__reset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.totp-settings-card__enabled-actions {
+  justify-content: flex-end;
+}
+
 .totp-settings-card__inline-code .settings-input,
 .totp-settings-card__confirm .settings-input {
   width: 132px;
+  min-width: 132px;
+}
+
+.totp-settings-card__reset .settings-input {
+  width: 150px;
   min-width: 132px;
 }
 
@@ -12685,7 +12702,9 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   }
 
   .totp-settings-card__inline-code,
-  .totp-settings-card__confirm {
+  .totp-settings-card__confirm,
+  .totp-settings-card__enabled-actions,
+  .totp-settings-card__reset {
     flex-wrap: wrap;
   }
 }
