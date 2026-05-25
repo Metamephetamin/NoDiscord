@@ -431,6 +431,7 @@ export default function MenuProfilePanel({
   icons,
   onOpenProfileSettings,
   onOpenVoiceSettings,
+  onOpenDonation,
   onScreenShareAction,
   onOpenCamera,
   onStopCameraShare,
@@ -636,6 +637,9 @@ export default function MenuProfilePanel({
 
             <button type="button" className="profile__mini-icon ui-tooltip-anchor" onClick={(event) => { onSuppressTooltip(event); onOpenVoiceSettings(); }} onMouseLeave={onRestoreTooltip} aria-label="Голос и видео" data-tooltip="Голос и видео">
               <span className="profile__mini-glyph profile__mini-glyph--settings" aria-hidden="true" />
+            </button>
+            <button type="button" className="profile__mini-icon profile__mini-icon--support ui-tooltip-anchor" onClick={(event) => { onSuppressTooltip(event); onOpenDonation?.(); }} onMouseLeave={onRestoreTooltip} aria-label="Поддержать проект" data-tooltip="Поддержать">
+              <span className="profile__mini-glyph profile__mini-glyph--donate" aria-hidden="true">₽</span>
             </button>
           </div>
         </div>

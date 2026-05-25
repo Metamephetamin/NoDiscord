@@ -18,7 +18,7 @@ import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/MenuMain.css";
 import "../../css/MenuProfile.css";
 import "../../css/ListChannels.css";
-import { API_BASE_URL, API_URL } from "../../config/runtime";
+import { API_BASE_URL, API_URL, DONATION_CONFIG } from "../../config/runtime";
 import {
   authFetch,
   getApiErrorMessage,
@@ -586,6 +586,7 @@ export default function MenuMain({
   const [showSoundMenu, setShowSoundMenu] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [donationModalOpen, setDonationModalOpen] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState("");
   const [quickSwitcherSelectedIndex, setQuickSwitcherSelectedIndex] = useState(0);
   const [textChatNavigationIndex, setTextChatNavigationIndex] = useState(null);
@@ -4378,6 +4379,21 @@ export default function MenuMain({
       tab: String(tab || "voice_video"),
     });
   }, []);
+  const openDonationModal = useCallback(() => {
+    setDonationModalOpen(true);
+    setShowMicMenu(false);
+    setShowSoundMenu(false);
+  }, []);
+  const closeDonationModal = useCallback(() => {
+    setDonationModalOpen(false);
+  }, []);
+  const openDonationLink = useCallback(() => {
+    if (!DONATION_CONFIG.available || !DONATION_CONFIG.url) {
+      return;
+    }
+
+    window.open(DONATION_CONFIG.url, "_blank", "noopener,noreferrer");
+  }, []);
   const openAdminSecurityPageFromSettings = useCallback(() => {
     if (!canUseAdminSecurity) {
       return;
@@ -6056,6 +6072,7 @@ export default function MenuMain({
     audioVolume,
     activeMicMenuBars,
     openSettingsPanel,
+    openDonationModal,
     handleScreenShareAction: stableHandleScreenShareAction,
     openCameraModal: stableHandleCameraAction,
     stopCameraShare: stableStopCameraShare,
@@ -6105,6 +6122,7 @@ export default function MenuMain({
     micVolume,
     noiseProfileOptions,
     noiseSuppressionMode,
+    openDonationModal,
     openLocalSharePreview,
     outputSelectionAvailable,
     profileCustomization,
@@ -7198,6 +7216,8 @@ export default function MenuMain({
       serverInviteFeedback={serverInviteFeedback}
       isMobileViewport={isMobileViewport}
       openAdminSecurityPage={openAdminSecurityPage}
+      donationModalOpen={donationModalOpen}
+      donationAvailable={DONATION_CONFIG.available}
       openSettings={openSettings}
       popupRef={popupRef}
       user={user}
@@ -7208,6 +7228,8 @@ export default function MenuMain({
       setOpenSettings={setOpenSettings}
       setSettingsTab={setSettingsTab}
       openAdminSecurityPageFromSettings={openAdminSecurityPageFromSettings}
+      closeDonationModal={closeDonationModal}
+      openDonationLink={openDonationLink}
       renderAdminSecurityPage={renderAdminSecurityPage}
       renderMobileSettingsShell={renderMobileSettingsShell}
       renderSettingsContent={renderSettingsContent}

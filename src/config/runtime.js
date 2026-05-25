@@ -1,3 +1,5 @@
+import { buildDonationConfig } from "../utils/donationConfig.mjs";
+
 const DEFAULT_VOICE_RTC_CONFIGURATION = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   iceTransportPolicy: "all",
@@ -141,6 +143,7 @@ const API_BASE_URL = `${API_URL}/api`;
 const CHAT_HUB_URL = `${API_URL}/chatHub`;
 const VOICE_HUB_URL = `${API_URL}/voiceHub`;
 const IS_DESKTOP_APP_RUNTIME = Boolean(electronRuntime.isDesktopApp);
+const DONATION_CONFIG = buildDonationConfig(electronRuntime.donationUrl || import.meta.env.VITE_DONATION_URL);
 const browserVoiceRtcConfig = buildBrowserVoiceRtcConfig();
 const VOICE_RTC_CONFIGURATION = {
   ...DEFAULT_VOICE_RTC_CONFIGURATION,
@@ -154,4 +157,4 @@ const VOICE_RTC_CONFIGURATION = {
       : DEFAULT_VOICE_RTC_CONFIGURATION.iceServers.map((server) => ({ ...server })),
 };
 
-export { API_URL, API_BASE_URL, CHAT_HUB_URL, IS_DESKTOP_APP_RUNTIME, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION };
+export { API_URL, API_BASE_URL, CHAT_HUB_URL, DONATION_CONFIG, IS_DESKTOP_APP_RUNTIME, VOICE_HUB_URL, VOICE_RTC_CONFIGURATION };

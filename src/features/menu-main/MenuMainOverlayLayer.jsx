@@ -4,6 +4,7 @@ import {
   CreateServerModal,
   DirectCallOverlayView,
   DirectToastStack,
+  DonationModal,
   MediaFrameEditorOverlay,
   QuickSwitcherModal,
   QrScannerModal,
@@ -35,6 +36,8 @@ export default function MenuMainOverlayLayer({
   serverInviteFeedback,
   isMobileViewport,
   openAdminSecurityPage,
+  donationModalOpen,
+  donationAvailable,
   openSettings,
   popupRef,
   user,
@@ -45,6 +48,8 @@ export default function MenuMainOverlayLayer({
   setOpenSettings,
   setSettingsTab,
   openAdminSecurityPageFromSettings,
+  closeDonationModal,
+  openDonationLink,
   renderAdminSecurityPage,
   renderMobileSettingsShell,
   renderSettingsContent,
@@ -250,6 +255,13 @@ export default function MenuMainOverlayLayer({
         onOpenAdminSecurityPage={openAdminSecurityPageFromSettings}
         renderMobileSettingsShell={renderMobileSettingsShell}
         renderSettingsContent={renderSettingsContent}
+      />
+
+      <DonationModal
+        open={donationModalOpen}
+        available={donationAvailable}
+        onClose={closeDonationModal}
+        onDonate={openDonationLink}
       />
 
       <AdminSecurityPageOverlay

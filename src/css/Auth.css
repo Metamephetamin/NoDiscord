@@ -2696,6 +2696,10 @@
     transform: translateY(56px);
   }
 
+  .auth-page--login .auth-card.auth-card--login {
+    transform: translateY(-24px);
+  }
+
   .auth-card--login,
   .auth-card--register {
     display: grid;

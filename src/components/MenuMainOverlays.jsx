@@ -5,6 +5,7 @@ import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
 import { formatTimestamp } from "../utils/textChatHelpers";
+import { getDonationAmountOptions } from "../utils/donationConfig.mjs";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
 const clampDirectCallWaveLevel = (value) => {
@@ -271,6 +272,59 @@ function SettingsNavIcon({ id }) {
     </span>
   );
 }
+
+export const DonationModal = ({
+  open,
+  available = false,
+  onClose,
+  onDonate,
+}) => {
+  const [selectedAmount, setSelectedAmount] = useState(300);
+  const amountOptions = useMemo(() => getDonationAmountOptions(), []);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="modal-backdrop donation-modal-layer" onClick={onClose}>
+      <section className="donation-modal" role="dialog" aria-modal="true" aria-label="Поддержать Lanaya" onClick={(event) => event.stopPropagation()}>
+        <div className="donation-modal__header">
+          <div className="donation-modal__mark" aria-hidden="true">₽</div>
+          <div>
+            <h3>Поддержать Lanaya</h3>
+            <p>Донаты помогают оплачивать серверы, звонки, хранение файлов и развитие приложения.</p>
+          </div>
+          <button type="button" className="donation-modal__close" onClick={onClose} aria-label="Закрыть" />
+        </div>
+
+        <div className="donation-modal__amounts" role="group" aria-label="Быстрые суммы">
+          {amountOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`donation-modal__amount ${selectedAmount === option.value ? "donation-modal__amount--active" : ""}`}
+              onClick={() => setSelectedAmount(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="donation-modal__note">
+          Сумму и способ оплаты можно будет подтвердить на стороне ЮKassa.
+        </div>
+
+        <div className="donation-modal__actions">
+          <button type="button" className="create-server-modal__secondary" onClick={onClose}>Позже</button>
+          <button type="button" className="stream-modal__action donation-modal__primary" onClick={onDonate} disabled={!available}>
+            {available ? "Перейти к оплате" : "Ссылка скоро появится"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+};
 
 export const SettingsOverlay = ({
   open,

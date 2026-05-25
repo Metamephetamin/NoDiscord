@@ -114,6 +114,7 @@ function buildVoiceRuntimeConfig() {
     apiUrl: process.env.ND_API_URL?.trim() || process.env.VITE_API_URL?.trim() || defaultApiUrl,
     liveKitUrl: process.env.ND_LIVEKIT_URL?.trim() || defaultLiveKitUrl,
     publicAppUrl: process.env.ND_PUBLIC_APP_URL?.trim() || process.env.VITE_PUBLIC_APP_URL?.trim() || "",
+    donationUrl: process.env.ND_DONATION_URL?.trim() || process.env.VITE_DONATION_URL?.trim() || "",
     appProtocol: process.env.ND_APP_PROTOCOL?.trim() || DEFAULT_APP_PROTOCOL,
     appVersion: process.env.npm_package_version?.trim?.() || "",
     isDesktopApp: true,
