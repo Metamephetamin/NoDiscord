@@ -16,6 +16,7 @@ import {
 } from "../utils/media";
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
+import { copyTextToClipboard } from "../utils/clipboard";
 import { formatFileSize, formatTime } from "../utils/textChatHelpers";
 import {
   shouldReserveVisualAttachmentWidth,
@@ -38,6 +39,11 @@ import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
 import { deriveMessageDeliveryState } from "../features/text-chat/messageDeliveryState.mjs";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
+const COPYABLE_EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const COPYABLE_PHONE_PATTERN = /(?:\+?\d[\d\s().-]{8,}\d)/g;
+const COPYABLE_HYPHEN_CODE_PATTERN = /\b[A-Z0-9]{3,8}(?:-[A-Z0-9]{3,8}){1,5}\b/gi;
+const COPYABLE_MIXED_CODE_PATTERN = /\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{8,32}\b/gi;
+const COPYABLE_DIGIT_CODE_PATTERN = /\b\d{4,8}\b/g;
 const LOCATION_MESSAGE_PATTERN = /^\s*📍?\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:\s*\n\s*(https?:\/\/\S+))?\s*$/u;
 const LOCATION_TILE_SIZE = 256;
 const LOCATION_PREVIEW_WIDTH = 320;
@@ -222,6 +228,88 @@ function normalizeTextLinkHref(value) {
   }
 
   return /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
+}
+
+function getPhoneDigitCount(value) {
+  return (String(value || "").match(/\d/g) || []).length;
+}
+
+function addCopyableTextMatches(matches, text, pattern, type, validate = null) {
+  pattern.lastIndex = 0;
+  let match = pattern.exec(text);
+
+  while (match) {
+    const value = match[0];
+    if (!validate || validate(value)) {
+      matches.push({
+        end: match.index + value.length,
+        start: match.index,
+        type,
+        value,
+      });
+    }
+
+    match = pattern.exec(text);
+  }
+}
+
+function getCopyableTextSegments(text) {
+  const source = String(text || "");
+  if (!source) {
+    return [];
+  }
+
+  const matches = [];
+  addCopyableTextMatches(matches, source, COPYABLE_EMAIL_PATTERN, "email");
+  addCopyableTextMatches(
+    matches,
+    source,
+    COPYABLE_PHONE_PATTERN,
+    "phone",
+    (value) => {
+      const digitCount = getPhoneDigitCount(value);
+      return digitCount >= 10 && digitCount <= 15;
+    }
+  );
+  addCopyableTextMatches(matches, source, COPYABLE_HYPHEN_CODE_PATTERN, "code");
+  addCopyableTextMatches(matches, source, COPYABLE_MIXED_CODE_PATTERN, "code");
+  addCopyableTextMatches(matches, source, COPYABLE_DIGIT_CODE_PATTERN, "code");
+
+  const acceptedMatches = [];
+  matches
+    .sort((left, right) => left.start - right.start || right.end - left.end)
+    .forEach((candidate) => {
+      const overlaps = acceptedMatches.some((match) => candidate.start < match.end && candidate.end > match.start);
+      if (!overlaps) {
+        acceptedMatches.push(candidate);
+      }
+    });
+
+  if (!acceptedMatches.length) {
+    return [{ text: source, type: "text" }];
+  }
+
+  const segments = [];
+  let cursor = 0;
+
+  acceptedMatches.forEach((match) => {
+    if (match.start > cursor) {
+      segments.push({ text: source.slice(cursor, match.start), type: "text" });
+    }
+
+    segments.push({
+      copyType: match.type,
+      text: match.value,
+      type: "copyable",
+    });
+    cursor = match.end;
+  });
+
+  if (cursor < source.length) {
+    segments.push({ text: source.slice(cursor), type: "text" });
+  }
+
+  return segments;
 }
 
 function clampLocationPreviewZoom(value) {
@@ -891,11 +979,48 @@ const LocationMessageCard = memo(function LocationMessageCard({ location, messag
 LocationMessageCard.displayName = "LocationMessageCard";
 
 const MessageText = memo(function MessageText({ text, mentions, currentUserId }) {
+  const [copiedToken, setCopiedToken] = useState("");
   const mentionCacheKey = getMentionSegmentCacheKey(mentions);
   const segments = useMemo(
     () => segmentMessageTextByMentions(text, mentions),
     [mentionCacheKey, mentions, text]
   );
+  const copyMessageToken = useCallback(async (event, value) => {
+    event.stopPropagation();
+
+    try {
+      await copyTextToClipboard(value);
+      setCopiedToken(value);
+    } catch {
+      setCopiedToken("");
+    }
+  }, []);
+
+  const renderCopyableTextPart = useCallback((part, keyPrefix) => {
+    const copyableSegments = getCopyableTextSegments(part);
+
+    return copyableSegments.map((copyableSegment, copyableIndex) => {
+      const key = `${keyPrefix}-${copyableIndex}`;
+
+      if (copyableSegment.type !== "copyable") {
+        return <span key={key}>{copyableSegment.text}</span>;
+      }
+
+      return (
+        <button
+          key={key}
+          type="button"
+          className={`message-text__copy-token message-text__copy-token--${copyableSegment.copyType} ${copiedToken === copyableSegment.text ? "message-text__copy-token--copied" : ""}`}
+          onClick={(event) => {
+            void copyMessageToken(event, copyableSegment.text);
+          }}
+          title={copiedToken === copyableSegment.text ? "Скопировано" : "Скопировать"}
+        >
+          {copyableSegment.text}
+        </button>
+      );
+    });
+  }, [copiedToken, copyMessageToken]);
 
   return segments.map((segment, index) => {
     if (segment.isMention) {
@@ -925,7 +1050,7 @@ const MessageText = memo(function MessageText({ text, mentions, currentUserId })
           const items = [];
 
           if (part) {
-            items.push(<span key={`copy-${index}-${partIndex}`}>{part}</span>);
+            items.push(renderCopyableTextPart(part, `copy-${index}-${partIndex}`));
           }
 
           if (urlMatch) {

@@ -18,7 +18,7 @@ import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/MenuMain.css";
 import "../../css/MenuProfile.css";
 import "../../css/ListChannels.css";
-import { API_BASE_URL, API_URL, DONATION_CONFIG } from "../../config/runtime";
+import { API_BASE_URL, API_URL } from "../../config/runtime";
 import {
   authFetch,
   getApiErrorMessage,
@@ -639,6 +639,7 @@ export default function MenuMain({
   const noiseMenuRef = useRef(null);
   const micMenuRef = useRef(null);
   const soundMenuRef = useRef(null);
+  const deviceMenuCloseTimeoutRef = useRef(null);
   const mobileVoiceStageShellRef = useRef(null);
   const mobileVoiceStageVideoRef = useRef(null);
   const mobileVoiceStageImageRef = useRef(null);
@@ -3491,6 +3492,12 @@ export default function MenuMain({
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+  useEffect(() => () => {
+    if (deviceMenuCloseTimeoutRef.current) {
+      window.clearTimeout(deviceMenuCloseTimeoutRef.current);
+      deviceMenuCloseTimeoutRef.current = null;
+    }
+  }, []);
   useEffect(() => {
     setShowServerMembersPanel(false);
     setServerContextMenu(null);
@@ -4387,13 +4394,26 @@ export default function MenuMain({
   const closeDonationModal = useCallback(() => {
     setDonationModalOpen(false);
   }, []);
-  const openDonationLink = useCallback(() => {
-    if (!DONATION_CONFIG.available || !DONATION_CONFIG.url) {
-      return;
+  const cancelDeviceMenuClose = useCallback(() => {
+    if (deviceMenuCloseTimeoutRef.current) {
+      window.clearTimeout(deviceMenuCloseTimeoutRef.current);
+      deviceMenuCloseTimeoutRef.current = null;
     }
-
-    window.open(DONATION_CONFIG.url, "_blank", "noopener,noreferrer");
   }, []);
+  const scheduleDeviceMenuClose = useCallback((menu) => {
+    cancelDeviceMenuClose();
+    deviceMenuCloseTimeoutRef.current = window.setTimeout(() => {
+      if (menu === "mic") {
+        setShowMicMenu(false);
+      }
+
+      if (menu === "sound") {
+        setShowSoundMenu(false);
+      }
+
+      deviceMenuCloseTimeoutRef.current = null;
+    }, 180);
+  }, [cancelDeviceMenuClose]);
   const openAdminSecurityPageFromSettings = useCallback(() => {
     if (!canUseAdminSecurity) {
       return;
@@ -6085,6 +6105,8 @@ export default function MenuMain({
     toggleSoundMute: stableToggleSoundMute,
     setShowMicMenu,
     setShowSoundMenu,
+    scheduleDeviceMenuClose,
+    cancelDeviceMenuClose,
     handleInputDeviceChange,
     handleOutputDeviceChange,
     handleDenoiserModeChange,
@@ -6131,6 +6153,8 @@ export default function MenuMain({
     selectedOutputDeviceId,
     showMicMenu,
     showSoundMenu,
+    cancelDeviceMenuClose,
+    scheduleDeviceMenuClose,
     stableStopCameraShare,
     streamDiagnostics,
     streamFpsOptions,
@@ -7216,7 +7240,6 @@ export default function MenuMain({
       isMobileViewport={isMobileViewport}
       openAdminSecurityPage={openAdminSecurityPage}
       donationModalOpen={donationModalOpen}
-      donationAvailable={DONATION_CONFIG.available}
       openSettings={openSettings}
       popupRef={popupRef}
       user={user}
@@ -7228,7 +7251,6 @@ export default function MenuMain({
       setSettingsTab={setSettingsTab}
       openAdminSecurityPageFromSettings={openAdminSecurityPageFromSettings}
       closeDonationModal={closeDonationModal}
-      openDonationLink={openDonationLink}
       renderAdminSecurityPage={renderAdminSecurityPage}
       renderMobileSettingsShell={renderMobileSettingsShell}
       renderSettingsContent={renderSettingsContent}

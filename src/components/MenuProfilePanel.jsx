@@ -443,6 +443,8 @@ export default function MenuProfilePanel({
   onToggleSoundMute,
   onToggleMicMenu,
   onToggleSoundMenu,
+  onScheduleDeviceMenuClose,
+  onCancelDeviceMenuClose,
   onInputDeviceChange,
   onOutputDeviceChange,
   onNoiseProfileChange,
@@ -561,8 +563,13 @@ export default function MenuProfilePanel({
             </div>
           </button>
 
-          <div className="profile__identity-controls">
-            <div className="device-menu device-menu--mic" ref={micMenuRef}>
+            <div className="profile__identity-controls">
+            <div
+              className="device-menu device-menu--mic"
+              ref={micMenuRef}
+              onMouseEnter={onCancelDeviceMenuClose}
+              onMouseLeave={() => onScheduleDeviceMenuClose?.("mic")}
+            >
               <button
                 type="button"
                 className={`profile__mini-icon profile__mini-icon--with-tooltip ${isMicMuted || isSoundMuted ? "profile__mini-icon--slashed" : ""}`}
@@ -600,7 +607,12 @@ export default function MenuProfilePanel({
               ) : null}
             </div>
 
-            <div className="device-menu device-menu--sound" ref={soundMenuRef}>
+            <div
+              className="device-menu device-menu--sound"
+              ref={soundMenuRef}
+              onMouseEnter={onCancelDeviceMenuClose}
+              onMouseLeave={() => onScheduleDeviceMenuClose?.("sound")}
+            >
               <button
                 type="button"
                 className={`profile__mini-icon profile__mini-icon--with-tooltip ${isSoundMuted ? "profile__mini-icon--slashed" : ""}`}

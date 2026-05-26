@@ -1503,6 +1503,48 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   text-decoration: underline;
 }
 
+.message-text__copy-token {
+  display: inline;
+  margin: 0 1px;
+  padding: 1px 5px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(111, 173, 255, 0.14);
+  color: #bcd9ff;
+  font: inherit;
+  font-weight: 700;
+  line-height: inherit;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  cursor: copy;
+  -webkit-user-select: text;
+  user-select: text;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.message-text__copy-token:hover,
+.message-text__copy-token:focus-visible {
+  background: rgba(111, 173, 255, 0.22);
+  color: #e8f2ff;
+}
+
+.message-text__copy-token--phone {
+  background: rgba(80, 210, 145, 0.14);
+  color: #b9f2d3;
+}
+
+.message-text__copy-token--code {
+  background: rgba(255, 199, 96, 0.16);
+  color: #ffe0a3;
+}
+
+.message-text__copy-token--copied {
+  background: rgba(128, 230, 177, 0.24);
+  color: #dcffe9;
+}
+
 .message-text-row {
   margin-top: 1px;
   display: inline-flex;
@@ -10500,12 +10542,53 @@ html[data-ui-theme="light"] .message-text__link:hover {
   color: #1d4ed8;
 }
 
+html[data-ui-theme="light"] .message-text__copy-token {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1e5bad;
+}
+
+html[data-ui-theme="light"] .message-text__copy-token:hover,
+html[data-ui-theme="light"] .message-text__copy-token:focus-visible {
+  background: rgba(37, 99, 235, 0.18);
+  color: #0f3f82;
+}
+
+html[data-ui-theme="light"] .message-text__copy-token--phone {
+  background: rgba(22, 163, 74, 0.13);
+  color: #11733a;
+}
+
+html[data-ui-theme="light"] .message-text__copy-token--code {
+  background: rgba(202, 138, 4, 0.16);
+  color: #7c5300;
+}
+
+html[data-ui-theme="light"] .message-text__copy-token--copied {
+  background: rgba(22, 163, 74, 0.2);
+  color: #0f6934;
+}
+
 html[data-ui-theme="purple"] .message-text__link {
   color: #d7b6ff;
 }
 
 html[data-ui-theme="purple"] .message-text__link:hover {
   color: #f0dcff;
+}
+
+html[data-ui-theme="purple"] .message-text__copy-token {
+  background: rgba(215, 182, 255, 0.15);
+  color: #eadcff;
+}
+
+html[data-ui-theme="purple"] .message-text__copy-token--phone {
+  background: rgba(99, 236, 180, 0.14);
+  color: #c7ffe8;
+}
+
+html[data-ui-theme="purple"] .message-text__copy-token--code {
+  background: rgba(255, 202, 112, 0.18);
+  color: #ffe2ad;
 }
 
 html:not([data-ui-theme="light"]) .message-time,
@@ -11329,4 +11412,3 @@ html[data-ui-theme="light"] .media-preview__image-fallback {
 ):focus-visible {
   outline: none !important;
 }
-

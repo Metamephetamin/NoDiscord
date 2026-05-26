@@ -58,6 +58,8 @@ function MenuMainProfilePanelSlot({
   toggleSoundMute,
   setShowMicMenu,
   setShowSoundMenu,
+  scheduleDeviceMenuClose,
+  cancelDeviceMenuClose,
   handleInputDeviceChange,
   handleOutputDeviceChange,
   handleNoiseSuppressionModeChange,
@@ -125,6 +127,8 @@ function MenuMainProfilePanelSlot({
       onToggleSoundMute={toggleSoundMute}
       onToggleMicMenu={() => setShowMicMenu((previous) => !previous)}
       onToggleSoundMenu={() => setShowSoundMenu((previous) => !previous)}
+      onScheduleDeviceMenuClose={scheduleDeviceMenuClose}
+      onCancelDeviceMenuClose={cancelDeviceMenuClose}
       onInputDeviceChange={handleInputDeviceChange}
       onOutputDeviceChange={handleOutputDeviceChange}
       onNoiseProfileChange={handleNoiseSuppressionModeChange}

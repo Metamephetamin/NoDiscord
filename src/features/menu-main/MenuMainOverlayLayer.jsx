@@ -37,7 +37,6 @@ export default function MenuMainOverlayLayer({
   isMobileViewport,
   openAdminSecurityPage,
   donationModalOpen,
-  donationAvailable,
   openSettings,
   popupRef,
   user,
@@ -49,7 +48,6 @@ export default function MenuMainOverlayLayer({
   setSettingsTab,
   openAdminSecurityPageFromSettings,
   closeDonationModal,
-  openDonationLink,
   renderAdminSecurityPage,
   renderMobileSettingsShell,
   renderSettingsContent,
@@ -259,9 +257,7 @@ export default function MenuMainOverlayLayer({
 
       <DonationModal
         open={donationModalOpen}
-        available={donationAvailable}
         onClose={closeDonationModal}
-        onDonate={openDonationLink}
       />
 
       <AdminSecurityPageOverlay

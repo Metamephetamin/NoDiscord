@@ -4,9 +4,27 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
+import { copyTextToClipboard } from "../utils/clipboard";
 import { formatTimestamp } from "../utils/textChatHelpers";
-import { getDonationAmountOptions } from "../utils/donationConfig.mjs";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
+
+const DONATION_DETAILS = [
+  {
+    id: "tbank",
+    label: "T-Bank",
+    value: "2200701323710159",
+  },
+  {
+    id: "usdt",
+    label: "USDT Ethereum",
+    value: "0x99Fd3CB46C1821b1329a44dC8ef703584320797D",
+  },
+  {
+    id: "btc",
+    label: "Bitcoin",
+    value: "bc1qp4dtrt9l3eaek3e6lfrx0qhg4jtskzzp52wnks",
+  },
+];
 
 const clampDirectCallWaveLevel = (value) => {
   const numericValue = Number(value);
@@ -286,50 +304,70 @@ function SettingsNavIcon({ id }) {
 
 export const DonationModal = ({
   open,
-  available = false,
   onClose,
-  onDonate,
 }) => {
-  const [selectedAmount, setSelectedAmount] = useState(300);
-  const amountOptions = useMemo(() => getDonationAmountOptions(), []);
+  const [copiedDetailId, setCopiedDetailId] = useState("");
+  const [copyError, setCopyError] = useState("");
+
+  const copyDonationDetail = async (detail) => {
+    try {
+      await copyTextToClipboard(detail.value);
+      setCopiedDetailId(detail.id);
+      setCopyError("");
+    } catch {
+      setCopiedDetailId("");
+      setCopyError("Не удалось скопировать. Можно выделить реквизиты вручную.");
+    }
+  };
+
+  const closeDonationModal = () => {
+    setCopiedDetailId("");
+    setCopyError("");
+    onClose();
+  };
 
   if (!open) {
     return null;
   }
 
   return (
-    <div className="modal-backdrop donation-modal-layer" onClick={onClose}>
+    <div className="modal-backdrop donation-modal-layer" onClick={closeDonationModal}>
       <section className="donation-modal" role="dialog" aria-modal="true" aria-label="Поддержать Lanaya" onClick={(event) => event.stopPropagation()}>
         <div className="donation-modal__header">
           <div className="donation-modal__mark" aria-hidden="true">₽</div>
           <div>
             <h3>Поддержать Lanaya</h3>
-            <p>Донаты помогают оплачивать серверы, звонки, хранение файлов и развитие приложения.</p>
+            <p>Можно перевести на карту или криптокошелек. Нажмите на нужные реквизиты, чтобы скопировать.</p>
           </div>
-          <button type="button" className="donation-modal__close" onClick={onClose} aria-label="Закрыть" />
+          <button type="button" className="donation-modal__close" onClick={closeDonationModal} aria-label="Закрыть" />
         </div>
 
-        <div className="donation-modal__amounts" role="group" aria-label="Быстрые суммы">
-          {amountOptions.map((option) => (
+        <div className="donation-modal__details" aria-label="Реквизиты для поддержки">
+          {DONATION_DETAILS.map((detail) => (
             <button
-              key={option.value}
+              key={detail.id}
               type="button"
-              className={`donation-modal__amount ${selectedAmount === option.value ? "donation-modal__amount--active" : ""}`}
-              onClick={() => setSelectedAmount(option.value)}
+              className="donation-modal__detail"
+              onClick={() => {
+                void copyDonationDetail(detail);
+              }}
             >
-              {option.label}
+              <span className="donation-modal__detail-label">{detail.label}</span>
+              <span className="donation-modal__detail-value">{detail.value}</span>
+              <span className="donation-modal__copy-state">
+                {copiedDetailId === detail.id ? "Скопировано" : "Копировать"}
+              </span>
             </button>
           ))}
         </div>
 
         <div className="donation-modal__note">
-          Сумму и способ оплаты можно будет подтвердить на стороне ЮKassa.
+          {copyError || "Спасибо за поддержку. Любая сумма помогает держать серверы и звонки стабильными."}
         </div>
 
         <div className="donation-modal__actions">
-          <button type="button" className="create-server-modal__secondary" onClick={onClose}>Позже</button>
-          <button type="button" className="stream-modal__action donation-modal__primary" onClick={onDonate} disabled={!available}>
-            {available ? "Перейти к оплате" : "Ссылка скоро появится"}
+          <button type="button" className="stream-modal__action donation-modal__primary" onClick={closeDonationModal}>
+            Готово
           </button>
         </div>
       </section>
