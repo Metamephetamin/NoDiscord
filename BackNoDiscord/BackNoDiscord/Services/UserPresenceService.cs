@@ -6,6 +6,8 @@ public class UserPresenceService
 {
     private readonly ConcurrentDictionary<string, int> _connectionCountsByUserId = new();
 
+    public int OnlineUserCount => _connectionCountsByUserId.Count(item => item.Value > 0);
+
     public bool MarkConnected(string userId)
     {
         var normalizedUserId = NormalizeUserId(userId);

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Lanaya — мессенджер с чатами, голосом, видео, серверами и живой статистикой пользователей.">
+  <title>Lanaya | Мессенджер для живого общения</title>
+  <link rel="icon" type="image/png" href="assets/brain.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-stats-state="loading">
+  <canvas id="motionCanvas" class="motion-canvas" aria-hidden="true"></canvas>
+
+  <div class="grain" aria-hidden="true"></div>
+  <div class="smoke-field" aria-hidden="true">
+    <span class="smoke smoke-a"></span>
+    <span class="smoke smoke-b"></span>
+    <span class="smoke smoke-c"></span>
+  </div>
+
+  <button class="config-button" type="button" aria-label="Настройки визуала">
+    <span></span>
+  </button>
+
+  <button class="menu-button" type="button" aria-label="Меню">
+    <span></span>
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+
+  <aside class="side-card reveal" aria-label="Карточка Lanaya">
+    <div class="availability">
+      <img class="brand-glyph" src="assets/logo-white-dark.png" alt="">
+      <span class="availability-pill"><i></i><span>Открыт ранний доступ</span></span>
+    </div>
+
+    <div class="portrait-card">
+      <img src="assets/logo-gradient-dark.png" alt="Lanaya">
+      <strong>Lanaya</strong>
+    </div>
+
+    <a href="mailto:hello@lanaya.space" class="mail-link">hello@lanaya.space</a>
+    <p>Мессенджер для серверов, голосовых комнат и приватного общения.</p>
+
+    <div class="social-row" aria-label="Возможности">
+      <span>DM</span>
+      <span>VO</span>
+      <span>LIVE</span>
+      <span>SEC</span>
+    </div>
+
+    <a class="side-cta" href="#download">
+      <span>Скачать</span>
+      <b>↗</b>
+    </a>
+  </aside>
+
+  <nav class="dock-nav" aria-label="Быстрая навигация">
+    <a href="#top" aria-label="Главная">⌂</a>
+    <a href="#features" aria-label="Возможности">☷</a>
+    <a href="#voice" aria-label="Голос">≋</a>
+    <a href="#stats" aria-label="Статистика">◎</a>
+    <a href="#download" aria-label="Скачать">↧</a>
+  </nav>
+
+  <main id="top" class="page-shell">
+    <header class="site-top reveal">
+      <p>lanaya.space</p>
+      <nav>
+        <a href="#features">Возможности</a>
+        <a href="#voice">Голос</a>
+        <a href="#stats">Статистика</a>
+        <a href="#download">Скачать</a>
+      </nav>
+    </header>
+
+    <section class="hero-section" aria-labelledby="hero-title">
+      <div class="intro-copy reveal">
+        <p class="section-kicker">● Introduction</p>
+        <h1 id="hero-title">Lanaya делает общение спокойным и живым</h1>
+        <p>
+          Чаты, серверы, голосовые комнаты, видео и демонстрация экрана собраны в одном
+          приложении без лишнего визуального шума.
+        </p>
+
+        <div class="tag-row">
+          <span>Приватные чаты</span>
+          <span>Голосовые комнаты</span>
+          <span>Видео</span>
+          <span>Серверы</span>
+        </div>
+      </div>
+
+      <div class="metrics-grid reveal" aria-label="Живая статистика Lanaya">
+        <article class="metric-card" data-metric="users">
+          <span><i></i>Пользователей</span>
+          <strong id="totalUsers" aria-live="polite">-</strong>
+        </article>
+        <article class="metric-card" data-metric="online">
+          <span><i></i>Онлайн сейчас</span>
+          <strong id="onlineUsers" aria-live="polite">-</strong>
+        </article>
+      </div>
+    </section>
+
+    <section id="features" class="section-block">
+      <p class="section-kicker reveal">● Возможности</p>
+      <h2 class="marquee-title reveal">Lanaya Lanaya Lanaya Lanaya Lanaya</h2>
+
+      <div class="work-grid">
+        <article class="work-card reveal">
+          <span>Messenger Core</span>
+          <h3>Серверы, каналы и личные диалоги</h3>
+          <p>Организуйте общение вокруг тем, команд и закрытых сообществ.</p>
+        </article>
+        <article class="work-card reveal">
+          <span>Media Flow</span>
+          <h3>Файлы, медиа и быстрые реакции</h3>
+          <p>Отправляйте сообщения, вложения, голосовые записи и держите контекст рядом.</p>
+        </article>
+        <article class="work-card reveal">
+          <span>Secure Space</span>
+          <h3>Контроль доступа и приватность</h3>
+          <p>Авторизация, политики origin, ограничения и модерация встроены в основу.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="voice" class="services-section">
+      <div class="section-heading reveal">
+        <p class="section-kicker">● Голос и видео</p>
+        <h2>От текста к живому разговору за один шаг</h2>
+      </div>
+
+      <div class="service-list">
+        <article class="service-item reveal">
+          <h3>Voice Rooms</h3>
+          <span>(01)</span>
+          <p>Стабильные комнаты для разговоров внутри серверов.</p>
+        </article>
+        <article class="service-item reveal">
+          <h3>Video Calls</h3>
+          <span>(02)</span>
+          <p>Видеосвязь для быстрых встреч и живого общения.</p>
+        </article>
+        <article class="service-item reveal">
+          <h3>Screen Share</h3>
+          <span>(03)</span>
+          <p>Демонстрация экрана без перехода в сторонние инструменты.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="stats" class="stats-section">
+      <div class="section-heading reveal">
+        <p class="section-kicker">● Реальные числа</p>
+        <h2>Статистика идет с backend API</h2>
+        <p>
+          Общее количество пользователей берется из базы, а онлайн считается по активным
+          подключениям к SignalR.
+        </p>
+      </div>
+
+      <div class="stats-board reveal">
+        <article>
+          <span>Всего пользователей</span>
+          <strong id="totalUsersBoard" aria-live="polite">-</strong>
+        </article>
+        <article>
+          <span>Сейчас онлайн</span>
+          <strong id="onlineUsersBoard" aria-live="polite">-</strong>
+        </article>
+        <article>
+          <span>Обновлено</span>
+          <strong id="updatedAt" aria-live="polite">-</strong>
+        </article>
+        <article>
+          <span>Статус</span>
+          <strong id="statsStatus" aria-live="polite">загрузка</strong>
+        </article>
+      </div>
+    </section>
+
+    <section id="download" class="download-section">
+      <p class="section-kicker reveal">● Скачать</p>
+      <h2 class="reveal">Кнопка готова. Сборку подключим позже.</h2>
+      <button class="download-button reveal" type="button" aria-disabled="true" data-state="disabled">
+        Скачать Lanaya
+        <span>↗</span>
+      </button>
+    </section>
+
+    <footer class="site-footer">
+      <span>Lanaya</span>
+      <span>lanaya.space</span>
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

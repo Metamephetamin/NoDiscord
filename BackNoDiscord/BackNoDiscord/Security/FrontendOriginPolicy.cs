@@ -8,7 +8,8 @@ public static class FrontendOriginPolicy
     private static readonly string[] ProductionDefaultOrigins =
     [
         "https://lanaya.space",
-        "https://www.lanaya.space"
+        "https://www.lanaya.space",
+        "https://land.lanaya.space"
     ];
 
     public static bool IsAllowed(string? origin, IConfiguration configuration, bool allowDevelopmentOrigins = false)

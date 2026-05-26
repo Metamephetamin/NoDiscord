@@ -2845,6 +2845,7 @@ export const DesktopServerRail = ({
   onServerPointerUp,
   onServerPointerCancel,
   onAddServer,
+  onOpenDonation,
   getServerIconFrame,
 }) => {
   const [serverTooltip, setServerTooltip] = useState(null);
@@ -2931,6 +2932,20 @@ export const DesktopServerRail = ({
         );
       })}
       <button type="button" className="btn__create-server" aria-label="Создать сервер" onClick={onAddServer}>+</button>
+      {onOpenDonation ? (
+        <button
+          type="button"
+          className="btn__server-donation"
+          onClick={onOpenDonation}
+          onMouseEnter={(event) => showServerTooltip(event, { name: "Поддержать проект" })}
+          onMouseLeave={hideServerTooltip}
+          onFocus={(event) => showServerTooltip(event, { name: "Поддержать проект" })}
+          onBlur={hideServerTooltip}
+          aria-label="Поддержать проект"
+        >
+          ₽
+        </button>
+      ) : null}
     </div>
     {serverTooltip ? (
       <div className="server-rail-tooltip" style={{ left: serverTooltip.left, top: serverTooltip.top }}>

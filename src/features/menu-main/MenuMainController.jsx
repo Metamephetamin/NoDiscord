@@ -6072,7 +6072,6 @@ export default function MenuMain({
     audioVolume,
     activeMicMenuBars,
     openSettingsPanel,
-    openDonationModal,
     handleScreenShareAction: stableHandleScreenShareAction,
     openCameraModal: stableHandleCameraAction,
     stopCameraShare: stableStopCameraShare,
@@ -6122,7 +6121,6 @@ export default function MenuMain({
     micVolume,
     noiseProfileOptions,
     noiseSuppressionMode,
-    openDonationModal,
     openLocalSharePreview,
     outputSelectionAvailable,
     profileCustomization,
@@ -6862,6 +6860,7 @@ export default function MenuMain({
       onServerPointerUp={handleServerShortcutPointerUp}
       onServerPointerCancel={handleServerShortcutPointerCancel}
       onAddServer={stableHandleAddServer}
+      onOpenDonation={openDonationModal}
       getServerIconFrame={getServerIconFrame}
     />
   );

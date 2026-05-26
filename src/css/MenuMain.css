@@ -429,6 +429,34 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   filter: brightness(1.03);
 }
 
+.btn__server-donation {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(255, 218, 101, 0.42);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 245, 168, 0.42), transparent 42%),
+    linear-gradient(145deg, rgba(120, 92, 31, 0.92), rgba(37, 31, 20, 0.96));
+  color: #ffe58a;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  overflow: visible;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.btn__server-donation:hover,
+.btn__server-donation:focus-visible {
+  border-color: rgba(255, 229, 138, 0.78);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.42), 0 0 20px rgba(255, 218, 101, 0.14);
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
 .btn__server-tooltip {
   display: none;
   position: absolute;
@@ -9555,27 +9583,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   mask-image: url("/icons/settings.png");
 }
 
-.profile__mini-icon--support {
-  color: #f7d56f;
-}
-
-.profile__mini-glyph--donate {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  background: none;
-  color: currentColor;
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.profile__mini-icon--support:hover {
-  background: rgba(247, 213, 111, 0.14);
-  color: #ffe38b;
-}
-
 .profile__mini-icon--slashed {
   position: relative;
   background: rgba(217, 45, 32, 0.2) !important;
@@ -10738,6 +10745,74 @@ html[data-ui-density="compact"] .settings-popup--shell {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.settings-shell__content--company-info {
+  gap: 18px;
+}
+
+.company-info-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.company-info-panel__brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.company-info-panel__mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  flex: 0 0 58px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.24), transparent 38%),
+    linear-gradient(145deg, rgba(123, 111, 255, 0.95), rgba(42, 46, 74, 0.98));
+  color: #ffffff;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.company-info-panel__brand h3 {
+  margin: 0;
+  color: var(--app-text, #ffffff);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.company-info-panel__brand p,
+.company-info-panel__note {
+  margin: 6px 0 0;
+  color: var(--app-text-muted, #9ca5ba);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.company-info-panel__rows {
+  overflow: hidden;
+}
+
+.company-info-panel__row {
+  align-items: flex-start;
+}
+
+.company-info-panel__row .account-settings-row__copy span {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.company-info-panel__note {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .settings-shell__main {

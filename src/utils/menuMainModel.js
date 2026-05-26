@@ -917,7 +917,7 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "admin", label: "Админка", section: "Администрирование" },
   { id: "server", label: "Сервер", section: "Текущий сервер" },
   { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
+  { id: "company_info", label: "О продукте и компании", section: "О приложении" },
 ];
 export const uiSoundCache = new Map();
-
 

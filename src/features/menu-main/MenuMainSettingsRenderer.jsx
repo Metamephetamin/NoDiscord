@@ -7,6 +7,7 @@ import {
   MobileSettingsShell,
   NotificationsSettings,
   PersonalProfileSettings,
+  ProductCompanyInfoSettings,
   RolesSettings,
   ServerSettings,
   VoiceSettingsPanel,
@@ -331,6 +332,8 @@ export function MenuMainSettingsContent({
           onAppLogoChange={handleAppLogoChange}
         />
       );
+    case "company_info":
+      return <ProductCompanyInfoSettings />;
     case "server":
       return (
         <ServerSettings

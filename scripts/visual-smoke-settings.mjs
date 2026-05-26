@@ -14,6 +14,8 @@ const requiredPanels = [
   "export const VoiceSettingsPanel",
   "export const PersonalProfileSettings",
   "export const AppearanceAccessibilitySettings",
+  "export const ProductCompanyInfoSettings",
+  "504417743063",
   'const HIDDEN_SETTINGS_INTEGRATION_PROVIDER_IDS = new Set(["battlenet", "yandex_music"])',
   "visibleIntegrations.filter",
   "theme-choice-list",
@@ -31,6 +33,7 @@ for (const tab of [
   'case "personal_profile"',
   'case "appearance_accessibility"',
   'case "voice_video"',
+  'case "company_info"',
 ]) {
   assert(rendererSource.includes(tab), `Settings renderer is missing ${tab}.`);
 }

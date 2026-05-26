@@ -45,7 +45,6 @@ function MenuMainProfilePanelSlot({
   audioVolume,
   activeMicMenuBars,
   openSettingsPanel,
-  openDonationModal,
   handleScreenShareAction,
   openCameraModal,
   stopCameraShare,
@@ -114,7 +113,6 @@ function MenuMainProfilePanelSlot({
       icons={{ settings: SETTINGS_ICON_URL }}
       onOpenProfileSettings={() => openSettingsPanel("personal_profile")}
       onOpenVoiceSettings={() => openSettingsPanel("voice_video")}
-      onOpenDonation={openDonationModal}
       onScreenShareAction={handleScreenShareAction}
       onOpenCamera={openCameraModal}
       onStopCameraShare={stopCameraShare}

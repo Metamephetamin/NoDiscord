@@ -50,6 +50,7 @@ public class FrontendOriginPolicyTests
 
         Assert.True(FrontendOriginPolicy.IsAllowed("https://lanaya.space", configuration));
         Assert.True(FrontendOriginPolicy.IsAllowed("https://www.lanaya.space", configuration));
+        Assert.True(FrontendOriginPolicy.IsAllowed("https://land.lanaya.space", configuration));
     }
 
     [Fact]

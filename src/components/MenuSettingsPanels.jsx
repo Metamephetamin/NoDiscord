@@ -616,6 +616,51 @@ export const AccountSettings = ({
   );
 };
 
+export const ProductCompanyInfoSettings = () => {
+  const companyRows = [
+    { label: "Продукт", value: "Lanaya" },
+    { label: "Тип сервиса", value: "мессенджер для общения, серверов, чатов и голосовых комнат" },
+    { label: "Сайт", value: "https://lanaya.space" },
+    { label: "ИНН", value: "504417743063" },
+    { label: "Почта сервиса", value: "code@lanaya.space" },
+  ];
+
+  return (
+    <div className="settings-shell__content settings-shell__content--company-info">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>О продукте и компании</h2>
+        </div>
+      </div>
+
+      <section className="account-settings-section company-info-panel">
+        <div className="company-info-panel__brand">
+          <div className="company-info-panel__mark" aria-hidden="true">L</div>
+          <div>
+            <h3>Lanaya</h3>
+            <p>Пространство для сообщений, голосовых каналов, серверов и совместного общения.</p>
+          </div>
+        </div>
+
+        <div className="account-settings-card account-settings-card--rows company-info-panel__rows">
+          {companyRows.map((row) => (
+            <div key={row.label} className="account-settings-row company-info-panel__row">
+              <div className="account-settings-row__copy">
+                <strong>{row.label}</strong>
+                <span>{row.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="company-info-panel__note">
+          Юридические реквизиты, оферта, условия оплаты и информация о возвратах должны быть опубликованы в актуальном виде перед приемом реальных платежей.
+        </div>
+      </section>
+    </div>
+  );
+};
+
 export const PersonalProfileSettings = ({
   profileBackgroundSrc,
   profileBackgroundFrame,

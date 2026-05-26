@@ -57,7 +57,7 @@ export default [
     },
   },
   {
-    files: ["landing/**/*.js"],
+    files: ["landing/**/*.js", "landing-live/**/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "script",
