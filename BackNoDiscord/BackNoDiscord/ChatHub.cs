@@ -130,6 +130,43 @@ public class ChatHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
+    public async Task UpdateLocation(double latitude, double longitude)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId) ||
+            double.IsNaN(latitude) ||
+            double.IsNaN(longitude) ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180)
+        {
+            return;
+        }
+
+        var friendIds = await _context.Friendships
+            .AsNoTracking()
+            .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
+            .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
+            .Distinct()
+            .ToListAsync(Context.ConnectionAborted);
+
+        var recipientIds = friendIds
+            .Append(currentUserId)
+            .Distinct()
+            .Select(item => item.ToString());
+
+        await Clients.Users(recipientIds).SendAsync("FriendLocationUpdated", new
+        {
+            userId = currentUserId,
+            latitude,
+            longitude,
+            locationLabel = "Местоположение",
+            displayName = currentUser.DisplayName,
+            updatedAt = DateTimeOffset.UtcNow
+        }, Context.ConnectionAborted);
+    }
+
     public async Task SendMessage(
         string channelId,
         string username,

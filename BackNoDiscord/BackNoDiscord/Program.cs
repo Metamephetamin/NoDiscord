@@ -342,7 +342,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     context.Response.Headers["Content-Security-Policy"] = BuildContentSecurityPolicy(app.Environment.IsDevelopment(), app.Configuration);
     context.Response.Headers["Permissions-Policy"] =
-        "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=(), serial=()";
+        "camera=(self), microphone=(self), display-capture=(self), geolocation=(self), payment=(), usb=(), serial=()";
 
     await next();
 });

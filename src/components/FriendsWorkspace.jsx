@@ -5,6 +5,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
+import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
 import { formatIntegrationActivityStatus } from "../utils/integrations";
@@ -267,12 +268,14 @@ const readFiniteNumber = (value) => {
   return Number.isFinite(numericValue) ? numericValue : null;
 };
 
-const LANAYA_WORLD_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const LANAYA_WORLD_BASE_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png";
+const LANAYA_WORLD_LABEL_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png";
 const LANAYA_WORLD_ATTRIBUTION = "&copy; OpenStreetMap contributors &copy; CARTO";
 const LANAYA_WORLD_MIN_ZOOM = 2;
 const LANAYA_WORLD_MAX_ZOOM = 19;
 const LANAYA_WORLD_DEFAULT_CENTER = [25, 25];
 const LANAYA_WORLD_DEFAULT_ZOOM = 2;
+const LANAYA_WORLD_BOUNDS = [[-60, -180], [84, 180]];
 
 const escapeMapHtml = (value) => String(value || "")
   .replace(/&/g, "&amp;")
@@ -682,11 +685,43 @@ const ProfileStoreView = ({ avatarSrc, displayName, appliedItem, onOpenItem }) =
   );
 };
 
-const WhereIsEveryoneView = ({ users }) => {
+const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
   const mapElementRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerLayerRef = useRef(null);
-  const onlineCount = users.filter((item) => item.kind === "self" || item.kind === "online").length;
+  const didInitialMapFitRef = useRef(false);
+  const lastLocationSentAtRef = useRef(0);
+  const [liveSelfLocation, setLiveSelfLocation] = useState(null);
+  const [realtimeLocations, setRealtimeLocations] = useState(() => new Map());
+  const [locationStatus, setLocationStatus] = useState(() => (
+    typeof navigator !== "undefined" && "geolocation" in navigator ? "" : "геолокация недоступна"
+  ));
+  const currentUserId = String(user?.id || user?.userId || user?.email || "self").trim() || "self";
+  const visibleUsers = useMemo(() => {
+    const usersById = new Map(users.map((item) => [String(item.id || ""), item]));
+
+    realtimeLocations.forEach((item, id) => {
+      usersById.set(id, {
+        ...usersById.get(id),
+        ...item,
+      });
+    });
+
+    if (liveSelfLocation) {
+      usersById.set(currentUserId, liveSelfLocation);
+    }
+
+    return Array.from(usersById.values()).sort((left, right) => {
+      if (String(left.id || "") === currentUserId) {
+        return -1;
+      }
+      if (String(right.id || "") === currentUserId) {
+        return 1;
+      }
+      return String(left.name || "").localeCompare(String(right.name || ""), "ru");
+    });
+  }, [currentUserId, liveSelfLocation, realtimeLocations, users]);
+  const onlineCount = visibleUsers.filter((item) => item.kind === "self" || item.kind === "online").length;
 
   useEffect(() => {
     if (!mapElementRef.current || mapInstanceRef.current) {
@@ -700,14 +735,27 @@ const WhereIsEveryoneView = ({ users }) => {
       worldCopyJump: true,
       minZoom: LANAYA_WORLD_MIN_ZOOM,
       maxZoom: LANAYA_WORLD_MAX_ZOOM,
+      maxBounds: LANAYA_WORLD_BOUNDS,
+      maxBoundsViscosity: 1,
     });
 
-    L.tileLayer(LANAYA_WORLD_TILE_URL, {
+    L.tileLayer(LANAYA_WORLD_BASE_TILE_URL, {
       attribution: LANAYA_WORLD_ATTRIBUTION,
       minZoom: LANAYA_WORLD_MIN_ZOOM,
       maxZoom: LANAYA_WORLD_MAX_ZOOM,
       subdomains: ["a", "b", "c", "d"],
       crossOrigin: true,
+      className: "lanaya-world-base-tile",
+      noWrap: true,
+    }).addTo(map);
+
+    L.tileLayer(LANAYA_WORLD_LABEL_TILE_URL, {
+      minZoom: LANAYA_WORLD_MIN_ZOOM,
+      maxZoom: LANAYA_WORLD_MAX_ZOOM,
+      subdomains: ["a", "b", "c", "d"],
+      crossOrigin: true,
+      className: "lanaya-world-label-tile",
+      noWrap: true,
     }).addTo(map);
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
@@ -715,6 +763,7 @@ const WhereIsEveryoneView = ({ users }) => {
 
     markerLayerRef.current = L.layerGroup().addTo(map);
     map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: false });
+    map.setMaxBounds(LANAYA_WORLD_BOUNDS);
     mapInstanceRef.current = map;
 
     const resizeTimer = window.setTimeout(() => {
@@ -730,6 +779,89 @@ const WhereIsEveryoneView = ({ users }) => {
   }, []);
 
   useEffect(() => {
+    const handleFriendLocationUpdated = (payload) => {
+      const userId = String(payload?.userId || "").trim();
+      const latitude = readFiniteNumber(payload?.latitude);
+      const longitude = readFiniteNumber(payload?.longitude);
+      if (!userId || latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+        return;
+      }
+
+      setRealtimeLocations((current) => {
+        const next = new Map(current);
+        next.set(userId, {
+          id: userId,
+          name: String(payload?.displayName || "").trim() || `User ${userId}`,
+          avatar: "",
+          locationLabel: String(payload?.locationLabel || "").trim() || "Местоположение",
+          latitude,
+          longitude,
+          kind: userId === currentUserId ? "self" : "online",
+        });
+        return next;
+      });
+    };
+
+    chatConnection.on("FriendLocationUpdated", handleFriendLocationUpdated);
+    return () => {
+      chatConnection.off("FriendLocationUpdated", handleFriendLocationUpdated);
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      return undefined;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setLocationStatus("");
+        setLiveSelfLocation({
+          id: currentUserId,
+          name: getDisplayName(user),
+          avatar: user?.avatar || user?.avatarUrl || "",
+          locationLabel: "Моё местоположение",
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          kind: "self",
+        });
+
+        const now = Date.now();
+        if (now - lastLocationSentAtRef.current > 1800) {
+          lastLocationSentAtRef.current = now;
+          startChatConnection()
+            .then((connection) => connection?.invoke?.("UpdateLocation", position.coords.latitude, position.coords.longitude))
+            .catch(() => {});
+        }
+      },
+      () => {
+        setLocationStatus("геолокация выключена");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 12000,
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [currentUserId, getDisplayName, user]);
+
+  const centerOnSelf = () => {
+    const map = mapInstanceRef.current;
+    const selfMarker = visibleUsers.find((item) => item.kind === "self") || visibleUsers.find((item) => String(item.id || "") === currentUserId);
+    if (!map || !selfMarker) {
+      return;
+    }
+
+    map.setView([selfMarker.latitude, selfMarker.longitude], Math.max(map.getZoom(), 13), {
+      animate: true,
+    });
+  };
+
+  useEffect(() => {
     const map = mapInstanceRef.current;
     const markerLayer = markerLayerRef.current;
     if (!map || !markerLayer) {
@@ -738,7 +870,7 @@ const WhereIsEveryoneView = ({ users }) => {
 
     markerLayer.clearLayers();
 
-    users.forEach((mapUser) => {
+    visibleUsers.forEach((mapUser) => {
       const userName = escapeMapHtml(mapUser.name);
       const locationLabel = escapeMapHtml(mapUser.locationLabel || `${mapUser.latitude.toFixed(2)}, ${mapUser.longitude.toFixed(2)}`);
       const marker = L.marker([mapUser.latitude, mapUser.longitude], {
@@ -746,7 +878,7 @@ const WhereIsEveryoneView = ({ users }) => {
         title: mapUser.name,
         icon: L.divIcon({
           className: `lanaya-world-leaflet__marker lanaya-world-leaflet__marker--${mapUser.kind}`,
-          html: `<span class="lanaya-world-leaflet__pulse"></span><span class="lanaya-world-leaflet__pin"></span><span class="lanaya-world-leaflet__label">${userName}</span>`,
+          html: `<span class="lanaya-world-leaflet__pulse lanaya-world-leaflet__pulse--one"></span><span class="lanaya-world-leaflet__pulse lanaya-world-leaflet__pulse--two"></span><span class="lanaya-world-leaflet__pin"></span><span class="lanaya-world-leaflet__label">${userName}</span>`,
           iconSize: [16, 16],
           iconAnchor: [8, 8],
         }),
@@ -761,22 +893,24 @@ const WhereIsEveryoneView = ({ users }) => {
       marker.addTo(markerLayer);
     });
 
-    if (users.length > 1) {
-      const bounds = L.latLngBounds(users.map((item) => [item.latitude, item.longitude]));
+    if (!didInitialMapFitRef.current && visibleUsers.length > 1) {
+      const bounds = L.latLngBounds(visibleUsers.map((item) => [item.latitude, item.longitude]));
       map.fitBounds(bounds.pad(0.34), {
         animate: true,
         duration: 0.45,
         maxZoom: 5,
       });
-    } else if (users.length === 1) {
-      map.setView([users[0].latitude, users[0].longitude], 9, { animate: true });
-    } else {
+      didInitialMapFitRef.current = true;
+    } else if (!didInitialMapFitRef.current && visibleUsers.length === 1) {
+      map.setView([visibleUsers[0].latitude, visibleUsers[0].longitude], 9, { animate: true });
+      didInitialMapFitRef.current = true;
+    } else if (!visibleUsers.length) {
       map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: true });
     }
 
     map.invalidateSize();
     return undefined;
-  }, [users]);
+  }, [visibleUsers]);
 
   return (
     <div className="friends-main__content friends-main__content--where">
@@ -788,30 +922,37 @@ const WhereIsEveryoneView = ({ users }) => {
             <p>На карте видны только пользователи, у которых уже есть открытая геопозиция в профиле.</p>
           </div>
           <div className="lanaya-world__stats" aria-label="Статистика карты">
-            <span><strong>{users.length}</strong> на карте</span>
+            <span><strong>{visibleUsers.length}</strong> на карте</span>
             <span><strong>{onlineCount}</strong> активны</span>
           </div>
         </div>
 
         <div className="lanaya-world-map" role="img" aria-label="Карта мира с пользователями Lanaya">
           <div ref={mapElementRef} className="lanaya-world-map__viewport" />
-          <span className="lanaya-world-map__scan" aria-hidden="true" />
+
+          <button
+            type="button"
+            className="lanaya-world-map__locate"
+            onClick={centerOnSelf}
+            disabled={!visibleUsers.some((item) => item.kind === "self" || String(item.id || "") === currentUserId)}
+          >
+            Моё место
+          </button>
 
           <div className="lanaya-world-map__legend">
-            <span><i className="lanaya-world-map__legend-dot lanaya-world-map__legend-dot--self" /> Вы</span>
-            <span><i className="lanaya-world-map__legend-dot lanaya-world-map__legend-dot--online" /> В сети</span>
-            <span><i className="lanaya-world-map__legend-dot lanaya-world-map__legend-dot--offline" /> Не в сети</span>
+            <span><i className="lanaya-world-map__legend-dot lanaya-world-map__legend-dot--self" /> Местоположение</span>
+            {locationStatus ? <span>{locationStatus}</span> : null}
           </div>
         </div>
 
         <div className="lanaya-world__panel">
           <div className="lanaya-world__panel-header">
             <strong>Пользователи Lanaya</strong>
-            <span>{users.length ? "координаты получены" : "нет открытых координат"}</span>
+            <span>{visibleUsers.length ? "координаты получены" : "нет открытых координат"}</span>
           </div>
-          {users.length ? (
+          {visibleUsers.length ? (
             <div className="lanaya-world__user-list">
-              {users.map((mapUser) => (
+              {visibleUsers.map((mapUser) => (
                 <div key={mapUser.id} className="lanaya-world__user-row">
                   <AnimatedAvatar className="lanaya-world__avatar" src={mapUser.avatar || ""} alt={mapUser.name} loading="lazy" decoding="async" />
                   <span>
@@ -1818,7 +1959,7 @@ export const FriendsMain = ({
             onOpenItem={(item) => setActiveStoreItem(item)}
           />
         ) : activeFriendsPageSection === "where" ? (
-          <WhereIsEveryoneView users={lanayaMapUsers} />
+          <WhereIsEveryoneView users={lanayaMapUsers} user={user} getDisplayName={getDisplayName} />
         ) : activeFriendsPageSection !== "conversations" ? (
           <div className="friends-main__content friends-main__content--directory">
             <section className="friends-directory">
