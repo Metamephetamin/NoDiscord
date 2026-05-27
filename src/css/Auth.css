@@ -610,6 +610,89 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+.auth-password-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.auth-password-field .auth-input {
+  padding-right: 48px;
+}
+
+.auth-input--password {
+  font-size: 18px;
+  letter-spacing: 0.1em;
+}
+
+.auth-input--password-visible,
+.auth-input--password::placeholder {
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6a7891;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.auth-password-toggle:hover,
+.auth-password-toggle:focus-visible {
+  background: rgba(105, 75, 205, 0.08);
+  color: #694bcd;
+}
+
+.auth-password-toggle span {
+  position: relative;
+  width: 21px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 999px 999px 999px 999px / 75% 75% 75% 75%;
+}
+
+.auth-password-toggle span::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.auth-password-toggle span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 24px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.78);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.auth-password-toggle--visible span::after {
+  opacity: 0;
+}
+
 .auth-input--compact {
   max-width: 160px;
 }
@@ -2746,6 +2829,10 @@
   .auth-page--login .auth-card.auth-card--login {
     transform: translateY(clamp(8px, 2vh, 24px));
   }
+
+  .auth-page--login .auth-card.auth-card--login:has(.auth-card__forgot) {
+    transform: translateY(clamp(-28px, -3vh, -12px));
+  }
 }
 
 @media (min-width: 641px) and (max-height: 720px) {
@@ -2758,5 +2845,9 @@
   .auth-page--login .auth-card,
   .auth-page--login .auth-card.auth-card--login {
     transform: translateY(0);
+  }
+
+  .auth-page--login .auth-card.auth-card--login:has(.auth-card__forgot) {
+    transform: translateY(-22px);
   }
 }

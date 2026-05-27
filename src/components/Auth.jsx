@@ -284,6 +284,39 @@ function buildQrLoginLink(session) {
   return qrUrl.toString();
 }
 
+function PasswordInput({
+  className = "",
+  hiddenLabel = "Скрыть пароль",
+  onToggleVisibility,
+  visibilityLabel = "Показать пароль",
+  visible = false,
+  ...inputProps
+}) {
+  const inputClassName = [
+    className,
+    "auth-input--password",
+    visible ? "auth-input--password-visible" : "",
+  ].filter(Boolean).join(" ");
+
+  return (
+    <span className="auth-password-field">
+      <input
+        {...inputProps}
+        className={inputClassName}
+        type={visible ? "text" : "password"}
+      />
+      <button
+        type="button"
+        className={`auth-password-toggle ${visible ? "auth-password-toggle--visible" : ""}`}
+        onClick={onToggleVisibility}
+        aria-label={visible ? hiddenLabel : visibilityLabel}
+      >
+        <span aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
+
 async function submitAuthRequest(endpoint, payload, fallbackMessage) {
   let response;
   const deviceToken = await getAuthDeviceToken();
@@ -357,6 +390,12 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
   const [isAuthVideoLoadAllowed, setIsAuthVideoLoadAllowed] = useState(false);
   const [isUserAgreementOpen, setIsUserAgreementOpen] = useState(false);
   const [brandLogoSrc, setBrandLogoSrc] = useState(() => getCurrentAppLogoOption().src);
+  const [visiblePasswordFields, setVisiblePasswordFields] = useState({
+    login: false,
+    passwordReset: false,
+    passwordResetConfirm: false,
+    register: false,
+  });
   const authVideoRef = useRef(null);
   const qrScannerVideoRef = useRef(null);
   const qrScannerStreamRef = useRef(null);
@@ -404,6 +443,12 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
     passwordResetSecondsLeft === 0 &&
     !isRequestingPasswordResetCode &&
     !isResettingPassword;
+  const togglePasswordVisibility = (field) => {
+    setVisiblePasswordFields((previous) => ({
+      ...previous,
+      [field]: !previous[field],
+    }));
+  };
 
   const resetEmailVerificationModal = () => {
     setEmailVerificationCode("");
@@ -1684,10 +1729,11 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
                         inputMode="numeric"
                         autoFocus
                       />
-                      <input
+                      <PasswordInput
                         className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
                         placeholder="Новый пароль"
-                        type="password"
+                        visible={visiblePasswordFields.passwordReset}
+                        onToggleVisibility={() => togglePasswordVisibility("passwordReset")}
                         value={passwordResetPassword}
                         onChange={(event) => {
                           setPasswordResetPassword(event.target.value.slice(0, MAX_AUTH_PASSWORD_LENGTH));
@@ -1696,10 +1742,13 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
                         maxLength={MAX_AUTH_PASSWORD_LENGTH}
                         minLength={6}
                       />
-                      <input
+                      <PasswordInput
                         className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
                         placeholder="Повторите пароль"
-                        type="password"
+                        visibilityLabel="Показать повтор пароля"
+                        hiddenLabel="Скрыть повтор пароля"
+                        visible={visiblePasswordFields.passwordResetConfirm}
+                        onToggleVisibility={() => togglePasswordVisibility("passwordResetConfirm")}
                         value={passwordResetPasswordConfirm}
                         onChange={(event) => {
                           setPasswordResetPasswordConfirm(event.target.value.slice(0, MAX_AUTH_PASSWORD_LENGTH));
@@ -1769,10 +1818,11 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
               {loginMethod === "password" && !shouldShowPasswordResetStep ? (
                 <>
                   <label className="auth-field auth-field--with-error-slot">
-                    <input
+                    <PasswordInput
                       className={`auth-input ${loginErrorMessage ? "auth-input--error" : ""}`}
                       placeholder="Пароль"
-                      type="password"
+                      visible={visiblePasswordFields.login}
+                      onToggleVisibility={() => togglePasswordVisibility("login")}
                       value={loginForm.password}
                       onChange={handleLoginFieldChange("password")}
                       maxLength={MAX_AUTH_PASSWORD_LENGTH}
@@ -1881,10 +1931,11 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
                 required
               />
 
-              <input
+              <PasswordInput
                 className="auth-input"
                 placeholder="Пароль"
-                type="password"
+                visible={visiblePasswordFields.register}
+                onToggleVisibility={() => togglePasswordVisibility("register")}
                 value={registerForm.password}
                 onChange={handleRegisterFieldChange("password")}
                 maxLength={MAX_AUTH_PASSWORD_LENGTH}
@@ -2076,4 +2127,3 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
     </div>
   );
 }
-
