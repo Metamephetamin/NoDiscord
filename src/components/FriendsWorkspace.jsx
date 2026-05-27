@@ -1,4 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
 import ScreenShareViewer from "./ScreenShareViewer";
@@ -260,79 +262,24 @@ const getDirectBlockNotice = (friend) => {
   return null;
 };
 
-const WORLD_MAP_WIDTH = 1000;
-const WORLD_MAP_HEIGHT = 520;
-
-const WORLD_MAP_REGIONS = [
-  "M73 146L105 116L156 104L206 124L234 158L221 205L247 241L226 286L179 296L143 271L109 280L79 247L58 197Z",
-  "M237 132L299 115L366 128L399 165L384 207L422 238L399 279L343 272L301 300L256 274L266 226L232 194Z",
-  "M458 112L532 84L622 96L694 134L743 183L720 230L646 226L589 248L527 229L472 249L430 213L442 160Z",
-  "M509 248L579 237L653 266L681 336L636 418L568 449L520 411L488 333Z",
-  "M683 254L743 239L813 263L873 318L851 367L785 352L724 326Z",
-  "M821 380L873 370L930 397L913 442L847 450L809 421Z",
-  "M291 318L351 339L386 402L362 482L322 464L306 411L267 366Z",
-  "M116 342L158 328L200 351L191 394L149 405L103 382Z",
-  "M376 80L417 69L454 82L439 108L394 110Z",
-  "M663 75L725 67L789 88L817 119L775 142L710 131L647 103Z",
-];
-
-const WORLD_CITY_LABELS = [
-  { label: "Сиэтл", lat: 47.61, lon: -122.33 },
-  { label: "Сан-Франциско", lat: 37.77, lon: -122.42 },
-  { label: "Лос-Анджелес", lat: 34.05, lon: -118.24 },
-  { label: "Мехико", lat: 19.43, lon: -99.13 },
-  { label: "Нью-Йорк", lat: 40.71, lon: -74.01 },
-  { label: "Торонто", lat: 43.65, lon: -79.38 },
-  { label: "Рио", lat: -22.91, lon: -43.17 },
-  { label: "Сан-Паулу", lat: -23.55, lon: -46.63 },
-  { label: "Буэнос-Айрес", lat: -34.6, lon: -58.38 },
-  { label: "Лондон", lat: 51.51, lon: -0.13 },
-  { label: "Париж", lat: 48.86, lon: 2.35 },
-  { label: "Берлин", lat: 52.52, lon: 13.4 },
-  { label: "Мадрид", lat: 40.42, lon: -3.7 },
-  { label: "Рим", lat: 41.9, lon: 12.5 },
-  { label: "Стамбул", lat: 41.01, lon: 28.98 },
-  { label: "Москва", lat: 55.76, lon: 37.62 },
-  { label: "Санкт-Петербург", lat: 59.93, lon: 30.31 },
-  { label: "Казань", lat: 55.79, lon: 49.12 },
-  { label: "Екатеринбург", lat: 56.84, lon: 60.61 },
-  { label: "Новосибирск", lat: 55.03, lon: 82.92 },
-  { label: "Владивосток", lat: 43.12, lon: 131.89 },
-  { label: "Дубай", lat: 25.2, lon: 55.27 },
-  { label: "Каир", lat: 30.04, lon: 31.24 },
-  { label: "Кейптаун", lat: -33.92, lon: 18.42 },
-  { label: "Найроби", lat: -1.29, lon: 36.82 },
-  { label: "Дели", lat: 28.61, lon: 77.21 },
-  { label: "Мумбаи", lat: 19.08, lon: 72.88 },
-  { label: "Бангкок", lat: 13.76, lon: 100.5 },
-  { label: "Сингапур", lat: 1.35, lon: 103.82 },
-  { label: "Пекин", lat: 39.9, lon: 116.41 },
-  { label: "Шанхай", lat: 31.23, lon: 121.47 },
-  { label: "Сеул", lat: 37.57, lon: 126.98 },
-  { label: "Токио", lat: 35.68, lon: 139.69 },
-  { label: "Сидней", lat: -33.87, lon: 151.21 },
-];
-
-const WORLD_POI_LABELS = [
-  { label: "Lanaya Hub", lat: 52.52, lon: 13.4, kind: "hub" },
-  { label: "Маркет", lat: 55.76, lon: 37.62, kind: "shop" },
-  { label: "Порт", lat: 1.35, lon: 103.82, kind: "port" },
-  { label: "Станция", lat: 35.68, lon: 139.69, kind: "station" },
-  { label: "Молл", lat: 25.2, lon: 55.27, kind: "shop" },
-  { label: "Хаб", lat: 40.71, lon: -74.01, kind: "hub" },
-  { label: "Порт", lat: -33.87, lon: 151.21, kind: "port" },
-  { label: "Маркет", lat: -23.55, lon: -46.63, kind: "shop" },
-];
-
-const projectWorldPoint = (latitude, longitude) => ({
-  x: ((longitude + 180) / 360) * WORLD_MAP_WIDTH,
-  y: ((90 - latitude) / 180) * WORLD_MAP_HEIGHT,
-});
-
 const readFiniteNumber = (value) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : null;
 };
+
+const LANAYA_WORLD_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const LANAYA_WORLD_ATTRIBUTION = "&copy; OpenStreetMap contributors &copy; CARTO";
+const LANAYA_WORLD_MIN_ZOOM = 2;
+const LANAYA_WORLD_MAX_ZOOM = 19;
+const LANAYA_WORLD_DEFAULT_CENTER = [25, 25];
+const LANAYA_WORLD_DEFAULT_ZOOM = 2;
+
+const escapeMapHtml = (value) => String(value || "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
 
 const getUserLocationCoordinates = (target) => {
   const nestedLocation = target?.location || target?.geo || target?.coordinates || target?.lastLocation || target?.publicLocation || {};
@@ -377,7 +324,6 @@ const createMapUserMarker = (target, { currentUserId, getDisplayName }) => {
     return null;
   }
 
-  const projected = projectWorldPoint(location.latitude, location.longitude);
   const isSelf = String(currentUserId || "") === userId;
   const isOnline = isUserCurrentlyOnline(target);
   return {
@@ -387,8 +333,6 @@ const createMapUserMarker = (target, { currentUserId, getDisplayName }) => {
     locationLabel: location.label,
     latitude: location.latitude,
     longitude: location.longitude,
-    x: projected.x,
-    y: projected.y,
     kind: isSelf ? "self" : isOnline ? "online" : "offline",
   };
 };
@@ -739,7 +683,100 @@ const ProfileStoreView = ({ avatarSrc, displayName, appliedItem, onOpenItem }) =
 };
 
 const WhereIsEveryoneView = ({ users }) => {
+  const mapElementRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerLayerRef = useRef(null);
   const onlineCount = users.filter((item) => item.kind === "self" || item.kind === "online").length;
+
+  useEffect(() => {
+    if (!mapElementRef.current || mapInstanceRef.current) {
+      return undefined;
+    }
+
+    const map = L.map(mapElementRef.current, {
+      zoomControl: false,
+      attributionControl: false,
+      preferCanvas: true,
+      worldCopyJump: true,
+      minZoom: LANAYA_WORLD_MIN_ZOOM,
+      maxZoom: LANAYA_WORLD_MAX_ZOOM,
+    });
+
+    L.tileLayer(LANAYA_WORLD_TILE_URL, {
+      attribution: LANAYA_WORLD_ATTRIBUTION,
+      minZoom: LANAYA_WORLD_MIN_ZOOM,
+      maxZoom: LANAYA_WORLD_MAX_ZOOM,
+      subdomains: ["a", "b", "c", "d"],
+      crossOrigin: true,
+    }).addTo(map);
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.scale({ position: "bottomleft", imperial: false, metric: true }).addTo(map);
+
+    markerLayerRef.current = L.layerGroup().addTo(map);
+    map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: false });
+    mapInstanceRef.current = map;
+
+    const resizeTimer = window.setTimeout(() => {
+      map.invalidateSize();
+    }, 120);
+
+    return () => {
+      window.clearTimeout(resizeTimer);
+      map.remove();
+      mapInstanceRef.current = null;
+      markerLayerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const markerLayer = markerLayerRef.current;
+    if (!map || !markerLayer) {
+      return undefined;
+    }
+
+    markerLayer.clearLayers();
+
+    users.forEach((mapUser) => {
+      const userName = escapeMapHtml(mapUser.name);
+      const locationLabel = escapeMapHtml(mapUser.locationLabel || `${mapUser.latitude.toFixed(2)}, ${mapUser.longitude.toFixed(2)}`);
+      const marker = L.marker([mapUser.latitude, mapUser.longitude], {
+        keyboard: false,
+        title: mapUser.name,
+        icon: L.divIcon({
+          className: `lanaya-world-leaflet__marker lanaya-world-leaflet__marker--${mapUser.kind}`,
+          html: `<span class="lanaya-world-leaflet__pulse"></span><span class="lanaya-world-leaflet__pin"></span><span class="lanaya-world-leaflet__label">${userName}</span>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+        }),
+      });
+
+      marker.bindTooltip(`<strong>${userName}</strong><span>${locationLabel}</span>`, {
+        direction: "top",
+        offset: [0, -12],
+        opacity: 1,
+        className: "lanaya-world-leaflet__tooltip",
+      });
+      marker.addTo(markerLayer);
+    });
+
+    if (users.length > 1) {
+      const bounds = L.latLngBounds(users.map((item) => [item.latitude, item.longitude]));
+      map.fitBounds(bounds.pad(0.34), {
+        animate: true,
+        duration: 0.45,
+        maxZoom: 5,
+      });
+    } else if (users.length === 1) {
+      map.setView([users[0].latitude, users[0].longitude], 9, { animate: true });
+    } else {
+      map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: true });
+    }
+
+    map.invalidateSize();
+    return undefined;
+  }, [users]);
 
   return (
     <div className="friends-main__content friends-main__content--where">
@@ -757,78 +794,8 @@ const WhereIsEveryoneView = ({ users }) => {
         </div>
 
         <div className="lanaya-world-map" role="img" aria-label="Карта мира с пользователями Lanaya">
-          <svg className="lanaya-world-map__svg" viewBox={`0 0 ${WORLD_MAP_WIDTH} ${WORLD_MAP_HEIGHT}`} aria-hidden="true" focusable="false">
-            <defs>
-              <radialGradient id="lanayaMapOcean" cx="50%" cy="45%" r="70%">
-                <stop offset="0%" stopColor="#19212e" />
-                <stop offset="58%" stopColor="#0d121a" />
-                <stop offset="100%" stopColor="#070a10" />
-              </radialGradient>
-              <linearGradient id="lanayaMapLand" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#2f4052" />
-                <stop offset="50%" stopColor="#203243" />
-                <stop offset="100%" stopColor="#182635" />
-              </linearGradient>
-            </defs>
-            <rect width={WORLD_MAP_WIDTH} height={WORLD_MAP_HEIGHT} rx="30" fill="url(#lanayaMapOcean)" />
-            <g className="lanaya-world-map__grid">
-              {[-120, -60, 0, 60, 120].map((longitude) => {
-                const { x } = projectWorldPoint(0, longitude);
-                return <line key={`longitude-${longitude}`} x1={x} y1="24" x2={x} y2={WORLD_MAP_HEIGHT - 24} />;
-              })}
-              {[-60, -30, 0, 30, 60].map((latitude) => {
-                const { y } = projectWorldPoint(latitude, 0);
-                return <line key={`latitude-${latitude}`} x1="24" y1={y} x2={WORLD_MAP_WIDTH - 24} y2={y} />;
-              })}
-            </g>
-            <g className="lanaya-world-map__land">
-              {WORLD_MAP_REGIONS.map((pathData, index) => (
-                <path key={pathData} d={pathData} style={{ animationDelay: `${index * 110}ms` }} />
-              ))}
-            </g>
-            <g className="lanaya-world-map__radar">
-              {[0, 1, 2].map((index) => (
-                <circle key={index} cx="500" cy="260" r={72 + index * 78} style={{ animationDelay: `${index * 620}ms` }} />
-              ))}
-              <line x1="500" y1="260" x2="500" y2="72" />
-            </g>
-            <g className="lanaya-world-map__labels">
-              {WORLD_CITY_LABELS.map((city) => {
-                const point = projectWorldPoint(city.lat, city.lon);
-                return (
-                  <g key={city.label} transform={`translate(${point.x} ${point.y})`}>
-                    <circle r="2.4" />
-                    <text x="7" y="-5">{city.label}</text>
-                  </g>
-                );
-              })}
-            </g>
-            <g className="lanaya-world-map__poi">
-              {WORLD_POI_LABELS.map((poi) => {
-                const point = projectWorldPoint(poi.lat, poi.lon);
-                return (
-                  <g key={`${poi.label}-${poi.lon}`} className={`lanaya-world-map__poi-item lanaya-world-map__poi-item--${poi.kind}`} transform={`translate(${point.x} ${point.y})`}>
-                    <rect x="-4" y="-4" width="8" height="8" rx="2" />
-                    <text x="8" y="4">{poi.label}</text>
-                  </g>
-                );
-              })}
-            </g>
-            <g className="lanaya-world-map__users">
-              {users.map((mapUser, index) => (
-                <g
-                  key={mapUser.id}
-                  className={`lanaya-world-map__user lanaya-world-map__user--${mapUser.kind}`}
-                  transform={`translate(${mapUser.x} ${mapUser.y})`}
-                  style={{ animationDelay: `${index * 180}ms` }}
-                >
-                  <circle className="lanaya-world-map__user-pulse" r="18" />
-                  <circle className="lanaya-world-map__user-dot" r="6" />
-                  <text x="12" y="-10">{mapUser.name}</text>
-                </g>
-              ))}
-            </g>
-          </svg>
+          <div ref={mapElementRef} className="lanaya-world-map__viewport" />
+          <span className="lanaya-world-map__scan" aria-hidden="true" />
 
           <div className="lanaya-world-map__legend">
             <span><i className="lanaya-world-map__legend-dot lanaya-world-map__legend-dot--self" /> Вы</span>

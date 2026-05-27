@@ -4472,6 +4472,170 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 20px 60px rgba(0, 0, 0, 0.34);
 }
 
+.lanaya-world-map__viewport,
+.lanaya-world-map__viewport .leaflet-container {
+  width: 100%;
+  height: 100%;
+  min-height: 440px;
+  background: #060911;
+}
+
+.lanaya-world-map__viewport .leaflet-tile-pane {
+  filter: saturate(0.78) contrast(1.08) brightness(0.86);
+}
+
+.lanaya-world-map__viewport .leaflet-control-zoom {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(7, 10, 16, 0.84);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.lanaya-world-map__viewport .leaflet-control-zoom a {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: #eef5ff;
+  font-size: 22px;
+  line-height: 38px;
+}
+
+.lanaya-world-map__viewport .leaflet-control-zoom a:hover {
+  background: rgba(87, 230, 192, 0.14);
+  color: #ffffff;
+}
+
+.lanaya-world-map__viewport .leaflet-control-scale-line {
+  border-color: rgba(238, 245, 255, 0.64);
+  background: rgba(7, 10, 16, 0.72);
+  color: #dce7f7;
+  text-shadow: none;
+}
+
+.lanaya-world-map__viewport .leaflet-marker-icon {
+  background: transparent;
+  border: 0;
+}
+
+.lanaya-world-leaflet__marker {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  pointer-events: auto;
+}
+
+.lanaya-world-leaflet__pin,
+.lanaya-world-leaflet__pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.lanaya-world-leaflet__pin {
+  width: 13px;
+  height: 13px;
+  background: #57e6c0;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 18px rgba(87, 230, 192, 0.72);
+}
+
+.lanaya-world-leaflet__pulse {
+  width: 36px;
+  height: 36px;
+  border: 2px solid rgba(87, 230, 192, 0.44);
+  animation: lanayaMapUserPulse 1900ms ease-out infinite;
+}
+
+.lanaya-world-leaflet__marker--self .lanaya-world-leaflet__pin {
+  background: #ffffff;
+  border-color: #57e6c0;
+}
+
+.lanaya-world-leaflet__marker--offline .lanaya-world-leaflet__pin {
+  background: #8d9ab0;
+  border-color: rgba(240, 246, 255, 0.82);
+  box-shadow: none;
+}
+
+.lanaya-world-leaflet__marker--offline .lanaya-world-leaflet__pulse {
+  border-color: rgba(160, 172, 194, 0.28);
+}
+
+.lanaya-world-leaflet__label {
+  position: absolute;
+  left: 20px;
+  top: -16px;
+  max-width: 160px;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(7, 10, 16, 0.78);
+  color: #eef5ff;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(10px);
+}
+
+.lanaya-world-leaflet__tooltip {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(7, 10, 16, 0.9);
+  color: #eef5ff;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+}
+
+.lanaya-world-leaflet__tooltip::before {
+  border-top-color: rgba(7, 10, 16, 0.9);
+}
+
+.lanaya-world-leaflet__tooltip strong,
+.lanaya-world-leaflet__tooltip span {
+  display: block;
+}
+
+.lanaya-world-leaflet__tooltip span {
+  margin-top: 3px;
+  color: #9eabc0;
+  font-size: 12px;
+}
+
+.lanaya-world-map__scan {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(58vw, 560px);
+  height: min(58vw, 560px);
+  border-radius: 50%;
+  border: 1px solid rgba(87, 230, 192, 0.18);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  box-shadow: inset 0 0 0 1px rgba(87, 230, 192, 0.08);
+}
+
+.lanaya-world-map__scan::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(87, 230, 192, 0.72), rgba(87, 230, 192, 0));
+  transform-origin: left center;
+  animation: lanayaMapRadarSweep 4200ms linear infinite;
+}
+
 .lanaya-world-map__svg {
   width: 100%;
   height: 100%;
@@ -8282,8 +8446,19 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   justify-content: center;
 }
 
-.menu__main--mobile .lanaya-world-map__svg {
+.menu__main--mobile .lanaya-world-map__viewport,
+.menu__main--mobile .lanaya-world-map__viewport .leaflet-container {
   min-height: 300px;
+}
+
+.menu__main--mobile .lanaya-world-leaflet__label {
+  max-width: 116px;
+  font-size: 10px;
+}
+
+.menu__main--mobile .lanaya-world-map__scan {
+  width: 280px;
+  height: 280px;
 }
 
 .menu__main--mobile .lanaya-world-map__labels text,
