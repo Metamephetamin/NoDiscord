@@ -114,10 +114,12 @@ export default function useMenuMobileNavigation({
           ? "Поиск и добавление друзей"
           : friendsPageSection === "conversations"
             ? "Групповые чаты"
+            : friendsPageSection === "where"
+              ? "Карта мира Lanaya"
             : `${friends.length} контактов`,
-        badge: friendsPageSection === "add" ? incomingFriendRequestCount : totalFriendsAttentionCount,
+        badge: friendsPageSection === "add" ? incomingFriendRequestCount : friendsPageSection === "where" ? 0 : totalFriendsAttentionCount,
         canGoBack: false,
-        actionLabel: friendsPageSection === "add" ? "Друзья" : friendsPageSection === "conversations" ? "Добавить" : "Беседы",
+        actionLabel: friendsPageSection === "add" ? "Друзья" : friendsPageSection === "conversations" ? "Где все ?" : friendsPageSection === "where" ? "Добавить" : "Беседы",
         actionBadge: friendsPageSection === "add" ? 0 : incomingFriendRequestCount,
         onAction: () => {
           setActiveDirectFriendId("");
@@ -128,6 +130,9 @@ export default function useMenuMobileNavigation({
             }
             if (previousSection === "friends") {
               return "conversations";
+            }
+            if (previousSection === "conversations") {
+              return "where";
             }
             return "add";
           });

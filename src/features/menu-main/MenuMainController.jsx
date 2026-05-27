@@ -7021,6 +7021,14 @@ export default function MenuMain({
         };
       }
 
+      if (friendsPageSection === "where") {
+        return {
+          title: "Где все ?",
+          iconType: "glyph",
+          iconGlyph: "⌖",
+        };
+      }
+
       return {
         title: "Друзья",
         iconType: "image",

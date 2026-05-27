@@ -53,6 +53,9 @@ const getWorkspaceStateStorageKey = (user) => {
   return userId ? `nd:workspace-state:${getLocalApiStorageScope()}:${userId}` : "";
 };
 
+const FRIENDS_PAGE_SECTIONS = new Set(["friends", "conversations", "where"]);
+const normalizeFriendsPageSection = (value) => FRIENDS_PAGE_SECTIONS.has(value) ? value : "friends";
+
 export const readWorkspaceStateFromStorageKey = (storageKey) => {
   if (!storageKey || typeof window === "undefined") {
     return {};
@@ -69,7 +72,7 @@ export const readWorkspaceStateFromStorageKey = (storageKey) => {
       workspaceMode: parsedValue.workspaceMode === "friends" ? "friends" : parsedValue.workspaceMode === "servers" ? "servers" : "",
       activeDirectFriendId: String(parsedValue.activeDirectFriendId || ""),
       activeConversationId: String(parsedValue.activeConversationId || ""),
-      friendsPageSection: parsedValue.friendsPageSection === "conversations" ? parsedValue.friendsPageSection : "friends",
+      friendsPageSection: normalizeFriendsPageSection(parsedValue.friendsPageSection),
       activeServerId: String(parsedValue.activeServerId || ""),
       currentTextChannelId: String(parsedValue.currentTextChannelId || ""),
       desktopServerPane: parsedValue.desktopServerPane === "voice" ? "voice" : "text",
@@ -93,7 +96,7 @@ export const writeWorkspaceStateToStorageKey = (storageKey, state) => {
       workspaceMode: state?.workspaceMode === "friends" ? "friends" : "servers",
       activeDirectFriendId: String(state?.activeDirectFriendId || ""),
       activeConversationId: String(state?.activeConversationId || ""),
-      friendsPageSection: state?.friendsPageSection === "conversations" ? state.friendsPageSection : "friends",
+      friendsPageSection: normalizeFriendsPageSection(state?.friendsPageSection),
       activeServerId: String(state?.activeServerId || ""),
       currentTextChannelId: String(state?.currentTextChannelId || ""),
       desktopServerPane: state?.desktopServerPane === "voice" ? "voice" : "text",
