@@ -2734,3 +2734,29 @@
     max-width: none;
   }
 }
+
+@media (min-width: 641px) and (max-height: 900px) {
+  .auth-page--login {
+    gap: clamp(24px, 4vh, 46px);
+    padding:
+      calc(clamp(32px, 4vh, 48px) + env(safe-area-inset-top, 0px)) 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .auth-page--login .auth-card,
+  .auth-page--login .auth-card.auth-card--login {
+    transform: translateY(clamp(8px, 2vh, 24px));
+  }
+}
+
+@media (min-width: 641px) and (max-height: 720px) {
+  .auth-page--login {
+    gap: clamp(16px, 3vh, 28px);
+    padding:
+      calc(20px + env(safe-area-inset-top, 0px)) 24px calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .auth-page--login .auth-card,
+  .auth-page--login .auth-card.auth-card--login {
+    transform: translateY(0);
+  }
+}

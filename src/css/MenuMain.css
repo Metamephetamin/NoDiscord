@@ -10477,7 +10477,7 @@ html[data-ui-density="compact"] .settings-popup--shell {
   background: linear-gradient(180deg, rgba(24, 25, 31, 0.88), rgba(18, 19, 24, 0.9));
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
   overflow-y: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(84, 89, 108, 0.92) rgba(18, 20, 28, 0.98);
@@ -10846,7 +10846,7 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   box-sizing: border-box;
   padding: 4px 24px 28px;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(84, 89, 108, 0.92) rgba(18, 20, 28, 0.98);
@@ -14594,7 +14594,7 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   z-index: 2410;
   color: #f8fafc;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   animation: uiModalInCentered 0.2s ease-out;
@@ -14886,6 +14886,7 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
+  scroll-behavior: auto;
   background: linear-gradient(180deg, rgba(14, 16, 23, 0.72), rgba(14, 16, 23, 0));
   width: 100%;
   min-width: 0;
