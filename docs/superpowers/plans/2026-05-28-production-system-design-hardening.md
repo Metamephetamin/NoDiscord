@@ -64,7 +64,7 @@
 - Create: `BackNoDiscord/BackNoDiscord/Services/UserLocationPrivacyService.cs`
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Services/UserLocationPrivacyServiceTests.cs`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Test cases:
 - Default privacy allows sharing to accepted friends.
@@ -80,7 +80,7 @@ dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --confi
 
 Expected before implementation: tests fail because `UserLocationPrivacyService` does not exist.
 
-- [ ] **Step 2: Add user columns**
+- [x] **Step 2: Add user columns**
 
 Add nullable/backwards-compatible columns:
 - `location_sharing_enabled boolean NOT NULL DEFAULT true`
@@ -89,7 +89,7 @@ Add nullable/backwards-compatible columns:
 
 Add matching properties to `User` and `OnModelCreating`.
 
-- [ ] **Step 3: Add compatibility initializer**
+- [x] **Step 3: Add compatibility initializer**
 
 Add these exact `ALTER TABLE users ADD COLUMN IF NOT EXISTS` statements in `DatabaseSchemaInitializer`:
 
@@ -105,7 +105,7 @@ Add a check constraint only if it can be added idempotently without breaking old
 CHECK (location_visibility IN ('friends', 'none'))
 ```
 
-- [ ] **Step 4: Implement service**
+- [x] **Step 4: Implement service**
 
 Service API:
 
@@ -121,11 +121,11 @@ public sealed class UserLocationPrivacyService
 
 Default retention: 24 hours through `Location:RetentionHours`, clamped to 1-168 hours.
 
-- [ ] **Step 5: Verify tests pass**
+- [x] **Step 5: Verify tests pass**
 
 Run the filtered test command again. Expected: all new tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/DbContext.cs BackNoDiscord/BackNoDiscord/Infrastructure/DatabaseSchemaInitializer.cs BackNoDiscord/BackNoDiscord/Services/UserLocationPrivacyService.cs BackNoDiscord/BackNoDiscord.Tests/Services/UserLocationPrivacyServiceTests.cs
@@ -140,7 +140,7 @@ git commit -m "feat: add location privacy model"
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Controllers/FriendsControllerTests.cs`
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Services/UserLocationPrivacyServiceTests.cs`
 
-- [ ] **Step 1: Write failing controller tests**
+- [x] **Step 1: Write failing controller tests**
 
 Test cases:
 - Friend payload includes non-expired coordinates when sharing is enabled.
@@ -155,11 +155,11 @@ dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --confi
 
 Expected before implementation: disabled/expired location still leaks.
 
-- [ ] **Step 2: Inject `UserLocationPrivacyService`**
+- [x] **Step 2: Inject `UserLocationPrivacyService`**
 
 Register service in `Program.cs` as scoped. Use it in `ChatHub.UpdateLocation` before writing coordinates.
 
-- [ ] **Step 3: Store expiry on update**
+- [x] **Step 3: Store expiry on update**
 
 `UpdateLocation` must set:
 - `last_location_latitude`
@@ -167,11 +167,11 @@ Register service in `Program.cs` as scoped. Use it in `ChatHub.UpdateLocation` b
 - `last_location_updated_at`
 - `last_location_expires_at`
 
-- [ ] **Step 4: Filter friend payloads**
+- [x] **Step 4: Filter friend payloads**
 
 In `FriendsController`, only return `latitude`, `longitude`, `locationLabel`, and `locationUpdatedAt` when `IsLocationVisible(friend, DateTimeOffset.UtcNow)` is true.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -179,7 +179,7 @@ Run:
 dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --filter "FriendsControllerTests|UserLocationPrivacyServiceTests"
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/ChatHub.cs BackNoDiscord/BackNoDiscord/Controllers/FriendsController.cs BackNoDiscord/BackNoDiscord/Program.cs BackNoDiscord/BackNoDiscord.Tests/Controllers/FriendsControllerTests.cs BackNoDiscord/BackNoDiscord.Tests/Services/UserLocationPrivacyServiceTests.cs
@@ -197,7 +197,7 @@ git commit -m "fix: enforce location privacy"
 - Test: `scripts/location-ui-smoke.mjs`
 - Test: `scripts/__tests__/location-privacy-source.test.mjs`
 
-- [ ] **Step 1: Write failing frontend source test**
+- [x] **Step 1: Write failing frontend source test**
 
 Create a node test asserting:
 - `MenuMainController.jsx` does not call `watchPosition` directly after the hook is introduced.
@@ -212,7 +212,7 @@ node --test scripts/__tests__/location-privacy-source.test.mjs
 
 Expected before implementation: test fails because the hook does not exist.
 
-- [ ] **Step 2: Add backend preference endpoint**
+- [x] **Step 2: Add backend preference endpoint**
 
 Endpoints:
 - `GET /api/user/location-sharing`
@@ -229,7 +229,7 @@ Payload:
 }
 ```
 
-- [ ] **Step 3: Move auto-location into hook**
+- [x] **Step 3: Move auto-location into hook**
 
 Create `useLocationSharingPreference(user, startChatConnection)`:
 - fetch preference after login;
@@ -237,18 +237,18 @@ Create `useLocationSharingPreference(user, startChatConnection)`:
 - call `UpdateLocation` with throttling;
 - stop watcher when disabled/logout.
 
-- [ ] **Step 4: Add UI toggle**
+- [x] **Step 4: Add UI toggle**
 
 In settings:
 - toggle "Показывать меня на карте";
 - button "Стереть мою последнюю локацию";
 - short note that only accepted friends see the location.
 
-- [ ] **Step 5: Update map empty/status states**
+- [x] **Step 5: Update map empty/status states**
 
 `FriendsWorkspace` should show a clear status when self location is disabled, without breaking friends' visible markers.
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 Run:
 
@@ -260,7 +260,7 @@ npm run build:frontend
 dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/Controllers/UserController.cs src/components/MenuSettingsPanels.jsx src/hooks/useLocationSharingPreference.js src/features/menu-main/MenuMainController.jsx src/components/FriendsWorkspace.jsx scripts/location-ui-smoke.mjs scripts/__tests__/location-privacy-source.test.mjs
@@ -283,7 +283,7 @@ git commit -m "feat: add location sharing controls"
 - Create: `BackNoDiscord/BackNoDiscord/Migrations/AppDbContextModelSnapshot.cs`
 - Test: `scripts/__tests__/migration-policy.test.mjs`
 
-- [ ] **Step 1: Write failing migration policy test**
+- [x] **Step 1: Write failing migration policy test**
 
 Assertions:
 - migrations directory exists;
@@ -297,11 +297,11 @@ Run:
 node --test scripts/__tests__/migration-policy.test.mjs
 ```
 
-- [ ] **Step 2: Add design-time factory**
+- [x] **Step 2: Add design-time factory**
 
 Factory reads `ConnectionStrings__DefaultConnection` or uses a harmless local placeholder for migration generation only.
 
-- [ ] **Step 3: Generate baseline migration**
+- [x] **Step 3: Generate baseline migration**
 
 Use:
 
@@ -317,14 +317,14 @@ dotnet tool install dotnet-ef --version 8.*
 dotnet tool run dotnet-ef migrations add BaselineProductionSchema --project BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --startup-project BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj
 ```
 
-- [ ] **Step 4: Document production migration policy**
+- [x] **Step 4: Document production migration policy**
 
 Create `docs/release/database-migrations.md`:
 - migrations are reviewed in PR;
 - production migration command is run during deploy only after backup;
 - rollback path is documented for additive migrations.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -333,7 +333,7 @@ node --test scripts/__tests__/migration-policy.test.mjs
 dotnet build BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/Infrastructure/AppDbContextDesignTimeFactory.cs BackNoDiscord/BackNoDiscord/Migrations docs/release/database-migrations.md scripts/__tests__/migration-policy.test.mjs
