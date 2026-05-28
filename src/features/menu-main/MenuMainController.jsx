@@ -200,6 +200,7 @@ import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatenc
 const SHOW_DIRECT_CALL_IN_TITLEBAR = false;
 const MAX_CHAT_BACKGROUND_BYTES = 1.5 * 1024 * 1024;
 const CHAT_BACKGROUND_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const AUTO_LOCATION_UPDATE_MIN_INTERVAL_MS = 1800;
 const groupSettingsNavItems = (items) => items.reduce((sections, item) => {
   if (!sections[item.section]) {
     sections[item.section] = [];
@@ -463,6 +464,7 @@ export default function MenuMain({
   const location = useLocation();
   const [servers, setServers] = useState(() => readStoredServers(user));
   const latestServersRef = useRef(servers);
+  const autoLocationLastSentAtRef = useRef(0);
   const pendingServerSyncFingerprintsRef = useRef(new Map());
   const [activeServerId, setActiveServerId] = useState(
     () => readWorkspaceState(user).activeServerId || localStorage.getItem(getActiveServerStorageKey(user)) || readStoredServers(user)[0]?.id || ""
@@ -578,6 +580,45 @@ export default function MenuMain({
     activeDirectFriendId,
     friendsPageSection,
   });
+
+  useEffect(() => {
+    if (!user?.id || typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      return undefined;
+    }
+
+    const sendLocationUpdate = (position) => {
+      const latitude = Number(position?.coords?.latitude);
+      const longitude = Number(position?.coords?.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - autoLocationLastSentAtRef.current < AUTO_LOCATION_UPDATE_MIN_INTERVAL_MS) {
+        return;
+      }
+
+      autoLocationLastSentAtRef.current = now;
+      startChatConnection()
+        .then((connection) => connection?.invoke?.("UpdateLocation", latitude, longitude))
+        .catch(() => {});
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      sendLocationUpdate,
+      () => {},
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 12000,
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [user?.id]);
+
   const [settingsTab, setSettingsTab] = useState("account");
   const [channelSettingsState, setChannelSettingsState] = useState(null);
   const [autoInputSensitivity, setAutoInputSensitivity] = useState(true);

@@ -428,6 +428,90 @@ jobs:
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "chmod +x '$BACKEND_PATH/install-punctuation-env.sh' && bash -lc 'setsid env BACKEND_PATH=\"'$BACKEND_PATH'\" BACKEND_OWNER=\"'$BACKEND_OWNER'\" bash \"'$BACKEND_PATH'/install-punctuation-env.sh\" > \"'$BACKEND_PATH'/punctuation-install.log\" 2>&1 < /dev/null & disown || true'"
           echo "Speech punctuation dependency install started in background"
 
+      - name: Enable free single-server scaling layer
+        if: steps.validate.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+          BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
+          BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
+          TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+
+          rsync -az --checksum -e "ssh $SSH_OPTS" scripts/db-backup.sh "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/db-backup.sh"
+          rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-db-backup.service "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-db-backup.service"
+          rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-db-backup.timer "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-db-backup.timer"
+          rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-backend@.service "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-backend@.service"
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/redis'"
+          rsync -az --checksum -e "ssh $SSH_OPTS" infra/redis/docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/redis/docker-compose.yml"
+
+          ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 10m bash -lc '
+            set -e
+            BACKEND_PATH='$BACKEND_PATH'
+            BACKEND_OWNER='$BACKEND_OWNER'
+            TEMP_ROOT='$TEMP_ROOT'
+            SCRIPT_DIR=/opt/nodiscord/.deploy/scripts
+            REDIS_DIR=/opt/nodiscord/.deploy/redis
+            run_root() {
+              if \"\$@\"; then
+                return 0
+              fi
+              if command -v sudo >/dev/null 2>&1; then
+                sudo -n \"\$@\"
+                return \$?
+              fi
+              return 1
+            }
+
+            mkdir -p \"\$SCRIPT_DIR\" \"\$REDIS_DIR\" /opt/nodiscord/.deploy/backups/postgres
+            cp \"\$TEMP_ROOT/db-backup.sh\" \"\$SCRIPT_DIR/db-backup.sh\"
+            chmod 750 \"\$SCRIPT_DIR/db-backup.sh\"
+            cp \"\$TEMP_ROOT/redis/docker-compose.yml\" \"\$REDIS_DIR/docker-compose.yml\"
+
+            run_root cp \"\$TEMP_ROOT/nodiscord-db-backup.service\" /etc/systemd/system/nodiscord-db-backup.service
+            run_root cp \"\$TEMP_ROOT/nodiscord-db-backup.timer\" /etc/systemd/system/nodiscord-db-backup.timer
+            run_root cp \"\$TEMP_ROOT/nodiscord-backend@.service\" /etc/systemd/system/nodiscord-backend@.service
+            run_root systemctl daemon-reload
+            run_root systemctl enable --now nodiscord-db-backup.timer
+
+            redis_ready=0
+            if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+              docker compose -f \"\$REDIS_DIR/docker-compose.yml\" up -d
+              redis_ready=1
+            elif command -v redis-server >/dev/null 2>&1; then
+              run_root systemctl enable --now redis-server || run_root systemctl enable --now redis || true
+              redis_ready=1
+            elif command -v apt-get >/dev/null 2>&1; then
+              run_root apt-get update
+              run_root apt-get install -y redis-server
+              run_root systemctl enable --now redis-server || run_root systemctl enable --now redis || true
+              redis_ready=1
+            else
+              echo \"Redis was not enabled because Docker Compose, redis-server, and apt-get are unavailable.\" >&2
+            fi
+
+            if [ \"\$redis_ready\" = \"1\" ]; then
+              sed -i.bak -E \"/^(Redis__ConnectionString|Redis:ConnectionString|Redis__ChannelPrefix|Redis:ChannelPrefix)=/d\" \"\$BACKEND_PATH/.env\"
+              {
+                printf \"Redis__ConnectionString=127.0.0.1:6379\\n\"
+                printf \"Redis__ChannelPrefix=lanaya-signalr\\n\"
+              } >> \"\$BACKEND_PATH/.env\"
+              echo \"Redis SignalR backplane enabled through 127.0.0.1:6379\"
+            fi
+
+            chown -R \"\$BACKEND_OWNER\" \"\$SCRIPT_DIR\" /opt/nodiscord/.deploy/backups/postgres \"\$REDIS_DIR\" || true
+            chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
+            chmod 600 \"\$BACKEND_PATH/.env\"
+            echo \"Free single-server scaling layer installed\"
+          '"
+
       - name: Ensure production domain on server
         if: steps.validate.outputs.ready == 'true'
         shell: bash
@@ -441,7 +525,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          NGINX_SOURCE="./infra/nginx/lanaya.space.conf"
+          NGINX_SOURCE="./infra/nginx/lanaya.space.load-balanced.conf"
           NGINX_BOOTSTRAP_SOURCE="./infra/nginx/lanaya.space.bootstrap.conf"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=NoDiscord PostgreSQL backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nodiscord
+Group=nodiscord
+WorkingDirectory=/opt/nodiscord/.deploy/backend
+EnvironmentFile=-/opt/nodiscord/.deploy/backend/.env
+Environment=DB_BACKUP_DIR=/opt/nodiscord/.deploy/backups/postgres
+Environment=DB_BACKUP_RETENTION_DAYS=14
+ExecStart=/opt/nodiscord/.deploy/scripts/db-backup.sh

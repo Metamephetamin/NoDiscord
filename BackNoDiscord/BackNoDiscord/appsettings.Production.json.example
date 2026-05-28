@@ -56,6 +56,10 @@
   "Storage": {
     "Root": "/opt/nodiscord/.deploy/storage"
   },
+  "Redis": {
+    "ConnectionString": "",
+    "ChannelPrefix": "lanaya-signalr"
+  },
   "ClientUpdates": {
     "LatestVersion": "1.0.1",
     "MinimumVersion": "1.0.0",

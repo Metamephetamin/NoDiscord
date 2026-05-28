@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using StackExchange.Redis;
 using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -304,12 +305,26 @@ builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationServic
 builder.Services.AddSingleton<ITextTranslationService, TextTranslationService>();
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
-builder.Services.AddSignalR(options =>
+var signalRBuilder = builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 4 * 1024 * 1024;
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
 })
 .AddMessagePackProtocol();
+
+var redisSignalRConnectionString = builder.Configuration["Redis:ConnectionString"];
+if (!string.IsNullOrWhiteSpace(redisSignalRConnectionString))
+{
+    var redisChannelPrefix = builder.Configuration["Redis:ChannelPrefix"];
+    signalRBuilder.AddStackExchangeRedis(redisSignalRConnectionString, options =>
+    {
+        var channelPrefix = string.IsNullOrWhiteSpace(redisChannelPrefix)
+            ? "lanaya-signalr"
+            : redisChannelPrefix.Trim();
+        options.Configuration.ChannelPrefix = RedisChannel.Literal(channelPrefix);
+    });
+}
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

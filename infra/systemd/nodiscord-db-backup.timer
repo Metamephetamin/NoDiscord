@@ -1,0 +1,11 @@
+[Unit]
+Description=Run NoDiscord PostgreSQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=20m
+Unit=nodiscord-db-backup.service
+
+[Install]
+WantedBy=timers.target
