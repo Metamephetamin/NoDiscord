@@ -1,4 +1,5 @@
 using BackNoDiscord.Security;
+using BackNoDiscord.Realtime;
 using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -176,7 +177,7 @@ public class ChatHub : Hub
             .Distinct()
             .Select(item => item.ToString());
 
-        await Clients.Users(recipientIds).SendAsync("FriendLocationUpdated", new
+        await Clients.Users(recipientIds).SendAsync(RealtimeEvents.FriendLocationUpdated, new
         {
             userId = currentUserId,
             latitude,
@@ -1480,7 +1481,7 @@ public class ChatHub : Hub
             .Distinct()
             .Select(item => item.ToString());
 
-        await Clients.Users(recipientIds).SendAsync("FriendPresenceUpdated", new
+        await Clients.Users(recipientIds).SendAsync(RealtimeEvents.FriendPresenceUpdated, new
         {
             userId,
             is_online = isOnline,

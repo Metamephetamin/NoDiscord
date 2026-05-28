@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import chatConnection from "../SignalR/ChatConnect";
+import { REALTIME_EVENTS } from "../realtime/realtimeEvents";
 import {
   authFetch,
   getApiErrorMessage,
@@ -750,7 +751,7 @@ export default function useFriendsWorkspaceState({
     chatConnection.on("FriendRequestsUpdated", handleFriendRequestsUpdated);
     chatConnection.on("ConversationsUpdated", handleConversationsUpdated);
     chatConnection.on("ReceiveMessage", handleConversationMessage);
-    chatConnection.on("FriendPresenceUpdated", handleFriendPresenceUpdated);
+    chatConnection.on(REALTIME_EVENTS.friendPresenceUpdated, handleFriendPresenceUpdated);
     window.addEventListener("focus", handleWindowFocus);
 
     const intervalId = window.setInterval(() => {
@@ -768,7 +769,7 @@ export default function useFriendsWorkspaceState({
       chatConnection.off("FriendRequestsUpdated", handleFriendRequestsUpdated);
       chatConnection.off("ConversationsUpdated", handleConversationsUpdated);
       chatConnection.off("ReceiveMessage", handleConversationMessage);
-      chatConnection.off("FriendPresenceUpdated", handleFriendPresenceUpdated);
+      chatConnection.off(REALTIME_EVENTS.friendPresenceUpdated, handleFriendPresenceUpdated);
       window.removeEventListener("focus", handleWindowFocus);
       window.clearInterval(intervalId);
     };

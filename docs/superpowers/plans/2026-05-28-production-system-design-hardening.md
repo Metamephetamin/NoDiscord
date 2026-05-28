@@ -547,14 +547,14 @@ git commit -m "chore: add storage backup timer"
 - Modify: `src/components/FriendsWorkspace.jsx`
 - Test: `scripts/realtime-smoke.mjs`
 
-- [ ] **Step 1: Extend realtime smoke test**
+- [x] **Step 1: Extend realtime smoke test**
 
 Assert:
 - `FriendLocationUpdated` is imported from constants on frontend;
 - backend has `RealtimeEvents.FriendLocationUpdated`;
 - no new location event raw strings exist outside constants.
 
-- [ ] **Step 2: Add constants**
+- [x] **Step 2: Add constants**
 
 Backend:
 
@@ -575,11 +575,11 @@ export const REALTIME_EVENTS = Object.freeze({
 });
 ```
 
-- [ ] **Step 3: Replace location and presence events first**
+- [x] **Step 3: Replace location and presence events first**
 
 Do not refactor every event in one commit. Start with location and presence.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -589,7 +589,7 @@ npm run lint:ci
 dotnet build BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/Realtime/RealtimeEvents.cs src/realtime/realtimeEvents.js BackNoDiscord/BackNoDiscord/ChatHub.cs src/components/FriendsWorkspace.jsx scripts/realtime-smoke.mjs

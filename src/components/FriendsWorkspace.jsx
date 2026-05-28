@@ -6,6 +6,7 @@ import { DirectCallOverlayView } from "./MenuMainOverlays";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import chatConnection from "../SignalR/ChatConnect";
+import { REALTIME_EVENTS } from "../realtime/realtimeEvents";
 import {
   LOCATION_SHARING_PREFERENCE_EVENT,
   SELF_LOCATION_UPDATED_EVENT,
@@ -915,9 +916,9 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
       });
     };
 
-    chatConnection.on("FriendLocationUpdated", handleFriendLocationUpdated);
+    chatConnection.on(REALTIME_EVENTS.friendLocationUpdated, handleFriendLocationUpdated);
     return () => {
-      chatConnection.off("FriendLocationUpdated", handleFriendLocationUpdated);
+      chatConnection.off(REALTIME_EVENTS.friendLocationUpdated, handleFriendLocationUpdated);
     };
   }, [currentUserId]);
 
