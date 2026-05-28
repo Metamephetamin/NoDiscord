@@ -272,6 +272,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<ProductionMetrics>();
 builder.Services.AddScoped<ProductionHealthService>();
+builder.Services.AddSingleton<ISystemdTimerStatus, SystemdTimerStatus>();
 builder.Services.AddSingleton<IClientUpdateService, ClientUpdateService>();
 builder.Services.AddSingleton<CryptoService>();
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();

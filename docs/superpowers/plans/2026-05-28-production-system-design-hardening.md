@@ -659,7 +659,7 @@ git commit -m "fix: resync friends after realtime reconnect"
 - Modify: `BackNoDiscord/BackNoDiscord/Controllers/HealthController.cs`
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Observability/ProductionHealthServiceTests.cs`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Check output contains:
 - `database`
@@ -668,7 +668,7 @@ Check output contains:
 - `configuration`
 - `backupTimer`
 
-- [ ] **Step 2: Implement checks**
+- [x] **Step 2: Implement checks**
 
 Redis:
 - if `Redis__ConnectionString` empty: `disabled`;
@@ -683,7 +683,7 @@ Backup timer:
 - on Linux, check `systemctl is-enabled nodiscord-db-backup.timer` through a small abstraction so tests can fake it;
 - outside Linux: report `unknown`.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -691,7 +691,7 @@ Run:
 dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --filter ProductionHealthServiceTests
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/Observability/ProductionHealthService.cs BackNoDiscord/BackNoDiscord/Controllers/HealthController.cs BackNoDiscord/BackNoDiscord.Tests/Observability/ProductionHealthServiceTests.cs
