@@ -384,6 +384,12 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS last_location_updated_at timestamptz NULL;
             ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS last_location_expires_at timestamptz NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS location_sharing_enabled boolean NOT NULL DEFAULT true;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS location_visibility text NOT NULL DEFAULT 'friends';
+            ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS terms_accepted_at timestamptz NULL;
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS terms_version text NULL;
