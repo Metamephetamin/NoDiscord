@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import AnimatedAvatar from "./AnimatedAvatar";
@@ -727,6 +727,31 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
     typeof navigator !== "undefined" && "geolocation" in navigator ? "" : "геолокация недоступна"
   ));
   const currentUserId = String(user?.id || user?.userId || user?.email || "self").trim() || "self";
+  const updateSelfLocation = useCallback((position) => {
+    const latitude = position.coords.latitude;
+    const longitude = position.coords.longitude;
+
+    setLocationStatus("");
+    setLiveSelfLocation({
+      id: currentUserId,
+      name: getDisplayName(user),
+      avatar: user?.avatar || user?.avatarUrl || "",
+      locationLabel: "Моё местоположение",
+      latitude,
+      longitude,
+      kind: "self",
+    });
+
+    const now = Date.now();
+    if (now - lastLocationSentAtRef.current > 1800) {
+      lastLocationSentAtRef.current = now;
+      startChatConnection()
+        .then((connection) => connection?.invoke?.("UpdateLocation", latitude, longitude))
+        .catch(() => {});
+    }
+
+    return { latitude, longitude };
+  }, [currentUserId, getDisplayName, user]);
   const visibleUsers = useMemo(() => {
     const usersById = new Map(users.map((item) => [String(item.id || ""), item]));
 
@@ -850,24 +875,7 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
-        setLocationStatus("");
-        setLiveSelfLocation({
-          id: currentUserId,
-          name: getDisplayName(user),
-          avatar: user?.avatar || user?.avatarUrl || "",
-          locationLabel: "Моё местоположение",
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          kind: "self",
-        });
-
-        const now = Date.now();
-        if (now - lastLocationSentAtRef.current > 1800) {
-          lastLocationSentAtRef.current = now;
-          startChatConnection()
-            .then((connection) => connection?.invoke?.("UpdateLocation", position.coords.latitude, position.coords.longitude))
-            .catch(() => {});
-        }
+        updateSelfLocation(position);
       },
       () => {
         setLocationStatus("геолокация выключена");
@@ -882,18 +890,43 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [currentUserId, getDisplayName, user]);
+  }, [currentUserId, getDisplayName, updateSelfLocation, user]);
 
   const centerOnSelf = () => {
     const map = mapInstanceRef.current;
     const selfMarker = visibleUsers.find((item) => item.kind === "self") || visibleUsers.find((item) => String(item.id || "") === currentUserId);
-    if (!map || !selfMarker) {
+    if (!map) {
       return;
     }
 
-    map.setView([selfMarker.latitude, selfMarker.longitude], Math.max(map.getZoom(), 13), {
-      animate: true,
-    });
+    if (selfMarker) {
+      map.setView([selfMarker.latitude, selfMarker.longitude], Math.max(map.getZoom(), 13), {
+        animate: true,
+      });
+      return;
+    }
+
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      setLocationStatus("геолокация недоступна");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = updateSelfLocation(position);
+        map.setView([nextLocation.latitude, nextLocation.longitude], Math.max(map.getZoom(), 13), {
+          animate: true,
+        });
+      },
+      () => {
+        setLocationStatus("геолокация выключена");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 12000,
+      }
+    );
   };
 
   useEffect(() => {
@@ -969,38 +1002,16 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
             type="button"
             className="lanaya-world-map__locate"
             onClick={centerOnSelf}
-            disabled={!visibleUsers.some((item) => item.kind === "self" || String(item.id || "") === currentUserId)}
+            aria-label="Показать моё местоположение"
+            title="Моё место"
           >
-            Моё место
+            <span aria-hidden="true" />
           </button>
 
           <div className="lanaya-world-map__legend">
             <span><i className="lanaya-world-map__legend-dot lanaya-world-map__legend-dot--self" /> Местоположение</span>
             {locationStatus ? <span>{locationStatus}</span> : null}
           </div>
-        </div>
-
-        <div className="lanaya-world__panel">
-          <div className="lanaya-world__panel-header">
-            <strong>Пользователи Lanaya</strong>
-            <span>{visibleUsers.length ? "координаты получены" : "нет открытых координат"}</span>
-          </div>
-          {visibleUsers.length ? (
-            <div className="lanaya-world__user-list">
-              {visibleUsers.map((mapUser) => (
-                <div key={mapUser.id} className="lanaya-world__user-row">
-                  <AnimatedAvatar className="lanaya-world__avatar" src={mapUser.avatar || ""} alt={mapUser.name} loading="lazy" decoding="async" />
-                  <span>
-                    <strong>{mapUser.name}</strong>
-                    <em>{mapUser.locationLabel || `${mapUser.latitude.toFixed(2)}, ${mapUser.longitude.toFixed(2)}`}</em>
-                  </span>
-                  <i className={`lanaya-world__status lanaya-world__status--${mapUser.kind}`} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="lanaya-world__empty">Пока никто не делится геопозицией.</div>
-          )}
         </div>
       </section>
     </div>
