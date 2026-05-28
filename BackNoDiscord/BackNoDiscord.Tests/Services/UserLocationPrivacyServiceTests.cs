@@ -64,6 +64,47 @@ public sealed class UserLocationPrivacyServiceTests
         Assert.Null(updatedUser.last_location_expires_at);
     }
 
+    [Fact]
+    public async Task UpdatePreferenceAsync_DisablingSharingClearsLocation()
+    {
+        await using var context = CreateContext();
+        var user = CreateUser(id: 42);
+        user.last_location_latitude = 55.7558;
+        user.last_location_longitude = 37.6173;
+        user.last_location_updated_at = DateTimeOffset.UtcNow;
+        user.last_location_expires_at = DateTimeOffset.UtcNow.AddHours(1);
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var service = new UserLocationPrivacyService(context, CreateConfiguration());
+
+        var preference = await service.UpdatePreferenceAsync(42, enabled: false, visibility: "none", CancellationToken.None);
+
+        var updatedUser = await context.Users.SingleAsync(item => item.id == 42);
+        Assert.NotNull(preference);
+        Assert.False(preference.Enabled);
+        Assert.Equal("none", preference.Visibility);
+        Assert.Null(updatedUser.last_location_latitude);
+        Assert.Null(updatedUser.last_location_longitude);
+        Assert.Null(updatedUser.last_location_updated_at);
+        Assert.Null(updatedUser.last_location_expires_at);
+    }
+
+    [Fact]
+    public async Task GetPreferenceAsync_ReturnsStoredSharingStateAndConfiguredRetention()
+    {
+        await using var context = CreateContext();
+        context.Users.Add(CreateUser(id: 42, sharingEnabled: true, visibility: "friends"));
+        await context.SaveChangesAsync();
+        var service = new UserLocationPrivacyService(context, CreateConfiguration("36"));
+
+        var preference = await service.GetPreferenceAsync(42, CancellationToken.None);
+
+        Assert.NotNull(preference);
+        Assert.True(preference.Enabled);
+        Assert.Equal("friends", preference.Visibility);
+        Assert.Equal(36, preference.RetentionHours);
+    }
+
     [Theory]
     [InlineData("0", 1)]
     [InlineData("24", 24)]

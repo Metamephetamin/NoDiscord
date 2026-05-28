@@ -8,6 +8,7 @@ public sealed class UserLocationPrivacyService
     private const int MinRetentionHours = 1;
     private const int MaxRetentionHours = 168;
     private const string FriendsVisibility = "friends";
+    private const string NoneVisibility = "none";
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
@@ -35,14 +36,57 @@ public sealed class UserLocationPrivacyService
             && string.Equals(locationPreference.location_visibility, FriendsVisibility, StringComparison.OrdinalIgnoreCase);
     }
 
+    public async Task<UserLocationSharingPreference?> GetPreferenceAsync(int userId, CancellationToken cancellationToken)
+    {
+        var preference = await _context.Users
+            .AsNoTracking()
+            .Where(user => user.id == userId)
+            .Select(user => new
+            {
+                user.location_sharing_enabled,
+                user.location_visibility
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return preference is null
+            ? null
+            : new UserLocationSharingPreference(
+                preference.location_sharing_enabled,
+                NormalizeVisibility(preference.location_visibility, preference.location_sharing_enabled),
+                GetRetentionHours());
+    }
+
+    public async Task<UserLocationSharingPreference?> UpdatePreferenceAsync(
+        int userId,
+        bool enabled,
+        string? visibility,
+        CancellationToken cancellationToken)
+    {
+        var user = await _context.Users.SingleOrDefaultAsync(item => item.id == userId, cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        user.location_sharing_enabled = enabled;
+        user.location_visibility = NormalizeVisibility(visibility, enabled);
+
+        if (!enabled)
+        {
+            user.last_location_latitude = null;
+            user.last_location_longitude = null;
+            user.last_location_updated_at = null;
+            user.last_location_expires_at = null;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return new UserLocationSharingPreference(user.location_sharing_enabled, user.location_visibility, GetRetentionHours());
+    }
+
     public Task<DateTimeOffset> GetLocationExpiryAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var retentionHours = Math.Clamp(
-            _configuration.GetValue("Location:RetentionHours", DefaultRetentionHours),
-            MinRetentionHours,
-            MaxRetentionHours);
-
-        return Task.FromResult(now.AddHours(retentionHours));
+        return Task.FromResult(now.AddHours(GetRetentionHours()));
     }
 
     public async Task ClearLocationAsync(int userId, CancellationToken cancellationToken)
@@ -74,4 +118,24 @@ public sealed class UserLocationPrivacyService
 
         return user.last_location_expires_at is null || user.last_location_expires_at > now;
     }
+
+    private int GetRetentionHours() =>
+        Math.Clamp(
+            _configuration.GetValue("Location:RetentionHours", DefaultRetentionHours),
+            MinRetentionHours,
+            MaxRetentionHours);
+
+    private static string NormalizeVisibility(string? visibility, bool enabled)
+    {
+        if (!enabled)
+        {
+            return NoneVisibility;
+        }
+
+        return string.Equals(visibility, FriendsVisibility, StringComparison.OrdinalIgnoreCase)
+            ? FriendsVisibility
+            : FriendsVisibility;
+    }
 }
+
+public sealed record UserLocationSharingPreference(bool Enabled, string Visibility, int RetentionHours);

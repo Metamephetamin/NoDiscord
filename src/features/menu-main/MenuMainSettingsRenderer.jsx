@@ -39,6 +39,7 @@ export function MenuMainSettingsContent({
   profileCustomization,
   handleProfileCustomizationChange,
   emailChangeState,
+  locationSharing,
   isTotpEnabled,
   totpSetup,
   maxProfileNicknameLength,
@@ -189,6 +190,9 @@ export function MenuMainSettingsContent({
           profileStatus={profileStatus}
           maxNicknameLength={maxProfileNicknameLength}
           emailChangeState={emailChangeState}
+          locationSharing={locationSharing}
+          onToggleLocationSharing={(enabled) => locationSharing?.setEnabled?.(enabled)}
+          onClearLocationSharing={() => locationSharing?.clearLocation?.()}
           isTotpEnabled={isTotpEnabled}
           totpSetup={totpSetup}
           onTotpCodeChange={updateTotpCode}

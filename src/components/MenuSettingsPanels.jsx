@@ -402,6 +402,7 @@ export const AccountSettings = ({
   profileStatus,
   maxNicknameLength,
   emailChangeState,
+  locationSharing,
   isTotpEnabled,
   totpSetup,
   onTotpCodeChange,
@@ -411,6 +412,8 @@ export const AccountSettings = ({
   onSaveProfile,
   onUpdateProfileDraft,
   onUpdateEmailChangeDraft,
+  onToggleLocationSharing,
+  onClearLocationSharing,
   onStartEmailChange,
   onConfirmEmailChange,
   onStartTotpSetup,
@@ -427,6 +430,8 @@ export const AccountSettings = ({
   const normalizedAccountName = String(accountName || "").trim();
   const normalizedNickname = String(nickname || "").trim();
   const headerDisplayName = normalizedNickname || normalizedAccountName || displayName;
+  const isLocationSharingEnabled = Boolean(locationSharing?.enabled);
+  const isLocationSharingBusy = Boolean(locationSharing?.isLoading || locationSharing?.isSaving);
 
   return (
     <div className="settings-shell__content settings-shell__content--account">
@@ -584,6 +589,32 @@ export const AccountSettings = ({
           {profileStatus ? <div className="profile-settings-form__status">{profileStatus}</div> : null}
           {emailChangeState?.status ? <div className="profile-settings-form__status">{emailChangeState.status}</div> : null}
         </section>
+      </section>
+
+      <section className="account-settings-section">
+        <h3>Геопозиция</h3>
+        <div className="voice-toggle-row">
+          <div>
+            <strong>Показывать меня на карте</strong>
+            <span>Твоё местоположение видно только принятым друзьям Lanaya.</span>
+          </div>
+          <VoiceSwitch
+            active={isLocationSharingEnabled}
+            onClick={() => onToggleLocationSharing?.(!isLocationSharingEnabled)}
+            label="Показывать меня на карте"
+          />
+        </div>
+        <div className="account-settings-row-editor__actions">
+          <span>{locationSharing?.status || "Последняя геопозиция хранится ограниченное время и обновляется автоматически."}</span>
+          <button
+            type="button"
+            className="settings-inline-button"
+            onClick={onClearLocationSharing}
+            disabled={isLocationSharingBusy}
+          >
+            Стереть мою последнюю локацию
+          </button>
+        </div>
       </section>
 
       <section className="account-settings-section">

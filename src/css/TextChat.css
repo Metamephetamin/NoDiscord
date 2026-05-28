@@ -1403,7 +1403,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .message-location-card__footer {
   position: absolute;
   right: 10px;
-  bottom: 10px;
+  bottom: 7px;
   z-index: 3;
   display: inline-flex;
   align-items: center;

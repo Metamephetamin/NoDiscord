@@ -5,7 +5,13 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
 import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
-import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
+import chatConnection from "../SignalR/ChatConnect";
+import {
+  LOCATION_SHARING_PREFERENCE_EVENT,
+  SELF_LOCATION_UPDATED_EVENT,
+  readStoredLocationSharingPreference,
+  readStoredSelfLocation,
+} from "../hooks/useLocationSharingPreference";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
 import { formatIntegrationActivityStatus } from "../utils/integrations";
@@ -720,35 +726,49 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
   const mapInstanceRef = useRef(null);
   const markerLayerRef = useRef(null);
   const didInitialMapFitRef = useRef(false);
-  const lastLocationSentAtRef = useRef(0);
-  const [liveSelfLocation, setLiveSelfLocation] = useState(null);
+  const currentUserId = String(user?.id || user?.userId || user?.email || "self").trim() || "self";
+  const [liveSelfLocation, setLiveSelfLocation] = useState(() => {
+    const initialLocationSharingPreference = readStoredLocationSharingPreference();
+    const storedSelfLocation = readStoredSelfLocation();
+    const latitude = Number(storedSelfLocation?.latitude);
+    const longitude = Number(storedSelfLocation?.longitude);
+    if (!initialLocationSharingPreference.enabled || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    return {
+      id: currentUserId,
+      name: String(storedSelfLocation?.name || getDisplayName(user) || "Вы").trim() || "Вы",
+      avatar: user?.avatar || user?.avatarUrl || "",
+      locationLabel: String(storedSelfLocation?.locationLabel || "Моё местоположение"),
+      latitude,
+      longitude,
+      kind: "self",
+    };
+  });
   const [realtimeLocations, setRealtimeLocations] = useState(() => new Map());
+  const [locationSharingPreference, setLocationSharingPreference] = useState(() => readStoredLocationSharingPreference());
   const [locationStatus, setLocationStatus] = useState(() => (
     typeof navigator !== "undefined" && "geolocation" in navigator ? "" : "геолокация недоступна"
   ));
-  const currentUserId = String(user?.id || user?.userId || user?.email || "self").trim() || "self";
-  const updateSelfLocation = useCallback((position) => {
-    const latitude = position.coords.latitude;
-    const longitude = position.coords.longitude;
+  const updateSelfLocation = useCallback((source) => {
+    const coordinates = source?.coords || source || {};
+    const latitude = Number(coordinates.latitude);
+    const longitude = Number(coordinates.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
 
     setLocationStatus("");
     setLiveSelfLocation({
       id: currentUserId,
-      name: getDisplayName(user),
+      name: String(source?.name || getDisplayName(user) || "Вы").trim() || "Вы",
       avatar: user?.avatar || user?.avatarUrl || "",
-      locationLabel: "Моё местоположение",
+      locationLabel: String(source?.locationLabel || "Моё местоположение"),
       latitude,
       longitude,
       kind: "self",
     });
-
-    const now = Date.now();
-    if (now - lastLocationSentAtRef.current > 1800) {
-      lastLocationSentAtRef.current = now;
-      startChatConnection()
-        .then((connection) => connection?.invoke?.("UpdateLocation", latitude, longitude))
-        .catch(() => {});
-    }
 
     return { latitude, longitude };
   }, [currentUserId, getDisplayName, user]);
@@ -777,6 +797,39 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
     });
   }, [currentUserId, liveSelfLocation, realtimeLocations, users]);
   const onlineCount = visibleUsers.filter((item) => item.kind === "self" || item.kind === "online").length;
+
+  useEffect(() => {
+    const handlePreferenceUpdated = (event) => {
+      const nextPreference = {
+        enabled: Boolean(event?.detail?.enabled),
+        visibility: String(event?.detail?.visibility || "friends"),
+        retentionHours: Number(event?.detail?.retentionHours || 24),
+      };
+
+      setLocationSharingPreference(nextPreference);
+      if (!nextPreference.enabled) {
+        setLiveSelfLocation(null);
+        setLocationStatus("геолокация выключена в настройках");
+      } else if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+        setLocationStatus("");
+      }
+    };
+
+    const handleSelfLocationUpdated = (event) => {
+      if (!locationSharingPreference.enabled) {
+        return;
+      }
+
+      updateSelfLocation(event?.detail);
+    };
+
+    window.addEventListener(LOCATION_SHARING_PREFERENCE_EVENT, handlePreferenceUpdated);
+    window.addEventListener(SELF_LOCATION_UPDATED_EVENT, handleSelfLocationUpdated);
+    return () => {
+      window.removeEventListener(LOCATION_SHARING_PREFERENCE_EVENT, handlePreferenceUpdated);
+      window.removeEventListener(SELF_LOCATION_UPDATED_EVENT, handleSelfLocationUpdated);
+    };
+  }, [locationSharingPreference.enabled, updateSelfLocation]);
 
   useEffect(() => {
     if (!mapElementRef.current || mapInstanceRef.current) {
@@ -868,30 +921,6 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
     };
   }, [currentUserId]);
 
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
-      return undefined;
-    }
-
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        updateSelfLocation(position);
-      },
-      () => {
-        setLocationStatus("геолокация выключена");
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 12000,
-      }
-    );
-
-    return () => {
-      navigator.geolocation.clearWatch(watchId);
-    };
-  }, [currentUserId, getDisplayName, updateSelfLocation, user]);
-
   const centerOnSelf = () => {
     const map = mapInstanceRef.current;
     const selfMarker = visibleUsers.find((item) => item.kind === "self") || visibleUsers.find((item) => String(item.id || "") === currentUserId);
@@ -906,6 +935,11 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
       return;
     }
 
+    if (!locationSharingPreference.enabled) {
+      setLocationStatus("геолокация выключена в настройках");
+      return;
+    }
+
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       setLocationStatus("геолокация недоступна");
       return;
@@ -914,6 +948,10 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const nextLocation = updateSelfLocation(position);
+        if (!nextLocation) {
+          return;
+        }
+
         map.setView([nextLocation.latitude, nextLocation.longitude], Math.max(map.getZoom(), 13), {
           animate: true,
         });

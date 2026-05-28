@@ -57,6 +57,12 @@ public class CreateUserReportRequest
     public string? Reason { get; set; }
 }
 
+public class UpdateLocationSharingRequest
+{
+    public bool Enabled { get; set; }
+    public string? Visibility { get; set; }
+}
+
 [ApiController]
 [Route("api/user")]
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
@@ -74,19 +80,67 @@ public class UserController : ControllerBase
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly IEmailVerificationSender _emailVerificationSender;
     private readonly CryptoService _crypto;
+    private readonly UserLocationPrivacyService _locationPrivacy;
 
     public UserController(
         AppDbContext dbContext,
         IHubContext<ChatHub> chatHubContext,
         UploadStoragePaths uploadStoragePaths,
         IEmailVerificationSender emailVerificationSender,
-        CryptoService crypto)
+        CryptoService crypto,
+        UserLocationPrivacyService locationPrivacy)
     {
         _dbContext = dbContext;
         _chatHubContext = chatHubContext;
         _uploadStoragePaths = uploadStoragePaths;
         _emailVerificationSender = emailVerificationSender;
         _crypto = crypto;
+        _locationPrivacy = locationPrivacy;
+    }
+
+    [HttpGet("location-sharing")]
+    public async Task<IActionResult> GetLocationSharing(CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var preference = await _locationPrivacy.GetPreferenceAsync(currentUserId, cancellationToken);
+        return preference is null ? Unauthorized() : Ok(preference);
+    }
+
+    [HttpPut("location-sharing")]
+    public async Task<IActionResult> UpdateLocationSharing([FromBody] UpdateLocationSharingRequest request, CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var preference = await _locationPrivacy.UpdatePreferenceAsync(
+            currentUserId,
+            request.Enabled,
+            request.Visibility,
+            cancellationToken);
+
+        return preference is null ? Unauthorized() : Ok(preference);
+    }
+
+    [HttpPost("location-sharing/clear")]
+    public async Task<IActionResult> ClearLocationSharing(CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        await _locationPrivacy.ClearLocationAsync(currentUserId, cancellationToken);
+        var preference = await _locationPrivacy.GetPreferenceAsync(currentUserId, cancellationToken);
+        return preference is null ? Unauthorized() : Ok(preference);
     }
 
     [HttpPost("{targetUserId:int}/report")]
