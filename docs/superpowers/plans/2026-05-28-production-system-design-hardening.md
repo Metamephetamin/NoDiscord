@@ -706,15 +706,15 @@ git commit -m "feat: expand production readiness checks"
 - Modify: `scripts/release-smoke.mjs`
 - Test: `npm run smoke:release:strict`
 
-- [ ] **Step 1: Add smoke check for readiness JSON keys**
+- [x] **Step 1: Add smoke check for readiness JSON keys**
 
 Strict smoke must assert readiness includes DB, Redis, storage, and backup fields.
 
-- [ ] **Step 2: Update docs**
+- [x] **Step 2: Update docs**
 
 Document what each readiness status means and what operator command to run.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -723,7 +723,7 @@ npm run smoke:release:strict
 npm run check:encoding
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/release/observability.md docs/release/monitoring.md scripts/release-smoke.mjs

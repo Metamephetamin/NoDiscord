@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
 const smokeScripts = [
+  "readiness-smoke.mjs",
   "auth-smoke.mjs",
   "chat-smoke.mjs",
   "upload-smoke.mjs",

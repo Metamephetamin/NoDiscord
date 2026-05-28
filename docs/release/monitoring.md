@@ -30,6 +30,14 @@ Never log or store these in application logs, audit metadata, browser console ou
 - LiveKit debug dumps remain behind `ND_VOICE_DEBUG=1`.
 - Electron renderer log forwarding must redact sensitive text before forwarding to the main process.
 
+## Readiness Triage
+
+- `database=unavailable`: check PostgreSQL service, connection string, and latest backup before restarting.
+- `redis=unavailable`: check local Redis or Docker Compose; SignalR may lose cross-instance delivery until fixed.
+- `storage=missing|unavailable`: check `Storage__Root`, disk space, ownership, and write permissions.
+- `configuration=missing`: inspect `/opt/nodiscord/.deploy/backend/.env` without printing secrets into shared logs.
+- `backupTimer=unavailable`: run `systemctl status nodiscord-db-backup.timer` and check `journalctl -u nodiscord-db-backup.service`.
+
 ## Release Check
 
 Run before production deploy:
