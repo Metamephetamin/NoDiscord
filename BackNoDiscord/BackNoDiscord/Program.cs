@@ -298,6 +298,7 @@ builder.Services.AddSingleton<AbuseAutoBanService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<FriendRequestService>();
 builder.Services.AddScoped<UserBlockService>();
+builder.Services.AddScoped<UserLocationPrivacyService>();
 builder.Services.AddHostedService<ChatFileCleanupHostedService>();
 builder.Services.AddHostedService<ChatFileMetadataRepairHostedService>();
 builder.Services.AddSingleton<UserPresenceService>();

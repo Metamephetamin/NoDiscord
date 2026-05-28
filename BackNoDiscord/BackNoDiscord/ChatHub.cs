@@ -61,6 +61,7 @@ public class ChatHub : Hub
     private readonly MessageDeduplicationService _messageDeduplication;
     private readonly ChatReadStateService _chatReadState;
     private readonly ModerationService _moderation;
+    private readonly UserLocationPrivacyService _locationPrivacy;
 
     public ChatHub(
         AppDbContext context,
@@ -76,7 +77,8 @@ public class ChatHub : Hub
         AbuseAutoBanService abuseAutoBan,
         MessageDeduplicationService messageDeduplication,
         ChatReadStateService chatReadState,
-        ModerationService moderation)
+        ModerationService moderation,
+        UserLocationPrivacyService locationPrivacy)
     {
         _context = context;
         _crypto = crypto;
@@ -92,6 +94,7 @@ public class ChatHub : Hub
         _messageDeduplication = messageDeduplication;
         _chatReadState = chatReadState;
         _moderation = moderation;
+        _locationPrivacy = locationPrivacy;
     }
 
     public override async Task OnConnectedAsync()
@@ -145,13 +148,20 @@ public class ChatHub : Hub
         }
 
         var now = DateTimeOffset.UtcNow;
+        if (!await _locationPrivacy.CanPublishLocationAsync(currentUserId, Context.ConnectionAborted))
+        {
+            return;
+        }
+
+        var expiresAt = await _locationPrivacy.GetLocationExpiryAsync(now, Context.ConnectionAborted);
 
         await _context.Users
             .Where(user => user.id == currentUserId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(user => user.last_location_latitude, latitude)
                 .SetProperty(user => user.last_location_longitude, longitude)
-                .SetProperty(user => user.last_location_updated_at, now),
+                .SetProperty(user => user.last_location_updated_at, now)
+                .SetProperty(user => user.last_location_expires_at, expiresAt),
                 Context.ConnectionAborted);
 
         var friendIds = await _context.Friendships

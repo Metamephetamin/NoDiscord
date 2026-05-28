@@ -22,6 +22,7 @@ public class FriendsController : ControllerBase
     private readonly UserPresenceService _userPresenceService;
     private readonly CryptoService _crypto;
     private readonly AbuseAutoBanService _abuseAutoBan;
+    private readonly UserLocationPrivacyService _locationPrivacy;
     private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
     private const int FriendSearchCandidateLimit = 200;
 
@@ -32,7 +33,8 @@ public class FriendsController : ControllerBase
         UserBlockService userBlockService,
         UserPresenceService userPresenceService,
         CryptoService crypto,
-        AbuseAutoBanService abuseAutoBan)
+        AbuseAutoBanService abuseAutoBan,
+        UserLocationPrivacyService locationPrivacy)
     {
         _context = context;
         _chatHubContext = chatHubContext;
@@ -41,6 +43,7 @@ public class FriendsController : ControllerBase
         _userPresenceService = userPresenceService;
         _crypto = crypto;
         _abuseAutoBan = abuseAutoBan;
+        _locationPrivacy = locationPrivacy;
     }
 
     [HttpGet]
@@ -799,6 +802,7 @@ public class FriendsController : ControllerBase
         var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
         UserIntegrationRecord? activity = null;
         activityByUserId?.TryGetValue(friend.id, out activity);
+        var canShowLocation = _locationPrivacy.IsLocationVisible(friend, DateTimeOffset.UtcNow);
         return new
         {
             id = friend.id,
@@ -814,10 +818,10 @@ public class FriendsController : ControllerBase
             is_online = isOnline,
             presence = isOnline ? "online" : "offline",
             last_seen_at = friend.last_seen_at,
-            latitude = friend.last_location_latitude,
-            longitude = friend.last_location_longitude,
-            locationLabel = friend.last_location_updated_at is null ? null : "Последняя локация",
-            locationUpdatedAt = friend.last_location_updated_at,
+            latitude = canShowLocation ? friend.last_location_latitude : null,
+            longitude = canShowLocation ? friend.last_location_longitude : null,
+            locationLabel = canShowLocation ? "Последняя локация" : null,
+            locationUpdatedAt = canShowLocation ? friend.last_location_updated_at : null,
             activity = isOnline ? BuildActivityPayload(activity) : null,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id),
             unreadCount = Math.Clamp(unreadCount, 0, 999),
