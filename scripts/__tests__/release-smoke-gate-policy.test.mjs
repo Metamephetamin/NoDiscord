@@ -38,3 +38,13 @@ test("pre-deploy release smoke is advisory and cannot block deployment fixes", (
     "pre-deploy smoke must not block publish/deploy when current production is broken",
   );
 });
+
+test("production health checks are pinned to lanaya.space", () => {
+  assert.match(deployWorkflow, /HEALTHCHECK="https:\/\/lanaya\.space"/);
+  assert.match(deployWorkflow, /HEALTHCHECK_URL/);
+  assert.match(deployWorkflow, /Unsupported production healthcheck URL/);
+  assert.match(deployWorkflow, /tendsec\.ru/);
+  assert.match(deployWorkflow, /\/api\/ping/);
+  assert.match(deployWorkflow, /\/chatHub\/negotiate\?negotiateVersion=1/);
+  assert.match(deployWorkflow, /\/voiceHub\/negotiate\?negotiateVersion=1/);
+});

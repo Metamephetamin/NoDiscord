@@ -742,18 +742,18 @@ git commit -m "docs: document production readiness signals"
 - Modify: `.github/workflows/deploy.yml`
 - Modify: `scripts/__tests__/release-smoke-gate-policy.test.mjs`
 
-- [ ] **Step 1: Write failing workflow test**
+- [x] **Step 1: Write failing workflow test**
 
 Assert:
 - production health URL is hardcoded to `https://lanaya.space` or validates against it;
 - deploy refuses `tendsec.ru` for production;
 - health checks include frontend, `/api/ping`, `/chatHub/negotiate`, `/voiceHub/negotiate`.
 
-- [ ] **Step 2: Add guard**
+- [x] **Step 2: Add guard**
 
 In workflow, fail early if `vars.HEALTHCHECK_URL` is set and is not `https://lanaya.space`.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -761,7 +761,7 @@ Run:
 node --test scripts/__tests__/release-smoke-gate-policy.test.mjs
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/deploy.yml scripts/__tests__/release-smoke-gate-policy.test.mjs

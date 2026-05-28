@@ -688,6 +688,10 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           HEALTHCHECK="https://lanaya.space"
+          if [ -n "${HEALTHCHECK_URL:-}" ] && [ "$HEALTHCHECK_URL" != "$HEALTHCHECK" ]; then
+            echo "Unsupported production healthcheck URL: $HEALTHCHECK_URL. tendsec.ru is not production; use https://lanaya.space." >&2
+            exit 1
+          fi
           API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
           CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
           VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"
