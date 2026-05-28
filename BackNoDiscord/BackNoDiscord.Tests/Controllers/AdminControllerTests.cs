@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BackNoDiscord.Tests.Controllers;
 
@@ -86,10 +87,15 @@ public sealed class AdminControllerTests : IDisposable
             })
             .Build();
         var accountBanService = new AccountBanService(_context, configuration);
+        var pushNotificationService = new PushNotificationService(
+            _context,
+            configuration,
+            NullLogger<PushNotificationService>.Instance);
         var controller = new AdminController(
             _context,
             accountBanService,
-            new AdminSecurityOverviewService(_context));
+            new AdminSecurityOverviewService(_context),
+            pushNotificationService);
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, currentUserId.ToString())

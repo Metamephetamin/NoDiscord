@@ -1104,6 +1104,7 @@ export const FriendsMain = ({
   onUpdateConversationMemberRole,
   onRemoveConversationMember,
   onLeaveConversation,
+  onReportConversationSpamAndLeave,
   onDeleteConversation,
   onClearConversationStatus,
   onStartDirectCall,
@@ -1661,6 +1662,23 @@ export const FriendsMain = ({
     }
   };
 
+  const handleReportConversationSpamAndLeave = async () => {
+    if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
+      return;
+    }
+
+    try {
+      await onReportConversationSpamAndLeave?.(
+        currentConversationTarget.conversationId || currentConversationTarget.id,
+        `Пользователь сообщил о спам-беседе: ${currentConversationTarget.title || "Без названия"}`
+      );
+      setShowConversationSettings(false);
+      resetConversationSettingsDraft();
+    } catch {
+      // handled in state
+    }
+  };
+
   const handleDeleteCurrentConversation = async () => {
     if (!currentConversationTarget?.conversationId && !currentConversationTarget?.id) {
       return;
@@ -1856,6 +1874,17 @@ export const FriendsMain = ({
                     title="Добавить участника"
                   >
                     <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">+</span>
+                  </button>
+                ) : null}
+
+                {currentConversationTarget ? (
+                  <button
+                    type="button"
+                    className="friends-direct-chat-topbar__spam"
+                    onClick={handleReportConversationSpamAndLeave}
+                    disabled={conversationActionLoading}
+                  >
+                    Сообщить о спаме и выйти
                   </button>
                 ) : null}
 
@@ -2648,6 +2677,16 @@ export const FriendsMain = ({
                   disabled={conversationActionLoading}
                 >
                   Покинуть
+                </button>
+              ) : null}
+              {canLeaveConversation ? (
+                <button
+                  type="button"
+                  className="friends-conversation-spam-button"
+                  onClick={handleReportConversationSpamAndLeave}
+                  disabled={conversationActionLoading}
+                >
+                  Сообщить о спаме и выйти
                 </button>
               ) : null}
               {canDeleteConversation ? (

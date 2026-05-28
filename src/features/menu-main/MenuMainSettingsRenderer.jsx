@@ -415,6 +415,7 @@ export function MenuMainSettingsContent({
 
 export function MenuMainAdminSecurityPage({
   user,
+  isTotpEnabled,
   currentUserId,
   activeServer,
   canManageReports,
@@ -423,6 +424,22 @@ export function MenuMainAdminSecurityPage({
     return (
       <div className="admin-security-page__empty">
         Нет доступа к странице безопасности.
+      </div>
+    );
+  }
+
+  if (!isTotpEnabled) {
+    return (
+      <div className="admin-security-page__content">
+        <section className="admin-security-page__hero">
+          <div>
+            <h1>Безопасность</h1>
+            <p>Включите двухфакторную защиту в настройках аккаунта, чтобы открыть админские инструменты.</p>
+          </div>
+        </section>
+        <div className="admin-security-page__empty">
+          Админка привязана к Google Authenticator: пока TOTP выключен, действия с пользователями и отчетами закрыты.
+        </div>
       </div>
     );
   }

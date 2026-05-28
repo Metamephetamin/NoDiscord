@@ -626,6 +626,81 @@ public sealed class ConversationsController : ControllerBase
         return Ok(new { status = "conversation_left" });
     }
 
+    [HttpPost("{conversationId:int}/report-spam-and-leave")]
+    public async Task<IActionResult> ReportSpamAndLeaveConversation([FromRoute] int conversationId, [FromBody] ConversationSpamReportRequest? request, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        var conversation = await _context.GroupConversations.FirstOrDefaultAsync(item => item.Id == conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return NotFound(new { message = "Беседа не найдена." });
+        }
+
+        var currentMember = await _context.GroupConversationMembers
+            .FirstOrDefaultAsync(item => item.ConversationId == conversationId && item.UserId == currentUserId && !item.IsBanned, cancellationToken);
+        if (currentMember is null)
+        {
+            return Forbid();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var recipientIds = await GetConversationRecipientIdsAsync(conversationId, includeBanned: false, cancellationToken);
+        var remainingMembers = await _context.GroupConversationMembers
+            .Where(item => item.ConversationId == conversationId && item.UserId != currentUserId && !item.IsBanned)
+            .ToListAsync(cancellationToken);
+
+        var ownerMember = remainingMembers.FirstOrDefault(item => item.UserId == conversation.OwnerUserId);
+        var addedByUserId = currentMember.AddedByUserId ?? conversation.OwnerUserId;
+        _context.ChatModerationReports.Add(new ChatModerationReportRecord
+        {
+            ServerId = $"conversation:{conversationId}",
+            ChannelId = ConversationChannels.BuildChatChannelId(conversationId),
+            MessageId = null,
+            ReporterUserId = currentUserId.ToString(),
+            TargetUserId = conversation.OwnerUserId.ToString(),
+            Reason = BuildConversationSpamReason(conversation, currentMember, ownerMember, request?.Reason),
+            Status = "open",
+            CreatedAt = now
+        });
+
+        if (NormalizeConversationRole(currentMember.Role) == "owner" && remainingMembers.Count > 0)
+        {
+            var nextOwner = remainingMembers
+                .OrderByDescending(item => GetConversationRolePriority(item.Role))
+                .ThenBy(item => item.JoinedAt)
+                .First();
+            nextOwner.Role = "owner";
+            conversation.OwnerUserId = nextOwner.UserId;
+        }
+
+        _context.GroupConversationMembers.Remove(currentMember);
+
+        if (remainingMembers.Count == 0)
+        {
+            _context.GroupConversations.Remove(conversation);
+            await _context.SaveChangesAsync(cancellationToken);
+            await BroadcastConversationsUpdatedAsync(recipientIds, cancellationToken);
+            return Ok(new { status = "conversation_reported_and_deleted" });
+        }
+
+        conversation.UpdatedAt = now;
+        await _context.SaveChangesAsync(cancellationToken);
+        await BroadcastConversationsUpdatedAsync(recipientIds, cancellationToken);
+
+        return Ok(new
+        {
+            status = "conversation_reported_and_left",
+            reportKind = "conversation_spam",
+            conversationId,
+            ownerUserId = conversation.OwnerUserId,
+            addedByUserId
+        });
+    }
+
     [HttpDelete("{conversationId:int}")]
     public async Task<IActionResult> DeleteConversation([FromRoute] int conversationId, CancellationToken cancellationToken)
     {
@@ -1262,6 +1337,28 @@ public sealed class ConversationsController : ControllerBase
         return UploadPolicies.TrimToLength(title, MaxConversationTitleLength).Trim();
     }
 
+    private static string BuildConversationSpamReason(
+        GroupConversationRecord conversation,
+        GroupConversationMemberRecord reporterMember,
+        GroupConversationMemberRecord? ownerMember,
+        string? rawReason)
+    {
+        var reason = UploadPolicies.TrimToLength(rawReason, 280).Trim();
+        var title = UploadPolicies.TrimToLength(conversation.Title, 120).Trim();
+        var ownerJoinedAt = ownerMember?.JoinedAt.ToString("O") ?? "";
+        return string.Join(" | ", new[]
+        {
+            "conversation_spam",
+            $"title:{title}",
+            $"conversation_id:{conversation.Id}",
+            $"owner_user_id:{conversation.OwnerUserId}",
+            $"added_by_user_id:{reporterMember.AddedByUserId?.ToString() ?? conversation.OwnerUserId.ToString()}",
+            $"reporter_joined_at:{reporterMember.JoinedAt:O}",
+            string.IsNullOrWhiteSpace(ownerJoinedAt) ? "" : $"owner_joined_at:{ownerJoinedAt}",
+            string.IsNullOrWhiteSpace(reason) ? "" : $"note:{reason}"
+        }.Where(item => !string.IsNullOrWhiteSpace(item)));
+    }
+
     private static string NormalizeConversationRole(string? role)
     {
         var normalizedRole = string.IsNullOrWhiteSpace(role) ? "member" : role.Trim().ToLowerInvariant();
@@ -1336,7 +1433,7 @@ public sealed class ConversationsController : ControllerBase
         public DateTimeOffset? LastSeenAt { get; set; }
     }
 
-    public sealed class UpdateConversationRequest
+public sealed class UpdateConversationRequest
     {
         public string? Title { get; set; }
         public string? AvatarUrl { get; set; }
@@ -1361,4 +1458,9 @@ public sealed class ConversationsController : ControllerBase
     {
         public int Minutes { get; set; } = 15;
     }
+}
+
+public sealed class ConversationSpamReportRequest
+{
+    public string? Reason { get; set; }
 }

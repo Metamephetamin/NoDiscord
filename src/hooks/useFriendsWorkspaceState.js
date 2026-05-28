@@ -405,6 +405,39 @@ export default function useFriendsWorkspaceState({
     }
   };
 
+  const handleReportConversationSpamAndLeave = async (conversationId, reason = "") => {
+    const normalizedConversationId = Number(conversationId);
+    if (normalizedConversationId <= 0) {
+      throw new Error("Не удалось определить беседу.");
+    }
+
+    try {
+      setConversationActionLoading(true);
+      setConversationsError("");
+      setConversationActionStatus("");
+
+      const response = await authFetch(`${apiBaseUrl}/conversations/${normalizedConversationId}/report-spam-and-leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: String(reason || "").trim() }),
+      });
+      const data = await parseApiResponse(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось отправить жалобу и выйти из беседы."));
+      }
+
+      setConversationActionStatus("Жалоба на спам отправлена, вы вышли из беседы.");
+      await loadConversations();
+      return data;
+    } catch (error) {
+      setConversationsError(error.message || "Не удалось отправить жалобу и выйти из беседы.");
+      throw error;
+    } finally {
+      setConversationActionLoading(false);
+    }
+  };
+
   const handleDeleteConversation = async (conversationId) => {
     const normalizedConversationId = Number(conversationId);
     if (normalizedConversationId <= 0) {
@@ -862,6 +895,7 @@ export default function useFriendsWorkspaceState({
     handleUpdateConversationMemberRole,
     handleRemoveConversationMember,
     handleLeaveConversation,
+    handleReportConversationSpamAndLeave,
     handleDeleteConversation,
   };
 }

@@ -16,15 +16,18 @@ public sealed class AdminController : ControllerBase
     private readonly AppDbContext _context;
     private readonly AccountBanService _accountBanService;
     private readonly AdminSecurityOverviewService _securityOverviewService;
+    private readonly PushNotificationService _pushNotificationService;
 
     public AdminController(
         AppDbContext context,
         AccountBanService accountBanService,
-        AdminSecurityOverviewService securityOverviewService)
+        AdminSecurityOverviewService securityOverviewService,
+        PushNotificationService pushNotificationService)
     {
         _context = context;
         _accountBanService = accountBanService;
         _securityOverviewService = securityOverviewService;
+        _pushNotificationService = pushNotificationService;
     }
 
     [HttpGet("users")]
@@ -85,6 +88,16 @@ public sealed class AdminController : ControllerBase
         }
 
         var result = await _accountBanService.BanUserAsync(currentUser.id, userId, request?.Reason, cancellationToken);
+        if (result == AccountBanResult.Success)
+        {
+            await SendAdminDecisionPushAsync(
+                userId,
+                "Аккаунт заблокирован",
+                BuildBanNotificationBody(request?.Reason),
+                "admin_ban",
+                cancellationToken);
+        }
+
         return result switch
         {
             AccountBanResult.Success => Ok(new { banned = true }),
@@ -104,9 +117,82 @@ public sealed class AdminController : ControllerBase
         }
 
         var result = await _accountBanService.UnbanUserAsync(userId, cancellationToken);
+        if (result == AccountBanResult.Success)
+        {
+            await SendAdminDecisionPushAsync(
+                userId,
+                "Блокировка снята",
+                "Администратор снял блокировку с вашего аккаунта.",
+                "admin_unban",
+                cancellationToken);
+        }
+
         return result == AccountBanResult.Success
             ? Ok(new { banned = false })
             : NotFound(new { message = "Пользователь не найден." });
+    }
+
+    [HttpPost("reports/chat/{reportId:int}/dismiss")]
+    public async Task<IActionResult> DismissChatReport([FromRoute] int reportId, [FromBody] AdminReportResolutionRequest? request, CancellationToken cancellationToken)
+    {
+        var currentUser = await RequireAdminAsync(cancellationToken);
+        if (currentUser == null)
+        {
+            return Forbid();
+        }
+
+        var report = await _context.ChatModerationReports.FirstOrDefaultAsync(item => item.Id == reportId, cancellationToken);
+        if (report == null)
+        {
+            return NotFound(new { message = "Жалоба не найдена." });
+        }
+
+        report.Status = "dismissed";
+        report.ReviewedAt = DateTimeOffset.UtcNow;
+        report.ReviewedByUserId = currentUser.id.ToString();
+        await _context.SaveChangesAsync(cancellationToken);
+
+        if (int.TryParse(report.ReporterUserId, out var reporterUserId))
+        {
+            await SendAdminDecisionPushAsync(
+                reporterUserId,
+                "Жалоба проверена",
+                NormalizeAdminMessage(request?.Message, "Мы проверили жалобу и не нашли нарушения."),
+                "admin_report_dismissed",
+                cancellationToken);
+        }
+
+        return Ok(new { dismissed = true });
+    }
+
+    [HttpPost("reports/user/{reportId:int}/dismiss")]
+    public async Task<IActionResult> DismissUserReport([FromRoute] int reportId, [FromBody] AdminReportResolutionRequest? request, CancellationToken cancellationToken)
+    {
+        var currentUser = await RequireAdminAsync(cancellationToken);
+        if (currentUser == null)
+        {
+            return Forbid();
+        }
+
+        var report = await _context.UserReports.FirstOrDefaultAsync(item => item.Id == reportId, cancellationToken);
+        if (report == null)
+        {
+            return NotFound(new { message = "Жалоба не найдена." });
+        }
+
+        report.Status = "dismissed";
+        report.ReviewedAt = DateTimeOffset.UtcNow;
+        report.ReviewedByUserId = currentUser.id;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await SendAdminDecisionPushAsync(
+            report.ReporterUserId,
+            "Жалоба проверена",
+            NormalizeAdminMessage(request?.Message, "Мы проверили жалобу и не нашли нарушения."),
+            "admin_report_dismissed",
+            cancellationToken);
+
+        return Ok(new { dismissed = true });
     }
 
     private async Task<User?> RequireAdminAsync(CancellationToken cancellationToken)
@@ -145,9 +231,53 @@ public sealed class AdminController : ControllerBase
         var fullName = $"{user.first_name} {user.last_name}".Trim();
         return string.IsNullOrWhiteSpace(fullName) ? user.email ?? $"User {user.id}" : fullName;
     }
+
+    private async Task SendAdminDecisionPushAsync(int userId, string title, string body, string type, CancellationToken cancellationToken)
+    {
+        if (userId <= 0)
+        {
+            return;
+        }
+
+        await _pushNotificationService.SendToUsersAsync(
+            [userId],
+            new PushNotificationPayload
+            {
+                Title = title,
+                Body = NormalizeAdminMessage(body, title),
+                Tag = $"{type}:{userId}",
+                Type = type,
+                Url = "/"
+            },
+            cancellationToken);
+    }
+
+    private static string BuildBanNotificationBody(string? reason)
+    {
+        var normalizedReason = NormalizeAdminMessage(reason, string.Empty);
+        return string.IsNullOrWhiteSpace(normalizedReason)
+            ? "Администратор заблокировал ваш аккаунт."
+            : $"Администратор заблокировал ваш аккаунт. Причина: {normalizedReason}";
+    }
+
+    private static string NormalizeAdminMessage(string? value, string fallback)
+    {
+        var normalized = Convert.ToString(value)?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = fallback.Trim();
+        }
+
+        return normalized.Length <= 220 ? normalized : normalized[..220];
+    }
 }
 
 public sealed class AdminBanRequest
 {
     public string? Reason { get; set; }
+}
+
+public sealed class AdminReportResolutionRequest
+{
+    public string? Message { get; set; }
 }

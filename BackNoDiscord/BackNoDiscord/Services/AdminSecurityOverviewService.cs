@@ -6,6 +6,7 @@ namespace BackNoDiscord.Services;
 public sealed class AdminSecurityOverviewService
 {
     private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
+    private const string ConversationSpamReasonKind = "conversation_spam";
     private const int RecentMessagesLimit = 40;
     private const int RecentFilesLimit = 40;
     private const int RecentReportsLimit = 40;
@@ -190,6 +191,7 @@ public sealed class AdminSecurityOverviewService
             .Take(RecentReportsLimit)
             .Select(report => new AdminSecurityReportDto(
                 report.Id,
+                GetReportKind(report.Reason),
                 report.ServerId,
                 report.ChannelId,
                 report.MessageId,
@@ -453,7 +455,7 @@ public sealed class AdminSecurityOverviewService
     {
         if (!string.IsNullOrWhiteSpace(message.EncryptedContent))
         {
-            return "зашифрованное сообщение";
+            return "Контент скрыт: сообщение зашифровано и доступно только участникам.";
         }
 
         var payload = TryDeserializePayload(message.Content);
@@ -512,6 +514,14 @@ public sealed class AdminSecurityOverviewService
         return markerIndex > serverPrefix.Length
             ? normalized[serverPrefix.Length..markerIndex]
             : string.Empty;
+    }
+
+    private static string GetReportKind(string? reason)
+    {
+        var normalized = (reason ?? string.Empty).Trim();
+        return normalized.StartsWith(ConversationSpamReasonKind, StringComparison.OrdinalIgnoreCase)
+            ? ConversationSpamReasonKind
+            : "message_report";
     }
 
     private static bool TryParseUserId(string? raw, out int userId)
@@ -617,6 +627,7 @@ public sealed record AdminSecurityFileDto(
 
 public sealed record AdminSecurityReportDto(
     int Id,
+    string ReportKind,
     string ServerId,
     string ChannelId,
     int? MessageId,

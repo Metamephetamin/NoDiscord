@@ -6423,6 +6423,30 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   cursor: pointer;
 }
 
+.friends-conversation-spam-button,
+.friends-direct-chat-topbar__spam {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 184, 77, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 184, 77, 0.1);
+  color: #ffd8a3;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.friends-conversation-spam-button:hover:not(:disabled),
+.friends-direct-chat-topbar__spam:hover:not(:disabled) {
+  background: rgba(255, 184, 77, 0.16);
+}
+
+.friends-conversation-spam-button:disabled,
+.friends-direct-chat-topbar__spam:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 @media (max-width: 900px) {
   .friends-hero__header {
     flex-direction: column;
@@ -20579,6 +20603,7 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   width: 100%;
   min-width: 0;
   min-height: 0;
+  overflow-x: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   color: var(--app-text);
@@ -20651,6 +20676,7 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 .admin-security-page__body {
   min-height: 0;
   overflow: auto;
+  overflow-x: hidden;
   padding: 24px clamp(16px, 4vw, 56px) 48px;
 }
 
@@ -20784,6 +20810,12 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 
 .settings-shell__content--admin {
   gap: 16px;
+  min-width: 0;
+}
+
+.settings-shell__content--admin,
+.settings-shell__content--admin * {
+  min-width: 0;
 }
 
 .admin-settings-card,
@@ -20798,6 +20830,102 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   display: grid;
   gap: 14px;
   padding: 16px;
+}
+
+.admin-security-overflow-safe {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.admin-security-workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-security-main-column,
+.admin-security-side-column {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.admin-security-section--risk {
+  min-height: 520px;
+}
+
+.admin-risk-event-list {
+  max-height: min(58vh, 720px);
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.admin-risk-event {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(139, 152, 178, 0.16);
+  border-radius: 12px;
+  background: rgba(7, 9, 14, 0.28);
+}
+
+.admin-risk-event__tone {
+  width: 8px;
+  border-radius: 999px;
+  background: rgba(139, 152, 178, 0.45);
+}
+
+.admin-risk-event--warning .admin-risk-event__tone {
+  background: rgba(255, 184, 77, 0.78);
+}
+
+.admin-risk-event--danger .admin-risk-event__tone {
+  background: rgba(255, 91, 110, 0.86);
+}
+
+.admin-risk-event__body {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-risk-event__body strong {
+  color: var(--app-text);
+}
+
+.admin-risk-event__body span,
+.admin-risk-event__body p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.admin-risk-event__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.admin-accounts-panel {
+  position: sticky;
+  top: 0;
+}
+
+.admin-users-window {
+  max-height: min(48vh, 560px);
+  min-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .admin-security-metrics {
@@ -20969,8 +21097,13 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   }
 
   .admin-security-columns,
+  .admin-security-workspace,
   .admin-security-suspect {
     grid-template-columns: 1fr;
+  }
+
+  .admin-accounts-panel {
+    position: static;
   }
 
   .admin-security-section__header {
@@ -21022,7 +21155,8 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 14px;
+  padding: 12px;
+  border-radius: 14px;
 }
 
 .admin-user-row--banned {

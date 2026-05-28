@@ -1170,6 +1170,74 @@ const getAdminOverviewArray = (overview, key) => (
   Array.isArray(overview?.[key]) ? overview[key] : []
 );
 
+const getAdminReportKindLabel = (report) => (
+  report?.reportKind === "conversation_spam" ? "Спам-беседа" : "Жалоба на сообщение"
+);
+
+const buildAdminRiskEvents = ({
+  alerts,
+  suspiciousUsers,
+  recentReports,
+  recentUserReports,
+  recentFiles,
+  recentMessages,
+}) => ([
+  ...alerts.map((alert) => ({
+    id: `alert-${alert.kind}-${alert.createdAt}`,
+    tone: alert.severity === "danger" ? "danger" : "warning",
+    title: alert.title || "Алерт",
+    meta: `${formatAdminDate(alert.createdAt)} · ${formatAdminNumber(alert.count)}`,
+    detail: alert.description || "Есть активность, которую стоит проверить.",
+  })),
+  ...suspiciousUsers.slice(0, 12).map((targetUser) => ({
+    id: `suspect-${targetUser.id}`,
+    tone: targetUser.suspicionScore >= 70 ? "danger" : "warning",
+    title: targetUser.displayName || targetUser.nickname || `User ${targetUser.id}`,
+    meta: `ID ${targetUser.id} · риск ${targetUser.suspicionScore || 0}`,
+    detail: (Array.isArray(targetUser.suspicionReasons) && targetUser.suspicionReasons.length)
+      ? targetUser.suspicionReasons.join(" · ")
+      : "Нестандартная активность без подробных сигналов.",
+  })),
+  ...recentReports.slice(0, 16).map((report) => ({
+    id: `chat-report-${report.id}`,
+    reportId: report.id,
+    reportSource: "chat",
+    status: report.status || "open",
+    canDismiss: (report.status || "open") === "open",
+    tone: report.reportKind === "conversation_spam" ? "danger" : "neutral",
+    title: getAdminReportKindLabel(report),
+    meta: `${report.status || "open"} · reporter ${report.reporterUserId || "?"} · target ${report.targetUserId || "?"}`,
+    detail: `${report.reason || "без причины"} · ${formatAdminDate(report.createdAt)} · ${report.channelId || "канал не указан"}`,
+  })),
+  ...recentUserReports.slice(0, 12).map((report) => ({
+    id: `user-report-${report.id}`,
+    reportId: report.id,
+    reportSource: "user",
+    status: report.status || "open",
+    canDismiss: (report.status || "open") === "open",
+    tone: "neutral",
+    title: `${report.reporterName || `User ${report.reporterUserId}`} → ${report.targetName || `User ${report.targetUserId}`}`,
+    meta: `${report.status || "open"} · ${formatAdminDate(report.createdAt)}`,
+    detail: report.reason || "без причины",
+  })),
+  ...recentFiles.slice(0, 10).map((file) => ({
+    id: `file-${file.id}`,
+    tone: "neutral",
+    title: file.displayFileName || "Файл",
+    meta: `User ${file.ownerUserId || "?"} · ${formatAdminBytes(file.size)} · ${file.contentType || "type unknown"}`,
+    detail: `${formatAdminDate(file.createdAt)} · ${file.channelId || "канал не указан"}`,
+  })),
+  ...recentMessages.slice(0, 8).map((message) => ({
+    id: `message-${message.id}`,
+    tone: "neutral",
+    title: message.username || `User ${message.authorUserId}`,
+    meta: `${formatAdminDate(message.timestamp)} · ${message.channelId || "канал не указан"}`,
+    detail: message.isEncrypted
+      ? "Контент скрыт: сообщение зашифровано. Смотри жалобы, метаданные и частоту действий."
+      : (message.preview || "без превью"),
+  })),
+]).slice(0, 80);
+
 export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
   const [query, setQuery] = useState("");
   const [reason, setReason] = useState("");
@@ -1180,12 +1248,21 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
   const [loading, setLoading] = useState(false);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [busyUserId, setBusyUserId] = useState("");
+  const [busyReportId, setBusyReportId] = useState("");
   const suspiciousUsers = useMemo(() => getAdminOverviewArray(overview, "suspiciousUsers"), [overview]);
   const recentMessages = useMemo(() => getAdminOverviewArray(overview, "recentMessages"), [overview]);
   const recentFiles = useMemo(() => getAdminOverviewArray(overview, "recentFiles"), [overview]);
   const recentReports = useMemo(() => getAdminOverviewArray(overview, "recentReports"), [overview]);
   const recentUserReports = useMemo(() => getAdminOverviewArray(overview, "recentUserReports"), [overview]);
   const alerts = useMemo(() => getAdminOverviewArray(overview, "alerts"), [overview]);
+  const riskEvents = useMemo(() => buildAdminRiskEvents({
+    alerts,
+    suspiciousUsers,
+    recentReports,
+    recentUserReports,
+    recentFiles,
+    recentMessages,
+  }), [alerts, suspiciousUsers, recentReports, recentUserReports, recentFiles, recentMessages]);
   const overviewMetrics = useMemo(() => ([
     { label: "Пользователи", value: overview?.totalUsers },
     { label: "В бане", value: overview?.bannedUsers },
@@ -1291,6 +1368,36 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
     }
   };
 
+  const dismissReport = async (event) => {
+    if (!event?.reportId || !event?.reportSource) {
+      return;
+    }
+
+    const busyKey = `${event.reportSource}:${event.reportId}`;
+    setBusyReportId(busyKey);
+    setOverviewStatus("");
+    try {
+      const response = await authFetch(`${API_BASE_URL}/admin/reports/${encodeURIComponent(event.reportSource)}/${encodeURIComponent(event.reportId)}/dismiss`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Мы проверили жалобу и не нашли нарушения. Спасибо, что сообщили.",
+        }),
+      });
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось отклонить жалобу."));
+      }
+
+      setOverviewStatus("Жалоба отклонена, пользователю отправлен push, если уведомления включены.");
+      void loadSecurityOverview();
+    } catch (error) {
+      setOverviewStatus(error?.message || "Не удалось отклонить жалобу.");
+    } finally {
+      setBusyReportId("");
+    }
+  };
+
   return (
     <div className="settings-shell__content settings-shell__content--admin">
       {showHeader ? (
@@ -1311,192 +1418,130 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
 
       {overviewStatus ? <div className="admin-settings-status">{overviewStatus}</div> : null}
 
-      <section className="admin-security-section">
-        <div className="admin-security-section__header">
-          <div>
-            <h3>Алерты</h3>
-            <p>Всплески сообщений, файлов и жалоб, которые требуют быстрой проверки.</p>
-          </div>
-        </div>
-        <div className="admin-security-list admin-security-list--compact">
-          {alerts.map((alert) => (
-            <article key={`${alert.kind}-${alert.createdAt}`} className={`admin-security-alert admin-security-alert--${alert.severity || "warning"}`}>
+      <section className="admin-security-workspace">
+        <div className="admin-security-main-column">
+          <section className="admin-security-section admin-security-section--risk">
+            <div className="admin-security-section__header">
               <div>
-                <strong>{alert.title || "Алерт"}</strong>
-                <span>{formatAdminDate(alert.createdAt)} · {formatAdminNumber(alert.count)}</span>
+                <h3>События риска</h3>
+                <p>Алерты, жалобы, подозрительные профили и файлы в одном списке для быстрой проверки.</p>
               </div>
-              <p>{alert.description || "Есть подозрительная активность."}</p>
-            </article>
-          ))}
-          {!overviewLoading && alerts.length === 0 ? <div className="admin-users-list__empty">Активных алертов нет.</div> : null}
+              <button type="button" className="settings-inline-button" disabled={overviewLoading} onClick={loadSecurityOverview}>
+                {overviewLoading ? "Обновляем..." : "Обновить"}
+              </button>
+            </div>
+            <div className="admin-security-list admin-risk-event-list">
+              {riskEvents.map((event) => (
+                <article key={event.id} className={`admin-risk-event admin-risk-event--${event.tone || "neutral"}`}>
+                  <span className="admin-risk-event__tone" aria-hidden="true" />
+                  <div className="admin-risk-event__body">
+                    <strong className="admin-security-overflow-safe">{event.title}</strong>
+                    <span className="admin-security-overflow-safe">{event.meta}</span>
+                    <p className="admin-security-overflow-safe">{event.detail}</p>
+                    {event.canDismiss ? (
+                      <div className="admin-risk-event__actions">
+                        <button
+                          type="button"
+                          className="settings-inline-button"
+                          disabled={busyReportId === `${event.reportSource}:${event.reportId}`}
+                          onClick={() => dismissReport(event)}
+                        >
+                          {busyReportId === `${event.reportSource}:${event.reportId}` ? "..." : "Отклонить и уведомить"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+              {!overviewLoading && riskEvents.length === 0 ? (
+                <div className="admin-users-list__empty">Странной активности пока нет.</div>
+              ) : null}
+            </div>
+          </section>
         </div>
-      </section>
 
-      <section className="admin-security-section">
-        <div className="admin-security-section__header">
-          <div>
-            <h3>Подозрительные профили</h3>
-            <p>Скоринг строится по массовым сообщениям, файлам, жалобам и совпадениям с бан-сигналами.</p>
-          </div>
-          <button type="button" className="settings-inline-button" disabled={overviewLoading} onClick={loadSecurityOverview}>
-            {overviewLoading ? "Обновляем..." : "Обновить"}
-          </button>
-        </div>
-        <div className="admin-security-list admin-security-list--compact">
-          {suspiciousUsers.map((targetUser) => (
-            <article key={targetUser.id} className="admin-security-suspect">
+        <aside className="admin-security-side-column">
+          <section className="admin-settings-card admin-accounts-panel">
+            <div className="admin-security-section__header">
               <div>
-                <strong>{targetUser.displayName || targetUser.nickname || `User ${targetUser.id}`}</strong>
-                <span>ID {targetUser.id} · score {targetUser.suspicionScore || 0}</span>
+                <h3>Аккаунты</h3>
+                <p>Поиск, бан и разбан без бесконечной прокрутки всей страницы.</p>
               </div>
-              <div className="admin-security-suspect__signals">
-                {(Array.isArray(targetUser.suspicionReasons) ? targetUser.suspicionReasons : []).map((signal) => (
-                  <span key={signal}>{signal}</span>
-                ))}
-              </div>
-            </article>
-          ))}
-          {!overviewLoading && suspiciousUsers.length === 0 ? <div className="admin-users-list__empty">Сильных подозрительных сигналов нет.</div> : null}
-        </div>
-      </section>
+            </div>
+            <form className="admin-settings-search" onSubmit={submitSearch}>
+              <label className="admin-settings-field">
+                <span>Поиск пользователя</span>
+                <input
+                  className="settings-input"
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="ID, ник или email"
+                />
+              </label>
+              <button type="submit" className="settings-inline-button" disabled={loading}>
+                {loading ? "Ищем..." : "Найти"}
+              </button>
+            </form>
 
-      <section className="admin-settings-card">
-        <form className="admin-settings-search" onSubmit={submitSearch}>
-          <label className="admin-settings-field">
-            <span>Поиск пользователя</span>
-            <input
-              className="settings-input"
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="ID, ник или email"
-            />
-          </label>
-          <button type="submit" className="settings-inline-button" disabled={loading}>
-            {loading ? "Ищем..." : "Найти"}
-          </button>
-        </form>
+            <label className="admin-settings-field admin-settings-field--reason">
+              <span>Причина бана</span>
+              <textarea
+                className="settings-input admin-settings-reason"
+                value={reason}
+                maxLength={500}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Будет видно только в админке и уведомлении о бане"
+              />
+            </label>
 
-        <label className="admin-settings-field admin-settings-field--reason">
-          <span>Причина бана</span>
-          <textarea
-            className="settings-input admin-settings-reason"
-            value={reason}
-            maxLength={500}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Необязательно, будет видно только в админке"
-          />
-        </label>
-      </section>
+            {status ? <div className="admin-settings-status">{status}</div> : null}
 
-      {status ? <div className="admin-settings-status">{status}</div> : null}
+            <div className="admin-users-window">
+              <section className="admin-users-list" aria-busy={loading}>
+                {users.map((targetUser) => {
+                  const userId = String(targetUser.id || "");
+                  const isSelf = String(currentUserId || "") === userId || targetUser.isSelf;
+                  const busy = busyUserId === userId;
 
-      <section className="admin-users-list" aria-busy={loading}>
-        {users.map((targetUser) => {
-          const userId = String(targetUser.id || "");
-          const isSelf = String(currentUserId || "") === userId || targetUser.isSelf;
-          const busy = busyUserId === userId;
-
-          return (
-            <article key={userId} className={`admin-user-row ${targetUser.isBanned ? "admin-user-row--banned" : ""}`}>
-              <AnimatedAvatar className="admin-user-row__avatar" src={targetUser.avatarUrl} alt={targetUser.displayName || targetUser.nickname || userId} />
-              <div className="admin-user-row__body">
-                <div className="admin-user-row__title">
-                  <strong>{targetUser.displayName || targetUser.nickname || `User ${userId}`}</strong>
-                  <span>ID {userId}</span>
-                  {targetUser.isAdmin ? <span className="admin-user-row__badge">admin</span> : null}
-                  {targetUser.isBanned ? <span className="admin-user-row__badge admin-user-row__badge--danger">ban</span> : null}
-                </div>
-                <div className="admin-user-row__meta">
-                  <span>{targetUser.email || "email не указан"}</span>
-                  <span>последний визит: {formatAdminDate(targetUser.lastSeenAt)}</span>
-                  {targetUser.isBanned ? <span>бан: {formatAdminDate(targetUser.bannedAt)}</span> : null}
-                </div>
-                {targetUser.isBanned && targetUser.banReason ? (
-                  <p className="admin-user-row__reason">{targetUser.banReason}</p>
-                ) : null}
-              </div>
-              <div className="admin-user-row__actions">
-                {targetUser.isBanned ? (
-                  <button type="button" className="settings-inline-button" disabled={busy} onClick={() => updateBanState(targetUser, false)}>
-                    {busy ? "Снимаем..." : "Разбанить"}
-                  </button>
-                ) : (
-                  <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={busy || isSelf} onClick={() => updateBanState(targetUser, true)}>
-                    {busy ? "Баним..." : "Забанить"}
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
-        {!loading && users.length === 0 ? <div className="admin-users-list__empty">Пользователи не найдены.</div> : null}
-      </section>
-
-      <section className="admin-security-columns">
-        <div className="admin-security-section">
-          <div className="admin-security-section__header">
-            <h3>Последние сообщения</h3>
-          </div>
-          <div className="admin-security-list">
-            {recentMessages.map((message) => (
-              <article key={message.id} className="admin-security-event">
-                <strong>{message.username || `User ${message.authorUserId}`}</strong>
-                <span>{formatAdminDate(message.timestamp)} · {message.channelId || "канал не указан"}</span>
-                <p>{message.isEncrypted ? "Зашифровано: " : ""}{message.preview || "без превью"}</p>
-              </article>
-            ))}
-            {!overviewLoading && recentMessages.length === 0 ? <div className="admin-users-list__empty">Сообщений пока нет.</div> : null}
-          </div>
-        </div>
-
-        <div className="admin-security-section">
-          <div className="admin-security-section__header">
-            <h3>Последние файлы</h3>
-          </div>
-          <div className="admin-security-list">
-            {recentFiles.map((file) => (
-              <article key={file.id} className="admin-security-event">
-                <strong>{file.displayFileName || "Файл"}</strong>
-                <span>User {file.ownerUserId || "?"} · {formatAdminBytes(file.size)} · {file.contentType || "type unknown"}</span>
-                <p>{formatAdminDate(file.createdAt)} · {file.channelId || "канал не указан"}</p>
-              </article>
-            ))}
-            {!overviewLoading && recentFiles.length === 0 ? <div className="admin-users-list__empty">Файлов пока нет.</div> : null}
-          </div>
-        </div>
-
-        <div className="admin-security-section admin-security-section--wide">
-          <div className="admin-security-section__header">
-            <h3>Жалобы на пользователей</h3>
-          </div>
-          <div className="admin-security-list">
-            {recentUserReports.map((report) => (
-              <article key={report.id} className="admin-security-event admin-security-event--report">
-                <strong>{report.reporterName || `User ${report.reporterUserId}`} → {report.targetName || `User ${report.targetUserId}`}</strong>
-                <span>{report.status || "open"} · {formatAdminDate(report.createdAt)}</span>
-                <p>{report.reason || "без причины"}</p>
-              </article>
-            ))}
-            {!overviewLoading && recentUserReports.length === 0 ? <div className="admin-users-list__empty">Жалоб на профили пока нет.</div> : null}
-          </div>
-        </div>
-
-        <div className="admin-security-section admin-security-section--wide">
-          <div className="admin-security-section__header">
-            <h3>Жалобы на сообщения</h3>
-          </div>
-          <div className="admin-security-list">
-            {recentReports.map((report) => (
-              <article key={report.id} className="admin-security-event">
-                <strong>Target {report.targetUserId || "?"}</strong>
-                <span>{report.status || "open"} · reporter {report.reporterUserId || "?"} · {formatAdminDate(report.createdAt)}</span>
-                <p>{report.reason || "без причины"}</p>
-              </article>
-            ))}
-            {!overviewLoading && recentReports.length === 0 ? <div className="admin-users-list__empty">Жалоб пока нет.</div> : null}
-          </div>
-        </div>
+                  return (
+                    <article key={userId} className={`admin-user-row ${targetUser.isBanned ? "admin-user-row--banned" : ""}`}>
+                      <AnimatedAvatar className="admin-user-row__avatar" src={targetUser.avatarUrl} alt={targetUser.displayName || targetUser.nickname || userId} />
+                      <div className="admin-user-row__body">
+                        <div className="admin-user-row__title">
+                          <strong className="admin-security-overflow-safe">{targetUser.displayName || targetUser.nickname || `User ${userId}`}</strong>
+                          <span>ID {userId}</span>
+                          {targetUser.isAdmin ? <span className="admin-user-row__badge">admin</span> : null}
+                          {targetUser.isBanned ? <span className="admin-user-row__badge admin-user-row__badge--danger">ban</span> : null}
+                        </div>
+                        <div className="admin-user-row__meta">
+                          <span className="admin-security-overflow-safe">{targetUser.email || "email не указан"}</span>
+                          <span>визит: {formatAdminDate(targetUser.lastSeenAt)}</span>
+                          {targetUser.isBanned ? <span>бан: {formatAdminDate(targetUser.bannedAt)}</span> : null}
+                        </div>
+                        {targetUser.isBanned && targetUser.banReason ? (
+                          <p className="admin-user-row__reason admin-security-overflow-safe">{targetUser.banReason}</p>
+                        ) : null}
+                      </div>
+                      <div className="admin-user-row__actions">
+                        {targetUser.isBanned ? (
+                          <button type="button" className="settings-inline-button" disabled={busy} onClick={() => updateBanState(targetUser, false)}>
+                            {busy ? "..." : "Разбанить"}
+                          </button>
+                        ) : (
+                          <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={busy || isSelf} onClick={() => updateBanState(targetUser, true)}>
+                            {busy ? "..." : "Бан"}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+                {!loading && users.length === 0 ? <div className="admin-users-list__empty">Пользователи не найдены.</div> : null}
+              </section>
+            </div>
+          </section>
+        </aside>
       </section>
     </div>
   );

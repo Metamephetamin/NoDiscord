@@ -572,6 +572,7 @@ export default function MenuMain({
     handleUpdateConversationMemberRole,
     handleRemoveConversationMember,
     handleLeaveConversation,
+    handleReportConversationSpamAndLeave,
     handleDeleteConversation,
   } = useFriendsWorkspaceState({
     user,
@@ -881,7 +882,7 @@ export default function MenuMain({
     requestTotpResetCode,
     resetTotp,
   } = useMenuMainTotpSettings({ user, setUser });
-  const canUseAdminSecurity = isCurrentUserAdmin && isTotpEnabled;
+  const canOpenAdminSecurity = isCurrentUserAdmin;
   const stableApplySelectedAudioDevicesToClient = useStableEvent(applySelectedAudioDevicesToClient);
   const stableApplyVoiceProcessingToClient = useStableEvent(applyVoiceProcessingToClient);
 
@@ -4418,7 +4419,7 @@ export default function MenuMain({
     }, 180);
   }, [cancelDeviceMenuClose]);
   const openAdminSecurityPageFromSettings = useCallback(() => {
-    if (!canUseAdminSecurity) {
+    if (!canOpenAdminSecurity) {
       return;
     }
 
@@ -4427,7 +4428,7 @@ export default function MenuMain({
     setShowServerMembersPanel(false);
     setShowMicMenu(false);
     setShowSoundMenu(false);
-  }, [canUseAdminSecurity]);
+  }, [canOpenAdminSecurity]);
   const openServerSettingsPanel = useCallback(() => {
     openSettingsPanel("server");
   }, [openSettingsPanel]);
@@ -5763,9 +5764,9 @@ export default function MenuMain({
   const mobileSettingsNavItems = useMemo(
     () => {
       const items = settingsNavItems.filter((item) => activeServer || (item.id !== "server" && item.id !== "roles" && item.id !== "moderation"));
-      return canUseAdminSecurity && adminSettingsItem ? [...items, adminSettingsItem] : items;
+      return canOpenAdminSecurity && adminSettingsItem ? [...items, adminSettingsItem] : items;
     },
-    [activeServer, adminSettingsItem, canUseAdminSecurity, settingsNavItems]
+    [activeServer, adminSettingsItem, canOpenAdminSecurity, settingsNavItems]
   );
   const activeSettingsTabMeta =
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
@@ -5977,6 +5978,7 @@ export default function MenuMain({
     <Suspense fallback={settingsContentFallback}>
       <MenuMainAdminSecurityPage
         user={user}
+        isTotpEnabled={isTotpEnabled}
         currentUserId={currentUserId}
         activeServer={activeServer}
         canManageReports={Boolean(canManageServer || canManageMessages)}
@@ -6776,6 +6778,14 @@ export default function MenuMain({
           }
           return result;
         }}
+        onReportConversationSpamAndLeave={async (conversationId, reason) => {
+          const result = await handleReportConversationSpamAndLeave(conversationId, reason);
+          if (String(activeConversationId || "") === String(conversationId || "")) {
+            resetActiveFriendWorkspaceSelection();
+            setFriendsPageSection("conversations");
+          }
+          return result;
+        }}
         onDeleteConversation={async (conversationId) => {
           const result = await handleDeleteConversation(conversationId);
           if (String(activeConversationId || "") === String(conversationId || "")) {
@@ -7255,7 +7265,7 @@ export default function MenuMain({
       openSettings={openSettings}
       popupRef={popupRef}
       user={user}
-      showAdminSettingsLink={canUseAdminSecurity}
+      showAdminSettingsLink={canOpenAdminSecurity}
       settingsNavSections={settingsNavSections}
       settingsTab={settingsTab}
       setOpenAdminSecurityPage={setOpenAdminSecurityPage}
