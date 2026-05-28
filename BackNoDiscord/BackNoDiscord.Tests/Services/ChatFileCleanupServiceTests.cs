@@ -1,5 +1,11 @@
 using BackNoDiscord.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BackNoDiscord.Tests.Services;
 
@@ -37,6 +43,27 @@ public sealed class ChatFileCleanupServiceTests
         Directory.Delete(directory, recursive: true);
     }
 
+    [Fact]
+    public async Task HostedCleanup_DoesNotResolveCleanupServiceWhenLockIsUnavailable()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IDistributedJobLock>(new DenyingDistributedJobLock());
+        await using var provider = services.BuildServiceProvider();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Storage:Root"] = Path.GetTempPath()
+            })
+            .Build();
+        var hostedService = new ChatFileCleanupHostedService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new BackNoDiscord.Infrastructure.UploadStoragePaths(configuration, new FakeHostEnvironment()),
+            configuration,
+            NullLogger<ChatFileCleanupHostedService>.Instance);
+
+        await hostedService.RunCleanupOnceAsync(CancellationToken.None);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -44,5 +71,21 @@ public sealed class ChatFileCleanupServiceTests
             .Options;
 
         return new AppDbContext(options);
+    }
+
+    private sealed class DenyingDistributedJobLock : IDistributedJobLock
+    {
+        public Task<IAsyncDisposable?> TryAcquireAsync(string key, TimeSpan ttl, CancellationToken cancellationToken) =>
+            Task.FromResult<IAsyncDisposable?>(null);
+    }
+
+    private sealed class FakeHostEnvironment : IWebHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ApplicationName { get; set; } = "Tests";
+        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = Directory.GetCurrentDirectory();
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

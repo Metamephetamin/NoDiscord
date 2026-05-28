@@ -445,13 +445,13 @@ git commit -m "feat: add distributed job locks"
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Services/ChatFileCleanupServiceTests.cs`
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Services/ChatFileMetadataRepairServiceTests.cs`
 
-- [ ] **Step 1: Write failing hosted-service tests**
+- [x] **Step 1: Write failing hosted-service tests**
 
 Use a fake lock service returning null. Assert:
 - cleanup service does not call cleanup when lock is unavailable;
 - metadata repair does not run batches when lock is unavailable.
 
-- [ ] **Step 2: Inject lock service**
+- [x] **Step 2: Inject lock service**
 
 Use keys:
 - `chat-file-cleanup`
@@ -461,7 +461,7 @@ TTL:
 - cleanup: interval duration;
 - repair: 30 minutes.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -469,7 +469,7 @@ Run:
 dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --filter "ChatFileCleanupServiceTests|ChatFileMetadataRepairServiceTests|DistributedJobLockTests"
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/Services/ChatFileCleanupService.cs BackNoDiscord/BackNoDiscord/Services/ChatFileMetadataRepairHostedService.cs BackNoDiscord/BackNoDiscord.Tests/Services

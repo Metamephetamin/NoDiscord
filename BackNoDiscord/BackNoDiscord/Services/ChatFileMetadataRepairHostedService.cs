@@ -18,6 +18,11 @@ public sealed class ChatFileMetadataRepairHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await RunRepairOnceAsync(stoppingToken);
+    }
+
+    public async Task RunRepairOnceAsync(CancellationToken stoppingToken)
+    {
         if (!_configuration.GetValue<bool>("ChatFiles:RepairLegacyMetadataOnStartup"))
         {
             return;
@@ -27,10 +32,18 @@ public sealed class ChatFileMetadataRepairHostedService : BackgroundService
         var maxBatches = Math.Clamp(_configuration.GetValue("ChatFiles:RepairLegacyMetadataMaxBatches", 20), 1, 200);
         var totalRepaired = 0;
 
+        using var scope = _scopeFactory.CreateScope();
+        var lockService = scope.ServiceProvider.GetRequiredService<IDistributedJobLock>();
+        await using var jobLock = await lockService.TryAcquireAsync("chat-file-metadata-repair", TimeSpan.FromMinutes(30), stoppingToken);
+        if (jobLock is null)
+        {
+            _logger.LogDebug("Legacy chat file metadata repair skipped because another instance holds the lock.");
+            return;
+        }
+
+        var repairService = scope.ServiceProvider.GetRequiredService<ChatFileMetadataRepairService>();
         for (var batch = 0; batch < maxBatches && !stoppingToken.IsCancellationRequested; batch += 1)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var repairService = scope.ServiceProvider.GetRequiredService<ChatFileMetadataRepairService>();
             var repaired = await repairService.RepairAsync(batchSize, stoppingToken);
             totalRepaired += repaired;
             if (repaired == 0)

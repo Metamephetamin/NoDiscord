@@ -1,6 +1,8 @@
 using BackNoDiscord.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BackNoDiscord.Tests.Services;
 
@@ -40,6 +42,26 @@ public sealed class ChatFileMetadataRepairServiceTests
         Assert.Equal(0, secondRun);
     }
 
+    [Fact]
+    public async Task HostedRepair_DoesNotResolveRepairServiceWhenLockIsUnavailable()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IDistributedJobLock>(new DenyingDistributedJobLock());
+        await using var provider = services.BuildServiceProvider();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ChatFiles:RepairLegacyMetadataOnStartup"] = "true"
+            })
+            .Build();
+        var hostedService = new ChatFileMetadataRepairHostedService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            configuration,
+            NullLogger<ChatFileMetadataRepairHostedService>.Instance);
+
+        await hostedService.RunRepairOnceAsync(CancellationToken.None);
+    }
+
     private static CryptoService CreateCrypto()
     {
         var configuration = new ConfigurationBuilder()
@@ -59,5 +81,11 @@ public sealed class ChatFileMetadataRepairServiceTests
             .Options;
 
         return new AppDbContext(options);
+    }
+
+    private sealed class DenyingDistributedJobLock : IDistributedJobLock
+    {
+        public Task<IAsyncDisposable?> TryAcquireAsync(string key, TimeSpan ttl, CancellationToken cancellationToken) =>
+            Task.FromResult<IAsyncDisposable?>(null);
     }
 }

@@ -119,7 +119,7 @@ public sealed class ChatFileCleanupHostedService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await RunCleanupAsync(stoppingToken);
+            await RunCleanupOnceAsync(stoppingToken);
 
             try
             {
@@ -132,11 +132,20 @@ public sealed class ChatFileCleanupHostedService : BackgroundService
         }
     }
 
-    private async Task RunCleanupAsync(CancellationToken stoppingToken)
+    public async Task RunCleanupOnceAsync(CancellationToken stoppingToken)
     {
         try
         {
             using var scope = _scopeFactory.CreateScope();
+            var lockService = scope.ServiceProvider.GetRequiredService<IDistributedJobLock>();
+            var lockTtl = ResolveMinutes("ChatFiles:CleanupIntervalMinutes", DefaultInterval, minMinutes: 5);
+            await using var jobLock = await lockService.TryAcquireAsync("chat-file-cleanup", lockTtl, stoppingToken);
+            if (jobLock is null)
+            {
+                _logger.LogDebug("Chat file cleanup skipped because another instance holds the lock.");
+                return;
+            }
+
             var service = scope.ServiceProvider.GetRequiredService<ChatFileCleanupService>();
             var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");
             var orphanAge = ResolveMinutes("ChatFiles:CleanupOrphanAgeMinutes", DefaultOrphanAge, minMinutes: 10);
