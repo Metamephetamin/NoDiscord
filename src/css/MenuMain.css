@@ -4488,11 +4488,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   filter: saturate(1.05) contrast(1.12) brightness(1.18);
 }
 
-.lanaya-world-map__viewport .lanaya-world-label-tile {
-  opacity: 0.96;
-  filter: saturate(1.08) contrast(1.32) brightness(1.82);
-}
-
 .lanaya-world-map__viewport .leaflet-control-zoom {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -4533,6 +4528,25 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   border: 0;
 }
 
+.lanaya-world-city-label {
+  width: auto !important;
+  height: auto !important;
+  pointer-events: none;
+}
+
+.lanaya-world-city-label span {
+  display: block;
+  color: rgba(241, 247, 255, 0.92);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 8px rgba(0, 0, 0, 0.86);
+  white-space: nowrap;
+  transform: translate(7px, -12px);
+}
+
 .lanaya-world-leaflet__marker {
   position: relative;
   width: 16px;
@@ -4550,11 +4564,34 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .lanaya-world-leaflet__pin {
-  width: 12px;
-  height: 12px;
+  width: 24px;
+  height: 30px;
+  background: transparent;
+  filter: drop-shadow(0 0 12px rgba(117, 221, 190, 0.48));
+}
+
+.lanaya-world-leaflet__pin::before,
+.lanaya-world-leaflet__pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
   background: #ffffff;
-  border: 2px solid rgba(109, 226, 190, 0.78);
-  box-shadow: 0 0 14px rgba(117, 221, 190, 0.45);
+  border: 2px solid rgba(109, 226, 190, 0.8);
+  transform: translateX(-50%);
+}
+
+.lanaya-world-leaflet__pin::before {
+  top: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+.lanaya-world-leaflet__pin::after {
+  top: 13px;
+  width: 18px;
+  height: 14px;
+  border-radius: 10px 10px 12px 12px;
 }
 
 .lanaya-world-leaflet__pulse {
@@ -4569,9 +4606,13 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .lanaya-world-leaflet__marker--offline .lanaya-world-leaflet__pin {
-  background: #ffffff;
+  background: transparent;
+  box-shadow: none;
+}
+
+.lanaya-world-leaflet__marker--offline .lanaya-world-leaflet__pin::before,
+.lanaya-world-leaflet__marker--offline .lanaya-world-leaflet__pin::after {
   border-color: rgba(109, 226, 190, 0.62);
-  box-shadow: 0 0 12px rgba(117, 221, 190, 0.34);
 }
 
 .lanaya-world-leaflet__marker--offline .lanaya-world-leaflet__pulse {

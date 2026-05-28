@@ -269,13 +269,43 @@ const readFiniteNumber = (value) => {
 };
 
 const LANAYA_WORLD_BASE_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png";
-const LANAYA_WORLD_LABEL_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png";
 const LANAYA_WORLD_ATTRIBUTION = "&copy; OpenStreetMap contributors &copy; CARTO";
 const LANAYA_WORLD_MIN_ZOOM = 2;
 const LANAYA_WORLD_MAX_ZOOM = 19;
 const LANAYA_WORLD_DEFAULT_CENTER = [25, 25];
 const LANAYA_WORLD_DEFAULT_ZOOM = 2;
 const LANAYA_WORLD_BOUNDS = [[-60, -180], [84, 180]];
+const LANAYA_WORLD_CITY_LABELS = [
+  ["Москва", 55.76, 37.62],
+  ["Санкт-Петербург", 59.93, 30.31],
+  ["Казань", 55.79, 49.12],
+  ["Екатеринбург", 56.84, 60.61],
+  ["Новосибирск", 55.03, 82.92],
+  ["Владивосток", 43.12, 131.89],
+  ["Лондон", 51.51, -0.13],
+  ["Париж", 48.86, 2.35],
+  ["Берлин", 52.52, 13.4],
+  ["Рим", 41.9, 12.5],
+  ["Стамбул", 41.01, 28.98],
+  ["Нью-Йорк", 40.71, -74.01],
+  ["Лос-Анджелес", 34.05, -118.24],
+  ["Торонто", 43.65, -79.38],
+  ["Мехико", 19.43, -99.13],
+  ["Сан-Паулу", -23.55, -46.63],
+  ["Буэнос-Айрес", -34.6, -58.38],
+  ["Дубай", 25.2, 55.27],
+  ["Каир", 30.04, 31.24],
+  ["Кейптаун", -33.92, 18.42],
+  ["Дели", 28.61, 77.21],
+  ["Мумбаи", 19.08, 72.88],
+  ["Бангкок", 13.76, 100.5],
+  ["Сингапур", 1.35, 103.82],
+  ["Пекин", 39.9, 116.41],
+  ["Шанхай", 31.23, 121.47],
+  ["Сеул", 37.57, 126.98],
+  ["Токио", 35.68, 139.69],
+  ["Сидней", -33.87, 151.21],
+];
 
 const escapeMapHtml = (value) => String(value || "")
   .replace(/&/g, "&amp;")
@@ -749,14 +779,19 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
       noWrap: true,
     }).addTo(map);
 
-    L.tileLayer(LANAYA_WORLD_LABEL_TILE_URL, {
-      minZoom: LANAYA_WORLD_MIN_ZOOM,
-      maxZoom: LANAYA_WORLD_MAX_ZOOM,
-      subdomains: ["a", "b", "c", "d"],
-      crossOrigin: true,
-      className: "lanaya-world-label-tile",
-      noWrap: true,
-    }).addTo(map);
+    const cityLabelLayer = L.layerGroup().addTo(map);
+    LANAYA_WORLD_CITY_LABELS.forEach(([label, latitude, longitude]) => {
+      L.marker([latitude, longitude], {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: "lanaya-world-city-label",
+          html: `<span>${escapeMapHtml(label)}</span>`,
+          iconSize: [1, 1],
+          iconAnchor: [0, 0],
+        }),
+      }).addTo(cityLabelLayer);
+    });
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false, metric: true }).addTo(map);

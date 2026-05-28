@@ -378,6 +378,12 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS last_seen_at timestamptz NULL;
             ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS last_location_latitude double precision NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS last_location_longitude double precision NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS last_location_updated_at timestamptz NULL;
+            ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS terms_accepted_at timestamptz NULL;
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS terms_version text NULL;

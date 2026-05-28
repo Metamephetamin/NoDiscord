@@ -144,6 +144,16 @@ public class ChatHub : Hub
             return;
         }
 
+        var now = DateTimeOffset.UtcNow;
+
+        await _context.Users
+            .Where(user => user.id == currentUserId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(user => user.last_location_latitude, latitude)
+                .SetProperty(user => user.last_location_longitude, longitude)
+                .SetProperty(user => user.last_location_updated_at, now),
+                Context.ConnectionAborted);
+
         var friendIds = await _context.Friendships
             .AsNoTracking()
             .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
@@ -163,7 +173,7 @@ public class ChatHub : Hub
             longitude,
             locationLabel = "Местоположение",
             displayName = currentUser.DisplayName,
-            updatedAt = DateTimeOffset.UtcNow
+            updatedAt = now
         }, Context.ConnectionAborted);
     }
 
