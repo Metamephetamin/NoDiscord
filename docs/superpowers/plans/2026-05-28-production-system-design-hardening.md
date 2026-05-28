@@ -604,11 +604,11 @@ git commit -m "chore: centralize realtime location events"
 - Modify: `src/components/FriendsWorkspace.jsx`
 - Test: `scripts/realtime-smoke.mjs`
 
-- [ ] **Step 1: Write failing smoke assertion**
+- [x] **Step 1: Write failing smoke assertion**
 
 Assert frontend calls friends refresh after SignalR reconnect so missed location/presence updates can be recovered.
 
-- [ ] **Step 2: Add reconnect event subscription**
+- [x] **Step 2: Add reconnect event subscription**
 
 Expose a safe callback registration API from `ChatConnect.jsx`:
 
@@ -625,11 +625,11 @@ export function onChatReconnected(callback) {
 }
 ```
 
-- [ ] **Step 3: Refresh friends on reconnect**
+- [x] **Step 3: Refresh friends on reconnect**
 
 In friends workspace state, call `refreshFriends()` after reconnect. Debounce to avoid repeated API calls.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -639,7 +639,7 @@ npm run lint:ci
 npm run build:frontend
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/SignalR/ChatConnect.jsx src/hooks/useFriendsWorkspaceState.js src/components/FriendsWorkspace.jsx scripts/realtime-smoke.mjs

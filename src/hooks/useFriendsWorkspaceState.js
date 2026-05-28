@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import chatConnection from "../SignalR/ChatConnect";
+import chatConnection, { onChatReconnected } from "../SignalR/ChatConnect";
 import { REALTIME_EVENTS } from "../realtime/realtimeEvents";
 import {
   authFetch,
@@ -56,6 +56,7 @@ export default function useFriendsWorkspaceState({
 
   const latestSearchRef = useRef("");
   const friendSearchRequestRef = useRef(0);
+  const reconnectRefreshTimeoutRef = useRef(0);
 
   const loadFriends = async () => {
     try {
@@ -746,12 +747,25 @@ export default function useFriendsWorkspaceState({
       loadFriendRequests().catch(() => {});
       loadConversations().catch(() => {});
     };
+    const handleChatReconnected = () => {
+      if (reconnectRefreshTimeoutRef.current) {
+        window.clearTimeout(reconnectRefreshTimeoutRef.current);
+      }
+
+      reconnectRefreshTimeoutRef.current = window.setTimeout(() => {
+        reconnectRefreshTimeoutRef.current = 0;
+        loadFriends().catch(() => {});
+        loadFriendRequests().catch(() => {});
+        loadConversations().catch(() => {});
+      }, 350);
+    };
 
     chatConnection.on("FriendListUpdated", handleFriendListUpdated);
     chatConnection.on("FriendRequestsUpdated", handleFriendRequestsUpdated);
     chatConnection.on("ConversationsUpdated", handleConversationsUpdated);
     chatConnection.on("ReceiveMessage", handleConversationMessage);
     chatConnection.on(REALTIME_EVENTS.friendPresenceUpdated, handleFriendPresenceUpdated);
+    const unsubscribeChatReconnected = onChatReconnected(handleChatReconnected);
     window.addEventListener("focus", handleWindowFocus);
 
     const intervalId = window.setInterval(() => {
@@ -770,6 +784,11 @@ export default function useFriendsWorkspaceState({
       chatConnection.off("ConversationsUpdated", handleConversationsUpdated);
       chatConnection.off("ReceiveMessage", handleConversationMessage);
       chatConnection.off(REALTIME_EVENTS.friendPresenceUpdated, handleFriendPresenceUpdated);
+      unsubscribeChatReconnected();
+      if (reconnectRefreshTimeoutRef.current) {
+        window.clearTimeout(reconnectRefreshTimeoutRef.current);
+        reconnectRefreshTimeoutRef.current = 0;
+      }
       window.removeEventListener("focus", handleWindowFocus);
       window.clearInterval(intervalId);
     };

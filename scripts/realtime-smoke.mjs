@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const menuMainSource = readFileSync("src/features/menu-main/MenuMainController.jsx", "utf8");
 const textChatSource = readFileSync("src/features/text-chat/TextChatController.jsx", "utf8");
 const voiceClientSource = readFileSync("src/webrtc/livekitVoiceRoomClient.js", "utf8");
+const chatConnectSource = readFileSync("src/SignalR/ChatConnect.jsx", "utf8");
 const voiceHubSource = readFileSync("BackNoDiscord/BackNoDiscord/VoiceHub.cs", "utf8");
 const chatHubSource = readFileSync("BackNoDiscord/BackNoDiscord/ChatHub.cs", "utf8");
 const backendEventsSource = readFileSync("BackNoDiscord/BackNoDiscord/Realtime/RealtimeEvents.cs", "utf8");
@@ -64,6 +65,14 @@ assert(
     !friendsWorkspaceSource.includes('chatConnection.on("FriendLocationUpdated"') &&
     !friendsStateSource.includes('chatConnection.on("FriendPresenceUpdated"'),
   "Friend location/presence raw event strings must stay inside constants."
+);
+
+assert(
+  chatConnectSource.includes("onChatReconnected") &&
+    chatConnectSource.includes("chatReconnectedCallbacks") &&
+    friendsStateSource.includes("onChatReconnected") &&
+    /onChatReconnected\([\s\S]*?loadFriends\(\)/.test(friendsStateSource),
+  "Friends state must refresh friends after chat SignalR reconnect to recover missed presence/location events."
 );
 
 console.log("Realtime smoke checks passed.");

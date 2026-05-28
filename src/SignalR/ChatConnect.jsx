@@ -21,6 +21,7 @@ let reconnectAttempt = 0;
 let lastLoggedStartErrorSignature = "";
 let lastLoggedStartErrorAt = 0;
 let isStoppingConnection = false;
+const chatReconnectedCallbacks = new Set();
 
 const clearScheduledReconnect = () => {
   if (reconnectTimerId && typeof window !== "undefined") {
@@ -187,6 +188,31 @@ chatConnection.onreconnected(() => {
     phase: "reconnected",
     status: chatConnection.state,
   });
+
+  for (const callback of Array.from(chatReconnectedCallbacks)) {
+    try {
+      callback();
+    } catch (error) {
+      reportClientDiagnostic({
+        type: "chat signalr reconnected callback failed",
+        surface: "chat-signalr",
+        errorName: error?.name || "ChatReconnectCallbackError",
+        phase: "reconnected-callback",
+        status: chatConnection.state,
+      });
+    }
+  }
 });
+
+export function onChatReconnected(callback) {
+  if (typeof callback !== "function") {
+    return () => {};
+  }
+
+  chatReconnectedCallbacks.add(callback);
+  return () => {
+    chatReconnectedCallbacks.delete(callback);
+  };
+}
 
 export default chatConnection;
