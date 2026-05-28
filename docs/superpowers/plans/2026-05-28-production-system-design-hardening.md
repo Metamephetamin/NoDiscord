@@ -394,7 +394,7 @@ git commit -m "ci: add migration preflight artifact"
 - Modify: `BackNoDiscord/BackNoDiscord/Program.cs`
 - Test: `BackNoDiscord/BackNoDiscord.Tests/Services/DistributedJobLockTests.cs`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Test cases:
 - lock returns acquired when provider grants it;
@@ -408,7 +408,7 @@ Run:
 dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --filter DistributedJobLockTests
 ```
 
-- [ ] **Step 2: Implement interface**
+- [x] **Step 2: Implement interface**
 
 ```csharp
 public interface IDistributedJobLock
@@ -422,15 +422,15 @@ Implementation:
 - Use a stable 64-bit key derived from SHA256 of the job name.
 - Keep the DB connection open until the returned handle is disposed.
 
-- [ ] **Step 3: Register service**
+- [x] **Step 3: Register service**
 
 Register as scoped or singleton depending on connection ownership. Avoid sharing a single open DbConnection globally.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run filtered tests and backend build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add BackNoDiscord/BackNoDiscord/Services/DistributedJobLock.cs BackNoDiscord/BackNoDiscord/Program.cs BackNoDiscord/BackNoDiscord.Tests/Services/DistributedJobLockTests.cs
