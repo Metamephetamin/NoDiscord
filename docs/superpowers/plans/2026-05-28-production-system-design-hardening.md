@@ -347,7 +347,7 @@ git commit -m "chore: add versioned database migrations"
 - Modify: `docs/release/database-backup-restore.md`
 - Test: `scripts/__tests__/free-scaling-infra.test.mjs`
 
-- [ ] **Step 1: Extend deploy invariant test**
+- [x] **Step 1: Extend deploy invariant test**
 
 Assert deploy order:
 1. backend publish;
@@ -355,7 +355,7 @@ Assert deploy order:
 3. migration script generated;
 4. health check.
 
-- [ ] **Step 2: Add migration script generation**
+- [x] **Step 2: Add migration script generation**
 
 Use:
 
@@ -365,7 +365,7 @@ dotnet ef migrations script --idempotent --project BackNoDiscord/BackNoDiscord/B
 
 Do not execute it automatically in the first deployment. Upload as an artifact for inspection.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -374,7 +374,7 @@ node --test scripts/__tests__/free-scaling-infra.test.mjs
 dotnet build BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/deploy.yml docs/release/database-backup-restore.md scripts/__tests__/free-scaling-infra.test.mjs

@@ -7,11 +7,12 @@
 - Never store backups in the repo.
 - Never print database passwords in logs.
 - On production, install `scripts/db-backup.sh` through `infra/systemd/nodiscord-db-backup.timer`.
+- Deploy generates `backend-migrations-sql` as a review artifact; it is not applied automatically.
 
 ## Restore Drill
 
 1. Restore latest backup into a non-production database.
-2. Run backend migration/startup checks.
+2. Inspect the latest `backend-migrations-sql` artifact before running backend migration/startup checks.
 3. Run API health check against the restored database.
 4. Record restore duration and result.
 

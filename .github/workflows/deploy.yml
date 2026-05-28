@@ -103,6 +103,24 @@ jobs:
           echo "Backend publish directory size:"
           du -sh ./artifacts/backend
 
+      - name: Generate migration preflight script
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet tool restore
+          dotnet tool run dotnet-ef migrations script --idempotent \
+            --project BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj \
+            --startup-project BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj \
+            --output ./artifacts/backend-migrations.sql
+          test -s ./artifacts/backend-migrations.sql
+
+      - name: Upload migration preflight artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-migrations-sql
+          path: ./artifacts/backend-migrations.sql
+          retention-days: 14
+
       - name: Validate deploy secrets
         id: validate
         shell: bash

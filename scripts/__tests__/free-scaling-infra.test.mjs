@@ -67,3 +67,21 @@ test("production deploy enables the single-server scaling layer", () => {
   assert.match(deployWorkflow, /nodiscord-backend@\.service/);
   assert.match(deployWorkflow, /HEALTHCHECK="https:\/\/lanaya\.space"/);
 });
+
+test("production deploy creates a reviewed migration artifact without applying it", () => {
+  const deployWorkflow = read(".github/workflows/deploy.yml");
+  const publishIndex = deployWorkflow.indexOf("Publish backend");
+  const backupTimerIndex = deployWorkflow.indexOf("nodiscord-db-backup.timer");
+  const migrationScriptIndex = deployWorkflow.indexOf("backend-migrations.sql");
+  const healthIndex = deployWorkflow.indexOf("Run production health checks");
+
+  assert(publishIndex > 0, "Deploy workflow must publish backend before migration preflight.");
+  assert(backupTimerIndex > publishIndex, "Backup timer installation must remain after backend publish.");
+  assert(migrationScriptIndex > publishIndex, "Migration script must be generated after backend publish.");
+  assert(healthIndex > migrationScriptIndex, "Production health check must run after migration script generation.");
+  assert.match(deployWorkflow, /dotnet tool restore/);
+  assert.match(deployWorkflow, /dotnet tool run dotnet-ef migrations script --idempotent/);
+  assert.match(deployWorkflow, /actions\/upload-artifact@v4/);
+  assert.doesNotMatch(deployWorkflow, /dotnet\s+(?:tool\s+run\s+)?dotnet-ef\s+database\s+update/);
+  assert.doesNotMatch(deployWorkflow, /dotnet\s+ef\s+database\s+update/);
+});
