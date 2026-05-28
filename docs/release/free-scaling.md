@@ -5,6 +5,7 @@ This project can prepare for horizontal scaling without paid managed services. T
 ## What This Adds
 
 - PostgreSQL scheduled backups through `pg_dump`.
+- Upload storage scheduled backups through compressed `tar` archives.
 - Optional Redis SignalR backplane.
 - Nginx upstream template for several local backend instances.
 - Systemd backend instance template for ports such as `7031`, `7032`, and `7033`.
@@ -35,6 +36,24 @@ sudo ls -lh /opt/nodiscord/.deploy/backups/postgres
 ```
 
 The backup script reads `ConnectionStrings__DefaultConnection` from `/opt/nodiscord/.deploy/backend/.env`. To use a separate backup user, set `DB_BACKUP_CONNECTION_STRING` in that same env file.
+
+## Upload Storage Backups
+
+Install the storage script and timer:
+
+```bash
+sudo mkdir -p /opt/nodiscord/.deploy/scripts
+sudo cp scripts/storage-backup.sh /opt/nodiscord/.deploy/scripts/storage-backup.sh
+sudo chmod 750 /opt/nodiscord/.deploy/scripts/storage-backup.sh
+sudo chown nodiscord:nodiscord /opt/nodiscord/.deploy/scripts/storage-backup.sh
+
+sudo cp infra/systemd/nodiscord-storage-backup.service /etc/systemd/system/nodiscord-storage-backup.service
+sudo cp infra/systemd/nodiscord-storage-backup.timer /etc/systemd/system/nodiscord-storage-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now nodiscord-storage-backup.timer
+```
+
+The storage backup reads `Storage__Root` from `/opt/nodiscord/.deploy/backend/.env` and writes archives to `/opt/nodiscord/.deploy/backups/storage`. Temporary `upload-*.tmp` files are excluded.
 
 ## Redis For SignalR
 

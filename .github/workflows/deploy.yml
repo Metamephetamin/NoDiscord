@@ -464,8 +464,11 @@ jobs:
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           rsync -az --checksum -e "ssh $SSH_OPTS" scripts/db-backup.sh "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/db-backup.sh"
+          rsync -az --checksum -e "ssh $SSH_OPTS" scripts/storage-backup.sh "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/storage-backup.sh"
           rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-db-backup.service "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-db-backup.service"
           rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-db-backup.timer "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-db-backup.timer"
+          rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-storage-backup.service "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-storage-backup.service"
+          rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-storage-backup.timer "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-storage-backup.timer"
           rsync -az --checksum -e "ssh $SSH_OPTS" infra/systemd/nodiscord-backend@.service "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/nodiscord-backend@.service"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$TEMP_ROOT/redis'"
           rsync -az --checksum -e "ssh $SSH_OPTS" infra/redis/docker-compose.yml "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/redis/docker-compose.yml"
@@ -488,16 +491,21 @@ jobs:
               return 1
             }
 
-            mkdir -p \"\$SCRIPT_DIR\" \"\$REDIS_DIR\" /opt/nodiscord/.deploy/backups/postgres
+            mkdir -p \"\$SCRIPT_DIR\" \"\$REDIS_DIR\" /opt/nodiscord/.deploy/backups/postgres /opt/nodiscord/.deploy/backups/storage
             cp \"\$TEMP_ROOT/db-backup.sh\" \"\$SCRIPT_DIR/db-backup.sh\"
+            cp \"\$TEMP_ROOT/storage-backup.sh\" \"\$SCRIPT_DIR/storage-backup.sh\"
             chmod 750 \"\$SCRIPT_DIR/db-backup.sh\"
+            chmod 750 \"\$SCRIPT_DIR/storage-backup.sh\"
             cp \"\$TEMP_ROOT/redis/docker-compose.yml\" \"\$REDIS_DIR/docker-compose.yml\"
 
             run_root cp \"\$TEMP_ROOT/nodiscord-db-backup.service\" /etc/systemd/system/nodiscord-db-backup.service
             run_root cp \"\$TEMP_ROOT/nodiscord-db-backup.timer\" /etc/systemd/system/nodiscord-db-backup.timer
+            run_root cp \"\$TEMP_ROOT/nodiscord-storage-backup.service\" /etc/systemd/system/nodiscord-storage-backup.service
+            run_root cp \"\$TEMP_ROOT/nodiscord-storage-backup.timer\" /etc/systemd/system/nodiscord-storage-backup.timer
             run_root cp \"\$TEMP_ROOT/nodiscord-backend@.service\" /etc/systemd/system/nodiscord-backend@.service
             run_root systemctl daemon-reload
             run_root systemctl enable --now nodiscord-db-backup.timer
+            run_root systemctl enable --now nodiscord-storage-backup.timer
 
             redis_ready=0
             if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -524,7 +532,7 @@ jobs:
               echo \"Redis SignalR backplane enabled through 127.0.0.1:6379\"
             fi
 
-            chown -R \"\$BACKEND_OWNER\" \"\$SCRIPT_DIR\" /opt/nodiscord/.deploy/backups/postgres \"\$REDIS_DIR\" || true
+            chown -R \"\$BACKEND_OWNER\" \"\$SCRIPT_DIR\" /opt/nodiscord/.deploy/backups/postgres /opt/nodiscord/.deploy/backups/storage \"\$REDIS_DIR\" || true
             chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
             chmod 600 \"\$BACKEND_PATH/.env\"
             echo \"Free single-server scaling layer installed\"

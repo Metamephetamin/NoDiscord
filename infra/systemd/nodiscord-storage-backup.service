@@ -1,0 +1,14 @@
+[Unit]
+Description=NoDiscord upload storage backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nodiscord
+Group=nodiscord
+WorkingDirectory=/opt/nodiscord/.deploy/backend
+EnvironmentFile=-/opt/nodiscord/.deploy/backend/.env
+Environment=STORAGE_BACKUP_DIR=/opt/nodiscord/.deploy/backups/storage
+Environment=STORAGE_BACKUP_RETENTION_DAYS=14
+ExecStart=/opt/nodiscord/.deploy/scripts/storage-backup.sh

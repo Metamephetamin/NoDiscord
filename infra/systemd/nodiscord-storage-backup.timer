@@ -1,0 +1,11 @@
+[Unit]
+Description=Run NoDiscord upload storage backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:45:00
+Persistent=true
+RandomizedDelaySec=20m
+Unit=nodiscord-storage-backup.service
+
+[Install]
+WantedBy=timers.target

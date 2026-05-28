@@ -493,7 +493,7 @@ git commit -m "fix: guard hosted jobs with distributed locks"
 - Create: `docs/release/storage-backup-restore.md`
 - Test: `scripts/__tests__/storage-backup-infra.test.mjs`
 
-- [ ] **Step 1: Write failing infra test**
+- [x] **Step 1: Write failing infra test**
 
 Assert:
 - script exists;
@@ -501,7 +501,7 @@ Assert:
 - timer exists;
 - deploy installs/enables timer.
 
-- [ ] **Step 2: Implement script**
+- [x] **Step 2: Implement script**
 
 Behavior:
 - reads `Storage__Root`;
@@ -509,11 +509,11 @@ Behavior:
 - excludes temporary files such as `upload-*.tmp`;
 - retention default 14 days.
 
-- [ ] **Step 3: Install through deploy**
+- [x] **Step 3: Install through deploy**
 
 Add rsync/copy of script and systemd units in the existing "Enable free single-server scaling layer" step.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -522,7 +522,7 @@ node --test scripts/__tests__/storage-backup-infra.test.mjs
 npm run check:encoding
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/storage-backup.sh infra/systemd/nodiscord-storage-backup.service infra/systemd/nodiscord-storage-backup.timer .github/workflows/deploy.yml docs/release/free-scaling.md docs/release/storage-backup-restore.md scripts/__tests__/storage-backup-infra.test.mjs
