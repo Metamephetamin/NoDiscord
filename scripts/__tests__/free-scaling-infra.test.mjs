@@ -65,4 +65,5 @@ test("production deploy enables the single-server scaling layer", () => {
   assert.match(deployWorkflow, /Redis__ConnectionString=127\.0\.0\.1:6379/);
   assert.match(deployWorkflow, /infra\/nginx\/lanaya\.space\.load-balanced\.conf/);
   assert.match(deployWorkflow, /nodiscord-backend@\.service/);
+  assert.match(deployWorkflow, /HEALTHCHECK="https:\/\/lanaya\.space"/);
 });

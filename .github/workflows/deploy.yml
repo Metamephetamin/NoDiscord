@@ -661,7 +661,7 @@ jobs:
           HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          HEALTHCHECK="${HEALTHCHECK_URL:-https://lanaya.space}"
+          HEALTHCHECK="https://lanaya.space"
           API_HEALTHCHECK="${HEALTHCHECK%/}/api/ping"
           CHAT_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/chatHub/negotiate?negotiateVersion=1"
           VOICE_NEGOTIATE_HEALTHCHECK="${HEALTHCHECK%/}/voiceHub/negotiate?negotiateVersion=1"
