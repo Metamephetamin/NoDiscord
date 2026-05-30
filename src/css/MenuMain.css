@@ -16141,6 +16141,51 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   margin-top: 20px;
 }
 
+.donation-modal__amounts {
+  margin-top: 20px;
+}
+
+.donation-modal__section-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #ffe38b;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.donation-modal__amount-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.donation-modal__amount-button {
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid rgba(247, 213, 111, 0.18);
+  border-radius: 8px;
+  background: rgba(247, 213, 111, 0.1);
+  color: #fff3bd;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.donation-modal__amount-button:hover:not(:disabled),
+.donation-modal__amount-button:focus-visible:not(:disabled) {
+  border-color: rgba(247, 213, 111, 0.45);
+  background: rgba(247, 213, 111, 0.18);
+  transform: translateY(-1px);
+}
+
+.donation-modal__amount-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .donation-modal__detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -17707,6 +17752,10 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   .donation-modal__mark {
     width: 42px;
     height: 42px;
+  }
+
+  .donation-modal__amount-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .donation-modal__actions {
@@ -20301,6 +20350,22 @@ html[data-ui-theme="light"] .stream-modal__action,
 html[data-ui-theme="light"] .create-server-modal__actions .stream-modal__action {
   background: #6b6cff;
   color: #ffffff;
+}
+
+html[data-ui-theme="light"] .donation-modal__section-label {
+  color: #6b4e00;
+}
+
+html[data-ui-theme="light"] .donation-modal__amount-button {
+  border-color: rgba(178, 137, 20, 0.24);
+  background: rgba(247, 213, 111, 0.2);
+  color: #5c4300;
+}
+
+html[data-ui-theme="light"] .donation-modal__amount-button:hover:not(:disabled),
+html[data-ui-theme="light"] .donation-modal__amount-button:focus-visible:not(:disabled) {
+  border-color: rgba(178, 137, 20, 0.42);
+  background: rgba(247, 213, 111, 0.32);
 }
 
 html[data-ui-theme="light"] .donation-modal__detail {

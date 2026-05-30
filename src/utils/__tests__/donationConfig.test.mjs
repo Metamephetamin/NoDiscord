@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildDonationUrlForAmount,
   buildDonationConfig,
   getDonationAmountOptions,
   normalizeDonationUrl,
@@ -35,4 +36,15 @@ test("buildDonationConfig exposes normalized donation url", () => {
 
 test("getDonationAmountOptions keeps compact ruble presets", () => {
   assert.deepEqual(getDonationAmountOptions().map((option) => option.label), ["100 ₽", "300 ₽", "500 ₽", "1000 ₽"]);
+});
+
+test("buildDonationUrlForAmount appends trusted ruble preset as YooKassa sum", () => {
+  assert.equal(
+    buildDonationUrlForAmount("https://yookassa.ru/my/i/example-invoice?source=app", 300),
+    "https://yookassa.ru/my/i/example-invoice?source=app&sum=300.00"
+  );
+});
+
+test("buildDonationUrlForAmount rejects unsupported amount values", () => {
+  assert.equal(buildDonationUrlForAmount("https://yookassa.ru/my/i/example-invoice", 250), "");
 });

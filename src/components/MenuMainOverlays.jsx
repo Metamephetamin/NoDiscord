@@ -4,7 +4,9 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
 import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
+import { DONATION_CONFIG } from "../config/runtime";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { buildDonationUrlForAmount, getDonationAmountOptions } from "../utils/donationConfig.mjs";
 import { formatTimestamp } from "../utils/textChatHelpers";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
@@ -25,6 +27,8 @@ const DONATION_DETAILS = [
     value: "bc1qp4dtrt9l3eaek3e6lfrx0qhg4jtskzzp52wnks",
   },
 ];
+
+const DONATION_AMOUNT_OPTIONS = getDonationAmountOptions();
 
 const clampDirectCallWaveLevel = (value) => {
   const numericValue = Number(value);
@@ -253,6 +257,17 @@ export const DonationModal = ({
   const [copiedDetailId, setCopiedDetailId] = useState("");
   const [copyError, setCopyError] = useState("");
 
+  const openDonationPayment = (amount) => {
+    const paymentUrl = buildDonationUrlForAmount(DONATION_CONFIG.url, amount);
+    if (!paymentUrl) {
+      setCopyError("Онлайн-оплата через ЮKassa пока не настроена. Можно использовать реквизиты ниже.");
+      return;
+    }
+
+    window.open(paymentUrl, "_blank", "noopener,noreferrer");
+    setCopyError("");
+  };
+
   const copyDonationDetail = async (detail) => {
     try {
       await copyTextToClipboard(detail.value);
@@ -281,9 +296,26 @@ export const DonationModal = ({
           <div className="donation-modal__mark" aria-hidden="true">₽</div>
           <div>
             <h3>Поддержать Lanaya</h3>
-            <p>Можно перевести на карту или криптокошелек. Нажмите на нужные реквизиты, чтобы скопировать.</p>
+            <p>Выберите сумму для оплаты через ЮKassa или скопируйте реквизиты ниже.</p>
           </div>
           <button type="button" className="donation-modal__close" onClick={closeDonationModal} aria-label="Закрыть" />
+        </div>
+
+        <div className="donation-modal__amounts" aria-label="Выберите сумму доната">
+          <span className="donation-modal__section-label">Сумма доната</span>
+          <div className="donation-modal__amount-grid">
+            {DONATION_AMOUNT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className="donation-modal__amount-button"
+                disabled={!DONATION_CONFIG.available}
+                onClick={() => openDonationPayment(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="donation-modal__details" aria-label="Реквизиты для поддержки">
