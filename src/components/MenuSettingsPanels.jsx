@@ -22,7 +22,6 @@ import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
-import { copyTextToClipboard } from "../utils/clipboard";
 import {
   APP_CACHE_LIMIT_OPTIONS,
   clearAppCacheStorage,
@@ -35,7 +34,6 @@ import {
   writeAppCachePolicy,
 } from "../utils/appStorageUsage.mjs";
 import AccountSessionsPanel from "../features/account-security/AccountSessionsPanel";
-import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -48,81 +46,6 @@ const VoiceSwitch = ({ active, onClick, label }) => (
     <span />
   </button>
 );
-
-const formatVoiceDiagnosticsPing = (rttMs) => {
-  const value = Number(rttMs);
-  return Number.isFinite(value) && value > 0 ? `${Math.round(value)} мс` : "нет данных";
-};
-
-const formatVoiceDiagnosticsBitrate = (bitrateBps) => {
-  const value = Number(bitrateBps);
-  if (!Number.isFinite(value) || value <= 0) {
-    return "нет данных";
-  }
-
-  return value >= 1_000_000
-    ? `${(value / 1_000_000).toFixed(1)} Мбит/с`
-    : `${Math.round(value / 1000)} Кбит/с`;
-};
-
-const getVoiceRouteLabel = (routeType) => {
-  if (routeType === "relay") {
-    return "через TURN";
-  }
-  if (routeType === "direct") {
-    return "прямой";
-  }
-  return "нет данных";
-};
-
-const getVoiceDiagnosticsRows = ({
-  audioInputDevices = [],
-  selectedInputDeviceId = "",
-  isMicTestActive = false,
-  streamDiagnostics = null,
-}) => {
-  const selectedInputDevice = audioInputDevices.find((device) => device.id === selectedInputDeviceId);
-  const retransmitPercent = Number(streamDiagnostics?.videoRetransmitPercent);
-
-  return [
-    {
-      label: "Микрофон",
-      value: selectedInputDevice?.label || "Системный микрофон",
-    },
-    {
-      label: "Проверка",
-      value: isMicTestActive ? "идет" : "остановлена",
-    },
-    {
-      label: "Доступ",
-      value: audioInputDevices.length > 0 || selectedInputDeviceId ? "микрофон доступен" : "ожидает разрешение",
-    },
-    {
-      label: "Сеть",
-      value: getVoiceNetworkProfileLabel(streamDiagnostics?.networkProfile || "good"),
-    },
-    {
-      label: "Маршрут",
-      value: getVoiceRouteLabel(streamDiagnostics?.routeType),
-    },
-    {
-      label: "RTT",
-      value: formatVoiceDiagnosticsPing(streamDiagnostics?.rttMs),
-    },
-    {
-      label: "Повторы",
-      value: Number.isFinite(retransmitPercent) && retransmitPercent > 0 ? `${retransmitPercent.toFixed(1)}%` : "нет давления",
-    },
-    {
-      label: "Голос",
-      value: formatVoiceDiagnosticsBitrate(
-        Number(streamDiagnostics?.audioBitrateKbps) > 0
-          ? Number(streamDiagnostics.audioBitrateKbps) * 1000
-          : streamDiagnostics?.outgoingBitrateBps,
-      ),
-    },
-  ];
-};
 
 const PROFILE_PREVIEW_ICON_PATHS = {
   about: (
@@ -674,91 +597,24 @@ export const AccountSettings = ({
   );
 };
 
-export const ProductCompanyInfoSettings = () => {
-  const [copiedCompanyField, setCopiedCompanyField] = useState("");
-  const companyRows = [
-    { label: "Продукт", value: "Lanaya" },
-    { label: "Тип сервиса", value: "мессенджер для личного общения, серверов, групповых чатов и голосовых комнат" },
-    { label: "Сайт", value: "https://lanaya.space" },
-    { label: "Домен продакшена", value: "lanaya.space" },
-    { label: "Голосовая связь", value: "комнаты, личные звонки, демонстрация экрана и медиа в реальном времени" },
-    { label: "Реальное время", value: "сообщения, статусы, звонки и уведомления обновляются без перезагрузки" },
-    { label: "Платежи", value: "поддержка проекта и донаты через ЮKassa" },
-    { label: "ИНН", value: "504417743063" },
-    { label: "Почта сервиса", value: "code@lanaya.space", copyable: true },
-  ];
-  const copyCompanyValue = async (row) => {
-    if (!row.copyable) {
-      return;
-    }
-
-    try {
-      await copyTextToClipboard(row.value);
-      setCopiedCompanyField(row.label);
-      window.setTimeout(() => {
-        setCopiedCompanyField((current) => (current === row.label ? "" : current));
-      }, 1400);
-    } catch {
-      setCopiedCompanyField("");
-    }
-  };
-
-  return (
-    <div className="settings-shell__content settings-shell__content--company-info">
-      <div className="settings-shell__content-header">
-        <div>
-          <h2>О продукте и компании</h2>
-        </div>
+export const ProductCompanyInfoSettings = () => (
+  <div className="settings-shell__content settings-shell__content--company-info">
+    <section className="account-settings-section company-info-panel" aria-label="О Lanaya">
+      <div className="company-info-panel__mark" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+        <i />
       </div>
-
-      <section className="account-settings-section company-info-panel">
-        <div className="company-info-panel__brand">
-          <div className="company-info-panel__mark" aria-hidden="true">L</div>
-          <div>
-            <h3>Lanaya</h3>
-            <p>Пространство для сообщений, серверов, голосовых комнат, личных звонков и совместного общения.</p>
-          </div>
-        </div>
-
-        <div className="company-info-panel__highlights" aria-label="Краткая информация">
-          <span>Electron + React</span>
-          <span>ASP.NET Core + SignalR</span>
-          <span>LiveKit voice</span>
-          <span>PostgreSQL</span>
-        </div>
-
-        <div className="account-settings-card account-settings-card--rows company-info-panel__rows">
-          {companyRows.map((row) => (
-            <div key={row.label} className="account-settings-row company-info-panel__row">
-              <div className="account-settings-row__copy">
-                <strong>{row.label}</strong>
-                {row.copyable ? (
-                  <button
-                    type="button"
-                    className="company-info-panel__copy-value"
-                    onClick={() => {
-                      void copyCompanyValue(row);
-                    }}
-                    title="Скопировать почту"
-                  >
-                    {row.value}
-                    {copiedCompanyField === row.label ? <small>Скопировано</small> : null}
-                  </button>
-                ) : (
-                  <span>{row.value}</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="company-info-panel__note">
-          Юридические реквизиты, оферта, условия оплаты и информация о возвратах должны быть опубликованы в актуальном виде перед приемом реальных платежей.
-        </div>
-      </section>
-    </div>
-  );
-};
+      <h2>Lanaya</h2>
+      <p>
+        Lanaya — приложение для общения с личными чатами, серверами, голосовыми комнатами и звонками.
+        Здесь можно переписываться, собирать сообщества и общаться голосом в реальном времени.
+      </p>
+    </section>
+  </div>
+);
 
 export const MemorySettings = () => {
   const [storageUsage, setStorageUsage] = useState(null);
@@ -1907,7 +1763,6 @@ export const VoiceSettingsPanel = ({
   noiseSuppressionMode,
   echoCancellationEnabled,
   autoInputSensitivity,
-  streamDiagnostics,
   onInputDeviceChange,
   onOutputDeviceChange,
   onMicVolumeChange,
@@ -1917,15 +1772,7 @@ export const VoiceSettingsPanel = ({
   onNoiseProfileChange,
   onToggleEchoCancellation,
   onToggleAutoSensitivity,
-}) => {
-  const voiceDiagnosticsRows = getVoiceDiagnosticsRows({
-    audioInputDevices,
-    selectedInputDeviceId,
-    isMicTestActive,
-    streamDiagnostics,
-  });
-
-  return (
+}) => (
     <div className="settings-shell__content settings-shell__content--voice">
       <div className="settings-shell__content-header">
         <div>
@@ -1992,23 +1839,14 @@ export const VoiceSettingsPanel = ({
           </div>
         </div>
 
-        <div className="voice-settings-diagnostics" aria-label="Диагностика тестового звонка">
-          {voiceDiagnosticsRows.map((row) => (
-            <div key={row.label} className="voice-settings-diagnostics__row">
-              <span>{row.label}</span>
-              <strong>{row.value}</strong>
-            </div>
-          ))}
-        </div>
-
         <div className="voice-settings-help">
           Нужна помощь? Здесь собраны все быстрые настройки голоса, чтобы не вылезать из звонка.
         </div>
       </section>
 
-      <section className="voice-settings-card">
+      <section className="voice-settings-card voice-settings-card--processing">
         <div className="voice-settings-card__title">Движок шумоподавления</div>
-        <div className="voice-profile-list">
+        <div className="voice-profile-list voice-profile-list--processing">
           {denoiserModeOptions.map((option) => (
             <label key={option.id} className="voice-profile-option voice-profile-option--single-line">
               <input type="radio" name="denoiserMode" checked={audioDenoiserMode === option.id} onChange={() => onDenoiserModeChange(option.id)} />
@@ -2020,7 +1858,7 @@ export const VoiceSettingsPanel = ({
         </div>
 
         <div className="voice-settings-card__title">Профиль ввода</div>
-        <div className="voice-profile-list">
+        <div className="voice-profile-list voice-profile-list--processing">
           {noiseProfileOptions.map((option) => (
             <label key={option.id} className="voice-profile-option">
               <input type="radio" name="noiseProfile" checked={noiseSuppressionMode === option.id} onChange={() => onNoiseProfileChange(option.id)} />
@@ -2031,24 +1869,25 @@ export const VoiceSettingsPanel = ({
           ))}
         </div>
 
-        <div className="voice-toggle-row voice-toggle-row--compact">
-          <div>
-            <strong>Эхоподавление</strong>
+        <div className="voice-settings-processing-toggles">
+          <div className="voice-toggle-row voice-toggle-row--compact">
+            <div>
+              <strong>Эхоподавление</strong>
+            </div>
+            <VoiceSwitch active={echoCancellationEnabled} onClick={onToggleEchoCancellation} label="Эхоподавление" />
           </div>
-          <VoiceSwitch active={echoCancellationEnabled} onClick={onToggleEchoCancellation} label="Эхоподавление" />
-        </div>
 
-        <div className="voice-toggle-row">
-          <div>
-            <strong>Автоматически определять чувствительность ввода</strong>
-            <span>Система сама подстраивает порог срабатывания микрофона под текущий шум.</span>
+          <div className="voice-toggle-row">
+            <div>
+              <strong>Автоматически определять чувствительность ввода</strong>
+              <span>Система сама подстраивает порог срабатывания микрофона под текущий шум.</span>
+            </div>
+            <VoiceSwitch active={autoInputSensitivity} onClick={onToggleAutoSensitivity} label="Автоматическая чувствительность" />
           </div>
-          <VoiceSwitch active={autoInputSensitivity} onClick={onToggleAutoSensitivity} label="Автоматическая чувствительность" />
         </div>
       </section>
     </div>
-  );
-};
+);
 
 export const NotificationsSettings = ({
   directNotificationsEnabled,

@@ -5904,7 +5904,6 @@ export default function MenuMain({
     activeNoiseProfile,
     echoCancellationEnabled,
     autoInputSensitivity,
-    streamDiagnostics,
     handleInputDeviceChange,
     handleOutputDeviceChange,
     updateMicVolume,

@@ -96,7 +96,6 @@ export function MenuMainSettingsContent({
   activeNoiseProfile,
   echoCancellationEnabled,
   autoInputSensitivity,
-  streamDiagnostics,
   handleInputDeviceChange,
   handleOutputDeviceChange,
   updateMicVolume,
@@ -403,7 +402,6 @@ export function MenuMainSettingsContent({
           activeNoiseProfile={activeNoiseProfile}
           echoCancellationEnabled={echoCancellationEnabled}
           autoInputSensitivity={autoInputSensitivity}
-          streamDiagnostics={streamDiagnostics}
           onInputDeviceChange={handleInputDeviceChange}
           onOutputDeviceChange={handleOutputDeviceChange}
           onMicVolumeChange={updateMicVolume}
