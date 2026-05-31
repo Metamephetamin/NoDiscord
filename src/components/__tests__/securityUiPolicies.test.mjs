@@ -362,6 +362,14 @@ test("voice stage toolbar does not render a duplicate center camera button", () 
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
 });
 
+test("voice stage does not keep a separate eye preview control", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+
+  assert.doesNotMatch(stageSource, /case "preview":/);
+  assert.doesNotMatch(stageSource, /3\.5-6 9\.5-6/);
+  assert.doesNotMatch(stageSource, /icon: "preview"/);
+});
+
 test("poll votes persist locally and expose anonymous mode", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");

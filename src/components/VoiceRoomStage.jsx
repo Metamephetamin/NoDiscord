@@ -480,13 +480,6 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
           <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
         </svg>
       );
-    case "preview":
-      return (
-        <svg {...commonProps}>
-          <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-          <circle cx="12" cy="12" r="2.8" />
-        </svg>
-      );
     case "fullscreen":
       return (
         <svg {...commonProps}>
