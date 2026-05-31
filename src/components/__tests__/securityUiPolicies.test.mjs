@@ -77,6 +77,14 @@ test("server icon changes require manage server permission", () => {
   assert.match(assetsControllerSource, /ServerPermissionEvaluator\.CanManageServer\(snapshot, currentUser\.UserId\)/);
 });
 
+test("admin banned user rows keep avatar urls from mixed backend payloads", () => {
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.match(settingsSource, /const getAdminUserAvatarUrl = \(user\) =>/);
+  assert.match(settingsSource, /user\?\.avatarUrl \?\? user\?\.avatar_url \?\? user\?\.AvatarUrl \?\? user\?\.avatar/);
+  assert.match(settingsSource, /src=\{getAdminUserAvatarUrl\(targetUser\)\}/);
+});
+
 test("avatar crop editor exposes vertical positioning control", () => {
   const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
 

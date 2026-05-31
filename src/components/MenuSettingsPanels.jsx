@@ -1399,6 +1399,10 @@ const getAdminOverviewArray = (overview, key) => (
   Array.isArray(overview?.[key]) ? overview[key] : []
 );
 
+const getAdminUserAvatarUrl = (user) => (
+  String(user?.avatarUrl ?? user?.avatar_url ?? user?.AvatarUrl ?? user?.avatar ?? "").trim()
+);
+
 const getAdminReportKindLabel = (report) => (
   report?.reportKind === "conversation_spam" ? "Спам-беседа" : "Жалоба на сообщение"
 );
@@ -1735,7 +1739,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
 
                   return (
                     <article key={userId} className={`admin-user-row ${targetUser.isBanned ? "admin-user-row--banned" : ""}`}>
-                      <AnimatedAvatar className="admin-user-row__avatar" src={targetUser.avatarUrl} alt={targetUser.displayName || targetUser.nickname || userId} />
+                      <AnimatedAvatar className="admin-user-row__avatar" src={getAdminUserAvatarUrl(targetUser)} alt={targetUser.displayName || targetUser.nickname || userId} />
                       <div className="admin-user-row__body">
                         <div className="admin-user-row__title">
                           <strong className="admin-security-overflow-safe">{targetUser.displayName || targetUser.nickname || `User ${userId}`}</strong>
