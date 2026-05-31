@@ -159,6 +159,20 @@ test("message search input text is readable on dark chat topbar", () => {
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
 });
 
+test("admin security styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const adminCss = readRepoFile("src/css/AdminSecurity.css");
+  const panelsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.match(panelsSource, /import "\.\.\/css\/AdminSecurity\.css";/);
+  assert.match(adminCss, /\.admin-security-page-backdrop \{/);
+  assert.match(adminCss, /\.admin-security-workspace \{/);
+  assert.match(adminCss, /\.admin-user-row \{/);
+  assert.doesNotMatch(mainCss, /^\.admin-security-page-backdrop \{/m);
+  assert.doesNotMatch(mainCss, /^\.admin-security-workspace \{/m);
+  assert.doesNotMatch(mainCss, /^\.admin-user-row \{/m);
+});
+
 test("API_BASE_URL callers do not duplicate the api prefix", () => {
   const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const textChatSource = readRepoFile("src/features/text-chat/TextChatController.jsx");

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
+import "../css/AdminSecurity.css";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import PercentageSlider from "./PercentageSlider";
 import { formatIntegrationActivityStatus } from "../utils/integrations";
