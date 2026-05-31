@@ -1333,6 +1333,8 @@ export function createVoiceRoomClient({
   const emitLocalScreenState = () => {
     const isScreenActive = Boolean(localScreenStream);
     const isCameraActive = Boolean(localCameraStream);
+    const screenActive = isScreenActive;
+    const cameraActive = isCameraActive;
     const isActive = isScreenActive || isCameraActive;
     const liveMode = isScreenActive && isCameraActive
       ? "both"
@@ -1341,16 +1343,7 @@ export function createVoiceRoomClient({
         : isCameraActive
           ? "camera"
           : "";
-    const previewMode =
-      localPreviewShareMode === "camera" && isCameraActive
-        ? "camera"
-        : localPreviewShareMode === "screen" && isScreenActive
-          ? "screen"
-          : isScreenActive
-            ? "screen"
-            : isCameraActive
-              ? "camera"
-              : "";
+    const previewMode = isScreenActive ? "screen" : isCameraActive ? "camera" : "";
     const previewStream = previewMode === "camera" ? localCameraStream : previewMode === "screen" ? localScreenStream : null;
     const previewVideoTrack = previewStream?.getVideoTracks?.()[0] || null;
     const previewSourceTitle =
@@ -1372,6 +1365,9 @@ export function createVoiceRoomClient({
       sourceTitle: previewSourceTitle,
       screenActive: isScreenActive,
       cameraActive: isCameraActive,
+      secondaryStream: screenActive && cameraActive ? localCameraStream : null,
+      secondaryMode: screenActive && cameraActive ? "camera" : "",
+      secondaryTitle: screenActive && cameraActive ? "Камера" : "",
     });
   };
 
@@ -2866,6 +2862,15 @@ const handleDeviceChange = () => {
         }
       });
     }
+    if (existing?.cameraStream) {
+      existing.cameraStream.getTracks().forEach((track) => {
+        try {
+          track.stop?.();
+        } catch {
+          // ignore cleanup failures for cloned tracks
+        }
+      });
+    }
 
     remoteScreenShares.delete(userId);
     emitRemoteScreens();
@@ -2971,7 +2976,7 @@ const handleDeviceChange = () => {
 
       if (state.cameraPublication) {
         const focusedCameraTarget = getPublicationVideoTarget(state.cameraPublication, REMOTE_CAMERA_TARGET);
-        const shouldSubscribeCamera = !isSpecificRemoteShareFocused;
+        const shouldSubscribeCamera = !isSpecificRemoteShareFocused || isFocused;
         const cameraIsPrimary = !hasScreenShare && isFocused;
         const cameraScale = cameraIsPrimary ? adaptiveProfile.remoteFocusedScale : adaptiveProfile.remoteBackgroundScale;
         const cameraFps = cameraIsPrimary ? adaptiveProfile.remoteFocusedFps : adaptiveProfile.remoteBackgroundFps;
@@ -3018,10 +3023,16 @@ const handleDeviceChange = () => {
     if (includeScreenAudio) {
       stream.addTrack(state.screenAudioPublication.audioTrack.mediaStreamTrack);
     }
+    const includeCameraInset =
+      preferredPublication.source === Track.Source.ScreenShare
+      && state.cameraPublication?.isSubscribed
+      && state.cameraPublication?.videoTrack;
+    const cameraStream = includeCameraInset ? new MediaStream([state.cameraPublication.videoTrack.mediaStreamTrack]) : null;
 
     remoteScreenShares.set(userId, {
       ...getParticipantSnapshot(participant),
       stream,
+      cameraStream: preferredPublication.source === Track.Source.ScreenShare ? cameraStream : null,
       updatedAt: Date.now(),
       hasAudio: Boolean(includeScreenAudio),
       mode: preferredPublication.source === Track.Source.Camera ? "camera" : "screen",

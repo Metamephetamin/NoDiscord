@@ -616,6 +616,9 @@ export default function VoiceRoomStage({
         width: selectedStream?.width || 0,
         height: selectedStream?.height || 0,
         fps: selectedStream?.fps || 0,
+        secondaryStream: selectedStream?.cameraStream || null,
+        secondaryTitle: "Камера",
+        secondaryMode: selectedStream?.cameraStream ? "camera" : "",
       };
     }
 
@@ -633,6 +636,9 @@ export default function VoiceRoomStage({
         height: Number(localSharePreview.stream?.getVideoTracks?.()[0]?.getSettings?.().height || 0),
         fps: Number(localSharePreview.stream?.getVideoTracks?.()[0]?.getSettings?.().frameRate || 0),
         mode: localSharePreview.mode || "screen",
+        secondaryStream: localSharePreview.secondaryStream || null,
+        secondaryTitle: localSharePreview.secondaryTitle || "Камера",
+        secondaryMode: localSharePreview.secondaryMode || "",
       };
     }
 
@@ -971,6 +977,18 @@ export default function VoiceRoomStage({
               <AnimatedAvatar className="voice-room-stage__hero-empty-avatar" src={activeStage.avatar} alt={activeStage.name} />
               <strong>{activeStage.name}</strong>
               <span>Поток ещё подключается</span>
+            </div>
+          ) : null}
+          {activeStage.secondaryStream ? (
+            <div className="voice-room-stage__secondary">
+              <VoiceStageMedia
+                stream={activeStage.secondaryStream}
+                alt={activeStage.secondaryTitle || "Камера"}
+                className="voice-room-stage__secondary-media"
+                muted
+                mirrored={activeStage.kind === "local" && activeStage.secondaryMode === "camera"}
+              />
+              <span>{activeStage.secondaryTitle || "Камера"}</span>
             </div>
           ) : null}
 

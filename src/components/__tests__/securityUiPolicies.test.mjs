@@ -389,6 +389,26 @@ test("local camera previews are mirrored consistently", () => {
   assert.match(mainCss, /\.camera-modal__video--mirrored/);
 });
 
+test("screen and camera shares render as separate viewing windows", () => {
+  const voiceClientSource = readRepoFile("src/webrtc/livekitVoiceRoomClient.js");
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const viewerSource = readRepoFile("src/components/ScreenShareViewer.jsx");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
+  const viewerCss = readRepoFile("src/css/ScreenShareViewer.css");
+
+  assert.match(voiceClientSource, /secondaryStream: screenActive && cameraActive \? localCameraStream : null/);
+  assert.match(voiceClientSource, /cameraStream: preferredPublication\.source === Track\.Source\.ScreenShare/);
+  assert.match(voiceClientSource, /const shouldSubscribeCamera = !isSpecificRemoteShareFocused \|\| isFocused;/);
+  assert.match(stageSource, /activeStage\.secondaryStream/);
+  assert.match(stageSource, /voice-room-stage__secondary/);
+  assert.match(viewerSource, /secondaryStream/);
+  assert.match(workspaceSource, /secondaryStream=\{selectedStream\?\.cameraStream \|\| null\}/);
+  assert.match(workspaceSource, /secondaryStream=\{localSharePreview\?\.secondaryStream \|\| null\}/);
+  assert.match(stageCss, /\.voice-room-stage__secondary/);
+  assert.match(viewerCss, /\.stream-viewer__secondary/);
+});
+
 test("voice stage toolbar does not render a duplicate center camera button", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");

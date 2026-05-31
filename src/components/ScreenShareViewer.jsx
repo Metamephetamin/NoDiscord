@@ -14,8 +14,12 @@ export default function ScreenShareViewer({
   onAction,
   actionVariant = "default",
   mirrored = false,
+  secondaryStream = null,
+  secondaryTitle = "",
+  secondaryMirrored = false,
 }) {
   const videoRef = useRef(null);
+  const secondaryVideoRef = useRef(null);
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -39,6 +43,24 @@ export default function ScreenShareViewer({
       mediaElement.src = "";
     };
   }, [muted, stream, videoSrc]);
+
+  useEffect(() => {
+    if (!secondaryVideoRef.current) {
+      return;
+    }
+
+    const mediaElement = secondaryVideoRef.current;
+    mediaElement.srcObject = secondaryStream || null;
+    mediaElement.muted = true;
+
+    if (secondaryStream) {
+      mediaElement.play().catch((error) => console.error("Ошибка запуска второго окна трансляции:", error));
+    }
+
+    return () => {
+      mediaElement.srcObject = null;
+    };
+  }, [secondaryStream]);
 
   useEffect(() => {
     if (!videoSrc || !videoRef.current) {
@@ -182,6 +204,18 @@ export default function ScreenShareViewer({
                 <div>audio: {debugInfo.hasAudio ? "yes" : "no"}</div>
                 <div>state: {debugInfo.readyState}</div>
                 <div>frame updated: {debugInfo.updatedAt || "none"}</div>
+              </div>
+            ) : null}
+            {secondaryStream ? (
+              <div className="stream-viewer__secondary">
+                <video
+                  ref={secondaryVideoRef}
+                  className={`stream-viewer__secondary-video ${secondaryMirrored ? "stream-viewer__video--mirrored" : ""}`.trim()}
+                  autoPlay
+                  playsInline
+                  muted
+                />
+                <span>{secondaryTitle || "Камера"}</span>
               </div>
             ) : null}
           </>

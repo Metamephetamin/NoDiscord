@@ -2807,6 +2807,8 @@ function ServerMainComponent({
             subtitle="Просмотр видеопотока участника"
             onClose={onCloseSelectedStream}
             debugInfo={selectedStreamDebugInfo}
+            secondaryStream={selectedStream?.cameraStream || null}
+            secondaryTitle="Камера"
           />
         ) : desktopServerPane === "voice" && isLocalSharePreviewVisible && hasLocalSharePreview ? (
           <ScreenShareViewer
@@ -2819,6 +2821,9 @@ function ServerMainComponent({
             onClose={onCloseLocalSharePreview}
             debugInfo={localSharePreviewDebugInfo}
             mirrored={localSharePreview?.mode === "camera"}
+            secondaryStream={localSharePreview?.secondaryStream || null}
+            secondaryTitle={localSharePreview?.secondaryTitle || "Камера"}
+            secondaryMirrored={localSharePreview?.secondaryMode === "camera"}
           />
         ) : isVoicePreviewVisible ? (
           <VoiceChannelPreview
