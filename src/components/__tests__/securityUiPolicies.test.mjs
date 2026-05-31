@@ -168,6 +168,17 @@ test("profile voice action uses a soundpad glyph instead of settings gear", () =
   assert.match(mainCss, /\.profile__mini-glyph--soundpad::before/);
 });
 
+test("profile store styles are split out of the main menu bundle", () => {
+  const workspaceSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const storeCss = readRepoFile("src/css/ProfileStore.css");
+
+  assert.match(workspaceSource, /import "\.\.\/css\/ProfileStore\.css";/);
+  assert.doesNotMatch(mainCss, /\.profile-store-hero/);
+  assert.match(storeCss, /\.profile-store-hero/);
+  assert.match(storeCss, /\.friends-main__content--store/);
+});
+
 test("clipboard images can be pasted from the whole text chat area", () => {
   const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
