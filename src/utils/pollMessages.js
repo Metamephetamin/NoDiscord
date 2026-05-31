@@ -106,6 +106,34 @@ export function resolvePollTheme(themeId) {
   return POLL_THEME_PRESETS.find((theme) => theme.id === normalizePollThemeId(themeId)) || POLL_THEME_PRESETS[0];
 }
 
+function hashPollSeed(value) {
+  const normalizedValue = String(value || "");
+  let hash = 2166136261;
+  for (let index = 0; index < normalizedValue.length; index += 1) {
+    hash ^= normalizedValue.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+export function getPollDisplayOptions(poll, { messageId = "", currentUserId = "" } = {}) {
+  const options = Array.isArray(poll?.options) ? [...poll.options] : [];
+  if (!poll?.settings?.shuffleOptions || options.length < 2) {
+    return options;
+  }
+
+  const seed = `${messageId || "message"}:${currentUserId || "guest"}:${poll.question || ""}`;
+  return options
+    .map((option, index) => ({
+      option,
+      index,
+      rank: hashPollSeed(`${seed}:${option?.id || index}:${option?.text || ""}`),
+    }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map((entry) => entry.option);
+}
+
 export function normalizePollMessage(rawPoll) {
   const question = clampText(rawPoll?.question, MAX_POLL_QUESTION_LENGTH);
   const normalizedOptions = Array.isArray(rawPoll?.options)

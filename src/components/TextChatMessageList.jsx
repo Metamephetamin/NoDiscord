@@ -15,7 +15,7 @@ import {
   resolveMediaUrl,
   resolveOptimizedMediaUrl,
 } from "../utils/media";
-import { resolvePollTheme } from "../utils/pollMessages";
+import { getPollDisplayOptions, resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { formatFileSize, formatTimestamp } from "../utils/textChatHelpers";
@@ -1174,7 +1174,11 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
   const [localTotalVoters, setLocalTotalVoters] = useState(() => Math.max(0, Number(storedVoteState?.totalVoters || poll?.totalVoters) || 0));
   const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState(() => storedVoteState?.selectedOptionIds || []);
   const [addOptionDraft, setAddOptionDraft] = useState("");
-  const options = [...(Array.isArray(poll?.options) ? poll.options : []), ...addedOptions];
+  const baseOptions = useMemo(
+    () => getPollDisplayOptions(poll, { messageId, currentUserId }),
+    [currentUserId, messageId, poll]
+  );
+  const options = [...baseOptions, ...addedOptions];
   const pollTheme = useMemo(() => resolvePollTheme(poll?.themeId), [poll?.themeId]);
   const isAnonymousPoll = Boolean(poll?.settings?.anonymous || poll?.settings?.showWhoVoted === false);
   const totalVoters = Math.max(

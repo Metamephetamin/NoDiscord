@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPollMessagePayload, parsePollMessage } from "../../utils/pollMessages.js";
+import { createPollMessagePayload, getPollDisplayOptions, parsePollMessage } from "../../utils/pollMessages.js";
 
 test("poll payload preserves anonymous voting setting", () => {
   const payload = createPollMessagePayload({
@@ -39,4 +39,51 @@ test("legacy open poll setting remains open", () => {
 
   assert.equal(parsed.settings.anonymous, false);
   assert.equal(parsed.settings.showWhoVoted, true);
+});
+
+test("poll display options are deterministically shuffled per viewer", () => {
+  const poll = parsePollMessage(createPollMessagePayload({
+    question: "Что выбрать?",
+    options: [
+      { id: "a", text: "A" },
+      { id: "b", text: "B" },
+      { id: "c", text: "C" },
+      { id: "d", text: "D" },
+    ],
+    settings: {
+      shuffleOptions: true,
+    },
+  }));
+
+  const firstViewerOptions = getPollDisplayOptions(poll, { messageId: 42, currentUserId: 7 });
+  const repeatedFirstViewerOptions = getPollDisplayOptions(poll, { messageId: 42, currentUserId: 7 });
+  const secondViewerOptions = getPollDisplayOptions(poll, { messageId: 42, currentUserId: 8 });
+
+  assert.deepEqual(
+    firstViewerOptions.map((option) => option.id),
+    repeatedFirstViewerOptions.map((option) => option.id)
+  );
+  assert.notDeepEqual(
+    firstViewerOptions.map((option) => option.id),
+    poll.options.map((option) => option.id)
+  );
+  assert.notDeepEqual(
+    firstViewerOptions.map((option) => option.id),
+    secondViewerOptions.map((option) => option.id)
+  );
+});
+
+test("poll display options keep author order when shuffle is disabled", () => {
+  const poll = parsePollMessage(createPollMessagePayload({
+    question: "Что выбрать?",
+    options: [
+      { id: "a", text: "A" },
+      { id: "b", text: "B" },
+      { id: "c", text: "C" },
+    ],
+  }));
+
+  const options = getPollDisplayOptions(poll, { messageId: 42, currentUserId: 7 });
+
+  assert.deepEqual(options.map((option) => option.id), ["a", "b", "c"]);
 });
