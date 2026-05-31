@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
+import "../css/VoiceRoomStage.css";
 
 const formatParticipantCount = (count) => {
   const value = Number(count) || 0;
