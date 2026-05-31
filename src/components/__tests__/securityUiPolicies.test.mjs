@@ -661,3 +661,15 @@ test("batch upload sheet styles stay split from the main text chat stylesheet", 
   assert.match(batchUploadCss, /html\[data-ui-theme="light"\] \.batch-upload-sheet/);
   assert.doesNotMatch(textChatCss, /batch-upload-sheet/);
 });
+
+test("chat profile modal styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const profileCss = readRepoFileIfExists("src/css/TextChatProfileModal.css");
+  const profileSource = readRepoFile("src/components/TextChatProfileModal.jsx");
+
+  assert.match(profileSource, /import "\.\.\/css\/TextChatProfileModal\.css";/);
+  assert.match(profileCss, /\.chat-profile-modal-backdrop \{/);
+  assert.match(profileCss, /\.chat-profile-modal \{/);
+  assert.match(profileCss, /html\[data-ui-theme="light"\] \.chat-profile-modal/);
+  assert.doesNotMatch(textChatCss, /chat-profile-modal/);
+});

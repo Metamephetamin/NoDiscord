@@ -2,6 +2,7 @@ import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { getProfileCustomizationClassName, getProfileCustomizationStyle } from "../utils/profileCustomization";
+import "../css/TextChatProfileModal.css";
 
 const PROFILE_ICON_PATHS = {
   about: (
