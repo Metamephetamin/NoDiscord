@@ -22,6 +22,7 @@ import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { MAX_SERVER_NAME_LENGTH } from "../utils/menuMainModel";
 import {
   APP_CACHE_LIMIT_OPTIONS,
   clearAppCacheStorage,
@@ -2655,7 +2656,7 @@ export const ServerSettings = ({
             )}
             <label className="voice-settings-field voice-settings-field--stacked voice-settings-field--grow">
               <span>Название сервера</span>
-              <input className="settings-input" type="text" value={activeServer?.name || ""} onChange={(event) => onServerNameChange(event.target.value)} disabled={!canManageServer} />
+              <input className="settings-input" type="text" value={activeServer?.name || ""} maxLength={MAX_SERVER_NAME_LENGTH} onChange={(event) => onServerNameChange(event.target.value)} disabled={!canManageServer} />
             </label>
           </div>
 

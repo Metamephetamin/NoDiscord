@@ -247,6 +247,19 @@ test("server deletion uses an in-app confirmation instead of browser confirm", (
   assert.match(controllerSource, /Подтвердите удаление сервера/);
 });
 
+test("server names are capped consistently in settings and stored snapshots", () => {
+  const modelSource = readRepoFile("src/utils/menuMainModel.js");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.match(modelSource, /export const MAX_SERVER_NAME_LENGTH = 48;/);
+  assert.match(modelSource, /export const normalizeServerNameInput = \(value, fallback = "Сервер"\) =>/);
+  assert.match(modelSource, /name: normalizeServerNameInput\(String\(server\?\.name \|\| `Сервер \$\{index \+ 1\}`\)/);
+  assert.match(controllerSource, /normalizeServerNameInput\(createServerName/);
+  assert.match(controllerSource, /name: normalizeServerNameInput\(value, server\.name \|\| "Сервер"\)/);
+  assert.match(settingsSource, /maxLength=\{MAX_SERVER_NAME_LENGTH\}/);
+});
+
 test("stream fullscreen button toggles fullscreen mode", () => {
   const streamSource = readRepoFile("src/components/ScreenShareViewer.jsx");
 

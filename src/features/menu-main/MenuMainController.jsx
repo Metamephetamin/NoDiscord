@@ -185,6 +185,7 @@ import {
   MOBILE_VIEWPORT_QUERY,
   MONITOR_ICON_URL,
   normalizeFriend,
+  normalizeServerNameInput,
   normalizeServers,
   normalizeTextChannelName,
   parseServerChatChannelId,
@@ -4608,7 +4609,7 @@ export default function MenuMain({
   };
   const handleCreateServerSubmit = (event) => {
     event?.preventDefault?.();
-    const nextName = String(createServerName || "");
+    const nextName = normalizeServerNameInput(createServerName, "");
     if (!nextName.trim()) {
       setCreateServerError("Введите название сервера.");
       return;
@@ -4686,7 +4687,7 @@ export default function MenuMain({
   };
   const updateActiveServerName = (value) => {
     if (!canManageServer) return;
-    updateServer((server) => ({ ...server, name: value }));
+    updateServer((server) => ({ ...server, name: normalizeServerNameInput(value, server.name || "Сервер") }));
   };
   const updateActiveServerDescription = (value) => {
     if (!canManageServer) return;
