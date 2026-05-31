@@ -108,6 +108,15 @@ test("pinned message jumps hydrate older history before giving up", () => {
   assert.match(scrollToMessageSource, /window\.requestAnimationFrame\(\(\) => attemptScroll\(attempt \+ 1\)\)/);
 });
 
+test("text chat scroll positions persist per user and channel", () => {
+  const scrollManagerSource = readRepoFile("src/hooks/useTextChatScrollManager.js");
+
+  assert.match(scrollManagerSource, /const TEXT_CHAT_SCROLL_STATE_ENABLED = true;/);
+  assert.match(scrollManagerSource, /writeTextChatScrollState\(payload\.userId, payload\.channelId, payload\.state\)/);
+  assert.match(scrollManagerSource, /readTextChatScrollState\(currentUserId, scopedChannelId\)/);
+  assert.match(scrollManagerSource, /scheduleScrollStateWrite\(\{\s*anchorMessageId,/);
+});
+
 test("avatar crop editor exposes vertical positioning control", () => {
   const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
 
