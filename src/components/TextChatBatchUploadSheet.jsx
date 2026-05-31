@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import PendingUploadPreview from "./PendingUploadPreview";
 import { formatFileSize } from "../utils/textChatHelpers";
 import { finishPerfTraceOnNextFrame, recordPerfEvent } from "../utils/perf";
+import "../css/TextChatBatchUploadSheet.css";
 
 const INITIAL_VISIBLE_BATCH_ITEMS = 12;
 const BATCH_RENDER_CHUNK_SIZE = 18;

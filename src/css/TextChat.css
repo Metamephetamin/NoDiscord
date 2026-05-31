@@ -6119,7 +6119,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   .forward-modal,
   .forward-modal__list,
   .chat-profile-modal,
-  .batch-upload-sheet,
   .composer-emoji-picker,
   .media-preview__dialog,
   .stream-modal,
@@ -6138,7 +6137,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   .forward-modal,
   .forward-modal__list,
   .chat-profile-modal,
-  .batch-upload-sheet,
   .composer-emoji-picker,
   .media-preview__dialog,
   .stream-modal,
@@ -6156,7 +6154,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   .forward-modal,
   .forward-modal__list,
   .chat-profile-modal,
-  .batch-upload-sheet,
   .composer-emoji-picker,
   .media-preview__dialog,
   .stream-modal,
@@ -6176,7 +6173,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   .forward-modal,
   .forward-modal__list,
   .chat-profile-modal,
-  .batch-upload-sheet,
   .composer-emoji-picker,
   .media-preview__dialog,
   .stream-modal,
@@ -6200,7 +6196,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   .forward-modal,
   .forward-modal__list,
   .chat-profile-modal,
-  .batch-upload-sheet,
   .composer-emoji-picker,
   .media-preview__dialog,
   .stream-modal,
@@ -6220,7 +6215,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   .forward-modal,
   .forward-modal__list,
   .chat-profile-modal,
-  .batch-upload-sheet,
   .composer-emoji-picker,
   .media-preview__dialog,
   .stream-modal,
@@ -8316,590 +8310,6 @@ html[data-ui-density="compact"] .input-area {
   display: none;
 }
 
-.batch-upload-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1205;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(7, 10, 17, 0.62);
-}
-
-.batch-upload-sheet {
-  width: min(100%, 386px);
-  max-height: min(88vh, 760px);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 14px;
-  background: rgba(22, 30, 42, 0.985);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
-  overflow: auto;
-}
-
-.batch-upload-sheet__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.batch-upload-sheet__header-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.batch-upload-sheet__header strong {
-  color: #f7fbff;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.batch-upload-sheet__header-meta {
-  color: #93a4c0;
-  font-size: 12px;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.batch-upload-sheet__document-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.batch-upload-sheet__document-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.batch-upload-sheet__document-row--pending-shell {
-  grid-template-columns: 58px minmax(0, 1fr);
-}
-
-.batch-upload-sheet__document-row--active {
-  border-color: rgba(121, 169, 255, 0.56);
-  box-shadow: inset 0 0 0 1px rgba(121, 169, 255, 0.48);
-}
-
-.batch-upload-sheet__document-main {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.batch-upload-sheet__document-preview {
-  position: relative;
-  width: 58px;
-  height: 58px;
-  border-radius: 14px;
-  overflow: hidden;
-  background: rgba(9, 14, 24, 0.82);
-}
-
-.batch-upload-sheet__document-preview--pending-shell {
-  display: block;
-}
-
-.batch-upload-sheet__document-preview-media {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-}
-
-.batch-upload-sheet__document-preview-media .pending-upload-preview__thumb,
-.batch-upload-sheet__document-preview-media .pending-upload-preview__full {
-  object-position: center 18%;
-}
-
-.batch-upload-sheet__document-fallback {
-  width: 100%;
-  height: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #dfe6f6;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.batch-upload-sheet__document-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.batch-upload-sheet__document-copy--pending-shell {
-  justify-content: center;
-}
-
-.batch-upload-sheet__document-name {
-  display: block;
-  color: #eef4ff;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.batch-upload-sheet__document-meta {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: #97a8c4;
-  font-size: 12px;
-  line-height: 1.25;
-}
-
-.batch-upload-sheet__document-line {
-  display: block;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.batch-upload-sheet__document-line--title {
-  width: min(100%, 190px);
-  height: 12px;
-}
-
-.batch-upload-sheet__document-line--meta {
-  width: 88px;
-  height: 9px;
-}
-
-.batch-upload-sheet__document-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.batch-upload-sheet__document-action {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #dce5fb;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
-}
-
-.batch-upload-sheet__document-action:hover,
-.batch-upload-sheet__document-action:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
-
-.batch-upload-sheet__document-action:disabled {
-  opacity: 0.44;
-  cursor: not-allowed;
-}
-
-.batch-upload-sheet__document-action--remove {
-  font-size: 15px;
-}
-
-.batch-upload-sheet__grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 3px;
-  padding: 4px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-}
-
-.batch-upload-sheet__grid--count-1 {
-  padding: 0;
-  background: rgba(7, 11, 18, 0.32);
-}
-
-.batch-upload-sheet__tile {
-  position: relative;
-  min-width: 0;
-  min-height: 86px;
-  overflow: hidden;
-  border-radius: 0;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.batch-upload-sheet__tile--loading-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 12, 20, 0.82);
-}
-
-.batch-upload-sheet__tile--pending-shell {
-  background: rgba(10, 14, 22, 0.88);
-}
-
-.batch-upload-sheet__tile--pending-shell-waiting:nth-child(2n) {
-  background: rgba(12, 17, 27, 0.92);
-}
-
-.batch-upload-sheet__tile--pending-shell-waiting:nth-child(3n) {
-  background: rgba(14, 20, 31, 0.96);
-}
-
-.batch-upload-sheet__tile-pending-shimmer {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(110deg, rgba(255, 255, 255, 0.03) 12%, rgba(143, 171, 255, 0.18) 26%, rgba(255, 255, 255, 0.03) 42%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
-  background-size: 220% 100%, 100% 100%;
-  animation: batchUploadPendingShimmer 1.15s linear infinite;
-  will-change: background-position, opacity;
-}
-
-.batch-upload-sheet__tile--pending-shell-waiting .batch-upload-sheet__tile-pending-shimmer {
-  animation-duration: 0.92s;
-}
-
-.batch-upload-sheet__loading-more-label {
-  color: rgba(232, 238, 249, 0.92);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.batch-upload-sheet__pending-copy {
-  color: rgba(196, 212, 240, 0.86);
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.batch-upload-sheet__tile--active {
-  box-shadow: inset 0 0 0 2px rgba(121, 169, 255, 0.9);
-}
-
-.batch-upload-sheet__tile-button {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  display: block;
-  cursor: pointer;
-}
-
-.batch-upload-sheet__tile--default,
-.batch-upload-sheet__tile--six {
-  aspect-ratio: 1 / 1;
-  grid-column: span 2;
-}
-
-.batch-upload-sheet__grid--count-1 .batch-upload-sheet__tile--default {
-  grid-column: 1 / -1;
-  aspect-ratio: 4 / 3;
-  min-height: 244px;
-}
-
-.batch-upload-sheet__tile--half {
-  aspect-ratio: 1 / 1.22;
-  grid-column: span 3;
-}
-
-.batch-upload-sheet__tile--large-left {
-  aspect-ratio: 1 / 1.22;
-  grid-column: span 4;
-  grid-row: span 2;
-}
-
-.batch-upload-sheet__tile--stack {
-  aspect-ratio: 1 / 1.22;
-  grid-column: span 2;
-}
-
-.batch-upload-sheet__tile--quad {
-  aspect-ratio: 1 / 1;
-  grid-column: span 3;
-}
-
-.batch-upload-sheet__tile--top {
-  aspect-ratio: 1 / 1.04;
-  grid-column: span 3;
-}
-
-.batch-upload-sheet__tile--bottom {
-  aspect-ratio: 1 / 1;
-  grid-column: span 2;
-}
-
-.batch-upload-sheet__preview {
-  width: 100%;
-  height: 100%;
-  background: rgba(9, 14, 24, 0.82);
-}
-
-.batch-upload-sheet__preview .pending-upload-preview__thumb,
-.batch-upload-sheet__preview .pending-upload-preview__full {
-  object-position: center 18%;
-}
-
-.batch-upload-sheet__preview .pending-upload-preview__thumb {
-  transform: none;
-  filter: none;
-}
-
-.batch-upload-sheet__tile-scrim {
-  position: absolute;
-  inset: auto 0 0;
-  height: 48px;
-  background: linear-gradient(180deg, transparent, rgba(4, 8, 15, 0.36));
-  pointer-events: none;
-}
-
-.batch-upload-sheet__thumb-fallback {
-  width: 100%;
-  height: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #dfe6f6;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.batch-upload-sheet__hint {
-  display: none;
-}
-
-.batch-upload-sheet__options--single .batch-upload-sheet__option:first-child,
-.batch-upload-sheet__options--single .batch-upload-sheet__option:last-child {
-  display: none;
-}
-
-.batch-upload-sheet__remove {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(7, 11, 18, 0.58);
-  color: #f7f9ff;
-  cursor: pointer;
-  transition: background-color 0.16s ease, transform 0.16s ease, opacity 0.16s ease;
-}
-
-.batch-upload-sheet__remove:hover,
-.batch-upload-sheet__remove:focus-visible {
-  background: rgba(255, 255, 255, 0.16);
-  transform: scale(1.05);
-}
-
-.batch-upload-sheet__remove:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.batch-upload-sheet__options {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.batch-upload-sheet__option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 34px;
-  padding: 0 2px;
-  color: #f2f6ff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: color 0.16s ease;
-}
-
-.batch-upload-sheet__option:hover {
-  color: #ffffff;
-}
-
-.batch-upload-sheet__checkbox {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-}
-
-.batch-upload-sheet__checkbox input {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  opacity: 0;
-}
-
-.batch-upload-sheet__checkbox-mark {
-  position: absolute;
-  inset: 0;
-  border-radius: 6px;
-  border: 2px solid rgba(160, 181, 214, 0.68);
-  background: transparent;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
-}
-
-.batch-upload-sheet__checkbox-mark::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 10px;
-  border-right: 2px solid #ffffff;
-  border-bottom: 2px solid #ffffff;
-  opacity: 0;
-  transform: rotate(45deg);
-  transform-origin: center;
-  translate: -50% -58%;
-}
-
-.batch-upload-sheet__checkbox input:checked + .batch-upload-sheet__checkbox-mark {
-  border-color: #6ea2ff;
-  background: #5f8cff;
-}
-
-.batch-upload-sheet__checkbox input:checked + .batch-upload-sheet__checkbox-mark::after {
-  opacity: 1;
-}
-
-.batch-upload-sheet__caption {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.batch-upload-sheet__caption span {
-  color: #8cc0ff;
-  font-size: 13px;
-  font-weight: 700;
-  padding-top: 0;
-}
-
-.batch-upload-sheet__caption textarea {
-  height: 30px;
-  min-height: 22px;
-  max-height: 84px;
-  resize: none;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  border-bottom: 2px solid rgba(110, 149, 255, 0.72);
-  border-radius: 0;
-  color: #f4f7ff;
-  background: transparent;
-  font: inherit;
-  line-height: 1.2;
-  outline: none;
-  transition: border-color 0.16s ease;
-}
-
-.batch-upload-sheet__caption textarea:focus {
-  border-bottom-color: rgba(143, 187, 255, 0.96);
-}
-
-.batch-upload-sheet__caption textarea::placeholder {
-  color: #7f8ba3;
-}
-
-.batch-upload-sheet__actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.batch-upload-sheet__actions-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 18px;
-}
-
-.batch-upload-sheet__action {
-  min-height: 36px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: #79a9ff;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
-}
-
-.batch-upload-sheet__action:hover,
-.batch-upload-sheet__action:focus-visible {
-  background: rgba(255, 255, 255, 0.05);
-  color: #a8cbff;
-}
-
-.batch-upload-sheet__action:disabled {
-  opacity: 0.44;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.batch-upload-sheet__action--attach {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 56px;
-  overflow: hidden;
-}
-
-.batch-upload-sheet__action--attach .attach-button__input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.batch-upload-sheet__action--primary {
-  color: #b8d4ff;
-}
-
 .input-area__controls--batch {
   display: none;
 }
@@ -9053,7 +8463,6 @@ html[data-ui-density="compact"] .input-area {
   animation: batchUploadPendingShimmer 0.95s linear infinite;
 }
 
-.batch-upload-sheet__preview,
 .chat-file-pill__preview-media {
   border-radius: inherit;
 }
@@ -10239,15 +9648,6 @@ html[data-ui-density="compact"] .message-composer {
     max-width: min(100%, 280px);
   }
 
-  .batch-upload-sheet-backdrop {
-    padding: 12px;
-    align-items: flex-end;
-  }
-
-  .batch-upload-sheet {
-    width: min(100%, 100%);
-    max-height: min(86vh, 720px);
-  }
 
   .message-composer {
     min-height: 50px;
@@ -10948,7 +10348,6 @@ html[data-ui-theme="light"] .composer-emoji-picker__search input::placeholder {
 
 html[data-ui-theme="light"] .forward-modal,
 html[data-ui-theme="light"] .poll-composer-modal,
-html[data-ui-theme="light"] .batch-upload-sheet,
 html[data-ui-theme="light"] .chat-profile-modal {
   border-color: #d9e0ec;
   background: #ffffff;
@@ -11000,9 +10399,7 @@ html[data-ui-theme="light"] .forward-modal__header h3,
 html[data-ui-theme="light"] .forward-modal__target-copy strong,
 html[data-ui-theme="light"] .poll-composer__header h3,
 html[data-ui-theme="light"] .poll-composer__setting-copy strong,
-html[data-ui-theme="light"] .poll-composer__theme-name,
-html[data-ui-theme="light"] .batch-upload-sheet__header strong,
-html[data-ui-theme="light"] .batch-upload-sheet__document-name {
+html[data-ui-theme="light"] .poll-composer__theme-name {
   color: #0f172a;
   text-shadow: none;
 }
@@ -11022,10 +10419,7 @@ html[data-ui-theme="light"] .forward-modal__target-copy small,
 html[data-ui-theme="light"] .forward-modal__empty,
 html[data-ui-theme="light"] .poll-composer__header p,
 html[data-ui-theme="light"] .poll-composer__hint,
-html[data-ui-theme="light"] .poll-composer__setting-copy small,
-html[data-ui-theme="light"] .batch-upload-sheet__header-meta,
-html[data-ui-theme="light"] .batch-upload-sheet__document-meta,
-html[data-ui-theme="light"] .batch-upload-sheet__pending-copy {
+html[data-ui-theme="light"] .poll-composer__setting-copy small {
   color: #5f6b82;
 }
 
@@ -11046,11 +10440,7 @@ html[data-ui-theme="light"] .chat-profile-modal__side-widget,
 html[data-ui-theme="light"] .chat-profile-modal__action,
 html[data-ui-theme="light"] .forward-modal__target,
 html[data-ui-theme="light"] .poll-composer__option,
-html[data-ui-theme="light"] .poll-composer__theme-swatch,
-html[data-ui-theme="light"] .batch-upload-sheet__document-row,
-html[data-ui-theme="light"] .batch-upload-sheet__grid,
-html[data-ui-theme="light"] .batch-upload-sheet__tile,
-html[data-ui-theme="light"] .batch-upload-sheet__document-preview {
+html[data-ui-theme="light"] .poll-composer__theme-swatch {
   border-color: #d9e0ec;
   background: #f8fafc;
   color: #172033;
@@ -11108,8 +10498,7 @@ html[data-ui-theme="light"] .poll-composer__actions {
 html[data-ui-theme="light"] .forward-modal__search,
 html[data-ui-theme="light"] .poll-composer__textarea,
 html[data-ui-theme="light"] .poll-composer__option-input,
-html[data-ui-theme="light"] .message-poll-card__add-option-input,
-html[data-ui-theme="light"] .batch-upload-sheet__caption textarea {
+html[data-ui-theme="light"] .message-poll-card__add-option-input {
   border-color: #d9e0ec;
   background: #ffffff;
   color: #172033;
@@ -11120,15 +10509,12 @@ html[data-ui-theme="light"] .batch-upload-sheet__caption textarea {
 html[data-ui-theme="light"] .forward-modal__search::placeholder,
 html[data-ui-theme="light"] .poll-composer__textarea::placeholder,
 html[data-ui-theme="light"] .poll-composer__option-input::placeholder,
-html[data-ui-theme="light"] .message-poll-card__add-option-input::placeholder,
-html[data-ui-theme="light"] .batch-upload-sheet__caption textarea::placeholder {
+html[data-ui-theme="light"] .message-poll-card__add-option-input::placeholder {
   color: #7c8799;
   -webkit-text-fill-color: #7c8799;
 }
 
 html[data-ui-theme="light"] .forward-modal__target--active,
-html[data-ui-theme="light"] .batch-upload-sheet__document-row--active,
-html[data-ui-theme="light"] .batch-upload-sheet__tile--active,
 html[data-ui-theme="light"] .poll-composer__theme-swatch--active {
   border-color: #b9c7ff;
   background: #eef3ff;
@@ -11137,9 +10523,7 @@ html[data-ui-theme="light"] .poll-composer__theme-swatch--active {
 
 html[data-ui-theme="light"] .poll-composer__label,
 html[data-ui-theme="light"] .poll-composer__add-option,
-html[data-ui-theme="light"] .message-poll-card__add-option,
-html[data-ui-theme="light"] .batch-upload-sheet__caption span,
-html[data-ui-theme="light"] .batch-upload-sheet__action {
+html[data-ui-theme="light"] .message-poll-card__add-option {
   color: #315fc7;
 }
 
@@ -11155,64 +10539,16 @@ html[data-ui-theme="light"] .poll-composer__close:focus-visible::after {
   background: #172033;
 }
 
-html[data-ui-theme="light"] .batch-upload-sheet__preview,
-html[data-ui-theme="light"] .batch-upload-sheet__tile--loading-more,
-html[data-ui-theme="light"] .batch-upload-sheet__tile--pending-shell,
-html[data-ui-theme="light"] .batch-upload-sheet__tile--pending-shell-waiting:nth-child(2n),
-html[data-ui-theme="light"] .batch-upload-sheet__tile--pending-shell-waiting:nth-child(3n) {
-  background: #eef3f8;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__document-fallback,
-html[data-ui-theme="light"] .batch-upload-sheet__thumb-fallback,
-html[data-ui-theme="light"] .batch-upload-sheet__loading-more-label {
-  color: #5f6b82;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__document-line {
-  background: #e3e8f1;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__remove {
-  background: rgba(15, 23, 42, 0.5);
-  color: #ffffff;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__remove:hover,
-html[data-ui-theme="light"] .batch-upload-sheet__remove:focus-visible {
-  background: rgba(15, 23, 42, 0.7);
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__document-action {
-  background: #eef3f8;
-  color: #5f6b82;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__document-action:hover,
-html[data-ui-theme="light"] .batch-upload-sheet__document-action:focus-visible,
-html[data-ui-theme="light"] .batch-upload-sheet__action:hover,
-html[data-ui-theme="light"] .batch-upload-sheet__action:focus-visible {
-  background: #e9eef7;
-  color: #172033;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__checkbox-mark {
-  border-color: #8fa0b8;
-  background: #ffffff;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__checkbox input:checked + .batch-upload-sheet__checkbox-mark {
-  border-color: #5f8cff;
-  background: #5f8cff;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__option {
-  color: #172033;
-}
 
-html[data-ui-theme="light"] .batch-upload-sheet__option:hover {
-  color: #0f172a;
-}
 
 html[data-ui-theme="light"] .media-preview {
   background: rgba(248, 250, 252, 0.72);

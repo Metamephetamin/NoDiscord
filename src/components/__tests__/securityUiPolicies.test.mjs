@@ -649,3 +649,15 @@ test("media-only message layout stays stable after reactions are added", () => {
   assert.match(mediaOnlySource, /hasRenderableAttachments/);
   assert.doesNotMatch(mediaOnlySource, /!reactions\.length/);
 });
+
+test("batch upload sheet styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const batchUploadCss = readRepoFileIfExists("src/css/TextChatBatchUploadSheet.css");
+  const batchUploadSource = readRepoFile("src/components/TextChatBatchUploadSheet.jsx");
+
+  assert.match(batchUploadSource, /import "\.\.\/css\/TextChatBatchUploadSheet\.css";/);
+  assert.match(batchUploadCss, /\.batch-upload-sheet-backdrop \{/);
+  assert.match(batchUploadCss, /\.batch-upload-sheet \{/);
+  assert.match(batchUploadCss, /html\[data-ui-theme="light"\] \.batch-upload-sheet/);
+  assert.doesNotMatch(textChatCss, /batch-upload-sheet/);
+});
