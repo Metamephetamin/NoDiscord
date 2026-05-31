@@ -4,12 +4,18 @@ import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatenc
 import { NOTIFICATION_SOUND_OPTIONS } from "../../utils/menuMainModel";
 
 const DEFAULT_NOTIFICATION_SOUND_ID = NOTIFICATION_SOUND_OPTIONS[0].id;
+const DEFAULT_SYSTEM_SOUND_VOLUME = 42;
 
 const getDefaultDirectMessageSoundId = (kind) => getDirectMessageSoundOptions(kind)[0]?.id || "classic";
+const normalizeSystemSoundVolume = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.max(0, Math.min(100, Math.round(numericValue))) : DEFAULT_SYSTEM_SOUND_VOLUME;
+};
 
 const createDefaultSoundState = () => ({
   notificationSoundEnabled: true,
   notificationSoundId: DEFAULT_NOTIFICATION_SOUND_ID,
+  systemSoundVolume: DEFAULT_SYSTEM_SOUND_VOLUME,
   customNotificationSoundData: "",
   customNotificationSoundName: "",
   notificationSoundError: "",
@@ -39,6 +45,7 @@ function readStoredSoundState(user, keys) {
           : DEFAULT_NOTIFICATION_SOUND_ID,
       customNotificationSoundData: localStorage.getItem(keys.notificationSoundCustomDataStorageKey) || "",
       customNotificationSoundName: localStorage.getItem(keys.notificationSoundCustomNameStorageKey) || "",
+      systemSoundVolume: normalizeSystemSoundVolume(localStorage.getItem(keys.systemSoundVolumeStorageKey)),
       directMessageSoundEnabled: localStorage.getItem(keys.directMessageSoundEnabledStorageKey) !== "false",
       directMessageSendSoundId: getDirectMessageSoundOptions("send").some((option) => option.id === directMessageSendSoundId)
         ? directMessageSendSoundId
@@ -63,6 +70,7 @@ function writeStoredSoundState(user, keys, state) {
     localStorage.setItem(keys.directMessageSendSoundStorageKey, state.directMessageSendSoundId);
     localStorage.setItem(keys.directMessageReceiveSoundStorageKey, state.directMessageReceiveSoundId);
     localStorage.setItem(keys.notificationSoundStorageKey, state.notificationSoundId);
+    localStorage.setItem(keys.systemSoundVolumeStorageKey, String(normalizeSystemSoundVolume(state.systemSoundVolume)));
 
     if (state.customNotificationSoundData) {
       localStorage.setItem(keys.notificationSoundCustomDataStorageKey, state.customNotificationSoundData);
@@ -156,6 +164,7 @@ export default function useMenuMainNotificationSound({
   notificationSoundStorageKey,
   notificationSoundCustomDataStorageKey,
   notificationSoundCustomNameStorageKey,
+  systemSoundVolumeStorageKey,
 }) {
   const keys = useMemo(() => ({
     directMessageSoundEnabledStorageKey,
@@ -165,6 +174,7 @@ export default function useMenuMainNotificationSound({
     notificationSoundStorageKey,
     notificationSoundCustomDataStorageKey,
     notificationSoundCustomNameStorageKey,
+    systemSoundVolumeStorageKey,
   }), [
     directMessageReceiveSoundStorageKey,
     directMessageSendSoundStorageKey,
@@ -173,6 +183,7 @@ export default function useMenuMainNotificationSound({
     notificationSoundCustomNameStorageKey,
     notificationSoundEnabledStorageKey,
     notificationSoundStorageKey,
+    systemSoundVolumeStorageKey,
   ]);
   const storageSignature = useMemo(
     () => `${user?.id || "guest"}:${Object.values(keys).join("|")}`,
@@ -227,26 +238,27 @@ export default function useMenuMainNotificationSound({
     () => getDirectMessageSoundOptions("receive").find((option) => option.id === soundState.directMessageReceiveSoundId)?.path || "",
     [soundState.directMessageReceiveSoundId]
   );
+  const systemSoundVolumeRatio = normalizeSystemSoundVolume(soundState.systemSoundVolume) / 100;
 
   useEffect(() => {
-    primeLowLatencyAudio([activeNotificationSoundPath, directMessageReceiveSoundPath], { volume: 0.42, poolSize: 3 });
-  }, [activeNotificationSoundPath, directMessageReceiveSoundPath]);
+    primeLowLatencyAudio([activeNotificationSoundPath, directMessageReceiveSoundPath], { volume: systemSoundVolumeRatio, poolSize: 3 });
+  }, [activeNotificationSoundPath, directMessageReceiveSoundPath, systemSoundVolumeRatio]);
 
   const playNotificationSound = useCallback(() => {
     if (!soundState.notificationSoundEnabled || !activeNotificationSoundPath) {
       return;
     }
 
-    playSoundPath(activeNotificationSoundPath);
-  }, [activeNotificationSoundPath, soundState.notificationSoundEnabled]);
+    playSoundPath(activeNotificationSoundPath, systemSoundVolumeRatio);
+  }, [activeNotificationSoundPath, soundState.notificationSoundEnabled, systemSoundVolumeRatio]);
 
   const playDirectMessageReceiveSound = useCallback(() => {
     if (!soundState.directMessageSoundEnabled || !directMessageReceiveSoundPath) {
       return;
     }
 
-    playSoundPath(directMessageReceiveSoundPath, 0.4);
-  }, [directMessageReceiveSoundPath, soundState.directMessageSoundEnabled]);
+    playSoundPath(directMessageReceiveSoundPath, systemSoundVolumeRatio);
+  }, [directMessageReceiveSoundPath, soundState.directMessageSoundEnabled, systemSoundVolumeRatio]);
 
   const handleCustomNotificationSoundChange = useCallback(async (event) => {
     const file = event.target.files?.[0] || null;
@@ -275,6 +287,9 @@ export default function useMenuMainNotificationSound({
     setNotificationSoundEnabled: (value) => setSoundField("notificationSoundEnabled", value),
     notificationSoundId: soundState.notificationSoundId,
     setNotificationSoundId: (value) => setSoundField("notificationSoundId", value),
+    systemSoundVolume: normalizeSystemSoundVolume(soundState.systemSoundVolume),
+    systemSoundVolumeRatio,
+    setSystemSoundVolume: (value) => setSoundField("systemSoundVolume", normalizeSystemSoundVolume(value)),
     notificationSoundOptions,
     customNotificationSoundData: soundState.customNotificationSoundData,
     setCustomNotificationSoundData: (value) => setSoundField("customNotificationSoundData", value),

@@ -42,6 +42,7 @@ const getChatThemeStorageKey = (user) => `nd:chat-theme:${getCurrentUserId(user)
 const getChatBackgroundStorageKey = (user) => `nd:chat-background:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundNameStorageKey = (user) => `nd:chat-background-name:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundFitStorageKey = (user) => `nd:chat-background-fit:${getCurrentUserId(user) || "guest"}`;
+const getSystemSoundVolumeStorageKey = (user) => `nd:system-sound-volume:${getCurrentUserId(user) || "guest"}`;
 
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
@@ -174,6 +175,7 @@ export function useMenuMainStorageKeys(user) {
     notificationSoundStorageKey: getNotificationSoundStorageKey(user),
     notificationSoundCustomDataStorageKey: getNotificationSoundCustomDataStorageKey(user),
     notificationSoundCustomNameStorageKey: getNotificationSoundCustomNameStorageKey(user),
+    systemSoundVolumeStorageKey: getSystemSoundVolumeStorageKey(user),
     audioInputDeviceStorageKey: getAudioInputDeviceStorageKey(user),
     audioOutputDeviceStorageKey: getAudioOutputDeviceStorageKey(user),
     videoInputDeviceStorageKey: getVideoInputDeviceStorageKey(user),

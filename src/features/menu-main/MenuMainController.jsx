@@ -728,6 +728,7 @@ export default function MenuMain({
     notificationSoundStorageKey,
     notificationSoundCustomDataStorageKey,
     notificationSoundCustomNameStorageKey,
+    systemSoundVolumeStorageKey,
     audioInputDeviceStorageKey,
     audioOutputDeviceStorageKey,
     videoInputDeviceStorageKey,
@@ -751,6 +752,9 @@ export default function MenuMain({
     setNotificationSoundEnabled,
     notificationSoundId,
     setNotificationSoundId,
+    systemSoundVolume,
+    systemSoundVolumeRatio,
+    setSystemSoundVolume,
     notificationSoundOptions,
     customNotificationSoundData,
     setCustomNotificationSoundData,
@@ -777,6 +781,7 @@ export default function MenuMain({
     notificationSoundStorageKey,
     notificationSoundCustomDataStorageKey,
     notificationSoundCustomNameStorageKey,
+    systemSoundVolumeStorageKey,
   });
   const {
     deviceSessions,
@@ -1826,7 +1831,7 @@ export default function MenuMain({
       const soundPath = UI_SOUND_PATHS[type];
       if (!soundPath) return;
 
-      if (playLowLatencyAudio(soundPath, { volume: 0.45, poolSize: 3 })) {
+      if (playLowLatencyAudio(soundPath, { volume: systemSoundVolumeRatio, poolSize: 3 })) {
         return;
       }
 
@@ -1839,7 +1844,7 @@ export default function MenuMain({
       }
 
       const audio = new Audio(soundPath);
-      audio.volume = 0.45;
+      audio.volume = systemSoundVolumeRatio;
       audio.preload = "auto";
       uiSoundCache.set(type, audio);
       audio.play().catch(() => {});
@@ -1848,8 +1853,8 @@ export default function MenuMain({
     }
   };
   useEffect(() => {
-    primeLowLatencyAudio(Object.values(UI_SOUND_PATHS), { volume: 0.45, poolSize: 3 });
-  }, []);
+    primeLowLatencyAudio(Object.values(UI_SOUND_PATHS), { volume: systemSoundVolumeRatio, poolSize: 3 });
+  }, [systemSoundVolumeRatio]);
   const clearScreenShareStartToneTimeout = () => {
     if (screenShareStartToneTimeoutRef.current) {
       window.clearTimeout(screenShareStartToneTimeoutRef.current);
@@ -5921,6 +5926,7 @@ export default function MenuMain({
     directMessageReceiveSoundId,
     notificationSoundEnabled,
     notificationSoundId,
+    systemSoundVolume,
     notificationSoundOptions,
     customNotificationSoundData,
     customNotificationSoundName,
@@ -5934,6 +5940,7 @@ export default function MenuMain({
     setDirectMessageReceiveSoundId,
     setNotificationSoundEnabled,
     setNotificationSoundId,
+    setSystemSoundVolume,
     setCustomNotificationSoundData,
     setCustomNotificationSoundName,
     setNotificationSoundError,

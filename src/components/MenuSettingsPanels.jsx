@@ -1898,6 +1898,7 @@ export const NotificationsSettings = ({
   directMessageReceiveSoundId,
   notificationSoundEnabled,
   notificationSoundId,
+  systemSoundVolume,
   notificationSoundOptions,
   customNotificationSoundData,
   customNotificationSoundName,
@@ -1911,6 +1912,7 @@ export const NotificationsSettings = ({
   onReceiveSoundChange,
   onToggleNotificationSound,
   onNotificationSoundChange,
+  onSystemSoundVolumeChange,
   onRemoveCustomNotificationSound,
   onCustomNotificationSoundChange,
   getDirectMessageSoundOptions,
@@ -1992,6 +1994,18 @@ export const NotificationsSettings = ({
           ))}
         </select>
         <span className="voice-settings-caption">Можно оставить встроенный вариант или переключиться на свой файл ниже.</span>
+      </label>
+
+      <label className="voice-settings-field voice-settings-field--volume">
+        <span>Громкость системных звуков</span>
+        <PercentageSlider
+          min={0}
+          max={100}
+          value={systemSoundVolume}
+          onChange={(event) => onSystemSoundVolumeChange(Number(event.target.value))}
+          ariaLabel="Громкость системных звуков"
+        />
+        <span className="voice-settings-caption">Влияет на уведомления и звуки голосовой комнаты.</span>
       </label>
 
       <div className="voice-settings-field voice-settings-field--stacked">
