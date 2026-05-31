@@ -112,11 +112,12 @@ test("owner role can be renamed without exposing role descriptions or permission
 
 test("speaking indicators animate without adding profile status dots", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
+  const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
   const channelCss = readRepoFile("src/css/ListChannels.css");
   const profileCss = readRepoFile("src/css/MenuProfile.css");
 
-  assert.match(mainCss, /@keyframes voice-speaking-card-pulse/);
-  assert.match(mainCss, /@keyframes voice-speaking-avatar-pulse/);
+  assert.match(`${mainCss}\n${stageCss}`, /@keyframes voice-speaking-card-pulse/);
+  assert.match(`${mainCss}\n${stageCss}`, /@keyframes voice-speaking-avatar-pulse/);
   assert.match(channelCss, /@keyframes participant-speaking-avatar-pulse/);
   assert.match(profileCss, /\.avatar-shell--speaking::after \{[\s\S]*?content: none;/);
   assert.match(profileCss, /@keyframes profile-speaking-avatar-pulse/);
@@ -129,6 +130,13 @@ test("light theme text tools menu is opaque and readable", () => {
   assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?backdrop-filter: none;/);
   assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action b/);
   assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action small/);
+});
+
+test("message search input text is readable on dark chat topbar", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+
+  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?color: #f8fbff;/);
+  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
 });
 
 test("clipboard images can be pasted from the whole text chat area", () => {

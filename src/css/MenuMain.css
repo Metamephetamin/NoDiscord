@@ -7325,6 +7325,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   min-height: 36px;
   border: 0;
   background: transparent;
+  color: #f8fbff;
+  caret-color: #f8fbff;
   padding: 0;
 }
 
