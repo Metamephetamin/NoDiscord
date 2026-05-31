@@ -947,173 +947,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   font-size: 14px;
 }
 
-.member-role-menu {
-  position: fixed;
-  z-index: 640;
-  min-width: 220px;
-  padding: 8px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(16, 21, 31, 0.98);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
-}
-
-.member-role-menu__title,
-.member-role-menu__subtitle {
-  padding: 8px 12px 6px;
-  color: #9ca7bd;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.member-role-menu__title--channel ~ .member-role-menu__title {
-  display: none;
-}
-
-.member-role-menu__item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #9ea7bb;
-  text-align: left;
-  cursor: pointer;
-}
-
-.member-role-menu__item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.member-role-menu__nickname-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 6px;
-}
-
-.member-role-menu__nickname-input {
-  width: 100%;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f5f8ff;
-  caret-color: #f5f8ff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.member-role-menu__nickname-input::placeholder {
-  color: rgba(226, 233, 246, 0.46);
-}
-
-.member-role-menu__nickname-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.member-role-menu__nickname-button {
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #dbe5f6;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.member-role-menu__nickname-button--primary {
-  background: rgba(77, 124, 255, 0.24);
-  color: #f5f8ff;
-}
-
-.member-role-menu__nickname-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.member-role-menu--server-compact {
-  min-width: 188px;
-  padding: 6px;
-  border-radius: 12px;
-}
-
-.member-role-menu--server-compact .member-role-menu__title {
-  padding: 6px 9px 5px;
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.member-role-menu--server-compact .member-role-menu__item {
-  min-height: 34px;
-  padding: 8px 9px;
-  border-radius: 9px;
-  font-size: 13px;
-}
-
-.member-role-menu__item--danger {
-  color: #ff9aa5;
-}
-
-.member-role-menu__item--danger:hover {
-  background: rgba(255, 82, 110, 0.12);
-  color: #ffc4cb;
-}
-
-.member-role-menu__item--active {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.member-role-menu__item--disabled,
-.member-role-menu__item:disabled {
-  opacity: 0.56;
-  cursor: default;
-}
-
-.member-role-menu__item--disabled:hover,
-.member-role-menu__item:disabled:hover {
-  background: transparent;
-}
-
-.member-role-menu__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-}
-
-.member-role-menu__icon {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-
-.member-role-menu__separator {
-  height: 1px;
-  margin: 6px 8px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.member-role-menu__status {
-  padding: 8px 12px 10px;
-  color: #9ca7bd;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
 .server-summary__icon {
   width: 64px;
   height: 64px;
@@ -18444,7 +18277,6 @@ html[data-ui-theme="light"] .server-panel__category-caret {
 .server-summary__invite:disabled,
 .server-panel__header button:disabled,
 .server-summary-menu button:disabled,
-.member-role-menu--server .member-role-menu__item:disabled,
 .server-summary-menu__separator.is-hidden {
   display: none;
 }
@@ -18687,7 +18519,6 @@ html[data-ui-theme="light"] .channel-create-modal__toggle {
   color: #172033;
 }
 
-html[data-ui-theme="light"] .member-role-menu,
 html[data-ui-theme="light"] .server-summary-menu,
 html[data-ui-theme="light"] .friends-conversation-member-menu__panel,
 html[data-ui-theme="light"] .quick-switcher,
@@ -18698,9 +18529,6 @@ html[data-ui-theme="light"] .server-invite-modal {
   box-shadow: 0 22px 52px rgba(15, 23, 42, 0.18);
 }
 
-html[data-ui-theme="light"] .member-role-menu__title,
-html[data-ui-theme="light"] .member-role-menu__subtitle,
-html[data-ui-theme="light"] .member-role-menu__status,
 html[data-ui-theme="light"] .server-summary-menu__icon,
 html[data-ui-theme="light"] .quick-switcher__header span,
 html[data-ui-theme="light"] .quick-switcher__copy span,
@@ -18721,7 +18549,6 @@ html[data-ui-theme="light"] .quick-switcher__copy strong {
   color: #0f172a;
 }
 
-html[data-ui-theme="light"] .member-role-menu__item,
 html[data-ui-theme="light"] .server-summary-menu button,
 html[data-ui-theme="light"] .friends-conversation-member-menu__item,
 html[data-ui-theme="light"] .quick-switcher__item {
@@ -18730,8 +18557,6 @@ html[data-ui-theme="light"] .quick-switcher__item {
   color: #172033;
 }
 
-html[data-ui-theme="light"] .member-role-menu__item:hover,
-html[data-ui-theme="light"] .member-role-menu__item--active,
 html[data-ui-theme="light"] .server-summary-menu button:hover:not(:disabled),
 html[data-ui-theme="light"] .friends-conversation-member-menu__item:hover,
 html[data-ui-theme="light"] .friends-conversation-member-menu__item--active,
@@ -18742,48 +18567,19 @@ html[data-ui-theme="light"] .quick-switcher__item--active {
   color: #2637c7;
 }
 
-html[data-ui-theme="light"] .member-role-menu__nickname-input {
-  border-color: #d9e0ec;
-  background: #ffffff;
-  color: #172033;
-  caret-color: #172033;
-}
-
-html[data-ui-theme="light"] .member-role-menu__nickname-input::placeholder {
-  color: #7c8799;
-}
-
-html[data-ui-theme="light"] .member-role-menu__nickname-button {
-  background: #eef3ff;
-  color: #315fc7;
-}
-
-html[data-ui-theme="light"] .member-role-menu__nickname-button--primary {
-  background: #315fc7;
-  color: #ffffff;
-}
-
-html[data-ui-theme="light"] .member-role-menu__separator,
 html[data-ui-theme="light"] .server-summary-menu__separator,
 html[data-ui-theme="light"] .server-invite-modal__footer {
   border-color: #e3e8f1;
   background: #f8fafc;
 }
 
-html[data-ui-theme="light"] .member-role-menu__item--danger,
 html[data-ui-theme="light"] .friends-conversation-member-menu__item--danger {
   color: var(--app-danger);
 }
 
-html[data-ui-theme="light"] .member-role-menu__item--danger:hover,
 html[data-ui-theme="light"] .friends-conversation-member-menu__item--danger:hover {
   background: #fff1f2;
   color: #9f1239;
-}
-
-html[data-ui-theme="light"] .member-role-menu__icon {
-  filter: none;
-  opacity: 0.78;
 }
 
 html[data-ui-theme="light"] .server-summary-menu__id {

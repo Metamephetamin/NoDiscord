@@ -8,6 +8,14 @@ const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const readRepoFile = (relativePath) =>
   readFileSync(path.join(repoRoot, relativePath), "utf8");
 
+const readRepoFileIfExists = (relativePath) => {
+  try {
+    return readRepoFile(relativePath);
+  } catch {
+    return "";
+  }
+};
+
 test("voice channel settings button is only rendered for channel managers", () => {
   const source = readRepoFile("src/components/VoiceChannelList.jsx");
 
@@ -211,6 +219,16 @@ test("member nickname changes use an in-app form instead of browser prompt", () 
   assert.doesNotMatch(controllerSource, /window\.prompt/);
   assert.match(workspaceSource, /member-role-menu__nickname-form/);
   assert.match(workspaceSource, /member-role-menu__nickname-input/);
+});
+
+test("member role menu styles are split out of the main menu stylesheet", () => {
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const memberRoleMenuCss = readRepoFileIfExists("src/css/MemberRoleMenu.css");
+
+  assert.match(workspaceSource, /import "\.\.\/css\/MemberRoleMenu\.css";/);
+  assert.doesNotMatch(mainCss, /\.member-role-menu/);
+  assert.match(memberRoleMenuCss, /\.member-role-menu/);
 });
 
 test("stream fullscreen button toggles fullscreen mode", () => {
