@@ -393,8 +393,8 @@ public class ServerStateService
         merged.Roles = MergeRoles(normalizedExisting.Roles, merged.Roles);
         merged.Members = MergeMembers(normalizedExisting.Members, merged.Members, merged.OwnerId);
         merged.ChannelCategories = CloneCategories(merged.ChannelCategories);
-        merged.TextChannels = MergeChannels(normalizedExisting.TextChannels, merged.TextChannels);
-        merged.VoiceChannels = MergeChannels(normalizedExisting.VoiceChannels, merged.VoiceChannels);
+        merged.TextChannels = CloneChannels(merged.TextChannels);
+        merged.VoiceChannels = CloneChannels(merged.VoiceChannels);
 
         return NormalizeSnapshot(merged, merged.OwnerId);
     }
@@ -505,40 +505,6 @@ public class ServerStateService
         }
 
         return result.Values.ToList();
-    }
-
-    private static List<ChannelSnapshot> MergeChannels(List<ChannelSnapshot>? existing, List<ChannelSnapshot>? incoming)
-    {
-        var existingById = new Dictionary<string, ChannelSnapshot>(StringComparer.Ordinal);
-
-        foreach (var channel in existing ?? Enumerable.Empty<ChannelSnapshot>())
-        {
-            if (!string.IsNullOrWhiteSpace(channel.Id))
-            {
-                existingById[channel.Id] = CloneChannel(channel);
-            }
-        }
-
-        var merged = new List<ChannelSnapshot>();
-        var seenIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var channel in incoming ?? Enumerable.Empty<ChannelSnapshot>())
-        {
-            if (!string.IsNullOrWhiteSpace(channel.Id))
-            {
-                merged.Add(CloneChannel(channel));
-                seenIds.Add(channel.Id);
-            }
-        }
-
-        foreach (var channel in existingById.Values)
-        {
-            if (seenIds.Add(channel.Id))
-            {
-                merged.Add(CloneChannel(channel));
-            }
-        }
-
-        return merged;
     }
 
     private static List<ChannelSnapshot> CloneChannels(List<ChannelSnapshot>? channels)

@@ -5,7 +5,7 @@ namespace BackNoDiscord.Tests.Services;
 public class ServerStateServiceTests
 {
     [Fact]
-    public void UpsertSnapshot_MergesExistingMembersRolesAndChannels()
+    public void UpsertSnapshot_MergesExistingMembersAndRolesButReplacesChannels()
     {
         using var context = CreateContext();
         var service = new ServerStateService(context);
@@ -52,8 +52,51 @@ public class ServerStateServiceTests
         Assert.Contains(merged.Roles, role => role.Id == "member");
         Assert.Contains(merged.Members, member => member.UserId == "owner-1");
         Assert.Contains(merged.Members, member => member.UserId == "member-2");
-        Assert.Contains(merged.TextChannels, channel => channel.Id == "general");
+        Assert.DoesNotContain(merged.TextChannels, channel => channel.Id == "general");
         Assert.Contains(merged.VoiceChannels, channel => channel.Id == "voice");
+    }
+
+    [Fact]
+    public void UpsertSnapshot_DoesNotRestoreDeletedChannels()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            TextChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "general", Name = "General" },
+                new() { Id = "old-chat", Name = "Old chat" }
+            },
+            VoiceChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "voice", Name = "Voice" }
+            }
+        }, "owner-1");
+
+        var merged = service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            TextChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "general", Name = "General" }
+            },
+            VoiceChannels = new List<ChannelSnapshot>()
+        }, "owner-1");
+
+        Assert.Equal(new[] { "general" }, merged.TextChannels.Select(channel => channel.Id));
+        Assert.Empty(merged.VoiceChannels);
+
+        var persisted = service.GetSnapshot("server-guild");
+        Assert.NotNull(persisted);
+        Assert.Equal(new[] { "general" }, persisted!.TextChannels.Select(channel => channel.Id));
+        Assert.Empty(persisted.VoiceChannels);
     }
 
     [Fact]
