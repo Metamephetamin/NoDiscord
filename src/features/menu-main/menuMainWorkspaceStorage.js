@@ -23,6 +23,7 @@ import {
   getDirectMessageSendSoundStorageKey,
   getDirectMessageSoundEnabledStorageKey,
 } from "../../utils/directMessageSounds";
+import { getSystemSoundVolumeStorageKey } from "../../utils/systemSoundVolume";
 
 const getLocalApiStorageScope = () => {
   try {
@@ -43,7 +44,6 @@ const getChatThemeStorageKey = (user) => `nd:chat-theme:${getCurrentUserId(user)
 const getChatBackgroundStorageKey = (user) => `nd:chat-background:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundNameStorageKey = (user) => `nd:chat-background-name:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundFitStorageKey = (user) => `nd:chat-background-fit:${getCurrentUserId(user) || "guest"}`;
-const getSystemSoundVolumeStorageKey = (user) => `nd:system-sound-volume:${getCurrentUserId(user) || "guest"}`;
 const getAutoInputSensitivityStorageKey = (user) => `nd:auto-input-sensitivity:${getCurrentUserId(user) || "guest"}`;
 
 const getDirectCallHistoryStorageKey = (user) => {

@@ -8,6 +8,7 @@ import { revokePendingUploadPreviews, scheduleObjectUrlRevoke } from "../../util
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";
 import { isDirectMessageChannelId, normalizeDirectMessageChannelId } from "../../utils/directMessageChannels";
 import { resolveDirectMessageSoundPath } from "../../utils/directMessageSounds";
+import { readSystemSoundVolumeRatio } from "../../utils/systemSoundVolume";
 import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatencyAudio";
 import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
@@ -2097,7 +2098,7 @@ export default function TextChat({
     }
 
     try {
-      playLowLatencyAudio(soundPath, { volume: type === "send" ? 0.34 : 0.4, poolSize: 3 });
+      playLowLatencyAudio(soundPath, { volume: readSystemSoundVolumeRatio(user), poolSize: 3 });
     } catch {
       // ignore DM sound failures
     }
@@ -2110,7 +2111,7 @@ export default function TextChat({
     primeLowLatencyAudio([
       resolveDirectMessageSoundPath(user, "send"),
       resolveDirectMessageSoundPath(user, "receive"),
-    ], { volume: 0.4, poolSize: 3 });
+    ], { volume: readSystemSoundVolumeRatio(user), poolSize: 3 });
   }, [isDirectChat, user]);
 
   useTextChatComposerPopovers({

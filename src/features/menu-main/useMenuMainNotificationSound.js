@@ -2,15 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDirectMessageSoundOptions } from "../../utils/directMessageSounds";
 import { playLowLatencyAudio, primeLowLatencyAudio } from "../../utils/lowLatencyAudio";
 import { NOTIFICATION_SOUND_OPTIONS } from "../../utils/menuMainModel";
+import { DEFAULT_SYSTEM_SOUND_VOLUME, normalizeSystemSoundVolume } from "../../utils/systemSoundVolume";
 
 const DEFAULT_NOTIFICATION_SOUND_ID = NOTIFICATION_SOUND_OPTIONS[0].id;
-const DEFAULT_SYSTEM_SOUND_VOLUME = 42;
 
 const getDefaultDirectMessageSoundId = (kind) => getDirectMessageSoundOptions(kind)[0]?.id || "classic";
-const normalizeSystemSoundVolume = (value) => {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? Math.max(0, Math.min(100, Math.round(numericValue))) : DEFAULT_SYSTEM_SOUND_VOLUME;
-};
 
 const createDefaultSoundState = () => ({
   notificationSoundEnabled: true,

@@ -431,6 +431,14 @@ test("direct call overlay styles stay split from the main menu stylesheet", () =
   assert.match(directCallCss, /\.direct-call-inline/);
 });
 
+test("direct message chat sounds use the shared system sound volume", () => {
+  const textChatSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+
+  assert.match(textChatSource, /readSystemSoundVolumeRatio/);
+  assert.doesNotMatch(textChatSource, /volume: type === "send" \? 0\.34 : 0\.4/);
+  assert.doesNotMatch(textChatSource, /\], \{ volume: 0\.4, poolSize: 3 \}/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 
