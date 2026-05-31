@@ -316,20 +316,24 @@ public class ServerStateService
             category.Order = category.Order < 0 ? index : category.Order;
         }
 
-        foreach (var channel in normalized.TextChannels)
+        for (var index = 0; index < normalized.TextChannels.Count; index++)
         {
+            var channel = normalized.TextChannels[index];
             channel.Id = channel.Id?.Trim() ?? string.Empty;
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "general" : channel.Name.Trim();
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "text" : channel.Kind.Trim();
+            channel.Order = channel.Order < 0 ? index : channel.Order;
         }
 
-        foreach (var channel in normalized.VoiceChannels)
+        for (var index = 0; index < normalized.VoiceChannels.Count; index++)
         {
+            var channel = normalized.VoiceChannels[index];
             channel.Id = channel.Id?.Trim() ?? string.Empty;
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
+            channel.Order = channel.Order < 0 ? index : channel.Order;
         }
 
         if (!normalized.Members.Any(member => string.Equals(member.UserId, normalized.OwnerId, StringComparison.Ordinal)))
@@ -505,25 +509,36 @@ public class ServerStateService
 
     private static List<ChannelSnapshot> MergeChannels(List<ChannelSnapshot>? existing, List<ChannelSnapshot>? incoming)
     {
-        var result = new Dictionary<string, ChannelSnapshot>(StringComparer.Ordinal);
+        var existingById = new Dictionary<string, ChannelSnapshot>(StringComparer.Ordinal);
 
         foreach (var channel in existing ?? Enumerable.Empty<ChannelSnapshot>())
         {
             if (!string.IsNullOrWhiteSpace(channel.Id))
             {
-                result[channel.Id] = CloneChannel(channel);
+                existingById[channel.Id] = CloneChannel(channel);
             }
         }
 
+        var merged = new List<ChannelSnapshot>();
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var channel in incoming ?? Enumerable.Empty<ChannelSnapshot>())
         {
             if (!string.IsNullOrWhiteSpace(channel.Id))
             {
-                result[channel.Id] = CloneChannel(channel);
+                merged.Add(CloneChannel(channel));
+                seenIds.Add(channel.Id);
             }
         }
 
-        return result.Values.ToList();
+        foreach (var channel in existingById.Values)
+        {
+            if (seenIds.Add(channel.Id))
+            {
+                merged.Add(CloneChannel(channel));
+            }
+        }
+
+        return merged;
     }
 
     private static List<ChannelSnapshot> CloneChannels(List<ChannelSnapshot>? channels)
@@ -587,6 +602,7 @@ public class ServerStateService
             Name = channel.Name,
             CategoryId = channel.CategoryId,
             Kind = channel.Kind,
+            Order = channel.Order,
             SlowMode = channel.SlowMode,
             Topic = channel.Topic,
             TopicPreview = channel.TopicPreview,

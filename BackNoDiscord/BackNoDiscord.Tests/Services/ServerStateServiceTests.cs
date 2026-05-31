@@ -91,6 +91,46 @@ public class ServerStateServiceTests
     }
 
     [Fact]
+    public void UpsertSnapshot_PreservesIncomingChannelOrderForExistingChannels()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            TextChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "general", Name = "General", Order = 0 },
+                new() { Id = "rules", Name = "Rules", Order = 1 },
+                new() { Id = "chat", Name = "Chat", Order = 2 }
+            }
+        }, "owner-1");
+
+        var merged = service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            TextChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "chat", Name = "Chat", Order = 0 },
+                new() { Id = "general", Name = "General", Order = 1 },
+                new() { Id = "rules", Name = "Rules", Order = 2 }
+            }
+        }, "owner-1");
+
+        Assert.Equal(new[] { "chat", "general", "rules" }, merged.TextChannels.Select(channel => channel.Id));
+        Assert.Equal(new[] { 0, 1, 2 }, merged.TextChannels.Select(channel => channel.Order));
+
+        var persisted = service.GetSnapshot("server-guild");
+        Assert.NotNull(persisted);
+        Assert.Equal(new[] { "chat", "general", "rules" }, persisted!.TextChannels.Select(channel => channel.Id));
+    }
+
+    [Fact]
     public void GetSnapshot_ResolvesLegacyScopedServerIdToCanonicalId()
     {
         using var context = CreateContext();

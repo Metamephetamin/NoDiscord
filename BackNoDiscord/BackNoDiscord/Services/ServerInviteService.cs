@@ -261,20 +261,24 @@ public class ServerInviteService
             category.Order = category.Order < 0 ? index : category.Order;
         }
 
-        foreach (var channel in normalized.TextChannels)
+        for (var index = 0; index < normalized.TextChannels.Count; index++)
         {
+            var channel = normalized.TextChannels[index];
             channel.Id = channel.Id?.Trim() ?? string.Empty;
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "general" : channel.Name.Trim();
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "text" : channel.Kind.Trim();
+            channel.Order = channel.Order < 0 ? index : channel.Order;
         }
 
-        foreach (var channel in normalized.VoiceChannels)
+        for (var index = 0; index < normalized.VoiceChannels.Count; index++)
         {
+            var channel = normalized.VoiceChannels[index];
             channel.Id = channel.Id?.Trim() ?? string.Empty;
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
+            channel.Order = channel.Order < 0 ? index : channel.Order;
         }
 
         if (!normalized.Members.Any(member => string.Equals(member.UserId, normalized.OwnerId, StringComparison.Ordinal)))
@@ -403,6 +407,7 @@ public class ChannelSnapshot
     public string Name { get; set; } = string.Empty;
     public string CategoryId { get; set; } = string.Empty;
     public string Kind { get; set; } = string.Empty;
+    public int Order { get; set; }
     public string SlowMode { get; set; } = string.Empty;
     public string Topic { get; set; } = string.Empty;
     public bool TopicPreview { get; set; }
