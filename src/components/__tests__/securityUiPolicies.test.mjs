@@ -411,3 +411,13 @@ test("poll composer backdrop fully covers and blurs the app", () => {
   assert.match(backdropRule, /isolation: isolate;/);
   assert.match(backdropRule, /overscroll-behavior: contain;/);
 });
+
+test("media-only message layout stays stable after reactions are added", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const mediaOnlyStart = messageListSource.indexOf("const isMediaOnlyMessage =");
+  const emojiOnlyStart = messageListSource.indexOf("const isInlineEmojiOnlyMessage =", mediaOnlyStart);
+  const mediaOnlySource = messageListSource.slice(mediaOnlyStart, emojiOnlyStart);
+
+  assert.match(mediaOnlySource, /hasRenderableAttachments/);
+  assert.doesNotMatch(mediaOnlySource, /!reactions\.length/);
+});

@@ -2305,7 +2305,6 @@ function TextChatMessageList({
             && !inviteCode
             && !messagePoll
             && hasRenderableAttachments
-            && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
           const isInlineEmojiOnlyMessage = isMediaOnlyMessage
