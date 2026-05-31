@@ -102,6 +102,13 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
 });
 
+test("voice settings microphone meter stays compact", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+
+  assert.match(mainCss, /\.device-menu__meter span,\n\.voice-settings-meter__bars span \{\s*height: 7px;/);
+  assert.match(mainCss, /\.voice-settings-card--voice \.voice-settings-meter \{\s*margin-top: 22px;\s*gap: 12px;/);
+});
+
 test("server management settings are hidden without permissions", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 

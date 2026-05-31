@@ -6374,7 +6374,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .device-menu__meter span,
 .voice-settings-meter__bars span {
-  height: 12px;
+  height: 7px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
 }
@@ -6956,8 +6956,8 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 }
 
 .voice-settings-card--voice .voice-settings-meter {
-  margin-top: 26px;
-  gap: 16px;
+  margin-top: 22px;
+  gap: 12px;
 }
 
 .voice-settings-card--voice .voice-settings-meter__button {
