@@ -1,4 +1,5 @@
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
+import "../css/TextChatContextMenu.css";
 
 export default function TextChatContextMenu({
   menuRef,

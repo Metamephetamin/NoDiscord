@@ -725,6 +725,19 @@ test("media preview styles stay split from the main text chat stylesheet", () =>
   assert.doesNotMatch(textChatCss, /^body\.media-preview-open/m);
 });
 
+test("message context menu styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const contextMenuCss = readRepoFileIfExists("src/css/TextChatContextMenu.css");
+  const contextMenuSource = readRepoFile("src/components/TextChatContextMenu.jsx");
+
+  assert.match(contextMenuSource, /import "\.\.\/css\/TextChatContextMenu\.css";/);
+  assert.match(contextMenuCss, /\.message-context-menu-stack \{/);
+  assert.match(contextMenuCss, /\.message-context-menu \{/);
+  assert.match(contextMenuCss, /html\[data-ui-theme="light"\] \.message-context-menu/);
+  assert.doesNotMatch(textChatCss, /^\s*\.message-context-menu[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.message-context-menu/m);
+});
+
 test("media frame editor styles stay split from the main menu stylesheet", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const editorCss = readRepoFileIfExists("src/css/MediaFrameEditorModal.css");
