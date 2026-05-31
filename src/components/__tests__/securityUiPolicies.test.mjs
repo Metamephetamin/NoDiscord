@@ -699,6 +699,17 @@ test("chat profile modal styles stay split from the main text chat stylesheet", 
   assert.doesNotMatch(textChatCss, /chat-profile-modal/);
 });
 
+test("forward modal styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const forwardCss = readRepoFileIfExists("src/css/TextChatForwardModal.css");
+  const forwardSource = readRepoFile("src/components/TextChatForwardModal.jsx");
+
+  assert.match(forwardSource, /import "\.\.\/css\/TextChatForwardModal\.css";/);
+  assert.match(forwardCss, /\.forward-modal__backdrop \{/);
+  assert.match(forwardCss, /html\[data-ui-theme="light"\] \.forward-modal/);
+  assert.doesNotMatch(textChatCss, /^\.forward-modal/m);
+});
+
 test("media frame editor styles stay split from the main menu stylesheet", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const editorCss = readRepoFileIfExists("src/css/MediaFrameEditorModal.css");

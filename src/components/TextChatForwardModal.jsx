@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { getTargetDisplayName } from "../utils/textChatHelpers";
+import "../css/TextChatForwardModal.css";
 
 export default function TextChatForwardModal({
   forwardModal,
