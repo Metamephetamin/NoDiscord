@@ -152,11 +152,13 @@ test("common counters and timestamps use the numeric Roboto font", () => {
 
 test("voice stage toolbar buttons avoid native title tooltips", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const mobileStageSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
   assert.doesNotMatch(stageSource, /title=\{label\}/);
   assert.doesNotMatch(stageSource, /title="Открыть сцену на весь экран"/);
   assert.match(stageSource, /aria-label=\{label\}/);
   assert.match(stageSource, /aria-label="Открыть сцену на весь экран"/);
+  assert.doesNotMatch(mobileStageSource, /\stitle=/);
 });
 
 test("profile voice action uses a soundpad glyph instead of settings gear", () => {

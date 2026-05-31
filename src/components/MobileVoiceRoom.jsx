@@ -71,20 +71,20 @@ export default function MobileVoiceRoom({
           ) : null}
           {stageMode === "remote" ? (
             <div className="mobile-voice-room__stage-actions">
-              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onOpenFullscreen} aria-label="Открыть эфир на весь экран" title="На весь экран">
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onOpenFullscreen} aria-label="Открыть эфир на весь экран">
                 ⛶
               </button>
-              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onCloseRemoteStream} aria-label="Закрыть эфир" title="Закрыть эфир">
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onCloseRemoteStream} aria-label="Закрыть эфир">
                 x
               </button>
             </div>
           ) : null}
           {stageMode === "local" ? (
             <div className="mobile-voice-room__stage-actions">
-              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onOpenFullscreen} aria-label="Открыть предпросмотр на весь экран" title="На весь экран">
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onOpenFullscreen} aria-label="Открыть предпросмотр на весь экран">
                 ⛶
               </button>
-              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onCloseLocalPreview} aria-label="Скрыть предпросмотр" title="Скрыть">
+              <button type="button" className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon" onClick={onCloseLocalPreview} aria-label="Скрыть предпросмотр">
                 x
               </button>
               <button
@@ -92,7 +92,6 @@ export default function MobileVoiceRoom({
                 className="mobile-voice-room__stage-action mobile-voice-room__stage-action--icon mobile-voice-room__stage-action--danger"
                 onClick={localSharePreview?.mode === "camera" ? onStopCameraShare : onStopScreenShare}
                 aria-label={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
-                title={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
               >
                 ■
               </button>
@@ -149,7 +148,6 @@ export default function MobileVoiceRoom({
           className={`mobile-voice-room__control ${isEffectiveMicMuted ? "mobile-voice-room__control--muted" : ""}`}
           onClick={onToggleMic}
           aria-label={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
-          title={isMicMuted ? "Включить микрофон" : "Выключить микрофон"}
         >
           <span className={`mobile-voice-room__control-icon ${isEffectiveMicMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <span className="mobile-voice-room__control-glyph mobile-voice-room__control-glyph--microphone" aria-hidden="true" />
@@ -160,13 +158,12 @@ export default function MobileVoiceRoom({
           className={`mobile-voice-room__control ${isSoundMuted ? "mobile-voice-room__control--muted" : ""}`}
           onClick={onToggleSound}
           aria-label={isSoundMuted ? "Включить звук" : "Выключить звук"}
-          title={isSoundMuted ? "Включить звук" : "Выключить звук"}
         >
           <span className={`mobile-voice-room__control-icon ${isSoundMuted ? "mobile-voice-room__control-icon--slashed" : ""}`}>
             <span className="mobile-voice-room__control-glyph mobile-voice-room__control-glyph--headphones" aria-hidden="true" />
           </span>
         </button>
-        <button type="button" className="mobile-voice-room__control" onClick={onOpenChat} aria-label="Перейти в чат" title="Перейти в чат">
+        <button type="button" className="mobile-voice-room__control" onClick={onOpenChat} aria-label="Перейти в чат">
           <span className="mobile-voice-room__control-icon">
             <img src={icons.chat} alt="" />
           </span>
@@ -176,7 +173,6 @@ export default function MobileVoiceRoom({
           className={`mobile-voice-room__control ${isScreenShareActive ? "mobile-voice-room__control--active" : ""}`}
           onClick={onScreenShareAction}
           aria-label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
-          title={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
         >
           <span className="mobile-voice-room__control-icon">
             <img src={icons.monitor} alt="" />
@@ -187,13 +183,12 @@ export default function MobileVoiceRoom({
           className={`mobile-voice-room__control ${isCameraShareActive ? "mobile-voice-room__control--active" : ""}`}
           onClick={onOpenCamera}
           aria-label={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
-          title={isCameraShareActive ? "Управление камерой" : "Открыть камеру"}
         >
           <span className="mobile-voice-room__control-icon">
             <img src={icons.camera} alt="" />
           </span>
         </button>
-        <button type="button" className="mobile-voice-room__control mobile-voice-room__control--danger" onClick={onLeave} aria-label="Отключиться от голосового канала" title="Отключиться от голосового канала">
+        <button type="button" className="mobile-voice-room__control mobile-voice-room__control--danger" onClick={onLeave} aria-label="Отключиться от голосового канала">
           <span className="mobile-voice-room__control-icon">
             <img src={icons.phone} alt="" />
           </span>
