@@ -685,3 +685,17 @@ test("media frame editor styles stay split from the main menu stylesheet", () =>
   assert.match(editorCss, /\.media-frame-editor__slider-field input::-webkit-slider-thumb/);
   assert.doesNotMatch(mainCss, /media-frame-editor/);
 });
+
+test("stream mini player controls avoid delayed native title tooltips", () => {
+  const serverWorkspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const miniPlayerStart = serverWorkspaceSource.indexOf("function StreamMiniPlayer");
+  const miniPlayerEnd = serverWorkspaceSource.indexOf("function ForumChannelView", miniPlayerStart);
+  const miniPlayerSource = serverWorkspaceSource.slice(miniPlayerStart, miniPlayerEnd);
+
+  assert.ok(miniPlayerStart >= 0, "stream mini player source is present");
+  assert.ok(miniPlayerEnd > miniPlayerStart, "stream mini player source is bounded");
+  assert.match(miniPlayerSource, /aria-label="Открыть стрим"/);
+  assert.match(miniPlayerSource, /aria-label=\{actionLabel \|\| "Действие со стримом"\}/);
+  assert.doesNotMatch(miniPlayerSource, /\s+title=\{/);
+  assert.doesNotMatch(miniPlayerSource, /\s+title="/);
+});

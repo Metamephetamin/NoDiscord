@@ -189,7 +189,6 @@ function StreamMiniPlayer({
       role="button"
       tabIndex={0}
       aria-label="Открыть стрим"
-      title={title}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -225,7 +224,6 @@ function StreamMiniPlayer({
               onAction();
             }}
             aria-label={actionLabel || "Действие со стримом"}
-            title={actionLabel || "Действие"}
           >
             Stop
           </button>
