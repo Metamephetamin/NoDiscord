@@ -165,7 +165,7 @@ const extractAccentFromImage = (src, seed) =>
     image.src = src;
   });
 
-function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain = false, muted = true }) {
+function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain = false, muted = true, mirrored = false }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -264,7 +264,15 @@ function VoiceStageMedia({ stream, videoSrc, imageSrc, alt, className, contain =
   }, [videoSrc]);
 
   if (stream || videoSrc) {
-    return <video ref={videoRef} className={`${className} ${contain ? "voice-room-stage__media--contain" : ""}`.trim()} autoPlay playsInline muted={muted} />;
+    return (
+      <video
+        ref={videoRef}
+        className={`${className} ${contain ? "voice-room-stage__media--contain" : ""} ${mirrored ? "voice-room-stage__media--mirrored" : ""}`.trim()}
+        autoPlay
+        playsInline
+        muted={muted}
+      />
+    );
   }
 
   if (imageSrc) {
@@ -889,25 +897,17 @@ export default function VoiceRoomStage({
             onClick: onScreenShareAction,
             active: isScreenShareActive,
           })}
-          {renderToolbarButton({
-            key: "camera",
-            icon: "camera",
-            label: isCameraShareActive ? "Управление камерой" : "Включить камеру",
-            onClick: onOpenCamera,
-            active: isCameraShareActive,
-          })}
+          {!isCameraShareActive
+            ? renderToolbarButton({
+                key: "camera",
+                icon: "camera",
+                label: "Включить камеру",
+                onClick: onOpenCamera,
+              })
+            : null}
         </div>
 
         <div className="voice-room-stage__toolbar-group">
-          {hasLocalSharePreview
-            ? renderToolbarButton({
-                key: "preview",
-                icon: "preview",
-                label: isLocalStage ? "Скрыть мой эфир" : localSharePreview?.mode === "camera" ? "Открыть моё видео" : "Открыть мой эфир",
-                onClick: isLocalStage ? onCloseLocalSharePreview : onOpenLocalSharePreview,
-                active: isLocalStage,
-              })
-            : null}
           {activeStage ? (
             <button
               type="button"
@@ -916,6 +916,11 @@ export default function VoiceRoomStage({
               title="Открыть сцену на весь экран"
               onClick={async () => {
                 try {
+                  if (document.fullscreenElement === shellRef.current) {
+                    await document.exitFullscreen?.();
+                    return;
+                  }
+
                   await shellRef.current?.requestFullscreen?.();
                 } catch (error) {
                   console.error("Ошибка перехода в полноэкранный режим голосовой сцены:", error);
@@ -977,6 +982,7 @@ export default function VoiceRoomStage({
             className="voice-room-stage__hero-media"
             contain
             muted={activeStage.kind !== "remote" || !activeStage.hasAudio}
+            mirrored={activeStage.kind === "local" && activeStage.mode === "camera"}
           />
           {!activeStage.stream && !activeStage.videoSrc && !activeStage.imageSrc ? (
             <div className="voice-room-stage__hero-empty">

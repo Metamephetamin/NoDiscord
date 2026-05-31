@@ -7096,6 +7096,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   object-fit: contain;
 }
 
+.voice-room-stage__media--mirrored {
+  transform: scaleX(-1);
+}
+
 .voice-room-stage__card-placeholder,
 .voice-room-stage__strip-avatar-shell {
   display: grid;
