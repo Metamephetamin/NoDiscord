@@ -7,6 +7,7 @@ import { API_BASE_URL } from "./config/runtime";
 import { installChunkLoadRecovery, lazyWithChunkRecovery } from "./utils/chunkLoadRecovery";
 import { installGlobalClientDiagnostics, reportClientDiagnostic } from "./utils/clientDiagnostics";
 import { clearPendingInviteAcceptCode, readPendingInviteAcceptCode } from "./utils/inviteFlow";
+import { enforceAppCachePolicy } from "./utils/appStorageUsage.mjs";
 import "./index.css";
 import { getDisplayCaptureSupportInfo } from "./utils/browserMediaSupport";
 import { parseMediaFrame } from "./utils/mediaFrames";
@@ -720,6 +721,24 @@ export default function Renderer() {
       void clearStoredSession();
     }
   }, [isAuthenticated, sessionHydrated, user]);
+
+  useEffect(() => {
+    if (!sessionHydrated) {
+      return undefined;
+    }
+
+    let disposed = false;
+    const timeoutId = window.setTimeout(() => {
+      if (!disposed) {
+        enforceAppCachePolicy().catch(() => {});
+      }
+    }, 2500);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [sessionHydrated]);
 
   useEffect(() => {
     const appLinksApi = window?.electronAppLinks;

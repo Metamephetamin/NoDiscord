@@ -24,10 +24,15 @@ import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import { copyTextToClipboard } from "../utils/clipboard";
 import {
+  APP_CACHE_LIMIT_OPTIONS,
   clearAppCacheStorage,
+  enforceAppCachePolicy,
   formatStorageBytes,
   getAppStorageUsage,
   getStorageUsagePercent,
+  readAppCachePolicy,
+  shouldAutoClearAppCache,
+  writeAppCachePolicy,
 } from "../utils/appStorageUsage.mjs";
 import AccountSessionsPanel from "../features/account-security/AccountSessionsPanel";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
@@ -759,20 +764,32 @@ export const MemorySettings = () => {
   const [storageUsage, setStorageUsage] = useState(null);
   const [storageStatus, setStorageStatus] = useState("loading");
   const [storageError, setStorageError] = useState("");
+  const [appCachePolicy, setAppCachePolicy] = useState(() => readAppCachePolicy());
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [isApplyingCachePolicy, setIsApplyingCachePolicy] = useState(false);
 
-  const loadStorageUsage = async () => {
+  const loadStorageUsage = async ({ applyPolicy = true } = {}) => {
     setStorageStatus("loading");
     setStorageError("");
 
     try {
       const usage = await getAppStorageUsage();
+      if (applyPolicy && shouldAutoClearAppCache(appCachePolicy, usage)) {
+        setIsApplyingCachePolicy(true);
+        const result = await enforceAppCachePolicy({ policy: appCachePolicy, usage });
+        setStorageUsage(result.usage || usage);
+        setStorageStatus(result.cleared ? "auto-cleared" : "ready");
+        setIsApplyingCachePolicy(false);
+        return;
+      }
+
       setStorageUsage(usage);
       setStorageStatus("ready");
     } catch (error) {
       setStorageUsage(null);
       setStorageStatus("error");
       setStorageError(error?.message || "Не удалось посчитать память приложения.");
+      setIsApplyingCachePolicy(false);
     }
   };
 
@@ -786,6 +803,17 @@ export const MemorySettings = () => {
       try {
         const usage = await getAppStorageUsage();
         if (isMounted) {
+          if (shouldAutoClearAppCache(appCachePolicy, usage)) {
+            setIsApplyingCachePolicy(true);
+            const result = await enforceAppCachePolicy({ policy: appCachePolicy, usage });
+            if (isMounted) {
+              setStorageUsage(result.usage || usage);
+              setStorageStatus(result.cleared ? "auto-cleared" : "ready");
+              setIsApplyingCachePolicy(false);
+            }
+            return;
+          }
+
           setStorageUsage(usage);
           setStorageStatus("ready");
         }
@@ -794,6 +822,7 @@ export const MemorySettings = () => {
           setStorageUsage(null);
           setStorageStatus("error");
           setStorageError(error?.message || "Не удалось посчитать память приложения.");
+          setIsApplyingCachePolicy(false);
         }
       }
     };
@@ -803,7 +832,7 @@ export const MemorySettings = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [appCachePolicy]);
 
   const clearCache = async () => {
     setIsClearingCache(true);
@@ -812,7 +841,7 @@ export const MemorySettings = () => {
     try {
       await clearAppCacheStorage();
       setStorageStatus("cleared");
-      setStorageUsage((previous) => previous ? { ...previous, cacheBytes: 0 } : previous);
+      setStorageUsage((previous) => previous ? { ...previous, cacheBytes: 0, indexedDbCacheBytes: 0 } : previous);
       window.setTimeout(() => {
         window.location.reload();
       }, 700);
@@ -820,6 +849,32 @@ export const MemorySettings = () => {
       setStorageStatus("error");
       setStorageError(error?.message || "Не удалось очистить кеш.");
       setIsClearingCache(false);
+    }
+  };
+
+  const updateAppCachePolicy = async (partialPolicy) => {
+    const nextPolicy = writeAppCachePolicy({
+      ...appCachePolicy,
+      ...partialPolicy,
+    });
+    setAppCachePolicy(nextPolicy);
+    setStorageStatus("policy-updated");
+    setStorageError("");
+
+    if (!storageUsage || !shouldAutoClearAppCache(nextPolicy, storageUsage)) {
+      return;
+    }
+
+    setIsApplyingCachePolicy(true);
+    try {
+      const result = await enforceAppCachePolicy({ policy: nextPolicy, usage: storageUsage });
+      setStorageUsage(result.usage || storageUsage);
+      setStorageStatus(result.cleared ? "auto-cleared" : "policy-updated");
+    } catch (error) {
+      setStorageStatus("error");
+      setStorageError(error?.message || "Не удалось применить лимит кеша.");
+    } finally {
+      setIsApplyingCachePolicy(false);
     }
   };
 
@@ -851,7 +906,12 @@ export const MemorySettings = () => {
       ? "Считаем память..."
       : storageStatus === "cleared"
         ? "Кеш очищен. Обновляем страницу..."
+        : storageStatus === "auto-cleared"
+          ? "Кеш превысил лимит и был очищен автоматически."
+          : storageStatus === "policy-updated"
+            ? "Настройки автоочистки сохранены."
         : storageError || "Память обновлена.";
+  const cacheControlsDisabled = storageStatus === "loading" || isClearingCache || isApplyingCachePolicy;
 
   return (
     <div className="settings-shell__content settings-shell__content--memory">
@@ -882,17 +942,54 @@ export const MemorySettings = () => {
         ))}
       </section>
 
+      <section className="voice-settings-card memory-settings-card memory-settings-card--policy">
+        <div>
+          <div className="voice-settings-card__title">Автоочистка кеша</div>
+          <p>Если кеш станет больше выбранного лимита, приложение само удалит временные данные и кеш чата.</p>
+        </div>
+        <div className="memory-settings-policy">
+          <div className="voice-toggle-row voice-toggle-row--compact memory-settings-policy__toggle">
+            <div>
+              <strong>Автоочистка</strong>
+              <span>{appCachePolicy.autoClearEnabled ? "включена" : "выключена"}</span>
+            </div>
+            <VoiceSwitch
+              active={appCachePolicy.autoClearEnabled}
+              onClick={() => {
+                void updateAppCachePolicy({ autoClearEnabled: !appCachePolicy.autoClearEnabled });
+              }}
+              label="Автоочистка кеша"
+            />
+          </div>
+          <label className="memory-settings-policy__limit">
+            <span>Максимум кеша</span>
+            <select
+              className="voice-settings-select voice-settings-select--native"
+              value={appCachePolicy.maxCacheBytes}
+              onChange={(event) => {
+                void updateAppCachePolicy({ maxCacheBytes: Number(event.target.value) });
+              }}
+              disabled={cacheControlsDisabled}
+            >
+              {APP_CACHE_LIMIT_OPTIONS.map((limitBytes) => (
+                <option key={limitBytes} value={limitBytes}>{formatStorageBytes(limitBytes)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
+
       <section className="voice-settings-card memory-settings-card memory-settings-card--actions">
         <div>
           <div className="voice-settings-card__title">Очистка кеша</div>
-          <p>Удаляются временные файлы, HTTP-кеш и Cache API. Вход, профиль и настройки остаются на месте.</p>
+          <p>Удаляются временные файлы, HTTP-кеш, Cache API и локальный кеш чата. Вход, профиль и настройки остаются на месте.</p>
           <span className="memory-settings-card__status" aria-live="polite">{statusText}</span>
         </div>
         <div className="memory-settings-card__buttons">
-          <button type="button" className="settings-inline-button" onClick={loadStorageUsage} disabled={storageStatus === "loading" || isClearingCache}>
-            Обновить
+          <button type="button" className="settings-inline-button" onClick={() => { void loadStorageUsage(); }} disabled={cacheControlsDisabled}>
+            {isApplyingCachePolicy ? "Проверяем..." : "Обновить"}
           </button>
-          <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={clearCache} disabled={isClearingCache || storageStatus === "loading"}>
+          <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={clearCache} disabled={cacheControlsDisabled}>
             {isClearingCache ? "Очищаем..." : "Очистить кеш"}
           </button>
         </div>
