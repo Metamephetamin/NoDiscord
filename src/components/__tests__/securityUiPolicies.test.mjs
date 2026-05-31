@@ -223,4 +223,7 @@ test("poll votes persist locally and expose anonymous mode", () => {
   assert.match(messageListSource, /function writeStoredPollVoteState/);
   assert.match(messageListSource, /nd:poll-vote:/);
   assert.match(messageListSource, /messageId=\{messageItem\.id\} currentUserId=\{currentUserId\}/);
+  assert.doesNotMatch(messageListSource, /window\.prompt/);
+  assert.match(messageListSource, /message-poll-card__add-option-form/);
+  assert.match(messageListSource, /message-poll-card__add-option-input/);
 });

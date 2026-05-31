@@ -1173,6 +1173,7 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
   const [localVotes, setLocalVotes] = useState(() => ({ ...(storedVoteState?.votes || poll?.votes || {}) }));
   const [localTotalVoters, setLocalTotalVoters] = useState(() => Math.max(0, Number(storedVoteState?.totalVoters || poll?.totalVoters) || 0));
   const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState(() => storedVoteState?.selectedOptionIds || []);
+  const [addOptionDraft, setAddOptionDraft] = useState("");
   const options = [...(Array.isArray(poll?.options) ? poll.options : []), ...addedOptions];
   const pollTheme = useMemo(() => resolvePollTheme(poll?.themeId), [poll?.themeId]);
   const isAnonymousPoll = Boolean(poll?.settings?.anonymous || poll?.settings?.showWhoVoted === false);
@@ -1237,13 +1238,14 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
     });
   };
 
-  const handleAddOption = () => {
-    if (!poll?.settings?.allowAddingOptions || typeof window === "undefined") {
+  const handleAddOption = (event) => {
+    event?.preventDefault?.();
+
+    if (!poll?.settings?.allowAddingOptions) {
       return;
     }
 
-    const nextOptionText = window.prompt("Новый вариант ответа");
-    const normalizedText = String(nextOptionText || "").trim().slice(0, 120);
+    const normalizedText = addOptionDraft.trim().slice(0, 120);
     if (!normalizedText) {
       return;
     }
@@ -1265,6 +1267,7 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
       });
       return nextOptions;
     });
+    setAddOptionDraft("");
   };
 
   return (
@@ -1310,9 +1313,20 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
 
       <div className="message-poll-card__footer">
         {poll?.settings?.allowAddingOptions ? (
-          <button type="button" className="message-poll-card__add-option" onClick={handleAddOption}>
-            Добавить вариант
-          </button>
+          <form className="message-poll-card__add-option-form" onSubmit={handleAddOption}>
+            <input
+              type="text"
+              className="message-poll-card__add-option-input"
+              value={addOptionDraft}
+              maxLength={120}
+              placeholder="Новый вариант"
+              aria-label="Новый вариант ответа"
+              onChange={(event) => setAddOptionDraft(event.target.value)}
+            />
+            <button type="submit" className="message-poll-card__add-option" disabled={!addOptionDraft.trim()}>
+              Добавить
+            </button>
+          </form>
         ) : (
           <span className="message-poll-card__meta">
             {totalVoters > 0

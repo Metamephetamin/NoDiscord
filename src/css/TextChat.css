@@ -7046,11 +7046,46 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   overflow-wrap: anywhere;
 }
 
+.message-poll-card__add-option-form {
+  flex: 1 1 260px;
+  min-width: min(100%, 220px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-poll-card__add-option-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(182, 196, 232, 0.24);
+  border-radius: 999px;
+  background: rgba(9, 16, 27, 0.24);
+  color: #f5f8ff;
+  caret-color: #f5f8ff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.message-poll-card__add-option-input::placeholder {
+  color: rgba(225, 236, 255, 0.46);
+}
+
 .message-poll-card__add-option {
-  padding: 0;
-  border: 0;
-  background: transparent;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(120, 245, 178, 0.26);
+  border-radius: 999px;
+  background: rgba(120, 245, 178, 0.12);
+  font-weight: 700;
   cursor: pointer;
+}
+
+.message-poll-card__add-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .message-poll-card__vote {
@@ -11360,6 +11395,7 @@ html[data-ui-theme="light"] .poll-composer__actions {
 html[data-ui-theme="light"] .forward-modal__search,
 html[data-ui-theme="light"] .poll-composer__textarea,
 html[data-ui-theme="light"] .poll-composer__option-input,
+html[data-ui-theme="light"] .message-poll-card__add-option-input,
 html[data-ui-theme="light"] .batch-upload-sheet__caption textarea {
   border-color: #d9e0ec;
   background: #ffffff;
@@ -11371,6 +11407,7 @@ html[data-ui-theme="light"] .batch-upload-sheet__caption textarea {
 html[data-ui-theme="light"] .forward-modal__search::placeholder,
 html[data-ui-theme="light"] .poll-composer__textarea::placeholder,
 html[data-ui-theme="light"] .poll-composer__option-input::placeholder,
+html[data-ui-theme="light"] .message-poll-card__add-option-input::placeholder,
 html[data-ui-theme="light"] .batch-upload-sheet__caption textarea::placeholder {
   color: #7c8799;
   -webkit-text-fill-color: #7c8799;
@@ -11387,6 +11424,7 @@ html[data-ui-theme="light"] .poll-composer__theme-swatch--active {
 
 html[data-ui-theme="light"] .poll-composer__label,
 html[data-ui-theme="light"] .poll-composer__add-option,
+html[data-ui-theme="light"] .message-poll-card__add-option,
 html[data-ui-theme="light"] .batch-upload-sheet__caption span,
 html[data-ui-theme="light"] .batch-upload-sheet__action {
   color: #315fc7;
