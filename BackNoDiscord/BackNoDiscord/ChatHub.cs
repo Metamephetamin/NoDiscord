@@ -141,11 +141,6 @@ public class ChatHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
-    public async Task UpdateLocation(double latitude, double longitude)
-    {
-        await PublishLocationAsync(latitude, longitude);
-    }
-
     public async Task UpdateLocationCell(LocationCellInput? input)
     {
         if (!TryParseLocationCell(input?.Cell, out var latitude, out var longitude))

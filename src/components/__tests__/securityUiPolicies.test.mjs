@@ -42,6 +42,7 @@ test("shared location is reduced to a privacy cell before realtime publication",
   assert.match(hookSource, /formatSharedLocationCell\(latitude, longitude\)/);
   assert.match(hookSource, /invoke\?\.\("UpdateLocationCell", \{ cell: locationCell \}\)/);
   assert.doesNotMatch(hookSource, /invoke\?\.\("UpdateLocation", latitude, longitude\)/);
+  assert.doesNotMatch(hubSource, /public async Task UpdateLocation\(double latitude, double longitude\)/);
   assert.match(hubSource, /public sealed record LocationCellInput\(string\? Cell\);/);
   assert.match(hubSource, /public async Task UpdateLocationCell\(LocationCellInput\? input\)/);
   assert.match(hubSource, /TryParseLocationCell\(input\?\.Cell, out var latitude, out var longitude\)/);
