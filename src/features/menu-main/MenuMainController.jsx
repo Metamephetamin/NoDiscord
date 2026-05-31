@@ -1425,12 +1425,12 @@ export default function MenuMain({
   }, []);
   useEffect(() => {
     if (settingsTab === "admin" || settingsTab === "moderation") {
-      setSettingsTab("voice_video");
+      setSettingsTab("account");
       return;
     }
 
     if (!activeServer && (settingsTab === "server" || settingsTab === "roles")) {
-      setSettingsTab("voice_video");
+      setSettingsTab("account");
     }
   }, [activeServer, settingsTab]);
   useEffect(() => {
@@ -4377,17 +4377,17 @@ export default function MenuMain({
       console.error("Ошибка обновления сервера:", error);
     }
   };
-  const openSettingsPanel = useCallback((tab = "voice_video") => {
+  const openSettingsPanel = useCallback((tab = "account") => {
     const traceId = startPerfTrace("menu-main", "open-settings-panel", {
-      tab: String(tab || "voice_video"),
+      tab: String(tab || "account"),
     });
-    setSettingsTab(tab);
+    setSettingsTab(tab || "account");
     setOpenSettings(true);
     setShowServerMembersPanel(false);
     setShowMicMenu(false);
     setShowSoundMenu(false);
     finishPerfTraceOnNextFrame(traceId, {
-      tab: String(tab || "voice_video"),
+      tab: String(tab || "account"),
     });
   }, []);
   const openDonationModal = useCallback(() => {
@@ -5757,8 +5757,18 @@ export default function MenuMain({
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
   const adminSettingsItem = useMemo(() => SETTINGS_NAV_ITEMS.find((item) => item.id === "admin"), []);
   const settingsNavItems = useMemo(
-    () => SETTINGS_NAV_ITEMS.filter((item) => item.id !== "roles" && item.id !== "admin" && item.id !== "moderation"),
-    []
+    () => SETTINGS_NAV_ITEMS.filter((item) => {
+      if (item.id === "admin" || item.id === "moderation") {
+        return false;
+      }
+
+      if ((item.id === "server" || item.id === "roles") && !activeServer) {
+        return false;
+      }
+
+      return true;
+    }),
+    [activeServer]
   );
   const settingsNavSections = useMemo(() => groupSettingsNavItems(settingsNavItems), [settingsNavItems]);
   const mobileSettingsNavItems = useMemo(
@@ -6369,9 +6379,6 @@ export default function MenuMain({
     const directChannelId = String(
       friendListUserContextMenu?.directChannelId || buildDirectMessageChannelId(currentUserId, targetUserId)
     );
-    if (typeof window !== "undefined" && !window.confirm(`Удалить ${username} из друзей? Связь пропадёт у вас обоих.`)) {
-      return;
-    }
 
     setFriendListUserContextMenu(null);
     setFriendsError("");

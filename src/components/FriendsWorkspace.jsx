@@ -27,6 +27,28 @@ import {
 } from "../utils/profileCustomization";
 
 const PROFILE_STORE_ENABLED = false;
+const MAP_LOCATION_COORDINATE_EPSILON = 0.00001;
+
+const hasMeaningfulMapLocationChange = (current, next) => {
+  if (!current) {
+    return true;
+  }
+
+  const currentLatitude = Number(current.latitude);
+  const currentLongitude = Number(current.longitude);
+  const nextLatitude = Number(next.latitude);
+  const nextLongitude = Number(next.longitude);
+  if (![currentLatitude, currentLongitude, nextLatitude, nextLongitude].every(Number.isFinite)) {
+    return true;
+  }
+
+  return Math.abs(currentLatitude - nextLatitude) > MAP_LOCATION_COORDINATE_EPSILON
+    || Math.abs(currentLongitude - nextLongitude) > MAP_LOCATION_COORDINATE_EPSILON
+    || String(current.name || "") !== String(next.name || "")
+    || String(current.avatar || "") !== String(next.avatar || "")
+    || String(current.locationLabel || "") !== String(next.locationLabel || "")
+    || String(current.kind || "") !== String(next.kind || "");
+};
 
 function FriendsNavIcon({ kind }) {
   switch (kind) {
@@ -369,6 +391,7 @@ const createMapUserMarker = (target, { currentUserId, getDisplayName }) => {
   return {
     id: userId,
     name: getDisplayName(target),
+    email: String(target?.email || "").trim(),
     avatar: target?.avatar || target?.avatarUrl || "",
     locationLabel: location.label,
     latitude: location.latitude,
@@ -722,12 +745,26 @@ const ProfileStoreView = ({ avatarSrc, displayName, appliedItem, onOpenItem }) =
   );
 };
 
-const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
+const WhereIsEveryoneView = ({
+  users,
+  user,
+  getDisplayName,
+  friendIds = new Set(),
+  isAddingFriend = false,
+  onAddFriend,
+}) => {
   const mapElementRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerLayerRef = useRef(null);
   const didInitialMapFitRef = useRef(false);
   const currentUserId = String(user?.id || user?.userId || user?.email || "self").trim() || "self";
+  const [selectedMapUserId, setSelectedMapUserId] = useState("");
+  const [mapFriendActionStatus, setMapFriendActionStatus] = useState("");
+  const [mapFriendActionUserId, setMapFriendActionUserId] = useState("");
+  const [mapFriendActionLockedUserIds, setMapFriendActionLockedUserIds] = useState(() => new Set());
+  const pendingRealtimeLocationsRef = useRef(new Map());
+  const realtimeFlushHandleRef = useRef(null);
+  const realtimeFlushModeRef = useRef("");
   const [liveSelfLocation, setLiveSelfLocation] = useState(() => {
     const initialLocationSharingPreference = readStoredLocationSharingPreference();
     const storedSelfLocation = readStoredSelfLocation();
@@ -760,8 +797,7 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
       return null;
     }
 
-    setLocationStatus("");
-    setLiveSelfLocation({
+    const nextLocation = {
       id: currentUserId,
       name: String(source?.name || getDisplayName(user) || "Вы").trim() || "Вы",
       avatar: user?.avatar || user?.avatarUrl || "",
@@ -769,7 +805,12 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
       latitude,
       longitude,
       kind: "self",
-    });
+    };
+
+    setLocationStatus("");
+    setLiveSelfLocation((current) => (
+      hasMeaningfulMapLocationChange(current, nextLocation) ? nextLocation : current
+    ));
 
     return { latitude, longitude };
   }, [currentUserId, getDisplayName, user]);
@@ -798,6 +839,77 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
     });
   }, [currentUserId, liveSelfLocation, realtimeLocations, users]);
   const onlineCount = visibleUsers.filter((item) => item.kind === "self" || item.kind === "online").length;
+  const selectedMapUser = useMemo(
+    () => visibleUsers.find((item) => String(item.id || "") === selectedMapUserId) || null,
+    [selectedMapUserId, visibleUsers]
+  );
+  const selectedMapUserIsSelf = selectedMapUser ? String(selectedMapUser.id || "") === currentUserId : false;
+  const selectedMapUserIsFriend = selectedMapUser ? friendIds.has(String(selectedMapUser.id || "")) : false;
+  const selectedMapUserHasPendingRequest = selectedMapUser ? mapFriendActionLockedUserIds.has(String(selectedMapUser.id || "")) : false;
+  const selectedMapUserCanAdd = Boolean(selectedMapUser && !selectedMapUserIsSelf && !selectedMapUserIsFriend && !selectedMapUserHasPendingRequest);
+  const selectedMapUserActionBusy = Boolean(isAddingFriend && selectedMapUser && mapFriendActionUserId === String(selectedMapUser.id || ""));
+  const selectedMapUserBadgeLabel = (() => {
+    if (selectedMapUserIsSelf) {
+      return "Это вы";
+    }
+
+    if (selectedMapUserIsFriend || mapFriendActionStatus === "Уже в друзьях." || mapFriendActionStatus === "Друг добавлен.") {
+      return "Уже в друзьях";
+    }
+
+    if (selectedMapUserHasPendingRequest) {
+      return "Заявка отправлена";
+    }
+
+    return "Уже в друзьях";
+  })();
+  const handleMapAddFriend = async () => {
+    if (!selectedMapUserCanAdd || !selectedMapUser) {
+      return;
+    }
+
+    if (!onAddFriend) {
+      setMapFriendActionStatus("Добавление недоступно.");
+      return;
+    }
+
+    const targetId = String(selectedMapUser.id || "");
+    setMapFriendActionUserId(targetId);
+    setMapFriendActionStatus("");
+    const result = await onAddFriend({
+      id: targetId,
+      email: selectedMapUser.email || "",
+      name: selectedMapUser.name || "",
+    });
+
+    if (result?.ok === false) {
+      setMapFriendActionStatus(result.message || "Не удалось отправить заявку.");
+      return;
+    }
+
+    setMapFriendActionLockedUserIds((current) => {
+      const next = new Set(current);
+      next.add(targetId);
+      return next;
+    });
+
+    if (result?.status === "already_friends") {
+      setMapFriendActionStatus("Уже в друзьях.");
+      return;
+    }
+
+    if (result?.status === "auto_accepted") {
+      setMapFriendActionStatus("Друг добавлен.");
+      return;
+    }
+
+    if (result?.status === "already_requested") {
+      setMapFriendActionStatus("Заявка уже отправлена.");
+      return;
+    }
+
+    setMapFriendActionStatus("Заявка отправлена.");
+  };
 
   useEffect(() => {
     const handlePreferenceUpdated = (event) => {
@@ -893,6 +1005,53 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
   }, []);
 
   useEffect(() => {
+    const flushRealtimeLocations = () => {
+      realtimeFlushHandleRef.current = null;
+      realtimeFlushModeRef.current = "";
+
+      const pendingLocations = pendingRealtimeLocationsRef.current;
+      if (!pendingLocations.size) {
+        return;
+      }
+
+      pendingRealtimeLocationsRef.current = new Map();
+      setRealtimeLocations((current) => {
+        let hasChanges = false;
+        const next = new Map(current);
+
+        pendingLocations.forEach((location, userId) => {
+          const currentLocation = next.get(userId);
+          const nextLocation = {
+            ...currentLocation,
+            ...location,
+          };
+
+          if (hasMeaningfulMapLocationChange(currentLocation, nextLocation)) {
+            next.set(userId, nextLocation);
+            hasChanges = true;
+          }
+        });
+
+        return hasChanges ? next : current;
+      });
+    };
+
+    const scheduleRealtimeFlush = () => {
+      if (realtimeFlushHandleRef.current !== null) {
+        return;
+      }
+
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        realtimeFlushModeRef.current = "animationFrame";
+        realtimeFlushHandleRef.current = window.requestAnimationFrame(flushRealtimeLocations);
+        return;
+      }
+
+      const timerRuntime = typeof window !== "undefined" ? window : globalThis;
+      realtimeFlushModeRef.current = "timeout";
+      realtimeFlushHandleRef.current = timerRuntime.setTimeout(flushRealtimeLocations, 80);
+    };
+
     const handleFriendLocationUpdated = (payload) => {
       const userId = String(payload?.userId || "").trim();
       const latitude = readFiniteNumber(payload?.latitude);
@@ -901,24 +1060,32 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
         return;
       }
 
-      setRealtimeLocations((current) => {
-        const next = new Map(current);
-        next.set(userId, {
-          id: userId,
-          name: String(payload?.displayName || "").trim() || `User ${userId}`,
-          avatar: "",
-          locationLabel: String(payload?.locationLabel || "").trim() || "Местоположение",
-          latitude,
-          longitude,
-          kind: userId === currentUserId ? "self" : "online",
-        });
-        return next;
+      pendingRealtimeLocationsRef.current.set(userId, {
+        id: userId,
+        name: String(payload?.displayName || "").trim() || `User ${userId}`,
+        avatar: "",
+        locationLabel: String(payload?.locationLabel || "").trim() || "Местоположение",
+        latitude,
+        longitude,
+        kind: userId === currentUserId ? "self" : "online",
       });
+      scheduleRealtimeFlush();
     };
 
     chatConnection.on(REALTIME_EVENTS.friendLocationUpdated, handleFriendLocationUpdated);
     return () => {
       chatConnection.off(REALTIME_EVENTS.friendLocationUpdated, handleFriendLocationUpdated);
+      if (realtimeFlushHandleRef.current !== null) {
+        const timerRuntime = typeof window !== "undefined" ? window : globalThis;
+        if (realtimeFlushModeRef.current === "animationFrame" && typeof timerRuntime.cancelAnimationFrame === "function") {
+          timerRuntime.cancelAnimationFrame(realtimeFlushHandleRef.current);
+        } else {
+          timerRuntime.clearTimeout(realtimeFlushHandleRef.current);
+        }
+      }
+      realtimeFlushHandleRef.current = null;
+      realtimeFlushModeRef.current = "";
+      pendingRealtimeLocationsRef.current = new Map();
     };
   }, [currentUserId]);
 
@@ -981,7 +1148,7 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
       const userName = escapeMapHtml(mapUser.name);
       const locationLabel = escapeMapHtml(mapUser.locationLabel || `${mapUser.latitude.toFixed(2)}, ${mapUser.longitude.toFixed(2)}`);
       const marker = L.marker([mapUser.latitude, mapUser.longitude], {
-        keyboard: false,
+        keyboard: true,
         title: mapUser.name,
         icon: L.divIcon({
           className: `lanaya-world-leaflet__marker lanaya-world-leaflet__marker--${mapUser.kind}`,
@@ -996,6 +1163,10 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
         offset: [0, -12],
         opacity: 1,
         className: "lanaya-world-leaflet__tooltip",
+      });
+      marker.on("click", () => {
+        setSelectedMapUserId(String(mapUser.id || ""));
+        setMapFriendActionStatus("");
       });
       marker.addTo(markerLayer);
     });
@@ -1025,8 +1196,6 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
         <div className="lanaya-world__header">
           <div className="lanaya-world__title">
             <span>Lanaya global scan</span>
-            <h1>Где все ?</h1>
-            <p>На карте видны только пользователи, у которых уже есть открытая геопозиция в профиле.</p>
           </div>
           <div className="lanaya-world__stats" aria-label="Статистика карты">
             <span><strong>{visibleUsers.length}</strong> на карте</span>
@@ -1036,6 +1205,40 @@ const WhereIsEveryoneView = ({ users, user, getDisplayName }) => {
 
         <div className="lanaya-world-map" role="img" aria-label="Карта мира с пользователями Lanaya">
           <div ref={mapElementRef} className="lanaya-world-map__viewport" />
+
+          {selectedMapUser ? (
+            <aside className="lanaya-world-map__person" aria-live="polite">
+              <button
+                type="button"
+                className="lanaya-world-map__person-close"
+                onClick={() => {
+                  setSelectedMapUserId("");
+                  setMapFriendActionStatus("");
+                }}
+                aria-label="Закрыть карточку пользователя"
+              />
+              <AnimatedAvatar className="lanaya-world-map__person-avatar" src={selectedMapUser.avatar || ""} alt={selectedMapUser.name} />
+              <div className="lanaya-world-map__person-copy">
+                <strong>{selectedMapUser.name}</strong>
+                <span>{selectedMapUser.locationLabel || `${selectedMapUser.latitude.toFixed(2)}, ${selectedMapUser.longitude.toFixed(2)}`}</span>
+              </div>
+              {selectedMapUserCanAdd ? (
+                <button
+                  type="button"
+                  className="lanaya-world-map__person-action"
+                  onClick={handleMapAddFriend}
+                  disabled={selectedMapUserActionBusy}
+                >
+                  {selectedMapUserActionBusy ? "Отправляем..." : "Добавить в друзья"}
+                </button>
+              ) : (
+                <span className="lanaya-world-map__person-badge">
+                  {selectedMapUserBadgeLabel}
+                </span>
+              )}
+              {mapFriendActionStatus ? <span className="lanaya-world-map__person-status">{mapFriendActionStatus}</span> : null}
+            </aside>
+          ) : null}
 
           <button
             type="button"
@@ -1238,6 +1441,10 @@ export const FriendsMain = ({
   );
   const onlineFriendCount = useMemo(
     () => friends.reduce((count, friend) => count + (!friend?.isBlocked && !friend?.blockedYou && isUserCurrentlyOnline(friend) ? 1 : 0), 0),
+    [friends]
+  );
+  const friendIdSet = useMemo(
+    () => new Set(friends.map((friend) => String(friend?.id || "")).filter(Boolean)),
     [friends]
   );
   const friendDirectoryRows = useMemo(() => {
@@ -1849,6 +2056,17 @@ export const FriendsMain = ({
               </div>
 
               <div className="chat__topbar-actions friends-direct-chat-topbar__actions">
+                {currentConversationTarget ? (
+                  <button
+                    type="button"
+                    className="friends-direct-chat-topbar__spam"
+                    onClick={handleReportConversationSpamAndLeave}
+                    disabled={conversationActionLoading}
+                  >
+                    Сообщить о спаме и выйти
+                  </button>
+                ) : null}
+
                 <label className="chat__topbar-search-wrap friends-direct-chat-topbar__search">
                   <img src={searchIcon} alt="" />
                   <input
@@ -1874,17 +2092,6 @@ export const FriendsMain = ({
                     title="Добавить участника"
                   >
                     <span className="friends-direct-chat-topbar__glyph" aria-hidden="true">+</span>
-                  </button>
-                ) : null}
-
-                {currentConversationTarget ? (
-                  <button
-                    type="button"
-                    className="friends-direct-chat-topbar__spam"
-                    onClick={handleReportConversationSpamAndLeave}
-                    disabled={conversationActionLoading}
-                  >
-                    Сообщить о спаме и выйти
                   </button>
                 ) : null}
 
@@ -2073,7 +2280,14 @@ export const FriendsMain = ({
             onOpenItem={(item) => setActiveStoreItem(item)}
           />
         ) : activeFriendsPageSection === "where" ? (
-          <WhereIsEveryoneView users={lanayaMapUsers} user={user} getDisplayName={getDisplayName} />
+          <WhereIsEveryoneView
+            users={lanayaMapUsers}
+            user={user}
+            getDisplayName={getDisplayName}
+            friendIds={friendIdSet}
+            isAddingFriend={isAddingFriend}
+            onAddFriend={onAddFriend}
+          />
         ) : activeFriendsPageSection !== "conversations" ? (
           <div className="friends-main__content friends-main__content--directory">
             <section className="friends-directory">
@@ -2677,16 +2891,6 @@ export const FriendsMain = ({
                   disabled={conversationActionLoading}
                 >
                   Покинуть
-                </button>
-              ) : null}
-              {canLeaveConversation ? (
-                <button
-                  type="button"
-                  className="friends-conversation-spam-button"
-                  onClick={handleReportConversationSpamAndLeave}
-                  disabled={conversationActionLoading}
-                >
-                  Сообщить о спаме и выйти
                 </button>
               ) : null}
               {canDeleteConversation ? (

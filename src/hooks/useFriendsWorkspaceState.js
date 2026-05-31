@@ -573,21 +573,24 @@ export default function useFriendsWorkspaceState({
         );
         rerunFriendSearch();
         loadFriendRequests().catch(() => {});
-        return;
+        return { ok: true, status: data?.status, friend: data?.friend || null };
       }
 
       if (data?.status === "already_requested") {
         setFriendActionStatus("Заявка уже отправлена и ждёт ответа.");
         rerunFriendSearch();
         loadFriendRequests().catch(() => {});
-        return;
+        return { ok: true, status: data?.status };
       }
 
       setFriendActionStatus("Заявка отправлена.");
       rerunFriendSearch();
       loadFriendRequests().catch(() => {});
+      return { ok: true, status: data?.status || "request_sent" };
     } catch (error) {
-      setFriendsError(error.message || "Не удалось добавить друга.");
+      const message = error.message || "Не удалось добавить друга.";
+      setFriendsError(message);
+      return { ok: false, message };
     } finally {
       setIsAddingFriend(false);
     }

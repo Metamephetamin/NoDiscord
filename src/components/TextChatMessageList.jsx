@@ -51,6 +51,7 @@ const LOCATION_PREVIEW_HEIGHT = 160;
 const invitePreviewCache = new Map();
 const TEXT_CHAT_STATIC_EMOJI_IN_FEED = true;
 const CHAT_SYSTEM_EVENT_MEMBER_ADDED = "conversation_member_added";
+const CHAT_SYSTEM_EVENT_MEMBER_REMOVED = "conversation_member_removed";
 const CHAT_SYSTEM_EVENT_TITLE_UPDATED = "conversation_title_updated";
 const CHAT_SYSTEM_EVENT_AVATAR_UPDATED = "conversation_avatar_updated";
 
@@ -85,6 +86,8 @@ function getChatSystemEventText(systemEvent) {
   switch (String(systemEvent?.type || "")) {
     case CHAT_SYSTEM_EVENT_MEMBER_ADDED:
       return `${actorName} пригласил ${targetName}`;
+    case CHAT_SYSTEM_EVENT_MEMBER_REMOVED:
+      return `${actorName} выгнал ${targetName}`;
     case CHAT_SYSTEM_EVENT_TITLE_UPDATED:
       return `${actorName} изменил название беседы${conversationTitle ? ` на «${conversationTitle}»` : ""}`;
     case CHAT_SYSTEM_EVENT_AVATAR_UPDATED:

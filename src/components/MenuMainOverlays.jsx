@@ -334,19 +334,6 @@ export const DonationModal = ({
     }
   };
 
-  const copyDonationPaymentUrl = async () => {
-    if (!paymentUrl) {
-      return;
-    }
-
-    try {
-      await copyTextToClipboard(paymentUrl);
-      setCopyError("Ссылка на оплату скопирована.");
-    } catch {
-      setCopyError("Не удалось скопировать ссылку. Можно открыть оплату кнопкой ниже.");
-    }
-  };
-
   const copyDonationDetail = async (detail) => {
     try {
       await copyTextToClipboard(detail.value);
@@ -416,10 +403,7 @@ export const DonationModal = ({
                   <span>{donationPaymentError || "Отсканируйте QR-код или откройте оплату в браузере."}</span>
                   <div className="donation-modal__payment-actions">
                     <button type="button" className="donation-modal__link-button" onClick={() => openDonationPayment()}>
-                      Открыть оплату
-                    </button>
-                    <button type="button" className="donation-modal__link-button donation-modal__link-button--secondary" onClick={copyDonationPaymentUrl}>
-                      Скопировать ссылку
+                      Оплатить
                     </button>
                   </div>
                 </div>

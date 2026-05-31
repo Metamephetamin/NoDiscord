@@ -413,7 +413,6 @@ export const AccountSettings = ({
   onUpdateProfileDraft,
   onUpdateEmailChangeDraft,
   onToggleLocationSharing,
-  onClearLocationSharing,
   onStartEmailChange,
   onConfirmEmailChange,
   onStartTotpSetup,
@@ -431,7 +430,6 @@ export const AccountSettings = ({
   const normalizedNickname = String(nickname || "").trim();
   const headerDisplayName = normalizedNickname || normalizedAccountName || displayName;
   const isLocationSharingEnabled = Boolean(locationSharing?.enabled);
-  const isLocationSharingBusy = Boolean(locationSharing?.isLoading || locationSharing?.isSaving);
 
   return (
     <div className="settings-shell__content settings-shell__content--account">
@@ -603,17 +601,6 @@ export const AccountSettings = ({
             onClick={() => onToggleLocationSharing?.(!isLocationSharingEnabled)}
             label="Показывать меня на карте"
           />
-        </div>
-        <div className="account-settings-row-editor__actions">
-          <span>{locationSharing?.status || "Последняя геопозиция хранится ограниченное время и обновляется автоматически."}</span>
-          <button
-            type="button"
-            className="settings-inline-button"
-            onClick={onClearLocationSharing}
-            disabled={isLocationSharingBusy}
-          >
-            Стереть мою последнюю локацию
-          </button>
         </div>
       </section>
 

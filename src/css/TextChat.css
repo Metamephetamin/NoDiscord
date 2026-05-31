@@ -685,11 +685,10 @@
 }
 
 .chat-system-event__text {
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(20, 25, 36, 0.74);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .chat-system-event__image {

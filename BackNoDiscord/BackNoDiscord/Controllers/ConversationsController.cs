@@ -21,6 +21,7 @@ public sealed class ConversationsController : ControllerBase
     private const long MaxConversationAvatarSizeBytes = 50L * 1024L * 1024L;
     private const string MessagePayloadPrefix = "__CHAT_PAYLOAD__:";
     private const string ConversationSystemMemberAdded = "conversation_member_added";
+    private const string ConversationSystemMemberRemoved = "conversation_member_removed";
     private const string ConversationSystemTitleUpdated = "conversation_title_updated";
     private const string ConversationSystemAvatarUpdated = "conversation_avatar_updated";
     private const string ConversationPermissionEditInfo = "edit_info";
@@ -563,11 +564,28 @@ public sealed class ConversationsController : ControllerBase
             return Forbid();
         }
 
+        var now = DateTimeOffset.UtcNow;
+        var eventUsers = await LoadUsersAsync([currentUserId, userId], cancellationToken);
+        eventUsers.TryGetValue(currentUserId, out var actorUser);
+        eventUsers.TryGetValue(userId, out var targetUser);
+        var systemMessage = AddConversationSystemMessage(
+            conversationId,
+            new ChatSystemEventPayload
+            {
+                Type = ConversationSystemMemberRemoved,
+                ActorUserId = currentUserId.ToString(),
+                ActorDisplayName = GetUserDisplayName(actorUser, currentUserId),
+                TargetUserId = userId.ToString(),
+                TargetDisplayName = GetUserDisplayName(targetUser, userId)
+            },
+            now);
+
         _context.GroupConversationMembers.Remove(targetMember);
-        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        conversation.UpdatedAt = now;
         await _context.SaveChangesAsync(cancellationToken);
 
         var recipientIds = await GetConversationRecipientIdsAsync(conversationId, includeBanned: false, cancellationToken);
+        await BroadcastConversationSystemMessageAsync(systemMessage, cancellationToken);
         await BroadcastConversationsUpdatedAsync(recipientIds.Append(userId), cancellationToken);
 
         return Ok(new { status = "member_removed" });
@@ -1117,6 +1135,7 @@ public sealed class ConversationsController : ControllerBase
             return payload.SystemEvent.Type switch
             {
                 ConversationSystemMemberAdded => "Новый участник в беседе",
+                ConversationSystemMemberRemoved => "Участник удалён из беседы",
                 ConversationSystemTitleUpdated => "Название беседы изменено",
                 ConversationSystemAvatarUpdated => "Аватар беседы обновлён",
                 _ => "Системное сообщение"

@@ -912,12 +912,11 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "devices", label: "Устройства", section: "Пользователь" },
   { id: "integrations", label: "Интеграции", section: "Пользователь" },
   { id: "notifications", label: "Уведомления", section: "Пользователь" },
+  { id: "server", label: "Настройки сервера", section: "Текущий сервер" },
+  { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
   { id: "voice_video", label: "Голос и видео", section: "Приложение" },
   { id: "appearance_accessibility", label: "Внешний вид и доступность", section: "Приложение" },
-  { id: "admin", label: "Админка", section: "Администрирование" },
-  { id: "server", label: "Сервер", section: "Текущий сервер" },
-  { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
   { id: "company_info", label: "О продукте и компании", section: "О приложении" },
+  { id: "admin", label: "Админка", section: "Администрирование" },
 ];
 export const uiSoundCache = new Map();
-

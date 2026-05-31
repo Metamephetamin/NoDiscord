@@ -4412,10 +4412,11 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .lanaya-world__title > span {
   display: block;
-  margin-bottom: 7px;
+  margin: 0;
   color: #57e6c0;
-  font-size: 12px;
+  font-size: 22px;
   font-weight: 850;
+  line-height: 1.1;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -4686,6 +4687,139 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .lanaya-world-map__locate:hover:not(:disabled) {
   background: rgba(87, 230, 192, 0.14);
+}
+
+.lanaya-world-map__person {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  width: min(340px, calc(100% - 28px));
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(7, 10, 16, 0.86);
+  color: #eef5ff;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+  z-index: 470;
+}
+
+.lanaya-world-map__person-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #98a7bd;
+  cursor: pointer;
+}
+
+.lanaya-world-map__person-close::before,
+.lanaya-world-map__person-close::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 11px;
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.lanaya-world-map__person-close::before {
+  transform: rotate(45deg);
+}
+
+.lanaya-world-map__person-close::after {
+  transform: rotate(-45deg);
+}
+
+.lanaya-world-map__person-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lanaya-world-map__person-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lanaya-world-map__person-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 18px;
+}
+
+.lanaya-world-map__person-copy strong,
+.lanaya-world-map__person-copy span,
+.lanaya-world-map__person-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lanaya-world-map__person-copy strong {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.lanaya-world-map__person-copy span {
+  color: #9eabc0;
+  font-size: 12px;
+}
+
+.lanaya-world-map__person-action,
+.lanaya-world-map__person-badge {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.lanaya-world-map__person-action {
+  border: 0;
+  background: #57e6c0;
+  color: #06130f;
+  cursor: pointer;
+}
+
+.lanaya-world-map__person-action:hover:not(:disabled) {
+  background: #7bf2d3;
+}
+
+.lanaya-world-map__person-action:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.lanaya-world-map__person-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cad3e4;
+}
+
+.lanaya-world-map__person-status {
+  grid-column: 2 / -1;
+  color: #b8e8d4;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .lanaya-world-map__locate span {
@@ -6423,25 +6557,29 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   cursor: pointer;
 }
 
-.friends-conversation-spam-button,
 .friends-direct-chat-topbar__spam {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 184, 77, 0.28);
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 91, 91, 0.28);
   border-radius: 10px;
-  background: rgba(255, 184, 77, 0.1);
-  color: #ffd8a3;
+  background: rgba(217, 45, 32, 0.1);
+  color: #ff8b8b;
   font-size: 12px;
   font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.friends-conversation-spam-button:hover:not(:disabled),
 .friends-direct-chat-topbar__spam:hover:not(:disabled) {
-  background: rgba(255, 184, 77, 0.16);
+  border-color: rgba(255, 91, 91, 0.44);
+  background: rgba(217, 45, 32, 0.16);
+  color: #ffb1b1;
 }
 
-.friends-conversation-spam-button:disabled,
 .friends-direct-chat-topbar__spam:disabled {
   cursor: default;
   opacity: 0.55;
@@ -8397,12 +8535,8 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   gap: 10px;
 }
 
-.menu__main--mobile .lanaya-world__title h1 {
-  font-size: 22px;
-}
-
-.menu__main--mobile .lanaya-world__title p {
-  font-size: 12px;
+.menu__main--mobile .lanaya-world__title > span {
+  font-size: 18px;
 }
 
 .menu__main--mobile .lanaya-world__stats {
@@ -8433,6 +8567,30 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   justify-content: space-between;
   gap: 6px;
   font-size: 10px;
+}
+
+.menu__main--mobile .lanaya-world-map__person {
+  left: 10px;
+  right: 10px;
+  bottom: 52px;
+  width: auto;
+  grid-template-columns: 38px minmax(0, 1fr);
+}
+
+.menu__main--mobile .lanaya-world-map__person-avatar {
+  width: 38px;
+  height: 38px;
+}
+
+.menu__main--mobile .lanaya-world-map__person-action,
+.menu__main--mobile .lanaya-world-map__person-badge,
+.menu__main--mobile .lanaya-world-map__person-status {
+  grid-column: 1 / -1;
+}
+
+.menu__main--mobile .lanaya-world-map__person-action,
+.menu__main--mobile .lanaya-world-map__person-badge {
+  width: 100%;
 }
 
 .menu__main--mobile .lanaya-world__panel {
@@ -10596,7 +10754,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .device-menu__submenu {
   position: absolute;
   left: calc(100% + 8px);
-  top: -42px;
+  top: 0;
   min-width: 230px;
   max-height: min(320px, calc(100vh - 128px));
   padding: 10px;
@@ -16261,7 +16419,8 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
 .donation-modal__link-button {
   min-height: 34px;
-  padding: 0 11px;
+  min-width: 112px;
+  padding: 0 14px;
   border: 0;
   border-radius: 8px;
   background: #62cda2;

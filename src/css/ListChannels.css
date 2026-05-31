@@ -40,20 +40,13 @@
 }
 
 .list__items--has-participants {
-  --voice-connector-color: rgba(65, 80, 124, 0.94);
-  --voice-connector-flow: rgba(126, 147, 214, 0.74);
   overflow: hidden;
-}
-
-.list__items--has-participants::before,
-.list__items--has-participants::after {
-  content: none;
 }
 
 .voice-channel__row {
   position: relative;
   width: 100%;
-  min-height: 42px;
+  min-height: 38px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -191,10 +184,6 @@
   padding-right: 34px;
 }
 
-.list__items--has-participants .voice-channel__button {
-  padding-left: 46px;
-}
-
 .list__items:hover .voice-channel__row > .channel-edit-button,
 .list__items:focus-within .voice-channel__row > .channel-edit-button,
 .list__items--editing .voice-channel__row > .channel-edit-button {
@@ -250,47 +239,8 @@
 .participant-list {
   position: relative;
   margin-top: 0;
-  padding: 0 0 18px 43px;
+  padding: 0 0 10px 30px;
   z-index: 1;
-}
-
-.participant-list::before,
-.participant-list::after {
-  content: none;
-}
-
-.participant-list__connector {
-  position: absolute;
-  left: 5px;
-  top: -20.5px;
-  width: 58px;
-  overflow: visible;
-  color: var(--voice-connector-color);
-  pointer-events: none;
-  z-index: 0;
-  filter: drop-shadow(0 0 8px rgba(40, 56, 104, 0.18));
-}
-
-.participant-list__connector-path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.participant-list__connector-path--flow {
-  color: var(--voice-connector-flow);
-  opacity: 0.72;
-  stroke-width: 3.25;
-  stroke-dasharray: 9 22;
-  stroke-dashoffset: 31;
-  filter: drop-shadow(0 0 6px rgba(86, 108, 171, 0.22));
-  animation:
-    participantConnectorFlow 1.35s linear infinite,
-    participantConnectorGlow 2.2s ease-in-out infinite;
-  animation-delay: var(--participant-flow-delay, 0s), var(--participant-flow-delay, 0s);
 }
 
 .participant-item {
@@ -439,31 +389,6 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
-@keyframes participantConnectorFlow {
-  from {
-    stroke-dashoffset: 31;
-  }
-
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes participantConnectorGlow {
-  0% {
-    opacity: 0.18;
-  }
-
-  38%,
-  62% {
-    opacity: 0.78;
-  }
-
-  100% {
-    opacity: 0.18;
-  }
-}
-
 html[data-ui-theme="light"] .list__items {
   border-color: transparent;
   background: transparent;
@@ -478,11 +403,6 @@ html[data-ui-theme="light"] .list__items--active,
 html[data-ui-theme="light"] .list__items--joining {
   border-color: #cbd7ff;
   background: #eef3ff;
-}
-
-html[data-ui-theme="light"] .list__items--has-participants {
-  --voice-connector-color: rgba(86, 101, 132, 0.58);
-  --voice-connector-flow: rgba(88, 103, 232, 0.64);
 }
 
 html[data-ui-theme="light"] .voice-channel__button,
@@ -537,9 +457,7 @@ html[data-ui-theme="light"] .channel-edit-button:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .list__items--has-participants::after,
-  .participant-item::after,
-  .participant-list__connector-path--flow {
+  .participant-item::after {
     animation: none;
     opacity: 0.36;
   }

@@ -78,7 +78,7 @@ export default function useMenuMobileNavigation({
         badge: totalDirectUnreadCount + totalServerUnreadCount,
         canGoBack: true,
         actionLabel: "Настройки",
-        onAction: () => openSettingsPanel("personal_profile"),
+        onAction: () => openSettingsPanel("account"),
       };
     }
 
