@@ -1,4 +1,5 @@
 import AnimatedAvatar from "./AnimatedAvatar";
+import "../css/MobileVoiceRoom.css";
 
 export default function MobileVoiceRoom({
   stageMode,

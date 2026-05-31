@@ -298,6 +298,16 @@ test("voice stage toolbar buttons avoid native title tooltips", () => {
   assert.doesNotMatch(mobileStageSource, /\stitle=/);
 });
 
+test("mobile voice room styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const mobileVoiceCss = readRepoFileIfExists("src/css/MobileVoiceRoom.css");
+  const mobileVoiceSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
+
+  assert.doesNotMatch(mainCss, /\.mobile-voice-room/);
+  assert.match(mobileVoiceCss, /\.mobile-voice-room/);
+  assert.match(mobileVoiceSource, /import "\.\.\/css\/MobileVoiceRoom\.css";/);
+});
+
 test("profile voice action uses a soundpad glyph instead of settings gear", () => {
   const panelSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const mainCss = readRepoFile("src/css/MenuMain.css");
