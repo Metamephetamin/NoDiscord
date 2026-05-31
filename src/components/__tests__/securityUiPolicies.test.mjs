@@ -673,3 +673,15 @@ test("chat profile modal styles stay split from the main text chat stylesheet", 
   assert.match(profileCss, /html\[data-ui-theme="light"\] \.chat-profile-modal/);
   assert.doesNotMatch(textChatCss, /chat-profile-modal/);
 });
+
+test("media frame editor styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const editorCss = readRepoFileIfExists("src/css/MediaFrameEditorModal.css");
+  const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
+
+  assert.match(editorSource, /import "\.\.\/css\/MediaFrameEditorModal\.css";/);
+  assert.match(editorCss, /\.media-frame-editor \{/);
+  assert.match(editorCss, /\.media-frame-editor__dialog \{/);
+  assert.match(editorCss, /\.media-frame-editor__slider-field input::-webkit-slider-thumb/);
+  assert.doesNotMatch(mainCss, /media-frame-editor/);
+});

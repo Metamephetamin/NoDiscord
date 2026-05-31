@@ -3,6 +3,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import AnimatedMedia from "./AnimatedMedia";
 import PercentageSlider from "./PercentageSlider";
 import { getDefaultMediaFrame, getMediaFramePositionBounds, normalizeMediaFrame } from "../utils/mediaFrames";
+import "../css/MediaFrameEditorModal.css";
 
 const TARGET_COPY = {
   avatar: {
