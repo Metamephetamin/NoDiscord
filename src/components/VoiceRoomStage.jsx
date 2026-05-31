@@ -552,7 +552,7 @@ export default function VoiceRoomStage({
   const shellRef = useRef(null);
   const [avatarAccentMap, setAvatarAccentMap] = useState({});
   const [inlineStreamUserIds, setInlineStreamUserIds] = useState(() => new Set());
-  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
+  const isEffectiveMicMuted = Boolean(isMicMuted);
   const remoteShareByUserId = useMemo(
     () => new Map((remoteShares || []).map((share) => [String(share.userId || ""), share])),
     [remoteShares]

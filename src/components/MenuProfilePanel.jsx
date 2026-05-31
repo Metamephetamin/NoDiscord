@@ -575,7 +575,7 @@ export default function MenuProfilePanel({
             >
               <button
                 type="button"
-                className={`profile__mini-icon profile__mini-icon--with-tooltip ${isMicMuted || isSoundMuted ? "profile__mini-icon--slashed" : ""}`}
+                className={`profile__mini-icon profile__mini-icon--with-tooltip ${isMicMuted ? "profile__mini-icon--slashed" : ""}`}
                 onClick={(event) => {
                   onSuppressTooltip(event);
                   onToggleMicMute();

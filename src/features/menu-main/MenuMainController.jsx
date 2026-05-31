@@ -3710,7 +3710,7 @@ export default function MenuMain({
     isMicForced: nextIsMicForced,
     isDeafenedForced: nextIsSoundForced,
   }) => {
-    const normalizedMicMuted = Boolean(nextMicMuted) && !nextIsDeafened;
+    const normalizedMicMuted = Boolean(nextMicMuted);
     const normalizedSoundMuted = Boolean(nextIsDeafened);
     const normalizedMicForced = Boolean(nextIsMicForced);
     const normalizedSoundForced = Boolean(nextIsSoundForced);
@@ -4174,16 +4174,14 @@ export default function MenuMain({
     }
   }, [autoInputSensitivity, autoInputSensitivityStorageKey]);
   useEffect(() => {
-    const shouldMutePublishedMic =
-      isMicMuted || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
+    const shouldMutePublishedMic = isMicMuted;
     const effectiveMicVolume = isMicTestActive ? micVolume : currentVoiceChannel ? (shouldMutePublishedMic ? 0 : micVolume) : micVolume;
     voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
-  }, [currentVoiceChannel, micVolume, isMicMuted, isMicTestActive, isSoundMuted]);
+  }, [currentVoiceChannel, micVolume, isMicMuted, isMicTestActive]);
   useEffect(() => {
     const shouldMutePublishedMic =
       isMicMuted
-      || (Boolean(currentVoiceChannel) && isMicTestActive)
-      || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
+      || (Boolean(currentVoiceChannel) && isMicTestActive);
     queueSelfVoiceStateSync({ isMicMuted: shouldMutePublishedMic, isDeafened: isSoundMuted });
   }, [currentVoiceChannel, isMicMuted, isMicTestActive, isSoundMuted, queueSelfVoiceStateSync]);
   useEffect(() => {
@@ -4725,7 +4723,7 @@ export default function MenuMain({
   const updateMicVolume = (value) => {
     const normalizedValue = clampDeviceVolumePercent(value, micVolume);
     setMicVolume(normalizedValue);
-    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted || isSoundMuted ? 0 : normalizedValue) : normalizedValue;
+    const effectiveMicVolume = currentVoiceChannel ? (isMicMuted ? 0 : normalizedValue) : normalizedValue;
     voiceClientRef.current?.setMicrophoneVolume(effectiveMicVolume);
   };
   const updateAudioVolume = (value) => {

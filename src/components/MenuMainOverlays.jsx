@@ -948,7 +948,7 @@ export const DirectCallOverlay = ({
   const isIncoming = call.status === "incoming";
   const isConnected = call.status === "connected";
   const isConnecting = call.status === "connecting";
-  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
+  const isEffectiveMicMuted = Boolean(isMicMuted);
   const callTitle = call.peerName || "Пользователь";
   const statusLabel =
     call.statusLabel
@@ -1088,7 +1088,7 @@ export const DirectCallOverlayView = ({
   const isFinished = call.phase === "ended" || call.phase === "declined" || call.phase === "disconnected";
   const isPending = call.phase === "incoming" || call.phase === "outgoing";
   const isMiniMode = !embedded && Boolean(call.isMiniMode) && !isIncoming;
-  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
+  const isEffectiveMicMuted = Boolean(isMicMuted);
   const callTitle = call.peerName || "Пользователь";
   const hasPeerStream = isConnected && Boolean(isPeerStreamLive);
   const peerStreamLabel = peerStreamMode === "camera" ? "Видео собеседника" : "Стрим собеседника";

@@ -103,6 +103,26 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
 });
 
+test("self headphones mute does not force local microphone mute", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
+  const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+  const overlaysSource = readRepoFile("src/components/MenuMainOverlays.jsx");
+  const selfMuteStart = controllerSource.indexOf("const shouldMutePublishedMic =\n      isMicMuted");
+  const selfMuteEnd = controllerSource.indexOf("queueSelfVoiceStateSync", selfMuteStart);
+  const selfMuteExpression = controllerSource.slice(selfMuteStart, selfMuteEnd);
+
+  assert.match(controllerSource, /const shouldMutePublishedMic =\s*isMicMuted\s*\|\| \(Boolean\(currentVoiceChannel\) && isMicTestActive\);/);
+  assert.ok(selfMuteStart >= 0 && selfMuteEnd > selfMuteStart, "self mute expression is present");
+  assert.doesNotMatch(selfMuteExpression, /isSoundMuted/);
+  assert.match(controllerSource, /const normalizedMicMuted = Boolean\(nextMicMuted\);/);
+  assert.match(stageSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
+  assert.match(mobileSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
+  assert.doesNotMatch(profileSource, /isMicMuted \|\| isSoundMuted \? "profile__mini-icon--slashed"/);
+  assert.match(overlaysSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
+});
+
 test("voice settings microphone meter stays compact", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
 

@@ -30,7 +30,7 @@ export default function MobileVoiceRoom({
   onOpenCamera,
   onLeave,
 }) {
-  const isEffectiveMicMuted = Boolean(isMicMuted || isSoundMuted);
+  const isEffectiveMicMuted = Boolean(isMicMuted);
 
   return (
     <section className="mobile-voice-room">
