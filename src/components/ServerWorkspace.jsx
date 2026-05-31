@@ -1593,6 +1593,7 @@ export const ServersSidebar = memo(({
   const [dragState, setDragState] = useState(null);
   const [dragOverState, setDragOverState] = useState(null);
   const [categoryContextMenu, setCategoryContextMenu] = useState(null);
+  const [nicknameEditState, setNicknameEditState] = useState(null);
   const categoryContextMenuRef = useRef(null);
   const dragEndedRef = useRef(false);
 
@@ -1717,6 +1718,33 @@ export const ServersSidebar = memo(({
       x: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 228)),
       y: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 116)),
     });
+  };
+  const openNicknameEditor = (member) => {
+    if (!member?.userId) {
+      return;
+    }
+
+    setNicknameEditState({
+      memberUserId: String(member.userId),
+      menuKey: String(memberRoleMenu?.openedAt || ""),
+      value: String(member.name || ""),
+    });
+  };
+  const updateNicknameDraft = (value) => {
+    setNicknameEditState((previous) => (
+      previous ? { ...previous, value: String(value || "") } : previous
+    ));
+  };
+  const submitNicknameEditor = (event) => {
+    event.preventDefault();
+    const memberUserId = String(nicknameEditState?.memberUserId || "");
+    const nextName = String(nicknameEditState?.value || "").trim();
+    if (!memberUserId || !nextName) {
+      return;
+    }
+
+    onUpdateMemberNickname?.(memberUserId, nextName);
+    setNicknameEditState(null);
   };
   const deleteCategoryFromContextMenu = () => {
     if (categoryContextMenu?.mode === "channel") {
@@ -2267,10 +2295,33 @@ export const ServersSidebar = memo(({
                   <>
                     {targetMember ? <div className="member-role-menu__title">{targetMember.name}</div> : null}
                     {canRenameMember ? (
-                      <button type="button" className="member-role-menu__item" onClick={() => onUpdateMemberNickname(memberRoleMenu.memberUserId)}>
-                        <img src={icons.pencil} alt="" className="member-role-menu__icon" />
-                        Сменить ник
-                      </button>
+                      nicknameEditState?.memberUserId === String(memberRoleMenu.memberUserId)
+                        && nicknameEditState?.menuKey === String(memberRoleMenu.openedAt || "") ? (
+                        <form className="member-role-menu__nickname-form" onSubmit={submitNicknameEditor}>
+                          <input
+                            type="text"
+                            className="member-role-menu__nickname-input"
+                            value={nicknameEditState.value}
+                            maxLength={32}
+                            placeholder="Новый ник"
+                            aria-label="Новый ник участника"
+                            onChange={(event) => updateNicknameDraft(event.target.value)}
+                          />
+                          <div className="member-role-menu__nickname-actions">
+                            <button type="button" className="member-role-menu__nickname-button" onClick={() => setNicknameEditState(null)}>
+                              Отмена
+                            </button>
+                            <button type="submit" className="member-role-menu__nickname-button member-role-menu__nickname-button--primary" disabled={!nicknameEditState.value.trim()}>
+                              Сохранить
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button type="button" className="member-role-menu__item" onClick={() => openNicknameEditor(targetMember)}>
+                          <img src={icons.pencil} alt="" className="member-role-menu__icon" />
+                          Сменить ник
+                        </button>
+                      )
                     ) : null}
                     {canMuteMember ? (
                       <button

@@ -204,6 +204,15 @@ test("message reports use an in-app dialog instead of browser prompt", () => {
   assert.match(modalSource, /Причина жалобы/);
 });
 
+test("member nickname changes use an in-app form instead of browser prompt", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+
+  assert.doesNotMatch(controllerSource, /window\.prompt/);
+  assert.match(workspaceSource, /member-role-menu__nickname-form/);
+  assert.match(workspaceSource, /member-role-menu__nickname-input/);
+});
+
 test("stream fullscreen button toggles fullscreen mode", () => {
   const streamSource = readRepoFile("src/components/ScreenShareViewer.jsx");
 

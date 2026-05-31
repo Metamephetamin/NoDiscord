@@ -4728,6 +4728,7 @@ export default function MenuMain({
     const triggerRect = event.currentTarget.getBoundingClientRect();
     setMemberRoleMenu({
       memberUserId: member.userId,
+      openedAt: Date.now(),
       x: Math.max(12, Math.min(triggerRect.right - 188, window.innerWidth - 232)),
       y: Math.max(12, Math.min(triggerRect.bottom + 8, window.innerHeight - 320)),
     });
@@ -4781,17 +4782,12 @@ export default function MenuMain({
       pushWorkspaceStatusToast(error instanceof Error ? error.message : "Не удалось назначить роль.", "danger");
     }
   };
-  const updateMemberNickname = (memberUserId) => {
+  const updateMemberNickname = (memberUserId, nextName) => {
     if (!activeServer || !canManageTargetMember(activeServer, currentUserId, memberUserId, "manage_nicknames")) return;
     const targetMember = activeServer.members.find((member) => String(member.userId) === String(memberUserId));
     if (!targetMember) return;
 
-    const nextName = window.prompt("Введите новый ник участника", targetMember.name || "");
-    if (typeof nextName !== "string") {
-      return;
-    }
-
-    const trimmedName = nextName.trim();
+    const trimmedName = String(nextName || "").trim();
     if (!trimmedName) {
       return;
     }
