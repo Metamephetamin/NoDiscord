@@ -84,7 +84,7 @@ const SYMBL_SMILEYS_AND_EMOTION_DATA = [
   ["sleepy_face", "😪", "Сонное лицо"],
   ["sleeping_face", "😴", "Спящее лицо"],
   ["drooling_face", "🤤", "Слюнки текут"],
-  ["face_bags_under_eyes", "🫩", "Лицо с мешками под глазами"],
+  ["face_bags_under_eyes", "😩", "Лицо с мешками под глазами"],
   ["medical_mask", "😷", "Лицо в медицинской маске"],
   ["dizzy_face", "😵", "Головокружение"],
   ["cold_face", "🥶", "Замерзающее лицо"],
@@ -680,4 +680,3 @@ export function normalizeReactions(reactions) {
       .filter((reaction) => reaction.key && reaction.glyph && reaction.count > 0)
     : [];
 }
-

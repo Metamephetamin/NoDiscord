@@ -88,6 +88,13 @@ test("admin banned user rows keep avatar urls from mixed backend payloads", () =
   assert.match(settingsSource, /src=\{getAdminUserAvatarUrl\(targetUser\)\}/);
 });
 
+test("sticker emoji list avoids Windows tofu fallback glyphs", () => {
+  const textChatModelSource = readRepoFile("src/utils/textChatModel.js");
+
+  assert.doesNotMatch(textChatModelSource, /"🫩"/);
+  assert.match(textChatModelSource, /"face_bags_under_eyes", "😩"/);
+});
+
 test("avatar crop editor exposes vertical positioning control", () => {
   const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
 
