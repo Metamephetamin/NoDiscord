@@ -1851,7 +1851,7 @@ export const ServersSidebar = memo(({
     }
   };
   const handleChannelDragOver = (event, type, channel = null, categoryId = "") => {
-    if (dragState?.kind !== "channel" || dragState.type !== type) {
+    if (dragState?.kind !== "channel") {
       return;
     }
 
@@ -1864,13 +1864,14 @@ export const ServersSidebar = memo(({
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     const nextCategoryId = getDragCategoryId(categoryId);
-    const targetChannelId = channel?.id ? String(channel.id) : "";
+    const isCrossTypeDrop = dragState.type !== type;
+    const targetChannelId = !isCrossTypeDrop && channel?.id ? String(channel.id) : "";
     const previousPlacement = dragOverState?.type === type
       && dragOverState.categoryId === nextCategoryId
       && dragOverState.targetChannelId === targetChannelId
       ? dragOverState.placement
       : "";
-    const placement = getChannelDropPlacement(event, channel, previousPlacement);
+    const placement = isCrossTypeDrop ? "end" : getChannelDropPlacement(event, channel, previousPlacement);
     const nextDragOverState = {
       type,
       categoryId: nextCategoryId,
@@ -1882,17 +1883,18 @@ export const ServersSidebar = memo(({
   };
   const handleChannelDrop = (event, type, channel = null, categoryId = "") => {
     const payload = decodeChannelDragPayload(event, dragState);
-    if (payload?.kind !== "channel" || payload.type !== type) {
+    if (payload?.kind !== "channel") {
       return;
     }
 
     const nextCategoryId = getDragCategoryId(categoryId);
-    const targetChannelId = channel?.id ? String(channel.id) : "";
+    const isCrossTypeDrop = payload.type !== type;
+    const targetChannelId = !isCrossTypeDrop && channel?.id ? String(channel.id) : "";
     const placement = dragOverState?.type === type
       && dragOverState.categoryId === nextCategoryId
       && dragOverState.targetChannelId === targetChannelId
       ? dragOverState.placement
-      : getChannelDropPlacement(event, channel);
+      : isCrossTypeDrop ? "end" : getChannelDropPlacement(event, channel);
     if (payload.channelId === targetChannelId && payload.categoryId === nextCategoryId) {
       return;
     }
@@ -1900,7 +1902,7 @@ export const ServersSidebar = memo(({
     event.preventDefault();
     event.stopPropagation();
     onMoveChannel?.({
-      type,
+      type: payload.type,
       channelId: payload.channelId,
       targetChannelId,
       targetCategoryId: nextCategoryId,
@@ -2336,26 +2338,28 @@ export const ServersSidebar = memo(({
           {categoryContextMenu ? (
             <div ref={categoryContextMenuRef} className="member-role-menu member-role-menu--server-compact" style={{ left: categoryContextMenu.x, top: categoryContextMenu.y }}>
               {categoryContextMenu.mode === "channel" ? (
-                <div className="member-role-menu__title member-role-menu__title--channel">{categoryContextMenu.name || "Канал"}</div>
-              ) : null}
-              {categoryContextMenu.mode === "channel" ? (
-                <button
-                  type="button"
-                  className="member-role-menu__item member-role-menu__item--danger"
-                  onClick={deleteCategoryFromContextMenu}
-                >
-                  Удалить канал
-                </button>
-              ) : null}
-              <div className="member-role-menu__title">{categoryContextMenu.name || "Категория"}</div>
-              <button
-                hidden={categoryContextMenu.mode === "channel"}
-                type="button"
-                className="member-role-menu__item member-role-menu__item--danger"
-                onClick={deleteCategoryFromContextMenu}
-              >
-                Удалить категорию
-              </button>
+                <>
+                  <div className="member-role-menu__title member-role-menu__title--channel">{categoryContextMenu.name || "Канал"}</div>
+                  <button
+                    type="button"
+                    className="member-role-menu__item member-role-menu__item--danger"
+                    onClick={deleteCategoryFromContextMenu}
+                  >
+                    Удалить канал
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="member-role-menu__title">{categoryContextMenu.name || "Категория"}</div>
+                  <button
+                    type="button"
+                    className="member-role-menu__item member-role-menu__item--danger"
+                    onClick={deleteCategoryFromContextMenu}
+                  >
+                    Удалить категорию и каналы
+                  </button>
+                </>
+              )}
             </div>
           ) : null}
         </div>

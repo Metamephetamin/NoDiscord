@@ -10,6 +10,7 @@ import {
   moveChannelInList,
   reorderById,
 } from "./menuMainControllerUtils";
+import { removeChannelCategoryWithChannels } from "./channelManagementUtils";
 
 const FORUM_CHILD_PARENT_KEYS = [
   "parentForumId",
@@ -186,25 +187,21 @@ export default function useMenuMainChannelActions({
   const addTextChannel = () => {
     if (!canManageChannels || !activeServer) return;
     const channel = { id: createId("text"), name: "новый-канал" };
-    updateServer((server) => ({ ...server, textChannels: [...server.textChannels, channel] }));
+    const nextServer = { ...activeServer, textChannels: [...(activeServer.textChannels || []), channel] };
+    updateServer(() => nextServer);
+    syncSharedServer(nextServer);
     setCurrentTextChannelId(channel.id);
     setDesktopServerPane("text");
-    setChannelRenameState({
-      type: "text",
-      channelId: channel.id,
-      value: channel.name,
-    });
+    setChannelRenameState(null);
   };
 
   const addVoiceChannel = () => {
     if (!canManageChannels || !activeServer) return;
     const channel = { id: createId("voice"), name: "голосовой-канал" };
-    updateServer((server) => ({ ...server, voiceChannels: [...server.voiceChannels, channel] }));
-    setChannelRenameState({
-      type: "voice",
-      channelId: channel.id,
-      value: channel.name,
-    });
+    const nextServer = { ...activeServer, voiceChannels: [...(activeServer.voiceChannels || []), channel] };
+    updateServer(() => nextServer);
+    syncSharedServer(nextServer);
+    setChannelRenameState(null);
   };
 
   const createChannelCategory = ({ name, privateCategory = false } = {}) => {
@@ -236,22 +233,37 @@ export default function useMenuMainChannelActions({
     }));
   };
 
-  const deleteChannelCategory = (categoryId) => {
+  const deleteChannelCategory = async (categoryId) => {
     if (!canManageChannels || !activeServer || !categoryId) return;
-    const normalizedCategoryId = String(categoryId || "");
+    if (!(activeServer.channelCategories || []).some((category) => String(category?.id || "") === String(categoryId || ""))) {
+      return;
+    }
 
-    const nextServer = {
-      ...activeServer,
-      channelCategories: (activeServer.channelCategories || []).filter((category) => String(category.id || "") !== normalizedCategoryId),
-      textChannels: (activeServer.textChannels || []).map((channel) =>
-        String(channel.categoryId || "") === normalizedCategoryId ? { ...channel, categoryId: "" } : channel
-      ),
-      voiceChannels: (activeServer.voiceChannels || []).map((channel) =>
-        String(channel.categoryId || "") === normalizedCategoryId ? { ...channel, categoryId: "" } : channel
-      ),
-    };
+    const { nextServer, removedTextChannelIds, removedVoiceChannelIds } = removeChannelCategoryWithChannels(activeServer, categoryId);
+
+    const currentVoiceChannelId = String(currentVoiceChannel || "");
+    const shouldLeaveVoice = [...removedVoiceChannelIds].some((channelId) =>
+      currentVoiceChannelId === channelId || currentVoiceChannelId === getScopedVoiceChannelId(activeServer.id, channelId)
+    );
+    if (shouldLeaveVoice) {
+      await leaveVoiceChannel();
+    }
+
     updateServer(() => nextServer);
     syncSharedServer(nextServer);
+
+    if (removedTextChannelIds.has(String(currentTextChannelId || ""))) {
+      setCurrentTextChannelId(nextServer.textChannels?.[0]?.id || "");
+    }
+    setChannelSettingsState((previous) => {
+      if (previous?.type === "text" && removedTextChannelIds.has(String(previous.channelId || ""))) {
+        return null;
+      }
+      if (previous?.type === "voice" && removedVoiceChannelIds.has(String(previous.channelId || ""))) {
+        return null;
+      }
+      return previous;
+    });
   };
 
   const deleteDefaultChannelCategory = async (type) => {
@@ -315,27 +327,33 @@ export default function useMenuMainChannelActions({
   const reorderChannelCategories = (sourceCategoryId, targetCategoryId) => {
     if (!canManageChannels || !activeServer || !sourceCategoryId || !targetCategoryId) return;
 
-    updateServer((server) => ({
-      ...server,
-      channelCategories: reorderById(server.channelCategories || [], sourceCategoryId, targetCategoryId),
-    }));
+    const nextServer = {
+      ...activeServer,
+      channelCategories: reorderById(activeServer.channelCategories || [], sourceCategoryId, targetCategoryId),
+    };
+    updateServer(() => nextServer);
+    syncSharedServer(nextServer);
   };
 
   const moveServerChannel = ({ type = "text", channelId = "", targetChannelId = "", targetCategoryId = "", placement = "before" } = {}) => {
     if (!canManageChannels || !activeServer || !channelId) return;
 
     if (String(type || "text") === "voice") {
-      updateServer((server) => ({
-        ...server,
-        voiceChannels: moveChannelInList(server.voiceChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
-      }));
+      const nextServer = {
+        ...activeServer,
+        voiceChannels: moveChannelInList(activeServer.voiceChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
+      };
+      updateServer(() => nextServer);
+      syncSharedServer(nextServer);
       return;
     }
 
-    updateServer((server) => ({
-      ...server,
-      textChannels: moveChannelInList(server.textChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
-    }));
+    const nextServer = {
+      ...activeServer,
+      textChannels: moveChannelInList(activeServer.textChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
+    };
+    updateServer(() => nextServer);
+    syncSharedServer(nextServer);
   };
 
   const createServerChannel = ({ type = "text", name = "", categoryId = "" } = {}) => {
@@ -366,11 +384,7 @@ export default function useMenuMainChannelActions({
         lastServerSyncFingerprintRef.current = getServerSyncFingerprint(nextServer);
         void syncServerSnapshot(nextServer, { applyResponse: false });
       }
-      setChannelRenameState({
-        type: "voice",
-        channelId: channel.id,
-        value: channel.name,
-      });
+      setChannelRenameState(null);
       return channel;
     }
 
@@ -390,11 +404,7 @@ export default function useMenuMainChannelActions({
     }
     setCurrentTextChannelId(channel.id);
     setDesktopServerPane("text");
-    setChannelRenameState({
-      type: "text",
-      channelId: channel.id,
-      value: channel.name,
-    });
+    setChannelRenameState(null);
     return channel;
   };
 
