@@ -2328,6 +2328,7 @@ export const RolesSettings = ({
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [roleStatus, setRoleStatus] = useState("");
   const [roleBusy, setRoleBusy] = useState(false);
+  const [roleDeleteConfirmId, setRoleDeleteConfirmId] = useState("");
 
   const selectedRole = useMemo(
     () => roles.find((role) => String(role.id) === String(selectedRoleId)) || roles[0] || null,
@@ -2356,6 +2357,7 @@ export const RolesSettings = ({
     setIsCreatingRole(true);
     setSelectedRoleId("");
     setRoleStatus("");
+    setRoleDeleteConfirmId("");
     setRoleForm({ name: "", color: "#7b89a8", permissions: [] });
   };
 
@@ -2363,6 +2365,7 @@ export const RolesSettings = ({
     setIsCreatingRole(false);
     setSelectedRoleId(role.id);
     setRoleStatus("");
+    setRoleDeleteConfirmId("");
     setRoleForm(normalizeRoleForm(role));
   };
 
@@ -2401,6 +2404,7 @@ export const RolesSettings = ({
       const nextRole = snapshot?.roles?.find((role) => role.name === payload.name) || snapshot?.roles?.find((role) => role.id === selectedRole?.id);
       setIsCreatingRole(false);
       setSelectedRoleId(nextRole?.id || selectedRole?.id || "");
+      setRoleDeleteConfirmId("");
       setRoleStatus("Сохранено.");
     } catch (error) {
       setRoleStatus(error instanceof Error ? error.message : "Не удалось сохранить роль.");
@@ -2410,7 +2414,13 @@ export const RolesSettings = ({
   };
 
   const removeSelectedRole = async () => {
-    if (!canEditSelectedRole || selectedRoleIsSystem || !selectedRole || !window.confirm(`Удалить роль ${selectedRole.name}?`)) {
+    if (!canEditSelectedRole || selectedRoleIsSystem || !selectedRole) {
+      return;
+    }
+
+    if (String(roleDeleteConfirmId || "") !== String(selectedRole.id || "")) {
+      setRoleDeleteConfirmId(String(selectedRole.id || ""));
+      setRoleStatus(`Подтвердите удаление роли «${selectedRole.name}».`);
       return;
     }
 
@@ -2419,6 +2429,7 @@ export const RolesSettings = ({
     try {
       await onDeleteRole?.(selectedRole.id);
       setSelectedRoleId("");
+      setRoleDeleteConfirmId("");
       setRoleStatus("Роль удалена.");
     } catch (error) {
       setRoleStatus(error instanceof Error ? error.message : "Не удалось удалить роль.");
@@ -2515,9 +2526,16 @@ export const RolesSettings = ({
                     Сохранить
                   </button>
                   {!isCreatingRole && selectedRole ? (
-                    <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={roleBusy || selectedRoleIsSystem || !canEditSelectedRole} onClick={removeSelectedRole}>
-                      Удалить
-                    </button>
+                    <>
+                      <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={roleBusy || selectedRoleIsSystem || !canEditSelectedRole} onClick={removeSelectedRole}>
+                        {roleDeleteConfirmId === selectedRole.id ? "Подтвердить удаление" : "Удалить"}
+                      </button>
+                      {roleDeleteConfirmId === selectedRole.id ? (
+                        <button type="button" className="settings-inline-button" disabled={roleBusy} onClick={() => setRoleDeleteConfirmId("")}>
+                          Отмена
+                        </button>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               </form>

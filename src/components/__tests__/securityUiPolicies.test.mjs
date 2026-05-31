@@ -231,6 +231,14 @@ test("member role menu styles are split out of the main menu stylesheet", () => 
   assert.match(memberRoleMenuCss, /\.member-role-menu/);
 });
 
+test("role deletion uses an in-app confirmation instead of browser confirm", () => {
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.doesNotMatch(settingsSource, /window\.confirm/);
+  assert.match(settingsSource, /roleDeleteConfirmId/);
+  assert.match(settingsSource, /Подтвердить удаление/);
+});
+
 test("stream fullscreen button toggles fullscreen mode", () => {
   const streamSource = readRepoFile("src/components/ScreenShareViewer.jsx");
 
