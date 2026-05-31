@@ -90,6 +90,18 @@ test("server sidebar renders channels from one mixed order", () => {
   assert.doesNotMatch(source, /renderTextChannelListItems\(visibleTextChannels, category\.id\)[\s\S]*?renderVoiceChannels\(visibleVoiceChannels, category\.id\)/);
 });
 
+test("server workspace styles are split out of the main menu stylesheet", () => {
+  const menuMainCss = readRepoFile("src/css/MenuMain.css");
+  const serverWorkspaceCss = readRepoFile("src/css/ServerWorkspace.css");
+  const serverWorkspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+
+  assert.match(serverWorkspaceSource, /import "\.\.\/css\/ServerWorkspace\.css";/);
+  assert.match(serverWorkspaceCss, /\.channel-settings-shell\b/);
+  assert.match(serverWorkspaceCss, /\.server-panel__section\b/);
+  assert.doesNotMatch(menuMainCss, /^\.channel-settings-shell\s*\{/m);
+  assert.doesNotMatch(menuMainCss, /^\.server-panel__section\s*\{/m);
+});
+
 test("created channels do not reopen inline rename mode", () => {
   const source = readRepoFile("src/features/menu-main/useMenuMainChannelActions.js");
   const createServerChannelStart = source.indexOf("const createServerChannel =");
