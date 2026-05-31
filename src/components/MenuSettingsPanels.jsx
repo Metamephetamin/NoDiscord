@@ -5,6 +5,7 @@ import AnimatedMedia from "./AnimatedMedia";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import "../css/AdminSecurity.css";
 import "../css/MenuVoiceProfileSettings.css";
+import "../css/MenuAccountSettings.css";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import PercentageSlider from "./PercentageSlider";
 import { formatIntegrationActivityStatus } from "../utils/integrations";

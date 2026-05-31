@@ -222,6 +222,19 @@ test("account session styles stay split from the main menu stylesheet", () => {
   assert.doesNotMatch(mainCss, /^html\[data-ui-theme="light"\] \.device-session-card/m);
 });
 
+test("account settings card styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const accountCss = readRepoFileIfExists("src/css/MenuAccountSettings.css");
+  const panelsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.match(panelsSource, /import "\.\.\/css\/MenuAccountSettings\.css";/);
+  assert.match(accountCss, /\.account-settings-card \{/);
+  assert.match(accountCss, /\.account-settings-card__grid \{/);
+  assert.match(accountCss, /html\[data-ui-theme="light"\] \.account-settings-card/);
+  assert.doesNotMatch(mainCss, /^\s*\.account-settings-card[^\n{]*\{/m);
+  assert.doesNotMatch(mainCss, /^html\[data-ui-theme="light"\] \.account-settings-card/m);
+});
+
 test("server management settings are hidden without permissions", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 

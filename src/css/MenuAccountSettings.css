@@ -1,0 +1,146 @@
+/* Styles scoped to account settings cards in MenuSettingsPanels.jsx. */
+
+
+
+.account-settings-card {
+  margin: 0 20px 20px;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(37, 44, 62, 0.72);
+  border: 1px solid rgba(155, 174, 217, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.028);
+}
+
+.account-settings-card--rows {
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(34, 41, 58, 0.86), rgba(24, 29, 43, 0.88));
+}
+
+.account-settings-card--form,
+.account-settings-card--email {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-settings-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 260px));
+  gap: 14px;
+  align-items: end;
+}
+
+.account-settings-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.account-settings-card__actions > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-settings-card__actions strong {
+  color: #f1f4fb;
+  font-size: 15px;
+}
+
+.account-settings-card__actions span {
+  color: #aeb7c9;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.account-settings-card__row {
+  min-height: 72px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.account-settings-card__row div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-settings-card__row strong {
+  color: #f1f4fb;
+  font-size: 15px;
+}
+
+.account-settings-card__row span {
+  color: #aeb7c9;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.account-settings-card__row button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-settings-card__row button:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+html[data-ui-theme="light"] .account-settings-card__actions strong,
+html[data-ui-theme="light"] .account-settings-card__row strong,
+html[data-ui-theme="purple"] .account-settings-card__actions strong,
+html[data-ui-theme="purple"] .account-settings-card__row strong {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .account-settings-card__actions span,
+html[data-ui-theme="light"] .account-settings-card__row span,
+html[data-ui-theme="purple"] .account-settings-card__actions span,
+html[data-ui-theme="purple"] .account-settings-card__row span {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .account-settings-card,
+html[data-ui-theme="light"] .account-settings-card--rows,
+html[data-ui-theme="purple"] .account-settings-card,
+html[data-ui-theme="purple"] .account-settings-card--rows {
+  background: var(--app-surface-2);
+  border-color: var(--app-border);
+}
+
+html[data-ui-theme="light"] .account-settings-card,
+html[data-ui-theme="light"] .account-settings-card--rows {
+  background: linear-gradient(180deg, #f7f9fd, #f1f5fb);
+  border-color: #dbe4f0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+html[data-ui-theme="purple"] .account-settings-card,
+html[data-ui-theme="purple"] .account-settings-card--rows {
+  background: linear-gradient(180deg, rgba(53, 42, 75, 0.86), rgba(38, 31, 58, 0.9));
+  border-color: rgba(202, 184, 255, 0.15);
+}
+
+html[data-ui-theme="light"] .account-settings-card__row button,
+html[data-ui-theme="purple"] .account-settings-card__row button {
+  border-color: var(--app-border);
+  background: var(--app-surface-3);
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .account-settings-card__row button:hover,
+html[data-ui-theme="purple"] .account-settings-card__row button:hover {
+  background: var(--app-hover-bg);
+  color: var(--app-text-strong);
+}
