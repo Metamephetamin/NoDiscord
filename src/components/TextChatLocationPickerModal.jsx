@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "../css/TextChatLocationPicker.css";
 
 const DEFAULT_CENTER = {
   latitude: 55.751244,

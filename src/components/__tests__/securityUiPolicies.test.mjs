@@ -439,6 +439,18 @@ test("direct message chat sounds use the shared system sound volume", () => {
   assert.doesNotMatch(textChatSource, /\], \{ volume: 0\.4, poolSize: 3 \}/);
 });
 
+test("text chat location picker styles stay split from the main chat stylesheet", () => {
+  const pickerSource = readRepoFile("src/components/TextChatLocationPickerModal.jsx");
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const pickerCss = readRepoFileIfExists("src/css/TextChatLocationPicker.css");
+
+  assert.match(pickerSource, /import "\.\.\/css\/TextChatLocationPicker\.css";/);
+  assert.doesNotMatch(textChatCss, /\.location-picker-modal/);
+  assert.doesNotMatch(textChatCss, /\.location-picker-map/);
+  assert.match(pickerCss, /\.location-picker-modal/);
+  assert.match(pickerCss, /\.location-picker-map/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 
