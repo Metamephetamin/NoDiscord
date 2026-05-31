@@ -3290,15 +3290,32 @@ export default function TextChat({
   };
 
   const handleComposerPaste = useCallback((event) => {
-    const clipboardItems = Array.from(event.clipboardData?.items || []);
-    if (!clipboardItems.length) {
+    if (event.defaultPrevented) {
       return;
     }
 
-    const clipboardFiles = clipboardItems
+    const clipboardItems = Array.from(event.clipboardData?.items || []);
+    const clipboardDataFiles = Array.from(event.clipboardData?.files || []);
+    if (!clipboardItems.length && !clipboardDataFiles.length) {
+      return;
+    }
+
+    const clipboardItemFiles = clipboardItems
       .filter((item) => String(item?.kind || "") === "file")
       .map((item) => item.getAsFile?.())
       .filter((file) => file instanceof File);
+    const seenFiles = new Set();
+    const clipboardFiles = [...clipboardItemFiles, ...clipboardDataFiles]
+      .filter((file) => file instanceof File)
+      .filter((file) => {
+        const key = `${file.name}:${file.type}:${file.size}:${file.lastModified}`;
+        if (seenFiles.has(key)) {
+          return false;
+        }
+
+        seenFiles.add(key);
+        return true;
+      });
 
     if (!clipboardFiles.length) {
       return;

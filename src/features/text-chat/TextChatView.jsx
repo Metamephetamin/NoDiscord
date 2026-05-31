@@ -410,6 +410,7 @@ export default function TextChatView(props) {
       onDragOver={onComposerDragOver}
       onDragLeave={onComposerDragLeave}
       onDrop={onComposerDrop}
+      onPaste={handleComposerPaste}
     >
       {composerDropActive ? (
         <div className="textchat-drop-overlay" aria-hidden="true">

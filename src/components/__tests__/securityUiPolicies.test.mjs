@@ -130,3 +130,14 @@ test("light theme text tools menu is opaque and readable", () => {
   assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action b/);
   assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action small/);
 });
+
+test("clipboard images can be pasted from the whole text chat area", () => {
+  const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+  const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
+
+  assert.match(controllerSource, /const clipboardDataFiles = Array\.from\(event\.clipboardData\?\.files \|\| \[\]\);/);
+  assert.match(controllerSource, /const clipboardFiles = \[\.\.\.clipboardItemFiles, \.\.\.clipboardDataFiles\]/);
+  assert.match(controllerSource, /if \(event\.defaultPrevented\) \{/);
+  assert.match(viewSource, /className=\{`textchat-container/);
+  assert.match(viewSource, /onPaste=\{handleComposerPaste\}/);
+});
