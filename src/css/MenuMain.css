@@ -385,7 +385,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   display: block;
   object-fit: cover;
   object-position: center 24%;
-  border-radius: inherit;
+  border-radius: var(--profile-avatar-frame-radius, inherit);
   image-rendering: auto;
   image-rendering: -webkit-optimize-contrast;
   backface-visibility: hidden;
@@ -11668,15 +11668,11 @@ html[data-ui-density="compact"] .settings-popup--shell {
 }
 
 html[data-ui-theme="light"] .memory-settings-card--hero {
-  background:
-    radial-gradient(circle at 18% 12%, rgba(80, 117, 255, 0.18), transparent 35%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 237, 249, 0.96));
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 237, 249, 0.96));
 }
 
 html[data-ui-theme="light"] .memory-settings-tile {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(238, 243, 251, 0.72)),
-    rgba(246, 248, 252, 0.94);
+  background: rgba(246, 248, 252, 0.94);
   border-color: rgba(45, 62, 96, 0.12);
 }
 
@@ -11685,9 +11681,7 @@ html[data-ui-theme="light"] .memory-settings-card__main small {
 }
 
 html[data-ui-theme="purple"] .memory-settings-card--hero {
-  background:
-    radial-gradient(circle at 18% 12%, rgba(196, 123, 255, 0.24), transparent 34%),
-    linear-gradient(145deg, rgba(34, 23, 55, 0.96), rgba(18, 13, 31, 0.96));
+  background: linear-gradient(145deg, rgba(34, 23, 55, 0.96), rgba(18, 13, 31, 0.96));
 }
 
 .settings-shell__content--memory {
@@ -11702,9 +11696,7 @@ html[data-ui-theme="purple"] .memory-settings-card--hero {
   display: grid;
   gap: 16px;
   padding: 22px;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(107, 129, 255, 0.24), transparent 34%),
-    linear-gradient(145deg, rgba(22, 27, 43, 0.96), rgba(10, 14, 22, 0.96));
+  background: linear-gradient(145deg, rgba(22, 27, 43, 0.96), rgba(10, 14, 22, 0.96));
 }
 
 .memory-settings-card__main {
@@ -11764,9 +11756,7 @@ html[data-ui-theme="purple"] .memory-settings-card--hero {
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)),
-    rgba(18, 22, 32, 0.82);
+  background: rgba(18, 22, 32, 0.82);
 }
 
 .memory-settings-tile strong {
@@ -11775,22 +11765,6 @@ html[data-ui-theme="purple"] .memory-settings-card--hero {
   font-weight: 900;
   line-height: 1.1;
   overflow-wrap: anywhere;
-}
-
-.memory-settings-tile--cache {
-  border-color: rgba(101, 211, 173, 0.24);
-}
-
-.memory-settings-tile--data {
-  border-color: rgba(111, 130, 255, 0.28);
-}
-
-.memory-settings-tile--local {
-  border-color: rgba(255, 213, 128, 0.22);
-}
-
-.memory-settings-tile--quota {
-  border-color: rgba(150, 172, 205, 0.2);
 }
 
 .memory-settings-card--actions {
@@ -14560,10 +14534,8 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   gap: 9px;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--avatar-frame-option-1, #7c86ff) 22%, rgba(255, 255, 255, 0.08));
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--avatar-frame-option-1, #7c86ff) 18%, transparent), transparent 54%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.045), color-mix(in srgb, var(--avatar-frame-option-2, #5898ff) 12%, rgba(255, 255, 255, 0.028)));
+  border: 1px solid rgba(126, 139, 170, 0.2);
+  background: rgba(255, 255, 255, 0.035);
   color: #eef2ff;
   text-align: left;
   cursor: pointer;
@@ -14572,9 +14544,7 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 .profile-settings-form__avatar-frame-option:hover,
 .profile-settings-form__avatar-frame-option--active {
   border-color: color-mix(in srgb, var(--avatar-frame-option-1, #7c86ff) 58%, rgba(132, 146, 255, 0.42));
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--avatar-frame-option-1, #7c86ff) 28%, transparent), transparent 58%),
-    linear-gradient(135deg, color-mix(in srgb, var(--avatar-frame-option-1, #7c86ff) 16%, rgba(255, 255, 255, 0.055)), color-mix(in srgb, var(--avatar-frame-option-2, #5898ff) 20%, rgba(255, 255, 255, 0.04)));
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .profile-settings-form__avatar-frame-option i {
@@ -18136,43 +18106,45 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--profile-accent) 28%, transparent), 0 0 22px color-mix(in srgb, var(--profile-accent) 34%, transparent);
 }
 
-.profile-customization--avatar-frame-neon .profile-settings-form__avatar-wrap,
-.profile-customization--avatar-frame-gold .profile-settings-form__avatar-wrap,
-.profile-customization--avatar-frame-ice .profile-settings-form__avatar-wrap,
-.profile-customization--avatar-frame-amethyst .profile-settings-form__avatar-wrap,
-.profile-customization--avatar-frame-pixel .profile-settings-form__avatar-wrap,
-.profile-customization--avatar-frame-wave .profile-settings-form__avatar-wrap,
-.profile-customization--avatar-frame-neon .avatar-shell,
-.profile-customization--avatar-frame-gold .avatar-shell,
-.profile-customization--avatar-frame-ice .avatar-shell,
-.profile-customization--avatar-frame-amethyst .avatar-shell,
-.profile-customization--avatar-frame-pixel .avatar-shell,
-.profile-customization--avatar-frame-wave .avatar-shell {
+.profile-customization--avatar-frame-neon,
+.profile-customization--avatar-frame-gold,
+.profile-customization--avatar-frame-ice,
+.profile-customization--avatar-frame-amethyst,
+.profile-customization--avatar-frame-pixel,
+.profile-customization--avatar-frame-wave {
+  --pafb: linear-gradient(rgba(12, 15, 23, 0.94), rgba(12, 15, 23, 0.94)) padding-box;
+  --pafr: conic-gradient(from 30deg, var(--profile-avatar-frame-accent, var(--profile-accent)), color-mix(in srgb, var(--profile-avatar-frame-accent, var(--profile-accent)) 30%, #ffffff), var(--profile-avatar-frame-accent, var(--profile-accent))) border-box;
+}
+
+:is(
+  .profile-customization--avatar-frame-neon,
+  .profile-customization--avatar-frame-gold,
+  .profile-customization--avatar-frame-ice,
+  .profile-customization--avatar-frame-amethyst,
+  .profile-customization--avatar-frame-pixel,
+  .profile-customization--avatar-frame-wave
+) :is(.profile-settings-form__avatar-wrap, .avatar-shell) {
   overflow: visible;
 }
 
-.profile-customization--avatar-frame-neon .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-gold .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-ice .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-amethyst .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-pixel .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-wave .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-neon .avatar-shell::before,
-.profile-customization--avatar-frame-gold .avatar-shell::before,
-.profile-customization--avatar-frame-ice .avatar-shell::before,
-.profile-customization--avatar-frame-amethyst .avatar-shell::before,
-.profile-customization--avatar-frame-pixel .avatar-shell::before,
-.profile-customization--avatar-frame-wave .avatar-shell::before {
+:is(
+  .profile-customization--avatar-frame-neon,
+  .profile-customization--avatar-frame-gold,
+  .profile-customization--avatar-frame-ice,
+  .profile-customization--avatar-frame-amethyst,
+  .profile-customization--avatar-frame-pixel,
+  .profile-customization--avatar-frame-wave
+) :is(.profile-settings-form__avatar-wrap, .avatar-shell)::before {
   content: "";
   position: absolute;
   inset: -5px;
   z-index: 2;
-  border-radius: inherit;
+  border-radius: var(--pafr-radius, inherit);
   pointer-events: none;
   border: 3px solid transparent;
   background:
-    linear-gradient(rgba(12, 15, 23, 0.94), rgba(12, 15, 23, 0.94)) padding-box,
-    conic-gradient(from 30deg, var(--profile-avatar-frame-accent, var(--profile-accent)), color-mix(in srgb, var(--profile-avatar-frame-accent, var(--profile-accent)) 30%, #ffffff), var(--profile-avatar-frame-accent, var(--profile-accent))) border-box;
+    var(--pafb),
+    var(--pafr);
   box-shadow: 0 0 24px color-mix(in srgb, var(--profile-avatar-frame-accent, var(--profile-accent)) 30%, transparent);
   -webkit-mask:
     linear-gradient(#000 0 0) padding-box,
@@ -18186,43 +18158,25 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
 .profile-customization--avatar-frame-gold {
   --profile-avatar-frame-accent: #facc15;
-}
-
-.profile-customization--avatar-frame-gold .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-gold .avatar-shell::before {
-  background:
-    linear-gradient(rgba(18, 14, 7, 0.94), rgba(18, 14, 7, 0.94)) padding-box,
-    conic-gradient(from 10deg, #f59e0b, #fff3a3, #f97316, #fde68a, #f59e0b) border-box;
+  --pafr: conic-gradient(from 10deg, #f59e0b, #fff3a3, #f97316, #fde68a, #f59e0b) border-box;
 }
 
 .profile-customization--avatar-frame-ice {
   --profile-avatar-frame-accent: #93c5fd;
-}
-
-.profile-customization--avatar-frame-ice .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-ice .avatar-shell::before {
-  background:
-    linear-gradient(rgba(8, 15, 27, 0.94), rgba(8, 15, 27, 0.94)) padding-box,
-    repeating-conic-gradient(from 0deg, #e0f2fe 0 10deg, #93c5fd 10deg 24deg, #60a5fa 24deg 34deg) border-box;
+  --pafr: repeating-conic-gradient(from 0deg, #e0f2fe 0 10deg, #93c5fd 10deg 24deg, #60a5fa 24deg 34deg) border-box;
 }
 
 .profile-customization--avatar-frame-amethyst {
   --profile-avatar-frame-accent: #a78bfa;
 }
 
-.profile-customization--avatar-frame-pixel .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-pixel .avatar-shell::before {
-  border-radius: 10px;
-  background:
-    linear-gradient(rgba(10, 15, 22, 0.94), rgba(10, 15, 22, 0.94)) padding-box,
-    repeating-conic-gradient(from 0deg, #65e48f 0 12deg, #22d3ee 12deg 24deg, #111827 24deg 36deg) border-box;
+.profile-customization--avatar-frame-pixel {
+  --pafr-radius: 10px;
+  --pafr: repeating-conic-gradient(from 0deg, #65e48f 0 12deg, #22d3ee 12deg 24deg, #111827 24deg 36deg) border-box;
 }
 
-.profile-customization--avatar-frame-wave .profile-settings-form__avatar-wrap::before,
-.profile-customization--avatar-frame-wave .avatar-shell::before {
-  background:
-    linear-gradient(rgba(9, 16, 21, 0.94), rgba(9, 16, 21, 0.94)) padding-box,
-    conic-gradient(from 120deg, #34d399, #60a5fa, #c084fc, #34d399) border-box;
+.profile-customization--avatar-frame-wave {
+  --pafr: conic-gradient(from 120deg, #34d399, #60a5fa, #c084fc, #34d399) border-box;
 }
 
 .profile-customization--controls-neon .profile__mini-icon,
@@ -22372,16 +22326,4 @@ html[data-ui-theme="light"] .admin-user-row__badge {
 html[data-ui-theme="light"] .admin-user-row__badge--danger {
   color: #b42336;
   background: #ffe4e8;
-}
-
-html[data-ui-theme="light"] .settings-shell__content--memory .memory-settings-card--hero {
-  background:
-    radial-gradient(circle at 18% 12%, rgba(80, 117, 255, 0.18), transparent 35%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 237, 249, 0.96));
-}
-
-html[data-ui-theme="purple"] .settings-shell__content--memory .memory-settings-card--hero {
-  background:
-    radial-gradient(circle at 18% 12%, rgba(196, 123, 255, 0.24), transparent 34%),
-    linear-gradient(145deg, rgba(34, 23, 55, 0.96), rgba(18, 13, 31, 0.96));
 }
