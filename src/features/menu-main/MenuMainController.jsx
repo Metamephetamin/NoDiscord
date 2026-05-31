@@ -4709,7 +4709,7 @@ export default function MenuMain({
       setMemberRoleMenu(null);
     } catch (error) {
       console.error("Ошибка назначения роли:", error);
-      window.alert(error instanceof Error ? error.message : "Не удалось назначить роль.");
+      pushWorkspaceStatusToast(error instanceof Error ? error.message : "Не удалось назначить роль.", "danger");
     }
   };
   const updateMemberNickname = (memberUserId) => {

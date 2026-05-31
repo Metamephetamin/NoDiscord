@@ -853,8 +853,8 @@ export default function useTextChatSendActions({
       return false;
     }
 
-    const normalizedLatitude = Number(numericLatitude.toFixed(6));
-    const normalizedLongitude = Number(numericLongitude.toFixed(6));
+    const normalizedLatitude = Number(numericLatitude.toFixed(4));
+    const normalizedLongitude = Number(numericLongitude.toFixed(4));
     const normalizedZoom = Math.max(3, Math.min(20, Math.round(Number(zoom) || LOCATION_MESSAGE_DEFAULT_ZOOM)));
     const locationUrl = `https://www.google.com/maps?q=${normalizedLatitude},${normalizedLongitude}&z=${normalizedZoom}`;
     const avatar = user?.avatarUrl || user?.avatar || "";

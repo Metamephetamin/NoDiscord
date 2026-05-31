@@ -4,6 +4,7 @@ import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
 const LOCATION_UPDATE_MIN_INTERVAL_MS = 1800;
+const LOCATION_PRIVACY_DECIMALS = 2;
 const DEFAULT_LOCATION_SHARING_PREFERENCE = Object.freeze({
   enabled: true,
   visibility: "public",
@@ -62,6 +63,15 @@ export const readStoredLocationSharingPreference = () => {
 };
 
 export const readStoredSelfLocation = () => safeReadJson(SELF_LOCATION_STORAGE_KEY);
+
+export function normalizeSharedLocationCoordinate(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return Number(numericValue.toFixed(LOCATION_PRIVACY_DECIMALS));
+}
 
 export default function useLocationSharingPreference({ user, apiBaseUrl = API_BASE_URL } = {}) {
   const userId = String(user?.id || user?.userId || "").trim();
@@ -173,8 +183,8 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
     }
 
     const publishLocation = (position) => {
-      const latitude = Number(position?.coords?.latitude);
-      const longitude = Number(position?.coords?.longitude);
+      const latitude = normalizeSharedLocationCoordinate(position?.coords?.latitude);
+      const longitude = normalizeSharedLocationCoordinate(position?.coords?.longitude);
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         return;
       }

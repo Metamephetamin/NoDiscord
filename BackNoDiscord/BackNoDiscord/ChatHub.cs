@@ -149,6 +149,8 @@ public class ChatHub : Hub
         }
 
         var now = DateTimeOffset.UtcNow;
+        var safeLatitude = NormalizeSharedLocationCoordinate(latitude);
+        var safeLongitude = NormalizeSharedLocationCoordinate(longitude);
         if (!await _locationPrivacy.CanPublishLocationAsync(currentUserId, Context.ConnectionAborted))
         {
             return;
@@ -159,8 +161,8 @@ public class ChatHub : Hub
         await _context.Users
             .Where(user => user.id == currentUserId)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(user => user.last_location_latitude, latitude)
-                .SetProperty(user => user.last_location_longitude, longitude)
+                .SetProperty(user => user.last_location_latitude, safeLatitude)
+                .SetProperty(user => user.last_location_longitude, safeLongitude)
                 .SetProperty(user => user.last_location_updated_at, now)
                 .SetProperty(user => user.last_location_expires_at, expiresAt),
                 Context.ConnectionAborted);
@@ -168,12 +170,17 @@ public class ChatHub : Hub
         await Clients.All.SendAsync(RealtimeEvents.FriendLocationUpdated, new
         {
             userId = currentUserId,
-            latitude,
-            longitude,
+            latitude = safeLatitude,
+            longitude = safeLongitude,
             locationLabel = "Местоположение",
             displayName = currentUser.DisplayName,
             updatedAt = now
         }, Context.ConnectionAborted);
+    }
+
+    private static double NormalizeSharedLocationCoordinate(double value)
+    {
+        return Math.Round(value, 2, MidpointRounding.AwayFromZero);
     }
 
     public async Task SendMessage(

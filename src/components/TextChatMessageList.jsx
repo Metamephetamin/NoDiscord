@@ -18,7 +18,7 @@ import {
 import { resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { copyTextToClipboard } from "../utils/clipboard";
-import { formatFileSize, formatTime } from "../utils/textChatHelpers";
+import { formatFileSize, formatTimestamp } from "../utils/textChatHelpers";
 import {
   shouldReserveVisualAttachmentWidth,
   shouldUseInlineDirectMessageFooter,
@@ -426,7 +426,7 @@ function EditedBadge({ message }) {
 }
 
 function MessageTimestamp({ messageItem }) {
-  const timestampLabel = formatTime(messageItem?.timestamp);
+  const timestampLabel = formatTimestamp(messageItem?.timestamp);
 
   return (
     <span className={`message-time ${messageItem?.isLocalEcho ? "message-time--pending" : ""}`}>
@@ -984,7 +984,7 @@ const LocationMessageCard = memo(function LocationMessageCard({ location, messag
       </span>
       <span className="message-location-card__meta">
         <strong>Геолокация</strong>
-        <span>{location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</span>
+        <span>Точка на карте</span>
       </span>
       <span className={`message-location-card__footer message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
         <MessageTimestamp messageItem={messageItem} />
@@ -2247,7 +2247,7 @@ function TextChatMessageList({
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
           const locationMessage = parseLocationMessage(messageText);
-          const usesEmbeddedLocationFooter = isDirectChat && Boolean(locationMessage);
+          const usesEmbeddedLocationFooter = Boolean(locationMessage);
           const isFileOnlyMessage =
             isDirectChat
             && hasOnlyFileLikeAttachments
@@ -2266,6 +2266,9 @@ function TextChatMessageList({
             hasForwardedFromUsername: Boolean(messageItem.forwardedFromUsername),
             hasReplyToMessageId: Boolean(messageItem.replyToMessageId),
           });
+          const showBottomFooter = !useInlineFooter
+            && !showAttachmentOverlayFooter
+            && !usesEmbeddedLocationFooter;
           const authorRoleColor = !isDirectChat
             ? authorRoleColorByUserId.get(String(messageItem.authorUserId || "")) || ""
             : "";
@@ -2368,12 +2371,6 @@ function TextChatMessageList({
                     >
                       {messageItem.username || "User"}
                     </button>
-                    {!showAttachmentOverlayFooter ? (
-                      <span className="message-meta">
-                        <MessageTimestamp messageItem={messageItem} />
-                        <EditedBadge message={messageItem} />
-                      </span>
-                    ) : null}
                   </div>
                 ) : null}
 
@@ -2471,7 +2468,7 @@ function TextChatMessageList({
                   priorityMediaMessageIdSet={priorityMediaMessageIdSet}
                 />
 
-                {(((isDirectChat || isVoiceOnlyMessage) && !useInlineFooter && !showAttachmentOverlayFooter && !usesEmbeddedLocationFooter) || reactions.length) ? (
+                {(showBottomFooter || reactions.length) ? (
                   <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
@@ -2515,7 +2512,7 @@ function TextChatMessageList({
                       </div>
                     ) : null}
 
-                    {((isDirectChat || isVoiceOnlyMessage) && !useInlineFooter && !usesEmbeddedLocationFooter) ? (
+                    {showBottomFooter ? (
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />

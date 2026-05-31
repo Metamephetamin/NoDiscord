@@ -17118,6 +17118,15 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   border-color: rgba(101, 214, 149, 0.2);
 }
 
+.workspace-status-toast--danger {
+  border-color: rgba(255, 104, 124, 0.32);
+}
+
+.workspace-status-toast--danger .workspace-status-toast__dot {
+  background: #ff687c;
+  box-shadow: 0 0 14px rgba(255, 104, 124, 0.44);
+}
+
 .workspace-status-toast__dot {
   width: 8px;
   height: 8px;
