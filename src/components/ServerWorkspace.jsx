@@ -9,6 +9,7 @@ import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentl
 import { isServerRailItemActive } from "./serverRailState.mjs";
 import { getMutedChannelKey } from "../features/menu-main/mutedServerChannels";
 import "../css/MemberRoleMenu.css";
+import "../css/ServerInviteModal.css";
 
 const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);

@@ -1,0 +1,437 @@
+.server-invite-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 4, 8, 0.68);
+  backdrop-filter: blur(6px);
+}
+
+.server-invite-modal {
+  width: min(480px, calc(100vw - 40px));
+  height: min(820px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: #0f1118;
+  color: #f7f8fb;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.62);
+}
+
+.server-invite-modal select {
+  color-scheme: inherit;
+}
+
+.server-invite-modal select option,
+.server-invite-modal select optgroup {
+  background-color: #0f1118;
+  color: var(--app-text);
+}
+
+.server-invite-modal select option:checked {
+  background-color: #24283a;
+  color: #ffffff;
+}
+
+.server-invite-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 16px;
+}
+
+.server-invite-modal__header h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.server-invite-modal__header p {
+  margin: 0;
+  color: #a9afbf;
+  font-size: 15px;
+}
+
+.server-invite-modal__close {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b7bcc9;
+  cursor: pointer;
+}
+
+.server-invite-modal__close:hover {
+  color: #ffffff;
+}
+
+.server-invite-modal__close span {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.server-invite-modal__close span::before,
+.server-invite-modal__close span::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 1px;
+  width: 2px;
+  height: 21px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.server-invite-modal__close span::before {
+  transform: rotate(45deg);
+}
+
+.server-invite-modal__close span::after {
+  transform: rotate(-45deg);
+}
+
+.server-invite-modal__search {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 24px 12px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(6, 8, 13, 0.92);
+}
+
+.server-invite-modal__search span {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid #c2c7d4;
+  border-radius: 50%;
+  opacity: 0.9;
+}
+
+.server-invite-modal__search span::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 2px;
+  border-radius: 999px;
+  background: #c2c7d4;
+  transform: translate(9px, 11px) rotate(45deg);
+}
+
+.server-invite-modal__search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f4f6fb;
+  font: inherit;
+  font-size: 15px;
+}
+
+.server-invite-modal__search input::placeholder {
+  color: #949aaa;
+}
+
+.server-invite-modal__friends {
+  flex: 1;
+  min-height: 0;
+  padding: 0 24px 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(85, 89, 106, 0.9) transparent;
+}
+
+.server-invite-modal__friend {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+
+.server-invite-modal__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.server-invite-modal__friend-copy {
+  min-width: 0;
+}
+
+.server-invite-modal__friend-copy strong,
+.server-invite-modal__friend-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-invite-modal__friend-copy strong {
+  color: #f2f4fb;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.server-invite-modal__friend-copy span {
+  margin-top: 3px;
+  color: #a5abb9;
+  font-size: 12px;
+}
+
+.server-invite-modal__friend button,
+.server-invite-modal__link-row button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #f6f7fb;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.server-invite-modal__friend button:hover:not(:disabled),
+.server-invite-modal__link-row button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.server-invite-modal__friend button:disabled,
+.server-invite-modal__link-row button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.server-invite-modal__empty {
+  padding: 18px 0;
+  color: #a5abb9;
+  font-size: 14px;
+}
+
+.server-invite-modal__footer {
+  padding: 22px 24px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.065);
+  background: rgba(6, 8, 13, 0.62);
+}
+
+.server-invite-modal__footer > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #f3f5fb;
+  font-size: 14px;
+}
+
+.server-invite-modal__link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(4, 6, 11, 0.9);
+}
+
+.server-invite-modal__link-row input {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f4f6fb;
+  font: inherit;
+  font-size: 15px;
+}
+
+.server-invite-modal__link-row button {
+  min-height: 32px;
+  background: #5865f2;
+}
+
+.server-invite-modal__link-row button:hover:not(:disabled) {
+  background: #6672f4;
+}
+
+.server-invite-modal__footer p {
+  margin: 14px 0 0;
+  color: #9fa6b5;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.server-invite-modal__footer p button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #5ca8f7;
+  font: inherit;
+  cursor: pointer;
+}
+
+.server-invite-modal__status {
+  margin-top: 8px;
+  color: #c8cede;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+html[data-ui-theme="light"] .server-invite-modal,
+html[data-ui-theme="purple"] .server-invite-modal {
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .server-invite-modal {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.18);
+}
+
+html[data-ui-theme="light"] .server-invite-modal__header p,
+html[data-ui-theme="light"] .server-invite-modal__friend-copy span,
+html[data-ui-theme="light"] .server-invite-modal__empty,
+html[data-ui-theme="light"] .server-invite-modal__footer p,
+html[data-ui-theme="light"] .server-invite-modal__status {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__header h3,
+html[data-ui-theme="light"] .server-invite-modal__footer > strong,
+html[data-ui-theme="light"] .server-invite-modal__friend-copy strong {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__footer {
+  border-color: #e3e8f1;
+  background: #f8fafc;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__search,
+html[data-ui-theme="light"] .server-invite-modal__link-row {
+  border-color: #d9e0ec;
+  background: #f8fafc;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__search input,
+html[data-ui-theme="light"] .server-invite-modal__link-row input {
+  color: #172033;
+  caret-color: #172033;
+  -webkit-text-fill-color: #172033;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__search input::placeholder {
+  color: #7c8799;
+  -webkit-text-fill-color: #7c8799;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__close {
+  color: #647084;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__close:hover {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__search span {
+  border-color: #7c8799;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__search span::after {
+  background: #7c8799;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__friend button,
+html[data-ui-theme="light"] .server-invite-modal__link-row button {
+  background: #eef3ff;
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .server-invite-modal__friend button:hover:not(:disabled),
+html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:disabled) {
+  background: #dfe7ff;
+}
+
+.server-invite-modal-layer * {
+  scrollbar-color: transparent transparent !important;
+}
+
+.server-invite-modal-layer *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.server-invite-modal-layer *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.server-invite-modal-layer *::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent !important;
+}
+
+.server-invite-modal-layer *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.server-invite-modal-layer .is-scroll-active {
+  scrollbar-color: rgba(150, 160, 184, 0.42) transparent !important;
+}
+
+.server-invite-modal-layer .is-scroll-active::-webkit-scrollbar-thumb {
+  background: rgba(150, 160, 184, 0.42) !important;
+}
+
+.server-invite-modal-layer .is-scroll-active::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 190, 214, 0.58) !important;
+}
+
+.server-invite-modal-layer :where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus {
+  outline: none !important;
+}
+
+.server-invite-modal-layer :where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: none !important;
+}

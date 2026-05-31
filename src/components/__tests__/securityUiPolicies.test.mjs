@@ -231,6 +231,16 @@ test("member role menu styles are split out of the main menu stylesheet", () => 
   assert.match(memberRoleMenuCss, /\.member-role-menu/);
 });
 
+test("server invite modal styles are split out of the main menu stylesheet", () => {
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const inviteModalCss = readRepoFileIfExists("src/css/ServerInviteModal.css");
+
+  assert.match(workspaceSource, /import "\.\.\/css\/ServerInviteModal\.css";/);
+  assert.doesNotMatch(mainCss, /\.server-invite-modal/);
+  assert.match(inviteModalCss, /\.server-invite-modal/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 
