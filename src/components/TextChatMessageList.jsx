@@ -38,6 +38,7 @@ import { parseMediaFrame } from "../utils/mediaFrames";
 import { recordPerfEvent } from "../utils/perf";
 import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
 import { canUseDirectImageMediaUrl } from "../utils/mediaImageSources.mjs";
+import { clampLocationMessageZoom, parseLocationMessageText } from "../utils/locationMessagePayload";
 import { deriveMessageDeliveryState } from "../features/text-chat/messageDeliveryState.mjs";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
@@ -46,7 +47,6 @@ const COPYABLE_PHONE_PATTERN = /(?:\+?\d[\d\s().-]{8,}\d)/g;
 const COPYABLE_HYPHEN_CODE_PATTERN = /\b[A-Z0-9]{3,8}(?:-[A-Z0-9]{3,8}){1,5}\b/gi;
 const COPYABLE_MIXED_CODE_PATTERN = /\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{8,32}\b/gi;
 const COPYABLE_DIGIT_CODE_PATTERN = /\b\d{4,8}\b/g;
-const LOCATION_MESSAGE_PATTERN = /^\s*📍?\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:\s*\n\s*(https?:\/\/\S+))?\s*$/u;
 const LOCATION_TILE_SIZE = 256;
 const LOCATION_PREVIEW_WIDTH = 320;
 const LOCATION_PREVIEW_HEIGHT = 160;
@@ -321,46 +321,6 @@ function getCopyableTextSegments(text) {
   return segments;
 }
 
-function clampLocationPreviewZoom(value) {
-  return Math.max(3, Math.min(20, Math.round(Number(value) || 16)));
-}
-
-function getLocationMapsUrl(latitude, longitude, zoom = 16) {
-  return `https://www.google.com/maps?q=${latitude},${longitude}&z=${clampLocationPreviewZoom(zoom)}`;
-}
-
-function parseLocationMessage(value) {
-  const normalizedValue = String(value || "").trim();
-  const match = normalizedValue.match(LOCATION_MESSAGE_PATTERN);
-  if (!match) {
-    return null;
-  }
-
-  const latitude = Number(match[1]);
-  const longitude = Number(match[2]);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
-
-  let zoom = 16;
-  const sourceUrl = String(match[3] || "").trim();
-  if (sourceUrl) {
-    try {
-      const parsedUrl = new URL(sourceUrl);
-      zoom = clampLocationPreviewZoom(parsedUrl.searchParams.get("z"));
-    } catch {
-      zoom = 16;
-    }
-  }
-
-  return {
-    latitude,
-    longitude,
-    zoom,
-    url: sourceUrl || getLocationMapsUrl(latitude, longitude, zoom),
-  };
-}
-
 function getLocationTileUrl(x, y, zoom) {
   const tileCount = 2 ** zoom;
   const normalizedX = ((x % tileCount) + tileCount) % tileCount;
@@ -370,7 +330,7 @@ function getLocationTileUrl(x, y, zoom) {
 }
 
 function getLocationPreviewTiles(latitude, longitude, zoom) {
-  const normalizedZoom = clampLocationPreviewZoom(zoom);
+  const normalizedZoom = clampLocationMessageZoom(zoom);
   const tileCount = 2 ** normalizedZoom;
   const clampedLatitude = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude) || 0));
   const normalizedLongitude = Math.max(-180, Math.min(180, Number(longitude) || 0));
@@ -2394,7 +2354,7 @@ function TextChatMessageList({
             && !reactions.length
             && !messageItem.forwardedFromUsername
             && !messageItem.replyToMessageId;
-          const locationMessage = parseLocationMessage(messageText);
+          const locationMessage = parseLocationMessageText(messageText);
           const usesEmbeddedLocationFooter = Boolean(locationMessage);
           const isFileOnlyMessage =
             isDirectChat

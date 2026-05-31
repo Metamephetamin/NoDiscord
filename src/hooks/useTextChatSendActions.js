@@ -17,6 +17,7 @@ import {
   MAX_FILE_SIZE_LABEL,
   MESSAGE_SEND_COOLDOWN_MS,
 } from "../utils/textChatModel";
+import { buildLocationMessageText } from "../utils/locationMessagePayload";
 import { finishPerfTrace, finishPerfTraceOnNextFrame, startPerfTrace } from "../utils/perf";
 
 const LOCATION_MESSAGE_DEFAULT_ZOOM = 15;
@@ -853,10 +854,16 @@ export default function useTextChatSendActions({
       return false;
     }
 
-    const normalizedLatitude = Number(numericLatitude.toFixed(4));
-    const normalizedLongitude = Number(numericLongitude.toFixed(4));
-    const normalizedZoom = Math.max(3, Math.min(20, Math.round(Number(zoom) || LOCATION_MESSAGE_DEFAULT_ZOOM)));
-    const locationUrl = `https://www.google.com/maps?q=${normalizedLatitude},${normalizedLongitude}&z=${normalizedZoom}`;
+    const locationMessageText = buildLocationMessageText({
+      latitude: numericLatitude,
+      longitude: numericLongitude,
+      zoom,
+    });
+    if (!locationMessageText) {
+      setErrorMessage("Не удалось подготовить локацию для отправки.");
+      return false;
+    }
+
     const avatar = user?.avatarUrl || user?.avatar || "";
     let sendSucceeded = false;
 
@@ -865,7 +872,7 @@ export default function useTextChatSendActions({
       await ensureChannelJoined();
 
       await sendMessagesCompat(scopedChannelId, avatar, [{
-        message: `📍 ${normalizedLatitude}, ${normalizedLongitude}\n${locationUrl}`,
+        message: locationMessageText,
         mentions: [],
         replyToMessageId: replyState?.messageId || "",
         replyToUsername: replyState?.username || "",
