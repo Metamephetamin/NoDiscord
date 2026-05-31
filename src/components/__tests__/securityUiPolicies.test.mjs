@@ -605,8 +605,8 @@ test("poll votes are submitted to the server and merged through message updates"
 });
 
 test("poll composer backdrop fully covers and blurs the app", () => {
-  const textChatCss = readRepoFile("src/css/TextChat.css");
-  const backdropRule = textChatCss.match(/\.poll-composer-backdrop \{[\s\S]*?\n\}/)?.[0] || "";
+  const pollComposerCss = readRepoFile("src/css/TextChatPollComposerModal.css");
+  const backdropRule = pollComposerCss.match(/\.poll-composer-backdrop \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(backdropRule, /position: fixed;/);
   assert.match(backdropRule, /inset: 0;/);
@@ -616,6 +616,18 @@ test("poll composer backdrop fully covers and blurs the app", () => {
   assert.match(backdropRule, /backdrop-filter: blur\(16px\);/);
   assert.match(backdropRule, /isolation: isolate;/);
   assert.match(backdropRule, /overscroll-behavior: contain;/);
+});
+
+test("poll composer modal styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const pollComposerCss = readRepoFile("src/css/TextChatPollComposerModal.css");
+  const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");
+
+  assert.match(composerSource, /import "\.\.\/css\/TextChatPollComposerModal\.css";/);
+  assert.match(pollComposerCss, /\.poll-composer-modal \{/);
+  assert.match(pollComposerCss, /html\[data-ui-theme="light"\] \.poll-composer-modal/);
+  assert.doesNotMatch(textChatCss, /^\.poll-composer-backdrop \{/m);
+  assert.doesNotMatch(textChatCss, /^\.poll-composer__/m);
 });
 
 test("manual profile status is editable, persisted, and rendered under the nickname", () => {

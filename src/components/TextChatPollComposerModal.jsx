@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_POLL_THEME_ID, POLL_THEME_PRESETS } from "../utils/pollMessages";
+import "../css/TextChatPollComposerModal.css";
 
 const DEFAULT_SETTINGS = {
   anonymous: true,
