@@ -139,6 +139,13 @@ test("message search input text is readable on dark chat topbar", () => {
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
 });
 
+test("common counters and timestamps use the numeric Roboto font", () => {
+  const indexCss = readRepoFile("src/index.css");
+
+  assert.match(indexCss, /--font-numeric: Roboto/);
+  assert.match(indexCss, /\.chat__topbar-badge,[\s\S]*?\.message-reaction__count,[\s\S]*?\.voice-message__duration,[\s\S]*?font-family: var\(--font-numeric\);/);
+});
+
 test("clipboard images can be pasted from the whole text chat area", () => {
   const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
