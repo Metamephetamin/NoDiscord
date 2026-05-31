@@ -197,6 +197,17 @@ test("voice profile option styles stay split from the main menu stylesheet", () 
   assert.doesNotMatch(mainCss, /^html\[data-ui-theme="light"\] \.voice-profile-option/m);
 });
 
+test("server invite feedback styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const feedbackCss = readRepoFileIfExists("src/css/MenuMainInviteFeedback.css");
+  const overlaySource = readRepoFile("src/features/menu-main/MenuMainOverlayLayer.jsx");
+
+  assert.match(overlaySource, /import "\.\.\/\.\.\/css\/MenuMainInviteFeedback\.css";/);
+  assert.match(feedbackCss, /\.server-invite-feedback \{/);
+  assert.match(feedbackCss, /\.server-invite-feedback--mobile \{/);
+  assert.doesNotMatch(mainCss, /^\s*\.server-invite-feedback[^\n{]*\{/m);
+});
+
 test("server management settings are hidden without permissions", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 

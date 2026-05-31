@@ -24,6 +24,7 @@ import {
   STREAM_RESOLUTION_OPTIONS,
 } from "../../utils/menuMainModel";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
+import "../../css/MenuMainInviteFeedback.css";
 
 export default function MenuMainOverlayLayer({
   children,
