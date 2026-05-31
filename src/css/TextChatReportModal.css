@@ -1,0 +1,161 @@
+/* Styles scoped to TextChatReportModal.jsx. Keep this file imported by that component. */
+
+
+
+.chat-report-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 7200;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.chat-report-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(3, 5, 10, 0.66);
+  backdrop-filter: blur(8px);
+  cursor: default;
+}
+
+.chat-report-modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(18, 21, 29, 0.98);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.46);
+}
+
+.chat-report-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-report-modal__header h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.chat-report-modal__close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f7ff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-report-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #aeb8cd;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.chat-report-modal__field textarea {
+  width: 100%;
+  min-height: 116px;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #f8fbff;
+  font: inherit;
+  outline: none;
+}
+
+.chat-report-modal__field textarea::placeholder {
+  color: rgba(185, 195, 214, 0.62);
+}
+
+.chat-report-modal__status {
+  margin: -4px 0 0;
+  color: #ffb4b4;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.chat-report-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.chat-report-modal__cancel,
+.chat-report-modal__submit {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chat-report-modal__cancel {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chat-report-modal__submit {
+  background: linear-gradient(180deg, #ef5368, #c72f46);
+}
+
+.chat-report-modal__cancel:disabled,
+.chat-report-modal__submit:disabled,
+.chat-report-modal__close:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+html[data-ui-theme="light"] .chat-report-modal__backdrop {
+  background: rgba(15, 23, 42, 0.36);
+}
+
+html[data-ui-theme="light"] .chat-report-modal__dialog {
+  border-color: #dbe3ef;
+  background: #ffffff;
+  box-shadow: 0 28px 64px rgba(15, 23, 42, 0.22);
+}
+
+html[data-ui-theme="light"] .chat-report-modal__header h3 {
+  color: #111827;
+}
+
+html[data-ui-theme="light"] .chat-report-modal__close,
+html[data-ui-theme="light"] .chat-report-modal__cancel {
+  background: #eef2f7;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .chat-report-modal__field {
+  color: #475569;
+}
+
+html[data-ui-theme="light"] .chat-report-modal__field textarea {
+  border-color: #d9e0ec;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .chat-report-modal__field textarea::placeholder {
+  color: #7b8799;
+}

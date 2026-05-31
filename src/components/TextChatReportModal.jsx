@@ -1,3 +1,5 @@
+import "../css/TextChatReportModal.css";
+
 export default function TextChatReportModal({
   report,
   onReasonChange,
