@@ -3356,6 +3356,10 @@ export default function TextChat({
     isContextReactionActive,
     primaryReactions,
     stickerReactions,
+    messageReportModal,
+    updateMessageReportReason,
+    closeMessageReportModal,
+    submitMessageReport,
   } = useTextChatMessageActions({
     searchQuery,
     messages,
@@ -3660,6 +3664,10 @@ export default function TextChat({
       handleProfileModalAddFriend={handleAddFriendFromProfileModal}
       handleProfileModalCopyUserId={handleCopyUserIdFromProfileModal}
       handleProfileModalReportUser={handleReportUserFromProfileModal}
+      messageReportModal={messageReportModal}
+      updateMessageReportReason={updateMessageReportReason}
+      closeMessageReportModal={closeMessageReportModal}
+      submitMessageReport={submitMessageReport}
       primaryReactions={primaryReactions}
       stickerReactions={stickerReactions}
       reactionStickerPanelOpen={reactionStickerPanelOpen}

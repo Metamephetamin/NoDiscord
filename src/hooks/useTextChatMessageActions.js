@@ -1,4 +1,4 @@
-﻿import { useMemo } from "react";
+﻿import { useMemo, useState } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import { API_URL } from "../config/runtime";
 import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
@@ -70,6 +70,13 @@ export default function useTextChatMessageActions({
   onDeleteMessageLocally,
   onDeleteAttachmentLocally,
 }) {
+  const [messageReportModal, setMessageReportModal] = useState({
+    open: false,
+    reason: "",
+    status: "",
+    busy: false,
+    context: null,
+  });
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const searchResults = useMemo(() => {
     if (normalizedSearchQuery.length < 2) {
@@ -598,27 +605,82 @@ export default function useTextChatMessageActions({
       return;
     }
 
-    const reason = window.prompt("Опишите причину жалобы", "spam");
-    if (reason == null) {
-      setMessageContextMenu(null);
+    setMessageReportModal({
+      open: true,
+      reason: "",
+      status: "",
+      busy: false,
+      context: {
+        serverId: messageContextMenu.serverId,
+        channelId: messageContextMenu.channelId || scopedChannelId,
+        messageId: Number(messageContextMenu.messageId) || null,
+        targetUserId: messageContextMenu.authorUserId,
+      },
+    });
+    setMessageContextMenu(null);
+  };
+
+  const closeMessageReportModal = () => {
+    if (messageReportModal.busy) {
+      return;
+    }
+
+    setMessageReportModal({
+      open: false,
+      reason: "",
+      status: "",
+      busy: false,
+      context: null,
+    });
+  };
+
+  const updateMessageReportReason = (reason) => {
+    setMessageReportModal((previous) => ({
+      ...previous,
+      reason,
+      status: previous.status && reason.trim().length >= 4 ? "" : previous.status,
+    }));
+  };
+
+  const submitMessageReport = async (event) => {
+    event?.preventDefault?.();
+    const context = messageReportModal.context;
+    if (!context?.serverId || !context?.targetUserId) {
+      closeMessageReportModal();
+      return;
+    }
+
+    const reason = messageReportModal.reason.trim();
+    if (reason.length < 4) {
+      setMessageReportModal((previous) => ({ ...previous, status: "Укажите причину жалобы." }));
       return;
     }
 
     try {
       setErrorMessage("");
+      setMessageReportModal((previous) => ({ ...previous, busy: true, status: "" }));
       await createModerationReport({
-        serverId: messageContextMenu.serverId,
-        channelId: messageContextMenu.channelId || scopedChannelId,
-        messageId: Number(messageContextMenu.messageId) || null,
-        targetUserId: messageContextMenu.authorUserId,
+        serverId: context.serverId,
+        channelId: context.channelId,
+        messageId: context.messageId,
+        targetUserId: context.targetUserId,
         reason,
       });
       setActionFeedback({ tone: "success", message: "Жалоба отправлена" });
+      setMessageReportModal({
+        open: false,
+        reason: "",
+        status: "",
+        busy: false,
+        context: null,
+      });
     } catch (error) {
       console.error("Create moderation report error:", error);
-      setErrorMessage(error?.message || "Не удалось отправить жалобу.");
-    } finally {
-      setMessageContextMenu(null);
+      setMessageReportModal((previous) => ({
+        ...previous,
+        busy: false,
+        status: error?.message || "Не удалось отправить жалобу.",
+      }));
     }
   };
 
@@ -897,5 +959,9 @@ export default function useTextChatMessageActions({
     isContextReactionActive,
     primaryReactions: PRIMARY_MESSAGE_REACTION_OPTIONS,
     stickerReactions: STICKER_MESSAGE_REACTION_OPTIONS,
+    messageReportModal,
+    updateMessageReportReason,
+    closeMessageReportModal,
+    submitMessageReport,
   };
 }

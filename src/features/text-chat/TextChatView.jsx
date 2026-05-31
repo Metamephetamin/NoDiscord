@@ -5,6 +5,7 @@ import TextChatUserContextMenu from "../../components/TextChatUserContextMenu";
 import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
 import TextChatMediaPreview from "../../components/TextChatMediaPreview";
+import TextChatReportModal from "../../components/TextChatReportModal";
 import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
 import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
@@ -162,6 +163,10 @@ export default function TextChatView(props) {
     handleProfileModalAddFriend,
     handleProfileModalCopyUserId,
     handleProfileModalReportUser,
+    messageReportModal,
+    updateMessageReportReason,
+    closeMessageReportModal,
+    submitMessageReport,
     primaryReactions,
     stickerReactions,
     reactionStickerPanelOpen,
@@ -707,6 +712,12 @@ export default function TextChatView(props) {
         onAddFriend={handleProfileModalAddFriend}
         onCopyUserId={handleProfileModalCopyUserId}
         onReportUser={handleProfileModalReportUser}
+      />
+      <TextChatReportModal
+        report={messageReportModal}
+        onReasonChange={updateMessageReportReason}
+        onClose={closeMessageReportModal}
+        onSubmit={submitMessageReport}
       />
       <Suspense fallback={null}>
         <TextChatForwardModal

@@ -190,6 +190,18 @@ test("clipboard images can be pasted from the whole text chat area", () => {
   assert.match(viewSource, /onPaste=\{handleComposerPaste\}/);
 });
 
+test("message reports use an in-app dialog instead of browser prompt", () => {
+  const actionsSource = readRepoFile("src/hooks/useTextChatMessageActions.js");
+  const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
+  const modalSource = readRepoFile("src/components/TextChatReportModal.jsx");
+
+  assert.doesNotMatch(actionsSource, /window\.prompt/);
+  assert.match(actionsSource, /setMessageReportModal\(\{/);
+  assert.match(actionsSource, /submitMessageReport/);
+  assert.match(viewSource, /<TextChatReportModal/);
+  assert.match(modalSource, /Причина жалобы/);
+});
+
 test("poll votes persist locally and expose anonymous mode", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");
