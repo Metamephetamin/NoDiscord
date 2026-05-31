@@ -245,11 +245,19 @@ test("API_BASE_URL callers do not duplicate the api prefix", () => {
 
 test("server audit log refreshes after role mutations", () => {
   const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
   const mutationStart = menuSource.indexOf("const mutateServerRoles = async");
   const createRoleStart = menuSource.indexOf("const createServerRole =", mutationStart);
   const mutationSource = menuSource.slice(mutationStart, createRoleStart);
 
   assert.match(mutationSource, /await refreshServerAuditLog\(requestServer\.id\);/);
+  assert.match(menuSource, /onRefreshAuditLog: \(\) => refreshServerAuditLog\(activeServer\?\.id\)/);
+  assert.match(rendererSource, /onRefreshAuditLog=\{onRefreshAuditLog\}/);
+  assert.match(settingsSource, /const formatAuditDetails = \(entry\) =>/);
+  assert.match(settingsSource, /"server\.roles\.create": "Роль создана"/);
+  assert.match(settingsSource, /"server\.member\.role\.update": "Роль участника изменена"/);
+  assert.match(settingsSource, /onClick=\{refreshAuditLog\}/);
 });
 
 test("message search indexes attachment media kinds, not only file names", () => {

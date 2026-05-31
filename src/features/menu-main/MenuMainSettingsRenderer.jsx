@@ -181,6 +181,7 @@ export function MenuMainSettingsContent({
   markServerAsShared,
   currentServerRole,
   serverAuditLogs,
+  onRefreshAuditLog,
 }) {
   switch (settingsTab) {
     case "account":
@@ -395,6 +396,7 @@ export function MenuMainSettingsContent({
           onUpdateRole={updateServerRole}
           onDeleteRole={deleteServerRole}
           onUpdateMemberRole={updateMemberRole}
+          onRefreshAuditLog={onRefreshAuditLog}
         />
       );
     case "voice_video":

@@ -6196,6 +6196,7 @@ export default function MenuMain({
     markServerAsShared,
     currentServerRole,
     serverAuditLogs,
+    onRefreshAuditLog: () => refreshServerAuditLog(activeServer?.id),
   };
 
   const renderSettingsContent = () => (

@@ -2321,10 +2321,19 @@ export const AppearanceAccessibilitySettings = ({
 const AUDIT_ACTION_LABELS = {
   "server.create": "Сервер создан",
   "server.settings.update": "Настройки сервера изменены",
+  "server.roles.create": "Роль создана",
   "server.roles.update": "Роли изменены",
+  "server.roles.delete": "Роль удалена",
+  "server.member.role.update": "Роль участника изменена",
   "server.channels.update": "Каналы изменены",
   "server.invite.create": "Создано приглашение",
   "server.delete": "Сервер удален",
+  "moderation.report.create": "Жалоба создана",
+  "moderation.report.status": "Статус жалобы изменен",
+  "moderation.ban.apply": "Бан применен",
+  "moderation.ban.revoke": "Бан снят",
+  "moderation.mute.apply": "Мут применен",
+  "moderation.mute.revoke": "Мут снят",
 };
 
 const formatAuditAction = (actionType) => AUDIT_ACTION_LABELS[actionType] || actionType || "Действие";
@@ -2347,6 +2356,27 @@ const formatAuditDate = (value) => {
   });
 };
 
+const parseAuditMetadata = (entry) => {
+  try {
+    const parsed = JSON.parse(String(entry?.metadataJson || entry?.metadata || "{}"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const formatAuditDetails = (entry) => {
+  const metadata = parseAuditMetadata(entry);
+  const parts = [
+    metadata.roleName ? `роль: ${metadata.roleName}` : "",
+    metadata.serverName ? `сервер: ${metadata.serverName}` : "",
+    entry?.targetId ? `цель: ${entry.targetId}` : "",
+    entry?.actorUserId ? `пользователь ID: ${entry.actorUserId}` : "",
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+};
+
 const SYSTEM_ROLE_IDS = new Set(["owner", "member"]);
 const normalizeRoleForm = (role) => ({
   name: role?.name || "",
@@ -2366,6 +2396,7 @@ export const RolesSettings = ({
   onUpdateRole,
   onDeleteRole,
   onUpdateMemberRole,
+  onRefreshAuditLog,
 }) => {
   const roles = activeServer?.roles || [];
   const members = activeServer?.members || [];
@@ -2377,6 +2408,7 @@ export const RolesSettings = ({
   const [roleStatus, setRoleStatus] = useState("");
   const [roleBusy, setRoleBusy] = useState(false);
   const [roleDeleteConfirmId, setRoleDeleteConfirmId] = useState("");
+  const [auditBusy, setAuditBusy] = useState(false);
 
   const selectedRole = useMemo(
     () => roles.find((role) => String(role.id) === String(selectedRoleId)) || roles[0] || null,
@@ -2483,6 +2515,19 @@ export const RolesSettings = ({
       setRoleStatus(error instanceof Error ? error.message : "Не удалось удалить роль.");
     } finally {
       setRoleBusy(false);
+    }
+  };
+
+  const refreshAuditLog = async () => {
+    if (typeof onRefreshAuditLog !== "function") {
+      return;
+    }
+
+    setAuditBusy(true);
+    try {
+      await onRefreshAuditLog();
+    } finally {
+      setAuditBusy(false);
     }
   };
 
@@ -2633,6 +2678,9 @@ export const RolesSettings = ({
             <div className="settings-section__header">
               <h4>Журнал действий</h4>
               <span className="settings-role-current">{auditLogs.length}</span>
+              <button type="button" className="settings-inline-button" disabled={auditBusy} onClick={refreshAuditLog}>
+                {auditBusy ? "Обновление..." : "Обновить"}
+              </button>
             </div>
             <div className="settings-audit-list">
               {auditLogs.length ? (
@@ -2642,7 +2690,7 @@ export const RolesSettings = ({
                       <strong>{formatAuditAction(entry.actionType)}</strong>
                       <span>{formatAuditDate(entry.createdAt)}</span>
                     </div>
-                    <span className="settings-role-description">Пользователь ID: {entry.actorUserId || "unknown"}</span>
+                    <span className="settings-role-description">{formatAuditDetails(entry) || "Деталей нет"}</span>
                   </div>
                 ))
               ) : (
