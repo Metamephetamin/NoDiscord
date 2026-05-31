@@ -58,10 +58,12 @@ const VoiceChannelList = ({
   onParticipantVolumeChange,
   canManageChannels = true,
   joiningChannelId = "",
+  mutedChannelIds = [],
 }) => {
   const [durationNowMs, setDurationNowMs] = useState(() => getMonotonicNow());
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
   const speakingUsers = useMemo(() => new Set(speakingUserIds), [speakingUserIds]);
+  const mutedChannels = useMemo(() => new Set((mutedChannelIds || []).map((channelId) => String(channelId))), [mutedChannelIds]);
   const roleColorByUserId = useMemo(
     () =>
       new Map(
@@ -144,6 +146,7 @@ const VoiceChannelList = ({
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
+        const isMuted = mutedChannels.has(String(channel.id));
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
         const participantCount = participants.length;
@@ -177,7 +180,7 @@ const VoiceChannelList = ({
           renderDropPlaceholder(channel.id, "before"),
           <li
             key={channel.id}
-            className={`list__items ${participants.length > 0 ? "list__items--has-participants" : ""} ${canManageChannels && !isEditing ? "list__items--with-drag-handle" : ""} ${isActive ? "list__items--active" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
+            className={`list__items ${participants.length > 0 ? "list__items--has-participants" : ""} ${canManageChannels && !isEditing ? "list__items--with-drag-handle" : ""} ${isActive ? "list__items--active" : ""} ${isMuted ? "list__items--muted" : ""} ${isEditing ? "list__items--editing" : ""} ${isJoining ? "list__items--joining" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "list__items--dragging" : ""}`}
             onDragOver={(event) => onChannelDragOver?.(event, "voice", channel, categoryId)}
             onDrop={(event) => onChannelDrop?.(event, "voice", channel, categoryId)}
             onDragEnd={onChannelDragEnd}
@@ -240,6 +243,7 @@ const VoiceChannelList = ({
                   disabled={isJoining}
                 >
                   <span className="voice-channel__title">{channel.name}</span>
+                  {isMuted ? <span className="voice-channel__muted" aria-label="Канал заглушён">Тихо</span> : null}
                   {durationLabel ? <span className="voice-channel__timer">{durationLabel}</span> : null}
                   {shouldShowLimit ? (
                     <span className="voice-channel__count" aria-label={`${participantCount} / ${userLimit}`}>

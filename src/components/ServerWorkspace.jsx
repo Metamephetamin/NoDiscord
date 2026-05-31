@@ -7,6 +7,7 @@ import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { isServerRailItemActive } from "./serverRailState.mjs";
+import { getMutedChannelKey } from "../features/menu-main/mutedServerChannels";
 
 const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
@@ -1516,6 +1517,7 @@ export const ServersSidebar = memo(({
   channelSettingsState,
   channelRenameState,
   serverUnreadCounts,
+  mutedServerChannels = {},
   chatDraftPresence,
   currentTextChannel,
   selectedVoiceChannel,
@@ -1567,6 +1569,7 @@ export const ServersSidebar = memo(({
   onUpdateChannelRenameValue,
   onSubmitChannelRename,
   onCancelChannelRename,
+  onToggleServerChannelMute,
   onJoinVoiceChannel,
   onLeaveVoiceChannel,
   onPrewarmVoiceChannel,
@@ -1663,6 +1666,15 @@ export const ServersSidebar = memo(({
   const showUnavailableServerMenuAction = () => {
     onShowServerFeedback?.("Этот раздел пока не подключён.");
   };
+  const isServerChannelMuted = (type, channelId) =>
+    Boolean(mutedServerChannels[getMutedChannelKey(activeServer?.id || "", type, channelId)]);
+  const getVisibleServerChannels = (type, channels = EMPTY_CHANNEL_LIST) => {
+    if (!hideMutedChannels) {
+      return channels;
+    }
+
+    return channels.filter((channel) => !isServerChannelMuted(type, channel.id));
+  };
   const openCategoryContextMenu = (event, category) => {
     if (!canManageChannels || !category?.id) {
       return;
@@ -1689,7 +1701,7 @@ export const ServersSidebar = memo(({
     });
   };
   const openChannelContextMenu = (event, type, channel) => {
-    if (!canManageChannels || !channel?.id) {
+    if (!channel?.id) {
       return;
     }
 
@@ -1701,6 +1713,7 @@ export const ServersSidebar = memo(({
       channelId: String(channel.id),
       channelType: String(type || "text") === "voice" ? "voice" : "text",
       name: getChannelDisplayName(channel.name, type),
+      muted: isServerChannelMuted(type, channel.id),
       x: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 228)),
       y: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 116)),
     });
@@ -1736,6 +1749,18 @@ export const ServersSidebar = memo(({
 
     onDeleteCategory?.(categoryId);
   };
+  const toggleChannelMuteFromContextMenu = () => {
+    if (categoryContextMenu?.mode !== "channel" || !categoryContextMenu.channelId) {
+      return;
+    }
+
+    onToggleServerChannelMute?.({
+      serverId: activeServer?.id || "",
+      type: categoryContextMenu.channelType || "text",
+      channelId: categoryContextMenu.channelId,
+    });
+    setCategoryContextMenu(null);
+  };
   const channelCategories = useMemo(
     () => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : EMPTY_CHANNEL_LIST),
     [activeServer?.channelCategories]
@@ -1750,8 +1775,10 @@ export const ServersSidebar = memo(({
   );
   const uncategorizedTextChannels = textChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
   const uncategorizedVoiceChannels = voiceChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
-  const hasUncategorizedTextChannels = uncategorizedTextChannels.length > 0;
-  const hasUncategorizedVoiceChannels = uncategorizedVoiceChannels.length > 0;
+  const visibleUncategorizedTextChannels = getVisibleServerChannels("text", uncategorizedTextChannels);
+  const visibleUncategorizedVoiceChannels = getVisibleServerChannels("voice", uncategorizedVoiceChannels);
+  const hasUncategorizedTextChannels = visibleUncategorizedTextChannels.length > 0;
+  const hasUncategorizedVoiceChannels = visibleUncategorizedVoiceChannels.length > 0;
   const canDragChannels = Boolean(canManageChannels && activeServer);
   const endDrag = () => {
     dragEndedRef.current = true;
@@ -1990,7 +2017,7 @@ export const ServersSidebar = memo(({
   };
   const renderTextChannelListItems = (channels, categoryId = "") => {
     const items = [];
-    channels.forEach((channel) => {
+    getVisibleServerChannels("text", channels).forEach((channel) => {
       const channelId = String(channel.id || "");
       items.push(renderChannelDropPlaceholder("text", categoryId, channelId, "before"));
       items.push(renderTextChannelItem(channel, categoryId));
@@ -2003,14 +2030,15 @@ export const ServersSidebar = memo(({
     const kind = getTextChannelKind(channel);
     const isEditing = channelRenameState?.type === "text" && channelRenameState.channelId === channel.id;
     const scopedChannelId = getScopedChatChannelId(activeServer?.id || "", channel.id);
-    const unreadCount = Number(serverUnreadCounts[scopedChannelId] || 0);
+    const isMuted = isServerChannelMuted("text", channel.id);
+    const unreadCount = isMuted ? 0 : Number(serverUnreadCounts[scopedChannelId] || 0);
     const hasDraft = Boolean(chatDraftPresence[scopedChannelId]);
     const isTextChannelActive = desktopServerPane !== "voice" && currentTextChannel?.id === channel.id;
 
     return (
       <li
         key={channel.id}
-        className={`channel-item ${canDragChannels && !isEditing ? "channel-item--with-drag-handle" : ""} ${isTextChannelActive ? "active-channel" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "channel-item--dragging" : ""}`}
+        className={`channel-item ${canDragChannels && !isEditing ? "channel-item--with-drag-handle" : ""} ${isTextChannelActive ? "active-channel" : ""} ${isMuted ? "channel-item--muted" : ""} ${isEditing ? "channel-item--editing" : ""} ${kind === "forum" ? "channel-item--forum" : ""} ${dragState?.kind === "channel" && dragState.channelId === channel.id ? "channel-item--dragging" : ""}`}
         onDragOver={(event) => handleChannelDragOver(event, "text", channel, categoryId)}
         onDrop={(event) => handleChannelDrop(event, "text", channel, categoryId)}
         onDragEnd={endDrag}
@@ -2054,6 +2082,7 @@ export const ServersSidebar = memo(({
           <button type="button" className="channel-item__button" onClick={() => onSelectTextChannel(channel.id)}>
             <span className="channel-item__icon" aria-hidden="true">{getChannelListIcon(kind)}</span>
             <span className="channel-item__label">{getChannelDisplayName(channel.name, "text")}</span>
+            {isMuted ? <span className="channel-item__muted" aria-label="Канал заглушён">Тихо</span> : null}
             {hasDraft ? <span className="channel-item__draft">Черновик</span> : null}
             {unreadCount > 0 ? <span className="sidebar-unread-badge sidebar-unread-badge--channel">{Math.min(unreadCount, 99)}</span> : null}
           </button>
@@ -2065,9 +2094,16 @@ export const ServersSidebar = memo(({
       </li>
     );
   };
-  const renderVoiceChannels = (channels, categoryId = "") => (
+  const renderVoiceChannels = (channels, categoryId = "") => {
+    const visibleChannels = getVisibleServerChannels("voice", channels);
+    const mutedChannelIds = visibleChannels
+      .filter((channel) => isServerChannelMuted("voice", channel.id))
+      .map((channel) => String(channel.id));
+
+    return (
     <VoiceChannelList
-      channels={channels}
+      channels={visibleChannels}
+      mutedChannelIds={mutedChannelIds}
       categoryId={categoryId}
       activeChannelId={currentVoiceChannel || ""}
       participantsMap={activeVoiceParticipantsMap}
@@ -2103,7 +2139,8 @@ export const ServersSidebar = memo(({
       onChannelDragEnd={endDrag}
       onChannelContextMenu={openChannelContextMenu}
     />
-  );
+    );
+  };
 
   return (
     <>
@@ -2342,11 +2379,21 @@ export const ServersSidebar = memo(({
                   <div className="member-role-menu__title member-role-menu__title--channel">{categoryContextMenu.name || "Канал"}</div>
                   <button
                     type="button"
+                    className="member-role-menu__item"
+                    onClick={toggleChannelMuteFromContextMenu}
+                  >
+                    {categoryContextMenu.muted ? "Включить уведомления" : "Заглушить канал"}
+                  </button>
+                  {canManageChannels ? <div className="member-role-menu__separator" /> : null}
+                  {canManageChannels ? (
+                  <button
+                    type="button"
                     className="member-role-menu__item member-role-menu__item--danger"
                     onClick={deleteCategoryFromContextMenu}
                   >
                     Удалить канал
                   </button>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -2384,7 +2431,7 @@ export const ServersSidebar = memo(({
                 onDragOver={(event) => handleChannelDragOver(event, "text", null, "")}
                 onDrop={(event) => handleChannelDrop(event, "text", null, "")}
               >
-                {renderTextChannelListItems(uncategorizedTextChannels, "")}
+                {renderTextChannelListItems(visibleUncategorizedTextChannels, "")}
               </ul>
             </div>
           ) : null}
@@ -2395,7 +2442,7 @@ export const ServersSidebar = memo(({
                 <span>Голосовые каналы</span>
                 <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
               </div>
-              {renderVoiceChannels(uncategorizedVoiceChannels, "")}
+              {renderVoiceChannels(visibleUncategorizedVoiceChannels, "")}
             </div>
           ) : null}
 
@@ -2403,8 +2450,10 @@ export const ServersSidebar = memo(({
             const categoryId = getDragCategoryId(category.id);
             const textChannels = textChannelsByCategory.get(categoryId) || EMPTY_CHANNEL_LIST;
             const voiceChannels = voiceChannelsByCategory.get(categoryId) || EMPTY_CHANNEL_LIST;
+            const visibleTextChannels = getVisibleServerChannels("text", textChannels);
+            const visibleVoiceChannels = getVisibleServerChannels("voice", voiceChannels);
             const isCollapsed = Boolean(category.collapsed);
-            const hasChannels = textChannels.length > 0 || voiceChannels.length > 0;
+            const hasChannels = visibleTextChannels.length > 0 || visibleVoiceChannels.length > 0;
 
             return (
               <div
@@ -2438,9 +2487,9 @@ export const ServersSidebar = memo(({
                         onDragOver={(event) => handleChannelDragOver(event, "text", null, category.id)}
                         onDrop={(event) => handleChannelDrop(event, "text", null, category.id)}
                       >
-                        {renderTextChannelListItems(textChannels, category.id)}
+                        {renderTextChannelListItems(visibleTextChannels, category.id)}
                       </ul>
-                      {renderVoiceChannels(voiceChannels, category.id)}
+                      {renderVoiceChannels(visibleVoiceChannels, category.id)}
                     </>
                   ) : (
                     <button

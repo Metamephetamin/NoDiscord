@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { removeChannelCategoryWithChannels } from "../../features/menu-main/channelManagementUtils.js";
+import { getMutedChannelKey, toggleMutedChannelKey } from "../../features/menu-main/mutedServerChannels.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const readRepoFile = (relativePath) =>
@@ -53,4 +54,31 @@ test("created channels do not reopen inline rename mode", () => {
 
   assert.match(createServerChannelSource, /setChannelRenameState\(null\);/);
   assert.doesNotMatch(createServerChannelSource, /setChannelRenameState\(\{\s*type:/);
+});
+
+test("muted channel keys are server scoped and toggle without duplicates", () => {
+  const textKey = getMutedChannelKey("server-a", "text", "general");
+  const voiceKey = getMutedChannelKey("server-a", "voice", "general");
+  const otherServerKey = getMutedChannelKey("server-b", "text", "general");
+
+  assert.notEqual(textKey, voiceKey);
+  assert.notEqual(textKey, otherServerKey);
+
+  const mutedOnce = toggleMutedChannelKey({}, textKey);
+  const mutedTwice = toggleMutedChannelKey(mutedOnce, textKey);
+
+  assert.equal(mutedOnce[textKey], true);
+  assert.equal(Object.keys(mutedOnce).length, 1);
+  assert.deepEqual(mutedTwice, {});
+});
+
+test("server channel mute is available without channel management permissions", () => {
+  const source = readRepoFile("src/components/ServerWorkspace.jsx");
+  const openChannelContextMenuStart = source.indexOf("const openChannelContextMenu =");
+  const deleteCategoryContextMenuStart = source.indexOf("const deleteCategoryFromContextMenu =", openChannelContextMenuStart);
+  const openChannelContextMenuSource = source.slice(openChannelContextMenuStart, deleteCategoryContextMenuStart);
+
+  assert.doesNotMatch(openChannelContextMenuSource, /canManageChannels/);
+  assert.match(source, /onToggleServerChannelMute\?\.\(\{/);
+  assert.match(source, /categoryContextMenu\.muted \? "Включить уведомления" : "Заглушить канал"/);
 });

@@ -1448,6 +1448,10 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   color: #eef3ff;
 }
 
+.channel-item--muted {
+  color: rgba(188, 198, 217, 0.62);
+}
+
 .channel-item--editing {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(255, 255, 255, 0.14);
@@ -1485,12 +1489,28 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .channel-item__draft,
+.channel-item__muted,
 .channel-item__button .sidebar-unread-badge {
   flex: 0 0 auto;
   margin-left: auto;
 }
 
+.channel-item__muted {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(214, 220, 233, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .channel-item__draft + .sidebar-unread-badge {
+  margin-left: 6px;
+}
+
+.channel-item__muted + .channel-item__draft,
+.channel-item__muted + .sidebar-unread-badge {
   margin-left: 6px;
 }
 

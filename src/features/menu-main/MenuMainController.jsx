@@ -114,6 +114,13 @@ import { buildMenuMainQuickSwitcherItems } from "./menuMainQuickSwitcher";
 import { buildActiveContacts } from "./menuMainActiveContacts";
 import { mergeCurrentVoiceParticipants } from "./voiceParticipantsViewUtils";
 import {
+  getMutedChannelKey,
+  getMutedChannelsStorageKey,
+  readMutedServerChannels,
+  toggleMutedChannelKey,
+  writeMutedServerChannels,
+} from "./mutedServerChannels";
+import {
   EMPTY_ARRAY,
   MAX_PROFILE_NICKNAME_LENGTH,
   clampDeviceVolumePercent,
@@ -725,6 +732,10 @@ export default function MenuMain({
 
   useTransientScrollbars();
 
+  useEffect(() => {
+    setMutedServerChannels(readMutedServerChannels(mutedServerChannelsStorageKey));
+  }, [mutedServerChannelsStorageKey]);
+
   const requestLeaveVoiceChannel = useCallback(() => {
     if (!leaveVoiceChannelRef.current) {
       return Promise.resolve();
@@ -786,6 +797,10 @@ export default function MenuMain({
     chatBackgroundNameStorageKey,
     chatBackgroundFitStorageKey,
   } = useMenuMainStorageKeys(user);
+  const mutedServerChannelsStorageKey = getMutedChannelsStorageKey(currentUserId);
+  const [mutedServerChannels, setMutedServerChannels] = useState(() =>
+    readMutedServerChannels(mutedServerChannelsStorageKey)
+  );
   const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
   const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {
@@ -1502,12 +1517,13 @@ export default function MenuMain({
           serverName: server.name || "Сервер",
           channelId: channel.id,
           channelName: normalizeTextChannelName(channel.name, "channel"),
+          muted: Boolean(mutedServerChannels[getMutedChannelKey(server.id, "text", channel.id)]),
         });
       });
     });
 
     return nextMap;
-  }, [servers]);
+  }, [mutedServerChannels, servers]);
   const directChannelFriendMap = useMemo(
     () =>
       new Map(
@@ -1663,9 +1679,21 @@ export default function MenuMain({
     () => totalDirectUnreadCount + incomingFriendRequestCount,
     [incomingFriendRequestCount, totalDirectUnreadCount]
   );
+  const visibleServerUnreadCounts = useMemo(() => {
+    const nextCounts = {};
+    Object.entries(serverUnreadCounts || {}).forEach(([channelKey, count]) => {
+      const parsedChannel = parseServerChatChannelId(channelKey);
+      if (parsedChannel && mutedServerChannels[getMutedChannelKey(parsedChannel.serverId, "text", parsedChannel.channelId)]) {
+        return;
+      }
+
+      nextCounts[channelKey] = count;
+    });
+    return nextCounts;
+  }, [mutedServerChannels, serverUnreadCounts]);
   const totalServerUnreadCount = useMemo(
-    () => getTotalUnreadCount(serverUnreadCounts),
-    [serverUnreadCounts]
+    () => getTotalUnreadCount(visibleServerUnreadCounts),
+    [visibleServerUnreadCounts]
   );
   const activeServerUnreadCount = useMemo(() => {
     if (!activeServer?.id) {
@@ -1673,10 +1701,14 @@ export default function MenuMain({
     }
 
     return (activeServer.textChannels || []).reduce((sum, channel) => {
+      if (mutedServerChannels[getMutedChannelKey(activeServer.id, "text", channel.id)]) {
+        return sum;
+      }
+
       const scopedChannelId = getScopedChatChannelId(activeServer.id, channel.id);
-      return sum + Math.max(0, Number(serverUnreadCounts?.[scopedChannelId]) || 0);
+      return sum + Math.max(0, Number(visibleServerUnreadCounts?.[scopedChannelId]) || 0);
     }, 0);
-  }, [activeServer, serverUnreadCounts]);
+  }, [activeServer, mutedServerChannels, visibleServerUnreadCounts]);
   const currentVoiceParticipants = useMemo(() => {
     if (!currentVoiceChannel) {
       return [];
@@ -1966,6 +1998,22 @@ export default function MenuMain({
 
     setServerUnreadCounts((previous) => clearUnreadCount(previous, channelKey));
   };
+  const toggleServerChannelMute = useCallback(({ serverId, type = "text", channelId } = {}) => {
+    const mutedChannelKey = getMutedChannelKey(serverId, type, channelId);
+    if (!mutedChannelKey) {
+      return;
+    }
+
+    setMutedServerChannels((previous) => {
+      const nextState = toggleMutedChannelKey(previous, mutedChannelKey);
+      writeMutedServerChannels(mutedServerChannelsStorageKey, nextState);
+      return nextState;
+    });
+
+    if (String(type || "text") !== "voice") {
+      setServerUnreadCounts((previous) => clearUnreadCount(previous, getScopedChatChannelId(serverId, channelId)));
+    }
+  }, [mutedServerChannelsStorageKey]);
   const logVoiceHubError = (label, error) => {
     if (isUnauthorizedError(error)) {
       return;
@@ -3293,11 +3341,15 @@ export default function MenuMain({
         return;
       }
 
+      if (Boolean(channelInfo?.isMuted || channelInfo?.muted)) {
+        return;
+      }
+
       incrementServerUnread(scopedChannelId);
 
       if (!shouldNotifyForUnread({
         notificationsEnabled: serverNotificationsEnabled,
-        muted: Boolean(channelInfo?.isMuted || channelInfo?.muted),
+        muted: false,
         shouldTrackUnread,
       })) {
         return;
@@ -6777,7 +6829,8 @@ export default function MenuMain({
       canManageChannels={canManageChannels}
       channelSettingsState={channelSettingsState}
       channelRenameState={channelRenameState}
-      serverUnreadCounts={serverUnreadCounts}
+      serverUnreadCounts={visibleServerUnreadCounts}
+      mutedServerChannels={mutedServerChannels}
       chatDraftPresence={chatDraftPresence}
       currentTextChannel={currentTextChannel}
       selectedVoiceChannel={selectedVoiceChannel}
@@ -6828,6 +6881,7 @@ export default function MenuMain({
       onUpdateChannelRenameValue={updateChannelRenameValue}
       onSubmitChannelRename={submitChannelRename}
       onCancelChannelRename={cancelChannelRename}
+      onToggleServerChannelMute={toggleServerChannelMute}
       onJoinVoiceChannel={stableJoinVoiceChannel}
       onLeaveVoiceChannel={stableLeaveVoiceChannel}
       onPrewarmVoiceChannel={prewarmVoiceChannel}
