@@ -3,6 +3,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 import PercentageSlider from "./PercentageSlider";
 import { getProfileCustomizationClassName, getProfileCustomizationStyle } from "../utils/profileCustomization";
+import "../css/MenuProfileDeviceMenu.css";
 
 const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   <button type="button" className="device-menu__settings" onClick={onClick}>

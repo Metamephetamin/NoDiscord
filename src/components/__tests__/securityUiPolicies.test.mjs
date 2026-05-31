@@ -164,10 +164,23 @@ test("self headphones mute does not force local microphone mute", () => {
 });
 
 test("voice settings microphone meter stays compact", () => {
+  const profileDeviceCss = readRepoFile("src/css/MenuProfileDeviceMenu.css");
   const mainCss = readRepoFile("src/css/MenuMain.css");
 
-  assert.match(mainCss, /\.device-menu__meter span,\n\.voice-settings-meter__bars span \{\s*height: 7px;/);
+  assert.match(profileDeviceCss, /\.device-menu__meter span \{\s*height: 7px;/);
   assert.match(mainCss, /\.voice-settings-card--voice \.voice-settings-meter \{\s*margin-top: 22px;\s*gap: 12px;/);
+});
+
+test("profile device menu styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const profileDeviceCss = readRepoFile("src/css/MenuProfileDeviceMenu.css");
+  const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+
+  assert.match(profileSource, /import "\.\.\/css\/MenuProfileDeviceMenu\.css";/);
+  assert.match(profileDeviceCss, /\.device-menu \{/);
+  assert.match(profileDeviceCss, /\.device-menu__panel \{/);
+  assert.match(profileDeviceCss, /html\[data-ui-theme="light"\] \.device-menu__panel/);
+  assert.doesNotMatch(mainCss, /device-menu/);
 });
 
 test("server management settings are hidden without permissions", () => {
