@@ -121,3 +121,12 @@ test("speaking indicators animate without adding profile status dots", () => {
   assert.match(profileCss, /\.avatar-shell--speaking::after \{[\s\S]*?content: none;/);
   assert.match(profileCss, /@keyframes profile-speaking-avatar-pulse/);
 });
+
+test("light theme text tools menu is opaque and readable", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+
+  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?background: #ffffff;/);
+  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?backdrop-filter: none;/);
+  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action b/);
+  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action small/);
+});
