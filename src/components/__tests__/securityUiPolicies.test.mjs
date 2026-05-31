@@ -419,6 +419,18 @@ test("stream viewer styles are split out of the main menu stylesheet", () => {
   assert.doesNotMatch(mainCss, /\.stream-viewer__button/);
 });
 
+test("direct call overlay styles stay split from the main menu stylesheet", () => {
+  const overlaySource = readRepoFile("src/components/MenuMainOverlays.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const directCallCss = readRepoFileIfExists("src/css/DirectCallOverlay.css");
+
+  assert.match(overlaySource, /import "\.\.\/css\/DirectCallOverlay\.css";/);
+  assert.doesNotMatch(mainCss, /\.direct-call-overlay/);
+  assert.doesNotMatch(mainCss, /\.direct-call-inline/);
+  assert.match(directCallCss, /\.direct-call-overlay/);
+  assert.match(directCallCss, /\.direct-call-inline/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 

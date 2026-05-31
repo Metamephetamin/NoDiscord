@@ -11,6 +11,7 @@ import { buildDonationUrlForAmount, getDonationAmountOptions } from "../utils/do
 import { createDonationPayment } from "../utils/donationPayments";
 import { formatTimestamp } from "../utils/textChatHelpers";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
+import "../css/DirectCallOverlay.css";
 
 const DONATION_DETAILS = [
   {
