@@ -1,0 +1,495 @@
+/* Styles scoped to composer popovers in TextChatComposer.jsx. Keep this file imported by that component. */
+
+
+
+.composer-text-tools-menu {
+  position: absolute;
+  right: 48px;
+  bottom: calc(100% + 12px);
+  width: 276px;
+  max-height: 380px;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(17, 20, 29, 0.98), rgba(11, 14, 22, 0.98));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+  z-index: 225;
+}
+
+.composer-text-tools-menu__action {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(126, 101, 255, 0.16);
+  color: #eef2ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-text-tools-menu__action:hover:not(:disabled) {
+  background: rgba(126, 101, 255, 0.25);
+}
+
+.composer-text-tools-menu__action:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.composer-text-tools-menu__action-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8b5cf6, #60a5fa);
+}
+
+.composer-text-tools-menu__action-icon--punctuation {
+  position: relative;
+}
+
+.composer-text-tools-menu__action-icon--punctuation::before {
+  content: ".,";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.composer-text-tools-menu__action b,
+.composer-text-tools-menu__action small {
+  display: block;
+  min-width: 0;
+}
+
+.composer-text-tools-menu__action b {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.composer-text-tools-menu__action small {
+  margin-top: 2px;
+  color: #aeb8cd;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.composer-text-tools-menu__header {
+  display: grid;
+  gap: 3px;
+  padding: 12px 2px 10px;
+}
+
+.composer-text-tools-menu__header strong {
+  color: #f4f7ff;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.composer-text-tools-menu__header span {
+  color: #9aa7bf;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.composer-text-tools-menu__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  max-height: 226px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.composer-text-tools-menu__item {
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #e8edf9;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.composer-text-tools-menu__item:hover:not(:disabled) {
+  background: rgba(125, 101, 255, 0.24);
+  color: #ffffff;
+}
+
+.composer-text-tools-menu__item:disabled {
+  opacity: 0.56;
+  cursor: default;
+}
+
+.composer-text-tools-menu__error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 89, 109, 0.14);
+  color: #ffb5c0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.composer-emoji-picker {
+  position: absolute;
+  right: 14px;
+  bottom: calc(100% + 12px);
+  width: 264px;
+  max-height: 334px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(17, 20, 29, 0.98), rgba(11, 14, 22, 0.98));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+  z-index: 220;
+}
+
+.composer-emoji-picker__search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-bottom: 10px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.composer-emoji-picker__search-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(216, 223, 242, 0.78);
+  border-radius: 50%;
+  position: relative;
+}
+
+.composer-emoji-picker__search-icon::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  width: 7px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(216, 223, 242, 0.78);
+  transform: rotate(45deg);
+}
+
+.composer-emoji-picker__search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.composer-emoji-picker__search input::placeholder {
+  color: rgba(216, 223, 242, 0.58);
+}
+
+.composer-emoji-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-emoji-picker__item {
+  min-height: 42px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.composer-emoji-picker__item:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.composer-emoji-picker__item .animated-emoji-glyph {
+  --animated-emoji-size: 28px;
+}
+
+.composer-emoji-picker__item .animated-emoji-glyph__fallback {
+  font-size: 26px;
+  font-weight: 400;
+  color: inherit;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.composer-emoji-picker__empty {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(216, 223, 242, 0.72);
+  font-size: 13px;
+  text-align: center;
+}
+
+.mention-suggestions {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(18, 21, 29, 0.98), rgba(12, 14, 21, 0.98));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+  z-index: 225;
+}
+
+.mention-suggestions__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #f4f7ff;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease, transform 0.16s ease;
+}
+
+.mention-suggestions__item:hover,
+.mention-suggestions__item--active {
+  background: rgba(96, 128, 255, 0.14);
+}
+
+.mention-suggestions__avatar {
+  width: 32px;
+  height: 32px;
+  display: block;
+  border-radius: 50%;
+  clip-path: inset(0 round 50%);
+  object-fit: cover;
+  image-rendering: optimizeQuality;
+  image-rendering: -webkit-optimize-contrast;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  flex: 0 0 auto;
+}
+
+.mention-suggestions__swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.mention-suggestions__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mention-suggestions__name {
+  color: #f5f7ff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.mention-suggestions__handle {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  color: #9fb0d8;
+  font-size: 12px;
+  line-height: 1.2;
+  gap: 0;
+}
+
+.mention-suggestions__meta {
+  margin-left: 8px;
+  color: #7284aa;
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker,
+html[data-ui-theme="light"] .composer-text-tools-menu,
+html[data-ui-theme="purple"] .composer-emoji-picker,
+html[data-ui-theme="purple"] .composer-text-tools-menu {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+  box-shadow: 0 10px 24px var(--app-shadow);
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu {
+  border-color: rgba(148, 163, 184, 0.34);
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  backdrop-filter: none;
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__header strong,
+html[data-ui-theme="purple"] .composer-text-tools-menu__header strong {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__header span,
+html[data-ui-theme="purple"] .composer-text-tools-menu__header span {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__action b,
+html[data-ui-theme="light"] .composer-text-tools-menu__item {
+  color: #111827;
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__action small {
+  color: #64748b;
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #991b1b;
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__action,
+html[data-ui-theme="light"] .composer-text-tools-menu__item,
+html[data-ui-theme="purple"] .composer-text-tools-menu__action,
+html[data-ui-theme="purple"] .composer-text-tools-menu__item {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+}
+
+html[data-ui-theme="light"] .composer-text-tools-menu__action:hover:not(:disabled),
+html[data-ui-theme="light"] .composer-text-tools-menu__item:hover:not(:disabled),
+html[data-ui-theme="purple"] .composer-text-tools-menu__action:hover:not(:disabled),
+html[data-ui-theme="purple"] .composer-text-tools-menu__item:hover:not(:disabled) {
+  background: var(--app-hover-bg);
+  color: var(--app-text-strong);
+}
+
+@media (max-width: 900px) {
+
+  .composer-emoji-picker {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: calc(100% + 10px);
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .mention-suggestions {
+    left: 8px;
+    right: 8px;
+    bottom: calc(100% + 10px);
+    border-radius: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+
+  .composer-emoji-picker__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .composer-emoji-picker__item {
+    min-height: 38px;
+    border-radius: 12px;
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 430px) {
+
+  .composer-text-tools-menu {
+    left: 8px;
+    right: 8px;
+    width: auto;
+  }
+
+  .composer-emoji-picker,
+  .mention-suggestions {
+    left: 6px;
+    right: 6px;
+  }
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker,
+html[data-ui-theme="light"] .mention-suggestions {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker__item,
+html[data-ui-theme="light"] .mention-suggestions__item {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker__item:hover,
+html[data-ui-theme="light"] .mention-suggestions__item:hover,
+html[data-ui-theme="light"] .mention-suggestions__item--active {
+  background: #f3f6fb;
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .mention-suggestions__handle,
+html[data-ui-theme="light"] .mention-suggestions__meta,
+html[data-ui-theme="light"] .composer-emoji-picker__empty {
+  color: #5f6b82;
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker__search {
+  border-color: #d9e0ec;
+  background: #f8fafc;
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker__search input {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .composer-emoji-picker__search input::placeholder {
+  color: #7c8799;
+}

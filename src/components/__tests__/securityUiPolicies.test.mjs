@@ -217,12 +217,12 @@ test("speaking indicators animate without adding profile status dots", () => {
 });
 
 test("light theme text tools menu is opaque and readable", () => {
-  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const composerPopoversCss = readRepoFileIfExists("src/css/TextChatComposerPopovers.css");
 
-  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?background: #ffffff;/);
-  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?backdrop-filter: none;/);
-  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action b/);
-  assert.match(textChatCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action small/);
+  assert.match(composerPopoversCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?background: #ffffff;/);
+  assert.match(composerPopoversCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu \{[\s\S]*?backdrop-filter: none;/);
+  assert.match(composerPopoversCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action b/);
+  assert.match(composerPopoversCss, /html\[data-ui-theme="light"\] \.composer-text-tools-menu__action small/);
 });
 
 test("message search input text is readable on dark chat topbar", () => {
@@ -763,6 +763,22 @@ test("text chat panel styles stay split from the main text chat stylesheet", () 
   assert.doesNotMatch(textChatCss, /^\s*\.message-search-panel[^\n{]*\{/m);
   assert.doesNotMatch(textChatCss, /^\s*\.chat-pins[^\n{]*\{/m);
   assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.chat-pins/m);
+});
+
+test("text chat composer popover styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const composerPopoversCss = readRepoFileIfExists("src/css/TextChatComposerPopovers.css");
+  const composerSource = readRepoFile("src/components/TextChatComposer.jsx");
+
+  assert.match(composerSource, /import "\.\.\/css\/TextChatComposerPopovers\.css";/);
+  assert.match(composerPopoversCss, /\.composer-text-tools-menu \{/);
+  assert.match(composerPopoversCss, /\.composer-emoji-picker \{/);
+  assert.match(composerPopoversCss, /\.mention-suggestions \{/);
+  assert.match(composerPopoversCss, /html\[data-ui-theme="light"\] \.composer-emoji-picker/);
+  assert.doesNotMatch(textChatCss, /^\s*\.composer-text-tools-menu[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^\s*\.composer-emoji-picker[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^\s*\.mention-suggestions[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.composer-emoji-picker/m);
 });
 
 test("media frame editor styles stay split from the main menu stylesheet", () => {

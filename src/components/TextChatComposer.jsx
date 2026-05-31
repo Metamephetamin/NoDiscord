@@ -17,6 +17,7 @@ import { formatFileSize } from "../utils/textChatHelpers";
 import { COMPOSER_TRANSLATION_LANGUAGES, translateComposerText } from "../utils/textTranslation";
 import { punctuateComposerText } from "../utils/speechPunctuation";
 import { copyTextToClipboard } from "../utils/clipboard";
+import "../css/TextChatComposerPopovers.css";
 
 const LOCATION_DESIRED_ACCURACY_METERS = 25;
 const LOCATION_ACCURACY_TIMEOUT_MS = 9000;
@@ -1387,5 +1388,4 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
 TextChatComposer.displayName = "TextChatComposer";
 
 export default memo(TextChatComposer, areTextChatComposerPropsEqual);
-
 
