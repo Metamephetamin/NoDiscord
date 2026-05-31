@@ -768,6 +768,7 @@ export default function MenuMain({
     notificationSoundCustomDataStorageKey,
     notificationSoundCustomNameStorageKey,
     systemSoundVolumeStorageKey,
+    autoInputSensitivityStorageKey,
     audioInputDeviceStorageKey,
     audioOutputDeviceStorageKey,
     videoInputDeviceStorageKey,
@@ -899,6 +900,7 @@ export default function MenuMain({
     voiceClientRef,
     noiseSuppressionStorageKey,
     echoCancellationStorageKey,
+    autoInputSensitivity,
   });
   const {
     directCallHistory,
@@ -4070,6 +4072,28 @@ export default function MenuMain({
     voiceClientRef.current.connect(user).catch((error) => logVoiceHubError("Ошибка обновления пользователя в голосовом хабе:", error));
   }, [user?.id, user?.nickname, user?.firstName, user?.first_name, user?.avatarUrl, user?.avatar]);
   useEffect(() => {
+    if (!autoInputSensitivityStorageKey || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      setAutoInputSensitivity(window.localStorage.getItem(autoInputSensitivityStorageKey) !== "false");
+    } catch {
+      setAutoInputSensitivity(true);
+    }
+  }, [autoInputSensitivityStorageKey]);
+  useEffect(() => {
+    if (!autoInputSensitivityStorageKey || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(autoInputSensitivityStorageKey, autoInputSensitivity ? "true" : "false");
+    } catch {
+      // Voice sensitivity persistence is optional.
+    }
+  }, [autoInputSensitivity, autoInputSensitivityStorageKey]);
+  useEffect(() => {
     const shouldMutePublishedMic =
       isMicMuted || (Boolean(currentVoiceChannel) && !isDirectCallChannelId(currentVoiceChannel) && isSoundMuted);
     const effectiveMicVolume = isMicTestActive ? micVolume : currentVoiceChannel ? (shouldMutePublishedMic ? 0 : micVolume) : micVolume;
@@ -5860,7 +5884,7 @@ export default function MenuMain({
     settingsNavItems[0] ||
     SETTINGS_NAV_ITEMS[0];
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
-  const activeMicSettingsBars = getMeterActiveBars(micLevel, 48);
+  const activeMicSettingsBars = getMeterActiveBars(micLevel, 32);
   const displayedPingMs = currentVoiceChannel ? resolvedVoicePingMs : resolvedApiPingMs;
   const pingTone = getPingTone(displayedPingMs);
   const pingTooltip =
@@ -5877,6 +5901,7 @@ export default function MenuMain({
       return;
     }
 
+    setIsMicMuted(false);
     setIsMicTestActive(true);
   };
 

@@ -11192,13 +11192,13 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .voice-settings-meter__bars {
-  grid-template-columns: repeat(48, minmax(0, 1fr));
+  grid-template-columns: repeat(32, minmax(0, 1fr));
   flex: 1;
 }
 
 .device-menu__meter span,
 .voice-settings-meter__bars span {
-  height: 18px;
+  height: 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
 }

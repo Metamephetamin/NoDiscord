@@ -71,3 +71,21 @@ test("avatar crop editor exposes vertical positioning control", () => {
   assert.match(editorSource, /ariaLabel="Положение аватара вверх и вниз"/);
   assert.match(editorSource, /value=\{normalizedDraftFrame\.y\}/);
 });
+
+test("microphone test and auto sensitivity are wired to the voice client", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const processingSource = readRepoFile("src/features/menu-main/useMenuMainVoiceProcessing.js");
+  const voiceClientSource = readRepoFile("src/webrtc/livekitVoiceRoomClient.js");
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const storageSource = readRepoFile("src/features/menu-main/menuMainWorkspaceStorage.js");
+
+  assert.match(controllerSource, /setIsMicMuted\(false\);\s*setIsMicTestActive\(true\);/);
+  assert.match(controllerSource, /const activeMicSettingsBars = getMeterActiveBars\(micLevel, 32\);/);
+  assert.match(settingsSource, /Array\.from\(\{ length: 32 \}\)/);
+  assert.match(storageSource, /nd:auto-input-sensitivity:/);
+  assert.match(processingSource, /client\.setAutoInputSensitivity\?\.\(currentVoiceProcessingState\.autoInputSensitivity\)/);
+  assert.match(processingSource, /voiceClientRef\.current\.setAutoInputSensitivity\?\.\(autoInputSensitivity\)/);
+  assert.match(voiceClientSource, /let autoInputSensitivityEnabled = true;/);
+  assert.match(voiceClientSource, /async setAutoInputSensitivity\(enabled\)/);
+  assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
+});

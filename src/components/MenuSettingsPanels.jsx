@@ -1833,7 +1833,7 @@ export const VoiceSettingsPanel = ({
             {isMicTestActive ? "Остановить проверку" : "Проверка микрофона"}
           </button>
           <div className="voice-settings-meter__bars" aria-hidden="true">
-            {Array.from({ length: 48 }).map((_, index) => (
+            {Array.from({ length: 32 }).map((_, index) => (
               <span key={index} className={index < activeMicSettingsBars ? "is-active" : ""} />
             ))}
           </div>

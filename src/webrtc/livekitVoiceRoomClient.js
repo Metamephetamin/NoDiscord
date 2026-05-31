@@ -540,6 +540,7 @@ export function createVoiceRoomClient({
   let audioDenoiserMode = "";
   let noiseSuppressionStrength = 85;
   let echoCancellationEnabled = true;
+  let autoInputSensitivityEnabled = true;
   let localScreenStream = null;
   let localCameraStream = null;
   let localPreviewShareMode = "";
@@ -1990,14 +1991,18 @@ const handleDeviceChange = () => {
         nextState.noiseFloor = previousNoiseFloor * 0.94 + rms * 0.06;
       }
 
-      const adaptiveOpenThreshold = Math.min(
-        gateProfile.maxAdaptiveOpenThreshold || gateProfile.openThreshold,
-        Math.max(gateProfile.openThreshold, nextState.noiseFloor * (gateProfile.adaptiveOpenRatio || 1))
-      );
-      const adaptiveCloseThreshold = Math.max(
-        gateProfile.closeThreshold,
-        Math.min(adaptiveOpenThreshold * 0.82, nextState.noiseFloor * (gateProfile.adaptiveCloseRatio || 1))
-      );
+      const adaptiveOpenThreshold = autoInputSensitivityEnabled
+        ? Math.min(
+          gateProfile.maxAdaptiveOpenThreshold || gateProfile.openThreshold,
+          Math.max(gateProfile.openThreshold, nextState.noiseFloor * (gateProfile.adaptiveOpenRatio || 1))
+        )
+        : gateProfile.openThreshold;
+      const adaptiveCloseThreshold = autoInputSensitivityEnabled
+        ? Math.max(
+          gateProfile.closeThreshold,
+          Math.min(adaptiveOpenThreshold * 0.82, nextState.noiseFloor * (gateProfile.adaptiveCloseRatio || 1))
+        )
+        : gateProfile.closeThreshold;
 
       if (rms >= adaptiveOpenThreshold) {
         nextState.isOpen = true;
@@ -4830,6 +4835,18 @@ const handleDeviceChange = () => {
       });
 
       await applyVoiceProcessingPipelineChange({ reuseCapture: false });
+    },
+
+    async setAutoInputSensitivity(enabled) {
+      const nextEnabled = Boolean(enabled);
+      if (autoInputSensitivityEnabled === nextEnabled) {
+        return;
+      }
+
+      autoInputSensitivityEnabled = nextEnabled;
+      logVoiceDebug("local-audio:auto-input-sensitivity-set", {
+        autoInputSensitivityEnabled,
+      });
     },
 
     async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {

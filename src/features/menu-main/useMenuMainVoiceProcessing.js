@@ -53,6 +53,7 @@ export default function useMenuMainVoiceProcessing({
   voiceClientRef,
   noiseSuppressionStorageKey,
   echoCancellationStorageKey,
+  autoInputSensitivity,
 }) {
   const [noiseSuppressionMode, setNoiseSuppressionMode] = useState(DEFAULT_VOICE_INPUT_MODE);
   const [audioDenoiserMode, setAudioDenoiserMode] = useState(AUDIO_DENOISER_MODE_DEEPFILTERNET3);
@@ -67,6 +68,7 @@ export default function useMenuMainVoiceProcessing({
       audioDenoiserMode: AUDIO_DENOISER_MODE_DEEPFILTERNET3,
       noiseSuppressionStrength: getVoiceInputModeNoiseStrength(DEFAULT_VOICE_INPUT_MODE),
       echoCancellationEnabled: true,
+      autoInputSensitivity: true,
     },
   }), []);
 
@@ -76,8 +78,9 @@ export default function useMenuMainVoiceProcessing({
       audioDenoiserMode,
       noiseSuppressionStrength,
       echoCancellationEnabled,
+      autoInputSensitivity,
     };
-  }, [audioDenoiserMode, echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
+  }, [audioDenoiserMode, autoInputSensitivity, echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
 
   useEffect(() => {
     if (!user) {
@@ -180,6 +183,9 @@ export default function useMenuMainVoiceProcessing({
     client.setEchoCancellationEnabled(currentVoiceProcessingState.echoCancellationEnabled).catch((error) => {
       console.error("Ошибка применения стартового эхоподавления:", error);
     });
+    client.setAutoInputSensitivity?.(currentVoiceProcessingState.autoInputSensitivity).catch((error) => {
+      console.error("Ошибка применения автоматической чувствительности:", error);
+    });
   }, [voiceClientRef, voiceProcessingStateRef]);
 
   useEffect(() => {
@@ -221,6 +227,16 @@ export default function useMenuMainVoiceProcessing({
       console.error("Ошибка переключения эхоподавления:", error);
     });
   }, [echoCancellationEnabled, voiceClientRef]);
+
+  useEffect(() => {
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    voiceClientRef.current.setAutoInputSensitivity?.(autoInputSensitivity).catch((error) => {
+      console.error("Ошибка переключения автоматической чувствительности:", error);
+    });
+  }, [autoInputSensitivity, voiceClientRef]);
 
   const noiseProfileOptions = NOISE_PROFILE_OPTIONS;
   const activeNoiseProfile = useMemo(
