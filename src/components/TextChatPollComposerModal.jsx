@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_POLL_THEME_ID, POLL_THEME_PRESETS } from "../utils/pollMessages";
 
 const DEFAULT_SETTINGS = {
-  showWhoVoted: true,
+  anonymous: true,
   allowMultipleAnswers: false,
   allowAddingOptions: false,
   allowRevoting: false,
@@ -13,9 +13,9 @@ const DEFAULT_SETTINGS = {
 
 const SETTINGS_ITEMS = [
   {
-    key: "showWhoVoted",
-    title: "Показывать голоса",
-    description: "Показывать, кто проголосовал за вариант.",
+    key: "anonymous",
+    title: "Анонимное голосование",
+    description: "Не показывать, кто выбрал конкретный вариант.",
     accentClassName: "poll-composer__setting-icon--blue",
   },
   {

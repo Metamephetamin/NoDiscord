@@ -141,3 +141,15 @@ test("clipboard images can be pasted from the whole text chat area", () => {
   assert.match(viewSource, /className=\{`textchat-container/);
   assert.match(viewSource, /onPaste=\{handleComposerPaste\}/);
 });
+
+test("poll votes persist locally and expose anonymous mode", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");
+
+  assert.match(composerSource, /anonymous: true/);
+  assert.match(composerSource, /title: "Анонимное голосование"/);
+  assert.match(messageListSource, /function readStoredPollVoteState/);
+  assert.match(messageListSource, /function writeStoredPollVoteState/);
+  assert.match(messageListSource, /nd:poll-vote:/);
+  assert.match(messageListSource, /messageId=\{messageItem\.id\} currentUserId=\{currentUserId\}/);
+});

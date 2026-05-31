@@ -137,7 +137,8 @@ export function normalizePollMessage(rawPoll) {
     votes,
     totalVoters,
     settings: {
-      showWhoVoted: Boolean(rawPoll?.settings?.showWhoVoted),
+      anonymous: Boolean(rawPoll?.settings?.anonymous ?? rawPoll?.settings?.showWhoVoted === false),
+      showWhoVoted: !Boolean(rawPoll?.settings?.anonymous ?? rawPoll?.settings?.showWhoVoted === false),
       allowMultipleAnswers: Boolean(rawPoll?.settings?.allowMultipleAnswers),
       allowAddingOptions: Boolean(rawPoll?.settings?.allowAddingOptions),
       allowRevoting: Boolean(rawPoll?.settings?.allowRevoting),

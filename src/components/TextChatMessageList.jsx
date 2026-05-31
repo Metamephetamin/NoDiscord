@@ -1096,7 +1096,54 @@ const MessageText = memo(function MessageText({ text, mentions, currentUserId })
 
 MessageText.displayName = "MessageText";
 
-function MessagePollCard({ poll }) {
+function getPollVoteStorageKey({ poll, messageId, currentUserId }) {
+  const normalizedUserId = String(currentUserId || "guest").trim() || "guest";
+  const normalizedMessageId = String(messageId || "").trim();
+  const fallbackPollKey = JSON.stringify({
+    question: String(poll?.question || ""),
+    options: Array.isArray(poll?.options) ? poll.options.map((option) => `${option?.id}:${option?.text}`) : [],
+  });
+  return `nd:poll-vote:${normalizedUserId}:${normalizedMessageId || fallbackPollKey}`;
+}
+
+function readStoredPollVoteState(storageKey) {
+  if (typeof localStorage === "undefined" || !storageKey) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      selectedOptionIds: Array.isArray(parsed.selectedOptionIds)
+        ? parsed.selectedOptionIds.map((optionId) => String(optionId || "")).filter(Boolean)
+        : [],
+      submitted: Boolean(parsed.submitted),
+      votes: parsed.votes && typeof parsed.votes === "object" ? parsed.votes : null,
+      totalVoters: Math.max(0, Number(parsed.totalVoters) || 0),
+      addedOptions: Array.isArray(parsed.addedOptions) ? parsed.addedOptions : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPollVoteState(storageKey, state) {
+  if (typeof localStorage === "undefined" || !storageKey) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // Poll state is a convenience cache.
+  }
+}
+
+function MessagePollCard({ poll, messageId, currentUserId }) {
   const pollResetKey = JSON.stringify({
     question: String(poll?.question || ""),
     themeId: String(poll?.themeId || ""),
@@ -1111,18 +1158,24 @@ function MessagePollCard({ poll }) {
     settings: poll?.settings || {},
   });
 
-  return <MessagePollCardInner key={pollResetKey} poll={poll} />;
+  return <MessagePollCardInner key={pollResetKey} poll={poll} messageId={messageId} currentUserId={currentUserId} />;
 }
 
-function MessagePollCardInner({ poll }) {
-  const [selectedOptionIds, setSelectedOptionIds] = useState([]);
-  const [submitted, setSubmitted] = useState(false);
-  const [addedOptions, setAddedOptions] = useState([]);
-  const [localVotes, setLocalVotes] = useState(() => ({ ...(poll?.votes || {}) }));
-  const [localTotalVoters, setLocalTotalVoters] = useState(() => Math.max(0, Number(poll?.totalVoters) || 0));
-  const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState([]);
+function MessagePollCardInner({ poll, messageId, currentUserId }) {
+  const pollVoteStorageKey = useMemo(
+    () => getPollVoteStorageKey({ poll, messageId, currentUserId }),
+    [currentUserId, messageId, poll]
+  );
+  const storedVoteState = useMemo(() => readStoredPollVoteState(pollVoteStorageKey), [pollVoteStorageKey]);
+  const [selectedOptionIds, setSelectedOptionIds] = useState(() => storedVoteState?.selectedOptionIds || []);
+  const [submitted, setSubmitted] = useState(() => Boolean(storedVoteState?.submitted));
+  const [addedOptions, setAddedOptions] = useState(() => storedVoteState?.addedOptions || []);
+  const [localVotes, setLocalVotes] = useState(() => ({ ...(storedVoteState?.votes || poll?.votes || {}) }));
+  const [localTotalVoters, setLocalTotalVoters] = useState(() => Math.max(0, Number(storedVoteState?.totalVoters || poll?.totalVoters) || 0));
+  const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState(() => storedVoteState?.selectedOptionIds || []);
   const options = [...(Array.isArray(poll?.options) ? poll.options : []), ...addedOptions];
   const pollTheme = useMemo(() => resolvePollTheme(poll?.themeId), [poll?.themeId]);
+  const isAnonymousPoll = Boolean(poll?.settings?.anonymous || poll?.settings?.showWhoVoted === false);
   const totalVoters = Math.max(
     localTotalVoters,
     Object.values(localVotes).reduce((sum, voteCount) => sum + Math.max(0, Number(voteCount) || 0), 0)
@@ -1156,26 +1209,32 @@ function MessagePollCardInner({ poll }) {
       return;
     }
 
-    setLocalVotes((previous) => {
-      const nextVotes = { ...previous };
+    const nextVotes = { ...localVotes };
+    let nextTotalVoters = localTotalVoters;
 
-      if (submitted && poll?.settings?.allowRevoting && lastSubmittedOptionIds.length) {
-        lastSubmittedOptionIds.forEach((optionId) => {
-          nextVotes[optionId] = Math.max(0, (Number(nextVotes[optionId]) || 0) - 1);
-        });
-      } else if (!submitted) {
-        setLocalTotalVoters((previousTotal) => previousTotal + 1);
-      }
-
-      selectedOptionIds.forEach((optionId) => {
-        nextVotes[optionId] = (Number(nextVotes[optionId]) || 0) + 1;
+    if (submitted && poll?.settings?.allowRevoting && lastSubmittedOptionIds.length) {
+      lastSubmittedOptionIds.forEach((optionId) => {
+        nextVotes[optionId] = Math.max(0, (Number(nextVotes[optionId]) || 0) - 1);
       });
+    } else if (!submitted) {
+      nextTotalVoters += 1;
+    }
 
-      return nextVotes;
+    selectedOptionIds.forEach((optionId) => {
+      nextVotes[optionId] = (Number(nextVotes[optionId]) || 0) + 1;
     });
 
+    setLocalVotes(nextVotes);
+    setLocalTotalVoters(nextTotalVoters);
     setLastSubmittedOptionIds([...selectedOptionIds]);
     setSubmitted(true);
+    writeStoredPollVoteState(pollVoteStorageKey, {
+      selectedOptionIds,
+      submitted: true,
+      votes: nextVotes,
+      totalVoters: nextTotalVoters,
+      addedOptions,
+    });
   };
 
   const handleAddOption = () => {
@@ -1189,13 +1248,23 @@ function MessagePollCardInner({ poll }) {
       return;
     }
 
-    setAddedOptions((previous) => [
-      ...previous,
-      {
-        id: `local-option-${Date.now()}-${previous.length + 1}`,
-        text: normalizedText,
-      },
-    ]);
+    setAddedOptions((previous) => {
+      const nextOptions = [
+        ...previous,
+        {
+          id: `local-option-${Date.now()}-${previous.length + 1}`,
+          text: normalizedText,
+        },
+      ];
+      writeStoredPollVoteState(pollVoteStorageKey, {
+        selectedOptionIds,
+        submitted,
+        votes: localVotes,
+        totalVoters: localTotalVoters,
+        addedOptions: nextOptions,
+      });
+      return nextOptions;
+    });
   };
 
   return (
@@ -1212,7 +1281,7 @@ function MessagePollCardInner({ poll }) {
     >
       <div className="message-poll-card__header">
         <strong>{poll?.question || "Опрос"}</strong>
-        <span className="message-poll-card__badge">Опрос</span>
+        <span className="message-poll-card__badge">{isAnonymousPoll ? "Анонимно" : "Открыто"}</span>
       </div>
 
       <div className="message-poll-card__options">
@@ -2449,7 +2518,7 @@ function TextChatMessageList({
                   )
                 ) : null}
 
-                {messagePoll ? <MessagePollCard poll={messagePoll} /> : null}
+                {messagePoll ? <MessagePollCard poll={messagePoll} messageId={messageItem.id} currentUserId={currentUserId} /> : null}
 
                 {inviteCode ? <MessageInviteCard inviteCode={inviteCode} /> : null}
 
