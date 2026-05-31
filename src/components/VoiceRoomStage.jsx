@@ -548,12 +548,10 @@ export default function VoiceRoomStage({
   isMicMuted = false,
   isSoundMuted = false,
   isScreenShareActive = false,
-  isCameraShareActive = false,
   onToggleMic,
   onToggleSound,
   onOpenTextChat,
   onScreenShareAction,
-  onOpenCamera,
   onLeave,
   isJoining = false,
   pendingParticipant = null,
@@ -897,14 +895,6 @@ export default function VoiceRoomStage({
             onClick: onScreenShareAction,
             active: isScreenShareActive,
           })}
-          {!isCameraShareActive
-            ? renderToolbarButton({
-                key: "camera",
-                icon: "camera",
-                label: "Включить камеру",
-                onClick: onOpenCamera,
-              })
-            : null}
         </div>
 
         <div className="voice-room-stage__toolbar-group">

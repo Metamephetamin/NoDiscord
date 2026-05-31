@@ -306,6 +306,16 @@ test("local camera previews are mirrored consistently", () => {
   assert.match(mainCss, /\.camera-modal__video--mirrored/);
 });
 
+test("voice stage toolbar does not render a duplicate center camera button", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+  const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
+
+  assert.doesNotMatch(stageSource, /key: "camera"[\s\S]*?label: "Включить камеру"/);
+  assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
+  assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
+});
+
 test("poll votes persist locally and expose anonymous mode", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");
