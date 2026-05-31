@@ -27,9 +27,12 @@ test("voice channel settings button is only rendered for channel managers", () =
 test("media preview delete button requires delete handler", () => {
   const previewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
 
   assert.match(previewSource, /\{onDeleteActive \? \(/);
   assert.match(viewSource, /onDeleteActive=\{mediaPreview\?\.canDelete \? handleDeleteMediaPreviewItem : null\}/);
+  assert.match(messageListSource, /canDeleteAttachments=\{Boolean\(messageAuthorUserId\) && isOwnMessage\}/);
+  assert.match(messageListSource, /canDelete: canDeleteAttachments/);
 });
 
 test("shared location is reduced to a privacy cell before realtime publication", () => {

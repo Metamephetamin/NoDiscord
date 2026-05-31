@@ -2584,7 +2584,7 @@ function TextChatMessageList({
                 <MessageAttachmentCollection
                   messageItem={messageItem}
                   attachments={attachments}
-                  canDeleteAttachments={isOwnMessage}
+                  canDeleteAttachments={Boolean(messageAuthorUserId) && isOwnMessage}
                   selectionMode={selectionMode}
                   onToggleSelection={onToggleSelection}
                   onOpenMediaPreview={onOpenMediaPreview}
