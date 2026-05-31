@@ -268,6 +268,19 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+    options.AddPolicy("donations", context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"donations:{remoteIp}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
 });
 builder.Services.AddSingleton<ChannelService>();
 builder.Services.AddSingleton<ProductionMetrics>();
@@ -307,6 +320,7 @@ builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<ISpeechPunctuationService, SpeechPunctuationService>();
 builder.Services.AddSingleton<ITextTranslationService, TextTranslationService>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<IDonationPaymentService, YooKassaDonationPaymentService>();
 builder.Services.AddControllers();
 var signalRBuilder = builder.Services.AddSignalR(options =>
 {

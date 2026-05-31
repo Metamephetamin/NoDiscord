@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import SiriWave from "siriwave";
 import AnimatedAvatar from "./AnimatedAvatar";
 import MediaFrameEditorModal from "./MediaFrameEditorModal";
@@ -7,6 +8,7 @@ import ScreenShareButton from "./ScreenShareButton";
 import { DONATION_CONFIG } from "../config/runtime";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { buildDonationUrlForAmount, getDonationAmountOptions } from "../utils/donationConfig.mjs";
+import { createDonationPayment } from "../utils/donationPayments";
 import { formatTimestamp } from "../utils/textChatHelpers";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
@@ -256,16 +258,93 @@ export const DonationModal = ({
 }) => {
   const [copiedDetailId, setCopiedDetailId] = useState("");
   const [copyError, setCopyError] = useState("");
+  const [selectedDonationAmount, setSelectedDonationAmount] = useState(0);
+  const [donationPayment, setDonationPayment] = useState(null);
+  const [donationPaymentStatus, setDonationPaymentStatus] = useState("idle");
+  const [donationPaymentError, setDonationPaymentError] = useState("");
+  const [donationPaymentQrSvg, setDonationPaymentQrSvg] = useState("");
 
-  const openDonationPayment = (amount) => {
-    const paymentUrl = buildDonationUrlForAmount(DONATION_CONFIG.url, amount);
-    if (!paymentUrl) {
-      setCopyError("Онлайн-оплата через ЮKassa пока не настроена. Можно использовать реквизиты ниже.");
+  const paymentUrl = String(donationPayment?.confirmationUrl || "");
+
+  useEffect(() => {
+    if (!open || !paymentUrl) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    QRCode.toString(paymentUrl, {
+      type: "svg",
+      margin: 1,
+      width: 168,
+      color: {
+        dark: "#111827",
+        light: "#ffffff",
+      },
+    })
+      .then((svg) => {
+        if (isMounted) {
+          setDonationPaymentQrSvg(svg);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setDonationPaymentQrSvg("");
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [open, paymentUrl]);
+
+  const openDonationPayment = (url = paymentUrl) => {
+    if (!url) {
       return;
     }
 
-    window.open(paymentUrl, "_blank", "noopener,noreferrer");
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const createDonationPaymentForAmount = async (amount) => {
+    setSelectedDonationAmount(amount);
+    setDonationPayment(null);
+    setDonationPaymentStatus("loading");
+    setDonationPaymentError("");
     setCopyError("");
+
+    try {
+      const payment = await createDonationPayment(amount);
+      setDonationPayment(payment);
+      setDonationPaymentStatus("ready");
+    } catch (error) {
+      const fallbackUrl = buildDonationUrlForAmount(DONATION_CONFIG.url, amount);
+      if (fallbackUrl) {
+        setDonationPayment({
+          paymentId: "",
+          status: "fallback",
+          confirmationUrl: fallbackUrl,
+        });
+        setDonationPaymentStatus("ready");
+        setDonationPaymentError("API ЮKassa недоступен, открыта резервная платежная ссылка.");
+        return;
+      }
+
+      setDonationPaymentStatus("error");
+      setDonationPaymentError(error instanceof Error ? error.message : "Онлайн-оплата через ЮKassa пока не настроена.");
+    }
+  };
+
+  const copyDonationPaymentUrl = async () => {
+    if (!paymentUrl) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(paymentUrl);
+      setCopyError("Ссылка на оплату скопирована.");
+    } catch {
+      setCopyError("Не удалось скопировать ссылку. Можно открыть оплату кнопкой ниже.");
+    }
   };
 
   const copyDonationDetail = async (detail) => {
@@ -282,6 +361,11 @@ export const DonationModal = ({
   const closeDonationModal = () => {
     setCopiedDetailId("");
     setCopyError("");
+    setSelectedDonationAmount(0);
+    setDonationPayment(null);
+    setDonationPaymentStatus("idle");
+    setDonationPaymentError("");
+    setDonationPaymentQrSvg("");
     onClose();
   };
 
@@ -309,14 +393,42 @@ export const DonationModal = ({
                 key={option.value}
                 type="button"
                 className="donation-modal__amount-button"
-                disabled={!DONATION_CONFIG.available}
-                onClick={() => openDonationPayment(option.value)}
+                disabled={donationPaymentStatus === "loading"}
+                onClick={() => {
+                  void createDonationPaymentForAmount(option.value);
+                }}
               >
-                {option.label}
+                {donationPaymentStatus === "loading" && selectedDonationAmount === option.value ? "..." : option.label}
               </button>
             ))}
           </div>
         </div>
+
+        {paymentUrl || donationPaymentStatus === "error" ? (
+          <div className="donation-modal__payment" aria-live="polite">
+            {paymentUrl ? (
+              <>
+                <div className="donation-modal__qr" aria-label="QR-код для оплаты">
+                  {donationPaymentQrSvg ? <div dangerouslySetInnerHTML={{ __html: donationPaymentQrSvg }} /> : <span>QR</span>}
+                </div>
+                <div className="donation-modal__payment-copy">
+                  <strong>{selectedDonationAmount ? `${selectedDonationAmount} ₽` : "Оплата"}</strong>
+                  <span>{donationPaymentError || "Отсканируйте QR-код или откройте оплату в браузере."}</span>
+                  <div className="donation-modal__payment-actions">
+                    <button type="button" className="donation-modal__link-button" onClick={() => openDonationPayment()}>
+                      Открыть оплату
+                    </button>
+                    <button type="button" className="donation-modal__link-button donation-modal__link-button--secondary" onClick={copyDonationPaymentUrl}>
+                      Скопировать ссылку
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <span>{donationPaymentError}</span>
+            )}
+          </div>
+        ) : null}
 
         <div className="donation-modal__details" aria-label="Реквизиты для поддержки">
           {DONATION_DETAILS.map((detail) => (
