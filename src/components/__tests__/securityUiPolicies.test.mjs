@@ -407,6 +407,21 @@ test("voice stage does not keep a separate eye preview control", () => {
   assert.doesNotMatch(stageSource, /icon: "preview"/);
 });
 
+test("voice leave notifies the server before slow local media cleanup", () => {
+  const voiceClientSource = readRepoFile("src/webrtc/livekitVoiceRoomClient.js");
+  const leaveStart = voiceClientSource.indexOf("async leaveChannel({ preserveMic = false } = {})");
+  const leaveEnd = voiceClientSource.indexOf("async startDirectCall", leaveStart);
+  const leaveSource = voiceClientSource.slice(leaveStart, leaveEnd);
+
+  assert.ok(leaveStart >= 0, "leaveChannel implementation is present");
+  assert.ok(leaveEnd > leaveStart, "leaveChannel block is bounded");
+  assert.ok(
+    leaveSource.indexOf('signalConnection.invoke("LeaveChannel", String(currentUser.id))') <
+      leaveSource.indexOf("await stopRoom({ preserveChannel: true });"),
+    "server leave must happen before LiveKit room cleanup"
+  );
+});
+
 test("poll votes persist locally and expose anonymous mode", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");

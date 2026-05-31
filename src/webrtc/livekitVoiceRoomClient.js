@@ -4412,12 +4412,12 @@ const handleDeviceChange = () => {
     },
 
     async leaveChannel({ preserveMic = false } = {}) {
-      await stopAllLocalSharesInternal();
-      await stopRoom({ preserveChannel: true });
-
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
         await signalConnection.invoke("LeaveChannel", String(currentUser.id));
       }
+
+      await stopAllLocalSharesInternal();
+      await stopRoom({ preserveChannel: true });
 
       currentChannel = null;
       onChannelChanged?.(null);
