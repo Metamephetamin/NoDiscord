@@ -1,3 +1,5 @@
+import "../css/QuickSwitcherModal.css";
+
 export default function QuickSwitcherModal({
   open,
   query,

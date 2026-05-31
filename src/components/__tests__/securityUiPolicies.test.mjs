@@ -241,6 +241,16 @@ test("server invite modal styles are split out of the main menu stylesheet", () 
   assert.match(inviteModalCss, /\.server-invite-modal/);
 });
 
+test("quick switcher styles are split out of the main menu stylesheet", () => {
+  const quickSwitcherSource = readRepoFile("src/components/QuickSwitcherModal.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const quickSwitcherCss = readRepoFileIfExists("src/css/QuickSwitcherModal.css");
+
+  assert.match(quickSwitcherSource, /import "\.\.\/css\/QuickSwitcherModal\.css";/);
+  assert.doesNotMatch(mainCss, /\.quick-switcher/);
+  assert.match(quickSwitcherCss, /\.quick-switcher/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 
