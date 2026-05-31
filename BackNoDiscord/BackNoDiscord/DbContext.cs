@@ -219,6 +219,9 @@ public class User
     [Column("nickname")]
     public string nickname { get; set; } = null!;
 
+    [Column("profile_status")]
+    public string? profile_status { get; set; }
+
     [Column("email")]
     public string? email { get; set; }
 
@@ -1071,6 +1074,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.profile_background_url).IsRequired(false);
             entity.Property(x => x.profile_background_frame_json).IsRequired(false);
             entity.Property(x => x.profile_customization_json).IsRequired(false);
+            entity.Property(x => x.profile_status).IsRequired(false);
             entity.Property(x => x.last_seen_at).IsRequired(false);
             entity.Property(x => x.last_location_latitude).IsRequired(false);
             entity.Property(x => x.last_location_longitude).IsRequired(false);

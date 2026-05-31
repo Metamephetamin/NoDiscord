@@ -29,6 +29,7 @@ function MenuMainProfilePanelSlot({
   soundMenuRef,
   avatarInputRef,
   user,
+  profileCustomStatus,
   profileCustomization,
   audioInputDevices,
   audioOutputDevices,
@@ -96,6 +97,7 @@ function MenuMainProfilePanelSlot({
       userAvatarSrc={user?.avatarUrl || user?.avatar}
       userAvatarFrame={getUserAvatarFrame(user)}
       displayName={getDisplayName(user)}
+      profileStatus={profileCustomStatus}
       activityStatus={formatIntegrationActivityStatus(user?.activity || user?.externalActivity)}
       profileCustomization={profileCustomization}
       audioInputDevices={audioInputDevices}

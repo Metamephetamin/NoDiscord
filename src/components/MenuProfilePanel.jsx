@@ -413,6 +413,7 @@ export default function MenuProfilePanel({
   userAvatarSrc,
   userAvatarFrame,
   displayName,
+  profileStatus,
   activityStatus,
   profileCustomization,
   audioInputDevices,
@@ -548,6 +549,7 @@ export default function MenuProfilePanel({
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={onAvatarChange} />
             <div className="profile__names">
               <span className="profile__username">{displayName}</span>
+              {profileStatus ? <span className="profile__custom-status">{profileStatus}</span> : null}
               {activityStatus ? (
                 <span className="profile__activity-status">
                   <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">

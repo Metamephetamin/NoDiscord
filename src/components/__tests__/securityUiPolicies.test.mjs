@@ -450,6 +450,24 @@ test("poll composer backdrop fully covers and blurs the app", () => {
   assert.match(backdropRule, /overscroll-behavior: contain;/);
 });
 
+test("manual profile status is editable, persisted, and rendered under the nickname", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+  const slotSource = readRepoFile("src/features/menu-main/MenuMainProfilePanelSlot.jsx");
+  const profileCss = readRepoFile("src/css/MenuProfile.css");
+
+  assert.match(controllerSource, /MAX_PROFILE_STATUS_LENGTH/);
+  assert.match(controllerSource, /profileStatus: user\?\.profile_status \|\| user\?\.profileStatus \|\| ""/);
+  assert.match(controllerSource, /profileStatus: nextProfileStatus/);
+  assert.match(controllerSource, /profile_status: data\?\.profile_status \?\? data\?\.profileStatus \?\? nextProfileStatus/);
+  assert.match(settingsSource, /onUpdateProfileDraft\?\.\("profileStatus", event\.target\.value\)/);
+  assert.match(settingsSource, /maxLength=\{maxProfileStatusLength\}/);
+  assert.match(slotSource, /profileStatus=\{profileCustomStatus\}/);
+  assert.match(profileSource, /className="profile__custom-status"/);
+  assert.match(profileCss, /\.profile__custom-status \{/);
+});
+
 test("media-only message layout stays stable after reactions are added", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const mediaOnlyStart = messageListSource.indexOf("const isMediaOnlyMessage =");

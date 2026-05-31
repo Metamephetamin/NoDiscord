@@ -29,6 +29,7 @@ public class UpdateProfileRequest
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? Nickname { get; set; }
+    public string? ProfileStatus { get; set; }
     public string? ProfileBackgroundUrl { get; set; }
     public MediaFrameData? AvatarFrame { get; set; }
     public MediaFrameData? ProfileBackgroundFrame { get; set; }
@@ -71,6 +72,7 @@ public class UserController : ControllerBase
     private const long MaxAvatarSizeBytes = 50L * 1024 * 1024;
     private const long MaxProfileBackgroundSizeBytes = 60L * 1024 * 1024;
     private const int MaxProfileCustomizationJsonLength = 8192;
+    private const int MaxProfileStatusLength = 80;
     private const int MaxEmailVerificationAttempts = 5;
     private static readonly TimeSpan EmailChangeCodeLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailChangeResendCooldown = TimeSpan.FromSeconds(60);
@@ -130,6 +132,7 @@ public class UserController : ControllerBase
                 first_name = user.first_name,
                 last_name = user.last_name,
                 nickname = user.nickname,
+                profile_status = user.profile_status ?? string.Empty,
                 email = user.email ?? string.Empty,
                 avatar_url = user.avatar_url ?? string.Empty,
                 avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
@@ -312,6 +315,7 @@ public class UserController : ControllerBase
         {
             user.nickname = nickname;
         }
+        user.profile_status = UploadPolicies.TrimToLength(request.ProfileStatus, MaxProfileStatusLength).Trim();
         user.avatar_frame_json = MediaFrameSerializer.Serialize(request.AvatarFrame, allowNull: false);
         if (request.ProfileBackgroundUrl != null)
         {
@@ -328,6 +332,7 @@ public class UserController : ControllerBase
             first_name = user.first_name,
             last_name = user.last_name,
             nickname = user.nickname,
+            profile_status = user.profile_status ?? string.Empty,
             email = user.email,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
@@ -519,6 +524,7 @@ public class UserController : ControllerBase
             first_name = user.first_name,
             last_name = user.last_name,
             nickname = user.nickname,
+            profile_status = user.profile_status ?? string.Empty,
             email = user.email ?? string.Empty,
             is_email_verified = user.is_email_verified,
             avatar_url = user.avatar_url ?? string.Empty,
@@ -759,6 +765,7 @@ public class UserController : ControllerBase
             first_name = user.first_name,
             last_name = user.last_name,
             nickname = user.nickname,
+            profile_status = user.profile_status ?? string.Empty,
             email = user.email ?? string.Empty,
             avatar_url = user.avatar_url ?? string.Empty,
             avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),

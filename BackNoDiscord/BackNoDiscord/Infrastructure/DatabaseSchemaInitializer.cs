@@ -405,6 +405,8 @@ public static class DatabaseSchemaInitializer
                 ADD COLUMN IF NOT EXISTS ban_reason text NULL;
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS nickname character varying(50) NULL;
+            ALTER TABLE IF EXISTS users
+                ADD COLUMN IF NOT EXISTS profile_status text NULL;
             ALTER TABLE IF EXISTS refresh_tokens
                 ADD COLUMN IF NOT EXISTS user_agent text NOT NULL DEFAULT '';
             ALTER TABLE IF EXISTS refresh_tokens

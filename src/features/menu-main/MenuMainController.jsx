@@ -123,6 +123,7 @@ import {
 import {
   EMPTY_ARRAY,
   MAX_PROFILE_NICKNAME_LENGTH,
+  MAX_PROFILE_STATUS_LENGTH,
   clampDeviceVolumePercent,
   getProfileFullName,
   getServerSnapshotKey,
@@ -650,6 +651,7 @@ export default function MenuMain({
     firstName: user?.first_name || user?.firstName || "",
     lastName: user?.last_name || user?.lastName || "",
     nickname: user?.nickname || "",
+    profileStatus: user?.profile_status || user?.profileStatus || "",
     email: user?.email || "",
     profileBackgroundUrl: getUserProfileBackground(user),
     profileBackgroundFrame: getUserProfileBackgroundFrame(user),
@@ -2686,6 +2688,7 @@ export default function MenuMain({
       const nextProfileCustomization = normalizeProfileCustomization(
         payload?.profile_customization || payload?.profileCustomization || null
       );
+      const nextProfileStatus = String(payload?.profile_status || payload?.profileStatus || "").trim();
       const nextEmail = String(payload?.email || "").trim();
       const nextDisplayName = nextNickname || `${nextFirstName} ${nextLastName}`.trim();
 
@@ -2694,6 +2697,8 @@ export default function MenuMain({
         firstName: nextFirstName || friend.firstName || "",
         lastName: nextLastName || friend.lastName || "",
         nickname: nextNickname || friend.nickname || "",
+        profileStatus: nextProfileStatus,
+        profile_status: nextProfileStatus,
         name: nextDisplayName || friend.name || "",
         email: nextEmail || friend.email || "",
         avatar: nextAvatar || friend.avatar || "",
@@ -2712,6 +2717,8 @@ export default function MenuMain({
                   firstName: nextFirstName || toast.friend?.firstName || "",
                   lastName: nextLastName || toast.friend?.lastName || "",
                   nickname: nextNickname || toast.friend?.nickname || "",
+                  profileStatus: nextProfileStatus,
+                  profile_status: nextProfileStatus,
                   name: nextDisplayName || toast.friend?.name || "",
                   email: nextEmail || toast.friend?.email || "",
                   avatar: nextAvatar || toast.friend?.avatar || "",
@@ -2736,6 +2743,8 @@ export default function MenuMain({
                   ? {
                       ...member,
                       name: nextDisplayName || member.name || "",
+                      profileStatus: nextProfileStatus,
+                      profile_status: nextProfileStatus,
                       avatar: nextAvatar || member.avatar || "",
                       avatarFrame: nextAvatarFrame || member.avatarFrame || null,
                       profileCustomization: nextProfileCustomization,
@@ -2756,6 +2765,8 @@ export default function MenuMain({
                     ? {
                         ...participant,
                         name: nextDisplayName || participant.name || participant.Name || "",
+                        profileStatus: nextProfileStatus,
+                        profile_status: nextProfileStatus,
                         avatar: nextAvatar || participant.avatar || participant.Avatar || "",
                         avatarFrame: nextAvatarFrame || participant.avatarFrame || participant.AvatarFrame || null,
                         profileCustomization: nextProfileCustomization,
@@ -2775,6 +2786,8 @@ export default function MenuMain({
           last_name: nextLastName || user.last_name || user.lastName || "",
           lastName: nextLastName || user.lastName || user.last_name || "",
           nickname: nextNickname || user.nickname || "",
+          profileStatus: nextProfileStatus,
+          profile_status: nextProfileStatus,
           email: nextEmail || user.email || "",
           avatarUrl: nextAvatar || user.avatarUrl || user.avatar || "",
           avatar: nextAvatar || user.avatar || user.avatarUrl || "",
@@ -3456,6 +3469,7 @@ export default function MenuMain({
       firstName: user?.first_name || user?.firstName || "",
       lastName: user?.last_name || user?.lastName || "",
       nickname: user?.nickname || "",
+      profileStatus: user?.profile_status || user?.profileStatus || "",
       email: user?.email || "",
       profileBackgroundUrl: getUserProfileBackground(user),
       profileBackgroundFrame: getUserProfileBackgroundFrame(user),
@@ -3472,6 +3486,8 @@ export default function MenuMain({
     user?.last_name,
     user?.lastName,
     user?.nickname,
+    user?.profile_status,
+    user?.profileStatus,
     user?.profileBackgroundUrl,
     user?.profile_background_url,
     user?.profileBackground,
@@ -5692,6 +5708,11 @@ export default function MenuMain({
         ...previous,
         nickname: normalizeProfileNicknameInput(value),
       }));
+    } else if (field === "profileStatus") {
+      setProfileDraft((previous) => ({
+        ...previous,
+        profileStatus: String(value || "").slice(0, MAX_PROFILE_STATUS_LENGTH),
+      }));
     } else {
       setProfileDraft((previous) => ({ ...previous, [field]: value }));
     }
@@ -5821,6 +5842,7 @@ export default function MenuMain({
     const nextFirstName = profileDraft.firstName.trim();
     const nextLastName = profileDraft.lastName.trim();
     const nextNickname = profileDraft.nickname.trim();
+    const nextProfileStatus = String(profileDraft.profileStatus || "").trim().slice(0, MAX_PROFILE_STATUS_LENGTH);
     if (!nextFirstName) {
       setProfileStatus("Имя не должно быть пустым.");
       return;
@@ -5864,6 +5886,7 @@ export default function MenuMain({
           firstName: nextFirstName,
           lastName: nextLastName,
           nickname: nextNickname,
+          profileStatus: nextProfileStatus,
           avatarFrame: serializeMediaFrame(getUserAvatarFrame(user)),
           profileBackgroundUrl: profileDraft.profileBackgroundUrl ?? getUserProfileBackground(user),
           profileBackgroundFrame: serializeMediaFrame(profileDraft.profileBackgroundFrame),
@@ -5881,6 +5904,8 @@ export default function MenuMain({
         last_name: data?.last_name || nextLastName,
         lastName: data?.last_name || nextLastName,
         nickname: data?.nickname || nextNickname,
+        profileStatus: data?.profile_status ?? data?.profileStatus ?? nextProfileStatus,
+        profile_status: data?.profile_status ?? data?.profileStatus ?? nextProfileStatus,
         email: data?.email || profileDraft.email || user?.email || "",
         avatarUrl: data?.avatar_url || user?.avatarUrl || user?.avatar || "",
         avatar: data?.avatar_url || user?.avatar || user?.avatarUrl || "",
@@ -5918,6 +5943,7 @@ export default function MenuMain({
   };
 
   const profileBackgroundSrc = resolveMediaUrl(getUserProfileBackground(user), "");
+  const profileCustomStatus = String(user?.profile_status || user?.profileStatus || "").trim();
   const adminSettingsItem = useMemo(() => SETTINGS_NAV_ITEMS.find((item) => item.id === "admin"), []);
   const settingsNavItems = useMemo(
     () => SETTINGS_NAV_ITEMS.filter((item) => {
@@ -6007,6 +6033,7 @@ export default function MenuMain({
       lastName: profileDraft.lastName,
       last_name: profileDraft.lastName,
       nickname: profileDraft.nickname,
+      profileStatus: profileDraft.profileStatus,
     }),
     profileDisplayName: getDisplayName({
       ...(user || {}),
@@ -6017,6 +6044,8 @@ export default function MenuMain({
       last_name: profileDraft.lastName,
     }),
     profileStatus,
+    profileCustomStatus,
+    maxProfileStatusLength: MAX_PROFILE_STATUS_LENGTH,
     profileCustomization,
     handleProfileCustomizationChange,
     emailChangeState,
@@ -6271,6 +6300,7 @@ export default function MenuMain({
     soundMenuRef,
     avatarInputRef,
     user,
+    profileCustomStatus,
     profileCustomization,
     audioInputDevices,
     audioOutputDevices,
@@ -6342,6 +6372,7 @@ export default function MenuMain({
     noiseSuppressionMode,
     openLocalSharePreview,
     outputSelectionAvailable,
+    profileCustomStatus,
     profileCustomization,
     pingTone,
     pingTooltip,

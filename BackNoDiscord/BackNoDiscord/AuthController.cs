@@ -1573,6 +1573,7 @@ public class AuthController : ControllerBase
             first_name = user.first_name,
             last_name = user.last_name,
             nickname = user.nickname,
+            profile_status = user.profile_status ?? string.Empty,
             email = user.email ?? string.Empty,
             is_email_verified = user.is_email_verified,
             phone_number = user.phone_number ?? string.Empty,
@@ -1966,6 +1967,7 @@ public class AuthController : ControllerBase
             first_name = user.first_name ?? string.Empty,
             last_name = user.last_name ?? string.Empty,
             nickname = user.nickname ?? string.Empty,
+            profile_status = user.profile_status ?? string.Empty,
             email = user.email ?? string.Empty,
             is_banned = true,
             banned_at = user.BannedAt?.ToString("O"),
@@ -2228,5 +2230,4 @@ public sealed class EmailVerificationResult
         };
     }
 }
-
 

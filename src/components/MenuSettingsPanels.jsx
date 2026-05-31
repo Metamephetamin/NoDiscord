@@ -369,6 +369,7 @@ export const AccountSettings = ({
   email,
   profileDraft,
   profileStatus,
+  maxProfileStatusLength,
   maxNicknameLength,
   emailChangeState,
   locationSharing,
@@ -485,6 +486,32 @@ export const AccountSettings = ({
                 />
               </label>
               <button type="submit" className="settings-inline-button">Сохранить ник</button>
+            </form>
+          ) : null}
+
+          <div className="account-settings-row">
+            <div className="account-settings-row__copy">
+              <strong>Статус</strong>
+              <span>{profileDraft?.profileStatus || "Не указан"}</span>
+            </div>
+            <button type="button" className="settings-inline-button" onClick={() => setEditingAccountField(editingAccountField === "profileStatus" ? "" : "profileStatus")}>
+              {editingAccountField === "profileStatus" ? "Скрыть" : "Изменить"}
+            </button>
+          </div>
+          {editingAccountField === "profileStatus" ? (
+            <form className="account-settings-row-editor account-settings-row-editor--single" onSubmit={onSaveProfile}>
+              <label className="account-settings-field">
+                <span>Текст под никнеймом</span>
+                <input
+                  className="settings-input"
+                  type="text"
+                  value={profileDraft?.profileStatus || ""}
+                  onChange={(event) => onUpdateProfileDraft?.("profileStatus", event.target.value)}
+                  maxLength={maxProfileStatusLength}
+                  placeholder="Например: работаю над проектом"
+                />
+              </label>
+              <button type="submit" className="settings-inline-button">Сохранить статус</button>
             </form>
           ) : null}
 

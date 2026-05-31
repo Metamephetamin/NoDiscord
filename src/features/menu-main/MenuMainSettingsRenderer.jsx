@@ -39,6 +39,7 @@ export function MenuMainSettingsContent({
   profileDisplayName,
   profileStatus,
   profileCustomization,
+  maxProfileStatusLength,
   handleProfileCustomizationChange,
   emailChangeState,
   locationSharing,
@@ -193,6 +194,7 @@ export function MenuMainSettingsContent({
           email={profileDraft.email}
           profileDraft={profileDraft}
           profileStatus={profileStatus}
+          maxProfileStatusLength={maxProfileStatusLength}
           maxNicknameLength={maxProfileNicknameLength}
           emailChangeState={emailChangeState}
           locationSharing={locationSharing}

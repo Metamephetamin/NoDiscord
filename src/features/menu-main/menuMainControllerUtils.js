@@ -3,6 +3,7 @@ import { normalizeScriptAwareNicknameInput } from "../../utils/nameScripts";
 import { getCanonicalSharedServerId } from "../../utils/menuMainModel";
 
 export const MAX_PROFILE_NICKNAME_LENGTH = 50;
+export const MAX_PROFILE_STATUS_LENGTH = 80;
 export const DEVICE_SESSION_REFRESH_TOKEN_HEADER = "X-Refresh-Token";
 export const EMPTY_ARRAY = Object.freeze([]);
 const MAX_DEVICE_VOLUME_PERCENT = 200;

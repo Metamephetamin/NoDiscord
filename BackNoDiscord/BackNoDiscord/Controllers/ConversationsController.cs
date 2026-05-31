@@ -959,6 +959,7 @@ public sealed class ConversationsController : ControllerBase
                 FirstName = item.first_name,
                 LastName = item.last_name,
                 Nickname = item.nickname,
+                ProfileStatus = item.profile_status,
                 Email = item.email,
                 AvatarUrl = item.avatar_url,
                 AvatarFrameJson = item.avatar_frame_json,
@@ -1302,6 +1303,7 @@ public sealed class ConversationsController : ControllerBase
                     first_name = user?.FirstName ?? string.Empty,
                     last_name = user?.LastName ?? string.Empty,
                     nickname = user?.Nickname ?? string.Empty,
+                    profile_status = user?.ProfileStatus ?? string.Empty,
                     email = user?.Email ?? string.Empty,
                     avatar_url = user?.AvatarUrl ?? string.Empty,
                     avatar_frame = MediaFrameSerializer.Parse(user?.AvatarFrameJson, allowNull: true),
@@ -1443,6 +1445,7 @@ public sealed class ConversationsController : ControllerBase
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string Nickname { get; set; } = string.Empty;
+        public string? ProfileStatus { get; set; }
         public string? Email { get; set; }
         public string? AvatarUrl { get; set; }
         public string? AvatarFrameJson { get; set; }
