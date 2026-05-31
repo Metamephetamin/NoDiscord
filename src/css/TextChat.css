@@ -1030,6 +1030,30 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   -webkit-font-smoothing: inherit;
 }
 
+.message-author__name-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-author__role-badge {
+  flex: 0 0 auto;
+  max-width: 128px;
+  padding: 1px 7px 2px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--message-author-role-color, #7b89a8) 54%, transparent);
+  background: color-mix(in srgb, var(--message-author-role-color, #7b89a8) 20%, transparent);
+  color: color-mix(in srgb, var(--message-author-role-color, #7b89a8) 82%, #ffffff);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-author__name--interactive {
   cursor: pointer;
   transition: opacity 0.16s ease, filter 0.16s ease;

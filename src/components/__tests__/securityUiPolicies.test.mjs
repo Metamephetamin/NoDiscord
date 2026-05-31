@@ -277,6 +277,16 @@ test("common counters and timestamps use the numeric Roboto font", () => {
   assert.match(indexCss, /\.chat__topbar-badge,[\s\S]*?\.message-reaction__count,[\s\S]*?\.voice-message__duration,[\s\S]*?font-family: var\(--font-numeric\);/);
 });
 
+test("server message authors render role badges after nicknames", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+
+  assert.match(messageListSource, /const authorRoleBadgeByUserId = useMemo/);
+  assert.match(messageListSource, /<span className="message-author__role-badge"/);
+  assert.match(messageListSource, /style=\{\{ "--message-author-role-color": authorRoleBadge\.color \}\}/);
+  assert.match(textChatCss, /\.message-author__role-badge/);
+});
+
 test("voice stage toolbar buttons avoid native title tooltips", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const mobileStageSource = readRepoFile("src/components/MobileVoiceRoom.jsx");

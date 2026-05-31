@@ -209,7 +209,11 @@ function isVideoLikeAttachment(attachmentItem) {
 }
 
 function normalizeRoleName(role) {
-  return String(role?.name || role?.Name || role?.roleName || role?.role_name || "").trim().toLowerCase();
+  return getRoleNameValue(role).toLowerCase();
+}
+
+function getRoleNameValue(role) {
+  return String(role?.name || role?.Name || role?.roleName || role?.role_name || "").trim();
 }
 
 function getRoleColorValue(role) {
@@ -2099,6 +2103,29 @@ function TextChatMessageList({
       ),
     [serverMembers, serverRoleById]
   );
+  const authorRoleBadgeByUserId = useMemo(
+    () =>
+      new Map(
+        (serverMembers || []).flatMap((member) => {
+          const userId = String(member?.userId || member?.id || "");
+          if (!userId) {
+            return [];
+          }
+
+          const resolvedRole = serverRoleById.get(String(member?.roleId || member?.role_id || "")) || member;
+          const roleName = getRoleNameValue(resolvedRole);
+          if (!roleName || isDefaultMemberRole(resolvedRole)) {
+            return [];
+          }
+
+          return [[userId, {
+            name: roleName,
+            color: getRoleColorValue(resolvedRole) || "#7b89a8",
+          }]];
+        })
+      ),
+    [serverMembers, serverRoleById]
+  );
   const registerMessageNode = useCallback((messageId, node) => {
     registerMeasuredNode?.(messageId, node);
     if (node) {
@@ -2396,6 +2423,8 @@ function TextChatMessageList({
           const forwardedFromRoleColor = !isDirectChat
             ? authorRoleColorByUserId.get(String(messageItem.forwardedFromUserId || "")) || ""
             : "";
+          const authorRoleBadge = !isDirectChat ? authorRoleBadgeByUserId.get(String(messageItem.authorUserId || "")) || null : null;
+          const forwardedFromRoleBadge = !isDirectChat ? authorRoleBadgeByUserId.get(String(messageItem.forwardedFromUserId || "")) || null : null;
           const canInsertAuthorMention = !isDirectChat && typeof onInsertMentionByUserId === "function";
           const messageRenderId = getMessageRenderId(messageItem);
           const messageRenderKey = duplicateMessageIdSet.has(messageRenderId)
@@ -2490,7 +2519,12 @@ function TextChatMessageList({
                         onInsertMentionByUserId?.(messageItem.authorUserId, messageItem.username || "User");
                       }}
                     >
-                      {messageItem.username || "User"}
+                      <span className="message-author__name-label">{messageItem.username || "User"}</span>
+                      {authorRoleBadge ? (
+                        <span className="message-author__role-badge" style={{ "--message-author-role-color": authorRoleBadge.color }}>
+                          {authorRoleBadge.name}
+                        </span>
+                      ) : null}
                     </button>
                   </div>
                 ) : null}
@@ -2511,7 +2545,12 @@ function TextChatMessageList({
                         onInsertMentionByUserId?.(messageItem.authorUserId, messageItem.username || "User");
                       }}
                     >
-                      {messageItem.username}
+                      <span className="message-author__name-label">{messageItem.username}</span>
+                      {authorRoleBadge ? (
+                        <span className="message-author__role-badge" style={{ "--message-author-role-color": authorRoleBadge.color }}>
+                          {authorRoleBadge.name}
+                        </span>
+                      ) : null}
                     </button>
                     <span className="message-forwarded__label">Автор</span>
                     <button
@@ -2527,7 +2566,12 @@ function TextChatMessageList({
                         onInsertMentionByUserId?.(messageItem.forwardedFromUserId, messageItem.forwardedFromUsername || "User");
                       }}
                     >
-                      {messageItem.forwardedFromUsername}
+                      <span className="message-author__name-label">{messageItem.forwardedFromUsername}</span>
+                      {forwardedFromRoleBadge ? (
+                        <span className="message-author__role-badge" style={{ "--message-author-role-color": forwardedFromRoleBadge.color }}>
+                          {forwardedFromRoleBadge.name}
+                        </span>
+                      ) : null}
                     </button>
                   </div>
                 ) : null}
