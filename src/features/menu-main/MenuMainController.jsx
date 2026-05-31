@@ -560,6 +560,7 @@ export default function MenuMain({
   const [showServerMembersPanel, setShowServerMembersPanel] = useState(false);
   const [memberRoleMenu, setMemberRoleMenu] = useState(null);
   const [serverContextMenu, setServerContextMenu] = useState(null);
+  const [serverDeleteConfirmId, setServerDeleteConfirmId] = useState("");
   const [friendListUserContextMenu, setFriendListUserContextMenu] = useState(null);
   const [friendListProfileModal, setFriendListProfileModal] = useState(null);
   const [rolesExpanded, setRolesExpanded] = useState(false);
@@ -3582,7 +3583,10 @@ export default function MenuMain({
       if (popupRef.current && !insidePopup && !insideMediaFrameEditor) setOpenSettings(false);
       if (serverMembersRef.current && !insideServerPanel && !insideMemberMenu) setShowServerMembersPanel(false);
       if (!insideMemberMenu) setMemberRoleMenu(null);
-      if (!insideServerContextMenu) setServerContextMenu(null);
+      if (!insideServerContextMenu) {
+        setServerContextMenu(null);
+        setServerDeleteConfirmId("");
+      }
       if (!insideFriendListUserContextMenu) setFriendListUserContextMenu(null);
       if (!insideNoiseMenu) setShowNoiseMenu(false);
       if (!insideMicMenu) setShowMicMenu(false);
@@ -3600,6 +3604,7 @@ export default function MenuMain({
   useEffect(() => {
     setShowServerMembersPanel(false);
     setServerContextMenu(null);
+    setServerDeleteConfirmId("");
   }, [activeServerId]);
   useEffect(() => {
     micLevelUiActiveRef.current = Boolean(
@@ -4628,7 +4633,6 @@ export default function MenuMain({
   const handleDeleteServer = async (serverId) => {
     const serverToDelete = servers.find((server) => String(server.id) === String(serverId));
     if (!serverToDelete) return;
-    setServerContextMenu(null);
     if (!hasServerPermission(serverToDelete, currentUserId, "manage_server")) return;
     if (isPersonalDefaultServer(serverToDelete, user)) {
       setProfileStatus("Личный сервер нельзя удалить.");
@@ -4637,11 +4641,22 @@ export default function MenuMain({
 
     const serverName = serverToDelete.name || "сервер";
     const isOwnerDelete = isServerOwnedByUser(serverToDelete, currentUserId);
-    const confirmMessage = isOwnerDelete
-      ? `Удалить сервер «${serverName}»? Это действие нельзя отменить.`
-      : `Удалить сервер «${serverName}»?`;
-    if (typeof window !== "undefined" && !window.confirm(confirmMessage)) return;
+    const deleteConfirmMessage = isOwnerDelete
+      ? `Подтвердите удаление сервера «${serverName}». Это действие нельзя отменить.`
+      : `Подтвердите удаление сервера «${serverName}».`;
+    if (String(serverDeleteConfirmId || "") !== String(serverToDelete.id || "")) {
+      setServerDeleteConfirmId(String(serverToDelete.id || ""));
+      setProfileStatus(deleteConfirmMessage);
+      setServerContextMenu((previous) => (
+        previous && String(previous.serverId) === String(serverToDelete.id)
+          ? { ...previous, status: deleteConfirmMessage }
+          : previous
+      ));
+      return;
+    }
 
+    setServerContextMenu(null);
+    setServerDeleteConfirmId("");
     if (serverToDelete.isShared) {
       try {
         const response = await authFetch(`${API_BASE_URL}/server-invites/server/${encodeURIComponent(serverToDelete.id)}`, {
@@ -4654,6 +4669,7 @@ export default function MenuMain({
         }
       } catch (error) {
         setProfileStatus(error?.message || "Не удалось удалить сервер.");
+        setServerDeleteConfirmId(String(serverToDelete.id || ""));
         return;
       }
     }
@@ -5537,6 +5553,7 @@ export default function MenuMain({
     event.preventDefault();
     event.stopPropagation();
 
+    setServerDeleteConfirmId("");
     setServerContextMenu({
       serverId: server.id,
       x: Math.max(12, Math.min(event.clientX, window.innerWidth - 272)),

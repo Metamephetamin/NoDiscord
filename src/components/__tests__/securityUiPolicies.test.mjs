@@ -239,6 +239,14 @@ test("role deletion uses an in-app confirmation instead of browser confirm", () 
   assert.match(settingsSource, /Подтвердить удаление/);
 });
 
+test("server deletion uses an in-app confirmation instead of browser confirm", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+
+  assert.doesNotMatch(controllerSource, /window\.confirm/);
+  assert.match(controllerSource, /serverDeleteConfirmId/);
+  assert.match(controllerSource, /Подтвердите удаление сервера/);
+});
+
 test("stream fullscreen button toggles fullscreen mode", () => {
   const streamSource = readRepoFile("src/components/ScreenShareViewer.jsx");
 
