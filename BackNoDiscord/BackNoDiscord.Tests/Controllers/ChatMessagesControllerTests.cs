@@ -125,6 +125,7 @@ public sealed class ChatMessagesControllerTests
         var result = await controller.GetMessages(
             DirectMessageChannels.BuildChannelId(42, 99),
             beforeMessageId: null,
+            afterMessageId: null,
             limit: 20,
             CancellationToken.None);
 
@@ -134,6 +135,64 @@ public sealed class ChatMessagesControllerTests
         Assert.NotNull(dto.ReadState);
         Assert.Equal(321, dto.ReadState.LastReadMessageId);
         Assert.Equal("42", dto.ReadState.UserId);
+    }
+
+    [Fact]
+    public async Task GetMessages_WithAfterMessageId_ReturnsOnlyNewerMessages()
+    {
+        await using var context = CreateContext();
+        context.Friendships.Add(new FriendshipRecord { UserLowId = 42, UserHighId = 99, CreatedAt = DateTimeOffset.UtcNow });
+        var channelId = DirectMessageChannels.BuildChannelId(42, 99);
+        context.Messages.AddRange(
+            new Message
+            {
+                ChannelId = channelId,
+                Username = "Friend",
+                Content = "__CHAT_PAYLOAD__:{\"message\":\"first\",\"authorUserId\":\"99\"}",
+                AuthorUserId = "99",
+                Timestamp = DateTime.UtcNow.AddMinutes(-2),
+                IsDeleted = false
+            },
+            new Message
+            {
+                ChannelId = channelId,
+                Username = "Friend",
+                Content = "__CHAT_PAYLOAD__:{\"message\":\"second\",\"authorUserId\":\"99\"}",
+                AuthorUserId = "99",
+                Timestamp = DateTime.UtcNow.AddMinutes(-1),
+                IsDeleted = false
+            },
+            new Message
+            {
+                ChannelId = channelId,
+                Username = "Friend",
+                Content = "__CHAT_PAYLOAD__:{\"message\":\"third\",\"authorUserId\":\"99\"}",
+                AuthorUserId = "99",
+                Timestamp = DateTime.UtcNow,
+                IsDeleted = false
+            });
+        await context.SaveChangesAsync();
+        var firstMessageId = await context.Messages
+            .Where(message => message.ChannelId == channelId)
+            .OrderBy(message => message.Id)
+            .Select(message => message.Id)
+            .FirstAsync();
+        var controller = BuildController(context, userId: "42");
+
+        var result = await controller.GetMessages(
+            channelId,
+            beforeMessageId: null,
+            afterMessageId: firstMessageId,
+            limit: 20,
+            cancellationToken: CancellationToken.None);
+
+        var actionResult = Assert.IsType<ActionResult<ChatMessagesPageDto>>(result);
+        Assert.NotNull(actionResult.Value);
+        var dto = actionResult.Value!;
+        Assert.Equal(2, dto.Items.Count);
+        Assert.All(dto.Items, message => Assert.True(message.Id > firstMessageId));
+        Assert.False(dto.HasMore);
+        Assert.Null(dto.NextCursor);
     }
 
     private static ChatMessagesController BuildController(

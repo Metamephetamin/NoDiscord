@@ -13,11 +13,13 @@ import { API_BASE_URL } from "../../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import {
-  readCachedTextChatMessages,
+  getLatestCachedTextChatMessageId,
+  getOldestCachedTextChatMessageId,
+  readPersistentCachedTextChatMessages,
   readHiddenTextChatMessageIds,
   readTextChatChannelClearedAt,
   writeHiddenTextChatMessageIds,
-  writeCachedTextChatMessages,
+  writePersistentCachedTextChatMessages,
 } from "../../utils/textChatMessageCache";
 import {
   extractMentionsFromText,
@@ -851,35 +853,57 @@ export default function TextChat({
 
   useEffect(() => {
     if (!currentUserId || !scopedChannelId || disableCacheHydration) {
-      return;
+      return undefined;
     }
 
     const cacheTraceId = startPerfTrace("text-chat", "hydrate-channel-from-cache", {
       channelId: scopedChannelId,
     });
-    const cachedMessages = readCachedTextChatMessages(currentUserId, scopedChannelId)
-      .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
-      .filter((messageItem) => !hiddenMessageIdSet.has(String(messageItem?.id || "")))
-      .filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
-    if (!cachedMessages.length) {
-      finishPerfTrace(cacheTraceId, {
-        channelId: scopedChannelId,
-        cachedMessageCount: 0,
-      });
-      return;
-    }
+    let cancelled = false;
 
-    setMessagesByChannel((previous) => updateChannelMessagesState(
-      previous,
-      scopedChannelId,
-      (currentChannelMessages) => currentChannelMessages.length
-        ? currentChannelMessages
-        : cachedMessages
-    ));
-    finishPerfTrace(cacheTraceId, {
-      channelId: scopedChannelId,
-      cachedMessageCount: cachedMessages.length,
-    });
+    readPersistentCachedTextChatMessages(currentUserId, scopedChannelId)
+      .then((storedMessages) => {
+        if (cancelled) {
+          return;
+        }
+
+        const cachedMessages = storedMessages
+          .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
+          .filter((messageItem) => !hiddenMessageIdSet.has(String(messageItem?.id || "")))
+          .filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
+        if (!cachedMessages.length) {
+          finishPerfTrace(cacheTraceId, {
+            channelId: scopedChannelId,
+            cachedMessageCount: 0,
+          });
+          return;
+        }
+
+        setMessagesByChannel((previous) => updateChannelMessagesState(
+          previous,
+          scopedChannelId,
+          (currentChannelMessages) => currentChannelMessages.length
+            ? currentChannelMessages
+            : cachedMessages
+        ));
+        finishPerfTrace(cacheTraceId, {
+          channelId: scopedChannelId,
+          cachedMessageCount: cachedMessages.length,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          finishPerfTrace(cacheTraceId, {
+            channelId: scopedChannelId,
+            cachedMessageCount: 0,
+            failed: true,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentUserId, disableCacheHydration, hiddenMessageIdSet, localClearCutoffMs, scopedChannelId]);
 
   useEffect(() => {
@@ -893,7 +917,7 @@ export default function TextChat({
     }
 
     const timeoutId = window.setTimeout(() => {
-      writeCachedTextChatMessages(currentUserId, scopedChannelId, cacheableMessages);
+      writePersistentCachedTextChatMessages(currentUserId, scopedChannelId, cacheableMessages).catch(() => {});
     }, 250);
 
     return () => {
@@ -1341,7 +1365,7 @@ export default function TextChat({
 
   const fetchMessageHistoryPage = useCallback(async (
     requestChannelId,
-    { beforeMessageId = null, limit = TEXT_CHAT_HISTORY_PAGE_SIZE } = {}
+    { beforeMessageId = null, afterMessageId = null, limit = TEXT_CHAT_HISTORY_PAGE_SIZE } = {}
   ) => {
     const normalizedChannelId = String(requestChannelId || "").trim();
     if (!normalizedChannelId) {
@@ -1358,6 +1382,10 @@ export default function TextChat({
     const numericBeforeMessageId = Number(beforeMessageId) || 0;
     if (numericBeforeMessageId > 0) {
       params.set("beforeMessageId", String(numericBeforeMessageId));
+    }
+    const numericAfterMessageId = Number(afterMessageId) || 0;
+    if (numericAfterMessageId > 0) {
+      params.set("afterMessageId", String(numericAfterMessageId));
     }
 
     const response = await authFetch(`${API_BASE_URL}/chats/${encodeURIComponent(normalizedChannelId)}/messages?${params.toString()}`);
@@ -2168,7 +2196,31 @@ export default function TextChat({
     }
 
     const requestChannelId = scopedChannelId;
-    const latestPagePromise = fetchMessageHistoryPage(requestChannelId, { limit: TEXT_CHAT_HISTORY_PAGE_SIZE });
+    let cachedMessagesForSync = [];
+    if (currentUserId && !disableCacheHydration) {
+      cachedMessagesForSync = (await readPersistentCachedTextChatMessages(currentUserId, requestChannelId))
+        .filter((messageItem) => !isUnrecoverableLegacyEncryptedMessage(messageItem))
+        .filter((messageItem) => !hiddenMessageIdSet.has(String(messageItem?.id || "")))
+        .filter((messageItem) => isMessageVisibleAfterLocalClear(messageItem, localClearCutoffMs));
+
+      if (cachedMessagesForSync.length && activeChannelRef.current === requestChannelId) {
+        setMessagesByChannel((previous) => updateChannelMessagesState(
+          previous,
+          requestChannelId,
+          (currentChannelMessages) => currentChannelMessages.length
+            ? currentChannelMessages
+            : cachedMessagesForSync
+        ));
+      }
+    }
+
+    const syncBaseMessages = cachedMessagesForSync.length ? cachedMessagesForSync : messages;
+    const afterMessageId = getLatestCachedTextChatMessageId(syncBaseMessages);
+    const oldestCachedMessageId = getOldestCachedTextChatMessageId(syncBaseMessages);
+    const latestPagePromise = fetchMessageHistoryPage(requestChannelId, {
+      afterMessageId: afterMessageId || null,
+      limit: afterMessageId > 0 ? TEXT_CHAT_HISTORY_PAGE_SIZE * 4 : TEXT_CHAT_HISTORY_PAGE_SIZE,
+    });
     await chatConnection.invoke("JoinChannel", requestChannelId);
     joinedChannelRef.current = requestChannelId;
     const latestPage = await latestPagePromise;
@@ -2209,8 +2261,12 @@ export default function TextChat({
       )
     ));
     updateHistoryState(requestChannelId, () => ({
-      hasMore: latestPage.hasMore,
-      nextCursor: latestPage.nextCursor,
+      hasMore: afterMessageId > 0
+        ? Boolean(oldestCachedMessageId > 1 && !localClearCutoffMs)
+        : latestPage.hasMore,
+      nextCursor: afterMessageId > 0
+        ? oldestCachedMessageId || null
+        : latestPage.nextCursor,
       loading: false,
     }));
     finishPerfTrace(joinTraceId, {

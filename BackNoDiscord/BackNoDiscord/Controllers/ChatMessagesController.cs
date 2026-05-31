@@ -62,6 +62,7 @@ public sealed class ChatMessagesController : ControllerBase
     public async Task<ActionResult<ChatMessagesPageDto>> GetMessages(
         [FromRoute] string chatId,
         [FromQuery] int? beforeMessageId,
+        [FromQuery] int? afterMessageId,
         [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
@@ -86,14 +87,23 @@ public sealed class ChatMessagesController : ControllerBase
         var query = _context.Messages.AsNoTracking()
             .Where(message => equivalentChannelIds.Contains(message.ChannelId) && !message.IsDeleted);
 
+        var afterCursorMessageId = afterMessageId.GetValueOrDefault();
+        if (afterCursorMessageId > 0)
+        {
+            query = query.Where(message => message.Id > afterCursorMessageId);
+        }
+
         var cursorMessageId = beforeMessageId.GetValueOrDefault();
         if (cursorMessageId > 0)
         {
             query = query.Where(message => message.Id < cursorMessageId);
         }
 
-        var descendingPage = await query
-            .OrderByDescending(message => message.Id)
+        var orderedQuery = afterCursorMessageId > 0
+            ? query.OrderBy(message => message.Id)
+            : query.OrderByDescending(message => message.Id);
+
+        var rawPage = await orderedQuery
             .Take(pageSize + 1)
             .Select(message => new Message
             {
@@ -111,8 +121,8 @@ public sealed class ChatMessagesController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        var hasMore = descendingPage.Count > pageSize;
-        var pageMessages = descendingPage
+        var hasMore = rawPage.Count > pageSize;
+        var pageMessages = rawPage
             .Take(pageSize)
             .OrderBy(message => message.Id)
             .ToList();
@@ -149,7 +159,9 @@ public sealed class ChatMessagesController : ControllerBase
                     reactionsByMessageId.TryGetValue(item.Message.Id, out var reactions) ? reactions : []))
                 .ToList(),
             HasMore = hasMore,
-            NextCursor = pageMessages.Count > 0 ? pageMessages.Min(message => message.Id) : null,
+            NextCursor = afterCursorMessageId > 0
+                ? null
+                : pageMessages.Count > 0 ? pageMessages.Min(message => message.Id) : null,
             ReadState = readState is null
                 ? null
                 : new ChatReadStateDto
