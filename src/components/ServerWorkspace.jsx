@@ -87,6 +87,7 @@ function StreamMiniPlayer({
   title = "Stream",
   actionLabel = "",
   actionVariant = "default",
+  mirrored = false,
   onAction,
   onOpen,
 }) {
@@ -199,7 +200,12 @@ function StreamMiniPlayer({
     >
       {hasVideo ? (
         stream || videoSrc ? (
-          <video ref={videoRef} className="stream-mini-player__video" autoPlay playsInline />
+          <video
+            ref={videoRef}
+            className={`stream-mini-player__video ${mirrored ? "stream-mini-player__video--mirrored" : ""}`.trim()}
+            autoPlay
+            playsInline
+          />
         ) : (
           <img src={imageSrc} alt={title} className="stream-mini-player__image" />
         )
@@ -2687,6 +2693,7 @@ function ServerMainComponent({
           videoSrc: "",
           imageSrc: "",
           muted: true,
+          mirrored: localSharePreview?.mode === "camera",
           title: localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим",
           actionLabel: localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим",
           actionVariant: "danger",
@@ -2798,6 +2805,7 @@ function ServerMainComponent({
             actionVariant="danger"
             onClose={onCloseLocalSharePreview}
             debugInfo={localSharePreviewDebugInfo}
+            mirrored={localSharePreview?.mode === "camera"}
           />
         ) : isVoicePreviewVisible ? (
           <VoiceChannelPreview
@@ -2838,6 +2846,7 @@ function ServerMainComponent({
           videoSrc={floatingStream.videoSrc}
           imageSrc={floatingStream.imageSrc}
           muted={floatingStream.muted}
+          mirrored={floatingStream.mirrored}
           title={floatingStream.title}
           actionLabel={floatingStream.actionLabel}
           actionVariant={floatingStream.actionVariant}

@@ -827,7 +827,7 @@ export const CameraModal = ({
         </label>
 
         <div className="camera-modal__preview">
-          <video ref={previewRef} className="camera-modal__video" autoPlay playsInline muted />
+          <video ref={previewRef} className="camera-modal__video camera-modal__video--mirrored" autoPlay playsInline muted />
           {!hasPreview ? (
             <div className="camera-modal__placeholder">
               <span>

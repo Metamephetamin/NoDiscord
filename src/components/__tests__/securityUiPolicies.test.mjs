@@ -289,6 +289,23 @@ test("stream fullscreen button toggles fullscreen mode", () => {
   assert.doesNotMatch(streamSource, /const requestFullscreen = async/);
 });
 
+test("local camera previews are mirrored consistently", () => {
+  const streamSource = readRepoFile("src/components/ScreenShareViewer.jsx");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const overlaysSource = readRepoFile("src/components/MenuMainOverlays.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+
+  assert.match(streamSource, /mirrored = false/);
+  assert.match(streamSource, /stream-viewer__video--mirrored/);
+  assert.match(workspaceSource, /mirrored: localSharePreview\?\.mode === "camera"/);
+  assert.match(workspaceSource, /mirrored=\{localSharePreview\?\.mode === "camera"\}/);
+  assert.match(workspaceSource, /stream-mini-player__video--mirrored/);
+  assert.match(overlaysSource, /camera-modal__video camera-modal__video--mirrored/);
+  assert.match(mainCss, /\.stream-viewer__video--mirrored/);
+  assert.match(mainCss, /\.stream-mini-player__video--mirrored/);
+  assert.match(mainCss, /\.camera-modal__video--mirrored/);
+});
+
 test("poll votes persist locally and expose anonymous mode", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");

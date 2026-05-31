@@ -12597,6 +12597,10 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   background: #05070b;
 }
 
+.stream-viewer__video--mirrored {
+  transform: scaleX(-1);
+}
+
 .stream-viewer__image {
   width: 100%;
   height: 100%;
@@ -12676,6 +12680,10 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 .stream-mini-player__video,
 .stream-mini-player__image {
   object-fit: contain;
+}
+
+.stream-mini-player__video--mirrored {
+  transform: scaleX(-1);
 }
 
 .stream-mini-player__empty {
@@ -14632,6 +14640,10 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   display: block;
   object-fit: cover;
   background: #090b10;
+}
+
+.camera-modal__video--mirrored {
+  transform: scaleX(-1);
 }
 
 .camera-modal__placeholder {

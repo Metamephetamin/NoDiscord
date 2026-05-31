@@ -12,6 +12,7 @@ export default function ScreenShareViewer({
   actionLabel,
   onAction,
   actionVariant = "default",
+  mirrored = false,
 }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
@@ -164,7 +165,12 @@ export default function ScreenShareViewer({
         {hasVideo ? (
           <>
             {stream || videoSrc ? (
-              <video ref={videoRef} className="stream-viewer__video" autoPlay playsInline />
+              <video
+                ref={videoRef}
+                className={`stream-viewer__video ${mirrored ? "stream-viewer__video--mirrored" : ""}`.trim()}
+                autoPlay
+                playsInline
+              />
             ) : (
               <img src={imageSrc} alt={title} className="stream-viewer__image" />
             )}
