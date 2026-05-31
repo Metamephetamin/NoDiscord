@@ -202,6 +202,15 @@ test("message reports use an in-app dialog instead of browser prompt", () => {
   assert.match(modalSource, /Причина жалобы/);
 });
 
+test("stream fullscreen button toggles fullscreen mode", () => {
+  const streamSource = readRepoFile("src/components/ScreenShareViewer.jsx");
+
+  assert.match(streamSource, /toggleFullscreen/);
+  assert.match(streamSource, /document\.fullscreenElement/);
+  assert.match(streamSource, /document\.exitFullscreen\?\.\(\)/);
+  assert.doesNotMatch(streamSource, /const requestFullscreen = async/);
+});
+
 test("poll votes persist locally and expose anonymous mode", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");

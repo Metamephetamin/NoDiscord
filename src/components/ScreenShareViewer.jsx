@@ -116,11 +116,16 @@ export default function ScreenShareViewer({
     };
   }, [videoSrc]);
 
-  const requestFullscreen = async () => {
+  const toggleFullscreen = async () => {
     try {
+      if (document.fullscreenElement === containerRef.current) {
+        await document.exitFullscreen?.();
+        return;
+      }
+
       await containerRef.current?.requestFullscreen?.();
     } catch (error) {
-      console.error("Ошибка перехода в полноэкранный режим:", error);
+      console.error("Ошибка переключения полноэкранного режима:", error);
     }
   };
 
@@ -144,7 +149,7 @@ export default function ScreenShareViewer({
               {actionLabel || "Действие"}
             </button>
           ) : null}
-          <button type="button" className="stream-viewer__button" onClick={requestFullscreen}>
+          <button type="button" className="stream-viewer__button" onClick={toggleFullscreen}>
             На весь экран
           </button>
           {onClose ? (
