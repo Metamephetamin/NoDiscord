@@ -16056,47 +16056,54 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 }
 
 .donation-modal {
-  width: min(100%, 520px);
-  padding: 22px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: min(100%, 500px);
+  max-height: min(860px, calc(100vh - 36px));
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background:
-    linear-gradient(180deg, rgba(30, 34, 46, 0.98), rgba(14, 17, 24, 0.99)),
+    radial-gradient(circle at 12% 4%, rgba(247, 213, 111, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(28, 32, 44, 0.98), rgba(13, 16, 24, 0.99)),
     #12151d;
   color: #f8fafc;
-  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 24px 62px rgba(0, 0, 0, 0.48);
   animation: uiModalIn 0.22s ease-out;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
 .donation-modal__header {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 34px;
-  gap: 14px;
+  grid-template-columns: 44px minmax(0, 1fr) 34px;
+  gap: 12px;
   align-items: start;
 }
 
 .donation-modal__mark {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(180deg, rgba(247, 213, 111, 0.22), rgba(98, 205, 162, 0.14));
+  background: linear-gradient(180deg, rgba(247, 213, 111, 0.24), rgba(98, 205, 162, 0.16));
   color: #f7d56f;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 900;
-  box-shadow: inset 0 0 0 1px rgba(247, 213, 111, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(247, 213, 111, 0.22), 0 10px 26px rgba(0, 0, 0, 0.2);
 }
 
 .donation-modal__header h3 {
-  margin: 0 0 8px;
-  font-size: 22px;
+  margin: 0 0 6px;
+  font-size: 21px;
+  line-height: 1.1;
 }
 
 .donation-modal__header p {
   margin: 0;
   color: #b4bed4;
-  line-height: 1.5;
+  line-height: 1.4;
+  font-size: 14px;
 }
 
 .donation-modal__close {
@@ -16137,19 +16144,19 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 .donation-modal__details {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .donation-modal__amounts {
-  margin-top: 20px;
+  margin-top: 18px;
 }
 
 .donation-modal__section-label {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #ffe38b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -16158,17 +16165,17 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 .donation-modal__amount-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .donation-modal__amount-button {
-  min-height: 48px;
-  padding: 0 12px;
+  min-height: 42px;
+  padding: 0 10px;
   border: 1px solid rgba(247, 213, 111, 0.18);
   border-radius: 8px;
-  background: rgba(247, 213, 111, 0.1);
+  background: rgba(255, 255, 255, 0.055);
   color: #fff3bd;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   cursor: pointer;
   transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
@@ -16181,6 +16188,13 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   transform: translateY(-1px);
 }
 
+.donation-modal__amount-button.is-selected {
+  border-color: rgba(98, 205, 162, 0.55);
+  background: rgba(98, 205, 162, 0.16);
+  color: #dff9ee;
+  box-shadow: inset 0 0 0 1px rgba(98, 205, 162, 0.16);
+}
+
 .donation-modal__amount-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -16188,20 +16202,20 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
 .donation-modal__payment {
   display: grid;
-  grid-template-columns: 128px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  margin-top: 14px;
-  padding: 14px;
+  margin-top: 12px;
+  padding: 12px;
   border: 1px solid rgba(98, 205, 162, 0.18);
-  border-radius: 10px;
-  background: rgba(98, 205, 162, 0.08);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(98, 205, 162, 0.12), rgba(77, 135, 169, 0.09));
   color: #dff9ee;
 }
 
 .donation-modal__qr {
-  width: 128px;
-  height: 128px;
+  width: 116px;
+  height: 116px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -16225,32 +16239,34 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .donation-modal__payment-copy strong {
   color: #ffffff;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .donation-modal__payment-copy span {
   color: #b8e8d4;
-  line-height: 1.4;
+  line-height: 1.35;
+  font-size: 14px;
 }
 
 .donation-modal__payment-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
 }
 
 .donation-modal__link-button {
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 34px;
+  padding: 0 11px;
   border: 0;
   border-radius: 8px;
   background: #62cda2;
   color: #06130e;
+  font-size: 13px;
   font-weight: 900;
   cursor: pointer;
 }
@@ -16263,11 +16279,12 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
 .donation-modal__detail {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 12px;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
   width: 100%;
-  min-height: 64px;
-  padding: 12px 14px;
+  min-height: 46px;
+  padding: 9px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
@@ -16286,9 +16303,9 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
 .donation-modal__detail-label {
   color: #ffe38b;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -16296,44 +16313,45 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   min-width: 0;
   color: #f8fafc;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  grid-column: 1 / -1;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .donation-modal__copy-state {
   justify-self: end;
-  align-self: start;
-  padding: 4px 8px;
+  padding: 4px 7px;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.07);
   color: #b8e8d4;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .donation-modal__note {
-  margin-top: 14px;
-  padding: 12px 14px;
+  margin-top: 12px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: rgba(98, 205, 162, 0.1);
   color: #b8e8d4;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .donation-modal__actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .donation-modal__primary {
   width: auto;
   min-width: 140px;
+  min-height: 42px;
   margin-top: 0;
 }
 
@@ -17817,16 +17835,17 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
   .donation-modal {
     width: 100%;
-    padding: 18px;
+    max-height: calc(100vh - 24px);
+    padding: 16px;
   }
 
   .donation-modal__header {
-    grid-template-columns: 42px minmax(0, 1fr) 34px;
+    grid-template-columns: 40px minmax(0, 1fr) 34px;
   }
 
   .donation-modal__mark {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
   }
 
   .donation-modal__amount-grid {
@@ -17839,6 +17858,16 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 
   .donation-modal__qr {
     justify-self: center;
+  }
+
+  .donation-modal__detail {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .donation-modal__detail-value {
+    grid-column: 1 / -1;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .donation-modal__actions {
@@ -20441,7 +20470,7 @@ html[data-ui-theme="light"] .donation-modal__section-label {
 
 html[data-ui-theme="light"] .donation-modal__amount-button {
   border-color: rgba(178, 137, 20, 0.24);
-  background: rgba(247, 213, 111, 0.2);
+  background: rgba(247, 213, 111, 0.16);
   color: #5c4300;
 }
 
@@ -20449,6 +20478,12 @@ html[data-ui-theme="light"] .donation-modal__amount-button:hover:not(:disabled),
 html[data-ui-theme="light"] .donation-modal__amount-button:focus-visible:not(:disabled) {
   border-color: rgba(178, 137, 20, 0.42);
   background: rgba(247, 213, 111, 0.32);
+}
+
+html[data-ui-theme="light"] .donation-modal__amount-button.is-selected {
+  border-color: rgba(17, 96, 71, 0.38);
+  background: #e7fbf2;
+  color: #116047;
 }
 
 html[data-ui-theme="light"] .donation-modal__payment {

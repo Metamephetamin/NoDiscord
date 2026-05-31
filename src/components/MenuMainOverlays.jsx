@@ -392,7 +392,7 @@ export const DonationModal = ({
               <button
                 key={option.value}
                 type="button"
-                className="donation-modal__amount-button"
+                className={`donation-modal__amount-button${selectedDonationAmount === option.value ? " is-selected" : ""}`}
                 disabled={donationPaymentStatus === "loading"}
                 onClick={() => {
                   void createDonationPaymentForAmount(option.value);
@@ -431,6 +431,7 @@ export const DonationModal = ({
         ) : null}
 
         <div className="donation-modal__details" aria-label="Реквизиты для поддержки">
+          <span className="donation-modal__section-label">Другие способы</span>
           {DONATION_DETAILS.map((detail) => (
             <button
               key={detail.id}
