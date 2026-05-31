@@ -315,6 +315,7 @@ test("server names are capped consistently in settings and stored snapshots", ()
   const modelSource = readRepoFile("src/utils/menuMainModel.js");
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
 
   assert.match(modelSource, /export const MAX_SERVER_NAME_LENGTH = 48;/);
   assert.match(modelSource, /export const normalizeServerNameInput = \(value, fallback = "Сервер"\) =>/);
@@ -322,6 +323,7 @@ test("server names are capped consistently in settings and stored snapshots", ()
   assert.match(controllerSource, /normalizeServerNameInput\(createServerName/);
   assert.match(controllerSource, /name: normalizeServerNameInput\(value, server\.name \|\| "Сервер"\)/);
   assert.match(settingsSource, /maxLength=\{MAX_SERVER_NAME_LENGTH\}/);
+  assert.match(mainCss, /\.server-summary__name \{\s*min-width: 0;\s*display: -webkit-box;\s*-webkit-line-clamp: 2;\s*-webkit-box-orient: vertical;/);
 });
 
 test("stream fullscreen button toggles fullscreen mode", () => {

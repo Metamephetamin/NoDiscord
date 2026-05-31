@@ -964,10 +964,12 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .server-summary__name {
   min-width: 0;
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   color: #f8fafc;
   font-size: 16px;
   font-weight: 700;
