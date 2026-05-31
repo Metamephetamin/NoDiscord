@@ -5,7 +5,7 @@ import test from "node:test";
 const controllerSource = readFileSync("src/features/menu-main/MenuMainController.jsx", "utf8");
 const rendererSource = readFileSync("src/features/menu-main/MenuMainSettingsRenderer.jsx", "utf8");
 const settingsPanelsSource = readFileSync("src/components/MenuSettingsPanels.jsx", "utf8");
-const adminCssSource = readFileSync("src/css/MenuMain.css", "utf8");
+const adminCssSource = readFileSync("src/css/AdminSecurity.css", "utf8");
 const adminControllerSource = readFileSync("BackNoDiscord/BackNoDiscord/Controllers/AdminController.cs", "utf8");
 
 test("admin security entry stays visible for configured admins before TOTP setup", () => {
