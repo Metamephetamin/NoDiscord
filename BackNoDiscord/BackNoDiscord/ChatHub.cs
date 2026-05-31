@@ -165,19 +165,7 @@ public class ChatHub : Hub
                 .SetProperty(user => user.last_location_expires_at, expiresAt),
                 Context.ConnectionAborted);
 
-        var friendIds = await _context.Friendships
-            .AsNoTracking()
-            .Where(item => item.UserLowId == currentUserId || item.UserHighId == currentUserId)
-            .Select(item => item.UserLowId == currentUserId ? item.UserHighId : item.UserLowId)
-            .Distinct()
-            .ToListAsync(Context.ConnectionAborted);
-
-        var recipientIds = friendIds
-            .Append(currentUserId)
-            .Distinct()
-            .Select(item => item.ToString());
-
-        await Clients.Users(recipientIds).SendAsync(RealtimeEvents.FriendLocationUpdated, new
+        await Clients.All.SendAsync(RealtimeEvents.FriendLocationUpdated, new
         {
             userId = currentUserId,
             latitude,

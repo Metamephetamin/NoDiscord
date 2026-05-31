@@ -550,9 +550,6 @@
   padding-left: 10px;
   padding-right: 14px;
   scroll-padding-bottom: 18px;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  will-change: scroll-position;
 }
 
 .messages-list-shell .messages-list::-webkit-scrollbar {
@@ -974,6 +971,12 @@
 
 .message-item--dm-incoming .msg-content--dm {
   border-bottom-left-radius: 14px;
+}
+
+html[data-chat-custom-background="true"] .msg-content--dm,
+body[data-chat-custom-background="true"] .msg-content--dm {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 html[data-chat-theme]:not([data-chat-theme="default"]) .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
@@ -5140,20 +5143,104 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   align-items: center;
 }
 
-.chat-profile-modal__avatar {
+.chat-profile-modal__avatar-frame {
   position: absolute;
   left: 40px;
   top: 50%;
   width: 108px;
   height: 108px;
   border-radius: 26px;
-  object-fit: cover;
   transform: translateY(-50%);
   border: 2px solid color-mix(in srgb, var(--chat-profile-accent) 46%, rgba(255, 255, 255, 0.18));
   box-shadow:
     0 24px 48px rgba(0, 0, 0, 0.38),
     0 0 34px color-mix(in srgb, var(--chat-profile-accent) 24%, transparent);
   background: rgba(255, 255, 255, 0.08);
+  isolation: isolate;
+}
+
+.chat-profile-modal__avatar {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-neon .chat-profile-modal__avatar-frame,
+.chat-profile-modal.profile-customization--avatar-frame-gold .chat-profile-modal__avatar-frame,
+.chat-profile-modal.profile-customization--avatar-frame-ice .chat-profile-modal__avatar-frame,
+.chat-profile-modal.profile-customization--avatar-frame-amethyst .chat-profile-modal__avatar-frame,
+.chat-profile-modal.profile-customization--avatar-frame-pixel .chat-profile-modal__avatar-frame,
+.chat-profile-modal.profile-customization--avatar-frame-wave .chat-profile-modal__avatar-frame {
+  border-color: transparent;
+  overflow: visible;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-neon .chat-profile-modal__avatar-frame::before,
+.chat-profile-modal.profile-customization--avatar-frame-gold .chat-profile-modal__avatar-frame::before,
+.chat-profile-modal.profile-customization--avatar-frame-ice .chat-profile-modal__avatar-frame::before,
+.chat-profile-modal.profile-customization--avatar-frame-amethyst .chat-profile-modal__avatar-frame::before,
+.chat-profile-modal.profile-customization--avatar-frame-pixel .chat-profile-modal__avatar-frame::before,
+.chat-profile-modal.profile-customization--avatar-frame-wave .chat-profile-modal__avatar-frame::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 3px solid transparent;
+  background:
+    linear-gradient(rgba(12, 15, 23, 0.94), rgba(12, 15, 23, 0.94)) padding-box,
+    conic-gradient(from 30deg, var(--chat-avatar-frame-accent, var(--chat-profile-accent)), color-mix(in srgb, var(--chat-avatar-frame-accent, var(--chat-profile-accent)) 30%, #ffffff), var(--chat-avatar-frame-accent, var(--chat-profile-accent))) border-box;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--chat-avatar-frame-accent, var(--chat-profile-accent)) 30%, transparent);
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-gold {
+  --chat-avatar-frame-accent: #facc15;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-gold .chat-profile-modal__avatar-frame::before {
+  background:
+    linear-gradient(rgba(18, 14, 7, 0.94), rgba(18, 14, 7, 0.94)) padding-box,
+    conic-gradient(from 10deg, #f59e0b, #fff3a3, #f97316, #fde68a, #f59e0b) border-box;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-ice {
+  --chat-avatar-frame-accent: #93c5fd;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-ice .chat-profile-modal__avatar-frame::before {
+  background:
+    linear-gradient(rgba(8, 15, 27, 0.94), rgba(8, 15, 27, 0.94)) padding-box,
+    repeating-conic-gradient(from 0deg, #e0f2fe 0 10deg, #93c5fd 10deg 24deg, #60a5fa 24deg 34deg) border-box;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-amethyst {
+  --chat-avatar-frame-accent: #a78bfa;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-pixel .chat-profile-modal__avatar-frame::before {
+  border-radius: 10px;
+  background:
+    linear-gradient(rgba(10, 15, 22, 0.94), rgba(10, 15, 22, 0.94)) padding-box,
+    repeating-conic-gradient(from 0deg, #65e48f 0 12deg, #22d3ee 12deg 24deg, #111827 24deg 36deg) border-box;
+}
+
+.chat-profile-modal.profile-customization--avatar-frame-wave .chat-profile-modal__avatar-frame::before {
+  background:
+    linear-gradient(rgba(9, 16, 21, 0.94), rgba(9, 16, 21, 0.94)) padding-box,
+    conic-gradient(from 120deg, #34d399, #60a5fa, #c084fc, #34d399) border-box;
 }
 
 .chat-profile-modal__identity {
@@ -5173,7 +5260,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .chat-profile-modal__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
-  align-items: start;
+  align-items: stretch;
   gap: 18px;
   padding: 22px 24px 24px;
   margin-top: -36px;
@@ -5408,7 +5495,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 
 .chat-profile-modal__action {
   --profile-action-hover: 0;
-  min-height: 52px;
+  min-height: 48px;
   padding: 0 16px;
   border: 1px solid rgba(126, 139, 170, 0.2);
   border-radius: 14px;
@@ -5551,9 +5638,9 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 
 .chat-profile-modal__side-widget {
   flex: 1 1 auto;
-  min-height: 174px;
+  min-height: 128px;
   box-sizing: border-box;
-  padding: 14px 15px;
+  padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(126, 139, 170, 0.18);
   background: linear-gradient(135deg, rgba(26, 31, 45, 0.72), rgba(13, 17, 27, 0.84));
@@ -5566,10 +5653,18 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: #f6f8ff;
   font-size: 14px;
   font-weight: 800;
+}
+
+.chat-profile-modal__side-widget-header span {
+  display: block;
+  width: min(48%, 112px);
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chat-profile-accent) 34%, rgba(246, 248, 255, 0.5));
 }
 
 .chat-profile-modal__side-widget-icon {
@@ -5594,8 +5689,8 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .chat-profile-modal__side-widget-row {
   min-width: 0;
   display: grid;
-  gap: 4px;
-  padding: 9px 0;
+  gap: 3px;
+  padding: 6px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -5609,24 +5704,21 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 }
 
 .chat-profile-modal__side-widget-row span {
-  min-width: 0;
-  color: rgba(210, 219, 242, 0.6);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.15;
+  display: block;
+  width: min(62%, 140px);
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chat-profile-accent) 28%, rgba(210, 219, 242, 0.34));
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .chat-profile-modal__side-widget-row b {
-  min-width: 0;
-  color: #f6f8ff;
-  font-size: 13px;
-  line-height: 1.18;
+  display: block;
+  width: min(78%, 172px);
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chat-profile-accent-2) 30%, rgba(246, 248, 255, 0.52));
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 760px) {
@@ -5649,7 +5741,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
     padding: 34px 20px 28px 124px;
   }
 
-  .chat-profile-modal__avatar {
+  .chat-profile-modal__avatar-frame {
     left: 20px;
     width: 88px;
     height: 88px;
@@ -10801,6 +10893,26 @@ html[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text) {
   --message-bubble-bg: var(--chat-message-own-bg, var(--chat-message-bubble-bg, rgba(27, 35, 48, 0.9)));
   border-color: transparent;
+  background: var(--message-bubble-bg);
+}
+
+html[data-chat-custom-background="true"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
+body[data-chat-custom-background="true"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text) {
+  --message-bubble-bg: rgba(17, 21, 31, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--message-bubble-bg);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+html[data-chat-custom-background="true"] .message-item--dm-own .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text),
+body[data-chat-custom-background="true"] .message-item--dm-own .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text) {
+  --message-bubble-bg: rgba(39, 60, 101, 0.97);
+  border-color: rgba(150, 176, 255, 0.14);
+  background: var(--message-bubble-bg);
+}
+
+html[data-chat-custom-background="true"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before,
+body[data-chat-custom-background="true"] .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
   background: var(--message-bubble-bg);
 }
 

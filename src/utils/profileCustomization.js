@@ -1,6 +1,47 @@
 const PROFILE_CUSTOMIZATION_STORAGE_PREFIX = "profile-customization";
 
 export const PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID = "none";
+export const PROFILE_CUSTOMIZATION_CUSTOM_ITEM_ID = "custom";
+
+export const PROFILE_CUSTOM_PALETTE_DEFAULT = Object.freeze({
+  primary: "#7c86ff",
+  secondary: "#38bdf8",
+  surface: "#101522",
+});
+
+export const PROFILE_AVATAR_FRAME_OPTIONS = [
+  { id: "none", title: "Без рамки", colors: ["#20232b", "#8b95a7"] },
+  { id: "neon", title: "Неон", colors: ["#22d3ee", "#a78bfa"] },
+  { id: "gold", title: "Золото", colors: ["#facc15", "#f97316"] },
+  { id: "ice", title: "Лёд", colors: ["#93c5fd", "#f8fafc"] },
+  { id: "amethyst", title: "Аметист", colors: ["#a78bfa", "#38bdf8"] },
+  { id: "pixel", title: "Пиксель", colors: ["#65e48f", "#22d3ee"] },
+  { id: "wave", title: "Волна", colors: ["#34d399", "#60a5fa"] },
+];
+
+const PROFILE_AVATAR_FRAME_IDS = new Set(PROFILE_AVATAR_FRAME_OPTIONS.map((item) => item.id));
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+
+const normalizeHexColor = (value, fallback) => {
+  const normalizedValue = String(value || "").trim();
+  return HEX_COLOR_PATTERN.test(normalizedValue) ? normalizedValue.toLowerCase() : fallback;
+};
+
+const normalizeCustomPalette = (value) => {
+  const source = value && typeof value === "object" ? value : {};
+
+  return {
+    enabled: Boolean(source.enabled),
+    primary: normalizeHexColor(source.primary, PROFILE_CUSTOM_PALETTE_DEFAULT.primary),
+    secondary: normalizeHexColor(source.secondary, PROFILE_CUSTOM_PALETTE_DEFAULT.secondary),
+    surface: normalizeHexColor(source.surface, PROFILE_CUSTOM_PALETTE_DEFAULT.surface),
+  };
+};
+
+const normalizeAvatarFrameId = (value) => {
+  const normalizedValue = String(value || "").trim();
+  return PROFILE_AVATAR_FRAME_IDS.has(normalizedValue) ? normalizedValue : "none";
+};
 
 export const PROFILE_STORE_ITEMS = [
   {
@@ -240,7 +281,17 @@ export const PROFILE_STORE_TYPES = Array.from(new Set(PROFILE_STORE_ITEMS.map((i
 export const PROFILE_STORE_FEATURED_ITEMS = PROFILE_STORE_ITEMS.filter((item) => item.id !== "none").slice(0, 6);
 
 export const getProfileStoreItemById = (itemId) => (
-  PROFILE_STORE_ITEMS.find((item) => item.id === itemId) || PROFILE_STORE_ITEMS[0]
+  itemId === PROFILE_CUSTOMIZATION_CUSTOM_ITEM_ID
+    ? {
+      id: PROFILE_CUSTOMIZATION_CUSTOM_ITEM_ID,
+      title: "Своя палитра",
+      colors: Object.values(PROFILE_CUSTOM_PALETTE_DEFAULT),
+      applies: {
+        profileCard: { theme: "custom", controls: "custom" },
+        voiceCard: { theme: "custom", wave: "pulse" },
+      },
+    }
+    : PROFILE_STORE_ITEMS.find((item) => item.id === itemId) || PROFILE_STORE_ITEMS[0]
 );
 
 export const createDefaultProfileCustomization = () => {
@@ -248,6 +299,7 @@ export const createDefaultProfileCustomization = () => {
     appliedItemId: PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID,
     profileCard: {},
     voiceCard: {},
+    customPalette: normalizeCustomPalette(null),
   };
 };
 
@@ -267,8 +319,12 @@ export const normalizeProfileCustomization = (value) => {
 
   return {
     appliedItemId: String(value.appliedItemId || defaults.appliedItemId),
-    profileCard: value.profileCard && typeof value.profileCard === "object" ? value.profileCard : defaults.profileCard,
+    profileCard: {
+      ...(value.profileCard && typeof value.profileCard === "object" ? value.profileCard : defaults.profileCard),
+      avatarFrame: normalizeAvatarFrameId(value.profileCard?.avatarFrame),
+    },
     voiceCard: value.voiceCard && typeof value.voiceCard === "object" ? value.voiceCard : defaults.voiceCard,
+    customPalette: normalizeCustomPalette(value.customPalette),
   };
 };
 
@@ -319,23 +375,88 @@ export const writeProfileCustomization = (user, customization) => {
 export const applyProfileStoreItem = (customization, item) => {
   const normalizedCustomization = normalizeProfileCustomization(customization);
   const nextItem = item || getProfileStoreItemById(PROFILE_CUSTOMIZATION_DEFAULT_ITEM_ID);
+  const currentAvatarFrame = normalizeAvatarFrameId(normalizedCustomization.profileCard?.avatarFrame);
 
   return normalizeProfileCustomization({
     ...normalizedCustomization,
     appliedItemId: nextItem.id,
-    profileCard: { ...(nextItem.applies.profileCard || {}) },
+    profileCard: { ...(nextItem.applies.profileCard || {}), avatarFrame: currentAvatarFrame },
     voiceCard: { ...(nextItem.applies.voiceCard || {}) },
+    customPalette: normalizeCustomPalette(null),
   });
+};
+
+export const updateProfileAvatarFrame = (customization, avatarFrame) => {
+  const normalizedCustomization = normalizeProfileCustomization(customization);
+
+  return normalizeProfileCustomization({
+    ...normalizedCustomization,
+    profileCard: {
+      ...normalizedCustomization.profileCard,
+      avatarFrame: normalizeAvatarFrameId(avatarFrame),
+    },
+  });
+};
+
+export const updateProfileCustomPalette = (customization, patch) => {
+  const normalizedCustomization = normalizeProfileCustomization(customization);
+  const nextPalette = normalizeCustomPalette({
+    ...normalizedCustomization.customPalette,
+    ...(patch || {}),
+    enabled: true,
+  });
+
+  return normalizeProfileCustomization({
+    ...normalizedCustomization,
+    appliedItemId: PROFILE_CUSTOMIZATION_CUSTOM_ITEM_ID,
+    profileCard: {
+      ...normalizedCustomization.profileCard,
+      theme: "custom",
+      controls: "custom",
+    },
+    voiceCard: {
+      ...normalizedCustomization.voiceCard,
+      theme: "custom",
+      wave: normalizedCustomization.voiceCard?.wave || "pulse",
+    },
+    customPalette: nextPalette,
+  });
+};
+
+export const getProfileCustomPalette = (customization) => (
+  normalizeProfileCustomization(customization).customPalette
+);
+
+export const getProfileCustomizationStyle = (customization) => {
+  const normalizedCustomization = normalizeProfileCustomization(customization);
+  const palette = normalizedCustomization.customPalette;
+
+  if (!palette.enabled) {
+    return undefined;
+  }
+
+  return {
+    "--profile-preview-accent": palette.primary,
+    "--profile-preview-accent-2": palette.secondary,
+    "--chat-profile-accent": palette.primary,
+    "--chat-profile-accent-2": palette.secondary,
+    "--profile-accent": palette.primary,
+    "--profile-accent-soft": `color-mix(in srgb, ${palette.primary} 20%, transparent)`,
+    "--profile-card-border": `color-mix(in srgb, ${palette.primary} 28%, rgba(119, 137, 174, 0.24))`,
+    "--profile-card-bg": `linear-gradient(180deg, color-mix(in srgb, ${palette.surface} 88%, ${palette.primary}), color-mix(in srgb, ${palette.surface} 92%, #050812))`,
+  };
 };
 
 export const getProfileCustomizationClassName = (customization, surface) => {
   const surfaceSettings = normalizeProfileCustomization(customization)[surface] || {};
+  const avatarFrame = surface === "profileCard" ? normalizeAvatarFrameId(surfaceSettings.avatarFrame) : "";
   const hasSurfaceSettings = [
     surfaceSettings.theme,
     surfaceSettings.frame,
     surfaceSettings.controls,
     surfaceSettings.wave,
     surfaceSettings.motion,
+    avatarFrame !== "none" ? avatarFrame : "",
   ].some((value) => String(value || "").trim());
 
   if (!hasSurfaceSettings) {
@@ -349,5 +470,6 @@ export const getProfileCustomizationClassName = (customization, surface) => {
     surfaceSettings.controls ? `profile-customization--controls-${surfaceSettings.controls}` : "",
     surfaceSettings.wave ? `profile-customization--wave-${surfaceSettings.wave}` : "",
     surfaceSettings.motion ? `profile-customization--motion-${surfaceSettings.motion}` : "",
+    avatarFrame && avatarFrame !== "none" ? `profile-customization--avatar-frame-${avatarFrame}` : "",
   ].filter(Boolean).join(" ");
 };

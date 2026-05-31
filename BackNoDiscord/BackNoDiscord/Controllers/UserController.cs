@@ -81,6 +81,7 @@ public class UserController : ControllerBase
     private readonly IEmailVerificationSender _emailVerificationSender;
     private readonly CryptoService _crypto;
     private readonly UserLocationPrivacyService _locationPrivacy;
+    private readonly UserPresenceService _userPresenceService;
 
     public UserController(
         AppDbContext dbContext,
@@ -88,7 +89,8 @@ public class UserController : ControllerBase
         UploadStoragePaths uploadStoragePaths,
         IEmailVerificationSender emailVerificationSender,
         CryptoService crypto,
-        UserLocationPrivacyService locationPrivacy)
+        UserLocationPrivacyService locationPrivacy,
+        UserPresenceService userPresenceService)
     {
         _dbContext = dbContext;
         _chatHubContext = chatHubContext;
@@ -96,6 +98,52 @@ public class UserController : ControllerBase
         _emailVerificationSender = emailVerificationSender;
         _crypto = crypto;
         _locationPrivacy = locationPrivacy;
+        _userPresenceService = userPresenceService;
+    }
+
+    [HttpGet("locations")]
+    public async Task<IActionResult> GetVisibleUserLocations(CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser) ||
+            !int.TryParse(currentUser.UserId, out _))
+        {
+            return Unauthorized();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var users = await _dbContext.Users
+            .AsNoTracking()
+            .Where(user =>
+                user.location_sharing_enabled &&
+                user.last_location_latitude != null &&
+                user.last_location_longitude != null &&
+                user.last_location_updated_at != null &&
+                (user.last_location_expires_at == null || user.last_location_expires_at > now))
+            .ToListAsync(cancellationToken);
+
+        return Ok(users.Select(user =>
+        {
+            var isOnline = _userPresenceService.IsOnline(user.id.ToString());
+            return new
+            {
+                id = user.id,
+                first_name = user.first_name,
+                last_name = user.last_name,
+                nickname = user.nickname,
+                email = user.email ?? string.Empty,
+                avatar_url = user.avatar_url ?? string.Empty,
+                avatar_frame = MediaFrameSerializer.Parse(user.avatar_frame_json, allowNull: true),
+                profile_background_url = user.profile_background_url ?? string.Empty,
+                profile_background_frame = MediaFrameSerializer.Parse(user.profile_background_frame_json, allowNull: true),
+                profile_customization = ParseProfileCustomization(user.profile_customization_json),
+                is_online = isOnline,
+                presence = isOnline ? "online" : "offline",
+                latitude = user.last_location_latitude,
+                longitude = user.last_location_longitude,
+                locationLabel = "Последняя локация",
+                locationUpdatedAt = user.last_location_updated_at
+            };
+        }));
     }
 
     [HttpGet("location-sharing")]

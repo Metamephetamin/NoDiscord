@@ -229,6 +229,15 @@ contextBridge.exposeInMainWorld("electronAppLogo", {
   },
 });
 
+contextBridge.exposeInMainWorld("electronAppStorage", {
+  async getUsage() {
+    return ipcRenderer.invoke("app-storage:get-usage");
+  },
+  async clearCache() {
+    return ipcRenderer.invoke("app-storage:clear-cache");
+  },
+});
+
 contextBridge.exposeInMainWorld("electronPermissions", {
   async getMediaStatus(mediaType) {
     return ipcRenderer.invoke("permissions:get-media-status", mediaType);

@@ -206,6 +206,18 @@ const SETTINGS_NAV_ICON_PATHS = {
       <path d="M4.5 19.5h15" />
     </>
   ),
+  memory: (
+    <>
+      <rect x="4.5" y="7" width="15" height="10" rx="2.4" />
+      <path d="M8 4.5v2.5" />
+      <path d="M12 4.5v2.5" />
+      <path d="M16 4.5v2.5" />
+      <path d="M8 17v2.5" />
+      <path d="M12 17v2.5" />
+      <path d="M16 17v2.5" />
+      <path d="M8.5 11.5h7" />
+    </>
+  ),
   company_info: (
     <>
       <path d="M5.5 20V6.8A2.8 2.8 0 0 1 8.3 4h7.4a2.8 2.8 0 0 1 2.8 2.8V20" />

@@ -101,7 +101,7 @@ public sealed class UserLocationPrivacyServiceTests
 
         Assert.NotNull(preference);
         Assert.True(preference.Enabled);
-        Assert.Equal("friends", preference.Visibility);
+        Assert.Equal("public", preference.Visibility);
         Assert.Equal(36, preference.RetentionHours);
     }
 
@@ -137,7 +137,7 @@ public sealed class UserLocationPrivacyServiceTests
             })
             .Build();
 
-    private static User CreateUser(int id, bool sharingEnabled = true, string visibility = "friends") =>
+    private static User CreateUser(int id, bool sharingEnabled = true, string visibility = "public") =>
         new()
         {
             id = id,

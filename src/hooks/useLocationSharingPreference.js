@@ -6,7 +6,7 @@ import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 const LOCATION_UPDATE_MIN_INTERVAL_MS = 1800;
 const DEFAULT_LOCATION_SHARING_PREFERENCE = Object.freeze({
   enabled: true,
-  visibility: "friends",
+  visibility: "public",
   retentionHours: 24,
 });
 
@@ -86,7 +86,7 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
 
     setIsLoading(true);
     try {
-      const response = await authFetch(`${apiBaseUrl}/api/user/location-sharing`);
+      const response = await authFetch(`${apiBaseUrl}/user/location-sharing`);
       const data = await parseApiResponse(response);
       if (!response.ok) {
         throw new Error(getApiErrorMessage(response, data, "Не удалось получить настройки геолокации."));
@@ -109,12 +109,12 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
 
     setIsSaving(true);
     try {
-      const response = await authFetch(`${apiBaseUrl}/api/user/location-sharing`, {
+      const response = await authFetch(`${apiBaseUrl}/user/location-sharing`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled: Boolean(enabled),
-          visibility: enabled ? "friends" : "none",
+          visibility: enabled ? "public" : "none",
         }),
       });
       const data = await parseApiResponse(response);
@@ -139,7 +139,7 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
 
     setIsSaving(true);
     try {
-      const response = await authFetch(`${apiBaseUrl}/api/user/location-sharing/clear`, {
+      const response = await authFetch(`${apiBaseUrl}/user/location-sharing/clear`, {
         method: "POST",
       });
       const data = await parseApiResponse(response);

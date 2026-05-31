@@ -7,12 +7,14 @@ import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import chatConnection from "../SignalR/ChatConnect";
 import { REALTIME_EVENTS } from "../realtime/realtimeEvents";
+import { API_BASE_URL } from "../config/runtime";
 import {
   LOCATION_SHARING_PREFERENCE_EVENT,
   SELF_LOCATION_UPDATED_EVENT,
   readStoredLocationSharingPreference,
   readStoredSelfLocation,
 } from "../hooks/useLocationSharingPreference";
+import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 import useMobileLongPress from "../hooks/useMobileLongPress";
 import { buildDirectMessageChannelId } from "../utils/directMessageChannels";
 import { formatIntegrationActivityStatus } from "../utils/integrations";
@@ -392,7 +394,7 @@ const createMapUserMarker = (target, { currentUserId, getDisplayName }) => {
     id: userId,
     name: getDisplayName(target),
     email: String(target?.email || "").trim(),
-    avatar: target?.avatar || target?.avatarUrl || "",
+    avatar: target?.avatar || target?.avatarUrl || target?.avatar_url || "",
     locationLabel: location.label,
     latitude: location.latitude,
     longitude: location.longitude,
@@ -789,6 +791,7 @@ const WhereIsEveryoneView = ({
   const [locationStatus, setLocationStatus] = useState(() => (
     typeof navigator !== "undefined" && "geolocation" in navigator ? "" : "геолокация недоступна"
   ));
+  const [globalLocationUsers, setGlobalLocationUsers] = useState([]);
   const updateSelfLocation = useCallback((source) => {
     const coordinates = source?.coords || source || {};
     const latitude = Number(coordinates.latitude);
@@ -814,8 +817,44 @@ const WhereIsEveryoneView = ({
 
     return { latitude, longitude };
   }, [currentUserId, getDisplayName, user]);
+
+  const refreshGlobalLocationUsers = useCallback(async () => {
+    try {
+      const response = await authFetch(`${API_BASE_URL}/user/locations`);
+      const data = await parseApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, "Не удалось обновить карту."));
+      }
+
+      setGlobalLocationUsers(
+        Array.isArray(data)
+          ? data
+            .map((item) => createMapUserMarker(item, { currentUserId, getDisplayName }))
+            .filter(Boolean)
+          : []
+      );
+    } catch (error) {
+      setLocationStatus(error?.message || "карта временно недоступна");
+    }
+  }, [currentUserId, getDisplayName]);
+
+  useEffect(() => {
+    void refreshGlobalLocationUsers();
+
+    const timerRuntime = typeof window !== "undefined" ? window : globalThis;
+    const intervalId = timerRuntime.setInterval?.(() => {
+      void refreshGlobalLocationUsers();
+    }, 30000);
+
+    return () => {
+      if (intervalId) {
+        timerRuntime.clearInterval?.(intervalId);
+      }
+    };
+  }, [refreshGlobalLocationUsers]);
+
   const visibleUsers = useMemo(() => {
-    const usersById = new Map(users.map((item) => [String(item.id || ""), item]));
+    const usersById = new Map([...globalLocationUsers, ...users].map((item) => [String(item.id || ""), item]));
 
     realtimeLocations.forEach((item, id) => {
       usersById.set(id, {
@@ -837,7 +876,7 @@ const WhereIsEveryoneView = ({
       }
       return String(left.name || "").localeCompare(String(right.name || ""), "ru");
     });
-  }, [currentUserId, liveSelfLocation, realtimeLocations, users]);
+  }, [currentUserId, globalLocationUsers, liveSelfLocation, realtimeLocations, users]);
   const onlineCount = visibleUsers.filter((item) => item.kind === "self" || item.kind === "online").length;
   const selectedMapUser = useMemo(
     () => visibleUsers.find((item) => String(item.id || "") === selectedMapUserId) || null,
@@ -2784,44 +2823,61 @@ export const FriendsMain = ({
               onChange={handleConversationSettingsAvatarChange}
             />
 
-            <div className="friends-conversation-settings-toolbar">
-              <div className="friends-modal__search friends-modal__search--compact">
-                <input
-                  type="text"
-                  value={conversationSettingsSearch}
-                  onChange={(event) => setConversationSettingsSearch(event.target.value)}
-                  placeholder="Поиск участников"
-                />
+            <section className="friends-conversation-members-section">
+              <div className="friends-conversation-members-head">
+                <div className="friends-conversation-members-title">
+                  <strong>Участники</strong>
+                  <span>{`${filteredConversationMembers.length} из ${(currentConversationTarget.members || []).length}`}</span>
+                </div>
+
+                <div className="friends-conversation-settings-toolbar">
+                  <div className="friends-modal__search friends-modal__search--compact">
+                    <input
+                      type="text"
+                      value={conversationSettingsSearch}
+                      onChange={(event) => setConversationSettingsSearch(event.target.value)}
+                      placeholder="Поиск по имени или почте"
+                    />
+                    {conversationSettingsSearch ? (
+                      <button type="button" onClick={() => setConversationSettingsSearch("")} aria-label="Очистить поиск">
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {canOpenConversationAddMembers ? (
+                    <button
+                      type="button"
+                      className="friends-modal__action friends-modal__action--ghost friends-modal__action--compact"
+                      onClick={() => {
+                        closeConversationSettings();
+                        onClearConversationStatus?.();
+                        setPendingConversationMemberId("");
+                        setAddConversationMemberSearch("");
+                        setShowAddConversationMemberForm(true);
+                      }}
+                    >
+                      Добавить
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
-              {canOpenConversationAddMembers ? (
-                <button
-                  type="button"
-                  className="friends-modal__action friends-modal__action--ghost friends-modal__action--compact"
-                  onClick={() => {
-                    closeConversationSettings();
-                    onClearConversationStatus?.();
-                    setPendingConversationMemberId("");
-                    setAddConversationMemberSearch("");
-                    setShowAddConversationMemberForm(true);
-                  }}
-                >
-                  Добавить
-                </button>
-              ) : null}
-            </div>
-
-            <div className="friends-modal__list friends-modal__list--settings">
+              <div className="friends-modal__list friends-modal__list--settings">
               {filteredConversationMembers.map((member) => {
                 const canManageMember = canManageConversationMember(member);
                 const memberRole = getConversationMemberRole(member, currentConversationTarget.ownerUserId);
-                const canOpenMemberActions = (canManageConversationRoles || canRemoveConversationMembers) && canManageMember;
+                const roleSelectOptions = CONVERSATION_ROLE_OPTIONS.filter((option) =>
+                  option.id === memberRole || assignableConversationRoles.some((assignableRole) => assignableRole.id === option.id)
+                );
+                const canChangeMemberRole = canManageConversationRoles && canManageMember && memberRole !== "owner" && roleSelectOptions.length > 1;
+                const canOpenMemberActions = canRemoveConversationMembers && canManageMember;
                 const isMemberActionsOpen = activeConversationMemberActionId === String(member.id || "");
 
                 return (
                   <div
                     key={member.id}
-                    className="friends-member-picker__row friends-member-picker__row--settings friends-member-picker__row--profile"
+                    className="friends-member-picker__row friends-member-picker__row--settings friends-member-picker__row--compact friends-member-picker__row--profile"
                     role="button"
                     tabIndex={0}
                     onClick={(event) => {
@@ -2849,9 +2905,23 @@ export const FriendsMain = ({
                     </div>
 
                     <div className="friends-conversation-member-controls">
-                      <span className="friends-conversation-role-badge">
-                        {getConversationRoleLabel(memberRole)}
-                      </span>
+                      {canChangeMemberRole ? (
+                        <select
+                          className="friends-conversation-role-select friends-conversation-role-select--compact"
+                          value={memberRole}
+                          onChange={(event) => handleConversationMemberRoleChange(member, event.target.value)}
+                          disabled={conversationActionLoading}
+                          aria-label={`Роль ${getDisplayName(member)}`}
+                        >
+                          {roleSelectOptions.map((option) => (
+                            <option key={option.id} value={option.id}>{option.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="friends-conversation-role-badge">
+                          {getConversationRoleLabel(memberRole)}
+                        </span>
+                      )}
 
                       {canOpenMemberActions ? (
                         <div className="friends-conversation-member-menu">
@@ -2867,27 +2937,14 @@ export const FriendsMain = ({
 
                           {isMemberActionsOpen ? (
                             <div className="friends-conversation-member-menu__panel">
-                              {canManageConversationRoles ? assignableConversationRoles.map((option) => (
-                                <button
-                                  key={option.id}
-                                  type="button"
-                                  className={`friends-conversation-member-menu__item ${memberRole === option.id ? "friends-conversation-member-menu__item--active" : ""}`}
-                                  onClick={() => handleConversationMemberRoleChange(member, option.id)}
-                                  disabled={conversationActionLoading || memberRole === option.id}
-                                >
-                                  {option.label}
-                                </button>
-                              )) : null}
-                              {canRemoveConversationMembers ? (
-                                <button
-                                  type="button"
-                                  className="friends-conversation-member-menu__item friends-conversation-member-menu__item--danger"
-                                  onClick={() => handleConversationMemberRemove(member)}
-                                  disabled={conversationActionLoading}
-                                >
-                                  Выгнать из беседы
-                                </button>
-                              ) : null}
+                              <button
+                                type="button"
+                                className="friends-conversation-member-menu__item friends-conversation-member-menu__item--danger"
+                                onClick={() => handleConversationMemberRemove(member)}
+                                disabled={conversationActionLoading}
+                              >
+                                Выгнать из беседы
+                              </button>
                             </div>
                           ) : null}
                         </div>
@@ -2899,7 +2956,8 @@ export const FriendsMain = ({
               {!filteredConversationMembers.length ? (
                 <div className="friends-panel__empty">Под поиск никого не нашли.</div>
               ) : null}
-            </div>
+              </div>
+            </section>
 
             {conversationsError ? <div className="friends-panel__error">{conversationsError}</div> : null}
 

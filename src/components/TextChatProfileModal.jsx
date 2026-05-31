@@ -1,7 +1,7 @@
 import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
-import { getProfileCustomizationClassName } from "../utils/profileCustomization";
+import { getProfileCustomizationClassName, getProfileCustomizationStyle } from "../utils/profileCustomization";
 
 const PROFILE_ICON_PATHS = {
   about: (
@@ -150,6 +150,7 @@ export default function TextChatProfileModal({
   const backgroundSrc = profile.backgroundUrl || "";
   const displayName = profile.username || "User";
   const profileThemeClassName = getProfileCustomizationClassName(profile.profileCustomization, "profileCard");
+  const profileCustomizationStyle = getProfileCustomizationStyle(profile.profileCustomization);
   const isOnline = isUserCurrentlyOnline(profile);
   const presenceLabel = profile.isSelf ? "Это вы" : formatUserPresenceStatus(profile);
   const relationshipLabel = getRelationshipLabel(profile);
@@ -164,17 +165,7 @@ export default function TextChatProfileModal({
     { id: "contact", icon: "contact", label: "Связь", value: canMessage ? (canCall ? "Сообщения и звонки" : "Личные сообщения") : "Недоступно" },
     { id: "id", icon: "id", label: "ID", value: profile.userId ? `#${profile.userId}` : "Не указан" },
   ];
-  const profileStats = Array.isArray(profile.socialStats)
-    ? profile.socialStats.filter((item) => item?.id && item?.label)
-    : [];
-  const visibleProfileStats = profileStats.length > 0
-    ? profileStats
-    : [
-      { id: "mutual-friends", label: "Общие друзья", value: "Нет данных" },
-      { id: "mutual-chats", label: "Общие чаты", value: "Нет данных" },
-      { id: "known-since", label: "Вы знакомы", value: "Неизвестно" },
-      { id: "last-dialog", label: "Последний диалог", value: "Нет данных" },
-    ];
+  const profileStatPlaceholders = ["mutual-friends", "mutual-chats", "known-since", "last-dialog"];
   const submitReport = async (event) => {
     event.preventDefault();
     if (!canReport || reportBusy) {
@@ -205,6 +196,7 @@ export default function TextChatProfileModal({
     <div className="chat-profile-modal-backdrop" onClick={onClose}>
       <div
         className={`chat-profile-modal ${profileThemeClassName}`.trim()}
+        style={profileCustomizationStyle}
         role="dialog"
         aria-modal="true"
         aria-label={`Профиль ${displayName}`}
@@ -231,14 +223,16 @@ export default function TextChatProfileModal({
 
         <div className="chat-profile-modal__hero">
           <div className="chat-profile-modal__hero-content">
-            <AnimatedAvatar
-              className="chat-profile-modal__avatar"
-              src={profile.avatarUrl}
-              alt={displayName}
-              frame={profile.avatarFrame}
-              loading="eager"
-              decoding="sync"
-            />
+            <span className="chat-profile-modal__avatar-frame">
+              <AnimatedAvatar
+                className="chat-profile-modal__avatar"
+                src={profile.avatarUrl}
+                alt={displayName}
+                frame={profile.avatarFrame}
+                loading="eager"
+                decoding="sync"
+              />
+            </span>
             <div className="chat-profile-modal__identity">
               <strong>{displayName}</strong>
               <div className="chat-profile-modal__chips">
@@ -387,13 +381,13 @@ export default function TextChatProfileModal({
             <section className="chat-profile-modal__side-widget" aria-label="Общая статистика">
               <div className="chat-profile-modal__side-widget-header">
                 <ProfileIcon kind="info" className="chat-profile-modal__side-widget-icon" />
-                <span>Общее</span>
+                <span />
               </div>
               <div className="chat-profile-modal__side-widget-list">
-                {visibleProfileStats.map((item) => (
-                  <div key={item.id} className="chat-profile-modal__side-widget-row">
-                    <span>{item.label}</span>
-                    <b>{item.value}</b>
+                {profileStatPlaceholders.map((item) => (
+                  <div key={item} className="chat-profile-modal__side-widget-row">
+                    <span />
+                    <b />
                   </div>
                 ))}
               </div>

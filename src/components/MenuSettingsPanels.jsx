@@ -7,16 +7,28 @@ import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import PercentageSlider from "./PercentageSlider";
 import { formatIntegrationActivityStatus } from "../utils/integrations";
 import {
+  PROFILE_AVATAR_FRAME_OPTIONS,
   PROFILE_STORE_FEATURED_ITEMS,
   applyProfileStoreItem,
+  getProfileCustomPalette,
   getProfileCustomizationClassName,
+  getProfileCustomizationStyle,
   getProfileStoreItemById,
+  updateProfileAvatarFrame,
+  updateProfileCustomPalette,
 } from "../utils/profileCustomization";
 import { APP_LOGO_OPTIONS } from "../utils/appLogo";
 import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { copyTextToClipboard } from "../utils/clipboard";
+import {
+  clearAppCacheStorage,
+  formatStorageBytes,
+  getAppStorageUsage,
+  getStorageUsagePercent,
+} from "../utils/appStorageUsage.mjs";
 import AccountSessionsPanel from "../features/account-security/AccountSessionsPanel";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 
@@ -617,7 +629,7 @@ export const AccountSettings = ({
         <div className="voice-toggle-row">
           <div>
             <strong>Показывать меня на карте</strong>
-            <span>Твоё местоположение видно только принятым друзьям Lanaya.</span>
+            <span>Твоё местоположение видно пользователям Lanaya, если геопозиция включена.</span>
           </div>
           <VoiceSwitch
             active={isLocationSharingEnabled}
@@ -658,13 +670,33 @@ export const AccountSettings = ({
 };
 
 export const ProductCompanyInfoSettings = () => {
+  const [copiedCompanyField, setCopiedCompanyField] = useState("");
   const companyRows = [
     { label: "Продукт", value: "Lanaya" },
-    { label: "Тип сервиса", value: "мессенджер для общения, серверов, чатов и голосовых комнат" },
+    { label: "Тип сервиса", value: "мессенджер для личного общения, серверов, групповых чатов и голосовых комнат" },
     { label: "Сайт", value: "https://lanaya.space" },
+    { label: "Домен продакшена", value: "lanaya.space" },
+    { label: "Голосовая связь", value: "комнаты, личные звонки, демонстрация экрана и медиа в реальном времени" },
+    { label: "Реальное время", value: "сообщения, статусы, звонки и уведомления обновляются без перезагрузки" },
+    { label: "Платежи", value: "поддержка проекта и донаты через ЮKassa" },
     { label: "ИНН", value: "504417743063" },
-    { label: "Почта сервиса", value: "code@lanaya.space" },
+    { label: "Почта сервиса", value: "code@lanaya.space", copyable: true },
   ];
+  const copyCompanyValue = async (row) => {
+    if (!row.copyable) {
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(row.value);
+      setCopiedCompanyField(row.label);
+      window.setTimeout(() => {
+        setCopiedCompanyField((current) => (current === row.label ? "" : current));
+      }, 1400);
+    } catch {
+      setCopiedCompanyField("");
+    }
+  };
 
   return (
     <div className="settings-shell__content settings-shell__content--company-info">
@@ -679,8 +711,15 @@ export const ProductCompanyInfoSettings = () => {
           <div className="company-info-panel__mark" aria-hidden="true">L</div>
           <div>
             <h3>Lanaya</h3>
-            <p>Пространство для сообщений, голосовых каналов, серверов и совместного общения.</p>
+            <p>Пространство для сообщений, серверов, голосовых комнат, личных звонков и совместного общения.</p>
           </div>
+        </div>
+
+        <div className="company-info-panel__highlights" aria-label="Краткая информация">
+          <span>Electron + React</span>
+          <span>ASP.NET Core + SignalR</span>
+          <span>LiveKit voice</span>
+          <span>PostgreSQL</span>
         </div>
 
         <div className="account-settings-card account-settings-card--rows company-info-panel__rows">
@@ -688,7 +727,21 @@ export const ProductCompanyInfoSettings = () => {
             <div key={row.label} className="account-settings-row company-info-panel__row">
               <div className="account-settings-row__copy">
                 <strong>{row.label}</strong>
-                <span>{row.value}</span>
+                {row.copyable ? (
+                  <button
+                    type="button"
+                    className="company-info-panel__copy-value"
+                    onClick={() => {
+                      void copyCompanyValue(row);
+                    }}
+                    title="Скопировать почту"
+                  >
+                    {row.value}
+                    {copiedCompanyField === row.label ? <small>Скопировано</small> : null}
+                  </button>
+                ) : (
+                  <span>{row.value}</span>
+                )}
               </div>
             </div>
           ))}
@@ -696,6 +749,152 @@ export const ProductCompanyInfoSettings = () => {
 
         <div className="company-info-panel__note">
           Юридические реквизиты, оферта, условия оплаты и информация о возвратах должны быть опубликованы в актуальном виде перед приемом реальных платежей.
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export const MemorySettings = () => {
+  const [storageUsage, setStorageUsage] = useState(null);
+  const [storageStatus, setStorageStatus] = useState("loading");
+  const [storageError, setStorageError] = useState("");
+  const [isClearingCache, setIsClearingCache] = useState(false);
+
+  const loadStorageUsage = async () => {
+    setStorageStatus("loading");
+    setStorageError("");
+
+    try {
+      const usage = await getAppStorageUsage();
+      setStorageUsage(usage);
+      setStorageStatus("ready");
+    } catch (error) {
+      setStorageUsage(null);
+      setStorageStatus("error");
+      setStorageError(error?.message || "Не удалось посчитать память приложения.");
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const load = async () => {
+      setStorageStatus("loading");
+      setStorageError("");
+
+      try {
+        const usage = await getAppStorageUsage();
+        if (isMounted) {
+          setStorageUsage(usage);
+          setStorageStatus("ready");
+        }
+      } catch (error) {
+        if (isMounted) {
+          setStorageUsage(null);
+          setStorageStatus("error");
+          setStorageError(error?.message || "Не удалось посчитать память приложения.");
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const clearCache = async () => {
+    setIsClearingCache(true);
+    setStorageError("");
+
+    try {
+      await clearAppCacheStorage();
+      setStorageStatus("cleared");
+      setStorageUsage((previous) => previous ? { ...previous, cacheBytes: 0 } : previous);
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 700);
+    } catch (error) {
+      setStorageStatus("error");
+      setStorageError(error?.message || "Не удалось очистить кеш.");
+      setIsClearingCache(false);
+    }
+  };
+
+  const usageRows = storageUsage ? [
+    {
+      label: "Кеш",
+      value: formatStorageBytes(storageUsage.cacheBytes),
+      tone: "cache",
+    },
+    {
+      label: "Данные приложения",
+      value: formatStorageBytes(storageUsage.appDataBytes),
+      tone: "data",
+    },
+    {
+      label: "Локальные настройки",
+      value: formatStorageBytes((storageUsage.localStorageBytes || 0) + (storageUsage.sessionStorageBytes || 0)),
+      tone: "local",
+    },
+    {
+      label: "Доступно хранилища",
+      value: storageUsage.quotaBytes ? formatStorageBytes(storageUsage.quotaBytes) : "нет данных",
+      tone: "quota",
+    },
+  ] : [];
+  const usagePercent = storageUsage ? getStorageUsagePercent(storageUsage.totalBytes, storageUsage.quotaBytes) : 0;
+  const statusText =
+    storageStatus === "loading"
+      ? "Считаем память..."
+      : storageStatus === "cleared"
+        ? "Кеш очищен. Обновляем страницу..."
+        : storageError || "Память обновлена.";
+
+  return (
+    <div className="settings-shell__content settings-shell__content--memory">
+      <div className="settings-shell__content-header">
+        <div>
+          <h2>Память</h2>
+          <p>Размер приложения, кеша и локальных данных на этом устройстве.</p>
+        </div>
+      </div>
+
+      <section className="voice-settings-card memory-settings-card memory-settings-card--hero">
+        <div className="memory-settings-card__main">
+          <span>Занято приложением</span>
+          <strong>{storageUsage ? formatStorageBytes(storageUsage.totalBytes) : "считаем..."}</strong>
+          <small>{storageUsage?.desktopAvailable ? "Данные Electron и кеш интерфейса" : "Данные браузера и интерфейса"}</small>
+        </div>
+        <div className="memory-settings-card__meter" aria-hidden="true">
+          <span style={{ width: `${usagePercent}%` }} />
+        </div>
+      </section>
+
+      <section className="memory-settings-grid" aria-label="Детали памяти">
+        {usageRows.map((row) => (
+          <div key={row.label} className={`memory-settings-tile memory-settings-tile--${row.tone}`}>
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+          </div>
+        ))}
+      </section>
+
+      <section className="voice-settings-card memory-settings-card memory-settings-card--actions">
+        <div>
+          <div className="voice-settings-card__title">Очистка кеша</div>
+          <p>Удаляются временные файлы, HTTP-кеш и Cache API. Вход, профиль и настройки остаются на месте.</p>
+          <span className="memory-settings-card__status" aria-live="polite">{statusText}</span>
+        </div>
+        <div className="memory-settings-card__buttons">
+          <button type="button" className="settings-inline-button" onClick={loadStorageUsage} disabled={storageStatus === "loading" || isClearingCache}>
+            Обновить
+          </button>
+          <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={clearCache} disabled={isClearingCache || storageStatus === "loading"}>
+            {isClearingCache ? "Очищаем..." : "Очистить кеш"}
+          </button>
         </div>
       </section>
     </div>
@@ -713,15 +912,22 @@ export const PersonalProfileSettings = ({
   onProfileCustomizationChange,
   onChangeAvatar,
   onChangeBackground,
-  onChangeAvatarFrame,
-  onChangeBackgroundFrame,
   onResetCustomization,
 }) => {
   const profileThemeClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
+  const profileCustomizationStyle = getProfileCustomizationStyle(profileCustomization);
   const appliedTheme = getProfileStoreItemById(profileCustomization?.appliedItemId);
+  const customPalette = getProfileCustomPalette(profileCustomization);
+  const selectedAvatarFrame = profileCustomization?.profileCard?.avatarFrame || "none";
   const themeItems = PROFILE_STORE_FEATURED_ITEMS;
   const applyTheme = (item) => {
     onProfileCustomizationChange?.(applyProfileStoreItem(profileCustomization, item));
+  };
+  const applyAvatarFrame = (frameId) => {
+    onProfileCustomizationChange?.(updateProfileAvatarFrame(profileCustomization, frameId));
+  };
+  const applyPaletteColor = (key, value) => {
+    onProfileCustomizationChange?.(updateProfileCustomPalette(profileCustomization, { [key]: value }));
   };
 
   return (
@@ -735,7 +941,7 @@ export const PersonalProfileSettings = ({
       <section className="voice-settings-card voice-settings-card--profile">
         <div className="profile-settings-form profile-settings-form--public">
           <div className="profile-settings-form__public-preview">
-            <div className={`profile-settings-form__public-card ${profileThemeClassName}`.trim()}>
+            <div className={`profile-settings-form__public-card ${profileThemeClassName}`.trim()} style={profileCustomizationStyle}>
               {profileBackgroundSrc ? (
                 <AnimatedMedia
                   className="profile-settings-form__public-backdrop"
@@ -817,24 +1023,24 @@ export const PersonalProfileSettings = ({
                   <div className="profile-settings-form__public-widget">
                     <div className="profile-settings-form__public-widget-header">
                       <ProfilePreviewIcon kind="info" className="profile-settings-form__public-widget-icon" />
-                      <strong>Общее</strong>
+                      <strong />
                     </div>
                     <div className="profile-settings-form__public-widget-list">
                       <div>
-                        <span>Общие друзья</span>
-                        <b>1 общий друг</b>
+                        <span />
+                        <b />
                       </div>
                       <div>
-                        <span>Общие чаты</span>
-                        <b>2 общих чата</b>
+                        <span />
+                        <b />
                       </div>
                       <div>
-                        <span>Вы знакомы</span>
-                        <b>с 24 апреля</b>
+                        <span />
+                        <b />
                       </div>
                       <div>
-                        <span>Последний диалог</span>
-                        <b>вчера</b>
+                        <span />
+                        <b />
                       </div>
                     </div>
                   </div>
@@ -866,6 +1072,28 @@ export const PersonalProfileSettings = ({
                   </button>
                 ))}
               </div>
+              <div className="profile-settings-form__palette-panel">
+                <div className="profile-settings-form__palette-header">
+                  <span>Своя палитра</span>
+                  <small>Цвета сразу применяются к профилю</small>
+                </div>
+                <div className="profile-settings-form__palette-grid">
+                  {[
+                    ["primary", "Акцент"],
+                    ["secondary", "Второй"],
+                    ["surface", "Основа"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="profile-settings-form__color-field">
+                      <span>{label}</span>
+                      <input
+                        type="color"
+                        value={customPalette[key]}
+                        onChange={(event) => applyPaletteColor(key, event.target.value)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="profile-settings-form__control-group profile-settings-form__control-group--media">
@@ -874,15 +1102,29 @@ export const PersonalProfileSettings = ({
                 <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
                   Аватар
                 </button>
-                <button type="button" className="settings-inline-button" onClick={onChangeAvatarFrame}>
-                  Рамка аватара
-                </button>
                 <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
                   Фон
                 </button>
-                <button type="button" className="settings-inline-button" onClick={onChangeBackgroundFrame}>
-                  Рамка фона
-                </button>
+              </div>
+              <div className="profile-settings-form__avatar-frame-picker">
+                <span>Рамка аватара</span>
+                <div className="profile-settings-form__avatar-frame-list">
+                  {PROFILE_AVATAR_FRAME_OPTIONS.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={`profile-settings-form__avatar-frame-option ${selectedAvatarFrame === item.id ? "profile-settings-form__avatar-frame-option--active" : ""}`.trim()}
+                      style={{
+                        "--avatar-frame-option-1": item.colors[0],
+                        "--avatar-frame-option-2": item.colors[1],
+                      }}
+                      onClick={() => applyAvatarFrame(item.id)}
+                    >
+                      <i aria-hidden="true" />
+                      <b>{item.title}</b>
+                    </button>
+                  ))}
+                </div>
               </div>
               <button type="button" className="settings-inline-button settings-inline-button--danger profile-settings-form__reset-button" onClick={onResetCustomization}>
                 Убрать всё
@@ -1671,11 +1913,10 @@ export const VoiceSettingsPanel = ({
         <div className="voice-settings-card__title">Движок шумоподавления</div>
         <div className="voice-profile-list">
           {denoiserModeOptions.map((option) => (
-            <label key={option.id} className="voice-profile-option">
+            <label key={option.id} className="voice-profile-option voice-profile-option--single-line">
               <input type="radio" name="denoiserMode" checked={audioDenoiserMode === option.id} onChange={() => onDenoiserModeChange(option.id)} />
               <span className="voice-profile-option__copy">
                 <strong>{option.title}</strong>
-                <span>{option.description}</span>
               </span>
             </label>
           ))}
@@ -1849,7 +2090,6 @@ export const AppearanceAccessibilitySettings = ({
   chatThemeId,
   customChatBackgroundData,
   customChatBackgroundFit,
-  customChatBackgroundName,
   chatThemeError,
   appLogoId,
   onDensityChange,
@@ -1878,7 +2118,6 @@ export const AppearanceAccessibilitySettings = ({
       <div className="settings-shell__content-header">
         <div>
           <h2>Внешний вид и доступность</h2>
-          <p>Настройте плотность интерфейса, размер шрифта, размеры зон попадания и уровень анимаций под свой ритм работы.</p>
         </div>
       </div>
 
@@ -1901,7 +2140,6 @@ export const AppearanceAccessibilitySettings = ({
             </span>
             <span className="theme-choice__copy">
               <strong>{option.title}</strong>
-              <span>{option.description}</span>
             </span>
           </button>
         ))}
@@ -1912,7 +2150,6 @@ export const AppearanceAccessibilitySettings = ({
       <div className="settings-section__header settings-section__header--compact">
         <div>
           <h4>Темы чата</h4>
-          <p>Отдельно меняет фон чата, цвет оболочек сообщений и цвет блока документов.</p>
         </div>
       </div>
 
@@ -1932,7 +2169,6 @@ export const AppearanceAccessibilitySettings = ({
             </span>
             <span className="chat-theme-choice__copy">
               <strong>{option.title}</strong>
-              <span>{option.description}</span>
             </span>
           </button>
         ))}
@@ -1953,11 +2189,6 @@ export const AppearanceAccessibilitySettings = ({
           <div className="chat-background-picker__header">
             <div>
               <strong>Свой фон чата</strong>
-              <span>
-                {customChatBackgroundData
-                  ? `Выбран файл: ${customChatBackgroundName || "изображение"}.`
-                  : "Можно поставить PNG, JPG, WEBP или GIF до 1.5 МБ."}
-              </span>
             </div>
             <div className="settings-shell__actions chat-background-picker__actions">
               <button type="button" className="settings-inline-button" onClick={() => chatBackgroundInputRef.current?.click()}>
@@ -2006,14 +2237,13 @@ export const AppearanceAccessibilitySettings = ({
       <div className="voice-settings-card__title">Плотность интерфейса</div>
       <div className="voice-profile-list">
         {[
-          { id: "standard", title: "Стандартно", description: "Обычная плотность блоков и отступов." },
-          { id: "compact", title: "Компактно", description: "Больше информации на экране и быстрее для ПК-навигации." },
+          { id: "standard", title: "Стандартно" },
+          { id: "compact", title: "Компактно" },
         ].map((option) => (
-          <label key={option.id} className="voice-profile-option">
+          <label key={option.id} className="voice-profile-option voice-profile-option--single-line">
             <input type="radio" name="uiDensity" checked={uiDensity === option.id} onChange={() => onDensityChange(option.id)} />
             <span className="voice-profile-option__copy">
               <strong>{option.title}</strong>
-              <span>{option.description}</span>
             </span>
           </label>
         ))}
@@ -2024,15 +2254,14 @@ export const AppearanceAccessibilitySettings = ({
       <div className="voice-settings-card__title">Размер текста</div>
       <div className="voice-profile-list">
         {[
-          { id: "sm", title: "Чуть меньше", description: "Компактнее и плотнее для больших списков." },
-          { id: "md", title: "Стандартный", description: "Сбалансированный базовый размер." },
-          { id: "lg", title: "Крупнее", description: "Лучше читается и легче воспринимается." },
+          { id: "sm", title: "Чуть меньше" },
+          { id: "md", title: "Стандартный" },
+          { id: "lg", title: "Крупнее" },
         ].map((option) => (
-          <label key={option.id} className="voice-profile-option">
+          <label key={option.id} className="voice-profile-option voice-profile-option--single-line">
             <input type="radio" name="uiFontScale" checked={uiFontScale === option.id} onChange={() => onFontScaleChange(option.id)} />
             <span className="voice-profile-option__copy">
               <strong>{option.title}</strong>
-              <span>{option.description}</span>
             </span>
           </label>
         ))}
@@ -2041,24 +2270,22 @@ export const AppearanceAccessibilitySettings = ({
 
     <section className="voice-settings-card">
       <div className="voice-settings-card__title">Взаимодействие</div>
-      <div className="voice-toggle-row voice-toggle-row--first">
+      <div className="voice-toggle-row voice-toggle-row--first voice-toggle-row--no-description">
         <div>
           <strong>Уменьшить анимации</strong>
-          <span>Снижает движение интерфейса и делает переходы спокойнее.</span>
         </div>
         <VoiceSwitch active={uiReduceMotion} onClick={() => onReduceMotionChange((previous) => !previous)} label="Уменьшить анимации" />
       </div>
 
       <div className="voice-profile-list">
         {[
-          { id: "standard", title: "Обычные зоны попадания", description: "Стандартные размеры кнопок и контролов." },
-          { id: "large", title: "Увеличенные зоны попадания", description: "Кнопки и поля становятся чуть удобнее для касания." },
+          { id: "standard", title: "Обычные зоны попадания" },
+          { id: "large", title: "Увеличенные зоны попадания" },
         ].map((option) => (
-          <label key={option.id} className="voice-profile-option">
+          <label key={option.id} className="voice-profile-option voice-profile-option--single-line">
             <input type="radio" name="uiTouchTargetSize" checked={uiTouchTargetSize === option.id} onChange={() => onTouchTargetSizeChange(option.id)} />
             <span className="voice-profile-option__copy">
               <strong>{option.title}</strong>
-              <span>{option.description}</span>
             </span>
           </label>
         ))}
@@ -2069,7 +2296,6 @@ export const AppearanceAccessibilitySettings = ({
       <div className="settings-section__header settings-section__header--compact">
         <div>
           <h4>Логотип приложения</h4>
-          <p>Выберите иконку для окна, вкладки и элементов приложения.</p>
         </div>
       </div>
       <div className="app-logo-picker" role="radiogroup" aria-label="Логотип приложения">
@@ -2085,7 +2311,6 @@ export const AppearanceAccessibilitySettings = ({
             <img className="app-logo-picker__preview" src={option.src} alt="" />
             <span className="app-logo-picker__copy">
               <strong>{option.label}</strong>
-              <span>{option.description}</span>
             </span>
           </button>
         ))}

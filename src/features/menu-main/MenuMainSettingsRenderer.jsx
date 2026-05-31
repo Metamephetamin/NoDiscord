@@ -4,6 +4,7 @@ import {
   AppearanceAccessibilitySettings,
   DevicesSettings,
   IntegrationsSettings,
+  MemorySettings,
   MobileSettingsShell,
   NotificationsSettings,
   PersonalProfileSettings,
@@ -340,6 +341,8 @@ export function MenuMainSettingsContent({
       );
     case "company_info":
       return <ProductCompanyInfoSettings />;
+    case "memory":
+      return <MemorySettings />;
     case "server":
       return (
         <ServerSettings

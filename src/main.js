@@ -720,6 +720,91 @@ const clearAppUpdateCache = async () => {
   }
 };
 
+const APP_STORAGE_CACHE_PATHS = [
+  "Cache",
+  "Code Cache",
+  "GPUCache",
+  "DawnCache",
+  "ShaderCache",
+  path.join("Service Worker", "CacheStorage"),
+];
+
+const getDirectorySize = async (targetPath, { maxEntries = 12000 } = {}) => {
+  let totalBytes = 0;
+  let visitedEntries = 0;
+  const stack = [targetPath];
+
+  while (stack.length > 0 && visitedEntries < maxEntries) {
+    const currentPath = stack.pop();
+    visitedEntries += 1;
+
+    let stats;
+    try {
+      stats = await fs.stat(currentPath);
+    } catch {
+      continue;
+    }
+
+    if (stats.isFile()) {
+      totalBytes += stats.size;
+      continue;
+    }
+
+    if (!stats.isDirectory()) {
+      continue;
+    }
+
+    let entries = [];
+    try {
+      entries = await fs.readdir(currentPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      stack.push(path.join(currentPath, entry.name));
+    }
+  }
+
+  return totalBytes;
+};
+
+const getAppStorageCachePaths = () =>
+  APP_STORAGE_CACHE_PATHS.map((relativePath) => path.join(app.getPath("userData"), relativePath));
+
+const getAppStorageUsage = async () => {
+  const userDataPath = app.getPath("userData");
+  const [totalBytes, cacheSize, cacheDirectoryBytes] = await Promise.all([
+    getDirectorySize(userDataPath),
+    typeof session.defaultSession.getCacheSize === "function"
+      ? session.defaultSession.getCacheSize().catch(() => 0)
+      : Promise.resolve(0),
+    Promise.all(getAppStorageCachePaths().map((cachePath) => getDirectorySize(cachePath))).then((sizes) =>
+      sizes.reduce((sum, value) => sum + value, 0)
+    ),
+  ]);
+  const cacheBytes = Math.max(Number(cacheSize) || 0, cacheDirectoryBytes);
+
+  return {
+    totalBytes,
+    cacheBytes,
+    appDataBytes: Math.max(0, totalBytes - cacheBytes),
+  };
+};
+
+const clearAppStorageCache = async () => {
+  if (typeof session.defaultSession.clearCache === "function") {
+    await session.defaultSession.clearCache();
+  }
+  if (typeof session.defaultSession.clearStorageData === "function") {
+    await session.defaultSession.clearStorageData({ storages: ["cachestorage"] }).catch(() => {});
+  }
+  await Promise.all(
+    getAppStorageCachePaths().map((cachePath) => fs.rm(cachePath, { recursive: true, force: true }).catch(() => {}))
+  );
+  return true;
+};
+
 const fileExists = async (targetPath) => {
   try {
     await fs.access(targetPath);
@@ -2108,6 +2193,8 @@ app.whenReady().then(async () => {
     receivedAt: new Date().toISOString(),
     payload: payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null,
   }));
+  ipcMain.handle("app-storage:get-usage", async () => getAppStorageUsage());
+  ipcMain.handle("app-storage:clear-cache", async () => clearAppStorageCache());
   ipcMain.handle("media-performance:set-stream-active", async (_event, active) =>
     setMediaPerformanceMode(active === true));
   ipcMain.handle("attachments:open-picker", async (_event, payload) => {

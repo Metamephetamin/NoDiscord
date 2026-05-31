@@ -256,6 +256,7 @@ export const CHAT_BACKGROUND_FIT_OPTIONS = Object.freeze([
 
 const SUPPORTED_CHAT_BACKGROUND_FIT_IDS = new Set(CHAT_BACKGROUND_FIT_OPTIONS.map((option) => option.id));
 const DEFAULT_CHAT_BACKGROUND_FIT = CHAT_BACKGROUND_FIT_OPTIONS[0];
+const CHAT_CUSTOM_BACKGROUND_STYLE_ID = "lanaya-chat-custom-background-style";
 
 export function normalizeChatThemeId(value) {
   const normalizedValue = String(value || "").trim().toLowerCase();
@@ -286,6 +287,35 @@ function toCssUrl(value) {
   return `url("${normalizedValue.replace(/["\\\n\r]/g, "")}")`;
 }
 
+function syncChatCustomBackgroundStyle(customBackgroundData, customBackgroundFit) {
+  const documentRef = globalThis.document;
+  const head = documentRef?.head;
+  if (!head) {
+    return;
+  }
+
+  let styleNode = documentRef.getElementById(CHAT_CUSTOM_BACKGROUND_STYLE_ID);
+  if (!customBackgroundData) {
+    styleNode?.remove();
+    return;
+  }
+
+  if (!styleNode) {
+    styleNode = documentRef.createElement("style");
+    styleNode.id = CHAT_CUSTOM_BACKGROUND_STYLE_ID;
+    head.appendChild(styleNode);
+  }
+
+  styleNode.textContent = [
+    ".textchat-container::before {",
+    `  --chat-custom-background-image: ${toCssUrl(customBackgroundData)};`,
+    `  --chat-custom-background-size: ${customBackgroundFit.size};`,
+    `  --chat-custom-background-position: ${customBackgroundFit.position};`,
+    `  --chat-custom-background-repeat: ${customBackgroundFit.repeat};`,
+    "}",
+  ].join("\n");
+}
+
 export function applyChatThemePreference(value, options = {}) {
   const theme = resolveChatTheme(value);
   const documentRef = globalThis.document;
@@ -298,6 +328,8 @@ export function applyChatThemePreference(value, options = {}) {
     theme.id === "default" && uiTheme === "light"
       ? { ...theme.variables, ...LIGHT_DEFAULT_CHAT_THEME_VARIABLES }
       : theme.variables;
+
+  syncChatCustomBackgroundStyle(customBackgroundData, customBackgroundFit);
 
   [root, body].forEach((node) => {
     if (!node) {
@@ -313,10 +345,10 @@ export function applyChatThemePreference(value, options = {}) {
       Object.entries(themeVariables).forEach(([name, themeValue]) => {
         node.style.setProperty(name, themeValue);
       });
-      node.style.setProperty("--chat-custom-background-image", toCssUrl(customBackgroundData));
-      node.style.setProperty("--chat-custom-background-size", customBackgroundFit.size);
-      node.style.setProperty("--chat-custom-background-position", customBackgroundFit.position);
-      node.style.setProperty("--chat-custom-background-repeat", customBackgroundFit.repeat);
+      node.style.setProperty("--chat-custom-background-image", "none");
+      node.style.setProperty("--chat-custom-background-size", DEFAULT_CHAT_BACKGROUND_FIT.size);
+      node.style.setProperty("--chat-custom-background-position", DEFAULT_CHAT_BACKGROUND_FIT.position);
+      node.style.setProperty("--chat-custom-background-repeat", DEFAULT_CHAT_BACKGROUND_FIT.repeat);
     }
   });
 

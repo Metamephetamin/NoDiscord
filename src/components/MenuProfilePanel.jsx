@@ -2,7 +2,7 @@ import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 import PercentageSlider from "./PercentageSlider";
-import { getProfileCustomizationClassName } from "../utils/profileCustomization";
+import { getProfileCustomizationClassName, getProfileCustomizationStyle } from "../utils/profileCustomization";
 
 const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
   <button type="button" className="device-menu__settings" onClick={onClick}>
@@ -458,6 +458,7 @@ export default function MenuProfilePanel({
 }) {
   const profileCardClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
   const voiceCardClassName = getProfileCustomizationClassName(profileCustomization, "voiceCard");
+  const profileCustomizationStyle = getProfileCustomizationStyle(profileCustomization);
   const wrapperClassName = [
     "menu__profile-wrapper",
     currentVoiceChannel ? "menu__profile-wrapper--voice-connected" : "",
@@ -466,7 +467,7 @@ export default function MenuProfilePanel({
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={wrapperClassName}>
+    <div className={wrapperClassName} style={profileCustomizationStyle}>
       {currentVoiceChannel ? (
         <div className={`profile__voice-stack ${voiceCardClassName}`}>
           <StreamStatusBanner

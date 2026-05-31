@@ -415,7 +415,7 @@ namespace BackNoDiscord.Migrations
                     last_location_updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     last_location_expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     location_sharing_enabled = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
-                    location_visibility = table.Column<string>(type: "text", nullable: false, defaultValue: "friends"),
+                    location_visibility = table.Column<string>(type: "text", nullable: false, defaultValue: "public"),
                     terms_accepted_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     terms_version = table.Column<string>(type: "text", nullable: true),
                     privacy_version = table.Column<string>(type: "text", nullable: true),

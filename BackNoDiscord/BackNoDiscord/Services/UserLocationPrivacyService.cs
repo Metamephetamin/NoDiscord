@@ -7,6 +7,7 @@ public sealed class UserLocationPrivacyService
     private const int DefaultRetentionHours = 24;
     private const int MinRetentionHours = 1;
     private const int MaxRetentionHours = 168;
+    private const string PublicVisibility = "public";
     private const string FriendsVisibility = "friends";
     private const string NoneVisibility = "none";
 
@@ -32,8 +33,7 @@ public sealed class UserLocationPrivacyService
             .SingleOrDefaultAsync(cancellationToken);
 
         return locationPreference is not null
-            && locationPreference.location_sharing_enabled
-            && string.Equals(locationPreference.location_visibility, FriendsVisibility, StringComparison.OrdinalIgnoreCase);
+            && locationPreference.location_sharing_enabled;
     }
 
     public async Task<UserLocationSharingPreference?> GetPreferenceAsync(int userId, CancellationToken cancellationToken)
@@ -108,7 +108,6 @@ public sealed class UserLocationPrivacyService
     public bool IsLocationVisible(User user, DateTimeOffset now)
     {
         if (!user.location_sharing_enabled ||
-            !string.Equals(user.location_visibility, FriendsVisibility, StringComparison.OrdinalIgnoreCase) ||
             user.last_location_latitude is null ||
             user.last_location_longitude is null ||
             user.last_location_updated_at is null)
@@ -133,8 +132,8 @@ public sealed class UserLocationPrivacyService
         }
 
         return string.Equals(visibility, FriendsVisibility, StringComparison.OrdinalIgnoreCase)
-            ? FriendsVisibility
-            : FriendsVisibility;
+            ? PublicVisibility
+            : PublicVisibility;
     }
 }
 

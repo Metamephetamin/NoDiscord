@@ -1246,7 +1246,7 @@ namespace BackNoDiscord.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text")
-                        .HasDefaultValue("friends")
+                        .HasDefaultValue("public")
                         .HasColumnName("location_visibility");
 
                     b.Property<string>("nickname")

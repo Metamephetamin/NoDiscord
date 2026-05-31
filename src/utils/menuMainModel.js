@@ -918,6 +918,7 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
   { id: "voice_video", label: "Голос и видео", section: "Приложение" },
   { id: "appearance_accessibility", label: "Внешний вид и доступность", section: "Приложение" },
+  { id: "memory", label: "Память", section: "Приложение" },
   { id: "company_info", label: "О продукте и компании", section: "О приложении" },
   { id: "admin", label: "Админка", section: "Администрирование" },
 ];
