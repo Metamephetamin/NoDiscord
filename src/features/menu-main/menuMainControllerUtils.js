@@ -69,51 +69,6 @@ export const reorderById = (items = [], sourceId, targetId) => {
   return withListOrder(nextItems);
 };
 
-const normalizeChannelCategoryId = (categoryId) => String(categoryId || "");
-
-export const moveChannelInList = (channels = [], { channelId, targetChannelId = "", targetCategoryId = "", placement = "before" } = {}) => {
-  const normalizedChannelId = String(channelId || "");
-  const normalizedTargetChannelId = String(targetChannelId || "");
-  const normalizedTargetCategoryId = normalizeChannelCategoryId(targetCategoryId);
-  const shouldInsertAfterTarget = String(placement || "before") === "after";
-  const sourceIndex = channels.findIndex((channel) => String(channel?.id || "") === normalizedChannelId);
-  if (sourceIndex === -1) {
-    return channels;
-  }
-
-  const nextChannels = [...channels];
-  const [sourceChannel] = nextChannels.splice(sourceIndex, 1);
-  const movedChannel = { ...sourceChannel, categoryId: normalizedTargetCategoryId };
-  let insertIndex = -1;
-
-  if (normalizedTargetChannelId) {
-    insertIndex = nextChannels.findIndex((channel) => String(channel?.id || "") === normalizedTargetChannelId);
-    if (insertIndex !== -1 && shouldInsertAfterTarget) {
-      insertIndex += 1;
-    }
-  }
-
-  if (insertIndex === -1) {
-    insertIndex = nextChannels.length;
-    for (let index = nextChannels.length - 1; index >= 0; index -= 1) {
-      if (normalizeChannelCategoryId(nextChannels[index]?.categoryId) === normalizedTargetCategoryId) {
-        insertIndex = index + 1;
-        break;
-      }
-    }
-  }
-
-  nextChannels.splice(insertIndex, 0, movedChannel);
-
-  const categoryOrder = new Map();
-  return nextChannels.map((channel) => {
-    const categoryKey = normalizeChannelCategoryId(channel.categoryId);
-    const order = categoryOrder.get(categoryKey) || 0;
-    categoryOrder.set(categoryKey, order + 1);
-    return { ...channel, order };
-  });
-};
-
 export const parseQrLoginPayload = (value) => {
   const rawValue = String(value || "").trim();
   if (!rawValue) {

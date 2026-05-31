@@ -7,10 +7,12 @@ import {
 } from "../../utils/menuMainModel";
 import {
   getServerSyncFingerprint,
-  moveChannelInList,
   reorderById,
 } from "./menuMainControllerUtils";
-import { removeChannelCategoryWithChannels } from "./channelManagementUtils";
+import {
+  moveServerChannelAcrossLists,
+  removeChannelCategoryWithChannels,
+} from "./channelManagementUtils";
 
 const FORUM_CHILD_PARENT_KEYS = [
   "parentForumId",
@@ -335,23 +337,24 @@ export default function useMenuMainChannelActions({
     syncSharedServer(nextServer);
   };
 
-  const moveServerChannel = ({ type = "text", channelId = "", targetChannelId = "", targetCategoryId = "", placement = "before" } = {}) => {
+  const moveServerChannel = ({
+    type = "text",
+    channelId = "",
+    targetType = type,
+    targetChannelId = "",
+    targetCategoryId = "",
+    placement = "before",
+  } = {}) => {
     if (!canManageChannels || !activeServer || !channelId) return;
 
-    if (String(type || "text") === "voice") {
-      const nextServer = {
-        ...activeServer,
-        voiceChannels: moveChannelInList(activeServer.voiceChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
-      };
-      updateServer(() => nextServer);
-      syncSharedServer(nextServer);
-      return;
-    }
-
-    const nextServer = {
-      ...activeServer,
-      textChannels: moveChannelInList(activeServer.textChannels || [], { channelId, targetChannelId, targetCategoryId, placement }),
-    };
+    const nextServer = moveServerChannelAcrossLists(activeServer, {
+      type,
+      channelId,
+      targetType,
+      targetChannelId,
+      targetCategoryId,
+      placement,
+    });
     updateServer(() => nextServer);
     syncSharedServer(nextServer);
   };

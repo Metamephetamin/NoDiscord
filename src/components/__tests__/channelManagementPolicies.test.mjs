@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { removeChannelCategoryWithChannels } from "../../features/menu-main/channelManagementUtils.js";
+import {
+  getOrderedServerChannelItems,
+  moveServerChannelAcrossLists,
+  removeChannelCategoryWithChannels,
+} from "../../features/menu-main/channelManagementUtils.js";
 import { getMutedChannelKey, toggleMutedChannelKey } from "../../features/menu-main/mutedServerChannels.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
@@ -42,8 +46,48 @@ test("channel ordering mutations sync shared server snapshots", () => {
   const source = readRepoFile("src/features/menu-main/useMenuMainChannelActions.js");
 
   assert.match(source, /const reorderChannelCategories = [\s\S]*?syncSharedServer\(nextServer\);[\s\S]*?const moveServerChannel = /);
-  assert.match(source, /voiceChannels: moveChannelInList[\s\S]*?syncSharedServer\(nextServer\);[\s\S]*?return;/);
-  assert.match(source, /textChannels: moveChannelInList[\s\S]*?syncSharedServer\(nextServer\);[\s\S]*?};/);
+  assert.match(source, /moveServerChannelAcrossLists\(activeServer, \{[\s\S]*?targetType,[\s\S]*?targetChannelId,[\s\S]*?syncSharedServer\(nextServer\);/);
+});
+
+test("text and voice channels share one saved order inside a category", () => {
+  const server = {
+    textChannels: [
+      { id: "rules", name: "rules", categoryId: "cat-a", order: 0 },
+      { id: "chat", name: "chat", categoryId: "cat-a", order: 2 },
+    ],
+    voiceChannels: [
+      { id: "voice", name: "voice", categoryId: "cat-a", order: 1 },
+    ],
+  };
+
+  assert.deepEqual(
+    getOrderedServerChannelItems(server.textChannels, server.voiceChannels, "cat-a").map((item) => `${item.type}:${item.channel.id}`),
+    ["text:rules", "voice:voice", "text:chat"]
+  );
+
+  const nextServer = moveServerChannelAcrossLists(server, {
+    type: "voice",
+    channelId: "voice",
+    targetType: "text",
+    targetChannelId: "chat",
+    targetCategoryId: "cat-a",
+    placement: "after",
+  });
+
+  assert.deepEqual(
+    getOrderedServerChannelItems(nextServer.textChannels, nextServer.voiceChannels, "cat-a").map((item) => `${item.type}:${item.channel.id}`),
+    ["text:rules", "text:chat", "voice:voice"]
+  );
+  assert.deepEqual(nextServer.textChannels.map((channel) => [channel.id, channel.order]), [["rules", 0], ["chat", 1]]);
+  assert.deepEqual(nextServer.voiceChannels.map((channel) => [channel.id, channel.order]), [["voice", 2]]);
+});
+
+test("server sidebar renders channels from one mixed order", () => {
+  const source = readRepoFile("src/components/ServerWorkspace.jsx");
+
+  assert.match(source, /getOrderedServerChannelItems\(textChannels, voiceChannels, categoryId\)/);
+  assert.match(source, /targetType: type/);
+  assert.doesNotMatch(source, /renderTextChannelListItems\(visibleTextChannels, category\.id\)[\s\S]*?renderVoiceChannels\(visibleVoiceChannels, category\.id\)/);
 });
 
 test("created channels do not reopen inline rename mode", () => {

@@ -7,6 +7,7 @@ import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { isServerRailItemActive } from "./serverRailState.mjs";
+import { getOrderedServerChannelItems } from "../features/menu-main/channelManagementUtils";
 import { getMutedChannelKey } from "../features/menu-main/mutedServerChannels";
 import "../css/MemberRoleMenu.css";
 import "../css/ServerInviteModal.css";
@@ -1815,6 +1816,7 @@ export const ServersSidebar = memo(({
   const visibleUncategorizedVoiceChannels = getVisibleServerChannels("voice", uncategorizedVoiceChannels);
   const hasUncategorizedTextChannels = visibleUncategorizedTextChannels.length > 0;
   const hasUncategorizedVoiceChannels = visibleUncategorizedVoiceChannels.length > 0;
+  const hasUncategorizedChannels = hasUncategorizedTextChannels || hasUncategorizedVoiceChannels;
   const canDragChannels = Boolean(canManageChannels && activeServer);
   const endDrag = () => {
     dragEndedRef.current = true;
@@ -1927,14 +1929,13 @@ export const ServersSidebar = memo(({
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     const nextCategoryId = getDragCategoryId(categoryId);
-    const isCrossTypeDrop = dragState.type !== type;
-    const targetChannelId = !isCrossTypeDrop && channel?.id ? String(channel.id) : "";
+    const targetChannelId = channel?.id ? String(channel.id) : "";
     const previousPlacement = dragOverState?.type === type
       && dragOverState.categoryId === nextCategoryId
       && dragOverState.targetChannelId === targetChannelId
       ? dragOverState.placement
       : "";
-    const placement = isCrossTypeDrop ? "end" : getChannelDropPlacement(event, channel, previousPlacement);
+    const placement = getChannelDropPlacement(event, channel, previousPlacement);
     const nextDragOverState = {
       type,
       categoryId: nextCategoryId,
@@ -1951,14 +1952,13 @@ export const ServersSidebar = memo(({
     }
 
     const nextCategoryId = getDragCategoryId(categoryId);
-    const isCrossTypeDrop = payload.type !== type;
-    const targetChannelId = !isCrossTypeDrop && channel?.id ? String(channel.id) : "";
+    const targetChannelId = channel?.id ? String(channel.id) : "";
     const placement = dragOverState?.type === type
       && dragOverState.categoryId === nextCategoryId
       && dragOverState.targetChannelId === targetChannelId
       ? dragOverState.placement
-      : isCrossTypeDrop ? "end" : getChannelDropPlacement(event, channel);
-    if (payload.channelId === targetChannelId && payload.categoryId === nextCategoryId) {
+      : getChannelDropPlacement(event, channel);
+    if (payload.type === type && payload.channelId === targetChannelId && payload.categoryId === nextCategoryId) {
       return;
     }
 
@@ -1967,6 +1967,7 @@ export const ServersSidebar = memo(({
     onMoveChannel?.({
       type: payload.type,
       channelId: payload.channelId,
+      targetType: type,
       targetChannelId,
       targetCategoryId: nextCategoryId,
       placement,
@@ -2130,52 +2131,88 @@ export const ServersSidebar = memo(({
       </li>
     );
   };
-  const renderVoiceChannels = (channels, categoryId = "") => {
+  const renderVoiceChannels = (channels, categoryId = "", listKey = "") => {
     const visibleChannels = getVisibleServerChannels("voice", channels);
     const mutedChannelIds = visibleChannels
       .filter((channel) => isServerChannelMuted("voice", channel.id))
       .map((channel) => String(channel.id));
 
     return (
-    <VoiceChannelList
-      channels={visibleChannels}
-      mutedChannelIds={mutedChannelIds}
-      categoryId={categoryId}
-      activeChannelId={currentVoiceChannel || ""}
-      participantsMap={activeVoiceParticipantsMap}
-      serverId={activeServer?.id || ""}
-      serverMembers={activeServer?.members || []}
-      serverRoles={activeServer?.roles || []}
-      onJoinChannel={onJoinVoiceChannel}
-      onLeaveChannel={onLeaveVoiceChannel}
-      onPrewarmChannel={(channelId) => {
-        void loadVoiceRoomStage();
-        onPrewarmVoiceChannel?.(channelId);
-      }}
-      onRenameChannel={onOpenChannelSettings}
-      liveUserIds={liveUserIds}
-      speakingUserIds={speakingUserIds}
-      watchedStreamUserId={watchedStreamUserId}
-      joiningChannelId={joiningVoiceChannelId}
-      currentUserId={currentUserId}
-      participantVolumeByUserId={participantVolumeByUserId}
-      onWatchStream={onWatchStream}
-      onParticipantVolumeChange={onParticipantVolumeChange}
-      canManageChannels={canManageChannels}
-      editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
-      editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}
-      onRenameValueChange={onUpdateChannelRenameValue}
-      onRenameSubmit={onSubmitChannelRename}
-      onRenameCancel={onCancelChannelRename}
-      dragState={dragState}
-      dragOverState={dragOverState}
-      onChannelDragStart={startChannelDrag}
-      onChannelDragOver={handleChannelDragOver}
-      onChannelDrop={handleChannelDrop}
-      onChannelDragEnd={endDrag}
-      onChannelContextMenu={openChannelContextMenu}
-    />
+      <VoiceChannelList
+        key={listKey || `voice-list-${categoryId || "root"}`}
+        channels={visibleChannels}
+        mutedChannelIds={mutedChannelIds}
+        categoryId={categoryId}
+        activeChannelId={currentVoiceChannel || ""}
+        participantsMap={activeVoiceParticipantsMap}
+        serverId={activeServer?.id || ""}
+        serverMembers={activeServer?.members || []}
+        serverRoles={activeServer?.roles || []}
+        onJoinChannel={onJoinVoiceChannel}
+        onLeaveChannel={onLeaveVoiceChannel}
+        onPrewarmChannel={(channelId) => {
+          void loadVoiceRoomStage();
+          onPrewarmVoiceChannel?.(channelId);
+        }}
+        onRenameChannel={onOpenChannelSettings}
+        liveUserIds={liveUserIds}
+        speakingUserIds={speakingUserIds}
+        watchedStreamUserId={watchedStreamUserId}
+        joiningChannelId={joiningVoiceChannelId}
+        currentUserId={currentUserId}
+        participantVolumeByUserId={participantVolumeByUserId}
+        onWatchStream={onWatchStream}
+        onParticipantVolumeChange={onParticipantVolumeChange}
+        canManageChannels={canManageChannels}
+        editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
+        editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}
+        onRenameValueChange={onUpdateChannelRenameValue}
+        onRenameSubmit={onSubmitChannelRename}
+        onRenameCancel={onCancelChannelRename}
+        dragState={dragState}
+        dragOverState={dragOverState}
+        onChannelDragStart={startChannelDrag}
+        onChannelDragOver={handleChannelDragOver}
+        onChannelDrop={handleChannelDrop}
+        onChannelDragEnd={endDrag}
+        onChannelContextMenu={openChannelContextMenu}
+      />
     );
+  };
+  const renderMixedChannelRows = (textChannels, voiceChannels, categoryId = "") => {
+    const rows = [];
+    let pendingTextChannels = [];
+    const flushTextChannels = () => {
+      if (!pendingTextChannels.length) {
+        return;
+      }
+
+      const textRun = pendingTextChannels;
+      pendingTextChannels = [];
+      rows.push(
+        <ul
+          key={`mixed-text-${categoryId || "root"}-${textRun.map((channel) => channel.id).join("-")}`}
+          className="channel-list"
+          onDragOver={(event) => handleChannelDragOver(event, "text", null, categoryId)}
+          onDrop={(event) => handleChannelDrop(event, "text", null, categoryId)}
+        >
+          {renderTextChannelListItems(textRun, categoryId)}
+        </ul>
+      );
+    };
+
+    getOrderedServerChannelItems(textChannels, voiceChannels, categoryId).forEach((item) => {
+      if (item.type === "text") {
+        pendingTextChannels.push(item.channel);
+        return;
+      }
+
+      flushTextChannels();
+      rows.push(renderVoiceChannels([item.channel], categoryId, `mixed-voice-${categoryId || "root"}-${item.channel.id}`));
+    });
+    flushTextChannels();
+
+    return rows;
   };
 
   return (
@@ -2479,29 +2516,13 @@ export const ServersSidebar = memo(({
 
       {activeServer ? (
         <>
-          {hasUncategorizedTextChannels ? (
+          {hasUncategorizedChannels ? (
             <div className="server-panel__section">
               <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "text")}>
-                <span>Текстовые каналы</span>
+                <span>Каналы</span>
                 <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
               </div>
-              <ul
-                className="channel-list"
-                onDragOver={(event) => handleChannelDragOver(event, "text", null, "")}
-                onDrop={(event) => handleChannelDrop(event, "text", null, "")}
-              >
-                {renderTextChannelListItems(visibleUncategorizedTextChannels, "")}
-              </ul>
-            </div>
-          ) : null}
-
-          {hasUncategorizedVoiceChannels ? (
-            <div className="server-panel__section">
-              <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "voice")}>
-                <span>Голосовые каналы</span>
-                <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
-              </div>
-              {renderVoiceChannels(visibleUncategorizedVoiceChannels, "")}
+              {renderMixedChannelRows(visibleUncategorizedTextChannels, visibleUncategorizedVoiceChannels, "")}
             </div>
           ) : null}
 
@@ -2540,16 +2561,7 @@ export const ServersSidebar = memo(({
 
                 {!isCollapsed ? (
                   hasChannels ? (
-                    <>
-                      <ul
-                        className="channel-list"
-                        onDragOver={(event) => handleChannelDragOver(event, "text", null, category.id)}
-                        onDrop={(event) => handleChannelDrop(event, "text", null, category.id)}
-                      >
-                        {renderTextChannelListItems(visibleTextChannels, category.id)}
-                      </ul>
-                      {renderVoiceChannels(visibleVoiceChannels, category.id)}
-                    </>
+                    renderMixedChannelRows(visibleTextChannels, visibleVoiceChannels, category.id)
                   ) : (
                     <button
                       type="button"
