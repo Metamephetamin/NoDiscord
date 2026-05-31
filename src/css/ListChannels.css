@@ -112,6 +112,21 @@
   line-height: 1;
 }
 
+.voice-channel__timer {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #61d485;
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.voice-channel__timer + .voice-channel__count {
+  margin-left: 0;
+}
+
 .voice-channel__leave {
   padding: 6px 10px;
   border: 0;
@@ -417,6 +432,10 @@ html[data-ui-theme="light"] .list__items--active .voice-channel__title {
 html[data-ui-theme="light"] .voice-channel__count {
   background: rgba(88, 103, 232, 0.12);
   color: #2637c7;
+}
+
+html[data-ui-theme="light"] .voice-channel__timer {
+  color: #138a4c;
 }
 
 html[data-ui-theme="light"] .participant-item {

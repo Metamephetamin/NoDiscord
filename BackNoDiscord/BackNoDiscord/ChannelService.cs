@@ -11,11 +11,13 @@ namespace BackNoDiscord
         private readonly ConcurrentDictionary<string, string> _userIdToConnection = new();
         private readonly ConcurrentDictionary<string, string> _userChannels = new();
         private readonly ConcurrentDictionary<string, bool> _screenSharingUsers = new();
+        private readonly TimeProvider _timeProvider;
         private readonly object _syncRoot = new();
 
-        public ChannelService()
+        public ChannelService(TimeProvider? timeProvider = null)
         {
             _channels = new ConcurrentDictionary<string, List<Participant>>();
+            _timeProvider = timeProvider ?? TimeProvider.System;
         }
 
         public Dictionary<string, List<Participant>> GetAllChannels()
@@ -45,7 +47,7 @@ namespace BackNoDiscord
         {
             lock (_syncRoot)
             {
-                var mergedParticipant = MergeWithExistingState(participant);
+                var mergedParticipant = EnsureVoiceSessionStarted(MergeWithExistingState(participant));
                 _participantsByUserId[mergedParticipant.UserId] = CloneParticipant(mergedParticipant);
 
                 if (_userIdToConnection.TryGetValue(mergedParticipant.UserId, out var previousConnectionId) &&
@@ -74,7 +76,11 @@ namespace BackNoDiscord
         {
             lock (_syncRoot)
             {
-                var mergedParticipant = MergeWithExistingState(participant);
+                var existingChannelName = GetChannelForUser(participant.UserId);
+                var isStayingInChannel = string.Equals(existingChannelName, channelName, StringComparison.Ordinal);
+                var mergedParticipant = isStayingInChannel
+                    ? EnsureVoiceSessionStarted(MergeWithExistingState(participant))
+                    : StartVoiceSession(MergeWithExistingState(participant));
 
                 if (connectionId is not null)
                 {
@@ -358,13 +364,20 @@ namespace BackNoDiscord
             return RemoveUser(userId);
         }
 
-        private static Participant CloneParticipant(Participant participant)
+        private Participant CloneParticipant(Participant participant)
         {
+            var elapsedMs = participant.JoinedAtUtc != default
+                ? Math.Max(0, (long)_timeProvider.GetElapsedTime(participant.JoinedAtTimestamp, _timeProvider.GetTimestamp()).TotalMilliseconds)
+                : Math.Max(0, participant.VoiceElapsedMs);
+
             return new Participant
             {
                 UserId = participant.UserId,
                 Name = participant.Name,
                 Avatar = participant.Avatar,
+                JoinedAtUtc = participant.JoinedAtUtc,
+                JoinedAtTimestamp = participant.JoinedAtTimestamp,
+                VoiceElapsedMs = elapsedMs,
                 IsScreenSharing = participant.IsScreenSharing,
                 IsMicMuted = participant.IsMicMuted,
                 IsDeafened = participant.IsDeafened,
@@ -385,12 +398,31 @@ namespace BackNoDiscord
                 UserId = participant.UserId,
                 Name = string.IsNullOrWhiteSpace(participant.Name) ? existing.Name : participant.Name,
                 Avatar = string.IsNullOrWhiteSpace(participant.Avatar) ? existing.Avatar : participant.Avatar,
+                JoinedAtUtc = existing.JoinedAtUtc,
+                JoinedAtTimestamp = existing.JoinedAtTimestamp,
+                VoiceElapsedMs = existing.VoiceElapsedMs,
                 IsScreenSharing = participant.IsScreenSharing || existing.IsScreenSharing,
                 IsMicMuted = participant.IsMicMuted || existing.IsMicMuted,
                 IsDeafened = participant.IsDeafened || existing.IsDeafened,
                 IsMicForced = participant.IsMicForced || existing.IsMicForced,
                 IsDeafenedForced = participant.IsDeafenedForced || existing.IsDeafenedForced,
             };
+        }
+
+        private Participant StartVoiceSession(Participant participant)
+        {
+            var started = CloneParticipant(participant);
+            started.JoinedAtUtc = _timeProvider.GetUtcNow();
+            started.JoinedAtTimestamp = _timeProvider.GetTimestamp();
+            started.VoiceElapsedMs = 0;
+            return started;
+        }
+
+        private Participant EnsureVoiceSessionStarted(Participant participant)
+        {
+            return participant.JoinedAtUtc != default
+                ? CloneParticipant(participant)
+                : StartVoiceSession(participant);
         }
     }
 

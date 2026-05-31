@@ -1,4 +1,5 @@
 import { DEFAULT_AVATAR } from "../utils/media";
+import { stampVoiceDurationSync } from "../utils/voiceChannelDuration";
 
 const NOISE_SUPPRESSION_MODE_TRANSPARENT = "transparent";
 const NOISE_SUPPRESSION_MODE_BROADCAST = "broadcast";
@@ -22,11 +23,13 @@ const getDisplayName = (user) =>
 
 const getAvatar = (user) => user?.avatarUrl || user?.avatar || DEFAULT_AVATAR;
 
-const normalizeParticipant = (participant = {}) => ({
+const normalizeParticipant = (participant = {}) => stampVoiceDurationSync({
   userId: participant.userId || participant.UserId || participant.fromUserId || participant.FromUserId || "",
   name: participant.name || participant.Name || participant.fromName || participant.FromName || "Unknown",
   avatar:
     participant.avatar || participant.Avatar || participant.fromAvatar || participant.FromAvatar || DEFAULT_AVATAR,
+  joinedAtUtc: participant.joinedAtUtc || participant.JoinedAtUtc || "",
+  voiceElapsedMs: Number(participant.voiceElapsedMs ?? participant.VoiceElapsedMs ?? 0) || 0,
   isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
   isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
   isDeafened: Boolean(participant.isDeafened || participant.IsDeafened),

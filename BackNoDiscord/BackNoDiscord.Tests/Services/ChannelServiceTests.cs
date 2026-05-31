@@ -5,6 +5,55 @@ namespace BackNoDiscord.Tests.Services;
 public class ChannelServiceTests
 {
     [Fact]
+    public void SetUserChannel_StampsJoinedAtAndElapsedFromServerTimeProvider()
+    {
+        var timeProvider = new ManualTimeProvider(new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero));
+        var service = new ChannelService(timeProvider);
+
+        service.SetUserChannel("voice:general", new Participant
+        {
+            UserId = "user-timer",
+            Name = "Timer"
+        }, "conn-timer");
+
+        timeProvider.Advance(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(3));
+
+        var participants = service.GetParticipantsInChannel("voice:general");
+
+        Assert.Single(participants);
+        Assert.Equal(new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero), participants[0].JoinedAtUtc);
+        Assert.Equal(3_723_000, participants[0].VoiceElapsedMs);
+    }
+
+    [Fact]
+    public void SetUserChannel_ResetsJoinedAtWhenMovingToAnotherChannel()
+    {
+        var timeProvider = new ManualTimeProvider(new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero));
+        var service = new ChannelService(timeProvider);
+
+        service.SetUserChannel("voice:first", new Participant
+        {
+            UserId = "user-move",
+            Name = "Mover"
+        }, "conn-move");
+
+        timeProvider.Advance(TimeSpan.FromMinutes(15));
+        service.SetUserChannel("voice:second", new Participant
+        {
+            UserId = "user-move",
+            Name = "Mover"
+        }, "conn-move");
+
+        timeProvider.Advance(TimeSpan.FromSeconds(10));
+
+        var participants = service.GetParticipantsInChannel("voice:second");
+
+        Assert.Single(participants);
+        Assert.Equal(new DateTimeOffset(2026, 5, 31, 12, 15, 0, TimeSpan.Zero), participants[0].JoinedAtUtc);
+        Assert.Equal(10_000, participants[0].VoiceElapsedMs);
+    }
+
+    [Fact]
     public void RegisterConnection_RestoresUserIntoExistingChannelOnReconnect()
     {
         var service = new ChannelService();
@@ -184,5 +233,29 @@ public class ChannelServiceTests
         Assert.Null(result.ChannelName);
         Assert.Null(result.Participant);
         Assert.False(result.VoiceStateChanged);
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _utcNow;
+        private long _timestamp;
+
+        public ManualTimeProvider(DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+            _timestamp = 0;
+        }
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public override long GetTimestamp() => _timestamp;
+
+        public void Advance(TimeSpan duration)
+        {
+            _utcNow = _utcNow.Add(duration);
+            _timestamp += duration.Ticks;
+        }
     }
 }

@@ -1666,6 +1666,9 @@ export default function MenuMain({
           isDeafened: Boolean(participant?.isDeafened || participant?.IsDeafened),
           isLive: liveUserIds.some((id) => String(id) === userId) || Boolean(participant?.isScreenSharing || participant?.IsScreenSharing),
           roleColor: memberRoleColorByUserId.get(userId) || "#7b89a8",
+          joinedAtUtc: participant?.joinedAtUtc || participant?.JoinedAtUtc || "",
+          voiceElapsedMs: Number(participant?.voiceElapsedMs ?? participant?.VoiceElapsedMs ?? 0) || 0,
+          voiceElapsedSyncedAtMs: Number(participant?.voiceElapsedSyncedAtMs ?? participant?.VoiceElapsedSyncedAtMs ?? 0) || 0,
         };
       })
       .sort((left, right) => {

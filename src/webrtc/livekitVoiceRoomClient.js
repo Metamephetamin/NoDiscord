@@ -31,6 +31,7 @@ import {
   getDisplayName,
   getElectronDisplayStream,
   getResolutionConstraints,
+  normalizeParticipant,
   normalizeParticipantsMap,
   tuneDisplayStream,
 } from "./voiceClientUtils";
@@ -1306,14 +1307,7 @@ export function createVoiceRoomClient({
         return;
       }
 
-      participantsById.set(userId, {
-        userId,
-        name: participant?.name || participant?.Name || "Участник",
-        avatar: participant?.avatar || participant?.Avatar || DEFAULT_AVATAR,
-        isMicMuted: Boolean(participant?.isMicMuted || participant?.IsMicMuted),
-        isDeafened: Boolean(participant?.isDeafened || participant?.IsDeafened),
-        isScreenSharing: Boolean(participant?.isScreenSharing || participant?.IsScreenSharing),
-      });
+      participantsById.set(userId, normalizeParticipant(participant));
     });
 
     if (currentUserId) {

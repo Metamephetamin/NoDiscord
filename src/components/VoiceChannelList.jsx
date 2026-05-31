@@ -1,8 +1,9 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import "../css/ListChannels.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { resolveStaticAssetUrl } from "../utils/media";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
+import { formatVoiceChannelDuration, getVoiceChannelDurationMs } from "../utils/voiceChannelDuration";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
@@ -20,6 +21,8 @@ const getVoiceDisplayName = (name) => {
 
 const normalizeVoiceUserLimit = (value) => Math.min(99, Math.max(0, Number(value) || 0));
 const formatVoiceLimitCount = (value) => String(Math.min(99, Math.max(0, Number(value) || 0))).padStart(2, "0");
+const getMonotonicNow = () =>
+  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
 
 const VoiceChannelList = ({
   channels,
@@ -53,6 +56,7 @@ const VoiceChannelList = ({
   canManageChannels = true,
   joiningChannelId = "",
 }) => {
+  const [durationNowMs, setDurationNowMs] = useState(() => getMonotonicNow());
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
   const speakingUsers = useMemo(() => new Set(speakingUserIds), [speakingUserIds]);
   const roleColorByUserId = useMemo(
@@ -71,6 +75,19 @@ const VoiceChannelList = ({
   );
   const getDropKey = (targetChannelId = "", placement = "end") =>
     `voice:${String(categoryId || "")}:${String(targetChannelId || "")}:${placement}`;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setDurationNowMs(getMonotonicNow());
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const renderDropPlaceholder = (targetChannelId = "", placement = "end") => {
     const key = getDropKey(targetChannelId, placement);
     if (dragOverState?.key !== key) {
@@ -105,6 +122,9 @@ const VoiceChannelList = ({
       isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
       isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
       isDeafened: Boolean(participant.isDeafened || participant.IsDeafened),
+      joinedAtUtc: participant.joinedAtUtc || participant.JoinedAtUtc || "",
+      voiceElapsedMs: Number(participant.voiceElapsedMs ?? participant.VoiceElapsedMs ?? 0) || 0,
+      voiceElapsedSyncedAtMs: Number(participant.voiceElapsedSyncedAtMs ?? participant.VoiceElapsedSyncedAtMs ?? durationNowMs) || 0,
       roleColor: roleColorByUserId.get(String(userId)) || "#7b89a8",
     };
   };
@@ -124,6 +144,9 @@ const VoiceChannelList = ({
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
         const participantCount = participants.length;
+        const durationLabel = participantCount > 0
+          ? formatVoiceChannelDuration(getVoiceChannelDurationMs(participants, durationNowMs))
+          : "";
         const canJoinFromRow = !isEditing && !isJoining;
         const triggerPrewarm = () => {
           onPrewarmChannel?.(channel.id);
@@ -214,6 +237,7 @@ const VoiceChannelList = ({
                   disabled={isJoining}
                 >
                   <span className="voice-channel__title">{channel.name}</span>
+                  {durationLabel ? <span className="voice-channel__timer">{durationLabel}</span> : null}
                   {shouldShowLimit ? (
                     <span className="voice-channel__count" aria-label={`${participantCount} / ${userLimit}`}>
                       <span>{formatVoiceLimitCount(participantCount)}</span>
