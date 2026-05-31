@@ -3401,6 +3401,30 @@ export default function MenuMain({
     workspaceMode,
   ]);
 
+  const refreshServerAuditLog = async (serverId = activeServer?.id, { isCancelled } = {}) => {
+    if (!user || !serverId || isDefaultServer) {
+      setServerAuditLogs([]);
+      return [];
+    }
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/server-invites/server/${encodeURIComponent(serverId)}/audit-log?limit=20`, {
+      method: "GET",
+      });
+      const data = await parseApiResponse(response);
+      const entries = response.ok && Array.isArray(data) ? data : [];
+      if (!isCancelled?.()) {
+        setServerAuditLogs(entries);
+      }
+      return entries;
+    } catch {
+      if (!isCancelled?.()) {
+        setServerAuditLogs([]);
+      }
+      return [];
+    }
+  };
+
   useEffect(() => {
     if (!user || settingsTab !== "roles" || !activeServer?.id || isDefaultServer) {
       setServerAuditLogs([]);
@@ -3408,27 +3432,7 @@ export default function MenuMain({
     }
 
     let cancelled = false;
-    authFetch(`${API_BASE_URL}/server-invites/server/${encodeURIComponent(activeServer.id)}/audit-log?limit=20`, {
-      method: "GET",
-    })
-      .then(async (response) => {
-        const data = await parseApiResponse(response);
-        if (!response.ok) {
-          return [];
-        }
-
-        return Array.isArray(data) ? data : [];
-      })
-      .then((entries) => {
-        if (!cancelled) {
-          setServerAuditLogs(entries);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setServerAuditLogs([]);
-        }
-      });
+    void refreshServerAuditLog(activeServer.id, { isCancelled: () => cancelled });
 
     return () => {
       cancelled = true;
@@ -4770,6 +4774,7 @@ export default function MenuMain({
       replaceServerSnapshot(data);
     }
 
+    await refreshServerAuditLog(requestServer.id);
     return data;
   };
   const createServerRole = async (roleDraft) => mutateServerRoles("/roles", {

@@ -165,8 +165,17 @@ test("API_BASE_URL callers do not duplicate the api prefix", () => {
 
   assert.doesNotMatch(menuSource, /API_BASE_URL\}\/api\//);
   assert.doesNotMatch(textChatSource, /API_BASE_URL\}\/api\//);
-  assert.match(menuSource, /API_BASE_URL\}\/server-invites\/server\/\$\{encodeURIComponent\(activeServer\.id\)\}\/audit-log/);
+  assert.match(menuSource, /API_BASE_URL\}\/server-invites\/server\/\$\{encodeURIComponent\(serverId\)\}\/audit-log\?limit=20/);
   assert.match(textChatSource, /API_BASE_URL\}\/chats\/\$\{encodeURIComponent\(scopedChannelId\)\}\/messages\/search/);
+});
+
+test("server audit log refreshes after role mutations", () => {
+  const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const mutationStart = menuSource.indexOf("const mutateServerRoles = async");
+  const createRoleStart = menuSource.indexOf("const createServerRole =", mutationStart);
+  const mutationSource = menuSource.slice(mutationStart, createRoleStart);
+
+  assert.match(mutationSource, /await refreshServerAuditLog\(requestServer\.id\);/);
 });
 
 test("message search indexes attachment media kinds, not only file names", () => {
@@ -328,7 +337,7 @@ test("server names are capped consistently in settings and stored snapshots", ()
   const modelSource = readRepoFile("src/utils/menuMainModel.js");
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
-  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const serverWorkspaceCss = readRepoFile("src/css/ServerWorkspace.css");
 
   assert.match(modelSource, /export const MAX_SERVER_NAME_LENGTH = 48;/);
   assert.match(modelSource, /export const normalizeServerNameInput = \(value, fallback = "Сервер"\) =>/);
@@ -336,7 +345,7 @@ test("server names are capped consistently in settings and stored snapshots", ()
   assert.match(controllerSource, /normalizeServerNameInput\(createServerName/);
   assert.match(controllerSource, /name: normalizeServerNameInput\(value, server\.name \|\| "Сервер"\)/);
   assert.match(settingsSource, /maxLength=\{MAX_SERVER_NAME_LENGTH\}/);
-  assert.match(mainCss, /\.server-summary__name \{\s*min-width: 0;\s*display: -webkit-box;\s*-webkit-line-clamp: 2;\s*-webkit-box-orient: vertical;/);
+  assert.match(serverWorkspaceCss, /\.server-summary__name \{\s*min-width: 0;\s*display: -webkit-box;\s*-webkit-line-clamp: 2;\s*-webkit-box-orient: vertical;/);
 });
 
 test("stream fullscreen button toggles fullscreen mode", () => {
