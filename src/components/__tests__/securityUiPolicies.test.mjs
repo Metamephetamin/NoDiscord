@@ -151,6 +151,16 @@ test("message search input text is readable on dark chat topbar", () => {
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
 });
 
+test("message search indexes attachment media kinds, not only file names", () => {
+  const actionsSource = readRepoFile("src/hooks/useTextChatMessageActions.js");
+  const backendSearchSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/MessageSearchService.cs");
+
+  assert.match(actionsSource, /buildAttachmentSearchText/);
+  assert.match(actionsSource, /изображение картинка фото image photo picture/);
+  assert.match(backendSearchSource, /BuildAttachmentSearchText/);
+  assert.match(backendSearchSource, /"изображение картинка фото image photo picture"/);
+});
+
 test("common counters and timestamps use the numeric Roboto font", () => {
   const indexCss = readRepoFile("src/index.css");
 

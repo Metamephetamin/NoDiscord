@@ -38,6 +38,44 @@ function getServerIdFromTextChannelId(channelId) {
   return match?.[1] || "";
 }
 
+function hasAttachmentExtension(fileHint, extensionPattern) {
+  return fileHint
+    .split(/\s+/)
+    .filter(Boolean)
+    .some((part) => extensionPattern.test(part));
+}
+
+function getAttachmentMediaKindTerms(attachment = {}) {
+  const contentType = String(attachment.attachmentContentType || "").toLowerCase();
+  const fileHint = String(`${attachment.attachmentName || ""} ${attachment.attachmentUrl || ""}`).toLowerCase();
+
+  if (contentType.startsWith("image/") || hasAttachmentExtension(fileHint, /\.(png|jpe?g|gif|webp|avif|bmp|svg)(?:[?#].*)?$/i)) {
+    return "изображение картинка фото image photo picture";
+  }
+
+  if (contentType.startsWith("video/") || hasAttachmentExtension(fileHint, /\.(mp4|webm|mov|mkv|avi)(?:[?#].*)?$/i)) {
+    return "видео video clip";
+  }
+
+  if (contentType.startsWith("audio/") || attachment.voiceMessage || hasAttachmentExtension(fileHint, /\.(mp3|wav|ogg|m4a)(?:[?#].*)?$/i)) {
+    return "аудио голос voice audio";
+  }
+
+  return attachment.attachmentAsFile ? "файл документ file document" : "вложение attachment";
+}
+
+function buildAttachmentSearchText(attachment = {}) {
+  return [
+    attachment.attachmentName,
+    attachment.attachmentContentType,
+    attachment.attachmentAsFile ? "файл документ file document" : "",
+    getAttachmentMediaKindTerms(attachment),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 export default function useTextChatMessageActions({
   searchQuery,
   messages,
@@ -86,10 +124,10 @@ export default function useTextChatMessageActions({
     return messages
       .filter((messageItem) => {
         const messageText = String(messageItem.message || "").toLowerCase();
-        const attachmentName = normalizeAttachmentItems(messageItem)
-          .map((attachment) => String(attachment.attachmentName || "").toLowerCase())
+        const attachmentSearchText = normalizeAttachmentItems(messageItem)
+          .map(buildAttachmentSearchText)
           .join(" ");
-        return messageText.includes(normalizedSearchQuery) || attachmentName.includes(normalizedSearchQuery);
+        return messageText.includes(normalizedSearchQuery) || attachmentSearchText.includes(normalizedSearchQuery);
       })
       .map((messageItem) => ({
         id: messageItem.id,

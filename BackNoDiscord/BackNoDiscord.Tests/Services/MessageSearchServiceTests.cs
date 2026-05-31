@@ -83,6 +83,40 @@ public sealed class MessageSearchServiceTests
         Assert.Equal("42", result.AuthorUserId);
     }
 
+    [Fact]
+    public async Task SearchAsync_SearchesAttachmentMediaKinds()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var payload = new ChatMessagePayload
+        {
+            AuthorUserId = "42",
+            Message = "",
+            Attachments =
+            [
+                new ChatAttachmentPayload
+                {
+                    AttachmentName = "upload.bin",
+                    AttachmentContentType = "image/png",
+                    AttachmentAsFile = false
+                }
+            ]
+        };
+        context.Messages.Add(new Message
+        {
+            ChannelId = "channel-a",
+            Username = "Alice",
+            Content = $"__CHAT_PAYLOAD__:{JsonSerializer.Serialize(payload)}",
+            Timestamp = DateTime.UtcNow,
+        });
+        await context.SaveChangesAsync();
+
+        var results = await service.SearchAsync(["channel-a"], "картинка", 10, CancellationToken.None);
+
+        var result = Assert.Single(results);
+        Assert.Equal("upload.bin", result.Preview);
+    }
+
     private static Message CreateMessage(
         string channelId,
         string username,

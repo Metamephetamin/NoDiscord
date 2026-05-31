@@ -135,10 +135,89 @@ public sealed class MessageSearchService
 
     private static string BuildSearchText(ChatMessagePayload payload)
     {
-        var attachmentNames = (payload.Attachments ?? [])
-            .Select(attachment => attachment.AttachmentName)
-            .Where(name => !string.IsNullOrWhiteSpace(name));
-        return $"{payload.Message ?? string.Empty} {string.Join(' ', attachmentNames)}".ToLowerInvariant();
+        var parts = new List<string> { payload.Message ?? string.Empty };
+        parts.AddRange(GetSearchAttachments(payload).Select(BuildAttachmentSearchText));
+        return string.Join(' ', parts).ToLowerInvariant();
+    }
+
+    private static IEnumerable<ChatAttachmentPayload> GetSearchAttachments(ChatMessagePayload payload)
+    {
+        foreach (var attachment in payload.Attachments ?? [])
+        {
+            yield return attachment;
+        }
+
+        if (HasLegacyAttachment(payload))
+        {
+            yield return new ChatAttachmentPayload
+            {
+                AttachmentUrl = payload.AttachmentUrl,
+                AttachmentName = payload.AttachmentName,
+                AttachmentContentType = payload.AttachmentContentType,
+                AttachmentAsFile = payload.AttachmentAsFile,
+                VoiceMessage = payload.VoiceMessage
+            };
+        }
+    }
+
+    private static bool HasLegacyAttachment(ChatMessagePayload payload)
+    {
+        return !string.IsNullOrWhiteSpace(payload.AttachmentUrl)
+            || !string.IsNullOrWhiteSpace(payload.AttachmentName)
+            || !string.IsNullOrWhiteSpace(payload.AttachmentContentType)
+            || payload.AttachmentAsFile
+            || payload.VoiceMessage is not null;
+    }
+
+    private static string BuildAttachmentSearchText(ChatAttachmentPayload attachment)
+    {
+        var parts = new List<string?>
+        {
+            attachment.AttachmentName,
+            attachment.AttachmentContentType,
+            attachment.AttachmentUrl,
+            GetAttachmentMediaKindTerms(attachment)
+        };
+
+        if (attachment.AttachmentAsFile)
+        {
+            parts.Add("файл документ file document");
+        }
+
+        return string.Join(' ', parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+    }
+
+    private static string GetAttachmentMediaKindTerms(ChatAttachmentPayload attachment)
+    {
+        var contentType = (attachment.AttachmentContentType ?? string.Empty).Trim().ToLowerInvariant();
+        var fileHint = $"{attachment.AttachmentName ?? string.Empty} {attachment.AttachmentUrl ?? string.Empty}".ToLowerInvariant();
+
+        if (contentType.StartsWith("image/", StringComparison.Ordinal) || HasKnownExtension(fileHint, ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".bmp", ".svg"))
+        {
+            return "изображение картинка фото image photo picture";
+        }
+
+        if (contentType.StartsWith("video/", StringComparison.Ordinal) || HasKnownExtension(fileHint, ".mp4", ".webm", ".mov", ".mkv", ".avi"))
+        {
+            return "видео video clip";
+        }
+
+        if (contentType.StartsWith("audio/", StringComparison.Ordinal) || attachment.VoiceMessage is not null || HasKnownExtension(fileHint, ".mp3", ".wav", ".ogg", ".m4a"))
+        {
+            return "аудио голос voice audio";
+        }
+
+        return attachment.AttachmentAsFile ? "файл документ file document" : "вложение attachment";
+    }
+
+    private static bool HasKnownExtension(string fileHint, params string[] extensions)
+    {
+        return fileHint
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Any(part => extensions.Any(extension =>
+                part.EndsWith(extension, StringComparison.Ordinal)
+                || part.Contains($"{extension}?", StringComparison.Ordinal)
+                || part.Contains($"{extension}#", StringComparison.Ordinal)));
     }
 
     private static string BuildPreview(ChatMessagePayload payload)
