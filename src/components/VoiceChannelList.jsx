@@ -52,7 +52,10 @@ const VoiceChannelList = ({
   liveUserIds = [],
   speakingUserIds = [],
   watchedStreamUserId = null,
+  currentUserId = "",
+  participantVolumeByUserId = {},
   onWatchStream,
+  onParticipantVolumeChange,
   canManageChannels = true,
   joiningChannelId = "",
 }) => {
@@ -287,6 +290,21 @@ const VoiceChannelList = ({
                       {participant.name}
                     </button>
                     <div className="participant-item__voice-flags">
+                      {String(participant.userId || "") !== String(currentUserId || "") ? (
+                        <label className="participant-item__volume" title="Громкость участника">
+                          <span>{Math.round(Number(participantVolumeByUserId[participant.userId] ?? 100))}%</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={Math.round(Number(participantVolumeByUserId[participant.userId] ?? 100))}
+                            onChange={(event) => onParticipantVolumeChange?.(participant.userId, Number(event.target.value))}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Громкость ${participant.name}`}
+                          />
+                        </label>
+                      ) : null}
                       {participant.isMicMuted && (
                         <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Микрофон выключен">
                           <img src={MICROPHONE_ICON_URL} alt="" />

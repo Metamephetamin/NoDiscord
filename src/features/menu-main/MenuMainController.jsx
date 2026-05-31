@@ -454,6 +454,44 @@ const buildNotificationRoute = (toast) => {
   return "/";
 };
 
+const getParticipantVolumeStorageKey = (user) => {
+  const userId = String(user?.id || user?.userId || user?.email || "guest").trim() || "guest";
+  return `nd:participant-volume:${userId}`;
+};
+
+const readParticipantVolumeMap = (user) => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(getParticipantVolumeStorageKey(user)) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([userId, value]) => [String(userId), clampDeviceVolumePercent(value)])
+        .filter(([userId]) => userId)
+    );
+  } catch {
+    return {};
+  }
+};
+
+const writeParticipantVolumeMap = (user, volumeMap) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(getParticipantVolumeStorageKey(user), JSON.stringify(volumeMap || {}));
+  } catch {
+    // Participant volumes are a local preference only.
+  }
+};
+
 export default function MenuMain({
   user,
   setUser,
@@ -481,6 +519,7 @@ export default function MenuMain({
   const [profileCustomization, setProfileCustomization] = useState(() => readProfileCustomization(user));
   const [micVolume, setMicVolume] = useState(100);
   const [audioVolume, setAudioVolume] = useState(100);
+  const [participantVolumeByUserId, setParticipantVolumeByUserId] = useState(() => readParticipantVolumeMap(user));
   const [micLevel, setMicLevel] = useState(0);
   const [showNoiseMenu, setShowNoiseMenu] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -4047,6 +4086,14 @@ export default function MenuMain({
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : audioVolume);
   }, [audioVolume, isSoundMuted]);
   useEffect(() => {
+    Object.entries(participantVolumeByUserId).forEach(([userId, value]) => {
+      voiceClientRef.current?.setParticipantVolume?.(userId, value);
+    });
+  }, [currentVoiceChannel, participantVolumeByUserId]);
+  useEffect(() => {
+    setParticipantVolumeByUserId(readParticipantVolumeMap(user));
+  }, [user?.id, user?.email]);
+  useEffect(() => {
     const voiceClient = voiceClientRef.current;
     if (!voiceClient) {
       return undefined;
@@ -4570,6 +4617,23 @@ export default function MenuMain({
     const normalizedValue = clampDeviceVolumePercent(value, audioVolume);
     setAudioVolume(normalizedValue);
     voiceClientRef.current?.setRemoteVolume(isSoundMuted ? 0 : normalizedValue);
+  };
+  const updateParticipantVolume = (userId, value) => {
+    const participantId = String(userId || "").trim();
+    if (!participantId) {
+      return;
+    }
+
+    const normalizedValue = clampDeviceVolumePercent(value);
+    setParticipantVolumeByUserId((previous) => {
+      const nextMap = {
+        ...previous,
+        [participantId]: normalizedValue,
+      };
+      writeParticipantVolumeMap(user, nextMap);
+      return nextMap;
+    });
+    voiceClientRef.current?.setParticipantVolume?.(participantId, normalizedValue);
   };
   const handleInputDeviceChange = (deviceId) => {
     setSelectedInputDeviceId(deviceId || "");
@@ -6691,6 +6755,7 @@ export default function MenuMain({
       speakingUserIds={speakingUserIds}
       watchedStreamUserId={selectedStreamUserId}
       joiningVoiceChannelId={joiningVoiceChannelId}
+      participantVolumeByUserId={participantVolumeByUserId}
       icons={serverSidebarIcons}
       canManageRoles={canManageRoles}
       onOpenServerSettings={openServerSettingsPanel}
@@ -6735,6 +6800,7 @@ export default function MenuMain({
       onLeaveVoiceChannel={stableLeaveVoiceChannel}
       onPrewarmVoiceChannel={prewarmVoiceChannel}
       onWatchStream={stableHandleWatchStream}
+      onParticipantVolumeChange={updateParticipantVolume}
       canManageTargetMember={canManageTargetMember}
       canAssignRoleToMember={canAssignRoleToMember}
       canInviteToServer={canInviteToServer}

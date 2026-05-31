@@ -1525,6 +1525,7 @@ export const ServersSidebar = memo(({
   speakingUserIds,
   watchedStreamUserId,
   joiningVoiceChannelId,
+  participantVolumeByUserId = {},
   icons,
   canManageRoles = false,
   onOpenServerSettings,
@@ -1570,6 +1571,7 @@ export const ServersSidebar = memo(({
   onLeaveVoiceChannel,
   onPrewarmVoiceChannel,
   onWatchStream,
+  onParticipantVolumeChange,
   canManageTargetMember,
   canAssignRoleToMember,
   canInviteToServer,
@@ -2081,7 +2083,10 @@ export const ServersSidebar = memo(({
       speakingUserIds={speakingUserIds}
       watchedStreamUserId={watchedStreamUserId}
       joiningChannelId={joiningVoiceChannelId}
+      currentUserId={currentUserId}
+      participantVolumeByUserId={participantVolumeByUserId}
       onWatchStream={onWatchStream}
+      onParticipantVolumeChange={onParticipantVolumeChange}
       canManageChannels={canManageChannels}
       editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
       editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}

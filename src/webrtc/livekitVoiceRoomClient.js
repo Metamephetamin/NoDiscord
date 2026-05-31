@@ -582,6 +582,7 @@ export function createVoiceRoomClient({
   const remoteScreenShares = new Map();
   const remoteAudioElements = new Map();
   const remoteAudioNodes = new Map();
+  const remoteParticipantVolumes = new Map();
   const remoteParticipantMedia = new Map();
   const roomActiveSpeakerIds = new Set();
 
@@ -2725,7 +2726,9 @@ const handleDeviceChange = () => {
       return;
     }
 
-    const normalizedRemoteVolume = Math.max(0, clampDeviceVolumePercent(remoteVolume * 100) / 100);
+    const participantId = String(key || "").split(":")[0] || "";
+    const participantVolume = remoteParticipantVolumes.get(participantId) ?? 1;
+    const normalizedRemoteVolume = Math.max(0, clampDeviceVolumePercent(remoteVolume * 100) / 100) * participantVolume;
     const nodeEntry = remoteAudioNodes.get(key);
     element.volume = Math.min(1, normalizedRemoteVolume);
 
@@ -4690,6 +4693,26 @@ const handleDeviceChange = () => {
         value,
         remoteVolume,
         elements: remoteAudioElements.size,
+      });
+    },
+
+    setParticipantVolume(userId, value) {
+      const participantId = String(userId || "").trim();
+      if (!participantId) {
+        return;
+      }
+
+      const participantVolume = clampDeviceVolumePercent(value) / 100;
+      remoteParticipantVolumes.set(participantId, participantVolume);
+      for (const [key, element] of remoteAudioElements.entries()) {
+        if (String(key || "").startsWith(`${participantId}:`)) {
+          applyRemoteAudioVolume(element, key);
+        }
+      }
+      logVoiceDebug("remote-audio:participant-volume-set", {
+        userId: participantId,
+        value,
+        participantVolume,
       });
     },
 

@@ -336,6 +336,21 @@
   margin-left: auto;
 }
 
+.participant-item__volume {
+  width: 72px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9ca5ba;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.participant-item__volume input {
+  width: 42px;
+  accent-color: #7c8cff;
+}
+
 .participant-item__voice-flag {
   position: relative;
   width: 18px;
