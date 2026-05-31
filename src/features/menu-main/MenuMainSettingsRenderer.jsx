@@ -13,6 +13,7 @@ import {
   ServerSettings,
   VoiceSettingsPanel,
 } from "../../components/MenuSettingsPanels";
+import "../../css/MenuSettings.css";
 import ModerationPanel from "../moderation/ModerationPanel";
 import {
   DEFAULT_SERVER_ICON,
