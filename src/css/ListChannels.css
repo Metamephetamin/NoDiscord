@@ -306,20 +306,6 @@
   box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.16);
 }
 
-.participant-item--speaking .participant-item__avatar-shell::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #5ce28d;
-  border: 2px solid #171b26;
-  box-shadow: 0 0 10px rgba(92, 226, 141, 0.42);
-  z-index: 2;
-}
-
 .participant-item__name {
   flex: 1;
   min-width: 0;
@@ -341,14 +327,6 @@
 .participant-item__name:hover {
   opacity: 0.94;
   filter: brightness(1.08);
-}
-
-.participant-item__role-dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
 }
 
 .participant-item__voice-flags {

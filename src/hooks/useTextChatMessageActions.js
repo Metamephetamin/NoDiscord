@@ -234,6 +234,7 @@ export default function useTextChatMessageActions({
       attachmentIndex: Number(attachmentIndex) || 0,
       attachmentEncryption,
       sourceUrl: sourceUrl || url,
+      canDelete: false,
     };
     const items = Array.isArray(galleryItems) && galleryItems.length ? galleryItems : [fallbackItem];
     const matchingIndex = items.findIndex((item) =>
@@ -288,6 +289,10 @@ export default function useTextChatMessageActions({
     const messageId = String(activeItem?.messageId || mediaPreview.messageId || "").trim();
     const attachmentIndex = Number(activeItem?.attachmentIndex ?? mediaPreview.attachmentIndex ?? 0) || 0;
     if (!messageId) {
+      return;
+    }
+
+    if (!activeItem?.canDelete) {
       return;
     }
 

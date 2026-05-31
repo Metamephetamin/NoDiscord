@@ -21823,8 +21823,8 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 }
 
 .settings-shell__content--admin {
-  gap: 16px;
-  min-width: 0;
+  display: grid;
+  gap: 20px;
 }
 
 .settings-shell__content--admin,
@@ -21854,18 +21854,16 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 }
 
 .admin-security-workspace {
-  min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-  gap: 14px;
+  gap: 20px;
   align-items: start;
 }
 
 .admin-security-main-column,
 .admin-security-side-column {
-  min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .admin-security-section--risk {
@@ -21945,7 +21943,7 @@ html[data-ui-theme="light"] .server-invite-modal__link-row button:hover:not(:dis
 .admin-security-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
+  gap: 14px;
 }
 
 .admin-security-metric,

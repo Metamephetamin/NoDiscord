@@ -1461,6 +1461,7 @@ function MessageAttachmentCard({
   messageItem,
   attachmentItem,
   galleryAttachments,
+  canDeleteAttachments = false,
   selectionMode,
   onToggleSelection,
   onOpenMediaPreview,
@@ -1471,6 +1472,11 @@ function MessageAttachmentCard({
 }) {
   const openAttachmentMediaPreview = () => {
     const type = attachmentItem.isImage ? "image" : "video";
+    const previewItems = getPreviewableMediaItems(messageItem, galleryAttachments).map((item) => ({
+      ...item,
+      canDelete: canDeleteAttachments,
+    }));
+
     onOpenMediaPreview(
       type,
       attachmentItem.attachmentUrl,
@@ -1480,7 +1486,7 @@ function MessageAttachmentCard({
       attachmentItem.attachmentEncryption,
       attachmentItem.attachmentSourceUrl || attachmentItem.attachmentUrl,
       attachmentItem.attachmentIndex,
-      getPreviewableMediaItems(messageItem, galleryAttachments)
+      previewItems
     );
   };
 
@@ -1744,6 +1750,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     messageItem,
     attachments,
     galleryAttachments = attachments,
+    canDeleteAttachments = false,
     mediaOverlayFooter,
     priorityMediaMessageIdSet,
   } = props;
@@ -1814,6 +1821,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 {...props}
                 attachmentItem={singleAttachment}
                 galleryAttachments={galleryAttachments}
+                canDeleteAttachments={canDeleteAttachments}
                 priorityMedia={isPriorityMediaMessage || Boolean(singleAttachment?.isImage)}
               />
             </div>
@@ -1828,6 +1836,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
         {...props}
         attachmentItem={singleAttachment}
         galleryAttachments={galleryAttachments}
+        canDeleteAttachments={canDeleteAttachments}
         priorityMedia={isPriorityMediaMessage || Boolean(singleAttachment?.isImage)}
       />
     );
@@ -1857,6 +1866,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                   {...props}
                   attachmentItem={attachmentItem}
                   galleryAttachments={galleryAttachments}
+                  canDeleteAttachments={canDeleteAttachments}
                   priorityMedia={isPriorityMediaMessage && attachmentIndex === 0}
                 />
               </div>
@@ -1874,6 +1884,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 {...props}
                 attachmentItem={attachmentItem}
                 galleryAttachments={galleryAttachments}
+                canDeleteAttachments={canDeleteAttachments}
                 priorityMedia={isPriorityMediaMessage}
               />
             </div>
@@ -2448,6 +2459,7 @@ function TextChatMessageList({
                 <MessageAttachmentCollection
                   messageItem={messageItem}
                   attachments={attachments}
+                  canDeleteAttachments={isOwnMessage}
                   selectionMode={selectionMode}
                   onToggleSelection={onToggleSelection}
                   onOpenMediaPreview={onOpenMediaPreview}

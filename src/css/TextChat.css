@@ -8369,6 +8369,13 @@ html[data-ui-theme="purple"] .composer-text-tools-menu__header strong {
   color: var(--app-text-strong);
 }
 
+html[data-ui-theme="light"] .message-search-panel__item strong,
+html[data-ui-theme="light"] .message-search-panel__item span,
+html[data-ui-theme="purple"] .message-search-panel__item strong,
+html[data-ui-theme="purple"] .message-search-panel__item span {
+  color: #ffffff;
+}
+
 html[data-ui-theme="light"] .message-search-panel__header span,
 html[data-ui-theme="light"] .message-search-panel__item small,
 html[data-ui-theme="light"] .message-search-panel__empty,

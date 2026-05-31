@@ -596,15 +596,17 @@ function TextChatMediaPreview({
 
           {!isVideoPreview ? (
           <div className="media-preview__dock media-preview__dock--bottom-right" onClick={stopEvent}>
-            <button
-              type="button"
-              className="media-preview__icon-button media-preview__icon-button--danger"
-              onClick={() => onDeleteActive?.()}
-              aria-label="Удалить текущее вложение"
-              title="Удалить текущее вложение"
-            >
-              <span className="media-preview__delete-icon" aria-hidden="true" />
-            </button>
+            {onDeleteActive ? (
+              <button
+                type="button"
+                className="media-preview__icon-button media-preview__icon-button--danger"
+                onClick={() => onDeleteActive()}
+                aria-label="Удалить текущее вложение"
+                title="Удалить текущее вложение"
+              >
+                <span className="media-preview__delete-icon" aria-hidden="true" />
+              </button>
+            ) : null}
             <button
               type="button"
               className="media-preview__icon-button"

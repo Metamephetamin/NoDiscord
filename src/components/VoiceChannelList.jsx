@@ -248,19 +248,20 @@ const VoiceChannelList = ({
                 </button>
               )}
 
-              <button
-                type="button"
-                className="channel-edit-button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onRenameChannel?.("voice", channel);
-                }}
-                disabled={!canManageChannels}
-                aria-label="Настройки канала"
-              >
-                <img src={SETTINGS_ICON_URL} alt="" />
-              </button>
+              {canManageChannels ? (
+                <button
+                  type="button"
+                  className="channel-edit-button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onRenameChannel?.("voice", channel);
+                  }}
+                  aria-label="Настройки канала"
+                >
+                  <img src={SETTINGS_ICON_URL} alt="" />
+                </button>
+              ) : null}
             </div>
 
             {participants.length > 0 && (
@@ -285,11 +286,6 @@ const VoiceChannelList = ({
                     >
                       {participant.name}
                     </button>
-                    <span
-                      className="participant-item__role-dot"
-                      style={{ backgroundColor: participant.roleColor }}
-                      aria-hidden="true"
-                    />
                     <div className="participant-item__voice-flags">
                       {participant.isMicMuted && (
                         <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Микрофон выключен">

@@ -105,6 +105,7 @@
 :root {
   --font-body: "Kulim Park", "Segoe UI", Helvetica, Arial, sans-serif;
   --font-heading: "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-numeric: Roboto, "Segoe UI", Arial, sans-serif;
   --font-slogan: "Rubik Glitch", "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
   --ui-font-size-base: 16px;
   --ui-touch-target-multiplier: 1;
@@ -133,6 +134,17 @@
   --app-message-bg: rgba(255, 255, 255, 0.055);
   --app-own-message-bg: rgba(108, 114, 255, 0.24);
   color-scheme: dark;
+}
+
+.voice-channel__timer,
+.voice-channel__count,
+.sidebar-unread-badge,
+.message-time,
+.location-picker-modal__zoom-value,
+.auth-inline-code__timer,
+.admin-security-metric strong,
+.memory-settings-card strong {
+  font-family: var(--font-numeric);
 }
 
 html[data-ui-theme="light"] {

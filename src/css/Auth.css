@@ -367,8 +367,11 @@
   min-height: 44px;
   border-radius: 12px;
   margin-top: 4px;
-  background: var(--auth-submit-gradient);
-  box-shadow: 0 12px 24px var(--auth-submit-shadow);
+  background: linear-gradient(135deg, #6b3dff 0%, #b02cff 50%, #ff4aa2 100%);
+  color: #ffffff;
+  box-shadow:
+    0 14px 30px rgba(138, 62, 255, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.18) inset;
 }
 
 .auth-card--register .auth-card__links {
