@@ -25,7 +25,7 @@ export default function TextChatForwardModal({
             <p>{forwardableCount} {forwardableCount === 1 ? "сообщение" : "сообщения"} можно переслать выбранным друзьям</p>
           </div>
           <button type="button" className="forward-modal__close" onClick={onClose} aria-label="Закрыть">
-            ?
+            ×
           </button>
         </div>
 

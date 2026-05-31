@@ -708,6 +708,7 @@ test("forward modal styles stay split from the main text chat stylesheet", () =>
   assert.match(forwardCss, /\.forward-modal__backdrop \{/);
   assert.match(forwardCss, /html\[data-ui-theme="light"\] \.forward-modal/);
   assert.doesNotMatch(textChatCss, /^\.forward-modal/m);
+  assert.doesNotMatch(forwardSource, />\s*\?\s*<\/button>/);
 });
 
 test("media frame editor styles stay split from the main menu stylesheet", () => {
