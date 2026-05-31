@@ -95,6 +95,19 @@ test("sticker emoji list avoids Windows tofu fallback glyphs", () => {
   assert.match(textChatModelSource, /"face_bags_under_eyes", "😩"/);
 });
 
+test("pinned message jumps hydrate older history before giving up", () => {
+  const scrollManagerSource = readRepoFile("src/hooks/useTextChatScrollManager.js");
+  const scrollToMessageStart = scrollManagerSource.indexOf("const scrollToMessage = useCallback");
+  const scrollToMessageEnd = scrollManagerSource.indexOf("useEffect(() => () => {", scrollToMessageStart);
+  const scrollToMessageSource = scrollManagerSource.slice(scrollToMessageStart, scrollToMessageEnd);
+
+  assert.match(scrollToMessageSource, /const requestOlderHistoryForJump = async \(\) =>/);
+  assert.match(scrollToMessageSource, /loadOlderHistoryRef\.current\?\.\(\)/);
+  assert.match(scrollToMessageSource, /hasMoreHistoryRef\.current/);
+  assert.match(scrollToMessageSource, /isLoadingOlderHistoryRef\.current/);
+  assert.match(scrollToMessageSource, /window\.requestAnimationFrame\(\(\) => attemptScroll\(attempt \+ 1\)\)/);
+});
+
 test("avatar crop editor exposes vertical positioning control", () => {
   const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
 

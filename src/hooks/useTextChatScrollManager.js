@@ -8,6 +8,7 @@ const LATEST_SCROLL_BOTTOM_PADDING_PX = 20;
 const PROGRAMMATIC_SCROLL_AUTO_RESET_MS = 420;
 const FORCE_LATEST_SCROLL_STABLE_FRAME_COUNT = 3;
 const FORCE_LATEST_SCROLL_MAX_FRAME_COUNT = 14;
+const MAX_JUMP_HISTORY_LOADS = 4;
 const TEXT_CHAT_SCROLL_STATE_PREFIX = "textchat-scroll-state";
 const TEXT_CHAT_SCROLL_STATE_ENABLED = false;
 const DEFAULT_MESSAGE_HIGHLIGHT_DURATION_MS = 2800;
@@ -548,6 +549,29 @@ export default function useTextChatScrollManager({
       applyHighlight(normalizedMessageId, highlightDurationMs);
     }
 
+    let olderHistoryJumpAttempts = 0;
+    const requestOlderHistoryForJump = async () => {
+      if (
+        olderHistoryJumpAttempts >= MAX_JUMP_HISTORY_LOADS
+        || !hasMoreHistoryRef.current
+        || isLoadingOlderHistoryRef.current
+        || typeof loadOlderHistoryRef.current !== "function"
+      ) {
+        return false;
+      }
+
+      olderHistoryJumpAttempts += 1;
+      isLoadingOlderHistoryRef.current = true;
+      try {
+        await loadOlderHistoryRef.current?.();
+        return true;
+      } catch {
+        return false;
+      } finally {
+        isLoadingOlderHistoryRef.current = false;
+      }
+    };
+
     const attemptScroll = (attempt = 0) => {
       const element = messageRefs.current.get(normalizedMessageId);
       if (element) {
@@ -563,6 +587,11 @@ export default function useTextChatScrollManager({
       }
 
       if (attempt >= 6) {
+        void requestOlderHistoryForJump().then((didRequestHistory) => {
+          if (didRequestHistory) {
+            window.requestAnimationFrame(() => attemptScroll(0));
+          }
+        });
         return;
       }
 
