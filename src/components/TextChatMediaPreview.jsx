@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { MEDIA_PREVIEW_ZOOM_STEP } from "../utils/textChatHelpers";
 import { MISSING_MEDIA_EVENT, isMediaUrlKnownMissing, markMediaUrlMissing } from "../utils/media";
 import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
+import "../css/TextChatMediaPreview.css";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.0015;
 const WHEEL_NAVIGATION_COOLDOWN_MS = 180;

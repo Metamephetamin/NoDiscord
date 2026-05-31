@@ -711,6 +711,20 @@ test("forward modal styles stay split from the main text chat stylesheet", () =>
   assert.doesNotMatch(forwardSource, />\s*\?\s*<\/button>/);
 });
 
+test("media preview styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const mediaPreviewCss = readRepoFileIfExists("src/css/TextChatMediaPreview.css");
+  const mediaPreviewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
+
+  assert.match(mediaPreviewSource, /import "\.\.\/css\/TextChatMediaPreview\.css";/);
+  assert.match(mediaPreviewCss, /\.media-preview \{/);
+  assert.match(mediaPreviewCss, /\.media-preview__dialog \{/);
+  assert.match(mediaPreviewCss, /html\[data-ui-theme="light"\] \.media-preview/);
+  assert.doesNotMatch(textChatCss, /^\s*\.media-preview[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.media-preview/m);
+  assert.doesNotMatch(textChatCss, /^body\.media-preview-open/m);
+});
+
 test("media frame editor styles stay split from the main menu stylesheet", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const editorCss = readRepoFileIfExists("src/css/MediaFrameEditorModal.css");
