@@ -158,6 +158,16 @@ test("message search input text is readable on dark chat topbar", () => {
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
 });
 
+test("API_BASE_URL callers do not duplicate the api prefix", () => {
+  const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const textChatSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+
+  assert.doesNotMatch(menuSource, /API_BASE_URL\}\/api\//);
+  assert.doesNotMatch(textChatSource, /API_BASE_URL\}\/api\//);
+  assert.match(menuSource, /API_BASE_URL\}\/server-invites\/server\/\$\{encodeURIComponent\(activeServer\.id\)\}\/audit-log/);
+  assert.match(textChatSource, /API_BASE_URL\}\/chats\/\$\{encodeURIComponent\(scopedChannelId\)\}\/messages\/search/);
+});
+
 test("message search indexes attachment media kinds, not only file names", () => {
   const actionsSource = readRepoFile("src/hooks/useTextChatMessageActions.js");
   const backendSearchSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/MessageSearchService.cs");

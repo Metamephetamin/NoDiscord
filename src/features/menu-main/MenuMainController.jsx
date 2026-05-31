@@ -3408,7 +3408,7 @@ export default function MenuMain({
     }
 
     let cancelled = false;
-    authFetch(`${API_BASE_URL}/api/server-invites/server/${encodeURIComponent(activeServer.id)}/audit-log?limit=20`, {
+    authFetch(`${API_BASE_URL}/server-invites/server/${encodeURIComponent(activeServer.id)}/audit-log?limit=20`, {
       method: "GET",
     })
       .then(async (response) => {

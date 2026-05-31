@@ -721,7 +721,7 @@ export default function TextChat({
         error: "",
       }));
 
-      authFetch(`${API_BASE_URL}/api/chats/${encodeURIComponent(scopedChannelId)}/messages/search?q=${encodeURIComponent(query)}&limit=25`, {
+      authFetch(`${API_BASE_URL}/chats/${encodeURIComponent(scopedChannelId)}/messages/search?q=${encodeURIComponent(query)}&limit=25`, {
         method: "GET",
         signal: abortController.signal,
       })
