@@ -1434,6 +1434,50 @@ export default function TextChat({
     };
   }, [currentUserId, localClearCutoffMs, serverMembers, serverRoles]);
 
+  const submitPollVote = useCallback(async (messageId, optionIds) => {
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!scopedChannelId || !normalizedMessageId) {
+      throw new Error("Не удалось определить опрос.");
+    }
+
+    const response = await authFetch(`${API_BASE_URL}/chats/${encodeURIComponent(scopedChannelId)}/messages/${encodeURIComponent(messageId)}/poll-vote`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        optionIds: Array.isArray(optionIds)
+          ? optionIds.map((optionId) => String(optionId || "")).filter(Boolean)
+          : [],
+      }),
+    });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось сохранить голос."));
+    }
+
+    const normalizedMessage = await normalizeIncomingMessage(data);
+    if (isUnrecoverableLegacyEncryptedMessage(normalizedMessage)) {
+      return null;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+      let didChange = false;
+      const nextChannelMessages = channelMessages.map((messageItem) => {
+        if (String(messageItem?.id || "") !== String(normalizedMessage.id || "")) {
+          return messageItem;
+        }
+
+        didChange = true;
+        return normalizedMessage;
+      });
+
+      return didChange ? nextChannelMessages : channelMessages;
+    }));
+
+    return normalizedMessage;
+  }, [scopedChannelId, serverMembers, serverRoles]);
+
   const updateHistoryState = useCallback((channelId, updater) => {
     const normalizedChannelId = String(channelId || "").trim();
     if (!normalizedChannelId) {
@@ -3572,6 +3616,7 @@ export default function TextChat({
       openUserContextMenu={openUserContextMenu}
       openMediaPreview={openMediaPreview}
       handleToggleReaction={handleToggleReaction}
+      submitPollVote={submitPollVote}
       handleComposerPaste={handleComposerPaste}
       selectedFiles={selectedFiles}
       uploadingFile={uploadingFile}

@@ -71,6 +71,7 @@ export default function TextChatView(props) {
     openUserContextMenu,
     openMediaPreview,
     handleToggleReaction,
+    submitPollVote,
     handleComposerPaste,
     selectedFiles,
     uploadingFile,
@@ -186,6 +187,7 @@ export default function TextChatView(props) {
   const stableOpenUserContextMenu = useStableCallback(openUserContextMenu);
   const stableOpenMediaPreview = useStableCallback(openMediaPreview);
   const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
+  const stableSubmitPollVote = useStableCallback(submitPollVote);
   const stableOpenForwardModal = useStableCallback(openForwardModal);
   const stableHandleInsertMentionByUserId = useStableCallback(handleInsertMentionByUserId);
   const stableCancelLocalEchoUpload = useStableCallback(cancelLocalEchoUpload);
@@ -496,6 +498,7 @@ export default function TextChatView(props) {
             onInsertMentionByUserId={stableHandleInsertMentionByUserId}
             onOpenMediaPreview={stableOpenMediaPreview}
             onToggleReaction={stableHandleToggleReaction}
+            onSubmitPollVote={stableSubmitPollVote}
             onJumpToReply={stableScrollToMessage}
             onCancelLocalEchoUpload={stableCancelLocalEchoUpload}
             onRetryLocalEchoUpload={stableRetryLocalEchoUpload}
@@ -531,6 +534,7 @@ export default function TextChatView(props) {
           onInsertMentionByUserId={stableHandleInsertMentionByUserId}
           onOpenMediaPreview={stableOpenMediaPreview}
           onToggleReaction={stableHandleToggleReaction}
+          onSubmitPollVote={stableSubmitPollVote}
           onJumpToReply={stableScrollToMessage}
           onCancelLocalEchoUpload={stableCancelLocalEchoUpload}
           onRetryLocalEchoUpload={stableRetryLocalEchoUpload}

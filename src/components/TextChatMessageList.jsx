@@ -1143,7 +1143,7 @@ function writeStoredPollVoteState(storageKey, state) {
   }
 }
 
-function MessagePollCard({ poll, messageId, currentUserId }) {
+function MessagePollCard({ poll, messageId, currentUserId, onSubmitPollVote }) {
   const pollResetKey = JSON.stringify({
     question: String(poll?.question || ""),
     themeId: String(poll?.themeId || ""),
@@ -1158,10 +1158,18 @@ function MessagePollCard({ poll, messageId, currentUserId }) {
     settings: poll?.settings || {},
   });
 
-  return <MessagePollCardInner key={pollResetKey} poll={poll} messageId={messageId} currentUserId={currentUserId} />;
+  return (
+    <MessagePollCardInner
+      key={pollResetKey}
+      poll={poll}
+      messageId={messageId}
+      currentUserId={currentUserId}
+      onSubmitPollVote={onSubmitPollVote}
+    />
+  );
 }
 
-function MessagePollCardInner({ poll, messageId, currentUserId }) {
+function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote }) {
   const pollVoteStorageKey = useMemo(
     () => getPollVoteStorageKey({ poll, messageId, currentUserId }),
     [currentUserId, messageId, poll]
@@ -1174,6 +1182,8 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
   const [localTotalVoters, setLocalTotalVoters] = useState(() => Math.max(0, Number(storedVoteState?.totalVoters || poll?.totalVoters) || 0));
   const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState(() => storedVoteState?.selectedOptionIds || []);
   const [addOptionDraft, setAddOptionDraft] = useState("");
+  const [pollVotePending, setPollVotePending] = useState(false);
+  const [pollVoteError, setPollVoteError] = useState("");
   const baseOptions = useMemo(
     () => getPollDisplayOptions(poll, { messageId, currentUserId }),
     [currentUserId, messageId, poll]
@@ -1209,7 +1219,7 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
     });
   };
 
-  const handleVote = () => {
+  const applyLocalVote = () => {
     if (!selectedOptionIds.length) {
       return;
     }
@@ -1240,6 +1250,28 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
       totalVoters: nextTotalVoters,
       addedOptions,
     });
+  };
+
+  const handleVote = async () => {
+    if (!selectedOptionIds.length || pollVotePending) {
+      return;
+    }
+
+    if (typeof onSubmitPollVote === "function") {
+      setPollVotePending(true);
+      setPollVoteError("");
+      try {
+        await onSubmitPollVote(messageId, selectedOptionIds);
+        applyLocalVote();
+      } catch (error) {
+        setPollVoteError(error?.message || "Не удалось сохранить голос.");
+      } finally {
+        setPollVotePending(false);
+      }
+      return;
+    }
+
+    applyLocalVote();
   };
 
   const handleAddOption = (event) => {
@@ -1341,13 +1373,15 @@ function MessagePollCardInner({ poll, messageId, currentUserId }) {
           </span>
         )}
 
+        {pollVoteError ? <span className="message-poll-card__error">{pollVoteError}</span> : null}
+
         <button
           type="button"
           className="message-poll-card__vote"
           onClick={handleVote}
-          disabled={!selectedOptionIds.length || (submitted && !poll?.settings?.allowRevoting)}
+          disabled={pollVotePending || !selectedOptionIds.length || (submitted && !poll?.settings?.allowRevoting)}
         >
-          {submitted ? (poll?.settings?.allowRevoting ? "Голос обновлён" : "Голос учтён") : "Голосовать"}
+          {pollVotePending ? "Сохраняем..." : submitted ? (poll?.settings?.allowRevoting ? "Голос обновлён" : "Голос учтён") : "Голосовать"}
         </button>
       </div>
     </div>
@@ -2012,6 +2046,7 @@ function TextChatMessageList({
   onInsertMentionByUserId,
   onOpenMediaPreview,
   onToggleReaction,
+  onSubmitPollVote,
   onJumpToReply,
   onCancelLocalEchoUpload,
   onRetryLocalEchoUpload,
@@ -2535,7 +2570,14 @@ function TextChatMessageList({
                   )
                 ) : null}
 
-                {messagePoll ? <MessagePollCard poll={messagePoll} messageId={messageItem.id} currentUserId={currentUserId} /> : null}
+                {messagePoll ? (
+                  <MessagePollCard
+                    poll={messagePoll}
+                    messageId={messageItem.id}
+                    currentUserId={currentUserId}
+                    onSubmitPollVote={onSubmitPollVote}
+                  />
+                ) : null}
 
                 {inviteCode ? <MessageInviteCard inviteCode={inviteCode} /> : null}
 
@@ -2652,6 +2694,7 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
     && previousProps.onInsertMentionByUserId === nextProps.onInsertMentionByUserId
     && previousProps.onOpenMediaPreview === nextProps.onOpenMediaPreview
     && previousProps.onToggleReaction === nextProps.onToggleReaction
+    && previousProps.onSubmitPollVote === nextProps.onSubmitPollVote
     && previousProps.onJumpToReply === nextProps.onJumpToReply
     && previousProps.onCancelLocalEchoUpload === nextProps.onCancelLocalEchoUpload
     && previousProps.onRetryLocalEchoUpload === nextProps.onRetryLocalEchoUpload

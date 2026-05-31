@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace BackNoDiscord.Controllers;
 
@@ -22,6 +24,8 @@ public sealed class ChatMessagesController : ControllerBase
     private const string ChatChannelMarker = "::channel:";
     private const string PrivateServerPrefix = "server-";
     private const string PersonalServerPrefix = "server-main-";
+    private const string PollMessagePrefix = "[[tend-poll]]";
+    private static readonly JsonSerializerOptions PollJsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly AppDbContext _context;
     private readonly CryptoService _crypto;
@@ -297,6 +301,107 @@ public sealed class ChatMessagesController : ControllerBase
         return Ok(dto);
     }
 
+    [HttpPost("{messageId:int}/poll-vote")]
+    public async Task<ActionResult<MessageDto>> SubmitPollVote(
+        [FromRoute] string chatId,
+        [FromRoute] int messageId,
+        [FromBody] ChatPollVoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var normalizedChannelId = NormalizeChannelId(chatId);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            return BadRequest(new { message = "chatId is required" });
+        }
+
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+        var message = await _context.Messages
+            .FirstOrDefaultAsync(item =>
+                item.Id == messageId &&
+                equivalentChannelIds.Contains(item.ChannelId) &&
+                !item.IsDeleted,
+                cancellationToken);
+        if (message is null)
+        {
+            return NotFound(new { message = "message not found" });
+        }
+
+        var payload = DeserializePayload(GetRawPayload(message));
+        if (!TryDecodePollMessage(payload.Message, out var poll))
+        {
+            return BadRequest(new { message = "poll message is required" });
+        }
+
+        var allowedOptionIds = GetPollOptionIds(poll);
+        var selectedOptionIds = NormalizeSelectedPollOptions(request.OptionIds, allowedOptionIds);
+        if (selectedOptionIds.Count == 0)
+        {
+            return BadRequest(new { message = "poll option is required" });
+        }
+
+        if (selectedOptionIds.Count > 1 && !ReadPollSetting(poll, "allowMultipleAnswers"))
+        {
+            return BadRequest(new { message = "multiple answers are disabled for this poll" });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var existingVote = await _context.MessagePollVotes
+            .FirstOrDefaultAsync(item => item.MessageId == message.Id && item.VoterUserId == currentUser.UserId, cancellationToken);
+        if (existingVote is not null && !ReadPollSetting(poll, "allowRevoting"))
+        {
+            return Conflict(new { message = "revoting is disabled for this poll" });
+        }
+
+        if (existingVote is null)
+        {
+            _context.MessagePollVotes.Add(new MessagePollVoteRecord
+            {
+                MessageId = message.Id,
+                ChannelId = message.ChannelId,
+                VoterUserId = currentUser.UserId,
+                OptionIdsJson = JsonSerializer.Serialize(selectedOptionIds, PollJsonOptions),
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+        else
+        {
+            existingVote.ChannelId = message.ChannelId;
+            existingVote.OptionIdsJson = JsonSerializer.Serialize(selectedOptionIds, PollJsonOptions);
+            existingVote.UpdatedAt = now;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var voteRecords = await _context.MessagePollVotes
+            .AsNoTracking()
+            .Where(item => item.MessageId == message.Id)
+            .ToListAsync(cancellationToken);
+        ApplyPollVoteTotals(poll, allowedOptionIds, voteRecords);
+        payload.Message = EncodePollMessage(poll);
+        SaveMessagePayload(message, payload);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var reactionsByMessageId = await BuildReactionMapAsync([message.Id], cancellationToken);
+        var dto = ToMessageDto(
+            message,
+            payload,
+            reactionsByMessageId.TryGetValue(message.Id, out var reactions) ? reactions : []);
+        await _hubContext.Clients.Group(message.ChannelId).SendAsync("MessageUpdated", dto, cancellationToken);
+
+        return Ok(dto);
+    }
+
     private MessageDto ToMessageDto(Message message, ChatMessagePayload payload, List<MessageReactionDto>? reactions = null)
     {
         return new MessageDto
@@ -393,6 +498,130 @@ public sealed class ChatMessagesController : ControllerBase
         {
             _logger.LogWarning(ex, "Failed to decrypt chat message {MessageId} in channel {ChannelId}.", message.Id, message.ChannelId);
             return message.Content ?? string.Empty;
+        }
+    }
+
+    private void SaveMessagePayload(Message message, ChatMessagePayload payload)
+    {
+        var serializedPayload = $"{MessagePayloadPrefix}{JsonSerializer.Serialize(payload)}";
+        if (string.IsNullOrWhiteSpace(message.EncryptedContent))
+        {
+            message.Content = serializedPayload;
+            return;
+        }
+
+        message.EncryptedContent = _crypto.Encrypt(serializedPayload);
+    }
+
+    private static bool TryDecodePollMessage(string? rawMessage, out JsonObject poll)
+    {
+        poll = [];
+        var normalizedMessage = rawMessage?.Trim() ?? string.Empty;
+        if (!normalizedMessage.StartsWith(PollMessagePrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var encodedPayload = normalizedMessage[PollMessagePrefix.Length..];
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(encodedPayload));
+            if (JsonNode.Parse(json) is not JsonObject parsedPoll)
+            {
+                return false;
+            }
+
+            poll = parsedPoll;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string EncodePollMessage(JsonObject poll)
+    {
+        var json = poll.ToJsonString(PollJsonOptions);
+        return $"{PollMessagePrefix}{Convert.ToBase64String(Encoding.UTF8.GetBytes(json))}";
+    }
+
+    private static List<string> GetPollOptionIds(JsonObject poll)
+    {
+        if (poll["options"] is not JsonArray options)
+        {
+            return [];
+        }
+
+        return options
+            .OfType<JsonObject>()
+            .Select(option => option["id"]?.GetValue<string>()?.Trim() ?? string.Empty)
+            .Where(optionId => !string.IsNullOrWhiteSpace(optionId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static List<string> NormalizeSelectedPollOptions(
+        IReadOnlyList<string>? rawOptionIds,
+        IReadOnlyList<string> allowedOptionIds)
+    {
+        var allowed = allowedOptionIds.ToHashSet(StringComparer.Ordinal);
+        return (rawOptionIds ?? [])
+            .Select(optionId => UploadPolicies.TrimToLength(optionId, 80).Trim())
+            .Where(optionId => allowed.Contains(optionId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool ReadPollSetting(JsonObject poll, string key)
+    {
+        return poll["settings"] is JsonObject settings &&
+            settings[key] is JsonValue value &&
+            value.TryGetValue<bool>(out var enabled) &&
+            enabled;
+    }
+
+    private static void ApplyPollVoteTotals(
+        JsonObject poll,
+        IReadOnlyList<string> optionIds,
+        IReadOnlyList<MessagePollVoteRecord> voteRecords)
+    {
+        var countsByOptionId = optionIds.ToDictionary(optionId => optionId, _ => 0, StringComparer.Ordinal);
+        foreach (var voteRecord in voteRecords)
+        {
+            var selectedOptionIds = DeserializePollVoteOptions(voteRecord.OptionIdsJson);
+            foreach (var optionId in selectedOptionIds)
+            {
+                if (countsByOptionId.ContainsKey(optionId))
+                {
+                    countsByOptionId[optionId] += 1;
+                }
+            }
+        }
+
+        var votes = new JsonObject();
+        foreach (var optionId in optionIds)
+        {
+            votes[optionId] = countsByOptionId[optionId];
+        }
+
+        poll["votes"] = votes;
+        poll["totalVoters"] = voteRecords
+            .Select(vote => vote.VoterUserId)
+            .Where(userId => !string.IsNullOrWhiteSpace(userId))
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+    }
+
+    private static List<string> DeserializePollVoteOptions(string rawOptionIds)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(rawOptionIds, PollJsonOptions) ?? [];
+        }
+        catch
+        {
+            return [];
         }
     }
 
@@ -742,4 +971,9 @@ public sealed class ChatOutboxMessageRequest
     public string? ReplyToMessageId { get; set; }
     public string? ReplyToUsername { get; set; }
     public string? ReplyPreview { get; set; }
+}
+
+public sealed class ChatPollVoteRequest
+{
+    public IReadOnlyList<string> OptionIds { get; set; } = [];
 }

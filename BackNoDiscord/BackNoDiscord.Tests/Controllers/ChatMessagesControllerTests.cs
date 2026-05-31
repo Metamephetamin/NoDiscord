@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using BackNoDiscord.Controllers;
 using BackNoDiscord.Security;
@@ -195,6 +196,62 @@ public sealed class ChatMessagesControllerTests
         Assert.Null(dto.NextCursor);
     }
 
+    [Fact]
+    public async Task SubmitPollVote_PersistsVoteCountsAndBroadcastsMessageUpdate()
+    {
+        await using var context = CreateContext();
+        context.Friendships.Add(new FriendshipRecord { UserLowId = 42, UserHighId = 99, CreatedAt = DateTimeOffset.UtcNow });
+        var channelId = DirectMessageChannels.BuildChannelId(42, 99);
+        var pollMessage = CreatePollMessage(new
+        {
+            version = 2,
+            question = "Куда идём?",
+            options = new[]
+            {
+                new { id = "cafe", text = "Кафе" },
+                new { id = "park", text = "Парк" }
+            },
+            settings = new
+            {
+                anonymous = true,
+                showWhoVoted = false,
+                allowMultipleAnswers = false,
+                allowRevoting = true
+            }
+        });
+        context.Messages.Add(new Message
+        {
+            ChannelId = channelId,
+            Username = "Friend",
+            Content = $"__CHAT_PAYLOAD__:{JsonSerializer.Serialize(new ChatMessagePayload { AuthorUserId = "99", Message = pollMessage })}",
+            AuthorUserId = "99",
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+        var messageId = await context.Messages.Select(message => message.Id).SingleAsync();
+        var hubContext = new RecordingHubContext();
+        var controller = BuildController(context, userId: "42", hubContext: hubContext);
+
+        var result = await controller.SubmitPollVote(
+            channelId,
+            messageId,
+            new ChatPollVoteRequest { OptionIds = ["park"] },
+            CancellationToken.None);
+
+        var actionResult = Assert.IsType<ActionResult<MessageDto>>(result);
+        var dto = Assert.IsType<MessageDto>(Assert.IsType<OkObjectResult>(actionResult.Result).Value);
+        var updatedPoll = ParsePollMessage(dto.Message);
+        Assert.Equal(1, updatedPoll.GetProperty("totalVoters").GetInt32());
+        Assert.Equal(1, updatedPoll.GetProperty("votes").GetProperty("park").GetInt32());
+        Assert.Equal(0, updatedPoll.GetProperty("votes").GetProperty("cafe").GetInt32());
+        Assert.Single(context.MessagePollVotes);
+        Assert.Contains(hubContext.Sends, item =>
+            item.GroupName == channelId &&
+            item.Method == "MessageUpdated" &&
+            item.Arguments.Count == 1);
+    }
+
     private static ChatMessagesController BuildController(
         AppDbContext context,
         string userId,
@@ -249,6 +306,21 @@ public sealed class ChatMessagesControllerTests
             })
             .Build();
         return new CryptoService(configuration);
+    }
+
+    private static string CreatePollMessage<T>(T poll)
+    {
+        var json = JsonSerializer.Serialize(poll, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return $"[[tend-poll]]{Convert.ToBase64String(Encoding.UTF8.GetBytes(json))}";
+    }
+
+    private static JsonElement ParsePollMessage(string? rawMessage)
+    {
+        const string prefix = "[[tend-poll]]";
+        var normalized = rawMessage ?? string.Empty;
+        Assert.StartsWith(prefix, normalized);
+        var json = Encoding.UTF8.GetString(Convert.FromBase64String(normalized[prefix.Length..]));
+        return JsonDocument.Parse(json).RootElement.Clone();
     }
 
     private sealed record RecordedHubSend(string GroupName, string Method, IReadOnlyList<object?> Arguments);

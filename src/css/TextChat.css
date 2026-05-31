@@ -7044,6 +7044,14 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   overflow-wrap: anywhere;
 }
 
+.message-poll-card__error {
+  color: #ffd3dc;
+  font-size: 13px;
+  font-weight: 800;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .message-poll-card__add-option-form {
   flex: 1 1 260px;
   min-width: min(100%, 220px);

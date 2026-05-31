@@ -416,10 +416,24 @@ test("poll votes persist locally and expose anonymous mode", () => {
   assert.match(messageListSource, /function readStoredPollVoteState/);
   assert.match(messageListSource, /function writeStoredPollVoteState/);
   assert.match(messageListSource, /nd:poll-vote:/);
-  assert.match(messageListSource, /messageId=\{messageItem\.id\} currentUserId=\{currentUserId\}/);
+  assert.match(messageListSource, /messageId=\{messageItem\.id\}[\s\S]*?currentUserId=\{currentUserId\}/);
   assert.doesNotMatch(messageListSource, /window\.prompt/);
   assert.match(messageListSource, /message-poll-card__add-option-form/);
   assert.match(messageListSource, /message-poll-card__add-option-input/);
+});
+
+test("poll votes are submitted to the server and merged through message updates", () => {
+  const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+  const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+
+  assert.match(controllerSource, /const submitPollVote = useCallback\(async \(messageId, optionIds\) =>/);
+  assert.match(controllerSource, /\/messages\/\$\{encodeURIComponent\(messageId\)\}\/poll-vote/);
+  assert.match(controllerSource, /setMessagesByChannel\(\(previous\) => updateChannelMessagesState\(previous, scopedChannelId/);
+  assert.match(viewSource, /const stableSubmitPollVote = useStableCallback\(submitPollVote\);/);
+  assert.match(viewSource, /onSubmitPollVote=\{stableSubmitPollVote\}/);
+  assert.match(messageListSource, /onSubmitPollVote/);
+  assert.match(messageListSource, /await onSubmitPollVote\(messageId, selectedOptionIds\)/);
 });
 
 test("poll composer backdrop fully covers and blurs the app", () => {

@@ -699,6 +699,31 @@ public class MessageReactionRecord
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+[Table("message_poll_votes")]
+public class MessagePollVoteRecord
+{
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("message_id")]
+    public int MessageId { get; set; }
+
+    [Column("channel_id")]
+    public string ChannelId { get; set; } = string.Empty;
+
+    [Column("voter_user_id")]
+    public string VoterUserId { get; set; } = string.Empty;
+
+    [Column("option_ids_json")]
+    public string OptionIdsJson { get; set; } = "[]";
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 [Table("push_subscriptions")]
 public class PushSubscriptionRecord
 {
@@ -847,6 +872,7 @@ public class AppDbContext : DbContext
     public DbSet<EmailVerificationCodeRecord> EmailVerificationCodes => Set<EmailVerificationCodeRecord>();
     public DbSet<QrLoginSessionRecord> QrLoginSessions => Set<QrLoginSessionRecord>();
     public DbSet<MessageReactionRecord> MessageReactions => Set<MessageReactionRecord>();
+    public DbSet<MessagePollVoteRecord> MessagePollVotes => Set<MessagePollVoteRecord>();
     public DbSet<PushSubscriptionRecord> PushSubscriptions => Set<PushSubscriptionRecord>();
     public DbSet<ServerAuditLogRecord> ServerAuditLogs => Set<ServerAuditLogRecord>();
     public DbSet<UserIntegrationRecord> UserIntegrations => Set<UserIntegrationRecord>();
@@ -955,6 +981,18 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ReactorUserId).IsRequired();
             entity.Property(x => x.ReactionKey).IsRequired();
             entity.Property(x => x.ReactionGlyph).IsRequired();
+        });
+
+        modelBuilder.Entity<MessagePollVoteRecord>(entity =>
+        {
+            entity.ToTable("message_poll_votes");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.MessageId);
+            entity.HasIndex(x => new { x.ChannelId, x.UpdatedAt });
+            entity.HasIndex(x => new { x.MessageId, x.VoterUserId }).IsUnique();
+            entity.Property(x => x.ChannelId).IsRequired();
+            entity.Property(x => x.VoterUserId).IsRequired();
+            entity.Property(x => x.OptionIdsJson).IsRequired();
         });
 
         modelBuilder.Entity<GroupConversationRecord>(entity =>
