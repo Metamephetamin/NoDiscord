@@ -259,10 +259,12 @@ const TotpAuthenticatorCard = ({
   onResetTotp,
 }) => {
   const [qrState, setQrState] = useState({ uri: "", svg: "" });
+  const [enabledAction, setEnabledAction] = useState("");
   const isSetupOpen = Boolean(totpSetup?.secret || totpSetup?.otpauthUri);
   const statusLabel = isTotpEnabled ? "Подключён" : "Не подключён";
   const qrUri = String(totpSetup?.otpauthUri || "");
   const qrSvg = qrState.uri === qrUri ? qrState.svg : "";
+  const activeEnabledAction = isTotpEnabled && !isSetupOpen && totpSetup?.resetRequested ? "reset" : enabledAction;
 
   useEffect(() => {
     let isMounted = true;
@@ -314,47 +316,72 @@ const TotpAuthenticatorCard = ({
         ) : null}
         {!isSetupOpen && isTotpEnabled ? (
           <div className="totp-settings-card__enabled-actions">
-            <div className="totp-settings-card__inline-code">
-              <input
-                className="settings-input"
-                inputMode="numeric"
-                value={totpSetup?.code || ""}
-                onChange={(event) => onTotpCodeChange?.(event.target.value)}
-                maxLength={6}
-                placeholder="123456"
-              />
-              <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
-                {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
+            {!activeEnabledAction ? (
+              <button
+                type="button"
+                className="settings-inline-button settings-inline-button--danger"
+                onClick={() => setEnabledAction("disable")}
+                disabled={totpSetup?.isBusy}
+              >
+                Отключить
               </button>
-            </div>
-            <div className="totp-settings-card__reset">
-              <input
-                className="settings-input"
-                type="password"
-                value={totpSetup?.resetPassword || ""}
-                onChange={(event) => onTotpResetPasswordChange?.(event.target.value)}
-                placeholder="Пароль"
-                autoComplete="current-password"
-              />
-              {totpSetup?.resetRequested ? (
+            ) : null}
+
+            {activeEnabledAction === "disable" ? (
+              <div className="totp-settings-card__inline-code">
                 <input
                   className="settings-input"
                   inputMode="numeric"
-                  value={totpSetup?.resetCode || ""}
-                  onChange={(event) => onTotpResetCodeChange?.(event.target.value)}
+                  value={totpSetup?.code || ""}
+                  onChange={(event) => onTotpCodeChange?.(event.target.value)}
                   maxLength={6}
-                  placeholder="Код из письма"
+                  placeholder="123456"
                 />
-              ) : null}
-              <button
-                type="button"
-                className="settings-inline-button"
-                onClick={totpSetup?.resetRequested ? onResetTotp : onRequestTotpResetCode}
-                disabled={totpSetup?.isBusy}
-              >
-                {totpSetup?.isBusy ? "Проверяем..." : totpSetup?.resetRequested ? "Сбросить" : "Код на почту"}
-              </button>
-            </div>
+                <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={onDisableTotp} disabled={totpSetup?.isBusy}>
+                  {totpSetup?.isBusy ? "Отключаем..." : "Отключить"}
+                </button>
+                <button type="button" className="settings-inline-button" onClick={() => setEnabledAction("reset")} disabled={totpSetup?.isBusy}>
+                  Нет кода
+                </button>
+                <button type="button" className="settings-inline-button" onClick={() => setEnabledAction("")} disabled={totpSetup?.isBusy}>
+                  Отмена
+                </button>
+              </div>
+            ) : null}
+
+            {activeEnabledAction === "reset" ? (
+              <div className="totp-settings-card__reset">
+                <input
+                  className="settings-input"
+                  type="password"
+                  value={totpSetup?.resetPassword || ""}
+                  onChange={(event) => onTotpResetPasswordChange?.(event.target.value)}
+                  placeholder="Пароль"
+                  autoComplete="current-password"
+                />
+                {totpSetup?.resetRequested ? (
+                  <input
+                    className="settings-input"
+                    inputMode="numeric"
+                    value={totpSetup?.resetCode || ""}
+                    onChange={(event) => onTotpResetCodeChange?.(event.target.value)}
+                    maxLength={6}
+                    placeholder="Код из письма"
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  className="settings-inline-button"
+                  onClick={totpSetup?.resetRequested ? onResetTotp : onRequestTotpResetCode}
+                  disabled={totpSetup?.isBusy}
+                >
+                  {totpSetup?.isBusy ? "Проверяем..." : totpSetup?.resetRequested ? "Сбросить" : "Код на почту"}
+                </button>
+                <button type="button" className="settings-inline-button" onClick={() => setEnabledAction("")} disabled={totpSetup?.isBusy}>
+                  Отмена
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

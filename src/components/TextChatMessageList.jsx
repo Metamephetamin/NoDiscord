@@ -36,6 +36,7 @@ import { normalizeVoiceMessageMetadata } from "../utils/voiceMessages";
 import { parseMediaFrame } from "../utils/mediaFrames";
 import { recordPerfEvent } from "../utils/perf";
 import { canLoadVideoPreviewUrl } from "../utils/mediaPreviewUrls.mjs";
+import { canUseDirectImageMediaUrl } from "../utils/mediaImageSources.mjs";
 import { deriveMessageDeliveryState } from "../features/text-chat/messageDeliveryState.mjs";
 
 const URL_PATTERN = /(?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;"')\]]/gi;
@@ -700,11 +701,11 @@ const MessageMediaImage = memo(function MessageMediaImage({
       }
     }
 
-    if (directSourceUrl) {
+    if (directSourceUrl && canUseDirectImageMediaUrl(directSourceUrl)) {
       candidates.push(directSourceUrl);
     }
 
-    if (!candidates.length && sourceUrl) {
+    if (!candidates.length && sourceUrl && canUseDirectImageMediaUrl(sourceUrl)) {
       candidates.push(sourceUrl);
     }
 

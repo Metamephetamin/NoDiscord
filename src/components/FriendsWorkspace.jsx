@@ -1281,6 +1281,7 @@ export const FriendsMain = ({
   friends,
   incomingFriendRequestCount,
   incomingFriendRequests,
+  outgoingFriendRequests = [],
   friendRequestsError,
   friendRequestsLoading,
   friendRequestActionId,
@@ -1357,6 +1358,7 @@ export const FriendsMain = ({
       ? directCallPanelProps
       : null;
   const activeFriendsPageSection = PROFILE_STORE_ENABLED ? friendsPageSection : friendsPageSection === "store" ? "friends" : friendsPageSection;
+  const friendRequestQueueCount = incomingFriendRequests.length + outgoingFriendRequests.length;
   const appliedStoreItem = getProfileStoreItemById(profileCustomization?.appliedItemId);
   const applyStoreItem = (item) => {
     onProfileCustomizationChange?.(applyProfileStoreItem(profileCustomization, item));
@@ -2312,7 +2314,7 @@ export const FriendsMain = ({
                 {[
                   { id: "all", label: "Все" },
                   { id: "online", label: "Онлайн", badge: onlineFriendCount },
-                  { id: "requests", label: "Запросы", badge: incomingFriendRequestCount },
+                  { id: "requests", label: "Запросы", badge: friendRequestQueueCount },
                   { id: "recent", label: "Недавние" },
                   { id: "blocked", label: "Заблокированные" },
                 ].map((item) => (
@@ -2333,7 +2335,7 @@ export const FriendsMain = ({
               <div className="friends-directory__summary">
                 <span>
                   {friendDirectoryFilter === "requests"
-                    ? `Входящие заявки — ${incomingFriendRequestCount}`
+                    ? `Заявки — ${friendRequestQueueCount}`
                     : `Все друзья — ${friends.length}`}
                 </span>
                 <span>Сортировать: По имени</span>
@@ -2342,6 +2344,11 @@ export const FriendsMain = ({
               {friendDirectoryFilter === "requests" ? (
                 <div className="friends-directory__list friends-results--scroll">
                   {friendRequestsError ? <div className="friends-panel__error">{friendRequestsError}</div> : null}
+                  {!friendRequestsError && incomingFriendRequests.length ? (
+                    <div className="friends-directory__summary">
+                      <span>Входящие — {incomingFriendRequests.length}</span>
+                    </div>
+                  ) : null}
                   {!friendRequestsError && incomingFriendRequests.map((request) => (
                     <div key={request.id} className="friends-directory__row friends-directory__row--request">
                       <div className="friends-directory__identity">
@@ -2361,8 +2368,29 @@ export const FriendsMain = ({
                       </div>
                     </div>
                   ))}
-                  {!friendRequestsError && !incomingFriendRequests.length ? (
-                    <div className="friends-panel__empty">Новых заявок нет.</div>
+                  {!friendRequestsError && outgoingFriendRequests.length ? (
+                    <div className="friends-directory__summary">
+                      <span>Отправленные — {outgoingFriendRequests.length}</span>
+                    </div>
+                  ) : null}
+                  {!friendRequestsError && outgoingFriendRequests.map((request) => (
+                    <div key={request.id} className="friends-directory__row friends-directory__row--request">
+                      <div className="friends-directory__identity">
+                        <AnimatedAvatar className="friends-directory__avatar" src={request.receiver.avatar || ""} alt={getDisplayName(request.receiver)} loading="lazy" decoding="async" />
+                        <span className="friends-directory__copy">
+                          <strong>{getDisplayName(request.receiver)}</strong>
+                          <span>{request.receiver.email || `ID: ${request.receiver.id}`}</span>
+                        </span>
+                      </div>
+                      <div className="friends-directory__status friends-directory__status--offline">
+                        <span>
+                          <strong>Ожидает ответа</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {!friendRequestsError && !friendRequestQueueCount ? (
+                    <div className="friends-panel__empty">Заявок нет.</div>
                   ) : null}
                 </div>
               ) : (

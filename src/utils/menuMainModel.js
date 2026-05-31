@@ -879,8 +879,10 @@ export const normalizeConversationTarget = (conversation) => {
 export const normalizeFriendRequest = (request) => ({
   id: Number(request?.id || 0),
   status: String(request?.status || "pending"),
+  direction: String(request?.direction || "incoming"),
   createdAt: String(request?.created_at || request?.createdAt || ""),
   sender: normalizeFriend(request?.sender || {}),
+  receiver: normalizeFriend(request?.receiver || {}),
 });
 const UI_SOUND_ASSET_VERSION = "2026-04-22-voice-refresh-1";
 const withUiSoundVersion = (path) => resolveStaticAssetUrl(`${path}?v=${UI_SOUND_ASSET_VERSION}`);

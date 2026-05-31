@@ -47,6 +47,15 @@ public class FriendRequestService
             .ToListAsync(cancellationToken);
     }
 
+    public Task<List<FriendRequestRecord>> GetOutgoingPendingRequestsAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return _context.FriendRequests
+            .AsNoTracking()
+            .Where(item => item.SenderUserId == userId && item.Status == FriendRequestStatuses.Pending)
+            .OrderByDescending(item => item.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<HashSet<int>> GetPendingRelatedUserIdsAsync(int userId, CancellationToken cancellationToken = default)
     {
         var userIds = await _context.FriendRequests

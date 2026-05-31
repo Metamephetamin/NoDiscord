@@ -256,8 +256,9 @@ public sealed class BackendSourcePolicyTests
         Assert.Contains("BuildDirectLastMessageTimestampsAsync(currentUserId, friendIds, cancellationToken)", source);
         Assert.Contains("BuildMutualFriendCountsAsync(currentUserId, friendIds, cancellationToken)", source);
         Assert.Contains("LoadBlockStatesAsync(currentUserId, friendIds, cancellationToken)", source);
-        Assert.Contains("GetIncomingFriendRequests(CancellationToken cancellationToken)", source);
+        Assert.Contains("GetFriendRequests(CancellationToken cancellationToken)", source);
         Assert.Contains("GetIncomingPendingRequestsAsync(currentUserId, cancellationToken)", source);
+        Assert.Contains("GetOutgoingPendingRequestsAsync(currentUserId, cancellationToken)", source);
     }
 
     [Fact]

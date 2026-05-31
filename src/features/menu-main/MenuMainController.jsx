@@ -543,6 +543,7 @@ export default function MenuMain({
     friendActionStatus,
     isAddingFriend,
     incomingFriendRequests,
+    outgoingFriendRequests,
     friendRequestsLoading,
     friendRequestsError,
     friendRequestActionId,
@@ -6751,6 +6752,7 @@ export default function MenuMain({
         friends={friendsWithRelationState}
         incomingFriendRequestCount={incomingFriendRequestCount}
         incomingFriendRequests={incomingFriendRequests}
+        outgoingFriendRequests={outgoingFriendRequests}
         friendRequestsError={friendRequestsError}
         friendRequestsLoading={friendRequestsLoading}
         friendRequestActionId={friendRequestActionId}

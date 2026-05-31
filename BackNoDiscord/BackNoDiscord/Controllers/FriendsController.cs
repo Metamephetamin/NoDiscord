@@ -304,24 +304,36 @@ public class FriendsController : ControllerBase
     }
 
     [HttpGet("requests")]
-    public async Task<IActionResult> GetIncomingFriendRequests(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetFriendRequests(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var currentUserId))
         {
             return Unauthorized();
         }
 
-        var requests = await _friendRequestService.GetIncomingPendingRequestsAsync(currentUserId, cancellationToken);
-        var senderIds = requests.Select(item => item.SenderUserId).Distinct().ToList();
-        var senders = await _context.Users
+        var incomingRequests = await _friendRequestService.GetIncomingPendingRequestsAsync(currentUserId, cancellationToken);
+        var outgoingRequests = await _friendRequestService.GetOutgoingPendingRequestsAsync(currentUserId, cancellationToken);
+        var relatedUserIds = incomingRequests
+            .Select(item => item.SenderUserId)
+            .Concat(outgoingRequests.Select(item => item.ReceiverUserId))
+            .Distinct()
+            .ToList();
+        var relatedUsers = await _context.Users
             .AsNoTracking()
-            .Where(item => senderIds.Contains(item.id))
+            .Where(item => relatedUserIds.Contains(item.id))
             .ToDictionaryAsync(item => item.id, cancellationToken);
 
-        var result = requests
-            .Where(item => senders.ContainsKey(item.SenderUserId))
-            .Select(item => BuildFriendRequestPayload(item, senders[item.SenderUserId]))
-            .ToList();
+        var result = new
+        {
+            incoming = incomingRequests
+                .Where(item => relatedUsers.ContainsKey(item.SenderUserId))
+                .Select(item => BuildFriendRequestPayload(item, relatedUsers[item.SenderUserId], "incoming"))
+                .ToList(),
+            outgoing = outgoingRequests
+                .Where(item => relatedUsers.ContainsKey(item.ReceiverUserId))
+                .Select(item => BuildFriendRequestPayload(item, relatedUsers[item.ReceiverUserId], "outgoing"))
+                .ToList()
+        };
 
         return Ok(result);
     }
@@ -851,30 +863,35 @@ public class FriendsController : ControllerBase
         };
     }
 
-    private object BuildFriendRequestPayload(FriendRequestRecord request, User sender)
+    private object BuildFriendRequestPayload(FriendRequestRecord request, User relatedUser, string direction)
     {
-        var isOnline = _userPresenceService.IsOnline(sender.id.ToString());
+        var isOutgoing = string.Equals(direction, "outgoing", StringComparison.OrdinalIgnoreCase);
+        var isOnline = _userPresenceService.IsOnline(relatedUser.id.ToString());
+        var userPayload = new
+        {
+            id = relatedUser.id,
+            first_name = relatedUser.first_name,
+            last_name = relatedUser.last_name,
+            nickname = relatedUser.nickname,
+            email = relatedUser.email,
+            avatar_url = relatedUser.avatar_url ?? string.Empty,
+            avatar_frame = MediaFrameSerializer.Parse(relatedUser.avatar_frame_json, allowNull: true),
+            profile_background_url = relatedUser.profile_background_url ?? string.Empty,
+            profile_background_frame = MediaFrameSerializer.Parse(relatedUser.profile_background_frame_json, allowNull: true),
+            profile_customization = ParseProfileCustomization(relatedUser.profile_customization_json),
+            is_online = isOnline,
+            presence = isOnline ? "online" : "offline",
+            last_seen_at = relatedUser.last_seen_at
+        };
+
         return new
         {
             id = request.Id,
             status = request.Status,
+            direction = isOutgoing ? "outgoing" : "incoming",
             created_at = request.CreatedAt,
-            sender = new
-            {
-                id = sender.id,
-                first_name = sender.first_name,
-                last_name = sender.last_name,
-                nickname = sender.nickname,
-                email = sender.email,
-                avatar_url = sender.avatar_url ?? string.Empty,
-                avatar_frame = MediaFrameSerializer.Parse(sender.avatar_frame_json, allowNull: true),
-                profile_background_url = sender.profile_background_url ?? string.Empty,
-                profile_background_frame = MediaFrameSerializer.Parse(sender.profile_background_frame_json, allowNull: true),
-                profile_customization = ParseProfileCustomization(sender.profile_customization_json),
-                is_online = isOnline,
-                presence = isOnline ? "online" : "offline",
-                last_seen_at = sender.last_seen_at
-            }
+            sender = isOutgoing ? null : userPayload,
+            receiver = isOutgoing ? userPayload : null
         };
     }
 

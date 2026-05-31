@@ -45,6 +45,7 @@ export default function useFriendsWorkspaceState({
   const [friendActionStatus, setFriendActionStatus] = useState("");
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [incomingFriendRequests, setIncomingFriendRequests] = useState([]);
+  const [outgoingFriendRequests, setOutgoingFriendRequests] = useState([]);
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
   const [friendRequestsError, setFriendRequestsError] = useState("");
   const [friendRequestActionId, setFriendRequestActionId] = useState(0);
@@ -144,18 +145,25 @@ export default function useFriendsWorkspaceState({
         throw new Error(getApiErrorMessage(response, data, "Не удалось загрузить заявки в друзья."));
       }
 
+      const incomingData = Array.isArray(data) ? data : Array.isArray(data?.incoming) ? data.incoming : [];
+      const outgoingData = Array.isArray(data?.outgoing) ? data.outgoing : [];
       setIncomingFriendRequests(
-        Array.isArray(data)
-          ? data
-              .map(normalizeFriendRequest)
-              .filter((request) => request.id && request.sender?.id)
-              .sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
-          : []
+        incomingData
+          .map(normalizeFriendRequest)
+          .filter((request) => request.id && request.sender?.id)
+          .sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
+      );
+      setOutgoingFriendRequests(
+        outgoingData
+          .map(normalizeFriendRequest)
+          .filter((request) => request.id && request.receiver?.id)
+          .sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
       );
       setFriendRequestsError("");
     } catch (error) {
       console.error("Ошибка загрузки заявок в друзья:", error);
       setIncomingFriendRequests([]);
+      setOutgoingFriendRequests([]);
       setFriendRequestsError(error.message || "Не удалось загрузить заявки в друзья.");
     } finally {
       setFriendRequestsLoading(false);
@@ -654,6 +662,7 @@ export default function useFriendsWorkspaceState({
   const resetFriendsState = () => {
     setFriends([]);
     setIncomingFriendRequests([]);
+    setOutgoingFriendRequests([]);
     setConversations([]);
     setFriendEmail("");
     setFriendLookupResults([]);
@@ -869,6 +878,7 @@ export default function useFriendsWorkspaceState({
     friendActionStatus,
     isAddingFriend,
     incomingFriendRequests,
+    outgoingFriendRequests,
     friendRequestsLoading,
     friendRequestsError,
     friendRequestActionId,
