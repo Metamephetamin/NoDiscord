@@ -149,6 +149,10 @@ function getCacheableMissingMediaPath(value) {
     : "";
 }
 
+export function getMediaUrlMissingCachePath(value) {
+  return getCacheableMissingMediaPath(value);
+}
+
 function getMissingMediaCacheTtlMs(internalPath) {
   return String(internalPath || "").startsWith("/chat-files/")
     ? MISSING_CHAT_FILE_CACHE_TTL_MS
@@ -162,6 +166,11 @@ export function markMediaUrlMissing(value) {
   }
 
   const cache = readMissingInternalMediaCache();
+  const existingExpiresAt = Number(cache.get(internalPath) || 0);
+  if (existingExpiresAt > Date.now()) {
+    return true;
+  }
+
   const expiresAt = Date.now() + getMissingMediaCacheTtlMs(internalPath);
   cache.set(internalPath, expiresAt);
   writeMissingInternalMediaCache(cache);

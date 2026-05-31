@@ -9,6 +9,7 @@ import { segmentMessageTextByMentions } from "../utils/messageMentions";
 import {
   DEFAULT_SERVER_ICON,
   MISSING_MEDIA_EVENT,
+  getMediaUrlMissingCachePath,
   isMediaUrlKnownMissing,
   markMediaUrlMissing,
   resolveMediaUrl,
@@ -679,9 +680,12 @@ const MessageMediaImage = memo(function MessageMediaImage({
   priorityMedia = false,
 }) {
   const directSourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const sourceUrlForMissing = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "").trim();
+  const directMissingPath = getMediaUrlMissingCachePath(directSourceUrl);
+  const sourceMissingPath = getMediaUrlMissingCachePath(sourceUrlForMissing);
   const [missingMediaVersion, setMissingMediaVersion] = useState(0);
   const sourceCandidates = useMemo(() => {
-    const sourceUrl = String(attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "").trim();
+    const sourceUrl = sourceUrlForMissing;
     const candidates = [];
     const isLocalPreview = /^(?:blob:|data:|file:)/i.test(directSourceUrl);
 
@@ -710,7 +714,7 @@ const MessageMediaImage = memo(function MessageMediaImage({
     }
 
     return Array.from(new Set(candidates));
-  }, [attachmentItem?.attachmentSourceUrl, attachmentItem?.attachmentUrl, directSourceUrl, missingMediaVersion]);
+  }, [directSourceUrl, missingMediaVersion, sourceUrlForMissing]);
   const sourceKey = sourceCandidates.join("\n");
   const [sourceState, setSourceState] = useState({
     sourceKey,
@@ -726,7 +730,12 @@ const MessageMediaImage = memo(function MessageMediaImage({
       return undefined;
     }
 
-    const handleMissingMedia = () => {
+    const handleMissingMedia = (event) => {
+      const missingPath = String(event?.detail?.path || "").trim();
+      if (missingPath && missingPath !== directMissingPath && missingPath !== sourceMissingPath) {
+        return;
+      }
+
       setMissingMediaVersion((current) => current + 1);
     };
 
@@ -734,7 +743,7 @@ const MessageMediaImage = memo(function MessageMediaImage({
     return () => {
       window.removeEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
     };
-  }, []);
+  }, [directMissingPath, sourceMissingPath]);
 
   const handleError = useCallback(() => {
     if (sourceIndex < sourceCandidates.length - 1) {
@@ -783,6 +792,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
   priorityMedia = false,
 }) {
   const sourceUrl = String(attachmentItem?.attachmentUrl || "").trim();
+  const sourceMissingPath = getMediaUrlMissingCachePath(sourceUrl);
   const canLoadPreviewVideo = canLoadVideoPreviewUrl(sourceUrl);
   const preparedSourceUrlRef = useRef("");
   const previewSeekRequestedRef = useRef(false);
@@ -876,7 +886,12 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
       return undefined;
     }
 
-    const handleMissingMedia = () => {
+    const handleMissingMedia = (event) => {
+      const missingPath = String(event?.detail?.path || "").trim();
+      if (missingPath && missingPath !== sourceMissingPath) {
+        return;
+      }
+
       setMissingMediaVersion((current) => current + 1);
     };
 
@@ -884,7 +899,7 @@ const MessageMediaVideo = memo(function MessageMediaVideo({
     return () => {
       window.removeEventListener(MISSING_MEDIA_EVENT, handleMissingMedia);
     };
-  }, []);
+  }, [sourceMissingPath]);
 
   const isSourceKnownMissing = missingMediaVersion >= 0 && isMediaUrlKnownMissing(sourceUrl);
   const isUnavailable = !sourceUrl || failedSourceUrl === sourceUrl || isSourceKnownMissing;

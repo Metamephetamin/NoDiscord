@@ -56,7 +56,7 @@ public sealed class MediaRenderControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_ReturnsNotFoundForMissingOwnedChatImage()
+    public async Task Render_ReturnsGeneratedFallbackForMissingOwnedChatImage()
     {
         var webRootPath = Path.Combine(_storageRoot, "wwwroot");
         var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
@@ -66,13 +66,14 @@ public sealed class MediaRenderControllerTests : IDisposable
 
         var result = await controller.Render("/chat-files/chat-42-missing.png", 160, 120, "contain", "false", CancellationToken.None);
 
-        Assert.IsType<NotFoundResult>(result);
-        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
-        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", fileResult.ContentType);
+        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
+        Assert.NotEmpty(fileResult.FileContents);
     }
 
     [Fact]
-    public async Task Render_ReturnsNotFoundForMissingOwnedHeicChatImage()
+    public async Task Render_ReturnsGeneratedFallbackForMissingOwnedHeicChatImage()
     {
         var webRootPath = Path.Combine(_storageRoot, "wwwroot");
         var defaultIconPath = Path.Combine(webRootPath, "image", "image.png");
@@ -82,9 +83,10 @@ public sealed class MediaRenderControllerTests : IDisposable
 
         var result = await controller.Render("/chat-files/chat-42-missing.heic", 160, 120, "contain", "false", CancellationToken.None);
 
-        Assert.IsType<NotFoundResult>(result);
-        Assert.Equal("no-store,max-age=0", controller.Response.Headers.CacheControl.ToString());
-        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/png", fileResult.ContentType);
+        Assert.Equal("public,max-age=300", controller.Response.Headers.CacheControl.ToString());
+        Assert.NotEmpty(fileResult.FileContents);
     }
 
     [Fact]

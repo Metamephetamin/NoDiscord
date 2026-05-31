@@ -89,7 +89,7 @@ public sealed class MediaRenderController : ControllerBase
         {
             if (!TryResolveMissingMediaFallback(src, out filePath, out extension))
             {
-                return CanUseDefaultMediaFallback(normalizedSource)
+                return CanUseGeneratedMissingMediaFallback(normalizedSource)
                     ? GeneratedMissingMediaFallbackResult()
                     : MissingMediaResult();
             }
@@ -166,6 +166,10 @@ public sealed class MediaRenderController : ControllerBase
     private static bool CanUseDefaultMediaFallback(string normalizedSource) =>
         normalizedSource.StartsWith("/server-icons/", StringComparison.OrdinalIgnoreCase)
         || normalizedSource.StartsWith("/avatars/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool CanUseGeneratedMissingMediaFallback(string normalizedSource) =>
+        CanUseDefaultMediaFallback(normalizedSource)
+        || normalizedSource.StartsWith("/chat-files/", StringComparison.OrdinalIgnoreCase);
 
     private bool IsDefaultMediaFallback(string filePath)
     {
