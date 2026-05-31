@@ -6372,12 +6372,16 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   position: fixed;
   inset: 0;
   z-index: 1780;
+  min-width: 100vw;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.56);
-  backdrop-filter: blur(5px);
+  background: rgba(3, 5, 12, 0.72);
+  backdrop-filter: blur(16px);
+  isolation: isolate;
+  overscroll-behavior: contain;
 }
 
 .poll-composer-modal {

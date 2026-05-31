@@ -397,3 +397,17 @@ test("poll votes persist locally and expose anonymous mode", () => {
   assert.match(messageListSource, /message-poll-card__add-option-form/);
   assert.match(messageListSource, /message-poll-card__add-option-input/);
 });
+
+test("poll composer backdrop fully covers and blurs the app", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const backdropRule = textChatCss.match(/\.poll-composer-backdrop \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(backdropRule, /position: fixed;/);
+  assert.match(backdropRule, /inset: 0;/);
+  assert.match(backdropRule, /min-width: 100vw;/);
+  assert.match(backdropRule, /min-height: 100dvh;/);
+  assert.match(backdropRule, /background: rgba\(3, 5, 12, 0\.72\);/);
+  assert.match(backdropRule, /backdrop-filter: blur\(16px\);/);
+  assert.match(backdropRule, /isolation: isolate;/);
+  assert.match(backdropRule, /overscroll-behavior: contain;/);
+});
