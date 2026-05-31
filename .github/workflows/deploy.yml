@@ -231,6 +231,9 @@ jobs:
           BACKEND_DEPLOY_OWNER: ${{ vars.BACKEND_DEPLOY_OWNER }}
           BACKEND_STORAGE_PATH: ${{ vars.BACKEND_STORAGE_PATH }}
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
+          YOOKASSA_SHOP_ID: ${{ secrets.YOOKASSA_SHOP_ID }}
+          YOOKASSA_SECRET_KEY: ${{ secrets.YOOKASSA_SECRET_KEY }}
+          YOOKASSA_RETURN_URL: ${{ secrets.YOOKASSA_RETURN_URL }}
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
@@ -239,6 +242,7 @@ jobs:
           STORAGE_PATH="${BACKEND_STORAGE_PATH:-/opt/nodiscord/.deploy/storage}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
+          TEMP_YOOKASSA_ENV_FILE="$TEMP_ROOT/yookassa.env"
           BACKEND_SOURCE="./artifacts/backend"
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
@@ -298,6 +302,22 @@ jobs:
             echo "Uploading backend .env file"
             printf '%s\n' "$BACKEND_ENV_FILE" | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_ENV_FILE'"
           fi
+          if [ -n "$YOOKASSA_SHOP_ID" ] || [ -n "$YOOKASSA_SECRET_KEY" ] || [ -n "$YOOKASSA_RETURN_URL" ]; then
+            if [ -z "$YOOKASSA_SHOP_ID" ] || [ -z "$YOOKASSA_SECRET_KEY" ]; then
+              echo "YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY must be configured together." >&2
+              exit 1
+            fi
+            echo "Uploading YooKassa backend environment overlay"
+            {
+              printf 'YooKassa__ShopId=%s\n' "$YOOKASSA_SHOP_ID"
+              printf 'YooKassa__SecretKey=%s\n' "$YOOKASSA_SECRET_KEY"
+              if [ -n "$YOOKASSA_RETURN_URL" ]; then
+                printf 'YooKassa__ReturnUrl=%s\n' "$YOOKASSA_RETURN_URL"
+              else
+                printf 'YooKassa__ReturnUrl=https://lanaya.space\n'
+              fi
+            } | ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$TEMP_YOOKASSA_ENV_FILE'"
+          fi
 
           echo "Applying backend environment on server"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 15m bash -lc '
@@ -306,6 +326,7 @@ jobs:
             STORAGE_PATH='$STORAGE_PATH'
             TEMP_ROOT='$TEMP_ROOT'
             TEMP_ENV_FILE='$TEMP_ENV_FILE'
+            TEMP_YOOKASSA_ENV_FILE='$TEMP_YOOKASSA_ENV_FILE'
             BACKEND_OWNER='$BACKEND_OWNER'
             case \"\$BACKEND_PATH\" in
               /opt/nodiscord/*) ;;
@@ -371,6 +392,11 @@ jobs:
                 printf \"LiveKit__Url=wss://lanaya.space/livekit\\n\"
               } >> \"\$BACKEND_PATH/.env\"
               echo \"Production public origins forced to lanaya.space\"
+              if [ -f \"\$TEMP_YOOKASSA_ENV_FILE\" ]; then
+                sed -i.bak -E \"/^(YooKassa__ShopId|YooKassa:ShopId|YooKassa__SecretKey|YooKassa:SecretKey|YooKassa__ReturnUrl|YooKassa:ReturnUrl)=/d\" \"\$BACKEND_PATH/.env\"
+                cat \"\$TEMP_YOOKASSA_ENV_FILE\" >> \"\$BACKEND_PATH/.env\"
+                echo \"YooKassa payment settings applied from GitHub Secrets\"
+              fi
               chown -R \"\$BACKEND_OWNER\" \"\$STORAGE_PATH\"
               chown \"\$BACKEND_OWNER\" \"\$BACKEND_PATH/.env\"
               chmod 600 \"\$BACKEND_PATH/.env\"
