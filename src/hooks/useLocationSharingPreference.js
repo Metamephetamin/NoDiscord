@@ -4,7 +4,7 @@ import { API_BASE_URL } from "../config/runtime";
 import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 
 const LOCATION_UPDATE_MIN_INTERVAL_MS = 1800;
-const LOCATION_PRIVACY_DECIMALS = 2;
+const LOCATION_PRIVACY_DECIMALS = 1;
 const DEFAULT_LOCATION_SHARING_PREFERENCE = Object.freeze({
   enabled: true,
   visibility: "public",
@@ -71,6 +71,19 @@ export function normalizeSharedLocationCoordinate(value) {
   }
 
   return Number(numericValue.toFixed(LOCATION_PRIVACY_DECIMALS));
+}
+
+const formatLocationCellPart = (value) => {
+  const normalizedValue = Object.is(value, -0) ? 0 : value;
+  return normalizedValue.toFixed(LOCATION_PRIVACY_DECIMALS);
+};
+
+export function formatSharedLocationCell(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return "";
+  }
+
+  return `${formatLocationCellPart(latitude)},${formatLocationCellPart(longitude)}`;
 }
 
 export default function useLocationSharingPreference({ user, apiBaseUrl = API_BASE_URL } = {}) {
@@ -210,9 +223,14 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
         return;
       }
 
+      const locationCell = formatSharedLocationCell(latitude, longitude);
+      if (!locationCell) {
+        return;
+      }
+
       lastSentAtRef.current = now;
       startChatConnection()
-        .then((connection) => connection?.invoke?.("UpdateLocation", latitude, longitude))
+        .then((connection) => connection?.invoke?.("UpdateLocationCell", { cell: locationCell }))
         .catch(() => {});
     };
 

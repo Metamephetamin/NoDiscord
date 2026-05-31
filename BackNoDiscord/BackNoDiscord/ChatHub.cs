@@ -6,10 +6,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 
 namespace BackNoDiscord;
+
+public sealed record LocationCellInput(string? Cell);
 
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ChatHub : Hub
@@ -30,6 +33,7 @@ public class ChatHub : Hub
     private const int MaxVoiceWaveformBars = 96;
     private const int MaxVoiceMimeTypeLength = 120;
     private const int MaxVoiceFileNameLength = 160;
+    private const int LocationPrivacyDecimals = 1;
     private const string ChatServerPrefix = "server:";
     private const string ChatChannelMarker = "::channel:";
     private const string PrivateServerPrefix = "server-";
@@ -42,6 +46,9 @@ public class ChatHub : Hub
     private static readonly Regex AsyncPunctuationSkipRegex = new(
         @"https?://|www\.|```|^\s*[/>]|[\w.+-]+@[\w.-]+\.\w+|@\w|#\w|:[A-Za-z0-9_+-]+:",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex LocationCellRegex = new(
+        @"^\s*(?<latitude>-?\d+(?:\.\d+)?),(?<longitude>-?\d+(?:\.\d+)?)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly ConcurrentDictionary<string, DateTime> LastMessageSentAtByUser = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastSlowModeMessageSentAtByUserAndChannel = new();
     private static readonly ConcurrentDictionary<string, DateTime> LastActionAtByUserAndName = new();
@@ -136,6 +143,21 @@ public class ChatHub : Hub
 
     public async Task UpdateLocation(double latitude, double longitude)
     {
+        await PublishLocationAsync(latitude, longitude);
+    }
+
+    public async Task UpdateLocationCell(LocationCellInput? input)
+    {
+        if (!TryParseLocationCell(input?.Cell, out var latitude, out var longitude))
+        {
+            return;
+        }
+
+        await PublishLocationAsync(latitude, longitude);
+    }
+
+    private async Task PublishLocationAsync(double latitude, double longitude)
+    {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser) ||
             !int.TryParse(currentUser.UserId, out var currentUserId) ||
             double.IsNaN(latitude) ||
@@ -178,9 +200,29 @@ public class ChatHub : Hub
         }, Context.ConnectionAborted);
     }
 
+    private static bool TryParseLocationCell(string? cell, out double latitude, out double longitude)
+    {
+        latitude = 0;
+        longitude = 0;
+
+        if (string.IsNullOrWhiteSpace(cell))
+        {
+            return false;
+        }
+
+        var match = LocationCellRegex.Match(cell);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        return double.TryParse(match.Groups["latitude"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out latitude) &&
+            double.TryParse(match.Groups["longitude"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out longitude);
+    }
+
     private static double NormalizeSharedLocationCoordinate(double value)
     {
-        return Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        return Math.Round(value, LocationPrivacyDecimals, MidpointRounding.AwayFromZero);
     }
 
     public async Task SendMessage(

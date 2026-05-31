@@ -24,16 +24,20 @@ test("media preview delete button requires delete handler", () => {
   assert.match(viewSource, /onDeleteActive=\{mediaPreview\?\.canDelete \? handleDeleteMediaPreviewItem : null\}/);
 });
 
-test("shared location is rounded before realtime publication", () => {
+test("shared location is reduced to a privacy cell before realtime publication", () => {
   const hookSource = readRepoFile("src/hooks/useLocationSharingPreference.js");
   const hubSource = readRepoFile("BackNoDiscord/BackNoDiscord/ChatHub.cs");
 
-  assert.match(hookSource, /const LOCATION_PRIVACY_DECIMALS = 2;/);
+  assert.match(hookSource, /const LOCATION_PRIVACY_DECIMALS = 1;/);
   assert.match(hookSource, /Number\(numericValue\.toFixed\(LOCATION_PRIVACY_DECIMALS\)\)/);
   assert.match(hookSource, /normalizeSharedLocationCoordinate\(position\?\.coords\?\.latitude\)/);
-  assert.match(hookSource, /invoke\?\.\("UpdateLocation", latitude, longitude\)/);
-  assert.match(hubSource, /NormalizeSharedLocationCoordinate\(latitude\)/);
-  assert.match(hubSource, /Math\.Round\(value, 2, MidpointRounding\.AwayFromZero\)/);
+  assert.match(hookSource, /formatSharedLocationCell\(latitude, longitude\)/);
+  assert.match(hookSource, /invoke\?\.\("UpdateLocationCell", \{ cell: locationCell \}\)/);
+  assert.doesNotMatch(hookSource, /invoke\?\.\("UpdateLocation", latitude, longitude\)/);
+  assert.match(hubSource, /public sealed record LocationCellInput\(string\? Cell\);/);
+  assert.match(hubSource, /public async Task UpdateLocationCell\(LocationCellInput\? input\)/);
+  assert.match(hubSource, /TryParseLocationCell\(input\?\.Cell, out var latitude, out var longitude\)/);
+  assert.match(hubSource, /Math\.Round\(value, LocationPrivacyDecimals, MidpointRounding\.AwayFromZero\)/);
 });
 
 test("message timestamps render in the bottom message footer", () => {
