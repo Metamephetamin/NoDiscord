@@ -2333,8 +2333,11 @@ export const RolesSettings = ({
     () => roles.find((role) => String(role.id) === String(selectedRoleId)) || roles[0] || null,
     [roles, selectedRoleId]
   );
+  const selectedRoleIsOwner = selectedRole?.id === "owner";
   const selectedRoleIsSystem = SYSTEM_ROLE_IDS.has(selectedRole?.id);
-  const canEditSelectedRole = Boolean(canManageRoles && selectedRole && !selectedRoleIsSystem);
+  const selectedRoleIsLocked = selectedRole?.id === "member" || (selectedRoleIsOwner && !isOwner);
+  const selectedRolePermissionsLocked = selectedRoleIsOwner;
+  const canEditSelectedRole = Boolean(canManageRoles && selectedRole && !selectedRoleIsLocked);
 
   useEffect(() => {
     if (!activeServer) {
@@ -2388,7 +2391,9 @@ export const RolesSettings = ({
       const payload = {
         name: roleForm.name.trim(),
         color: roleForm.color,
-        permissions: roleForm.permissions,
+        permissions: selectedRolePermissionsLocked && selectedRole
+          ? selectedRole.permissions || []
+          : roleForm.permissions,
       };
       const snapshot = isCreatingRole
         ? await onCreateRole?.(payload)
@@ -2405,7 +2410,7 @@ export const RolesSettings = ({
   };
 
   const removeSelectedRole = async () => {
-    if (!canEditSelectedRole || !selectedRole || !window.confirm(`Удалить роль ${selectedRole.name}?`)) {
+    if (!canEditSelectedRole || selectedRoleIsSystem || !selectedRole || !window.confirm(`Удалить роль ${selectedRole.name}?`)) {
       return;
     }
 
@@ -2461,11 +2466,6 @@ export const RolesSettings = ({
                   >
                     <div className="settings-role-meta">
                       <span className="settings-role-badge" style={{ backgroundColor: role.color || "#7b89a8" }}>{role.name}</span>
-                      <span className="settings-role-description">
-                        {(role.permissions || []).length
-                          ? role.permissions.map((permission) => rolePermissionLabels[permission] || permission).join(", ")
-                          : "Базовый доступ"}
-                      </span>
                     </div>
                   </button>
                 ))}
@@ -2501,7 +2501,7 @@ export const RolesSettings = ({
                         <input
                           type="checkbox"
                           checked={roleForm.permissions.includes(permission)}
-                          disabled={!canManageRoles || (!isCreatingRole && !canEditSelectedRole) || lockedSensitivePermission}
+                          disabled={!canManageRoles || (!isCreatingRole && !canEditSelectedRole) || lockedSensitivePermission || selectedRolePermissionsLocked}
                           onChange={() => togglePermission(permission)}
                         />
                         <span>{label}</span>
@@ -2515,7 +2515,7 @@ export const RolesSettings = ({
                     Сохранить
                   </button>
                   {!isCreatingRole && selectedRole ? (
-                    <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={roleBusy || !canEditSelectedRole} onClick={removeSelectedRole}>
+                    <button type="button" className="settings-inline-button settings-inline-button--danger" disabled={roleBusy || selectedRoleIsSystem || !canEditSelectedRole} onClick={removeSelectedRole}>
                       Удалить
                     </button>
                   ) : null}

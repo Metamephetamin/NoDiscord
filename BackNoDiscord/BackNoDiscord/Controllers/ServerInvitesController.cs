@@ -303,7 +303,9 @@ public class ServerInvitesController : ControllerBase
             Name = request.Name ?? string.Empty,
             Color = request.Color ?? string.Empty,
             Priority = existingRole?.Priority ?? 0,
-            Permissions = request.Permissions ?? new List<string>()
+            Permissions = string.Equals(roleId, "owner", StringComparison.Ordinal)
+                ? existingRole?.Permissions ?? new List<string>()
+                : request.Permissions ?? new List<string>()
         };
         var updatedSnapshot = _serverState.SaveRole(snapshot.Id, role, create: false);
         await RecordRolesAuditAsync(updatedSnapshot, currentUser.UserId, "server.roles.update", role.Id, role.Name, cancellationToken);
@@ -518,7 +520,9 @@ public class ServerInvitesController : ControllerBase
                 return NotFound(new { message = "Role not found." });
             }
 
-            if (IsProtectedRoleId(existingRole.Id))
+            if (IsProtectedRoleId(existingRole.Id) &&
+                !(string.Equals(existingRole.Id, "owner", StringComparison.Ordinal) &&
+                  string.Equals(snapshot.OwnerId, actorUserId, StringComparison.Ordinal)))
             {
                 return BadRequest(new { message = "System role cannot be edited." });
             }

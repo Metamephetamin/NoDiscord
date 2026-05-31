@@ -89,3 +89,23 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   assert.match(voiceClientSource, /async setAutoInputSensitivity\(enabled\)/);
   assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
 });
+
+test("server management settings are hidden without permissions", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+
+  assert.match(controllerSource, /if \(item\.id === "server" && !canManageServer\) \{/);
+  assert.match(controllerSource, /if \(item\.id === "roles" && !canManageRoles\) \{/);
+  assert.doesNotMatch(controllerSource, /SETTINGS_NAV_ITEMS\.find\(\(item\) => item\.id === settingsTab\)/);
+});
+
+test("owner role can be renamed without exposing role descriptions or permission edits", () => {
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const controllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/ServerInvitesController.cs");
+
+  assert.match(settingsSource, /const selectedRoleIsOwner = selectedRole\?\.id === "owner";/);
+  assert.match(settingsSource, /const selectedRolePermissionsLocked = selectedRoleIsOwner;/);
+  assert.match(settingsSource, /permissions: selectedRolePermissionsLocked && selectedRole/);
+  assert.doesNotMatch(settingsSource, /role\.permissions\.map\(\(permission\) => rolePermissionLabels/);
+  assert.match(controllerSource, /Permissions = string\.Equals\(roleId, "owner", StringComparison\.Ordinal\)/);
+  assert.match(controllerSource, /string\.Equals\(existingRole\.Id, "owner", StringComparison\.Ordinal\)[\s\S]*string\.Equals\(snapshot\.OwnerId, actorUserId, StringComparison\.Ordinal\)/);
+});

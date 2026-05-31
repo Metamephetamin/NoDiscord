@@ -5865,9 +5865,17 @@ export default function MenuMain({
         return false;
       }
 
+      if (item.id === "server" && !canManageServer) {
+        return false;
+      }
+
+      if (item.id === "roles" && !canManageRoles) {
+        return false;
+      }
+
       return true;
     }),
-    [activeServer]
+    [activeServer, canManageRoles, canManageServer]
   );
   const settingsNavSections = useMemo(() => groupSettingsNavItems(settingsNavItems), [settingsNavItems]);
   const mobileSettingsNavItems = useMemo(
@@ -5877,10 +5885,16 @@ export default function MenuMain({
     },
     [activeServer, adminSettingsItem, canOpenAdminSecurity, settingsNavItems]
   );
+  useEffect(() => {
+    if (!openSettings || mobileSettingsNavItems.some((item) => item.id === settingsTab)) {
+      return;
+    }
+
+    setSettingsTab(mobileSettingsNavItems[0]?.id || "account");
+  }, [mobileSettingsNavItems, openSettings, settingsTab]);
   const activeSettingsTabMeta =
     mobileSettingsNavItems.find((item) => item.id === settingsTab) ||
     settingsNavItems.find((item) => item.id === settingsTab) ||
-    SETTINGS_NAV_ITEMS.find((item) => item.id === settingsTab) ||
     settingsNavItems[0] ||
     SETTINGS_NAV_ITEMS[0];
   const activeMicMenuBars = getMeterActiveBars(micLevel, 24);
