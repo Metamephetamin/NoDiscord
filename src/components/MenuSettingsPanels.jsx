@@ -435,7 +435,6 @@ export const AccountSettings = ({
   onTotpCodeChange,
   onTotpResetPasswordChange,
   onTotpResetCodeChange,
-  onOpenProfileSettings,
   onSaveProfile,
   onUpdateProfileDraft,
   onUpdateEmailChangeDraft,
@@ -484,9 +483,6 @@ export const AccountSettings = ({
           <div className="account-settings-panel__name">
             <strong>{headerDisplayName}</strong>
           </div>
-          <button type="button" className="settings-inline-button" onClick={onOpenProfileSettings}>
-            Визуал профиля
-          </button>
         </div>
 
         <section className="account-settings-card account-settings-card--rows">
@@ -717,6 +713,8 @@ export const PersonalProfileSettings = ({
   onProfileCustomizationChange,
   onChangeAvatar,
   onChangeBackground,
+  onChangeAvatarFrame,
+  onChangeBackgroundFrame,
   onResetCustomization,
 }) => {
   const profileThemeClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
@@ -731,7 +729,6 @@ export const PersonalProfileSettings = ({
       <div className="settings-shell__content-header">
         <div>
           <h2>Личный профиль</h2>
-          <p>Так выглядит ваш профиль для других.</p>
         </div>
       </div>
 
@@ -768,58 +765,45 @@ export const PersonalProfileSettings = ({
               <div className="profile-settings-form__public-body">
                 <div className="profile-settings-form__public-main">
                   <div className="profile-settings-form__public-grid" aria-hidden="true">
-                    <div>
+                    <div className="profile-settings-form__public-tone-card">
                       <ProfilePreviewIcon kind="activity" className="profile-settings-form__public-quick-icon" />
-                      <span>Активность</span>
-                      <b>Сейчас в сети</b>
+                      <span />
+                      <b />
                     </div>
-                    <div>
+                    <div className="profile-settings-form__public-tone-card">
                       <ProfilePreviewIcon kind="contact" className="profile-settings-form__public-quick-icon" />
-                      <span>Связь</span>
-                      <b>Сообщения и звонки</b>
+                      <span />
+                      <b />
                     </div>
-                    <div>
+                    <div className="profile-settings-form__public-tone-card">
                       <ProfilePreviewIcon kind="id" className="profile-settings-form__public-quick-icon" />
-                      <span>ID</span>
-                      <b>Ваш ID</b>
+                      <span />
+                      <b />
                     </div>
                   </div>
                   <div className="profile-settings-form__public-section">
                     <ProfilePreviewSectionIcon kind="about" />
                     <div className="profile-settings-form__public-section-copy">
-                      <strong>О себе</strong>
-                      <p>{displayName} пока ничего не рассказал о себе.</p>
+                      <strong />
+                      <p />
                     </div>
                   </div>
                   <div className="profile-settings-form__public-section profile-settings-form__public-section--info">
                     <ProfilePreviewSectionIcon kind="info" />
                     <div className="profile-settings-form__public-section-copy">
-                      <strong>Информация</strong>
                       <div className="profile-settings-form__public-info-list">
-                        <div>
-                          <em>Имя</em>
-                          <b>{displayName}</b>
-                        </div>
-                        <div>
-                          <em>Статус</em>
-                          <b>Друг</b>
-                        </div>
-                        <div>
-                          <em>Звонки</em>
-                          <b>Доступны</b>
-                        </div>
-                        <div>
-                          <em>Последний визит</em>
-                          <b>Сегодня</b>
-                        </div>
+                        <div><em /><b /></div>
+                        <div><em /><b /></div>
+                        <div><em /><b /></div>
+                        <div><em /><b /></div>
                       </div>
                     </div>
                   </div>
                   <div className="profile-settings-form__public-section">
                     <ProfilePreviewSectionIcon kind="common" />
                     <div className="profile-settings-form__public-section-copy">
-                      <strong>Общее</strong>
-                      <p>Вы друзья. Можно писать и звонить.</p>
+                      <strong />
+                      <p />
                     </div>
                   </div>
                 </div>
@@ -868,6 +852,11 @@ export const PersonalProfileSettings = ({
                     type="button"
                     key={item.id}
                     className={`profile-settings-form__theme-button ${profileCustomization?.appliedItemId === item.id ? "profile-settings-form__theme-button--active" : ""}`.trim()}
+                    style={{
+                      "--profile-theme-option-1": item.colors?.[0] || "#7c86ff",
+                      "--profile-theme-option-2": item.colors?.[1] || item.colors?.[0] || "#5898ff",
+                      "--profile-theme-option-3": item.colors?.[2] || item.colors?.[1] || "#38bdf8",
+                    }}
                     onClick={() => applyTheme(item)}
                   >
                     <span className="profile-settings-form__theme-swatches" aria-hidden="true">
@@ -883,19 +872,25 @@ export const PersonalProfileSettings = ({
               <strong>Медиа</strong>
               <div className="profile-settings-form__actions">
                 <button type="button" className="settings-inline-button" onClick={onChangeAvatar}>
-                  Сменить аватар и рамку
+                  Аватар
+                </button>
+                <button type="button" className="settings-inline-button" onClick={onChangeAvatarFrame}>
+                  Рамка аватара
                 </button>
                 <button type="button" className="settings-inline-button" onClick={onChangeBackground}>
-                  Сменить фон и рамку
+                  Фон
+                </button>
+                <button type="button" className="settings-inline-button" onClick={onChangeBackgroundFrame}>
+                  Рамка фона
                 </button>
               </div>
+              <button type="button" className="settings-inline-button settings-inline-button--danger profile-settings-form__reset-button" onClick={onResetCustomization}>
+                Убрать всё
+              </button>
             </div>
 
             <div className="profile-settings-form__control-spacer" />
             {profileStatus ? <div className="profile-settings-form__status profile-settings-form__status--inline">{profileStatus}</div> : null}
-            <button type="button" className="settings-inline-button settings-inline-button--danger profile-settings-form__reset-button" onClick={onResetCustomization}>
-              Убрать всё
-            </button>
           </div>
         </div>
       </section>
@@ -994,10 +989,6 @@ export const DevicesSettings = ({
       <section className="voice-settings-card">
         <div className="voice-settings-card__title">Подключение по QR</div>
         <div className="device-connect-guide">
-          <div className="device-connect-guide__item">
-            <strong>Войти на телефоне</strong>
-            <span>Покажите QR здесь, а на телефоне нажмите «Сканировать QR-код» на экране входа.</span>
-          </div>
           <div className="device-connect-guide__item">
             <strong>Подтвердить вход на ПК</strong>
             <span>Если QR открыт на другом устройстве, можно отсканировать его из приложения.</span>

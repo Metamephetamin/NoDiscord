@@ -25,20 +25,22 @@ export default function AccountSessionsPanel({
   const hasOtherSessions = sessions.some((session) => !session?.isCurrent);
 
   return (
-    <section className="voice-settings-card">
-      <div className="voice-settings-card__title">Активные сессии</div>
-      <div className="device-connect-guide__actions">
-        <button type="button" className="settings-inline-button" onClick={onRefresh} disabled={loading || Boolean(actionBusy)}>
-          {loading ? "Обновляем..." : "Обновить"}
-        </button>
-        <button
-          type="button"
-          className="settings-inline-button"
-          onClick={onRevokeOtherSessions}
-          disabled={!hasOtherSessions || loading || Boolean(actionBusy)}
-        >
-          {actionBusy === "revoke-others" ? "Завершаем..." : "Выйти на других устройствах"}
-        </button>
+    <section className="voice-settings-card device-sessions-panel">
+      <div className="device-sessions-panel__header">
+        <div className="voice-settings-card__title">Активные сессии</div>
+        <div className="device-sessions-panel__actions">
+          <button type="button" className="settings-inline-button" onClick={onRefresh} disabled={loading || Boolean(actionBusy)}>
+            {loading ? "Обновляем..." : "Обновить"}
+          </button>
+          <button
+            type="button"
+            className="settings-inline-button"
+            onClick={onRevokeOtherSessions}
+            disabled={!hasOtherSessions || loading || Boolean(actionBusy)}
+          >
+            {actionBusy === "revoke-others" ? "Завершаем..." : "Выйти на других"}
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -59,25 +61,26 @@ export default function AccountSessionsPanel({
                   <strong>{session.deviceLabel || "Устройство"}</strong>
                   <span>{session.userAgent || "Браузер"}</span>
                 </div>
-                {session.isCurrent ? <span className="device-session-card__badge">Это устройство</span> : null}
+                <div className="device-session-card__actions">
+                  {session.isCurrent ? <span className="device-session-card__badge">Это устройство</span> : null}
+                  {!session.isCurrent ? (
+                    <button
+                      type="button"
+                      className="settings-inline-button"
+                      onClick={() => onRevokeSession?.(session.id)}
+                      disabled={loading || actionBusy === `revoke:${session.id}` || actionBusy === "revoke-others"}
+                    >
+                      {actionBusy === `revoke:${session.id}` ? "Выходим..." : "Выйти"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="device-session-card__meta">
-                <span>Последняя активность: {formatDeviceSessionDate(session.lastUsedAt) || "недавно"}</span>
-                <span>Истекает: {formatDeviceSessionDate(session.expiresAt) || "позже"}</span>
-                {session.lastIp ? <span>IP: {session.lastIp}</span> : null}
+                <span><b>Активность</b>{formatDeviceSessionDate(session.lastUsedAt) || "недавно"}</span>
+                <span><b>Истекает</b>{formatDeviceSessionDate(session.expiresAt) || "позже"}</span>
+                {session.lastIp ? <span><b>IP</b>{session.lastIp}</span> : null}
               </div>
-
-              {!session.isCurrent ? (
-                <button
-                  type="button"
-                  className="settings-inline-button"
-                  onClick={() => onRevokeSession?.(session.id)}
-                  disabled={loading || actionBusy === `revoke:${session.id}` || actionBusy === "revoke-others"}
-                >
-                  {actionBusy === `revoke:${session.id}` ? "Завершаем..." : "Выйти"}
-                </button>
-              ) : null}
             </div>
           ))}
         </div>

@@ -22,6 +22,12 @@ import {
   parseMediaFrame,
   serializeMediaFrame,
 } from "../../utils/mediaFrames";
+import {
+  getUserAvatar,
+  getUserAvatarFrame,
+  getUserProfileBackground,
+  getUserProfileBackgroundFrame,
+} from "../../utils/menuMainModel";
 
 const revokeMediaEditorPreviewUrl = (editorState) => {
   const previewUrl = String(editorState?.previewUrl || "");
@@ -94,6 +100,30 @@ export default function useMenuMainMediaFrameActions({
       .catch(() => {});
   }, [activeServer?.id]);
 
+  const openExistingMediaFrameEditor = useCallback(({ kind, target, source, frame, title, missingMessage }) => {
+    const normalizedSource = String(source || "").trim();
+    if (!normalizedSource) {
+      setProfileStatus(missingMessage || "Сначала загрузите изображение.");
+      return;
+    }
+
+    setMediaFrameEditorState((previous) => {
+      revokeMediaEditorPreviewUrl(previous);
+      const nextFrame = normalizeMediaFrame(frame);
+      return {
+        kind,
+        target,
+        title: title || "",
+        file: null,
+        previewUrl: normalizedSource,
+        frame: nextFrame,
+        autoFrame: normalizeMediaFrame(getDefaultMediaFrame()),
+        frameOnly: true,
+        activeServerId: activeServer?.id || "",
+      };
+    });
+  }, [activeServer?.id, setProfileStatus]);
+
   const uploadAvatarWithFrame = useCallback(async (file, frame) => {
     const formData = new FormData();
     formData.append("avatar", file);
@@ -161,6 +191,72 @@ export default function useMenuMainMediaFrameActions({
     setProfileStatus("Фон профиля сохранён.");
   }, [setProfileDraft, setProfileStatus, setUser, user]);
 
+  const updateProfileMediaFrame = useCallback(async (kind, frame) => {
+    if (!user?.id) return;
+
+    const normalizedFrame = normalizeMediaFrame(frame);
+    const currentAvatarFrame = getUserAvatarFrame(user);
+    const currentBackgroundFrame = getUserProfileBackgroundFrame(user);
+    const nextAvatarFrame = kind === "avatarFrame" ? normalizedFrame : currentAvatarFrame;
+    const nextBackgroundFrame = kind === "profileBackgroundFrame" ? normalizedFrame : currentBackgroundFrame;
+    const currentBackgroundUrl = getUserProfileBackground(user);
+
+    const response = await authFetch(`${API_URL}/api/user/profile`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: user?.firstName || user?.first_name || "",
+        lastName: user?.lastName || user?.last_name || "",
+        nickname: user?.nickname || user?.nick_name || "",
+        avatarFrame: serializeMediaFrame(nextAvatarFrame),
+        profileBackgroundUrl: currentBackgroundUrl || undefined,
+        profileBackgroundFrame: serializeMediaFrame(nextBackgroundFrame),
+      }),
+    });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось сохранить рамку."));
+    }
+
+    const nextUser = {
+      ...user,
+      first_name: data?.first_name || user?.first_name || user?.firstName || "",
+      firstName: data?.first_name || user?.firstName || user?.first_name || "",
+      last_name: data?.last_name || user?.last_name || user?.lastName || "",
+      lastName: data?.last_name || user?.lastName || user?.last_name || "",
+      nickname: data?.nickname || user?.nickname || user?.nick_name || "",
+      avatarUrl: data?.avatar_url || user?.avatarUrl || user?.avatar || "",
+      avatar: data?.avatar_url || user?.avatar || user?.avatarUrl || "",
+      avatarFrame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame, nextAvatarFrame),
+      avatar_frame: parseMediaFrame(data?.avatar_frame, data?.avatarFrame, nextAvatarFrame),
+      profileBackgroundUrl: data?.profile_background_url || currentBackgroundUrl || "",
+      profile_background_url: data?.profile_background_url || currentBackgroundUrl || "",
+      profileBackground: data?.profile_background_url || currentBackgroundUrl || "",
+      profileBackgroundFrame: parseMediaFrame(
+        data?.profile_background_frame,
+        data?.profileBackgroundFrame,
+        nextBackgroundFrame
+      ),
+      profile_background_frame: parseMediaFrame(
+        data?.profile_background_frame,
+        data?.profileBackgroundFrame,
+        nextBackgroundFrame
+      ),
+    };
+    setUser?.(nextUser);
+    setProfileDraft((previous) => ({
+      ...previous,
+      profileBackgroundUrl: nextUser.profileBackgroundUrl,
+      profileBackgroundFrame: nextUser.profileBackgroundFrame,
+    }));
+    await storeSession(nextUser, {
+      accessToken: getStoredToken(),
+      refreshToken: getStoredRefreshToken(),
+      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+    });
+    setProfileStatus(kind === "avatarFrame" ? "Рамка аватара сохранена." : "Рамка фона сохранена.");
+  }, [setProfileDraft, setProfileStatus, setUser, user]);
+
   const uploadServerIconWithFrame = useCallback(async (file, frame, { createDraft = false } = {}) => {
     const formData = new FormData();
     formData.append("icon", file);
@@ -188,6 +284,19 @@ export default function useMenuMainMediaFrameActions({
 
   const handleMediaFrameConfirm = useCallback(async (frame) => {
     const editorState = mediaFrameEditorState;
+    if (editorState?.frameOnly) {
+      try {
+        await updateProfileMediaFrame(editorState.kind, frame);
+      } catch (error) {
+        setProfileStatus(error?.message || "Не удалось сохранить рамку.");
+        console.error("Ошибка сохранения рамки профиля:", error);
+      } finally {
+        revokeMediaEditorPreviewUrl(editorState);
+        setMediaFrameEditorState(null);
+      }
+      return;
+    }
+
     if (!editorState?.file) {
       closeMediaFrameEditor();
       return;
@@ -219,6 +328,7 @@ export default function useMenuMainMediaFrameActions({
     mediaFrameEditorState,
     setCreateServerError,
     setProfileStatus,
+    updateProfileMediaFrame,
     uploadAvatarWithFrame,
     uploadProfileBackgroundWithFrame,
     uploadServerIconWithFrame,
@@ -288,6 +398,28 @@ export default function useMenuMainMediaFrameActions({
     });
   }, [openMediaFrameEditor, setProfileStatus, user?.id]);
 
+  const handleAvatarFrameEdit = useCallback(() => {
+    openExistingMediaFrameEditor({
+      kind: "avatarFrame",
+      target: "avatar",
+      source: getUserAvatar(user),
+      frame: getUserAvatarFrame(user),
+      title: "Рамка аватара",
+      missingMessage: "Сначала загрузите аватар.",
+    });
+  }, [openExistingMediaFrameEditor, user]);
+
+  const handleProfileBackgroundFrameEdit = useCallback(() => {
+    openExistingMediaFrameEditor({
+      kind: "profileBackgroundFrame",
+      target: "profileBackground",
+      source: getUserProfileBackground(user),
+      frame: getUserProfileBackgroundFrame(user),
+      title: "Рамка фона",
+      missingMessage: "Сначала загрузите фон профиля.",
+    });
+  }, [openExistingMediaFrameEditor, user]);
+
   const handleServerIconChange = useCallback(async (event) => {
     if (!canManageServer) return;
     const file = event.target.files?.[0];
@@ -322,6 +454,8 @@ export default function useMenuMainMediaFrameActions({
     handleCreateServerIconChange,
     handleAvatarChange,
     handleProfileBackgroundChange,
+    handleAvatarFrameEdit,
+    handleProfileBackgroundFrameEdit,
     handleServerIconChange,
   };
 }

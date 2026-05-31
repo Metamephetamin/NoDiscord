@@ -2505,7 +2505,6 @@ function ServerMainComponent({
   currentVoiceParticipants,
   activeVoiceParticipantsMap,
   joiningVoiceChannelId,
-  voiceConnectionState,
   remoteScreenShares,
   activeServerUnreadCount,
   hasLocalSharePreview,
@@ -2639,7 +2638,6 @@ function ServerMainComponent({
             channelName={currentVoiceChannelName}
             participants={currentVoiceParticipants}
             isJoining={isJoiningVoiceChannel}
-            connectionState={voiceConnectionState}
             pendingParticipant={user ? { name: user.nickname || user.firstName || user.first_name || user.email || "Вы", avatar: user.avatarUrl || user.avatar || "" } : null}
             remoteShares={remoteScreenShares}
             selectedStreamUserId={selectedStreamUserId}

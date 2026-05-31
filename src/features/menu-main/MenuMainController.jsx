@@ -4458,6 +4458,8 @@ export default function MenuMain({
     handleCreateServerIconChange,
     handleAvatarChange,
     handleProfileBackgroundChange,
+    handleAvatarFrameEdit,
+    handleProfileBackgroundFrameEdit,
     handleServerIconChange,
   } = useMenuMainMediaFrameActions({
     user,
@@ -5851,6 +5853,8 @@ export default function MenuMain({
     avatarInputRef,
     profileBackgroundInputRef,
     serverIconInputRef,
+    handleAvatarFrameEdit,
+    handleProfileBackgroundFrameEdit,
     handleResetProfileCustomization,
     handleProfileSave,
     updateProfileDraft,
@@ -6841,7 +6845,6 @@ export default function MenuMain({
       currentVoiceParticipants={currentVoiceParticipants}
       activeVoiceParticipantsMap={activeVoiceParticipantsMap}
       joiningVoiceChannelId={joiningVoiceChannelId}
-      voiceConnectionState={voiceConnectionState}
       remoteScreenShares={remoteScreenShares}
       activeServerUnreadCount={activeServerUnreadCount}
       hasLocalSharePreview={hasLocalSharePreview}

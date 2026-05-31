@@ -47,6 +47,8 @@ export function MenuMainSettingsContent({
   avatarInputRef,
   profileBackgroundInputRef,
   serverIconInputRef,
+  handleAvatarFrameEdit,
+  handleProfileBackgroundFrameEdit,
   handleResetProfileCustomization,
   handleProfileSave,
   updateProfileDraft,
@@ -197,7 +199,6 @@ export function MenuMainSettingsContent({
           onTotpCodeChange={updateTotpCode}
           onTotpResetPasswordChange={updateTotpResetPassword}
           onTotpResetCodeChange={updateTotpResetCode}
-          onOpenProfileSettings={() => setSettingsTab?.("personal_profile")}
           onSaveProfile={handleProfileSave}
           onUpdateProfileDraft={updateProfileDraft}
           onUpdateEmailChangeDraft={updateEmailChangeDraft}
@@ -229,6 +230,8 @@ export function MenuMainSettingsContent({
           onSubmit={handleProfileSave}
           onChangeAvatar={() => avatarInputRef.current?.click()}
           onChangeBackground={() => profileBackgroundInputRef.current?.click()}
+          onChangeAvatarFrame={handleAvatarFrameEdit}
+          onChangeBackgroundFrame={handleProfileBackgroundFrameEdit}
           profileCustomization={profileCustomization}
           onProfileCustomizationChange={handleProfileCustomizationChange}
           onResetCustomization={handleResetProfileCustomization}
