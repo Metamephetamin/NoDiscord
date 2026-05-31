@@ -260,6 +260,9 @@ export default function useMenuMainMediaFrameActions({
   const uploadServerIconWithFrame = useCallback(async (file, frame, { createDraft = false } = {}) => {
     const formData = new FormData();
     formData.append("icon", file);
+    if (!createDraft && activeServer?.id) {
+      formData.append("serverId", String(activeServer.id));
+    }
     const response = await authFetch(`${API_BASE_URL}/server-assets/upload-icon`, {
       method: "POST",
       body: formData,
@@ -280,7 +283,7 @@ export default function useMenuMainMediaFrameActions({
 
     updateServer((server) => ({ ...server, icon: nextIconUrl, iconFrame: nextIconFrame }));
     setProfileStatus("Иконка сервера сохранена.");
-  }, [setCreateServerError, setCreateServerIcon, setCreateServerIconFrame, setProfileStatus, updateServer]);
+  }, [activeServer?.id, setCreateServerError, setCreateServerIcon, setCreateServerIconFrame, setProfileStatus, updateServer]);
 
   const handleMediaFrameConfirm = useCallback(async (frame) => {
     const editorState = mediaFrameEditorState;
@@ -425,6 +428,10 @@ export default function useMenuMainMediaFrameActions({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !activeServer) return;
+    if (!canManageServer) {
+      setProfileStatus("Недостаточно прав для смены картинки сервера.");
+      return;
+    }
 
     try {
       const validationError = await validateServerIconFile(file);

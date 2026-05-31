@@ -2656,7 +2656,9 @@ export const ServerSettings = ({
           </label>
 
           <div className="settings-shell__actions">
-            <button type="button" className="settings-inline-button" onClick={onChangeServerIcon}>Сменить картинку</button>
+            {canManageServer ? (
+              <button type="button" className="settings-inline-button" onClick={onChangeServerIcon}>Сменить картинку</button>
+            ) : null}
             <button type="button" className="settings-inline-button settings-inline-button--danger" onClick={() => onDeleteServer(activeServer?.id)} disabled={!canManageServer}>Удалить сервер</button>
           </div>
         </section>

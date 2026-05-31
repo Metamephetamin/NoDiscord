@@ -50,3 +50,24 @@ test("role assignment errors use in-app status instead of alert", () => {
   assert.doesNotMatch(controllerSource, /window\.alert/);
   assert.match(controllerSource, /pushWorkspaceStatusToast\(error instanceof Error \? error\.message : "Не удалось назначить роль\.", "danger"\)/);
 });
+
+test("server icon changes require manage server permission", () => {
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
+  const mediaActionsSource = readRepoFile("src/features/menu-main/useMenuMainMediaFrameActions.js");
+  const assetsControllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/ServerAssetsController.cs");
+
+  assert.match(settingsSource, /\{canManageServer \? \([\s\S]*?Сменить картинку[\s\S]*?\) : null\}/);
+  assert.match(rendererSource, /if \(canManageServer\) \{\s*serverIconInputRef\.current\?\.click\(\);/);
+  assert.match(mediaActionsSource, /if \(!canManageServer\) \{[\s\S]*Недостаточно прав для смены картинки сервера/);
+  assert.match(mediaActionsSource, /formData\.append\("serverId", String\(activeServer\.id\)\)/);
+  assert.match(assetsControllerSource, /ServerPermissionEvaluator\.CanManageServer\(snapshot, currentUser\.UserId\)/);
+});
+
+test("avatar crop editor exposes vertical positioning control", () => {
+  const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
+
+  assert.match(editorSource, /const handleVerticalPositionChange = \(event\) => \{/);
+  assert.match(editorSource, /ariaLabel="Положение аватара вверх и вниз"/);
+  assert.match(editorSource, /value=\{normalizedDraftFrame\.y\}/);
+});

@@ -13725,6 +13725,8 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 0 10px;
 }
 

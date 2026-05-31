@@ -133,6 +133,10 @@ export default function MediaFrameEditorModal({
   }, [open]);
 
   const normalizedDraftFrame = useMemo(() => normalizeMediaFrame(draftFrame), [draftFrame]);
+  const positionBounds = useMemo(
+    () => getMediaFramePositionBounds(normalizedDraftFrame.zoom),
+    [normalizedDraftFrame.zoom]
+  );
 
   if (!open || !source) {
     return null;
@@ -158,6 +162,15 @@ export default function MediaFrameEditorModal({
     setDraftFrame((previous) => ({
       ...normalizeMediaFrame(previous),
       zoom: nextZoom,
+    }));
+  };
+
+  const handleVerticalPositionChange = (event) => {
+    const nextY = clamp(Number(event.target.value) || 50, positionBounds.min, positionBounds.max);
+    draftTouchedRef.current = true;
+    setDraftFrame((previous) => ({
+      ...normalizeMediaFrame(previous),
+      y: nextY,
     }));
   };
 
@@ -234,6 +247,19 @@ export default function MediaFrameEditorModal({
                   formatValue={(nextValue) => `${Math.round(Number(nextValue) * 100)}%`}
                 />
                 <strong>{Math.round(normalizedDraftFrame.zoom * 100)}%</strong>
+              </label>
+              <label className="media-frame-editor__slider-field media-frame-editor__slider-field--avatar">
+                <span className="media-frame-editor__slider-label">Вверх/вниз</span>
+                <PercentageSlider
+                  min={positionBounds.min}
+                  max={positionBounds.max}
+                  step={0.1}
+                  value={normalizedDraftFrame.y}
+                  onChange={handleVerticalPositionChange}
+                  ariaLabel="Положение аватара вверх и вниз"
+                  formatValue={(nextValue) => `${Math.round(Number(nextValue))}%`}
+                />
+                <strong>{Math.round(normalizedDraftFrame.y)}%</strong>
               </label>
             </div>
 

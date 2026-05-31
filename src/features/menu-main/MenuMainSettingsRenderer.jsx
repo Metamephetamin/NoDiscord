@@ -361,7 +361,11 @@ export function MenuMainSettingsContent({
           icons={{ microphone: MICROPHONE_ICON_URL, headphones: HEADPHONES_ICON_URL, settings: SETTINGS_ICON_URL }}
           onServerNameChange={updateActiveServerName}
           onServerDescriptionChange={updateActiveServerDescription}
-          onChangeServerIcon={() => serverIconInputRef.current?.click()}
+          onChangeServerIcon={() => {
+            if (canManageServer) {
+              serverIconInputRef.current?.click();
+            }
+          }}
           onDeleteServer={handleDeleteServer}
           canManageTargetMember={canManageTargetMember}
           canAssignRoleToMember={canAssignRoleToMember}

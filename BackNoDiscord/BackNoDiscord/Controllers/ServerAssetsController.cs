@@ -1,5 +1,6 @@
 using BackNoDiscord.Infrastructure;
 using BackNoDiscord.Security;
+using BackNoDiscord.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace BackNoDiscord.Controllers;
 public class UploadServerIconRequest
 {
     public IFormFile? Icon { get; set; }
+    public string? ServerId { get; set; }
 }
 
 [ApiController]
@@ -19,10 +21,12 @@ public class ServerAssetsController : ControllerBase
     private const long MaxStaticServerIconSizeBytes = 15L * 1024 * 1024;
     private const long MaxAnimatedServerIconSizeBytes = 30L * 1024 * 1024;
     private readonly UploadStoragePaths _uploadStoragePaths;
+    private readonly ServerStateService _serverState;
 
-    public ServerAssetsController(UploadStoragePaths uploadStoragePaths)
+    public ServerAssetsController(UploadStoragePaths uploadStoragePaths, ServerStateService serverState)
     {
         _uploadStoragePaths = uploadStoragePaths;
+        _serverState = serverState;
     }
 
     [HttpPost("upload-icon")]
@@ -43,6 +47,16 @@ public class ServerAssetsController : ControllerBase
         if (!UploadPolicies.TryValidateServerIcon(icon, out var extension, out _, out var error))
         {
             return BadRequest(new { message = error });
+        }
+
+        var serverId = request.ServerId?.Trim();
+        if (!string.IsNullOrWhiteSpace(serverId))
+        {
+            var snapshot = _serverState.GetSnapshot(serverId);
+            if (snapshot is null || !ServerPermissionEvaluator.CanManageServer(snapshot, currentUser.UserId))
+            {
+                return Forbid();
+            }
         }
 
         var maxAllowedSize = extension is ".gif" or ".mp4"
