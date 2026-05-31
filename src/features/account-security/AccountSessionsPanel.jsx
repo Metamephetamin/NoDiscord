@@ -1,3 +1,5 @@
+import "../../css/AccountSessionsPanel.css";
+
 const formatDeviceSessionDate = (value) => {
   const parsed = Date.parse(String(value || ""));
   if (!Number.isFinite(parsed)) {

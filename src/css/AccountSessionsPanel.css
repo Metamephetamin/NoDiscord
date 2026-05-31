@@ -1,0 +1,149 @@
+/* Styles scoped to AccountSessionsPanel.jsx. */
+
+
+
+html[data-ui-theme="light"] .device-session-card,
+html[data-ui-theme="purple"] .device-session-card {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+}
+
+.device-sessions-list {
+  display: grid;
+  gap: 10px;
+}
+
+.device-sessions-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.device-sessions-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.device-sessions-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.device-sessions-panel__actions .settings-inline-button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.device-session-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+}
+
+.device-session-card--current {
+  border-color: rgba(118, 144, 255, 0.58);
+  background: rgba(96, 119, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(118, 144, 255, 0.16);
+}
+
+.device-session-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.device-session-card__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.device-session-card__copy strong {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.device-session-card__copy span,
+.device-session-card__meta span {
+  color: #bac5db;
+  font-size: 12px;
+  line-height: 1.32;
+}
+
+.device-session-card__copy span {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.device-session-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.device-session-card__meta span {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.device-session-card__meta b {
+  color: #eef2ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.device-session-card__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.device-session-card__actions .settings-inline-button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+}
+
+.device-session-card__badge {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(107, 129, 255, 0.24);
+  color: #dce3ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .device-sessions-panel__header,
+  .device-session-card__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .device-sessions-panel__actions,
+  .device-session-card__actions {
+    justify-content: flex-start;
+  }
+}

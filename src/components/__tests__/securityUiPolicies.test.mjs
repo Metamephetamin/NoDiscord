@@ -208,6 +208,20 @@ test("server invite feedback styles stay split from the main menu stylesheet", (
   assert.doesNotMatch(mainCss, /^\s*\.server-invite-feedback[^\n{]*\{/m);
 });
 
+test("account session styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const sessionsCss = readRepoFileIfExists("src/css/AccountSessionsPanel.css");
+  const sessionsSource = readRepoFile("src/features/account-security/AccountSessionsPanel.jsx");
+
+  assert.match(sessionsSource, /import "\.\.\/\.\.\/css\/AccountSessionsPanel\.css";/);
+  assert.match(sessionsCss, /\.device-sessions-panel \{/);
+  assert.match(sessionsCss, /\.device-session-card \{/);
+  assert.match(sessionsCss, /html\[data-ui-theme="light"\] \.device-session-card/);
+  assert.doesNotMatch(mainCss, /^\s*\.device-sessions-panel[^\n{]*\{/m);
+  assert.doesNotMatch(mainCss, /^\s*\.device-session-card[^\n{]*\{/m);
+  assert.doesNotMatch(mainCss, /^html\[data-ui-theme="light"\] \.device-session-card/m);
+});
+
 test("server management settings are hidden without permissions", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 
