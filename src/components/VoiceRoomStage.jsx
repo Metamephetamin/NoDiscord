@@ -521,7 +521,7 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
 
 function VoiceStageStatusBadge({ name, label }) {
   return (
-    <span className="voice-room-stage__status-badge voice-room-stage__status-badge--slashed" title={label} aria-label={label}>
+    <span className="voice-room-stage__status-badge voice-room-stage__status-badge--slashed" aria-label={label}>
       <VoiceStageIcon name={name} className="voice-room-stage__status-icon" />
     </span>
   );
@@ -853,7 +853,6 @@ export default function VoiceRoomStage({
       className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""} ${muted ? "voice-room-stage__toolbar-button--muted" : ""}`.trim()}
       onClick={onClick}
       aria-label={label}
-      title={label}
       disabled={disabled}
     >
       <span className={`voice-room-stage__toolbar-icon-shell ${muted ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
@@ -914,7 +913,6 @@ export default function VoiceRoomStage({
               type="button"
               className="voice-room-stage__toolbar-button"
               aria-label="Открыть сцену на весь экран"
-              title="Открыть сцену на весь экран"
               onClick={async () => {
                 try {
                   if (document.fullscreenElement === shellRef.current) {

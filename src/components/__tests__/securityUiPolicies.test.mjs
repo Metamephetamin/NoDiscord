@@ -146,6 +146,15 @@ test("common counters and timestamps use the numeric Roboto font", () => {
   assert.match(indexCss, /\.chat__topbar-badge,[\s\S]*?\.message-reaction__count,[\s\S]*?\.voice-message__duration,[\s\S]*?font-family: var\(--font-numeric\);/);
 });
 
+test("voice stage toolbar buttons avoid native title tooltips", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+
+  assert.doesNotMatch(stageSource, /title=\{label\}/);
+  assert.doesNotMatch(stageSource, /title="Открыть сцену на весь экран"/);
+  assert.match(stageSource, /aria-label=\{label\}/);
+  assert.match(stageSource, /aria-label="Открыть сцену на весь экран"/);
+});
+
 test("clipboard images can be pasted from the whole text chat area", () => {
   const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
