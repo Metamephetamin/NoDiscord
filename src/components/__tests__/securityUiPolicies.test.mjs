@@ -295,6 +295,18 @@ test("friends workspace styles are split out of the main menu stylesheet", () =>
   assert.match(friendsCss, /\.friends-modal/);
 });
 
+test("stream viewer styles are split out of the main menu stylesheet", () => {
+  const viewerSource = readRepoFile("src/components/ScreenShareViewer.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const viewerCss = readRepoFileIfExists("src/css/ScreenShareViewer.css");
+
+  assert.match(viewerSource, /import "\.\.\/css\/ScreenShareViewer\.css";/);
+  assert.match(viewerCss, /\.stream-viewer \{/);
+  assert.match(viewerCss, /\.stream-viewer__video--mirrored/);
+  assert.doesNotMatch(mainCss, /\.stream-viewer \{/);
+  assert.doesNotMatch(mainCss, /\.stream-viewer__button/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 
@@ -340,6 +352,7 @@ test("local camera previews are mirrored consistently", () => {
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
   const overlaysSource = readRepoFile("src/components/MenuMainOverlays.jsx");
   const mainCss = readRepoFile("src/css/MenuMain.css");
+  const screenShareCss = readRepoFile("src/css/ScreenShareViewer.css");
 
   assert.match(streamSource, /mirrored = false/);
   assert.match(streamSource, /stream-viewer__video--mirrored/);
@@ -347,7 +360,7 @@ test("local camera previews are mirrored consistently", () => {
   assert.match(workspaceSource, /mirrored=\{localSharePreview\?\.mode === "camera"\}/);
   assert.match(workspaceSource, /stream-mini-player__video--mirrored/);
   assert.match(overlaysSource, /camera-modal__video camera-modal__video--mirrored/);
-  assert.match(mainCss, /\.stream-viewer__video--mirrored/);
+  assert.match(screenShareCss, /\.stream-viewer__video--mirrored/);
   assert.match(mainCss, /\.stream-mini-player__video--mirrored/);
   assert.match(mainCss, /\.camera-modal__video--mirrored/);
 });

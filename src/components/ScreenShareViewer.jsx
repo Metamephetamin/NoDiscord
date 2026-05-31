@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import "../css/ScreenShareViewer.css";
 
 export default function ScreenShareViewer({
   stream,
