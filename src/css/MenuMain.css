@@ -7047,6 +7047,17 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .voice-room-stage__strip-card--speaking {
   border-color: rgba(80, 214, 137, 0.72);
   box-shadow: 0 0 0 1px rgba(80, 214, 137, 0.22);
+  animation: voice-speaking-card-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes voice-speaking-card-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(80, 214, 137, 0.18), 0 0 0 0 rgba(80, 214, 137, 0.22);
+  }
+
+  50% {
+    box-shadow: 0 0 0 1px rgba(80, 214, 137, 0.38), 0 0 0 7px rgba(80, 214, 137, 0);
+  }
 }
 
 .voice-room-stage__card-media {
@@ -7125,6 +7136,23 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+}
+
+.voice-room-stage__card--speaking .voice-room-stage__card-avatar,
+.voice-room-stage__strip-card--speaking .voice-room-stage__strip-avatar {
+  animation: voice-speaking-avatar-pulse 0.86s ease-in-out infinite;
+}
+
+@keyframes voice-speaking-avatar-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: saturate(1);
+  }
+
+  50% {
+    transform: scale(1.045);
+    filter: saturate(1.14);
+  }
 }
 
 .voice-room-stage__card-scrim {

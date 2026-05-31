@@ -335,7 +335,7 @@
 }
 
 .avatar-shell--speaking::after {
-  content: "";
+  content: none;
   position: absolute;
   top: 3px;
   right: 3px;
@@ -351,6 +351,19 @@
 .avatar-shell--speaking .avatar {
   border-color: rgba(101, 228, 143, 0.78);
   box-shadow: 0 0 0 2px rgba(101, 228, 143, 0.12);
+  animation: profile-speaking-avatar-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes profile-speaking-avatar-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(101, 228, 143, 0.12);
+  }
+
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 6px rgba(101, 228, 143, 0);
+  }
 }
 
 .profile__names {

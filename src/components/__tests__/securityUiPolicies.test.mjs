@@ -109,3 +109,15 @@ test("owner role can be renamed without exposing role descriptions or permission
   assert.match(controllerSource, /Permissions = string\.Equals\(roleId, "owner", StringComparison\.Ordinal\)/);
   assert.match(controllerSource, /string\.Equals\(existingRole\.Id, "owner", StringComparison\.Ordinal\)[\s\S]*string\.Equals\(snapshot\.OwnerId, actorUserId, StringComparison\.Ordinal\)/);
 });
+
+test("speaking indicators animate without adding profile status dots", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const channelCss = readRepoFile("src/css/ListChannels.css");
+  const profileCss = readRepoFile("src/css/MenuProfile.css");
+
+  assert.match(mainCss, /@keyframes voice-speaking-card-pulse/);
+  assert.match(mainCss, /@keyframes voice-speaking-avatar-pulse/);
+  assert.match(channelCss, /@keyframes participant-speaking-avatar-pulse/);
+  assert.match(profileCss, /\.avatar-shell--speaking::after \{[\s\S]*?content: none;/);
+  assert.match(profileCss, /@keyframes profile-speaking-avatar-pulse/);
+});

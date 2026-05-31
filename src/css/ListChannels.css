@@ -304,6 +304,19 @@
 .participant-item--speaking .participant-item__avatar {
   border-color: rgba(86, 220, 124, 0.8);
   box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.16);
+  animation: participant-speaking-avatar-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes participant-speaking-avatar-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.14);
+  }
+
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 5px rgba(86, 220, 124, 0);
+  }
 }
 
 .participant-item__name {
