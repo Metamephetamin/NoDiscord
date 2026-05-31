@@ -643,6 +643,16 @@ export const ProductCompanyInfoSettings = () => (
         Lanaya — приложение для общения с личными чатами, серверами, голосовыми комнатами и звонками.
         Здесь можно переписываться, собирать сообщества и общаться голосом в реальном времени.
       </p>
+      <dl className="company-info-panel__facts">
+        <div>
+          <dt>Сайт</dt>
+          <dd>https://lanaya.space</dd>
+        </div>
+        <div>
+          <dt>ИНН</dt>
+          <dd>504417743063</dd>
+        </div>
+      </dl>
     </section>
   </div>
 );
