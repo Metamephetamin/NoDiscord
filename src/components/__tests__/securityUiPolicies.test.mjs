@@ -264,6 +264,20 @@ test("quick switcher styles are split out of the main menu stylesheet", () => {
   assert.match(quickSwitcherCss, /\.quick-switcher__list::-webkit-scrollbar-thumb/);
 });
 
+test("friends workspace styles are split out of the main menu stylesheet", () => {
+  const friendsWorkspaceSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const friendsCss = readRepoFileIfExists("src/css/FriendsWorkspace.css");
+
+  assert.match(friendsWorkspaceSource, /import "\.\.\/css\/FriendsWorkspace\.css";/);
+  assert.doesNotMatch(mainCss, /\.friends-main/);
+  assert.doesNotMatch(mainCss, /\.friends-directory/);
+  assert.doesNotMatch(mainCss, /\.friends-modal/);
+  assert.match(friendsCss, /\.friends-main/);
+  assert.match(friendsCss, /\.friends-directory/);
+  assert.match(friendsCss, /\.friends-modal/);
+});
+
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
 

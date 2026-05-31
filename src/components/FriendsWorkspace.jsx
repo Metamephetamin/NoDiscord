@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "../css/FriendsWorkspace.css";
 import "../css/ProfileStore.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
