@@ -3725,7 +3725,6 @@ html[data-ui-theme="light"] .settings-section__header h4,
 html[data-ui-theme="light"] .voice-settings-card__title,
 html[data-ui-theme="light"] .voice-settings-field > span,
 html[data-ui-theme="light"] .voice-toggle-row strong,
-html[data-ui-theme="light"] .voice-profile-option__copy strong,
 html[data-ui-theme="light"] .settings-checkbox,
 html[data-ui-theme="light"] .account-settings-field > span,
 html[data-ui-theme="light"] .settings-field span,
@@ -3734,7 +3733,6 @@ html[data-ui-theme="purple"] .settings-section__header h4,
 html[data-ui-theme="purple"] .voice-settings-card__title,
 html[data-ui-theme="purple"] .voice-settings-field > span,
 html[data-ui-theme="purple"] .voice-toggle-row strong,
-html[data-ui-theme="purple"] .voice-profile-option__copy strong,
 html[data-ui-theme="purple"] .settings-checkbox,
 html[data-ui-theme="purple"] .account-settings-field > span,
 html[data-ui-theme="purple"] .settings-field span {
@@ -3744,12 +3742,10 @@ html[data-ui-theme="purple"] .settings-field span {
 html[data-ui-theme="light"] .settings-shell__content-header p,
 html[data-ui-theme="light"] .settings-section__header p,
 html[data-ui-theme="light"] .voice-toggle-row span,
-html[data-ui-theme="light"] .voice-profile-option__copy span,
 html[data-ui-theme="light"] .voice-settings-caption,
 html[data-ui-theme="purple"] .settings-shell__content-header p,
 html[data-ui-theme="purple"] .settings-section__header p,
 html[data-ui-theme="purple"] .voice-toggle-row span,
-html[data-ui-theme="purple"] .voice-profile-option__copy span,
 html[data-ui-theme="purple"] .voice-settings-caption {
   color: var(--app-text-muted);
 }
@@ -4102,12 +4098,6 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   box-shadow: 0 0 0 2px rgba(246, 247, 251, 0.16), 0 4px 10px rgba(0, 0, 0, 0.28);
 }
 
-.voice-profile-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
 .voice-settings-card--processing {
   display: grid;
   gap: 14px;
@@ -4117,12 +4107,6 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   margin: 0;
 }
 
-.voice-profile-list--processing {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px 12px;
-}
-
 .voice-settings-field--noise-strength {
   margin-top: 18px;
 }
@@ -4130,80 +4114,6 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
 .voice-settings-field--noise-strength .slider-with-tooltip {
   padding-top: 14px;
   --slider-tooltip-top: -38px;
-}
-
-.voice-profile-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 13px;
-  min-height: 34px;
-  cursor: pointer;
-  color: #d7deed;
-}
-
-.voice-profile-option--single-line {
-  align-items: center;
-  min-height: 28px;
-}
-
-.voice-profile-option--single-line input {
-  margin-top: 0;
-}
-
-.voice-profile-option input {
-  position: relative;
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  margin: 1px 0 0;
-  border: 2px solid #80848f;
-  border-radius: 50%;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  cursor: pointer;
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
-}
-
-.voice-profile-option input::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: #ffffff;
-  opacity: 0;
-  transform: scale(0.45);
-  transition: opacity 0.14s ease, transform 0.14s ease;
-}
-
-.voice-profile-option input:checked {
-  border-color: #6c63ff;
-  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.16);
-}
-
-.voice-profile-option input:checked::after {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.voice-profile-option input:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.28);
-}
-
-.voice-profile-option__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.voice-profile-option__copy strong {
-  font-size: 15px;
-}
-
-.voice-profile-option__copy span {
-  color: #9ea8c1;
-  line-height: 1.45;
 }
 
 .app-logo-picker {
@@ -9419,7 +9329,6 @@ html[data-ui-theme="light"] .voice-settings-card--voice {
 html[data-ui-theme="light"] .voice-settings-card__title,
 html[data-ui-theme="light"] .voice-settings-field > span,
 html[data-ui-theme="light"] .voice-toggle-row strong,
-html[data-ui-theme="light"] .voice-profile-option__copy strong,
 html[data-ui-theme="light"] .settings-section h4,
 html[data-ui-theme="light"] .settings-section__header h4 {
   color: #0f172a;
@@ -9428,7 +9337,6 @@ html[data-ui-theme="light"] .settings-section__header h4 {
 html[data-ui-theme="light"] .voice-settings-caption,
 html[data-ui-theme="light"] .voice-settings-help,
 html[data-ui-theme="light"] .voice-toggle-row span,
-html[data-ui-theme="light"] .voice-profile-option__copy span,
 html[data-ui-theme="light"] .settings-section__header p,
 html[data-ui-theme="light"] .settings-role-description,
 html[data-ui-theme="light"] .settings-member-name {

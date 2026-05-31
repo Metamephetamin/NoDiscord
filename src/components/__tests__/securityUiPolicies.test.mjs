@@ -183,6 +183,20 @@ test("profile device menu styles stay split from the main menu stylesheet", () =
   assert.doesNotMatch(mainCss, /device-menu/);
 });
 
+test("voice profile option styles stay split from the main menu stylesheet", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const voiceProfileCss = readRepoFileIfExists("src/css/MenuVoiceProfileSettings.css");
+  const panelsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.match(panelsSource, /import "\.\.\/css\/MenuVoiceProfileSettings\.css";/);
+  assert.match(voiceProfileCss, /\.voice-profile-list \{/);
+  assert.match(voiceProfileCss, /\.voice-profile-option \{/);
+  assert.match(voiceProfileCss, /html\[data-ui-theme="light"\] \.voice-profile-option__copy strong/);
+  assert.doesNotMatch(mainCss, /^\s*\.voice-profile-list[^\n{]*\{/m);
+  assert.doesNotMatch(mainCss, /^\s*\.voice-profile-option[^\n{]*\{/m);
+  assert.doesNotMatch(mainCss, /^html\[data-ui-theme="light"\] \.voice-profile-option/m);
+});
+
 test("server management settings are hidden without permissions", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 

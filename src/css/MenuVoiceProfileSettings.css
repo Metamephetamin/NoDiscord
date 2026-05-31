@@ -1,0 +1,107 @@
+/* Styles scoped to voice profile settings in MenuSettingsPanels.jsx. */
+
+
+
+html[data-ui-theme="light"] .voice-profile-option__copy strong,
+html[data-ui-theme="purple"] .voice-profile-option__copy strong {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .voice-profile-option__copy span,
+html[data-ui-theme="purple"] .voice-profile-option__copy span {
+  color: var(--app-text-muted);
+}
+
+.voice-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.voice-profile-list--processing {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 12px;
+}
+
+.voice-profile-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-height: 34px;
+  cursor: pointer;
+  color: #d7deed;
+}
+
+.voice-profile-option--single-line {
+  align-items: center;
+  min-height: 28px;
+}
+
+.voice-profile-option--single-line input {
+  margin-top: 0;
+}
+
+.voice-profile-option input {
+  position: relative;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  border: 2px solid #80848f;
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+.voice-profile-option input::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #ffffff;
+  opacity: 0;
+  transform: scale(0.45);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.voice-profile-option input:checked {
+  border-color: #6c63ff;
+  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.16);
+}
+
+.voice-profile-option input:checked::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.voice-profile-option input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.28);
+}
+
+.voice-profile-option__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-profile-option__copy strong {
+  font-size: 15px;
+}
+
+.voice-profile-option__copy span {
+  color: #9ea8c1;
+  line-height: 1.45;
+}
+
+html[data-ui-theme="light"] .voice-profile-option__copy strong {
+  color: #0f172a;
+}
+
+html[data-ui-theme="light"] .voice-profile-option__copy span {
+  color: #5f6b82;
+}
