@@ -38,6 +38,7 @@ const getUiFontScaleStorageKey = (user) => `nd:ui-font-scale:${getCurrentUserId(
 const getUiReduceMotionStorageKey = (user) => `nd:ui-reduce-motion:${getCurrentUserId(user) || "guest"}`;
 const getUiTouchTargetStorageKey = (user) => `nd:ui-touch-target:${getCurrentUserId(user) || "guest"}`;
 const getUiThemeStorageKey = (user) => `nd:ui-theme:${getCurrentUserId(user) || "guest"}`;
+const getUiAccentStorageKey = (user) => `nd:ui-accent:${getCurrentUserId(user) || "guest"}`;
 const getChatThemeStorageKey = (user) => `nd:chat-theme:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundStorageKey = (user) => `nd:chat-background:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundNameStorageKey = (user) => `nd:chat-background-name:${getCurrentUserId(user) || "guest"}`;
@@ -189,6 +190,7 @@ export function useMenuMainStorageKeys(user) {
     uiReduceMotionStorageKey: getUiReduceMotionStorageKey(user),
     uiTouchTargetStorageKey: getUiTouchTargetStorageKey(user),
     uiThemeStorageKey: getUiThemeStorageKey(user),
+    uiAccentStorageKey: getUiAccentStorageKey(user),
     chatThemeStorageKey: getChatThemeStorageKey(user),
     chatBackgroundStorageKey: getChatBackgroundStorageKey(user),
     chatBackgroundNameStorageKey: getChatBackgroundNameStorageKey(user),

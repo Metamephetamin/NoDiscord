@@ -139,6 +139,7 @@ export function MenuMainSettingsContent({
   uiReduceMotion,
   uiTouchTargetSize,
   uiTheme,
+  uiAccentColor,
   chatThemeId,
   customChatBackgroundData,
   customChatBackgroundFit,
@@ -150,6 +151,7 @@ export function MenuMainSettingsContent({
   setUiReduceMotion,
   setUiTouchTargetSize,
   setUiTheme,
+  setUiAccentColor,
   setChatThemeId,
   setCustomChatBackgroundData,
   setCustomChatBackgroundFit,
@@ -323,6 +325,7 @@ export function MenuMainSettingsContent({
           uiReduceMotion={uiReduceMotion}
           uiTouchTargetSize={uiTouchTargetSize}
           uiTheme={uiTheme}
+          uiAccentColor={uiAccentColor}
           chatThemeId={chatThemeId}
           customChatBackgroundData={customChatBackgroundData}
           customChatBackgroundFit={customChatBackgroundFit}
@@ -334,6 +337,7 @@ export function MenuMainSettingsContent({
           onReduceMotionChange={setUiReduceMotion}
           onTouchTargetSizeChange={setUiTouchTargetSize}
           onThemeChange={setUiTheme}
+          onAccentColorChange={setUiAccentColor}
           onChatThemeChange={setChatThemeId}
           onCustomChatBackgroundFitChange={setCustomChatBackgroundFit}
           onCustomChatBackgroundChange={handleCustomChatBackgroundChange}

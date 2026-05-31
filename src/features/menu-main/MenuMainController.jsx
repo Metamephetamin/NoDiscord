@@ -57,7 +57,7 @@ import {
   applyAppLogoPreference,
   getStoredAppLogoId,
 } from "../../utils/appLogo";
-import { applyUiThemePreference, normalizeUiTheme } from "../../utils/uiTheme.mjs";
+import { applyUiAccentPreference, applyUiThemePreference, normalizeUiAccentColor, normalizeUiTheme } from "../../utils/uiTheme.mjs";
 import { applyChatThemePreference, normalizeChatBackgroundFit, normalizeChatThemeId } from "../../utils/chatTheme.mjs";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import { buildStreamDiagnostics } from "../../webrtc/streamDiagnostics.mjs";
@@ -680,6 +680,7 @@ export default function MenuMain({
   const [uiReduceMotion, setUiReduceMotion] = useState(false);
   const [uiTouchTargetSize, setUiTouchTargetSize] = useState("standard");
   const [uiTheme, setUiTheme] = useState("dark");
+  const [uiAccentColor, setUiAccentColor] = useState("");
   const [chatThemeId, setChatThemeId] = useState("default");
   const [customChatBackgroundData, setCustomChatBackgroundData] = useState("");
   const [customChatBackgroundName, setCustomChatBackgroundName] = useState("");
@@ -796,6 +797,7 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiTouchTargetStorageKey,
     uiThemeStorageKey,
+    uiAccentStorageKey,
     chatThemeStorageKey,
     chatBackgroundStorageKey,
     chatBackgroundNameStorageKey,
@@ -1269,6 +1271,7 @@ export default function MenuMain({
     const nextReduceMotion = localStorage.getItem(uiReduceMotionStorageKey) === "true";
     const nextTouchTargetSize = localStorage.getItem(uiTouchTargetStorageKey) || "standard";
     const nextTheme = localStorage.getItem(uiThemeStorageKey) || "dark";
+    const nextAccentColor = localStorage.getItem(uiAccentStorageKey) || "";
     const nextChatTheme = localStorage.getItem(chatThemeStorageKey) || "default";
     const nextChatBackground = localStorage.getItem(chatBackgroundStorageKey) || "";
     const nextChatBackgroundName = localStorage.getItem(chatBackgroundNameStorageKey) || "";
@@ -1279,6 +1282,7 @@ export default function MenuMain({
     setUiReduceMotion(nextReduceMotion);
     setUiTouchTargetSize(nextTouchTargetSize === "large" ? "large" : "standard");
     setUiTheme(normalizeUiTheme(nextTheme));
+    setUiAccentColor(normalizeUiAccentColor(nextAccentColor));
     setChatThemeId(normalizeChatThemeId(nextChatTheme));
     setCustomChatBackgroundData(nextChatBackground);
     setCustomChatBackgroundName(nextChatBackgroundName);
@@ -1294,6 +1298,7 @@ export default function MenuMain({
     uiReduceMotionStorageKey,
     uiThemeStorageKey,
     uiTouchTargetStorageKey,
+    uiAccentStorageKey,
   ]);
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1305,6 +1310,7 @@ export default function MenuMain({
     localStorage.setItem(uiReduceMotionStorageKey, String(uiReduceMotion));
     localStorage.setItem(uiTouchTargetStorageKey, uiTouchTargetSize);
     localStorage.setItem(uiThemeStorageKey, normalizeUiTheme(uiTheme));
+    localStorage.setItem(uiAccentStorageKey, normalizeUiAccentColor(uiAccentColor));
     localStorage.setItem(chatThemeStorageKey, normalizeChatThemeId(chatThemeId));
     localStorage.setItem(chatBackgroundFitStorageKey, normalizeChatBackgroundFit(customChatBackgroundFit));
     if (customChatBackgroundData) {
@@ -1325,6 +1331,7 @@ export default function MenuMain({
     root.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
     root.dataset.uiTouchTargets = uiTouchTargetSize;
     applyUiThemePreference(uiTheme, { root, body });
+    applyUiAccentPreference(uiAccentColor, { root, body });
     body.dataset.uiDensity = uiDensity;
     body.dataset.uiFontScale = uiFontScale;
     body.dataset.uiReduceMotion = uiReduceMotion ? "true" : "false";
@@ -1345,6 +1352,8 @@ export default function MenuMain({
     customChatBackgroundData,
     customChatBackgroundFit,
     customChatBackgroundName,
+    uiAccentColor,
+    uiAccentStorageKey,
     uiDensity,
     uiDensityStorageKey,
     uiFontScale,
@@ -6146,6 +6155,7 @@ export default function MenuMain({
     uiReduceMotion,
     uiTouchTargetSize,
     uiTheme,
+    uiAccentColor,
     chatThemeId,
     customChatBackgroundData,
     customChatBackgroundFit,
@@ -6157,6 +6167,7 @@ export default function MenuMain({
     setUiReduceMotion,
     setUiTouchTargetSize,
     setUiTheme,
+    setUiAccentColor,
     setChatThemeId,
     setCustomChatBackgroundData,
     setCustomChatBackgroundFit,

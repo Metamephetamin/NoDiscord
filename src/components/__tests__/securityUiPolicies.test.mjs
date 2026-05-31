@@ -483,6 +483,23 @@ test("manual profile status is editable, persisted, and rendered under the nickn
   assert.match(profileCss, /\.profile__custom-status \{/);
 });
 
+test("interface accent color is customizable through appearance settings", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
+  const storageSource = readRepoFile("src/features/menu-main/menuMainWorkspaceStorage.js");
+  const themeSource = readRepoFile("src/utils/uiTheme.mjs");
+
+  assert.match(storageSource, /nd:ui-accent:/);
+  assert.match(themeSource, /export function normalizeUiAccentColor/);
+  assert.match(themeSource, /export function applyUiAccentPreference/);
+  assert.match(controllerSource, /const \[uiAccentColor, setUiAccentColor\]/);
+  assert.match(controllerSource, /localStorage\.setItem\(uiAccentStorageKey, normalizeUiAccentColor\(uiAccentColor\)\)/);
+  assert.match(controllerSource, /applyUiAccentPreference\(uiAccentColor, \{ root, body \}\)/);
+  assert.match(rendererSource, /uiAccentColor=\{uiAccentColor\}/);
+  assert.match(settingsSource, /type="color"[\s\S]*?value=\{uiAccentColor \|\| "#8b7cff"\}/);
+});
+
 test("media-only message layout stays stable after reactions are added", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const mediaOnlyStart = messageListSource.indexOf("const isMediaOnlyMessage =");

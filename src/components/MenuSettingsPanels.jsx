@@ -2066,6 +2066,7 @@ export const AppearanceAccessibilitySettings = ({
   uiReduceMotion,
   uiTouchTargetSize,
   uiTheme,
+  uiAccentColor,
   chatThemeId,
   customChatBackgroundData,
   customChatBackgroundFit,
@@ -2076,6 +2077,7 @@ export const AppearanceAccessibilitySettings = ({
   onReduceMotionChange,
   onTouchTargetSizeChange,
   onThemeChange,
+  onAccentColorChange,
   onChatThemeChange,
   onCustomChatBackgroundFitChange,
   onCustomChatBackgroundChange,
@@ -2122,6 +2124,19 @@ export const AppearanceAccessibilitySettings = ({
             </span>
           </button>
         ))}
+      </div>
+      <div className="theme-accent-picker">
+        <label className="theme-accent-picker__field">
+          <span>Акцентный цвет</span>
+          <input
+            type="color"
+            value={uiAccentColor || "#8b7cff"}
+            onChange={(event) => onAccentColorChange(event.target.value)}
+          />
+        </label>
+        <button type="button" className="settings-inline-button settings-inline-button--ghost" onClick={() => onAccentColorChange("")} disabled={!uiAccentColor}>
+          Сбросить цвет
+        </button>
       </div>
     </section>
 

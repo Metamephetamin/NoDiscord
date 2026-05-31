@@ -794,6 +794,36 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   background: #11151c;
 }
 
+.theme-accent-picker {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.theme-accent-picker__field {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  font-weight: 800;
+}
+
+.theme-accent-picker__field input {
+  width: 42px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
 .theme-choice__swatch span:nth-child(1) {
   grid-row: 1 / span 2;
   background: #0f1115;
