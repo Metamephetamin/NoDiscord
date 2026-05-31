@@ -115,12 +115,13 @@
 .voice-channel__timer {
   flex: 0 0 auto;
   margin-left: auto;
+  width: 76px;
   color: #61d485;
+  text-align: end;
   font-size: 13px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  letter-spacing: 0;
 }
 
 .voice-channel__timer + .voice-channel__count {
@@ -254,7 +255,7 @@
 .participant-list {
   position: relative;
   margin-top: 0;
-  padding: 0 0 10px 30px;
+  padding: 0 0 10px 22px;
   z-index: 1;
 }
 
