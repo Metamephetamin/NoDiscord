@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatTimestamp } from "../utils/textChatHelpers";
+import "../css/TextChatPanels.css";
 
 export function MessageSearchPanel({ query, results, loading = false, error = "", onOpenMessage }) {
   const normalizedQuery = String(query || "").trim();

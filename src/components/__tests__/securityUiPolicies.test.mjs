@@ -751,6 +751,20 @@ test("chat report modal styles stay split from the main text chat stylesheet", (
   assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.chat-report-modal/m);
 });
 
+test("text chat panel styles stay split from the main text chat stylesheet", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const panelsCss = readRepoFileIfExists("src/css/TextChatPanels.css");
+  const panelsSource = readRepoFile("src/components/TextChatPanels.jsx");
+
+  assert.match(panelsSource, /import "\.\.\/css\/TextChatPanels\.css";/);
+  assert.match(panelsCss, /\.message-search-panel \{/);
+  assert.match(panelsCss, /\.chat-pins \{/);
+  assert.match(panelsCss, /html\[data-ui-theme="light"\] \.chat-pins/);
+  assert.doesNotMatch(textChatCss, /^\s*\.message-search-panel[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^\s*\.chat-pins[^\n{]*\{/m);
+  assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.chat-pins/m);
+});
+
 test("media frame editor styles stay split from the main menu stylesheet", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const editorCss = readRepoFileIfExists("src/css/MediaFrameEditorModal.css");

@@ -1,0 +1,276 @@
+/* Styles scoped to TextChatPanels.jsx. Keep this file imported by that component. */
+
+
+
+.message-search-panel {
+  margin: 12px 0 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.message-search-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.message-search-panel__header strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.message-search-panel__header span,
+.message-search-panel__item small,
+.message-search-panel__empty {
+  color: #96a2ba;
+  font-size: 12px;
+}
+
+.message-search-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-search-panel__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef2ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-search-panel__item strong {
+  font-size: 13px;
+}
+
+.message-search-panel__item span {
+  color: #d6deef;
+  font-size: 13px;
+}
+
+.chat-pins {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
+}
+
+.chat-pins__header {
+  display: flex;
+  align-items: center;
+}
+
+.chat-pins__header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-pins__header strong {
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.chat-pins__header span {
+  color: #96a2ba;
+  font-size: 11px;
+}
+
+.chat-pins__header span {
+  min-width: 22px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(145, 164, 205, 0.1);
+  color: #aebbe0;
+  font-weight: 800;
+}
+
+.chat-pins__list {
+  max-height: 148px;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(109, 119, 145, 0.7) transparent;
+}
+
+.chat-pins__list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-pins__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-pins__list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(109, 119, 145, 0.58);
+}
+
+.chat-pins__item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #edf2ff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.chat-pins__item:hover {
+  border-color: rgba(145, 164, 205, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-pins__link {
+  min-width: 0;
+  display: contents;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-pins__meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-pins__meta strong {
+  color: #f6f8ff;
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-pins__meta small,
+.chat-pins__preview {
+  color: #a7b1c6;
+  font-size: 11px;
+}
+
+.chat-pins__meta small {
+  flex: 0 0 auto;
+  color: #8792ad;
+}
+
+.chat-pins__preview {
+  grid-column: 1 / 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.chat-pins__remove {
+  width: 24px;
+  height: 24px;
+  align-self: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #dce3f3;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-pins__remove:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html[data-ui-theme="light"] .message-search-panel,
+html[data-ui-theme="light"] .chat-pins,
+html[data-ui-theme="purple"] .message-search-panel,
+html[data-ui-theme="purple"] .chat-pins {
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+  box-shadow: 0 10px 24px var(--app-shadow);
+}
+
+html[data-ui-theme="light"] .message-search-panel__header strong,
+html[data-ui-theme="light"] .chat-pins__header strong,
+html[data-ui-theme="light"] .message-search-panel__item span,
+html[data-ui-theme="purple"] .message-search-panel__header strong,
+html[data-ui-theme="purple"] .chat-pins__header strong,
+html[data-ui-theme="purple"] .message-search-panel__item span {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .message-search-panel__item strong,
+html[data-ui-theme="light"] .message-search-panel__item span,
+html[data-ui-theme="purple"] .message-search-panel__item strong,
+html[data-ui-theme="purple"] .message-search-panel__item span {
+  color: #ffffff;
+}
+
+html[data-ui-theme="light"] .message-search-panel__header span,
+html[data-ui-theme="light"] .message-search-panel__item small,
+html[data-ui-theme="light"] .message-search-panel__empty,
+html[data-ui-theme="purple"] .message-search-panel__header span,
+html[data-ui-theme="purple"] .message-search-panel__item small,
+html[data-ui-theme="purple"] .message-search-panel__empty {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .message-search-panel__item,
+html[data-ui-theme="purple"] .message-search-panel__item {
+  border-color: var(--app-border);
+  background: var(--app-message-bg);
+  color: var(--app-text);
+}
+
+@media (max-width: 768px) {
+  .chat-pins__list {
+    grid-template-columns: 1fr;
+    max-height: 188px;
+  }
+}
+
+@media (max-width: 900px) {
+  .message-search-panel,
+  .chat-pins {
+    margin-top: 8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .message-search-panel,
+  .chat-pins {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+}
