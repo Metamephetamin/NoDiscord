@@ -112,6 +112,7 @@ import {
 } from "./menuMainRealtimeComparators";
 import { buildMenuMainQuickSwitcherItems } from "./menuMainQuickSwitcher";
 import { buildActiveContacts } from "./menuMainActiveContacts";
+import { mergeCurrentVoiceParticipants } from "./voiceParticipantsViewUtils";
 import {
   EMPTY_ARRAY,
   MAX_PROFILE_NICKNAME_LENGTH,
@@ -1682,22 +1683,14 @@ export default function MenuMain({
     }
 
     const rawParticipants = activeVoiceParticipantsMap?.[currentVoiceChannel] || [];
-    const liveKitParticipants =
-      String(roomVoiceParticipants?.channel || "") === String(currentVoiceChannel)
-        ? roomVoiceParticipants.participants || []
-        : [];
-    const participantsById = new Map();
+    const hasLiveKitSnapshot = String(roomVoiceParticipants?.channel || "") === String(currentVoiceChannel);
+    const liveKitParticipants = hasLiveKitSnapshot ? roomVoiceParticipants.participants || [] : [];
 
-    [...rawParticipants, ...liveKitParticipants].forEach((participant) => {
-      const userId = String(participant?.userId || participant?.UserId || "");
-      if (!userId || participantsById.has(userId)) {
-        return;
-      }
-
-      participantsById.set(userId, participant);
-    });
-
-    return Array.from(participantsById.values())
+    return mergeCurrentVoiceParticipants({
+      rawParticipants,
+      liveKitParticipants,
+      hasLiveKitSnapshot,
+    })
       .map((participant) => {
         const userId = String(participant?.userId || participant?.UserId || "");
         const fallbackName = String(participant?.name || participant?.Name || "").trim();
