@@ -648,7 +648,7 @@ export default function MenuProfilePanel({
             </div>
 
             <button type="button" className="profile__mini-icon ui-tooltip-anchor" onClick={(event) => { onSuppressTooltip(event); onOpenVoiceSettings(); }} onMouseLeave={onRestoreTooltip} aria-label="Голос и видео" data-tooltip="Голос и видео">
-              <span className="profile__mini-glyph profile__mini-glyph--settings" aria-hidden="true" />
+              <span className="profile__mini-glyph profile__mini-glyph--soundpad" aria-hidden="true" />
             </button>
           </div>
         </div>

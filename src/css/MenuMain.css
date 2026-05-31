@@ -9700,6 +9700,32 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   mask-image: url("/icons/settings.png");
 }
 
+.profile__mini-glyph--soundpad {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  background-color: transparent;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.profile__mini-glyph--soundpad::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 3px;
+  background: currentColor;
+  box-shadow:
+    0 6px 0 currentColor,
+    0 12px 0 currentColor,
+    6px 0 0 currentColor,
+    6px 6px 0 currentColor,
+    6px 12px 0 currentColor,
+    12px 0 0 currentColor,
+    12px 6px 0 currentColor,
+    12px 12px 0 currentColor;
+}
+
 .profile__mini-icon--slashed {
   position: relative;
   background: rgba(217, 45, 32, 0.2) !important;

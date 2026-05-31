@@ -155,6 +155,15 @@ test("voice stage toolbar buttons avoid native title tooltips", () => {
   assert.match(stageSource, /aria-label="Открыть сцену на весь экран"/);
 });
 
+test("profile voice action uses a soundpad glyph instead of settings gear", () => {
+  const panelSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+
+  assert.match(panelSource, /profile__mini-glyph profile__mini-glyph--soundpad/);
+  assert.doesNotMatch(panelSource, /profile__mini-glyph profile__mini-glyph--settings/);
+  assert.match(mainCss, /\.profile__mini-glyph--soundpad::before/);
+});
+
 test("clipboard images can be pasted from the whole text chat area", () => {
   const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
