@@ -447,7 +447,7 @@ const VoiceChannelList = ({
                         }`}
                         onClick={() => onWatchStream?.(participant.userId)}
                       >
-                        Стрим
+                        в эфире
                       </button>
                     )}
                   </div>

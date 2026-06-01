@@ -436,7 +436,7 @@
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-group {
   gap: 0;
   min-height: 58px;
-  padding: 5px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 20px;
   background: rgba(21, 22, 28, 0.96);
@@ -450,12 +450,22 @@
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button {
-  width: 52px;
-  height: 48px;
+  width: 58px;
+  height: 58px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 0;
   background: transparent;
   color: #f2f4f8;
+}
+
+.voice-room-stage__hero-controls .voice-room-stage__toolbar-group > .voice-room-stage__toolbar-button:first-child {
+  border-top-left-radius: 19px;
+  border-bottom-left-radius: 19px;
+}
+
+.voice-room-stage__hero-controls .voice-room-stage__toolbar-group > .voice-room-stage__toolbar-button:last-child {
+  border-top-right-radius: 19px;
+  border-bottom-right-radius: 19px;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button + .voice-room-stage__toolbar-button {
@@ -479,7 +489,6 @@
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--danger {
   background: #dc3340;
   color: #ffffff;
-  border-radius: 17px;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--danger:hover {
@@ -506,9 +515,9 @@
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--menu {
-  width: 76px;
+  width: 82px;
   justify-content: space-between;
-  padding: 0 12px 0 14px;
+  padding: 0 14px 0 16px;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--menu + .voice-room-stage__toolbar-button {

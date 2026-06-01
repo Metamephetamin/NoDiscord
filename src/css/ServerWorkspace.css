@@ -860,9 +860,12 @@
 .server-summary-menu__icon,
 .server-summary-menu__id {
   flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
   color: #b6bdcc;
   font-size: 15px;
   line-height: 1;
+  fill: currentColor;
 }
 
 

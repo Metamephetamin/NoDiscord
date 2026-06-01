@@ -83,6 +83,93 @@ function VoiceStageModuleFallback({ channelName = "" }) {
   );
 }
 
+function ServerSummaryMenuIcon({ name }) {
+  const commonProps = {
+    className: "server-summary-menu__icon",
+    viewBox: "0 0 16 16",
+    "aria-hidden": "true",
+    focusable: "false",
+  };
+
+  switch (name) {
+    case "person-plus-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="M1 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H1z" />
+          <path d="M6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+          <path fillRule="evenodd" d="M13.5 5a.5.5 0 0 1 .5.5V7h1.5a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0V8h-1.5a.5.5 0 0 1 0-1H13V5.5a.5.5 0 0 1 .5-.5z" />
+        </svg>
+      );
+    case "gear-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.46 1.46 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.46 1.46 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.46 1.46 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.46 1.46 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.46 1.46 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.46 1.46 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.46 1.46 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.858 2.929 2.929 0 0 1 0 5.858z" />
+        </svg>
+      );
+    case "people-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7z" />
+          <path d="M11 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+          <path fillRule="evenodd" d="M5.216 14A2.238 2.238 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1h4.216z" />
+          <path d="M4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />
+        </svg>
+      );
+    case "plus-circle-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z" />
+        </svg>
+      );
+    case "folder-plus":
+      return (
+        <svg {...commonProps}>
+          <path d="m.5 3 .04.87a1.99 1.99 0 0 0-.342 1.311l.637 7A2 2 0 0 0 2.826 14H9v-1H2.826a1 1 0 0 1-.995-.91l-.637-7A1 1 0 0 1 2.19 4h11.62a1 1 0 0 1 .996 1.09L14.54 8h1.005l.256-2.819A2 2 0 0 0 13.81 3H9.828a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 6.172 1H2.5a2 2 0 0 0-2 2zm5.672-1a1 1 0 0 1 .707.293L7.586 3H2.19c-.24 0-.47.042-.683.12L1.5 2.98A1 1 0 0 1 2.5 2h3.672z" />
+          <path d="M13.5 9a.5.5 0 0 1 .5.5V11h1.5a.5.5 0 1 1 0 1H14v1.5a.5.5 0 1 1-1 0V12h-1.5a.5.5 0 0 1 0-1H13V9.5a.5.5 0 0 1 .5-.5z" />
+        </svg>
+      );
+    case "bell-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="M8 16a2 2 0 0 0 1.985-1.75h-3.97A2 2 0 0 0 8 16zm.104-14.003a1 1 0 0 0-1.206 0A5.002 5.002 0 0 0 3 6.854v2.79L1.34 12.19A.5.5 0 0 0 1.76 13h12.48a.5.5 0 0 0 .42-.81L13 9.644v-2.79a5.002 5.002 0 0 0-4.896-4.857z" />
+        </svg>
+      );
+    case "pencil-square":
+      return (
+        <svg {...commonProps}>
+          <path d="M15.502 1.94a.5.5 0 0 1 0 .706l-1 1-2.121-2.121 1-1a.5.5 0 0 1 .707 0l1.414 1.414z" />
+          <path d="M13.793 4.354 11.672 2.232 4.939 8.965a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.854-6.612z" />
+          <path fillRule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z" />
+        </svg>
+      );
+    case "eye-slash-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474L2.93 5.052C1.82 5.78.88 6.78.11 8c1.58 2.5 4.07 4 7.89 4 1.04 0 1.98-.13 2.79-.38v1.292z" />
+          <path d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829l-2.83-2.829zm4.95.708-2.83-2.83a2.5 2.5 0 0 1 2.83 2.83z" />
+          <path d="M13.359 11.238C14.06 10.45 14.62 9.37 15.89 8 14.31 5.5 11.82 4 8 4c-.79 0-1.52.08-2.19.24l1.36 1.36A3.5 3.5 0 0 1 10.4 8.83l2.959 2.408z" />
+          <path fillRule="evenodd" d="M13.646 14.354-1.354-.646l.708-.708 15 15-.708.708z" />
+        </svg>
+      );
+    case "eye-fill":
+      return (
+        <svg {...commonProps}>
+          <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z" />
+          <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+        </svg>
+      );
+    case "clipboard-fill":
+      return (
+        <svg {...commonProps}>
+          <path fillRule="evenodd" d="M10 1.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-1z" />
+          <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v10A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-10A1.5 1.5 0 0 0 11.5 2H11v.5A1.5 1.5 0 0 1 9.5 4h-3A1.5 1.5 0 0 1 5 2.5V2h-.5z" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 function StreamMiniPlayer({
   stream,
   videoSrc = "",
@@ -1567,8 +1654,6 @@ export const ServersSidebar = memo(({
   onLeaveServer,
   onDeleteServer,
   onAddServer,
-  onAddTextChannel,
-  onAddVoiceChannel,
   onCreateCategory,
   onToggleCategory,
   onDeleteCategory,
@@ -2284,37 +2369,37 @@ export const ServersSidebar = memo(({
             >
               <button type="button" onClick={() => runServerMenuAction(onOpenServerInviteModal)} disabled={!canInviteToServer(activeServer)}>
                 <span>Пригласить на сервер</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">♣</span>
+                <ServerSummaryMenuIcon name="person-plus-fill" />
               </button>
               <button type="button" onClick={() => runServerMenuAction(onOpenServerSettings)} disabled={!canManageServer}>
                 <span>Настройки сервера</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">⚙</span>
+                <ServerSummaryMenuIcon name="gear-fill" />
               </button>
               <button type="button" onClick={() => runServerMenuAction(onOpenServerRoles)} disabled={!canManageRoles}>
                 <span>Роли и участники</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">◆</span>
+                <ServerSummaryMenuIcon name="people-fill" />
               </button>
               <button type="button" onClick={() => runServerMenuAction(() => openCreateChannelModal("", "text"))} disabled={!canManageChannels}>
                 <span>Создать канал</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">＋</span>
+                <ServerSummaryMenuIcon name="plus-circle-fill" />
               </button>
               <button type="button" onClick={() => runServerMenuAction(openCreateCategoryModal)} disabled={!canManageChannels}>
                 <span>Создать категорию</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">▣</span>
+                <ServerSummaryMenuIcon name="folder-plus" />
               </button>
               <span className={`server-summary-menu__separator ${!canInviteToServer(activeServer) && !canManageServer && !canManageRoles && !canManageChannels ? "is-hidden" : ""}`} aria-hidden="true" />
               <button type="button" onClick={() => runServerMenuAction(onOpenNotificationSettings)}>
                 <span>Параметры уведомлений</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">●</span>
+                <ServerSummaryMenuIcon name="bell-fill" />
               </button>
               <span className="server-summary-menu__separator" aria-hidden="true" />
               <button type="button" onClick={() => runServerMenuAction(onOpenPersonalProfileSettings)}>
                 <span>Редактировать личный профиль</span>
-                <span className="server-summary-menu__icon" aria-hidden="true">✎</span>
+                <ServerSummaryMenuIcon name="pencil-square" />
               </button>
               <button type="button" onClick={() => setHideMutedChannels((value) => !value)}>
                 <span>Скрыть заглушённые каналы</span>
-                <span className={`server-summary-menu__checkbox ${hideMutedChannels ? "is-checked" : ""}`} aria-hidden="true" />
+                <ServerSummaryMenuIcon name={hideMutedChannels ? "eye-slash-fill" : "eye-fill"} />
               </button>
               <span className="server-summary-menu__separator" aria-hidden="true" />
               <button
@@ -2325,7 +2410,7 @@ export const ServersSidebar = memo(({
                 })}
               >
                 <span>Копировать ID сервера</span>
-                <span className="server-summary-menu__id" aria-hidden="true">ID</span>
+                <ServerSummaryMenuIcon name="clipboard-fill" />
               </button>
             </div>
           ) : null}
@@ -2540,7 +2625,6 @@ export const ServersSidebar = memo(({
             <div className="server-panel__section">
               <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "text")}>
                 <span>Текстовые каналы</span>
-                <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
               </div>
               {renderMixedChannelRows(visibleDefaultTextChannels.textChannels, visibleDefaultTextChannels.voiceChannels, DEFAULT_TEXT_CHANNEL_CATEGORY_ID)}
             </div>
@@ -2550,7 +2634,6 @@ export const ServersSidebar = memo(({
             <div className="server-panel__section">
               <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "voice")}>
                 <span>Голосовые каналы</span>
-                <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
               </div>
               {renderMixedChannelRows(visibleDefaultVoiceChannels.textChannels, visibleDefaultVoiceChannels.voiceChannels, DEFAULT_VOICE_CHANNEL_CATEGORY_ID)}
             </div>

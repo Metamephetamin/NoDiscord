@@ -31,6 +31,7 @@ import {
   getDisplayName,
   getElectronDisplayStream,
   getResolutionConstraints,
+  normalizeDisplayCaptureSourceTitle,
   normalizeParticipant,
   normalizeParticipantsMap,
   tuneDisplayStream,
@@ -1348,7 +1349,10 @@ export function createVoiceRoomClient({
     const previewVideoTrack = previewStream?.getVideoTracks?.()[0] || null;
     const previewSourceTitle =
       previewMode === "screen"
-        ? String(previewStream?.__ndDisplaySourceName || previewVideoTrack?.label || "Экран").trim()
+        ? normalizeDisplayCaptureSourceTitle(
+            previewStream?.__ndDisplaySourceName || previewVideoTrack?.label || "",
+            previewStream?.__ndDisplaySourceId || previewVideoTrack?.label || ""
+          )
         : previewMode === "camera"
           ? String(previewVideoTrack?.label || "Камера").trim()
           : "";

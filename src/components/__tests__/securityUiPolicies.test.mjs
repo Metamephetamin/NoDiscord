@@ -43,6 +43,50 @@ test("text channel settings button is only rendered for channel managers", () =>
   assert.doesNotMatch(renderTextChannelItemSource, /disabled=\{!canManageChannels\}/);
 });
 
+test("default channel section headers do not render add buttons", () => {
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const defaultTextHeaderSource = workspaceSource.slice(
+    workspaceSource.indexOf('openDefaultCategoryContextMenu(event, "text")'),
+    workspaceSource.indexOf("renderMixedChannelRows(visibleDefaultTextChannels"),
+  );
+  const defaultVoiceHeaderSource = workspaceSource.slice(
+    workspaceSource.indexOf('openDefaultCategoryContextMenu(event, "voice")'),
+    workspaceSource.indexOf("renderMixedChannelRows(visibleDefaultVoiceChannels"),
+  );
+
+  assert.doesNotMatch(defaultTextHeaderSource, /onAddTextChannel|channel-add-button|>\+<\/button>/);
+  assert.doesNotMatch(defaultVoiceHeaderSource, /onAddVoiceChannel|channel-add-button|>\+<\/button>/);
+  assert.doesNotMatch(workspaceSource, /onAddTextChannel|onAddVoiceChannel/);
+  assert.doesNotMatch(controllerSource, /onAddTextChannel=\{|onAddVoiceChannel=\{/);
+});
+
+test("server summary menu uses bootstrap icons instead of symbol glyphs", () => {
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const menuSource = workspaceSource.slice(
+    workspaceSource.indexOf('className="server-summary-menu"'),
+    workspaceSource.indexOf("{isServerInviteModalOpen", workspaceSource.indexOf('className="server-summary-menu"')),
+  );
+
+  [
+    "person-plus-fill",
+    "gear-fill",
+    "people-fill",
+    "plus-circle-fill",
+    "folder-plus",
+    "bell-fill",
+    "pencil-square",
+    "eye-slash-fill",
+    "eye-fill",
+    "clipboard-fill",
+  ].forEach((iconName) => {
+    assert.match(workspaceSource, new RegExp(`["']${iconName}["']`));
+  });
+  assert.match(workspaceSource, /function ServerSummaryMenuIcon/);
+  assert.doesNotMatch(menuSource, /[♣◆＋▣●✎]/);
+  assert.doesNotMatch(menuSource, />ID<\/span>/);
+});
+
 test("desktop login card stays near the auth sphere center", () => {
   const authCss = readRepoFile("src/css/Auth.css");
 
@@ -230,19 +274,20 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
 });
 
-test("self headphones mute does not force local microphone mute", () => {
+test("self headphones mute only unmutes microphone when it muted microphone automatically", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const overlaysSource = readRepoFile("src/components/MenuMainOverlays.jsx");
-  const selfMuteStart = controllerSource.indexOf("const shouldMutePublishedMic =\n      isMicMuted");
-  const selfMuteEnd = controllerSource.indexOf("queueSelfVoiceStateSync", selfMuteStart);
-  const selfMuteExpression = controllerSource.slice(selfMuteStart, selfMuteEnd);
 
+  assert.match(controllerSource, /const micMutedBySoundMuteRef = useRef\(false\);/);
+  assert.match(controllerSource, /micMutedBySoundMuteRef\.current = false;[\s\S]*?return nextValue;/);
+  assert.match(controllerSource, /const shouldAutoMuteMic = nextValue && !isMicMuted;/);
+  assert.match(controllerSource, /micMutedBySoundMuteRef\.current = shouldAutoMuteMic;/);
+  assert.match(controllerSource, /if \(shouldAutoMuteMic\) \{[\s\S]*?setIsMicMuted\(true\);[\s\S]*?\}/);
+  assert.match(controllerSource, /if \(!nextValue && micMutedBySoundMuteRef\.current\) \{[\s\S]*?micMutedBySoundMuteRef\.current = false;[\s\S]*?setIsMicMuted\(false\);[\s\S]*?\}/);
   assert.match(controllerSource, /const shouldMutePublishedMic =\s*isMicMuted\s*\|\| \(Boolean\(currentVoiceChannel\) && isMicTestActive\);/);
-  assert.ok(selfMuteStart >= 0 && selfMuteEnd > selfMuteStart, "self mute expression is present");
-  assert.doesNotMatch(selfMuteExpression, /isSoundMuted/);
   assert.match(controllerSource, /const normalizedMicMuted = Boolean\(nextMicMuted\);/);
   assert.match(stageSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
   assert.match(mobileSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
@@ -489,6 +534,16 @@ test("active voice stream chrome auto-hides after pointer inactivity", () => {
   assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
 });
 
+test("voice participant live badge uses lowercase on-air copy", () => {
+  const voiceChannelSource = readRepoFile("src/components/VoiceChannelList.jsx");
+  const listCss = readRepoFile("src/css/ListChannels.css");
+
+  assert.match(voiceChannelSource, />\s*в эфире\s*<\/button>/);
+  assert.doesNotMatch(voiceChannelSource, />\s*Стрим\s*<\/button>/);
+  assert.match(listCss, /\.participant-live-badge \{[\s\S]*?text-transform: none;/);
+  assert.match(listCss, /\.participant-live-badge \{[\s\S]*?letter-spacing: 0;/);
+});
+
 test("mobile voice room styles stay split from the main menu stylesheet", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const mobileVoiceCss = readRepoFileIfExists("src/css/MobileVoiceRoom.css");
@@ -729,6 +784,19 @@ test("screen and camera shares render as separate viewing windows", () => {
   assert.match(viewerCss, /\.stream-viewer__secondary/);
 });
 
+test("local stream banner shows a friendly screen or window title", () => {
+  const voiceClientUtilsSource = readRepoFile("src/webrtc/voiceClientUtils.js");
+  const voiceClientSource = readRepoFile("src/webrtc/livekitVoiceRoomClient.js");
+  const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+
+  assert.match(voiceClientUtilsSource, /const normalizeDisplayCaptureSourceTitle = \(sourceTitle = "", sourceId = ""\) =>/);
+  assert.match(voiceClientUtilsSource, /return `Экран \$\{screenNumber\}`;/);
+  assert.match(voiceClientUtilsSource, /return "Окно";/);
+  assert.match(voiceClientSource, /normalizeDisplayCaptureSourceTitle\(/);
+  assert.doesNotMatch(profileSource, /\$\{normalizedSourceTitle \|\| "Экран"\} \+ камера/);
+  assert.match(profileSource, /normalizedSourceTitle \|\| \(isScreenShareActive \? "Экран в эфире" : "Камера в эфире"\)/);
+});
+
 test("voice stage toolbar does not render a duplicate center camera button", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
@@ -743,8 +811,11 @@ test("voice stage toolbar does not render a duplicate center camera button", () 
   assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 76px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group \{[\s\S]*?padding: 0;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group > \.voice-room-stage__toolbar-button:first-child \{[\s\S]*?border-top-left-radius: 19px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 82px;/);
   assert.match(stageSource, /VoiceStageIcon name="chevron-down"/);
+  assert.match(stageSource, /case "leave":[\s\S]*?viewBox="0 0 16 16"[\s\S]*?fill="currentColor"[\s\S]*?fillRule="evenodd"/);
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
@@ -752,13 +823,37 @@ test("voice stage toolbar does not render a duplicate center camera button", () 
 
 test("clicking own stream opens local preview instead of remote loading state", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const menuControllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const selfShareBranch = stageSource.slice(
     stageSource.indexOf("if (participant.isSelf && participant.share) {"),
     stageSource.indexOf("if (participant.isLive && isInlineStreamActive) {"),
   );
+  const watchStreamHandler = menuControllerSource.slice(
+    menuControllerSource.indexOf("const handleWatchStream = (userId) => {"),
+    menuControllerSource.indexOf("const handlePreviewStream = (userId) => {"),
+  );
 
-  assert.match(selfShareBranch, /onOpenLocalSharePreview\?\.\(\);[\s\S]*?return;/);
+  assert.match(selfShareBranch, /setInlineStreamUserIds\(\(previous\) => \{[\s\S]*?next\.add\(participantCardId\);[\s\S]*?return next;[\s\S]*?\}\);[\s\S]*?return;/);
   assert.doesNotMatch(selfShareBranch, /onPreviewStream\?\.\(participant\.userId\)/);
+  assert.match(watchStreamHandler, /normalizedUserId === String\(currentUserId \|\| ""\)/);
+  assert.match(watchStreamHandler, /setFocusedRemoteShareUser\?\.\(""\)/);
+  assert.match(watchStreamHandler, /openLocalSharePreview\(\);[\s\S]*?return;/);
+  assert.doesNotMatch(watchStreamHandler, /requestScreenShare\(normalizedUserId\)[\s\S]*?normalizedUserId === String\(currentUserId/);
+});
+
+test("local screen and camera shares render as separate live preview cards", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+
+  assert.match(controllerSource, /onLocalPreviewStreamChanged: \(\{ stream, mode, sourceTitle, secondaryStream, secondaryMode, secondaryTitle \}\) =>/);
+  assert.match(controllerSource, /secondaryStream: normalizedSecondaryStream/);
+  assert.match(stageSource, /\(participants \|\| \[\]\)\.flatMap\(\(participant\) =>/);
+  assert.match(stageSource, /localPreview\?\.secondaryStream/);
+  assert.match(stageSource, /stageCardId: `\$\{userId\}:screen`/);
+  assert.match(stageSource, /stageTitle: "Стрим"/);
+  assert.match(stageSource, /stageCardId: `\$\{userId\}:camera`/);
+  assert.match(stageSource, /stageTitle: "Вебкамера"/);
+  assert.match(stageSource, /isInlineStreamActive \? \([\s\S]*?<VoiceStageMedia[\s\S]*?className="voice-room-stage__card-video"[\s\S]*?mirrored=\{participant\.isSelf && participant\.share\.mode === "camera"\}/);
 });
 
 test("voice stage does not keep a separate eye preview control", () => {

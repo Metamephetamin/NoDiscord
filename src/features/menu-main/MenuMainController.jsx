@@ -717,6 +717,7 @@ export default function MenuMain({
   const pendingLocalVoiceTransitionRef = useRef(null);
   const pendingLocalMicToneRef = useRef("");
   const pendingLocalSoundToneRef = useRef("");
+  const micMutedBySoundMuteRef = useRef(false);
   const pendingLocalScreenShareToneRef = useRef("");
   const previousVoiceParticipantIdsRef = useRef({ channelId: "", participantIds: [] });
   const previousLiveVoiceUserIdsRef = useRef({ channelId: "", userIds: [] });
@@ -3716,6 +3717,10 @@ export default function MenuMain({
     const normalizedMicForced = Boolean(nextIsMicForced);
     const normalizedSoundForced = Boolean(nextIsSoundForced);
 
+    if (!normalizedMicMuted || !normalizedSoundMuted) {
+      micMutedBySoundMuteRef.current = false;
+    }
+
     setIsMicMuted((previousValue) => (
       previousValue === normalizedMicMuted ? previousValue : normalizedMicMuted
     ));
@@ -3883,19 +3888,28 @@ export default function MenuMain({
           previousValue === normalizedMode ? previousValue : normalizedMode
         ));
       },
-      onLocalPreviewStreamChanged: ({ stream, mode, sourceTitle }) => {
+      onLocalPreviewStreamChanged: ({ stream, mode, sourceTitle, secondaryStream, secondaryMode, secondaryTitle }) => {
         const normalizedStream = stream || null;
         const normalizedMode = mode || "";
         const normalizedSourceTitle = String(sourceTitle || "").trim();
+        const normalizedSecondaryStream = secondaryStream || null;
+        const normalizedSecondaryMode = secondaryMode || "";
+        const normalizedSecondaryTitle = String(secondaryTitle || "").trim();
         setLocalSharePreview((previousValue) => (
           previousValue.stream === normalizedStream
             && previousValue.mode === normalizedMode
             && String(previousValue.sourceTitle || "") === normalizedSourceTitle
+            && previousValue.secondaryStream === normalizedSecondaryStream
+            && String(previousValue.secondaryMode || "") === normalizedSecondaryMode
+            && String(previousValue.secondaryTitle || "") === normalizedSecondaryTitle
             ? previousValue
             : {
                 stream: normalizedStream,
                 mode: normalizedMode,
                 sourceTitle: normalizedSourceTitle,
+                secondaryStream: normalizedSecondaryStream,
+                secondaryMode: normalizedSecondaryMode,
+                secondaryTitle: normalizedSecondaryTitle,
               }
         ));
       },
@@ -5534,7 +5548,17 @@ export default function MenuMain({
     void startCameraShare({ restorePreviewOnError: false });
   };
   const handleWatchStream = (userId) => {
-    const normalizedUserId = String(userId);
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) {
+      return;
+    }
+
+    if (normalizedUserId === String(currentUserId || "") && (hasLocalSharePreview || isLocalStreamActive)) {
+      voiceClientRef.current?.setFocusedRemoteShareUser?.("");
+      openLocalSharePreview();
+      return;
+    }
+
     voiceClientRef.current?.setFocusedRemoteShareUser?.(normalizedUserId);
     voiceClientRef.current?.requestScreenShare(normalizedUserId).catch((error) => console.error("Ошибка запроса просмотра трансляции:", error));
     pushNavigationHistory(() => {
@@ -5652,6 +5676,7 @@ export default function MenuMain({
       }
 
       const nextValue = !previous;
+      micMutedBySoundMuteRef.current = false;
       if (currentVoiceChannelRef.current) {
         const nextTone = nextValue ? "mute" : "unmute";
         pendingLocalMicToneRef.current = nextTone;
@@ -5668,6 +5693,25 @@ export default function MenuMain({
       }
 
       const nextValue = !previous;
+      const shouldAutoMuteMic = nextValue && !isMicMuted;
+
+      if (!nextValue && micMutedBySoundMuteRef.current) {
+        micMutedBySoundMuteRef.current = false;
+        if (currentVoiceChannelRef.current) {
+          pendingLocalMicToneRef.current = "unmute";
+        }
+        setIsMicMuted(false);
+      }
+
+      micMutedBySoundMuteRef.current = shouldAutoMuteMic;
+
+      if (shouldAutoMuteMic) {
+        if (currentVoiceChannelRef.current) {
+          pendingLocalMicToneRef.current = "mute";
+        }
+        setIsMicMuted(true);
+      }
+
       if (currentVoiceChannelRef.current) {
         const nextTone = nextValue ? "mute" : "unmute";
         pendingLocalSoundToneRef.current = nextTone;
@@ -6925,8 +6969,6 @@ export default function MenuMain({
       onLeaveServer={handleLeaveServer}
       onDeleteServer={handleDeleteServer}
       onAddServer={stableHandleAddServer}
-      onAddTextChannel={addTextChannel}
-      onAddVoiceChannel={addVoiceChannel}
       onCreateCategory={createChannelCategory}
       onToggleCategory={toggleChannelCategory}
       onDeleteCategory={deleteChannelCategory}

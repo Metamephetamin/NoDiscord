@@ -526,9 +526,17 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
       );
     case "leave":
       return (
-        <svg {...commonProps}>
-          <path d="M9 8c-4 0-6 2.5-6 4v2h4v-2c0-.5.7-1.5 2-1.5h6c1.3 0 2 1 2 1.5v2h4v-2c0-1.5-2-4-6-4H9Z" />
-          <path d="M12 12v5" />
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          stroke="none"
+          aria-hidden="true"
+          className={className}
+        >
+          <path
+            fillRule="evenodd"
+            d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877zm9.261 1.135a.5.5 0 0 1 .708 0L13 2.793l1.146-1.147a.5.5 0 0 1 .708.708L13.707 3.5l1.147 1.146a.5.5 0 0 1-.708.708L13 4.207l-1.146 1.147a.5.5 0 0 1-.708-.708L12.293 3.5l-1.147-1.146a.5.5 0 0 1 0-.708"
+          />
         </svg>
       );
     default:
@@ -589,7 +597,7 @@ export default function VoiceRoomStage({
 
   const stageCards = useMemo(
     () =>
-      (participants || []).map((participant) => {
+      (participants || []).flatMap((participant) => {
         const userId = String(participant.userId || "");
         const localPreview = participant.isSelf && hasLocalSharePreview ? localSharePreview : null;
         const share = localPreview || remoteShareByUserId.get(userId) || null;
@@ -597,15 +605,50 @@ export default function VoiceRoomStage({
           participant.isSelf
             ? Boolean(localPreview)
             : Boolean(participant.isLive && (share || onWatchStream));
-
-        return {
+        const baseCard = {
           ...participant,
           share,
           canOpen,
+          stageCardId: userId,
+          stageTitle: share ? (share.mode === "camera" ? "Вебкамера" : "Стрим") : participant.name,
           isSelected:
             (isRemoteStage && userId === selectedUserId)
             || (isLocalStage && participant.isSelf && hasLocalSharePreview),
         };
+
+        if (!participant.isSelf || !localPreview?.secondaryStream) {
+          return [baseCard];
+        }
+
+        return [
+          {
+            ...baseCard,
+            stageCardId: `${userId}:screen`,
+            stageTitle: "Стрим",
+            share: {
+              ...localPreview,
+              mode: "screen",
+              stream: localPreview.stream || null,
+              secondaryStream: null,
+              secondaryMode: "",
+              secondaryTitle: "",
+            },
+          },
+          {
+            ...baseCard,
+            stageCardId: `${userId}:camera`,
+            stageTitle: "Вебкамера",
+            share: {
+              ...localPreview,
+              mode: localPreview.secondaryMode || "camera",
+              stream: localPreview.secondaryStream,
+              sourceTitle: localPreview.secondaryTitle || "Камера",
+              secondaryStream: null,
+              secondaryMode: "",
+              secondaryTitle: "",
+            },
+          },
+        ];
       }),
     [
       hasLocalSharePreview,
@@ -793,10 +836,15 @@ export default function VoiceRoomStage({
     }
 
     const participantUserId = String(participant.userId || "");
-    const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantUserId));
+    const participantCardId = String(participant.stageCardId || participantUserId);
+    const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantCardId));
 
     if (participant.isSelf && participant.share) {
-      onOpenLocalSharePreview?.();
+      setInlineStreamUserIds((previous) => {
+        const next = new Set(previous);
+        next.add(participantCardId);
+        return next;
+      });
       return;
     }
 
@@ -829,7 +877,7 @@ export default function VoiceRoomStage({
     return (
     <div className="voice-room-stage__card-meta">
       <div className="voice-room-stage__card-copy">
-        <strong>{participant.name || "Участник"}</strong>
+        <strong>{isStreamCard ? (participant.stageTitle || participant.name || "Участник") : (participant.name || "Участник")}</strong>
         {subtitle ? <span>
           {participant.isLive
             ? "Смотреть стрим"
@@ -851,9 +899,9 @@ export default function VoiceRoomStage({
 
   const renderStripCards = () => (
     <div className="voice-room-stage__strip" role="list" aria-label="Участники голосового канала">
-      {stageCards.map((participant) => (
+          {stageCards.map((participant) => (
         <button
-          key={participant.userId || participant.name}
+          key={participant.stageCardId || participant.userId || participant.name}
           type="button"
           className={`voice-room-stage__strip-card ${participant.isSelected ? "voice-room-stage__strip-card--active" : ""} ${participant.isSpeaking ? "voice-room-stage__strip-card--speaking" : ""}`}
           onClick={() => handleCardClick(participant)}
@@ -883,8 +931,8 @@ export default function VoiceRoomStage({
             ) : null}
           </div>
           <div className="voice-room-stage__strip-copy">
-            <strong>{participant.name}</strong>
-            <span>{participant.isLive ? "Открыть эфир" : participant.isSelf ? "Это вы" : "В комнате"}</span>
+            <strong>{participant.stageTitle || participant.name}</strong>
+            <span>{participant.isLive ? participant.name : participant.isSelf ? "Это вы" : "В комнате"}</span>
           </div>
         </button>
       ))}
@@ -1151,12 +1199,13 @@ export default function VoiceRoomStage({
         <div className="voice-room-stage__grid">
           {stageCards.map((participant) => {
             const participantUserId = String(participant.userId || "");
+            const participantCardId = String(participant.stageCardId || participantUserId);
             const isStreamCard = Boolean(participant.share || participant.isLive);
-            const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantUserId));
+            const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantCardId));
 
             return (
             <button
-              key={participant.userId || participant.name}
+              key={participant.stageCardId || participant.userId || participant.name}
               type="button"
               className={`voice-room-stage__card ${participant.isSelf ? "voice-room-stage__card--self" : ""} ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""} ${isStreamCard ? "voice-room-stage__card--stream" : ""} ${isInlineStreamActive ? "voice-room-stage__card--stream-inline" : ""}`}
               onClick={() => handleCardClick(participant)}
@@ -1166,11 +1215,24 @@ export default function VoiceRoomStage({
               <div className="voice-room-stage__card-media">
                 {participant.share ? (
                   <>
-                    <VoiceStagePreviewMedia
-                      share={participant.share}
-                      alt={participant.name}
-                      className="voice-room-stage__card-video"
-                    />
+                    {isInlineStreamActive ? (
+                      <VoiceStageMedia
+                        stream={participant.share.stream}
+                        videoSrc={participant.share.videoSrc || ""}
+                        imageSrc={participant.share.imageSrc || ""}
+                        alt={participant.stageTitle || participant.name}
+                        className="voice-room-stage__card-video"
+                        contain
+                        muted
+                        mirrored={participant.isSelf && participant.share.mode === "camera"}
+                      />
+                    ) : (
+                      <VoiceStagePreviewMedia
+                        share={participant.share}
+                        alt={participant.stageTitle || participant.name}
+                        className="voice-room-stage__card-video"
+                      />
+                    )}
                     {!isInlineStreamActive ? <div className="voice-room-stage__card-scrim" aria-hidden="true" /> : null}
                   </>
                 ) : (
@@ -1181,7 +1243,7 @@ export default function VoiceRoomStage({
 
                 {participant.isLive && !isInlineStreamActive ? (
                   <div className="voice-room-stage__card-cta">
-                    <span className="voice-room-stage__card-watch">Смотреть стрим</span>
+                    <span className="voice-room-stage__card-watch">Смотреть</span>
                   </div>
                 ) : null}
                 {isStreamCard ? renderParticipantMeta(participant) : null}

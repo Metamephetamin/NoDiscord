@@ -188,10 +188,10 @@ const StreamStatusBanner = ({
   const isActive = isScreenShareActive || isCameraShareActive;
   const normalizedSourceTitle = String(sourceTitle || "").trim();
   const streamTitle = isScreenShareActive && isCameraShareActive
-    ? `${normalizedSourceTitle || "Экран"} + камера`
+    ? `${normalizedSourceTitle || "Экран в эфире"} + камера`
     : isCameraShareActive
       ? "Камера в эфире"
-      : normalizedSourceTitle || "Экран в эфире";
+      : normalizedSourceTitle || (isScreenShareActive ? "Экран в эфире" : "Камера в эфире");
   const normalizedFps = Number(fps) || 30;
   const settingsOpen = isActive && showSettings;
   const diagnosticsItems = getStreamDiagnosticsItems(diagnostics);

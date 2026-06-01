@@ -88,6 +88,38 @@ const getCameraConstraints = (deviceId, resolution, fps) => {
   };
 };
 
+const normalizeDisplayCaptureSourceTitle = (sourceTitle = "", sourceId = "") => {
+  const normalizedTitle = String(sourceTitle || "").trim();
+  const normalizedId = String(sourceId || "").trim();
+  const technicalSourceMatch = (normalizedTitle || normalizedId).match(/^(screen|window):(\d+)/i)
+    || normalizedId.match(/^(screen|window):(\d+)/i);
+
+  if (technicalSourceMatch?.[1]?.toLowerCase() === "screen") {
+    const rawScreenNumber = Number(technicalSourceMatch[2]);
+    const screenNumber = Number.isFinite(rawScreenNumber) && rawScreenNumber > 0 ? rawScreenNumber : 1;
+    return `Экран ${screenNumber}`;
+  }
+
+  if (technicalSourceMatch?.[1]?.toLowerCase() === "window") {
+    return "Окно";
+  }
+
+  const screenTitleMatch = normalizedTitle.match(/^screen\s+(\d+)$/i);
+  if (screenTitleMatch) {
+    return `Экран ${screenTitleMatch[1]}`;
+  }
+
+  if (/^entire screen$/i.test(normalizedTitle)) {
+    return "Весь экран";
+  }
+
+  if (/^window$/i.test(normalizedTitle)) {
+    return "Окно";
+  }
+
+  return normalizedTitle || "Экран";
+};
+
 const tuneDisplayStream = async (stream, resolution, fps) => {
   const track = stream?.getVideoTracks?.()?.[0];
   if (!track) {
@@ -168,7 +200,7 @@ const getElectronDisplayStream = async (resolution, fps, withAudio = false) => {
   }
 
   if (stream && Object.isExtensible(stream)) {
-    stream.__ndDisplaySourceName = String(screenSource.name || "").trim();
+    stream.__ndDisplaySourceName = normalizeDisplayCaptureSourceTitle(screenSource.name, screenSource.id);
     stream.__ndDisplaySourceId = String(screenSource.id || "").trim();
   }
 
@@ -205,6 +237,7 @@ export {
   getDisplayName,
   getElectronDisplayStream,
   getResolutionConstraints,
+  normalizeDisplayCaptureSourceTitle,
   normalizeParticipant,
   normalizeParticipantsMap,
   tuneDisplayStream,
