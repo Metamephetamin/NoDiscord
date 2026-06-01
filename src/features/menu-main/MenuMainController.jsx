@@ -737,10 +737,6 @@ export default function MenuMain({
 
   useTransientScrollbars();
 
-  useEffect(() => {
-    setMutedServerChannels(readMutedServerChannels(mutedServerChannelsStorageKey));
-  }, [mutedServerChannelsStorageKey]);
-
   const requestLeaveVoiceChannel = useCallback(() => {
     if (!leaveVoiceChannelRef.current) {
       return Promise.resolve();
@@ -807,6 +803,11 @@ export default function MenuMain({
   const [mutedServerChannels, setMutedServerChannels] = useState(() =>
     readMutedServerChannels(mutedServerChannelsStorageKey)
   );
+
+  useEffect(() => {
+    setMutedServerChannels(readMutedServerChannels(mutedServerChannelsStorageKey));
+  }, [mutedServerChannelsStorageKey]);
+
   const isCurrentUserAdmin = Boolean(user?.isAdmin || user?.is_admin);
   const [friendRelations, setFriendRelations] = useState(() => readFriendRelations(currentUserId));
   const {

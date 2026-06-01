@@ -5,6 +5,7 @@ import test from "node:test";
 const deployWorkflow = readFileSync(".github/workflows/deploy.yml", "utf8");
 const releaseSmokeRunner = readFileSync("scripts/smoke/release-strict.mjs", "utf8");
 const authSmoke = readFileSync("scripts/smoke/auth-smoke.mjs", "utf8");
+const menuMainController = readFileSync("src/features/menu-main/MenuMainController.jsx", "utf8");
 
 test("deploy release smoke gate does not require authenticated smoke credentials", () => {
   assert.equal(
@@ -74,5 +75,17 @@ test("production health checks retry while backend warms after restart", () => {
     deployWorkflow,
     /retry_healthcheck "voice negotiate" check_hub_once "Voice hub" "\$VOICE_NEGOTIATE_HEALTHCHECK"/,
     "voice negotiate should also tolerate the short post-restart window",
+  );
+});
+
+test("menu main muted channel storage key is initialized before effects read it", () => {
+  const storageKeyIndex = menuMainController.indexOf("const mutedServerChannelsStorageKey = getMutedChannelsStorageKey(currentUserId);");
+  const effectReadIndex = menuMainController.indexOf("setMutedServerChannels(readMutedServerChannels(mutedServerChannelsStorageKey));");
+
+  assert.notEqual(storageKeyIndex, -1, "muted channel storage key should be declared");
+  assert.notEqual(effectReadIndex, -1, "muted channel restore effect should read the storage key");
+  assert.ok(
+    storageKeyIndex < effectReadIndex,
+    "the restore effect must not close over mutedServerChannelsStorageKey before the const is initialized",
   );
 });
