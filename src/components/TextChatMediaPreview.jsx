@@ -59,6 +59,16 @@ const BOOTSTRAP_ICON_PATHS = {
       <path d="M3.038 3.5h9.924l-.846 10.58a1 1 0 0 1-.997.92H4.881a1 1 0 0 1-.997-.92L3.038 3.5Zm2.462 2a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 1 0V6a.5.5 0 0 0-.5-.5Zm2.5 0a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 1 0V6a.5.5 0 0 0-.5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z" />
     </>
   ),
+  volumeMuteFill: (
+    <path d="M6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06Z" />
+  ),
+  volumeUpFill: (
+    <>
+      <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707Z" />
+      <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.482 5.482 0 0 1 11.025 8a5.482 5.482 0 0 1-1.61 3.89l.706.706Z" />
+      <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707ZM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06Z" />
+    </>
+  ),
 };
 
 function BootstrapIcon({ kind, className = "" }) {
@@ -66,6 +76,15 @@ function BootstrapIcon({ kind, className = "" }) {
     <svg className={`media-preview__bootstrap-icon ${className}`.trim()} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       {BOOTSTRAP_ICON_PATHS[kind] || BOOTSTRAP_ICON_PATHS.download}
     </svg>
+  );
+}
+
+function VideoVolumeIcon({ muted }) {
+  return (
+    <BootstrapIcon
+      kind={muted ? "volumeMuteFill" : "volumeUpFill"}
+      className="media-preview__video-volume-icon"
+    />
   );
 }
 
@@ -118,6 +137,7 @@ function TextChatMediaPreview({
   const videoCurrentTime = Math.max(0, Math.min(videoDuration || Number.MAX_SAFE_INTEGER, Number(currentVideoControlState.currentTime) || 0));
   const remainingVideoTime = videoDuration > 0 ? Math.max(0, videoDuration - videoCurrentTime) : 0;
   const videoProgress = videoDuration > 0 ? (videoCurrentTime / videoDuration) * 100 : 0;
+  const videoVolumeProgress = currentVideoControlState.muted ? 0 : Math.round(currentVideoControlState.volume * 100);
   const isCachedImageReady = imagePreviewUrl && loadedImageUrls.has(imagePreviewUrl);
   const isImageReady = !isImagePreview || (imagePreviewUrl && (isCachedImageReady || imageLoadState.url === imagePreviewUrl) && !imageLoadState.failed && !isImageKnownMissing);
   const imageLoadFailed = isImagePreview && imagePreviewUrl && (isImageKnownMissing || (imageLoadState.url === imagePreviewUrl && imageLoadState.failed));
@@ -549,7 +569,7 @@ function TextChatMediaPreview({
                   onClick={toggleVideoMute}
                   aria-label={currentVideoControlState.muted ? "Unmute video" : "Mute video"}
                 >
-                  <span className={`media-preview__video-icon ${currentVideoControlState.muted ? "media-preview__video-icon--muted" : "media-preview__video-icon--volume"}`} aria-hidden="true" />
+                  <VideoVolumeIcon muted={currentVideoControlState.muted || currentVideoControlState.volume <= 0} />
                 </button>
                 <input
                   className="media-preview__video-volume-slider"
@@ -557,7 +577,9 @@ function TextChatMediaPreview({
                   min="0"
                   max="100"
                   step="1"
-                  value={currentVideoControlState.muted ? 0 : Math.round(currentVideoControlState.volume * 100)}
+                  value={videoVolumeProgress}
+                  style={{ "--media-preview-volume": `${videoVolumeProgress}%` }}
+                  onInput={handleVideoVolumeChange}
                   onChange={handleVideoVolumeChange}
                   aria-label="Video volume"
                 />

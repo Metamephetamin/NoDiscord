@@ -36,7 +36,7 @@ assert(
   "Video preview must request playback data immediately after the user opens it."
 );
 assert(
-  source.includes("onCanPlay={() => setVideoLoadState({ url: videoPreviewUrl, failed: false })"),
+  /onCanPlay=\{\(\) => \{[\s\S]*?setVideoLoadState\(\{ url: videoPreviewUrl, failed: false \}\)[\s\S]*?\}\}/.test(source),
   "Video preview must mark readiness at canplay so playback starts as soon as enough data is buffered."
 );
 assert(

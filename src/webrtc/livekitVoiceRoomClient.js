@@ -4019,6 +4019,7 @@ const handleDeviceChange = () => {
         isDeafened: Boolean(payload?.isDeafened ?? payload?.IsDeafened),
         isMicForced: Boolean(payload?.isMicForced ?? payload?.IsMicForced),
         isDeafenedForced: Boolean(payload?.isDeafenedForced ?? payload?.IsDeafenedForced),
+        clientStateVersion: Number(payload?.clientStateVersion ?? payload?.ClientStateVersion ?? 0),
       });
     });
 
@@ -4864,12 +4865,13 @@ const handleDeviceChange = () => {
       });
     },
 
-    async updateSelfVoiceState({ isMicMuted = false, isDeafened = false } = {}) {
+    async updateSelfVoiceState({ isMicMuted = false, isDeafened = false, clientStateVersion = 0 } = {}) {
       isSelfMicMuted = Boolean(isMicMuted);
       isSelfDeafened = Boolean(isDeafened);
       logVoiceDebug("local-audio:self-state-update", {
         isSelfMicMuted,
         isSelfDeafened,
+        clientStateVersion: Number(clientStateVersion || 0),
       });
       await applyPublishedAudioState();
 
@@ -4877,7 +4879,7 @@ const handleDeviceChange = () => {
         return;
       }
 
-      await signalConnection.invoke("UpdateVoiceState", String(currentUser.id), Boolean(isMicMuted), Boolean(isDeafened));
+      await signalConnection.invoke("UpdateVoiceState", String(currentUser.id), Boolean(isMicMuted), Boolean(isDeafened), Number(clientStateVersion || 0));
     },
 
     async updateParticipantVoiceState(targetUserId, { isMicMuted = false, isDeafened = false } = {}) {
@@ -4885,7 +4887,7 @@ const handleDeviceChange = () => {
         return;
       }
 
-      await signalConnection.invoke("UpdateVoiceState", String(targetUserId), Boolean(isMicMuted), Boolean(isDeafened));
+      await signalConnection.invoke("UpdateVoiceState", String(targetUserId), Boolean(isMicMuted), Boolean(isDeafened), 0);
     },
 
     async disconnect() {

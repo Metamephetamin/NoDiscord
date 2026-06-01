@@ -456,7 +456,7 @@
   box-sizing: border-box;
   overflow: hidden;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 0;
   isolation: isolate;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -476,21 +476,7 @@
 }
 
 .participant-item--speaking .participant-item__avatar-shell {
-  border-color: rgba(86, 220, 124, 0.8);
-  box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.16);
-  animation: participant-speaking-avatar-pulse 0.9s ease-in-out infinite;
-}
-
-@keyframes participant-speaking-avatar-pulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.14);
-  }
-
-  50% {
-    transform: scale(1.06);
-    box-shadow: 0 0 0 5px rgba(86, 220, 124, 0);
-  }
+  box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.86), 0 0 0 4px rgba(86, 220, 124, 0.14);
 }
 
 .participant-item__name {

@@ -624,7 +624,10 @@ export default function VoiceRoomStage({
   onToggleSound,
   onOpenTextChat,
   onScreenShareAction,
+  onOpenScreenShareSettings,
   onOpenCamera,
+  onOpenCameraSettings,
+  onOpenVoiceSettings,
   onLeave,
   isJoining = false,
   pendingParticipant = null,
@@ -912,6 +915,22 @@ export default function VoiceRoomStage({
     }
   };
 
+  const handleCardDoubleClick = (participant) => {
+    if (!participant) {
+      return;
+    }
+
+    if (participant.isSelf && participant.share) {
+      onWatchStream?.(participant.userId);
+      return;
+    }
+
+    if (participant.isLive) {
+      onWatchStream?.(participant.userId);
+      return;
+    }
+  };
+
   const renderParticipantMeta = (participant) => {
     const isStreamCard = Boolean(participant.share || participant.isLive);
     const subtitle = isStreamCard
@@ -998,22 +1017,55 @@ export default function VoiceRoomStage({
     slashed = false,
     disabled = false,
     menu = false,
+    menuLabel = "Открыть настройки",
+    onMenuClick,
     ghost = false,
-  }) => (
-    <button
-      key={key}
-      type="button"
-      className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""} ${muted ? "voice-room-stage__toolbar-button--muted" : ""} ${menu ? "voice-room-stage__toolbar-button--menu" : ""} ${ghost ? "voice-room-stage__toolbar-button--ghost" : ""}`.trim()}
-      onClick={onClick}
-      aria-label={label}
-      disabled={disabled}
-    >
-      <span className={`voice-room-stage__toolbar-icon-shell ${muted || slashed ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
-        <VoiceStageIcon name={icon} />
-      </span>
-      {menu ? <VoiceStageIcon name="chevron-down" className="voice-room-stage__toolbar-chevron" /> : null}
-    </button>
-  );
+  }) => {
+    const buttonClassName = `voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""} ${muted ? "voice-room-stage__toolbar-button--muted" : ""} ${ghost ? "voice-room-stage__toolbar-button--ghost" : ""}`.trim();
+
+    if (menu) {
+      return (
+        <span key={key} className={`voice-room-stage__toolbar-split ${active ? "voice-room-stage__toolbar-split--active" : ""} ${muted ? "voice-room-stage__toolbar-split--muted" : ""}`.trim()}>
+          <button
+            type="button"
+            className={`${buttonClassName} voice-room-stage__toolbar-button--split-main`}
+            onClick={onClick}
+            aria-label={label}
+            disabled={disabled}
+          >
+            <span className={`voice-room-stage__toolbar-icon-shell ${muted || slashed ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
+              <VoiceStageIcon name={icon} />
+            </span>
+          </button>
+          <span className="voice-room-stage__toolbar-split-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className={`${buttonClassName} voice-room-stage__toolbar-button--split-menu`}
+            onClick={onMenuClick || onClick}
+            aria-label={menuLabel}
+            disabled={disabled || !(onMenuClick || onClick)}
+          >
+            <VoiceStageIcon name="chevron-down" className="voice-room-stage__toolbar-chevron" />
+          </button>
+        </span>
+      );
+    }
+
+    return (
+      <button
+        key={key}
+        type="button"
+        className={buttonClassName}
+        onClick={onClick}
+        aria-label={label}
+        disabled={disabled}
+      >
+        <span className={`voice-room-stage__toolbar-icon-shell ${muted || slashed ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
+          <VoiceStageIcon name={icon} />
+        </span>
+      </button>
+    );
+  };
 
   const renderFullscreenButton = (className = "voice-room-stage__toolbar-button") => (
     <button
@@ -1070,6 +1122,8 @@ export default function VoiceRoomStage({
                   onClick: onToggleMic,
                   muted: isEffectiveMicMuted,
                   menu: true,
+                  menuLabel: "Настройки микрофона",
+                  onMenuClick: onOpenVoiceSettings,
                 })}
                 {renderToolbarButton({
                   key: "camera",
@@ -1080,6 +1134,8 @@ export default function VoiceRoomStage({
                   slashed: !isCameraShareActive,
                   disabled: !cameraAction,
                   menu: true,
+                  menuLabel: "Настройки камеры",
+                  onMenuClick: onOpenCameraSettings,
                 })}
               </div>
 
@@ -1091,24 +1147,20 @@ export default function VoiceRoomStage({
                   onClick: onScreenShareAction,
                   active: isScreenShareActive,
                   menu: true,
-                })}
-                {renderToolbarButton({
-                  key: "activities",
-                  icon: "activities",
-                  label: "Активности",
-                  onClick: onOpenTextChat,
+                  menuLabel: "Настройки трансляции",
+                  onMenuClick: onOpenScreenShareSettings,
                 })}
                 {renderToolbarButton({
                   key: "effects",
                   icon: "effects",
                   label: "Реакции",
-                  onClick: () => {},
+                  onClick: onOpenTextChat,
                 })}
                 {renderToolbarButton({
                   key: "more",
                   icon: "more",
                   label: "Ещё",
-                  onClick: () => {},
+                  onClick: onOpenVoiceSettings,
                 })}
               </div>
             </div>
@@ -1152,13 +1204,9 @@ export default function VoiceRoomStage({
               label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
               onClick: onToggleMic,
               muted: isEffectiveMicMuted,
-            })}
-            {renderToolbarButton({
-              key: "headphones",
-              icon: "headphones",
-              label: isSoundMuted ? "Включить звук" : "Отключить звук",
-              onClick: onToggleSound,
-              muted: isSoundMuted,
+              menu: true,
+              menuLabel: "Настройки микрофона",
+              onMenuClick: onOpenVoiceSettings,
             })}
             {renderToolbarButton({
               key: "camera",
@@ -1168,22 +1216,34 @@ export default function VoiceRoomStage({
               active: isCameraShareActive,
               slashed: !isCameraShareActive,
               disabled: !cameraAction,
+              menu: true,
+              menuLabel: "Настройки камеры",
+              onMenuClick: onOpenCameraSettings,
             })}
           </div>
 
           <div className="voice-room-stage__toolbar-group">
-            {renderToolbarButton({
-              key: "chat",
-              icon: "chat",
-              label: "Перейти в чат канала",
-              onClick: onOpenTextChat,
-            })}
             {renderToolbarButton({
               key: "screen",
               icon: "screen",
               label: isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана",
               onClick: onScreenShareAction,
               active: isScreenShareActive,
+              menu: true,
+              menuLabel: "Настройки трансляции",
+              onMenuClick: onOpenScreenShareSettings,
+            })}
+            {renderToolbarButton({
+              key: "effects",
+              icon: "effects",
+              label: "Реакции",
+              onClick: onOpenTextChat,
+            })}
+            {renderToolbarButton({
+              key: "more",
+              icon: "more",
+              label: "Ещё",
+              onClick: onOpenVoiceSettings,
             })}
           </div>
 
@@ -1263,22 +1323,11 @@ export default function VoiceRoomStage({
               </strong>
             </div>
             <div className="voice-room-stage__hero-badges">
-              <AnimatedAvatar className="voice-room-stage__hero-badge-avatar" src={activeStage.avatar} alt={activeStage.name} />
               {getResolutionBadge(activeStage) ? <span className="voice-room-stage__pill voice-room-stage__pill--quality">{getResolutionBadge(activeStage)}</span> : null}
               <span className="voice-room-stage__pill voice-room-stage__pill--live">{getStreamBadge(activeStage)}</span>
-              <VoiceStageIcon name="chat" className="voice-room-stage__hero-chat-icon" />
             </div>
           </div>
 
-          <div className="voice-room-stage__hero-bottom">
-            <div className="voice-room-stage__hero-person">
-              <AnimatedAvatar className="voice-room-stage__hero-avatar" src={activeStage.avatar} alt={activeStage.name} />
-              <div className="voice-room-stage__hero-copy">
-                <strong>{activeStage.name}</strong>
-                <span>{activeStage.subtitle}</span>
-              </div>
-            </div>
-          </div>
           <div className="voice-room-stage__hero-controls">
             {stageToolbar}
           </div>
@@ -1297,6 +1346,7 @@ export default function VoiceRoomStage({
               type="button"
               className={`voice-room-stage__card ${participant.isSelf ? "voice-room-stage__card--self" : ""} ${participant.isSpeaking ? "voice-room-stage__card--speaking" : ""} ${participant.isLive ? "voice-room-stage__card--live" : ""} ${isStreamCard ? "voice-room-stage__card--stream" : ""} ${isInlineStreamActive ? "voice-room-stage__card--stream-inline" : ""}`}
               onClick={() => handleCardClick(participant)}
+              onDoubleClick={() => handleCardDoubleClick(participant)}
               disabled={!participant.canOpen}
               style={buildAccentVariables(getParticipantAccent(participant))}
             >

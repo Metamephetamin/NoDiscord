@@ -4,6 +4,8 @@ export default function useMenuMainSelfVoiceStateSync({ voiceClientRef }) {
   const queuedSelfVoiceStateRef = useRef(null);
   const selfVoiceStateSyncPromiseRef = useRef(null);
   const lastSelfVoiceStateSignatureRef = useRef("");
+  const desiredSelfVoiceStateSignatureRef = useRef("");
+  const latestSelfVoiceStateVersionRef = useRef(0);
   const flushQueuedSelfVoiceStateRef = useRef(null);
 
   const flushQueuedSelfVoiceState = useCallback(() => {
@@ -43,15 +45,31 @@ export default function useMenuMainSelfVoiceStateSync({ voiceClientRef }) {
   }, [flushQueuedSelfVoiceState]);
 
   const queueSelfVoiceStateSync = useCallback((nextState) => {
-    queuedSelfVoiceStateRef.current = {
+    const normalizedState = {
       isMicMuted: Boolean(nextState?.isMicMuted),
       isDeafened: Boolean(nextState?.isDeafened),
+    };
+    const signature = `${Number(normalizedState.isMicMuted)}:${Number(normalizedState.isDeafened)}`;
+    if (desiredSelfVoiceStateSignatureRef.current !== signature) {
+      latestSelfVoiceStateVersionRef.current += 1;
+      desiredSelfVoiceStateSignatureRef.current = signature;
+    }
+
+    queuedSelfVoiceStateRef.current = {
+      ...normalizedState,
+      clientStateVersion: latestSelfVoiceStateVersionRef.current,
     };
     flushQueuedSelfVoiceState();
   }, [flushQueuedSelfVoiceState]);
 
+  const isSelfVoiceStateEchoStale = useCallback((clientStateVersion) => {
+    const normalizedVersion = Number(clientStateVersion || 0);
+    return normalizedVersion > 0 && normalizedVersion < latestSelfVoiceStateVersionRef.current;
+  }, []);
+
   return {
     flushQueuedSelfVoiceState,
+    isSelfVoiceStateEchoStale,
     queueSelfVoiceStateSync,
   };
 }

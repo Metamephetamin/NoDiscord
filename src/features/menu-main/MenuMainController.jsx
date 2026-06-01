@@ -947,6 +947,7 @@ export default function MenuMain({
   });
   const {
     flushQueuedSelfVoiceState,
+    isSelfVoiceStateEchoStale,
     queueSelfVoiceStateSync,
   } = useMenuMainSelfVoiceStateSync({ voiceClientRef });
   const {
@@ -3723,29 +3724,35 @@ export default function MenuMain({
     isDeafened: nextIsDeafened,
     isMicForced: nextIsMicForced,
     isDeafenedForced: nextIsSoundForced,
+    clientStateVersion,
   }) => {
     const normalizedMicMuted = Boolean(nextMicMuted);
     const normalizedSoundMuted = Boolean(nextIsDeafened);
     const normalizedMicForced = Boolean(nextIsMicForced);
     const normalizedSoundForced = Boolean(nextIsSoundForced);
+    const isStaleLocalEcho = isSelfVoiceStateEchoStale(clientStateVersion);
 
-    if (!normalizedMicMuted || !normalizedSoundMuted) {
+    if (!isStaleLocalEcho && (!normalizedMicMuted || !normalizedSoundMuted)) {
       micMutedBySoundMuteRef.current = false;
     }
 
-    setIsMicMuted((previousValue) => (
-      previousValue === normalizedMicMuted ? previousValue : normalizedMicMuted
-    ));
-    setIsSoundMuted((previousValue) => (
-      previousValue === normalizedSoundMuted ? previousValue : normalizedSoundMuted
-    ));
+    if (!isStaleLocalEcho || normalizedMicForced) {
+      setIsMicMuted((previousValue) => (
+        previousValue === normalizedMicMuted ? previousValue : normalizedMicMuted
+      ));
+    }
+    if (!isStaleLocalEcho || normalizedSoundForced) {
+      setIsSoundMuted((previousValue) => (
+        previousValue === normalizedSoundMuted ? previousValue : normalizedSoundMuted
+      ));
+    }
     setIsMicForced((previousValue) => (
       previousValue === normalizedMicForced ? previousValue : normalizedMicForced
     ));
     setIsSoundForced((previousValue) => (
       previousValue === normalizedSoundForced ? previousValue : normalizedSoundForced
     ));
-  }, []);
+  }, [isSelfVoiceStateEchoStale]);
 
   const handleMicLevelChanged = useCallback((nextLevel) => {
     if (!micLevelUiActiveRef.current) {
@@ -5538,6 +5545,12 @@ export default function MenuMain({
     setShowNoiseMenu(false);
     setShowCameraModal(true);
   };
+  const openScreenShareSettings = () => {
+    setShowCameraModal(false);
+    setScreenShareError("");
+    setShowNoiseMenu(false);
+    setShowModal(true);
+  };
   const closeCameraModal = () => {
     setShowCameraModal(false);
     setCameraError("");
@@ -6303,8 +6316,10 @@ export default function MenuMain({
   const stableStopScreenShare = useStableEvent(stopScreenShare);
   const stableStopCameraShare = useStableEvent(stopCameraShare);
   const stableHandleScreenShareAction = useStableEvent(handleScreenShareAction);
+  const stableOpenScreenShareSettings = useStableEvent(openScreenShareSettings);
   const stableOpenCameraModal = useStableEvent(openCameraModal);
   const stableHandleCameraAction = useStableEvent(handleCameraAction);
+  const stableOpenVoiceSettings = useStableEvent(() => openSettingsPanel("voice_video"));
   const stableLeaveVoiceChannel = useStableEvent(leaveVoiceChannel);
   const stableJoinVoiceChannel = useStableEvent(joinVoiceChannel);
   const stableCreateForumPost = useStableEvent(createForumPost);
@@ -7171,7 +7186,10 @@ export default function MenuMain({
       onToggleSound={stableToggleSoundMute}
       onOpenTextChat={openDesktopTextChatPane}
       onScreenShareAction={stableHandleScreenShareAction}
+      onOpenScreenShareSettings={stableOpenScreenShareSettings}
       onOpenCamera={stableHandleCameraAction}
+      onOpenCameraSettings={stableOpenCameraModal}
+      onOpenVoiceSettings={stableOpenVoiceSettings}
       onLeave={stableLeaveVoiceChannel}
       onJoinVoiceChannel={stableJoinVoiceChannel}
       onCreateForumPost={stableCreateForumPost}

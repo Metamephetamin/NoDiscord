@@ -249,7 +249,7 @@ html[data-ui-theme="light"] .message-context-menu__item--danger:not(:disabled) .
   color: var(--app-danger);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 640px) and (hover: none) and (pointer: coarse) {
 
   .message-context-menu-stack {
     left: 10px !important;

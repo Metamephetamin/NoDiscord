@@ -20,6 +20,7 @@ const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomSta
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
 const loadScreenShareViewer = () => recoverChunkImport(() => import("./ScreenShareViewer"));
 const ScreenShareViewer = lazy(loadScreenShareViewer);
+const SERVER_SUMMARY_MENU_WIDTH = 280;
 const EMPTY_CHANNEL_LIST = Object.freeze([]);
 const DEFAULT_TEXT_CATEGORY_NAME = "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
 const DEFAULT_VOICE_CATEGORY_NAME = "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
@@ -169,6 +170,21 @@ function ServerSummaryMenuIcon({ name }) {
     default:
       return null;
   }
+}
+
+function ServerSummaryMenuButton({ label, iconName, onClick, disabled = false }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      <span title={label}>{label}</span>
+      <ServerSummaryMenuIcon name={iconName} />
+    </button>
+  );
 }
 
 function StreamMiniPlayer({
@@ -1709,7 +1725,10 @@ export const ServersSidebar = memo(({
     const rect = anchor.getBoundingClientRect();
     const top = Math.max(8, rect.bottom + 8);
     setServerMenuPosition({
-      left: Math.max(8, rect.left + 36),
+      left: Math.min(
+        Math.max(8, rect.left + 36),
+        Math.max(8, window.innerWidth - SERVER_SUMMARY_MENU_WIDTH - 8),
+      ),
       top,
       maxHeight: Math.max(180, window.innerHeight - top - 16),
     });
@@ -2371,51 +2390,62 @@ export const ServersSidebar = memo(({
                 maxHeight: serverMenuPosition.maxHeight,
               }}
             >
-              <button type="button" onClick={() => runServerMenuAction(onOpenServerInviteModal)} disabled={!canInviteToServer(activeServer)}>
-                <span>Пригласить на сервер</span>
-                <ServerSummaryMenuIcon name="person-plus-fill" />
-              </button>
-              <button type="button" onClick={() => runServerMenuAction(onOpenServerSettings)} disabled={!canManageServer}>
-                <span>Настройки сервера</span>
-                <ServerSummaryMenuIcon name="gear-fill" />
-              </button>
-              <button type="button" onClick={() => runServerMenuAction(onOpenServerRoles)} disabled={!canManageRoles}>
-                <span>Роли и участники</span>
-                <ServerSummaryMenuIcon name="people-fill" />
-              </button>
-              <button type="button" onClick={() => runServerMenuAction(() => openCreateChannelModal("", "text"))} disabled={!canManageChannels}>
-                <span>Создать канал</span>
-                <ServerSummaryMenuIcon name="plus-circle-fill" />
-              </button>
-              <button type="button" onClick={() => runServerMenuAction(openCreateCategoryModal)} disabled={!canManageChannels}>
-                <span>Создать категорию</span>
-                <ServerSummaryMenuIcon name="folder-plus" />
-              </button>
+              <ServerSummaryMenuButton
+                label="Пригласить на сервер"
+                iconName="person-plus-fill"
+                onClick={() => runServerMenuAction(onOpenServerInviteModal)}
+                disabled={!canInviteToServer(activeServer)}
+              />
+              <ServerSummaryMenuButton
+                label="Настройки сервера"
+                iconName="gear-fill"
+                onClick={() => runServerMenuAction(onOpenServerSettings)}
+                disabled={!canManageServer}
+              />
+              <ServerSummaryMenuButton
+                label="Роли и участники"
+                iconName="people-fill"
+                onClick={() => runServerMenuAction(onOpenServerRoles)}
+                disabled={!canManageRoles}
+              />
+              <ServerSummaryMenuButton
+                label="Создать канал"
+                iconName="plus-circle-fill"
+                onClick={() => runServerMenuAction(() => openCreateChannelModal("", "text"))}
+                disabled={!canManageChannels}
+              />
+              <ServerSummaryMenuButton
+                label="Создать категорию"
+                iconName="folder-plus"
+                onClick={() => runServerMenuAction(openCreateCategoryModal)}
+                disabled={!canManageChannels}
+              />
               <span className={`server-summary-menu__separator ${!canInviteToServer(activeServer) && !canManageServer && !canManageRoles && !canManageChannels ? "is-hidden" : ""}`} aria-hidden="true" />
-              <button type="button" onClick={() => runServerMenuAction(onOpenNotificationSettings)}>
-                <span>Параметры уведомлений</span>
-                <ServerSummaryMenuIcon name="bell-fill" />
-              </button>
+              <ServerSummaryMenuButton
+                label="Параметры уведомлений"
+                iconName="bell-fill"
+                onClick={() => runServerMenuAction(onOpenNotificationSettings)}
+              />
               <span className="server-summary-menu__separator" aria-hidden="true" />
-              <button type="button" onClick={() => runServerMenuAction(onOpenPersonalProfileSettings)}>
-                <span>Редактировать личный профиль</span>
-                <ServerSummaryMenuIcon name="pencil-square" />
-              </button>
-              <button type="button" onClick={() => setHideMutedChannels((value) => !value)}>
-                <span>Скрыть заглушённые каналы</span>
-                <ServerSummaryMenuIcon name={hideMutedChannels ? "eye-slash-fill" : "eye-fill"} />
-              </button>
+              <ServerSummaryMenuButton
+                label="Редактировать личный профиль"
+                iconName="pencil-square"
+                onClick={() => runServerMenuAction(onOpenPersonalProfileSettings)}
+              />
+              <ServerSummaryMenuButton
+                label="Скрыть заглушённые каналы"
+                iconName={hideMutedChannels ? "eye-slash-fill" : "eye-fill"}
+                onClick={() => setHideMutedChannels((value) => !value)}
+              />
               <span className="server-summary-menu__separator" aria-hidden="true" />
-              <button
-                type="button"
+              <ServerSummaryMenuButton
+                label="Копировать ID сервера"
+                iconName="clipboard-fill"
                 onClick={() => runServerMenuAction(() => {
                   void copyTextToClipboard(String(activeServer.id || ""));
                   onShowServerFeedback?.("ID сервера скопирован.");
                 })}
-              >
-                <span>Копировать ID сервера</span>
-                <ServerSummaryMenuIcon name="clipboard-fill" />
-              </button>
+              />
             </div>
           ) : null}
 
@@ -2790,7 +2820,10 @@ function ServerMainComponent({
   onToggleSound,
   onOpenTextChat,
   onScreenShareAction,
+  onOpenScreenShareSettings,
   onOpenCamera,
+  onOpenCameraSettings,
+  onOpenVoiceSettings,
   onLeave,
   onJoinVoiceChannel,
   onCreateForumPost,
@@ -2922,7 +2955,10 @@ function ServerMainComponent({
             onToggleSound={onToggleSound}
             onOpenTextChat={onOpenTextChat}
             onScreenShareAction={onScreenShareAction}
+            onOpenScreenShareSettings={onOpenScreenShareSettings}
             onOpenCamera={onOpenCamera}
+            onOpenCameraSettings={onOpenCameraSettings}
+            onOpenVoiceSettings={onOpenVoiceSettings}
             onLeave={onLeave}
           />
           </Suspense>
@@ -3093,7 +3129,10 @@ function areServerMainPropsEqual(previousProps, nextProps) {
     && previousProps.onToggleSound === nextProps.onToggleSound
     && previousProps.onOpenTextChat === nextProps.onOpenTextChat
     && previousProps.onScreenShareAction === nextProps.onScreenShareAction
+    && previousProps.onOpenScreenShareSettings === nextProps.onOpenScreenShareSettings
     && previousProps.onOpenCamera === nextProps.onOpenCamera
+    && previousProps.onOpenCameraSettings === nextProps.onOpenCameraSettings
+    && previousProps.onOpenVoiceSettings === nextProps.onOpenVoiceSettings
     && previousProps.onLeave === nextProps.onLeave
     && previousProps.onJoinVoiceChannel === nextProps.onJoinVoiceChannel
     && previousProps.onCreateForumPost === nextProps.onCreateForumPost

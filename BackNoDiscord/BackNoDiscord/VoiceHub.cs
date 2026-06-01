@@ -289,7 +289,7 @@ public class VoiceHub : Hub
         await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
     }
 
-    public async Task UpdateVoiceState(string targetUserId, bool isMicMuted, bool isDeafened)
+    public async Task UpdateVoiceState(string targetUserId, bool isMicMuted, bool isDeafened, long clientStateVersion = 0)
     {
         if (string.IsNullOrWhiteSpace(targetUserId) ||
             !_channels.TryGetParticipantByConnectionId(Context.ConnectionId, out var actor))
@@ -345,7 +345,8 @@ public class VoiceHub : Hub
                 IsMicMuted = updatedParticipant.IsMicMuted,
                 IsDeafened = updatedParticipant.IsDeafened,
                 IsMicForced = updatedParticipant.IsMicForced,
-                IsDeafenedForced = updatedParticipant.IsDeafenedForced
+                IsDeafenedForced = updatedParticipant.IsDeafenedForced,
+                ClientStateVersion = isSelfUpdate ? clientStateVersion : 0
             });
         }
     }
@@ -666,6 +667,7 @@ public class VoiceStatePayload
     public bool IsDeafened { get; set; }
     public bool IsMicForced { get; set; }
     public bool IsDeafenedForced { get; set; }
+    public long ClientStateVersion { get; set; }
 }
 
 public class ScreenShareFramePayload
@@ -688,4 +690,3 @@ public class ScreenShareChunkPayload
     public string MimeType { get; set; } = "video/webm";
     public bool HasAudio { get; set; }
 }
-

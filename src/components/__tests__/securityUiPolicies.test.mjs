@@ -129,6 +129,21 @@ test("media preview photo actions use bootstrap icons without a theme shell", ()
   assert.match(mediaPreviewCss, /html\[data-ui-theme="light"\] \.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
 });
 
+test("media preview video volume controls expose a working speaker slider", () => {
+  const previewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
+  const mediaPreviewCss = readRepoFileIfExists("src/css/TextChatMediaPreview.css");
+
+  assert.match(previewSource, /function VideoVolumeIcon\(\{ muted \}\)/);
+  assert.match(previewSource, /<VideoVolumeIcon muted=\{currentVideoControlState\.muted \|\| currentVideoControlState\.volume <= 0\} \/>/);
+  assert.match(previewSource, /onInput=\{handleVideoVolumeChange\}/);
+  assert.match(previewSource, /"--media-preview-volume"/);
+  assert.doesNotMatch(previewSource, /media-preview__video-icon--volume/);
+  assert.match(mediaPreviewCss, /\.media-preview__video-volume-icon \{[\s\S]*?fill: currentColor;/);
+  assert.match(mediaPreviewCss, /\.media-preview__video-volume-slider \{[\s\S]*?--media-preview-volume/);
+  assert.match(mediaPreviewCss, /\.media-preview__video-volume-slider::-webkit-slider-thumb \{[\s\S]*?width: 12px;[\s\S]*?height: 12px;/);
+  assert.match(mediaPreviewCss, /\.media-preview__video-volume-slider::-moz-range-thumb \{[\s\S]*?width: 12px;[\s\S]*?height: 12px;/);
+});
+
 test("media preview can browse previous message media without forward wraparound", () => {
   const actionsSource = readRepoFile("src/hooks/useTextChatMessageActions.js");
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
@@ -392,6 +407,24 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
 });
 
+test("self voice mute sync ignores stale local echo from rapid toggles", () => {
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const syncHookSource = readRepoFile("src/features/menu-main/useMenuMainSelfVoiceStateSync.js");
+  const voiceClientSource = readRepoFile("src/webrtc/livekitVoiceRoomClient.js");
+  const voiceHubSource = readRepoFile("BackNoDiscord/BackNoDiscord/VoiceHub.cs");
+
+  assert.match(syncHookSource, /latestSelfVoiceStateVersionRef/);
+  assert.match(syncHookSource, /clientStateVersion: latestSelfVoiceStateVersionRef\.current/);
+  assert.match(syncHookSource, /const isSelfVoiceStateEchoStale = useCallback/);
+  assert.match(controllerSource, /isSelfVoiceStateEchoStale\(clientStateVersion\)/);
+  assert.match(controllerSource, /if \(!isStaleLocalEcho \|\| normalizedMicForced\) \{[\s\S]*?setIsMicMuted/);
+  assert.match(controllerSource, /if \(!isStaleLocalEcho \|\| normalizedSoundForced\) \{[\s\S]*?setIsSoundMuted/);
+  assert.match(voiceClientSource, /clientStateVersion: Number\(payload\?\.clientStateVersion \?\? payload\?\.ClientStateVersion \?\? 0\)/);
+  assert.match(voiceClientSource, /UpdateVoiceState", String\(currentUser\.id\), Boolean\(isMicMuted\), Boolean\(isDeafened\), Number\(clientStateVersion \|\| 0\)/);
+  assert.match(voiceHubSource, /UpdateVoiceState\(string targetUserId, bool isMicMuted, bool isDeafened, long clientStateVersion = 0\)/);
+  assert.match(voiceHubSource, /ClientStateVersion = isSelfUpdate \? clientStateVersion : 0/);
+});
+
 test("self headphones mute only unmutes microphone when it muted microphone automatically", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
@@ -516,8 +549,10 @@ test("speaking indicators stay out of the bottom profile avatar", () => {
 
   assert.match(`${mainCss}\n${stageCss}`, /@keyframes voice-speaking-card-pulse/);
   assert.match(`${mainCss}\n${stageCss}`, /@keyframes voice-speaking-avatar-pulse/);
-  assert.match(channelCss, /@keyframes participant-speaking-avatar-pulse/);
-  assert.match(channelCss, /\.participant-item--speaking \.participant-item__avatar-shell \{[\s\S]*?border-color: rgba\(86, 220, 124, 0\.8\);/);
+  assert.match(channelCss, /\.participant-item__avatar-shell \{[\s\S]*?border: 0;/);
+  assert.match(channelCss, /\.participant-item--speaking \.participant-item__avatar-shell \{[\s\S]*?box-shadow: 0 0 0 2px rgba\(86, 220, 124, 0\.86\), 0 0 0 4px rgba\(86, 220, 124, 0\.14\);/);
+  assert.doesNotMatch(channelCss, /@keyframes participant-speaking-avatar-pulse/);
+  assert.doesNotMatch(channelCss, /\.participant-item--speaking \.participant-item__avatar-shell \{[^}]*animation:/);
   assert.match(stageCss, /\.voice-room-stage__card--speaking,[\s\S]*?\.voice-room-stage__strip-card--speaking \{[\s\S]*?border-color: rgba\(80, 214, 137, 0\.72\);/);
   assert.doesNotMatch(profileCss, /\.avatar-shell--speaking \.avatar \{[\s\S]*?animation: profile-speaking-avatar-pulse/);
   assert.doesNotMatch(profileCss, /@keyframes profile-speaking-avatar-pulse/);
@@ -665,13 +700,17 @@ test("active voice stream chrome auto-hides after pointer inactivity", () => {
   assert.match(stageSource, /voice-room-stage__hero--chrome-visible/);
   assert.doesNotMatch(stageCss, /\.voice-room-stage--active-stream \.voice-room-stage__hero-top,[\s\S]*?display: none;/);
   assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-controls/);
-  assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-top,[\s\S]*?\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-bottom/);
+  assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-top/);
+  assert.doesNotMatch(stageSource, /voice-room-stage__hero-bottom/);
   assert.match(stageSource, /voice-room-stage__hero-stream-meta/);
   assert.match(stageSource, /VoiceStageIcon name="volume"/);
   assert.match(stageSource, /\(activeStage\.mode === "camera" \? "Камера" : "Экран"\)[\s\S]*?\{activeStage\.name\}/);
   assert.match(stageSource, /voice-room-stage__pill--quality/);
   assert.match(stageSource, /voice-room-stage__pill--live/);
-  assert.match(stageSource, /VoiceStageIcon name="chat" className="voice-room-stage__hero-chat-icon"/);
+  assert.doesNotMatch(stageSource, /voice-room-stage__hero-badge-avatar/);
+  assert.doesNotMatch(stageSource, /voice-room-stage__hero-chat-icon/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage__hero-badge-avatar/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage__hero-chat-icon/);
   assert.match(stageSource, /кадров в секунду/);
   assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?background: rgba\(13, 14, 18, 0\.98\);/);
 });
@@ -1002,17 +1041,45 @@ test("active stream chrome keeps the segmented Discord-style controls", () => {
   assert.match(stageSource, /VoiceStageIcon name="users-add"/);
   assert.match(stageSource, /voice-room-stage__stream-toolbar-center/);
   assert.match(stageSource, /const activeStageStopAction = activeStage\?\.kind === "local"/);
+  assert.match(stageSource, /onMenuClick: onOpenVoiceSettings/);
+  assert.match(stageSource, /onMenuClick: onOpenCameraSettings/);
+  assert.match(stageSource, /onMenuClick: onOpenScreenShareSettings/);
   assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
+  assert.match(stageCss, /\.voice-room-stage--active-stream \{[\s\S]*?gap: 0;[\s\S]*?padding: 0;/);
+  assert.match(stageCss, /\.voice-room-stage--active-stream \.voice-room-stage__hero \{[\s\S]*?width: 100%;[\s\S]*?height: 100%;/);
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;[\s\S]*?height: 58px;/);
   assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group \{[\s\S]*?min-height: 58px;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 82px;/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-split \{[\s\S]*?width: 82px;/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-split-divider \{[\s\S]*?width: 1px;[\s\S]*?background: rgba\(255, 255, 255, 0\.12\);/);
+  assert.doesNotMatch(stageSource, /voice-room-stage__hero-person/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage__hero-person/);
   assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(13, 14, 18, 0\.98\);/);
   assert.match(stageSource, /VoiceStageIcon name="volume" className="voice-room-stage__hero-channel-icon"/);
   assert.match(stageSource, /case "leave":[\s\S]*?viewBox="0 0 24 24"[\s\S]*?fill="currentColor"/);
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
+});
+
+test("voice stage idle toolbar matches stream controls without activities shortcut", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
+  const idleToolbarStart = stageSource.search(/\) : \(\s*<div className="voice-room-stage__toolbar" role="toolbar" aria-label="Управление голосовой комнатой">/);
+  const idleToolbarEnd = stageSource.indexOf("voice-room-stage__toolbar-group voice-room-stage__toolbar-group--danger", idleToolbarStart);
+  const idleToolbarSource = stageSource.slice(idleToolbarStart, idleToolbarEnd);
+
+  assert.ok(idleToolbarStart >= 0, "idle toolbar source is present");
+  assert.ok(idleToolbarEnd > idleToolbarStart, "idle toolbar source is bounded");
+  assert.match(idleToolbarSource, /key: "mic"[\s\S]*?menuLabel: "Настройки микрофона"[\s\S]*?onMenuClick: onOpenVoiceSettings/);
+  assert.match(idleToolbarSource, /key: "camera"[\s\S]*?menuLabel: "Настройки камеры"[\s\S]*?onMenuClick: onOpenCameraSettings/);
+  assert.match(idleToolbarSource, /key: "screen"[\s\S]*?menuLabel: "Настройки трансляции"[\s\S]*?onMenuClick: onOpenScreenShareSettings/);
+  assert.match(idleToolbarSource, /key: "effects"[\s\S]*?onClick: onOpenTextChat/);
+  assert.match(idleToolbarSource, /key: "more"[\s\S]*?onClick: onOpenVoiceSettings/);
+  assert.doesNotMatch(idleToolbarSource, /key: "activities"/);
+  assert.doesNotMatch(idleToolbarSource, /key: "headphones"/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-group \{[\s\S]*?gap: 0;[\s\S]*?min-height: 58px;/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-split \{[\s\S]*?width: 82px;/);
 });
 
 test("standalone stream viewer uses Discord-style top and bottom chrome", () => {
@@ -1066,6 +1133,19 @@ test("clicking own stream opens local preview instead of remote loading state", 
   assert.match(watchStreamHandler, /setFocusedRemoteShareUser\?\.\(""\)/);
   assert.match(watchStreamHandler, /openLocalSharePreview\(\);[\s\S]*?return;/);
   assert.doesNotMatch(watchStreamHandler, /requestScreenShare\(normalizedUserId\)[\s\S]*?normalizedUserId === String\(currentUserId/);
+});
+
+test("double clicking a stream card opens the active stream viewer", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const doubleClickHandler = stageSource.slice(
+    stageSource.indexOf("const handleCardDoubleClick = (participant) => {"),
+    stageSource.indexOf("const renderParticipantMeta = (participant) => {"),
+  );
+
+  assert.ok(doubleClickHandler.length > 0, "double click handler is present before participant meta rendering");
+  assert.match(doubleClickHandler, /if \(participant\.isLive\) \{[\s\S]*?onWatchStream\?\.\(participant\.userId\);[\s\S]*?return;[\s\S]*?\}/);
+  assert.match(doubleClickHandler, /if \(participant\.isSelf && participant\.share\) \{[\s\S]*?onWatchStream\?\.\(participant\.userId\);[\s\S]*?return;[\s\S]*?\}/);
+  assert.match(stageSource, /onDoubleClick=\{\(\) => handleCardDoubleClick\(participant\)\}/);
 });
 
 test("local screen and camera shares render as separate live preview cards", () => {
@@ -1320,6 +1400,7 @@ test("message context menu styles stay split from the main text chat stylesheet"
   assert.match(contextMenuSource, /import "\.\.\/css\/TextChatContextMenu\.css";/);
   assert.match(contextMenuCss, /\.message-context-menu-stack \{/);
   assert.match(contextMenuCss, /\.message-context-menu \{/);
+  assert.match(contextMenuCss, /@media \(max-width: 640px\) and \(hover: none\) and \(pointer: coarse\)/);
   assert.match(contextMenuCss, /html\[data-ui-theme="light"\] \.message-context-menu/);
   assert.doesNotMatch(textChatCss, /^\s*\.message-context-menu[^\n{]*\{/m);
   assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.message-context-menu/m);
