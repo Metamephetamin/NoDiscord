@@ -447,16 +447,6 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
           <path d="M18.5 7a7 7 0 0 1 0 10" />
         </svg>
       );
-    case "users-add":
-      return (
-        <svg {...commonProps}>
-          <path d="M8.5 12.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-          <path d="M2.8 20a5.8 5.8 0 0 1 11.4 0" />
-          <path d="M17 8v6" />
-          <path d="M14 11h6" />
-          <path d="M16.8 17.5c1.9.2 3.4 1.1 4.2 2.5" />
-        </svg>
-      );
     case "chat":
       return (
         <svg {...commonProps}>
@@ -527,16 +517,13 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
     case "leave":
       return (
         <svg
-          viewBox="0 0 16 16"
+          viewBox="0 0 24 24"
           fill="currentColor"
           stroke="none"
           aria-hidden="true"
           className={className}
         >
-          <path
-            fillRule="evenodd"
-            d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877zm9.261 1.135a.5.5 0 0 1 .708 0L13 2.793l1.146-1.147a.5.5 0 0 1 .708.708L13.707 3.5l1.147 1.146a.5.5 0 0 1-.708.708L13 4.207l-1.146 1.147a.5.5 0 0 1-.708-.708L12.293 3.5l-1.147-1.146a.5.5 0 0 1 0-.708"
-          />
+          <path d="M20.82 14.38c.48.45.5 1.21.04 1.68l-2.08 2.13c-.46.47-1.2.5-1.7.08l-2.48-2.08a1.25 1.25 0 0 1-.4-1.29l.34-1.16a.48.48 0 0 0-.28-.58 7.18 7.18 0 0 0-4.52 0 .48.48 0 0 0-.28.58l.34 1.16c.14.47-.02.97-.4 1.29l-2.48 2.08c-.5.42-1.24.39-1.7-.08l-2.08-2.13a1.18 1.18 0 0 1 .04-1.68C5.62 10.84 8.55 9.75 12 9.75s6.38 1.09 8.82 4.63Z" />
         </svg>
       );
     default:
@@ -988,72 +975,46 @@ export default function VoiceRoomStage({
   );
 
   const stageToolbar = (
-    <div className={`voice-room-stage__toolbar-shell ${activeStage ? "voice-room-stage__toolbar-shell--stream" : ""}`}>
+    <div className="voice-room-stage__toolbar-shell">
       {activeStage ? renderStripCards() : null}
 
-      {activeStage ? (
-        <div className="voice-room-stage__stream-toolbar-layout">
-          <div className="voice-room-stage__stream-side voice-room-stage__stream-side--left" aria-hidden="true">
-            <VoiceStageIcon name="users-add" className="voice-room-stage__stream-side-icon" />
-          </div>
+      <div className="voice-room-stage__toolbar" role="toolbar" aria-label="Управление голосовой комнатой">
+        <div className="voice-room-stage__toolbar-group">
+          {renderToolbarButton({
+            key: "mic",
+            icon: "mic",
+            label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
+            onClick: onToggleMic,
+            muted: isEffectiveMicMuted,
+          })}
+          {renderToolbarButton({
+            key: "headphones",
+            icon: "headphones",
+            label: isSoundMuted ? "Включить звук" : "Отключить звук",
+            onClick: onToggleSound,
+            muted: isSoundMuted,
+          })}
+        </div>
 
-          <div className="voice-room-stage__stream-toolbar-center">
-            <div className="voice-room-stage__toolbar" role="toolbar" aria-label="Управление голосовой комнатой">
-              <div className="voice-room-stage__toolbar-group">
-                {renderToolbarButton({
-                  key: "mic",
-                  icon: "mic",
-                  label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
-                  onClick: onToggleMic,
-                  muted: isEffectiveMicMuted,
-                  menu: true,
-                })}
-                {renderToolbarButton({
-                  key: "headphones",
-                  icon: "headphones",
-                  label: isSoundMuted ? "Включить звук" : "Отключить звук",
-                  onClick: onToggleSound,
-                  muted: isSoundMuted,
-                })}
-              </div>
+        <div className="voice-room-stage__toolbar-group">
+          {renderToolbarButton({
+            key: "chat",
+            icon: "chat",
+            label: "Перейти в чат канала",
+            onClick: onOpenTextChat,
+          })}
+          {renderToolbarButton({
+            key: "screen",
+            icon: "screen",
+            label: isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана",
+            onClick: onScreenShareAction,
+            active: isScreenShareActive,
+          })}
+        </div>
 
-              <div className="voice-room-stage__toolbar-group">
-                {renderToolbarButton({
-                  key: "screen",
-                  icon: "screen",
-                  label: isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана",
-                  onClick: onScreenShareAction,
-                  active: isScreenShareActive,
-                  menu: true,
-                })}
-                {renderToolbarButton({
-                  key: "chat",
-                  icon: "chat",
-                  label: "Перейти в чат канала",
-                  onClick: onOpenTextChat,
-                })}
-                {activeStage?.kind === "local"
-                  ? renderToolbarButton({
-                      key: "stop-local",
-                      icon: "close",
-                      label: activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим",
-                      onClick: activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare,
-                      danger: true,
-                    })
-                  : null}
-              </div>
-            </div>
-
-            {renderToolbarButton({
-              key: "leave",
-              icon: "leave",
-              label: "Отключиться от голосового канала",
-              onClick: onLeave,
-              danger: true,
-            })}
-          </div>
-
-          <div className="voice-room-stage__stream-side voice-room-stage__stream-side--right">
+        {activeStage ? (
+          <div className="voice-room-stage__toolbar-group">
+            {renderFullscreenButton()}
             {activeStage.kind !== "local"
               ? renderToolbarButton({
                   key: "close-stage",
@@ -1062,55 +1023,28 @@ export default function VoiceRoomStage({
                   onClick: onCloseSelectedStream,
                 })
               : null}
-            {renderFullscreenButton("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost")}
           </div>
-        </div>
-      ) : (
-        <div className="voice-room-stage__toolbar" role="toolbar" aria-label="Управление голосовой комнатой">
-          <div className="voice-room-stage__toolbar-group">
-            {renderToolbarButton({
-              key: "mic",
-              icon: "mic",
-              label: isMicMuted ? "Включить микрофон" : "Выключить микрофон",
-              onClick: onToggleMic,
-              muted: isEffectiveMicMuted,
-            })}
-            {renderToolbarButton({
-              key: "headphones",
-              icon: "headphones",
-              label: isSoundMuted ? "Включить звук" : "Отключить звук",
-              onClick: onToggleSound,
-              muted: isSoundMuted,
-            })}
-          </div>
+        ) : null}
 
-          <div className="voice-room-stage__toolbar-group">
-            {renderToolbarButton({
-              key: "chat",
-              icon: "chat",
-              label: "Перейти в чат канала",
-              onClick: onOpenTextChat,
-            })}
-            {renderToolbarButton({
-              key: "screen",
-              icon: "screen",
-              label: isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана",
-              onClick: onScreenShareAction,
-              active: isScreenShareActive,
-            })}
-          </div>
-
-          <div className="voice-room-stage__toolbar-group voice-room-stage__toolbar-group--danger">
-            {renderToolbarButton({
-              key: "leave",
-              icon: "leave",
-              label: "Отключиться от голосового канала",
-              onClick: onLeave,
-              danger: true,
-            })}
-          </div>
+        <div className="voice-room-stage__toolbar-group voice-room-stage__toolbar-group--danger">
+          {activeStage?.kind === "local"
+            ? renderToolbarButton({
+                key: "stop-local",
+                icon: "close",
+                label: activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим",
+                onClick: activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare,
+                danger: true,
+              })
+            : null}
+          {renderToolbarButton({
+            key: "leave",
+            icon: "leave",
+            label: "Отключиться от голосового канала",
+            onClick: onLeave,
+            danger: true,
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 

@@ -94,6 +94,17 @@ test("desktop login card stays near the auth sphere center", () => {
   assert.doesNotMatch(authCss, /\.auth-page--login \.auth-card\.auth-card--login\s*\{[\s\S]*?transform: translateY\(150px\);[\s\S]*?\}/);
 });
 
+test("password login surfaces backend totp challenge instead of hiding the field", () => {
+  const authSource = readRepoFile("src/components/Auth.jsx");
+  const loginHandlerSource = authSource.slice(
+    authSource.indexOf("const handleLogin = async"),
+    authSource.indexOf("const handleRequestLoginCode = async"),
+  );
+
+  assert.match(loginHandlerSource, /totpCode: typeof backendFieldErrors\.totpCode === "string" \? backendFieldErrors\.totpCode : ""/);
+  assert.match(authSource, /\{loginErrors\.totpCode \|\| loginForm\.totpCode \? \(/);
+});
+
 test("media preview delete button requires delete handler", () => {
   const previewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
@@ -816,25 +827,25 @@ test("local stream banner shows a friendly screen or window title", () => {
   assert.match(profileSource, /normalizedSourceTitle \|\| \(isScreenShareActive \? "Экран в эфире" : "Камера в эфире"\)/);
 });
 
-test("voice stage toolbar does not render a duplicate center camera button", () => {
+test("active stream toolbar stays compact without decorative side controls", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
   assert.doesNotMatch(stageSource, /key: "camera"[\s\S]*?label: "Включить камеру"/);
-  assert.match(stageSource, /voice-room-stage__stream-toolbar-layout/);
-  assert.match(stageSource, /VoiceStageIcon name="users-add"/);
-  assert.match(stageSource, /voice-room-stage__stream-toolbar-center/);
+  assert.doesNotMatch(stageSource, /voice-room-stage__stream-toolbar-layout/);
+  assert.doesNotMatch(stageSource, /VoiceStageIcon name="users-add"/);
+  assert.doesNotMatch(stageSource, /voice-room-stage__stream-toolbar-center/);
   assert.match(stageSource, /activeStage\.kind !== "local"[\s\S]*?key: "close-stage"/);
-  assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
-  assert.match(stageCss, /\.voice-room-stage__stream-toolbar-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
-  assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group \{[\s\S]*?padding: 0;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group > \.voice-room-stage__toolbar-button:first-child \{[\s\S]*?border-top-left-radius: 19px;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 82px;/);
-  assert.match(stageSource, /VoiceStageIcon name="chevron-down"/);
-  assert.match(stageSource, /case "leave":[\s\S]*?viewBox="0 0 16 16"[\s\S]*?fill="currentColor"[\s\S]*?fillRule="evenodd"/);
+  assert.match(stageSource, /renderFullscreenButton\(\)/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage__stream-toolbar-layout/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage__stream-toolbar-center/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage__stream-side/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar \{[\s\S]*?max-width: min\(720px, calc\(100vw - 32px\)\);/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button \{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--danger \{[\s\S]*?border-radius: 17px;/);
+  assert.match(stageSource, /case "leave":[\s\S]*?viewBox="0 0 24 24"[\s\S]*?fill="currentColor"/);
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);

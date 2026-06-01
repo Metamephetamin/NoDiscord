@@ -395,8 +395,8 @@
   z-index: 6;
   display: flex;
   justify-content: center;
-  padding: 34px 18px 18px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.34));
+  padding: 56px 14px 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(4, 6, 10, 0.72));
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
@@ -411,7 +411,6 @@
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-shell {
-  width: 100%;
   margin: 0;
   padding: 0;
 }
@@ -421,72 +420,48 @@
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar {
-  max-width: none;
-  padding: 0;
-  gap: 16px;
-  border: 0;
-  border-radius: 0;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 7px 9px;
+  gap: 6px;
+  border-radius: 18px;
   flex-wrap: nowrap;
   overflow-x: auto;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-group {
-  gap: 0;
-  min-height: 58px;
+  gap: 5px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  background: rgba(21, 22, 28, 0.96);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035), 0 16px 36px rgba(0, 0, 0, 0.34);
-  overflow: hidden;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-group + .voice-room-stage__toolbar-group,
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-group--danger {
+  padding-left: 8px;
   margin-left: 0;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button {
-  width: 58px;
-  height: 58px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   color: #f2f4f8;
 }
 
-.voice-room-stage__hero-controls .voice-room-stage__toolbar-group > .voice-room-stage__toolbar-button:first-child {
-  border-top-left-radius: 19px;
-  border-bottom-left-radius: 19px;
-}
-
-.voice-room-stage__hero-controls .voice-room-stage__toolbar-group > .voice-room-stage__toolbar-button:last-child {
-  border-top-right-radius: 19px;
-  border-bottom-right-radius: 19px;
-}
-
-.voice-room-stage__hero-controls .voice-room-stage__toolbar-button + .voice-room-stage__toolbar-button {
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.07);
-}
-
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--muted {
-  background: rgba(84, 30, 37, 0.92);
+  background: rgba(84, 30, 37, 0.88);
   color: #ff5d66;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--active {
-  background: rgba(27, 77, 51, 0.92);
+  background: rgba(27, 77, 51, 0.88);
   color: #72da97;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--danger {
+  border-radius: 17px;
   background: #dc3340;
   color: #ffffff;
 }
@@ -510,14 +485,14 @@
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-icon {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--menu {
-  width: 82px;
+  width: 58px;
   justify-content: space-between;
-  padding: 0 14px 0 16px;
+  padding: 0 10px 0 12px;
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--menu + .voice-room-stage__toolbar-button {
@@ -528,67 +503,6 @@
   width: 14px;
   height: 14px;
   opacity: 0.9;
-}
-
-.voice-room-stage__stream-toolbar-layout {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
-  align-items: end;
-  gap: 18px;
-}
-
-.voice-room-stage__stream-toolbar-center {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  min-width: 0;
-}
-
-.voice-room-stage__stream-toolbar-center > .voice-room-stage__toolbar-button--danger {
-  width: 78px;
-  height: 58px;
-  border-radius: 18px;
-  border: 0;
-  background: #dc3340;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
-}
-
-.voice-room-stage__stream-side {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  color: #aeb4c0;
-}
-
-.voice-room-stage__stream-side--left {
-  justify-self: start;
-  padding-left: 2px;
-}
-
-.voice-room-stage__stream-side--right {
-  justify-self: end;
-}
-
-.voice-room-stage__stream-side--right .voice-room-stage__toolbar-button {
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #aeb4c0;
-  box-shadow: none;
-}
-
-.voice-room-stage__stream-side--right .voice-room-stage__toolbar-button:hover {
-  color: #f5f7fb;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.voice-room-stage__stream-side-icon {
-  width: 34px;
-  height: 34px;
 }
 
 .voice-room-stage__hero-empty {

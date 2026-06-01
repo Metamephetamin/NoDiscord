@@ -906,6 +906,7 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
       setLoginErrors({
         identifier: identifierValidationError,
         password: payload.password ? "" : "Введите пароль.",
+        totpCode: "",
       });
       return;
     }
@@ -958,6 +959,7 @@ export default function Auth({ onAuthSuccess, onAccountBanned }) {
         setLoginErrors({
           identifier: typeof backendFieldErrors.identifier === "string" ? backendFieldErrors.identifier : "",
           password: typeof backendFieldErrors.password === "string" ? backendFieldErrors.password : "",
+          totpCode: typeof backendFieldErrors.totpCode === "string" ? backendFieldErrors.totpCode : "",
         });
       } else {
         setMessage(error.message || "Не удалось войти в аккаунт.");
