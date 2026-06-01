@@ -684,6 +684,15 @@ html[data-ui-theme="light"] .voice-channel__title {
   color: #172033;
 }
 
+html[data-ui-theme="light"] .voice-channel__icon {
+  opacity: 1;
+  filter: none;
+}
+
+html[data-ui-theme="light"] .voice-channel__icon img {
+  filter: brightness(0) saturate(100%);
+}
+
 html[data-ui-theme="light"] .list__items--active .voice-channel__title {
   color: #2637c7;
 }

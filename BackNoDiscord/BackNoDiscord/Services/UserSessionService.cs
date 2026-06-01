@@ -18,6 +18,8 @@ public sealed class UserSessionService
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        await PruneDuplicateActiveDeviceSessionsAsync(userId, currentRefreshTokenHash, now, cancellationToken);
+
         var sessions = await _context.RefreshTokens
             .AsNoTracking()
             .Where(item =>
@@ -40,6 +42,57 @@ public sealed class UserSessionService
                 !string.IsNullOrWhiteSpace(currentRefreshTokenHash) &&
                 string.Equals(item.TokenHash, currentRefreshTokenHash, StringComparison.Ordinal)))
             .ToList();
+    }
+
+    private async Task PruneDuplicateActiveDeviceSessionsAsync(
+        int userId,
+        string? currentRefreshTokenHash,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var activeSessions = await _context.RefreshTokens
+            .Where(item =>
+                item.UserId == userId &&
+                !item.RevokedAt.HasValue &&
+                item.ExpiresAt > now &&
+                item.DeviceTokenHash != "")
+            .ToListAsync(cancellationToken);
+        if (activeSessions.Count < 2)
+        {
+            return;
+        }
+
+        var normalizedCurrentHash = (currentRefreshTokenHash ?? string.Empty).Trim();
+        var revokedAny = false;
+        foreach (var deviceGroup in activeSessions.GroupBy(item => item.DeviceTokenHash, StringComparer.OrdinalIgnoreCase))
+        {
+            var deviceSessions = deviceGroup
+                .OrderByDescending(item =>
+                    !string.IsNullOrWhiteSpace(normalizedCurrentHash) &&
+                    string.Equals(item.TokenHash, normalizedCurrentHash, StringComparison.Ordinal)
+                        ? 1
+                        : 0)
+                .ThenByDescending(item => item.LastUsedAt)
+                .ThenByDescending(item => item.CreatedAt)
+                .ThenByDescending(item => item.Id)
+                .ToList();
+            if (deviceSessions.Count < 2)
+            {
+                continue;
+            }
+
+            foreach (var duplicateSession in deviceSessions.Skip(1))
+            {
+                duplicateSession.RevokedAt = now;
+                duplicateSession.LastUsedAt = now;
+                revokedAny = true;
+            }
+        }
+
+        if (revokedAny)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<bool> RevokeSessionAsync(

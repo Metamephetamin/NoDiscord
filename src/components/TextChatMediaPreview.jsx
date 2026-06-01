@@ -39,6 +39,36 @@ function setMediaElementProperty(mediaNode, propertyName, value) {
   Reflect.set(mediaNode, propertyName, value);
 }
 
+const BOOTSTRAP_ICON_PATHS = {
+  collection: (
+    <>
+      <path d="M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11Z" />
+      <path d="M4.5 1.5a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7Z" />
+      <path d="M1.5 14.5A1.5 1.5 0 0 1 0 13V6a1.5 1.5 0 0 1 1.5-1.5h13A1.5 1.5 0 0 1 16 6v7a1.5 1.5 0 0 1-1.5 1.5h-13ZM1 13a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5V6a.5.5 0 0 0-.5-.5h-13A.5.5 0 0 0 1 6v7Z" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5Z" />
+      <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3Z" />
+    </>
+  ),
+  trash3: (
+    <>
+      <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h13a.5.5 0 0 0 0-1H11Z" />
+      <path d="M3.038 3.5h9.924l-.846 10.58a1 1 0 0 1-.997.92H4.881a1 1 0 0 1-.997-.92L3.038 3.5Zm2.462 2a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 1 0V6a.5.5 0 0 0-.5-.5Zm2.5 0a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 1 0V6a.5.5 0 0 0-.5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z" />
+    </>
+  ),
+};
+
+function BootstrapIcon({ kind, className = "" }) {
+  return (
+    <svg className={`media-preview__bootstrap-icon ${className}`.trim()} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      {BOOTSTRAP_ICON_PATHS[kind] || BOOTSTRAP_ICON_PATHS.download}
+    </svg>
+  );
+}
+
 function TextChatMediaPreview({
   mediaPreview,
   videoRef,
@@ -573,7 +603,7 @@ function TextChatMediaPreview({
                   onClick={() => onDownload?.()}
                   aria-label="Download video"
                 >
-                  <span className="media-preview__download-icon" aria-hidden="true" />
+                  <BootstrapIcon kind="download" />
                 </button>
               </div>
 
@@ -605,7 +635,7 @@ function TextChatMediaPreview({
                 aria-label="Удалить текущее вложение"
                 title="Удалить текущее вложение"
               >
-                <span className="media-preview__delete-icon" aria-hidden="true" />
+                <BootstrapIcon kind="trash3" />
               </button>
             ) : null}
             <button
@@ -615,7 +645,7 @@ function TextChatMediaPreview({
               aria-label="Скачать текущее вложение"
               title="Скачать текущее вложение"
             >
-              <span className="media-preview__download-icon" aria-hidden="true" />
+              <BootstrapIcon kind="download" />
             </button>
             {hasGallery ? (
               <button
@@ -625,7 +655,7 @@ function TextChatMediaPreview({
                 aria-label="Скачать все вложения"
                 title="Скачать все вложения"
               >
-                <span className="media-preview__download-icon media-preview__download-icon--double" aria-hidden="true" />
+                <BootstrapIcon kind="collection" />
               </button>
             ) : null}
           </div>

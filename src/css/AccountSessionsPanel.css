@@ -9,6 +9,32 @@ html[data-ui-theme="purple"] .device-session-card {
   color: var(--app-text);
 }
 
+html[data-ui-theme="light"] .device-session-card--current {
+  border-color: color-mix(in srgb, var(--app-accent) 46%, #d9e0ec);
+  background: color-mix(in srgb, var(--app-accent) 8%, #ffffff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 14%, transparent);
+}
+
+html[data-ui-theme="light"] .device-session-card__copy strong,
+html[data-ui-theme="light"] .device-session-card__meta b {
+  color: var(--app-text-strong);
+}
+
+html[data-ui-theme="light"] .device-session-card__copy span,
+html[data-ui-theme="light"] .device-session-card__meta span {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .device-session-card__meta span {
+  border-color: var(--app-border);
+  background: var(--app-surface-3);
+}
+
+html[data-ui-theme="light"] .device-session-card__badge {
+  background: color-mix(in srgb, var(--app-accent) 14%, #eef3ff);
+  color: var(--app-text-strong);
+}
+
 .device-sessions-list {
   display: grid;
   gap: 10px;

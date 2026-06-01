@@ -2076,6 +2076,20 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   display: flex;
 }
 
+.chat__topbar--mobile-direct .chat__topbar-copy {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.chat__topbar-presence {
+  display: block;
+  max-width: min(460px, 58vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat__topbar-mobile-avatar {
   width: 34px;
   height: 34px;
@@ -9191,6 +9205,19 @@ html[data-ui-theme="light"] .profile-settings-form__control-group {
   box-shadow: none;
 }
 
+html[data-ui-theme="light"] .profile-settings-form__palette-panel,
+html[data-ui-theme="light"] .profile-settings-form__avatar-frame-picker,
+html[data-ui-theme="light"] .profile-settings-form__avatar-frame-option {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .profile-settings-form__avatar-frame-option:hover,
+html[data-ui-theme="light"] .profile-settings-form__avatar-frame-option--active {
+  background: #f8fafc;
+}
+
 html[data-ui-theme="light"] .profile-settings-form__public-identity strong,
 html[data-ui-theme="light"] .profile-settings-form__public-grid b,
 html[data-ui-theme="light"] .profile-settings-form__public-section-copy > strong,
@@ -9198,7 +9225,10 @@ html[data-ui-theme="light"] .profile-settings-form__public-info-list b,
 html[data-ui-theme="light"] .profile-settings-form__public-widget-header,
 html[data-ui-theme="light"] .profile-settings-form__public-widget-list b,
 html[data-ui-theme="light"] .profile-settings-form__control-group > strong,
-html[data-ui-theme="light"] .profile-settings-form__theme-button b {
+html[data-ui-theme="light"] .profile-settings-form__theme-button b,
+html[data-ui-theme="light"] .profile-settings-form__palette-header span,
+html[data-ui-theme="light"] .profile-settings-form__avatar-frame-picker > span,
+html[data-ui-theme="light"] .profile-settings-form__avatar-frame-option b {
   color: #0f172a;
   text-shadow: none;
 }
@@ -9209,7 +9239,9 @@ html[data-ui-theme="light"] .profile-settings-form__public-section p,
 html[data-ui-theme="light"] .profile-settings-form__public-info-list > div,
 html[data-ui-theme="light"] .profile-settings-form__public-info-list em,
 html[data-ui-theme="light"] .profile-settings-form__public-widget-list span,
-html[data-ui-theme="light"] .profile-settings-form__status--inline {
+html[data-ui-theme="light"] .profile-settings-form__status--inline,
+html[data-ui-theme="light"] .profile-settings-form__palette-header small,
+html[data-ui-theme="light"] .profile-settings-form__color-field {
   color: #5f6b82;
 }
 
@@ -9349,6 +9381,22 @@ html[data-ui-theme="light"] .profile__voice-stack,
 html[data-ui-theme="light"] .profile__identity-row,
 html[data-ui-theme="light"] .menu__profile-wrapper--voice-connected .profile__voice-stack,
 html[data-ui-theme="light"] .menu__profile-wrapper--voice-connected .profile__identity-row {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+html[data-ui-theme="light"] .menu__profile.profile-customization .profile__identity-row,
+html[data-ui-theme="light"] .profile__voice-stack.profile-customization {
+  border-color: #d9e0ec;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+html[data-ui-theme="light"] .menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized .menu__profile.profile-customization .profile__identity-row,
+html[data-ui-theme="light"] .menu__profile-wrapper--voice-connected.menu__profile-wrapper--customized .profile__voice-stack.profile-customization {
   border-color: #d9e0ec;
   background: #ffffff;
   color: #172033;

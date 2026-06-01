@@ -2646,8 +2646,10 @@
 }
 
 .friends-direct-chat-topbar .chat__topbar-copy {
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex-wrap: nowrap;
 }
 
 .friends-direct-chat-topbar .chat__topbar-copy strong {
@@ -2659,6 +2661,14 @@
 .friends-direct-chat-topbar .chat__topbar-copy span {
   font-size: 11px;
   color: #93a0ba;
+}
+
+.friends-direct-chat-topbar__presence {
+  display: block;
+  max-width: min(460px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .friends-direct-chat-topbar__actions {

@@ -55,6 +55,32 @@ public sealed class UserSessionServiceTests
     }
 
     [Fact]
+    public async Task GetActiveSessionsAsync_PrunesDuplicateActiveSessionsForSameDeviceToken()
+    {
+        await using var context = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var sameDeviceHash = new string('A', 64);
+        context.RefreshTokens.AddRange(
+            BuildToken(id: 1, userId: 42, tokenHash: "current", now, deviceTokenHash: sameDeviceHash, createdAt: now.AddDays(-2)),
+            BuildToken(id: 2, userId: 42, tokenHash: "duplicate", now, deviceTokenHash: sameDeviceHash, createdAt: now.AddDays(-1)),
+            BuildToken(id: 3, userId: 42, tokenHash: "other-device", now, deviceTokenHash: new string('B', 64), createdAt: now.AddHours(-2)));
+        await context.SaveChangesAsync();
+        var service = new UserSessionService(context);
+
+        var sessions = await service.GetActiveSessionsAsync(
+            userId: 42,
+            currentRefreshTokenHash: "current",
+            CancellationToken.None);
+
+        Assert.Equal(2, sessions.Count);
+        Assert.Contains(sessions, item => item.Id == 1 && item.IsCurrent);
+        Assert.Contains(sessions, item => item.Id == 3);
+        Assert.Null((await context.RefreshTokens.FindAsync(1))?.RevokedAt);
+        Assert.NotNull((await context.RefreshTokens.FindAsync(2))?.RevokedAt);
+        Assert.Null((await context.RefreshTokens.FindAsync(3))?.RevokedAt);
+    }
+
+    [Fact]
     public async Task DetectLoginSecuritySignalAsync_FlagsNewDeviceAndIpFamily()
     {
         await using var context = CreateContext();

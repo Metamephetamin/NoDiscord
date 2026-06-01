@@ -17,6 +17,7 @@ import { formatFileSize } from "../utils/textChatHelpers";
 import { COMPOSER_TRANSLATION_LANGUAGES, translateComposerText } from "../utils/textTranslation";
 import { punctuateComposerText } from "../utils/speechPunctuation";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { getNextEmojiPickerSearchVisibility } from "../utils/emojiPickerScrollState";
 import "../css/TextChatComposerPopovers.css";
 
 const LOCATION_DESIRED_ACCURACY_METERS = 60;
@@ -202,6 +203,7 @@ function TextChatComposer({
 }) {
   const [emojiPreviewCount, setEmojiPreviewCount] = useState(8);
   const [emojiSearchQuery, setEmojiSearchQuery] = useState("");
+  const [emojiSearchHidden, setEmojiSearchHidden] = useState(false);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerLocating, setLocationPickerLocating] = useState(false);
@@ -218,6 +220,7 @@ function TextChatComposer({
   const translatorButtonRef = useRef(null);
   const translatorMenuRef = useRef(null);
   const attachMenuCloseTimeoutRef = useRef(0);
+  const emojiPickerScrollTopRef = useRef(0);
   const suppressSpeechClickRef = useRef(false);
   const deferredMessage = useDeferredValue(message);
   const deferredEmojiSearchQuery = useDeferredValue(emojiSearchQuery);
@@ -278,6 +281,8 @@ function TextChatComposer({
     if (!composerEmojiPickerOpen) {
       setEmojiSearchQuery("");
       setEmojiPreviewCount(8);
+      setEmojiSearchHidden(false);
+      emojiPickerScrollTopRef.current = 0;
     }
   }, [composerEmojiPickerOpen]);
 
@@ -375,6 +380,15 @@ function TextChatComposer({
 
   const handleEmojiPickerScroll = (event) => {
     const target = event.currentTarget;
+    const currentScrollTop = Math.max(0, Number(target.scrollTop) || 0);
+    const previousScrollTop = emojiPickerScrollTopRef.current;
+    emojiPickerScrollTopRef.current = currentScrollTop;
+    setEmojiSearchHidden((searchHidden) => getNextEmojiPickerSearchVisibility({
+      previousScrollTop,
+      currentScrollTop,
+      searchHidden,
+    }));
+
     if (target.scrollHeight - target.scrollTop - target.clientHeight <= 72) {
       loadMoreEmojiPreviews();
     }
@@ -912,7 +926,7 @@ function TextChatComposer({
             {composerEmojiPickerOpen ? (
               <div
                 ref={composerEmojiPickerRef}
-                className="composer-emoji-picker"
+                className={`composer-emoji-picker ${emojiSearchHidden ? "composer-emoji-picker--search-hidden" : ""}`}
                 role="dialog"
                 aria-label="Выбор смайлика"
                 onScroll={handleEmojiPickerScroll}
@@ -925,6 +939,8 @@ function TextChatComposer({
                     onChange={(event) => {
                       setEmojiSearchQuery(event.target.value);
                       setEmojiPreviewCount(8);
+                      setEmojiSearchHidden(false);
+                      emojiPickerScrollTopRef.current = 0;
                     }}
                     placeholder="Поиск"
                     autoComplete="off"

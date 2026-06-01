@@ -117,6 +117,18 @@ test("media preview delete button requires delete handler", () => {
   assert.match(messageListSource, /canDelete: canDeleteAttachments/);
 });
 
+test("media preview photo actions use bootstrap icons without a theme shell", () => {
+  const previewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
+  const mediaPreviewCss = readRepoFileIfExists("src/css/TextChatMediaPreview.css");
+
+  assert.match(previewSource, /BootstrapIcon/);
+  assert.match(previewSource, /kind="trash3"/);
+  assert.match(previewSource, /kind="download"/);
+  assert.match(previewSource, /kind="collection"/);
+  assert.match(mediaPreviewCss, /\.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
+  assert.match(mediaPreviewCss, /html\[data-ui-theme="light"\] \.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
+});
+
 test("media preview can browse previous message media without forward wraparound", () => {
   const actionsSource = readRepoFile("src/hooks/useTextChatMessageActions.js");
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
@@ -188,7 +200,7 @@ test("message timestamps show only time while dates render as day dividers", () 
   assert.doesNotMatch(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="end" \/>/);
 });
 
-test("direct chat topbar does not render online presence under the title", () => {
+test("direct chat topbar renders user presence on a second line", () => {
   const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
   const friendsCss = readRepoFile("src/css/FriendsWorkspace.css");
   const topbarStart = friendsSource.indexOf('className="chat__topbar friends-direct-chat-topbar"');
@@ -197,12 +209,13 @@ test("direct chat topbar does not render online presence under the title", () =>
 
   assert.match(topbarSource, /friends-direct-chat-topbar__avatar/);
   assert.match(topbarSource, /currentDirectTopbarAvatar/);
-  assert.doesNotMatch(topbarSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
+  assert.match(topbarSource, /friends-direct-chat-topbar__presence/);
+  assert.match(topbarSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
   assert.doesNotMatch(topbarSource, /chat__topbar-copy-name--online/);
-  assert.doesNotMatch(topbarSource, /isUserCurrentlyOnline\(currentDirectFriend\)/);
   assert.match(topbarSource, /currentConversationTarget \? \(/);
   assert.match(topbarSource, /участников/);
-  assert.match(friendsCss, /\.friends-direct-chat-topbar \.chat__topbar-copy \{[\s\S]*?gap: 8px;/);
+  assert.match(friendsCss, /\.friends-direct-chat-topbar \.chat__topbar-copy \{[\s\S]*?flex-direction: column;[\s\S]*?align-items: flex-start;/);
+  assert.match(friendsCss, /\.friends-direct-chat-topbar__presence \{[\s\S]*?display: block;/);
 });
 
 test("personal chat memoization ignores volatile presence fields", () => {
@@ -225,7 +238,7 @@ test("voice channel status editing is restricted to server owner", () => {
   const channelActionsSource = readRepoFile("src/features/menu-main/useMenuMainChannelActions.js");
 
   assert.match(voiceChannelSource, /canEditChannelStatus = false/);
-  assert.match(voiceChannelSource, /const canEditStatus = canEditChannelStatus && !isEditing && !isJoining;/);
+  assert.match(voiceChannelSource, /const canEditStatus = canEditChannelStatus && participantCount > 0 && !isEditing && !isJoining;/);
   assert.match(voiceChannelSource, /if \(!canEditChannelStatus \|\| !channel\?\.id\)/);
   assert.match(voiceChannelSource, /if \(!canEditChannelStatus \|\| !channel\?\.id \|\| statusEditor\.channelId !== channel\.id\)/);
   assert.doesNotMatch(voiceChannelSource, /const canEditStatus = canManageChannels && !isEditing && !isJoining;/);
@@ -236,8 +249,9 @@ test("voice channel status editing is restricted to server owner", () => {
   assert.match(channelActionsSource, /delete safePatch\.status;/);
 });
 
-test("mobile direct chat topbar keeps avatar without online presence text", () => {
+test("mobile direct chat topbar keeps avatar and renders user presence below the title", () => {
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const menuCss = readRepoFile("src/css/MenuMain.css");
   const mobileStart = workspaceSource.indexOf("export const MobileDirectChat =");
   const mobileExportEnd = workspaceSource.indexOf("export default", mobileStart);
   const mobileEnd = mobileExportEnd === -1 ? workspaceSource.length : mobileExportEnd;
@@ -245,7 +259,22 @@ test("mobile direct chat topbar keeps avatar without online presence text", () =
 
   assert.match(mobileSource, /chat__topbar-mobile-avatar/);
   assert.match(mobileSource, /mobileDirectAvatar/);
-  assert.doesNotMatch(mobileSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
+  assert.match(mobileSource, /chat__topbar-presence/);
+  assert.match(mobileSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
+  assert.match(menuCss, /\.chat__topbar--mobile-direct \.chat__topbar-copy \{[\s\S]*?flex-direction: column;[\s\S]*?align-items: flex-start;/);
+  assert.match(menuCss, /\.chat__topbar-presence \{[\s\S]*?display: block;/);
+});
+
+test("appearance settings nav item uses a single-word label and plain star icon", () => {
+  const modelSource = readRepoFile("src/utils/menuMainModel.js");
+  const overlaysSource = readRepoFile("src/components/MenuMainOverlays.jsx");
+  const iconStart = overlaysSource.indexOf("appearance_accessibility: (");
+  const iconEnd = overlaysSource.indexOf("memory: (", iconStart);
+  const iconSource = overlaysSource.slice(iconStart, iconEnd);
+
+  assert.match(modelSource, /\{ id: "appearance_accessibility", label: "Оформление", section: "Приложение" \}/);
+  assert.match(iconSource, /M12 4\.5 13\.8 9l4\.7\.35-3\.6 3\.05 1\.1 4\.6-4-2\.45L8 17l1\.1-4\.6-3\.6-3\.05L10\.2 9 12 4\.5Z/);
+  assert.doesNotMatch(iconSource, /M4\.5 19\.5h15/);
 });
 
 test("text chat does not render a floating date pinned to the top center", () => {
@@ -438,6 +467,9 @@ test("account session styles stay split from the main menu stylesheet", () => {
   assert.match(sessionsCss, /\.device-sessions-panel \{/);
   assert.match(sessionsCss, /\.device-session-card \{/);
   assert.match(sessionsCss, /html\[data-ui-theme="light"\] \.device-session-card/);
+  assert.match(sessionsCss, /html\[data-ui-theme="light"\] \.device-session-card__copy strong/);
+  assert.match(sessionsCss, /html\[data-ui-theme="light"\] \.device-session-card__meta b/);
+  assert.match(sessionsCss, /html\[data-ui-theme="light"\] \.device-session-card__badge/);
   assert.doesNotMatch(mainCss, /^\s*\.device-sessions-panel[^\n{]*\{/m);
   assert.doesNotMatch(mainCss, /^\s*\.device-session-card[^\n{]*\{/m);
   assert.doesNotMatch(mainCss, /^html\[data-ui-theme="light"\] \.device-session-card/m);
@@ -588,6 +620,16 @@ test("common counters and timestamps use the numeric Roboto font", () => {
   assert.match(indexCss, /\.chat__topbar-badge,[\s\S]*?\.message-reaction__count,[\s\S]*?\.voice-message__duration,[\s\S]*?font-family: var\(--font-numeric\);/);
 });
 
+test("voice message controls stay bright and aligned", () => {
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+
+  assert.match(textChatCss, /\.voice-message__bar \{[\s\S]*?background: rgba\(122, 196, 255, 0\.62\);/);
+  assert.match(textChatCss, /\.voice-message__time \{[\s\S]*?color: rgba\(114, 190, 255, 0\.98\);/);
+  assert.match(textChatCss, /\.voice-message__speed \{[\s\S]*?right: 42px;[\s\S]*?top: 17px;[\s\S]*?background: rgba\(72, 154, 224, 0\.88\);/);
+  assert.match(textChatCss, /\.msg-content--voice-only \.message-bottom-row--voice \.message-read-status \{[\s\S]*?align-self: center;[\s\S]*?height: 16px;[\s\S]*?transform: none;/);
+  assert.match(textChatCss, /\.msg-content--voice-only \.message-bottom-row--voice \.message-read-status__check \{[\s\S]*?width: 8px;[\s\S]*?height: 12px;/);
+});
+
 test("server message authors render role badges after nicknames", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const textChatCss = readRepoFile("src/css/TextChat.css");
@@ -654,6 +696,7 @@ test("voice channel active card keeps participants outside the highlight and exp
 
   assert.match(voiceChannelSource, /normalizeVoiceChannelStatus/);
   assert.match(voiceChannelSource, /VOICE_CHANNEL_STATUS_CHAR_LIMIT/);
+  assert.match(voiceChannelSource, /const shouldShowStatus = participantCount > 0 && \(/);
   assert.match(voiceChannelSource, /placeholder="Выбрать статус канала"/);
   assert.match(voiceChannelSource, /className="voice-channel__status-button"/);
   assert.match(workspaceSource, /onUpdateChannelStatus=\{\(channelId, status\) => onUpdateChannelSettings\?\.\("voice", channelId, \{ status \}\)\}/);
@@ -662,6 +705,7 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(serverInviteSource, /public string Status \{ get; set; \} = string\.Empty;/);
   assert.doesNotMatch(listCss, /\.list__items--active \{[^}]*background:/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
+  assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon img \{[\s\S]*?filter: brightness\(0\) saturate\(100%\);/);
   assert.match(listCss, /\.voice-channel__status-button \{/);
   assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
 });

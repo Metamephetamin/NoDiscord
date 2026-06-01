@@ -4,7 +4,7 @@ import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
-import { createId, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { isServerRailItemActive } from "./serverRailState.mjs";
 import {
   DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
@@ -3366,6 +3366,7 @@ export const MobileDirectChat = ({
             />
             <div className="chat__topbar-copy">
               <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{mobileDirectTitle}</strong>
+              <span className="chat__topbar-presence">{formatUserPresenceStatus(currentDirectFriend)}</span>
             </div>
           </div>
         </div>

@@ -308,17 +308,17 @@ const VoiceChannelList = ({
         {channels.flatMap((channel) => {
         const runtimeId = getChannelRuntimeId(serverId, channel.id);
         const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
+        const participantCount = participants.length;
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
         const isMuted = mutedChannels.has(String(channel.id));
         const channelStatus = normalizeVoiceChannelStatus(channel.status ?? channel.Status ?? "");
-        const isStatusEditing = statusEditor.channelId === channel.id;
-        const canEditStatus = canEditChannelStatus && !isEditing && !isJoining;
-        const shouldShowStatus = Boolean(channelStatus) || (isActive && canEditStatus);
+        const isStatusEditing = statusEditor.channelId === channel.id && participantCount > 0;
+        const canEditStatus = canEditChannelStatus && participantCount > 0 && !isEditing && !isJoining;
+        const shouldShowStatus = participantCount > 0 && (Boolean(channelStatus) || (isActive && canEditStatus));
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
-        const participantCount = participants.length;
         const sessionStartedAtMs = resolveVoiceChannelSessionStartedAtMs({
           previousStartedAtMs: channelSessionStartedAtMsById[runtimeId],
           participants,

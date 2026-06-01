@@ -347,6 +347,36 @@ public sealed class AuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Login_WithSameDeviceToken_RevokesOlderActiveSessionForSameDevice()
+    {
+        var passwordHasher = new PasswordHasher<User>();
+        var user = BuildUser(20, "same-device-login@gmail.com");
+        user.password_hash = passwordHasher.HashPassword(user, "current-password");
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        var controller = BuildController();
+        var login = new LoginDto
+        {
+            identifier = user.email,
+            password = "current-password",
+            deviceToken = "ldv1.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222"
+        };
+
+        var firstResult = await controller.Login(login);
+        var secondResult = await controller.Login(login);
+
+        Assert.IsType<OkObjectResult>(firstResult);
+        Assert.IsType<OkObjectResult>(secondResult);
+        var userTokens = await _context.RefreshTokens
+            .Where(item => item.UserId == user.id)
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+        Assert.Equal(2, userTokens.Count);
+        Assert.NotNull(userTokens[0].RevokedAt);
+        Assert.Null(userTokens[1].RevokedAt);
+    }
+
+    [Fact]
     public async Task ResetTotp_WithPasswordAndEmailCode_DisablesTotp()
     {
         var passwordHasher = new PasswordHasher<User>();

@@ -2172,6 +2172,9 @@ export const FriendsMain = ({
                   {currentConversationTarget ? (
                     <span>{`${Number(currentConversationTarget.memberCount || currentConversationTarget.members?.length || 0)} участников`}</span>
                   ) : null}
+                  {currentDirectFriend ? (
+                    <span className="friends-direct-chat-topbar__presence">{formatUserPresenceStatus(currentDirectFriend)}</span>
+                  ) : null}
                 </div>
               </div>
 

@@ -1286,7 +1286,8 @@ public class AuthController : ControllerBase
             storedToken.User,
             dto.deviceToken,
             cancellationToken,
-            sessionCreatedAt: storedToken.CreatedAt);
+            sessionCreatedAt: storedToken.CreatedAt,
+            revokeExistingDeviceSessions: false);
         var revoked = await RevokeRefreshTokenForRotationAsync(
             storedToken.Id,
             authSession.RefreshToken,
@@ -1481,7 +1482,8 @@ public class AuthController : ControllerBase
         User user,
         string? deviceToken = null,
         CancellationToken cancellationToken = default,
-        DateTimeOffset? sessionCreatedAt = null)
+        DateTimeOffset? sessionCreatedAt = null,
+        bool revokeExistingDeviceSessions = true)
     {
         var now = DateTimeOffset.UtcNow;
         var accessTokenExpiresAt = now.AddMinutes(GetAccessTokenLifetimeMinutes());
@@ -1503,6 +1505,24 @@ public class AuthController : ControllerBase
             securitySignal,
             now,
             cancellationToken);
+
+        if (revokeExistingDeviceSessions && !string.IsNullOrWhiteSpace(deviceTokenHash))
+        {
+            var existingDeviceSessions = await _context.RefreshTokens
+                .Where(item =>
+                    item.UserId == user.id &&
+                    item.DeviceTokenHash == deviceTokenHash &&
+                    !item.RevokedAt.HasValue &&
+                    item.ExpiresAt > now)
+                .ToListAsync(cancellationToken);
+
+            foreach (var session in existingDeviceSessions)
+            {
+                session.RevokedAt = now;
+                session.LastUsedAt = now;
+                session.LastIp = clientIp;
+            }
+        }
 
         _context.RefreshTokens.Add(new RefreshTokenRecord
         {

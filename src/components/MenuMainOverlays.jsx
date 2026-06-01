@@ -204,7 +204,6 @@ const SETTINGS_NAV_ICON_PATHS = {
   appearance_accessibility: (
     <>
       <path d="M12 4.5 13.8 9l4.7.35-3.6 3.05 1.1 4.6-4-2.45L8 17l1.1-4.6-3.6-3.05L10.2 9 12 4.5Z" />
-      <path d="M4.5 19.5h15" />
     </>
   ),
   memory: (
