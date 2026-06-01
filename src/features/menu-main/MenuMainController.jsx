@@ -80,7 +80,6 @@ import useMenuMainNavigation from "./useMenuMainNavigation";
 import useMenuMainNotificationSound from "./useMenuMainNotificationSound";
 import useMenuMainQrScanner from "./useMenuMainQrScanner";
 import useMenuMainSelfVoiceStateSync from "./useMenuMainSelfVoiceStateSync";
-import useMenuMainSoundboard from "./useMenuMainSoundboard";
 import useMenuMainServerInviteFlow, { useMenuMainServerInvitePermissions } from "./useMenuMainServerInviteFlow";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
 import useMenuMainVoiceProcessing from "./useMenuMainVoiceProcessing";
@@ -855,21 +854,6 @@ export default function MenuMain({
     systemSoundEventsStorageKey,
   });
   const [soundboardOpen, setSoundboardOpen] = useState(false);
-  const {
-    soundboardInputRef,
-    filteredSoundboardSounds,
-    soundboardQuery,
-    setSoundboardQuery,
-    soundboardStatus,
-    soundboardActiveSoundId,
-    handleSoundboardUpload,
-    playSoundboardSound,
-    stopSoundboardSound,
-    removeSoundboardSound,
-  } = useMenuMainSoundboard({
-    user,
-    systemSoundVolumeRatio,
-  });
   const {
     deviceSessions,
     deviceSessionsLoading,
@@ -7680,21 +7664,8 @@ export default function MenuMain({
       setQuickSwitcherQuery={setQuickSwitcherQuery}
       handleQuickSwitcherSelect={handleQuickSwitcherSelect}
       closeQuickSwitcher={closeQuickSwitcher}
-      soundboardOpen={soundboardOpen}
-      soundboardInputRef={soundboardInputRef}
-      soundboardSounds={filteredSoundboardSounds}
-      soundboardQuery={soundboardQuery}
-      soundboardStatus={soundboardStatus}
-      soundboardActiveSoundId={soundboardActiveSoundId}
-      setSoundboardQuery={setSoundboardQuery}
-      handleSoundboardUpload={handleSoundboardUpload}
-      playSoundboardSound={playSoundboardSound}
-      stopSoundboardSound={stopSoundboardSound}
-      removeSoundboardSound={removeSoundboardSound}
-      closeSoundboard={() => {
-        setSoundboardOpen(false);
-        stopSoundboardSound();
-      }}
+      sb={soundboardOpen}
+      c={setSoundboardOpen}
       directCallState={directCallState}
       directCallHistory={directCallHistory}
       isMicMuted={isMicMuted}

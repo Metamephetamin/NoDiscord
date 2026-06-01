@@ -1,4 +1,5 @@
-import "../css/SoundboardPanel.css";
+import "../../css/SoundboardPanel.css";
+import useMenuMainSoundboard from "./useMenuMainSoundboard";
 
 const formatDuration = (durationSeconds) => {
   const totalSeconds = Math.max(0, Math.round(Number(durationSeconds) || 0));
@@ -34,24 +35,26 @@ function SoundboardTileIcon({ active }) {
 }
 
 export default function SoundboardPanel({
-  open,
-  query,
-  sounds = [],
-  activeSoundId = "",
-  status = "",
-  inputRef,
-  onQueryChange,
-  onUpload,
-  onPlay,
-  onRemove,
-  onClose,
+  u,
+  c,
 }) {
-  if (!open) {
-    return null;
-  }
+  const close = () => c(false);
+  const {
+    soundboardInputRef,
+    filteredSoundboardSounds,
+    soundboardQuery,
+    setSoundboardQuery,
+    soundboardStatus,
+    soundboardActiveSoundId,
+    handleSoundboardUpload,
+    playSoundboardSound,
+    removeSoundboardSound,
+  } = useMenuMainSoundboard({
+    user: u,
+  });
 
   return (
-    <div className="soundboard-panel-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="soundboard-panel-backdrop" role="presentation" onMouseDown={close}>
       <section
         className="soundboard-panel"
         role="dialog"
@@ -64,8 +67,8 @@ export default function SoundboardPanel({
             <SoundboardSearchIcon />
             <input
               type="search"
-              value={query}
-              onChange={(event) => onQueryChange?.(event.target.value)}
+              value={soundboardQuery}
+              onChange={(event) => setSoundboardQuery(event.target.value)}
               placeholder="Найдите идеальный звук"
               autoFocus
             />
@@ -73,39 +76,39 @@ export default function SoundboardPanel({
           <button type="button" className="soundboard-panel__volume" aria-label="Громкость системных звуков">
             <SoundboardVolumeIcon />
           </button>
-          <button type="button" className="soundboard-panel__close" onClick={onClose} aria-label="Закрыть звуковую панель">
+          <button type="button" className="soundboard-panel__close" onClick={close} aria-label="Закрыть звуковую панель">
             ×
           </button>
         </div>
 
         <input
-          ref={inputRef}
+          ref={soundboardInputRef}
           type="file"
           accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/*"
           className="hidden-input"
           multiple
-          onChange={onUpload}
+          onChange={handleSoundboardUpload}
         />
 
         <div className="soundboard-panel__body">
           <div className="soundboard-panel__section-head">
             <strong>Мои звуки</strong>
-            <button type="button" className="soundboard-panel__upload" onClick={() => inputRef?.current?.click()}>
+            <button type="button" className="soundboard-panel__upload" onClick={() => soundboardInputRef.current?.click()}>
               Загрузить звук
             </button>
           </div>
 
-          {sounds.length ? (
+          {filteredSoundboardSounds.length ? (
             <div className="soundboard-panel__grid">
-              {sounds.map((sound) => {
-                const active = activeSoundId === sound.id;
+              {filteredSoundboardSounds.map((sound) => {
+                const active = soundboardActiveSoundId === sound.id;
 
                 return (
                   <div key={sound.id} className={`soundboard-panel__tile-wrap ${active ? "soundboard-panel__tile-wrap--active" : ""}`}>
                     <button
                       type="button"
                       className="soundboard-panel__tile"
-                      onClick={() => onPlay?.(sound)}
+                      onClick={() => playSoundboardSound(sound)}
                       aria-label={`Воспроизвести ${sound.name}`}
                     >
                       <SoundboardTileIcon active={active} />
@@ -115,7 +118,7 @@ export default function SoundboardPanel({
                     <button
                       type="button"
                       className="soundboard-panel__tile-remove"
-                      onClick={() => onRemove?.(sound.id)}
+                      onClick={() => removeSoundboardSound(sound.id)}
                       aria-label={`Удалить ${sound.name}`}
                     >
                       ×
@@ -127,16 +130,15 @@ export default function SoundboardPanel({
           ) : (
             <div className="soundboard-panel__empty">
               <strong>Пока нет звуков</strong>
-              <button type="button" className="soundboard-panel__upload soundboard-panel__upload--empty" onClick={() => inputRef?.current?.click()}>
+              <button type="button" className="soundboard-panel__upload soundboard-panel__upload--empty" onClick={() => soundboardInputRef.current?.click()}>
                 Загрузить звук
               </button>
             </div>
           )}
 
-          {status ? <div className="soundboard-panel__status" role="status">{status}</div> : null}
+          {soundboardStatus ? <div className="soundboard-panel__status" role="status">{soundboardStatus}</div> : null}
         </div>
       </section>
     </div>
   );
 }
-

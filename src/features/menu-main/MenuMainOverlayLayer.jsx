@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import {
   AdminSecurityPageOverlay,
   CameraModal,
@@ -12,7 +13,6 @@ import {
   ServerToastStack,
   SettingsOverlay,
 } from "../../components/MenuMainOverlays";
-import SoundboardPanel from "../../components/SoundboardPanel";
 import {
   DEFAULT_SERVER_ICON,
 } from "../../utils/media";
@@ -26,6 +26,8 @@ import {
 } from "../../utils/menuMainModel";
 import { SCREEN_SHARE_ALLOWED_FPS } from "../../webrtc/voiceClientUtils";
 import "../../css/MenuMainInviteFeedback.css";
+
+const SoundboardPanel = lazy(() => import("./SoundboardPanel"));
 
 export default function MenuMainOverlayLayer({
   children,
@@ -121,18 +123,8 @@ export default function MenuMainOverlayLayer({
   setQuickSwitcherQuery,
   handleQuickSwitcherSelect,
   closeQuickSwitcher,
-  soundboardOpen,
-  soundboardInputRef,
-  soundboardSounds,
-  soundboardQuery,
-  soundboardStatus,
-  soundboardActiveSoundId,
-  setSoundboardQuery,
-  handleSoundboardUpload,
-  playSoundboardSound,
-  stopSoundboardSound,
-  removeSoundboardSound,
-  closeSoundboard,
+  sb,
+  c,
   directCallState,
   directCallHistory,
   isMicMuted,
@@ -214,22 +206,14 @@ export default function MenuMainOverlayLayer({
         onSelect={handleQuickSwitcherSelect}
       />
 
-      <SoundboardPanel
-        open={soundboardOpen}
-        query={soundboardQuery}
-        sounds={soundboardSounds}
-        activeSoundId={soundboardActiveSoundId}
-        status={soundboardStatus}
-        inputRef={soundboardInputRef}
-        onQueryChange={setSoundboardQuery}
-        onUpload={handleSoundboardUpload}
-        onPlay={playSoundboardSound}
-        onRemove={removeSoundboardSound}
-        onClose={() => {
-          closeSoundboard?.();
-          stopSoundboardSound?.();
-        }}
-      />
+      {sb && (
+        <Suspense>
+          <SoundboardPanel
+            u={user}
+            c={c}
+          />
+        </Suspense>
+      )}
 
       {showDirectCallOverlay ? (
         <DirectCallOverlayView

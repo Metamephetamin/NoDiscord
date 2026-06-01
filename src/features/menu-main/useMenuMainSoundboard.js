@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getScopedUserStorageScope } from "../../utils/menuMainModel";
+import { readSystemSoundVolumeRatio } from "../../utils/systemSoundVolume";
 
 const SOUNDBOARD_STORAGE_PREFIX = "nd:soundboard";
 const SOUNDBOARD_MAX_DURATION_SECONDS = 20;
@@ -127,7 +128,6 @@ const createSoundFromFile = async (file) => {
 
 export default function useMenuMainSoundboard({
   user,
-  systemSoundVolumeRatio = 1,
 }) {
   const storageKey = useMemo(() => createSoundboardStorageKey(user), [user]);
   const soundboardInputRef = useRef(null);
@@ -163,7 +163,7 @@ export default function useMenuMainSoundboard({
     stopSoundboardSound();
 
     const audio = new Audio(sound.dataUrl);
-    audio.volume = Math.max(0, Math.min(1, Number(systemSoundVolumeRatio) || 0));
+    audio.volume = Math.max(0, Math.min(1, Number(readSystemSoundVolumeRatio(user)) || 0));
     audio.preload = "auto";
     activeAudioRef.current = audio;
     setSoundboardActiveSoundId(sound.id);
@@ -190,7 +190,7 @@ export default function useMenuMainSoundboard({
       }
       setSoundboardStatus("Браузер заблокировал воспроизведение звука.");
     });
-  }, [stopSoundboardSound, systemSoundVolumeRatio]);
+  }, [stopSoundboardSound, user]);
 
   const handleSoundboardUpload = useCallback(async (event) => {
     const files = Array.from(event?.target?.files || []);
