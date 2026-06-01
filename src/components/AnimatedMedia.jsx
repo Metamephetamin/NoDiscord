@@ -63,6 +63,7 @@ export default function AnimatedMedia({
   const resolvedSrc = useMemo(() => resolveMediaUrl(src, fallback), [fallback, src]);
   const [readyVideoSrc, setReadyVideoSrc] = useState("");
   const readyVideoSrcRef = useRef("");
+  const nodeRef = useRef(null);
   const [node, setNode] = useState(null);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [isVisible, setIsVisible] = useState(() => loading === "eager");
@@ -148,6 +149,11 @@ export default function AnimatedMedia({
   }), [className, optimize, optimizedImageSrc, resolvedSrc, shouldRenderVideo, shouldTrackVisibility, targetHeight, targetWidth]);
 
   const attachNodeRef = useCallback((nextNode) => {
+    if (nodeRef.current === nextNode) {
+      return;
+    }
+
+    nodeRef.current = nextNode;
     setNode(nextNode);
   }, []);
 
@@ -266,7 +272,6 @@ export default function AnimatedMedia({
   if (shouldRenderVideo) {
     return (
       <video
-        key={resolvedSrc || resolvedFallback}
         {...rest}
         ref={attachNodeRef}
         className={className}
@@ -304,7 +309,6 @@ export default function AnimatedMedia({
 
   return (
     <img
-      key={optimizedImageSrc || resolvedFallback}
       {...rest}
       ref={attachNodeRef}
       className={className}
