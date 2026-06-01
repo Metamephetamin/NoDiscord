@@ -2948,10 +2948,13 @@ function ServerMainComponent({
             isMicMuted={isMicMuted}
             isSoundMuted={isSoundMuted}
             isScreenShareActive={isScreenShareActive}
+            isCameraShareActive={isCameraShareActive}
             onToggleMic={onToggleMic}
             onToggleSound={onToggleSound}
             onOpenTextChat={onOpenTextChat}
             onScreenShareAction={onScreenShareAction}
+            onOpenCamera={onOpenCamera}
+            onStopCameraShare={onStopCameraShare}
             onLeave={onLeave}
           />
           </Suspense>
@@ -2980,10 +2983,13 @@ function ServerMainComponent({
             isMicMuted={isMicMuted}
             isSoundMuted={isSoundMuted}
             isScreenShareActive={isScreenShareActive}
+            isCameraShareActive={isCameraShareActive}
             onToggleMic={onToggleMic}
             onToggleSound={onToggleSound}
             onOpenTextChat={onOpenTextChat}
             onScreenShareAction={onScreenShareAction}
+            onOpenCamera={onOpenCamera}
+            onStopCameraShare={onStopCameraShare}
             onLeave={onLeave}
           />
           </Suspense>

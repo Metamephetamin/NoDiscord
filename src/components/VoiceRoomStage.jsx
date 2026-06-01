@@ -467,6 +467,8 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
       return (
         <svg {...commonProps}>
           <rect x="4" y="5" width="16" height="11" rx="2" />
+          <path d="M10 11.5h5" />
+          <path d="m13 9 2 2.5-2 2.5" />
           <path d="M9 19h6" />
           <path d="M12 16v3" />
         </svg>
@@ -476,6 +478,53 @@ function VoiceStageIcon({ name, className = "voice-room-stage__toolbar-icon" }) 
         <svg {...commonProps}>
           <path d="M8 8h7a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z" />
           <path d="m17 11 3-2v8l-3-2" />
+        </svg>
+      );
+    case "screen-stop":
+      return (
+        <svg {...commonProps}>
+          <rect x="4" y="5" width="16" height="11" rx="2" />
+          <path d="m10 9 4 4" />
+          <path d="m14 9-4 4" />
+          <path d="M9 19h6" />
+          <path d="M12 16v3" />
+        </svg>
+      );
+    case "activities":
+      return (
+        <svg {...commonProps} fill="currentColor" stroke="none">
+          <path d="M8.1 4.4a1.6 1.6 0 0 1 2.2 0l1.3 1.3a1.6 1.6 0 0 1 0 2.2l-1.3 1.3a1.6 1.6 0 0 1-2.2 0L6.8 7.9a1.6 1.6 0 0 1 0-2.2l1.3-1.3Z" />
+          <path d="M15.4 5.1a1.4 1.4 0 0 1 2 0l1.1 1.1a1.4 1.4 0 0 1 0 2l-1.1 1.1a1.4 1.4 0 0 1-2 0l-1.1-1.1a1.4 1.4 0 0 1 0-2l1.1-1.1Z" />
+          <path d="M5.7 13.9a1.4 1.4 0 0 1 2 0l1.1 1.1a1.4 1.4 0 0 1 0 2l-1.1 1.1a1.4 1.4 0 0 1-2 0L4.6 17a1.4 1.4 0 0 1 0-2l1.1-1.1Z" />
+          <path d="M14 13.3a1.8 1.8 0 0 1 2.5 0l1.5 1.5a1.8 1.8 0 0 1 0 2.5l-1.5 1.5a1.8 1.8 0 0 1-2.5 0l-1.5-1.5a1.8 1.8 0 0 1 0-2.5l1.5-1.5Z" />
+        </svg>
+      );
+    case "effects":
+      return (
+        <svg {...commonProps}>
+          <path d="M6 18 8.8 6.8a2.2 2.2 0 0 1 3.8-.92l5.6 6.48a2.2 2.2 0 0 1-1.45 3.62L6 18Z" />
+          <path d="M9.3 9.2 15 15" />
+          <path d="M16.7 4.4 18 2.8" />
+          <path d="M19 8.2h2.2" />
+          <path d="M13.9 2.9l-.2-2" />
+          <path d="M18.6 11.9l2 1" />
+          <path d="M4 6.6 2.5 5.1" />
+        </svg>
+      );
+    case "more":
+      return (
+        <svg {...commonProps} fill="currentColor" stroke="none">
+          <circle cx="5.5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="18.5" cy="12" r="1.8" />
+        </svg>
+      );
+    case "popout":
+      return (
+        <svg {...commonProps}>
+          <path d="M9 5H6.5A2.5 2.5 0 0 0 4 7.5v10A2.5 2.5 0 0 0 6.5 20h10a2.5 2.5 0 0 0 2.5-2.5V15" />
+          <path d="M14 4h6v6" />
+          <path d="m20 4-8 8" />
         </svg>
       );
     case "focus":
@@ -570,10 +619,12 @@ export default function VoiceRoomStage({
   isMicMuted = false,
   isSoundMuted = false,
   isScreenShareActive = false,
+  isCameraShareActive = false,
   onToggleMic,
   onToggleSound,
   onOpenTextChat,
   onScreenShareAction,
+  onOpenCamera,
   onLeave,
   isJoining = false,
   pendingParticipant = null,
@@ -944,18 +995,20 @@ export default function VoiceRoomStage({
     active = false,
     danger = false,
     muted = false,
+    slashed = false,
     disabled = false,
     menu = false,
+    ghost = false,
   }) => (
     <button
       key={key}
       type="button"
-      className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""} ${muted ? "voice-room-stage__toolbar-button--muted" : ""} ${menu ? "voice-room-stage__toolbar-button--menu" : ""}`.trim()}
+      className={`voice-room-stage__toolbar-button ${active ? "voice-room-stage__toolbar-button--active" : ""} ${danger ? "voice-room-stage__toolbar-button--danger" : ""} ${muted ? "voice-room-stage__toolbar-button--muted" : ""} ${menu ? "voice-room-stage__toolbar-button--menu" : ""} ${ghost ? "voice-room-stage__toolbar-button--ghost" : ""}`.trim()}
       onClick={onClick}
       aria-label={label}
       disabled={disabled}
     >
-      <span className={`voice-room-stage__toolbar-icon-shell ${muted ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
+      <span className={`voice-room-stage__toolbar-icon-shell ${muted || slashed ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
         <VoiceStageIcon name={icon} />
       </span>
       {menu ? <VoiceStageIcon name="chevron-down" className="voice-room-stage__toolbar-chevron" /> : null}
@@ -984,6 +1037,19 @@ export default function VoiceRoomStage({
     </button>
   );
 
+  const cameraAction = isCameraShareActive ? onStopCameraShare : onOpenCamera;
+  const activeStageStopAction = activeStage?.kind === "local"
+    ? activeStage.mode === "camera"
+      ? onStopCameraShare
+      : onStopScreenShare
+    : onCloseSelectedStream || onLeave;
+  const activeStagePopoutAction = activeStage?.kind === "local" ? onCloseLocalSharePreview : onCloseSelectedStream;
+  const activeStageStopLabel = activeStage?.kind === "local"
+    ? activeStage.mode === "camera"
+      ? "Остановить камеру"
+      : "Остановить стрим"
+    : "Закрыть эфир";
+
   const stageToolbar = (
     <div className={`voice-room-stage__toolbar-shell ${activeStage ? "voice-room-stage__toolbar-shell--stream" : ""}`}>
       {activeStage ? renderStripCards() : null}
@@ -1006,11 +1072,14 @@ export default function VoiceRoomStage({
                   menu: true,
                 })}
                 {renderToolbarButton({
-                  key: "headphones",
-                  icon: "headphones",
-                  label: isSoundMuted ? "Включить звук" : "Отключить звук",
-                  onClick: onToggleSound,
-                  muted: isSoundMuted,
+                  key: "camera",
+                  icon: "camera",
+                  label: isCameraShareActive ? "Остановить камеру" : "Включить камеру",
+                  onClick: cameraAction,
+                  active: isCameraShareActive,
+                  slashed: !isCameraShareActive,
+                  disabled: !cameraAction,
+                  menu: true,
                 })}
               </div>
 
@@ -1024,41 +1093,53 @@ export default function VoiceRoomStage({
                   menu: true,
                 })}
                 {renderToolbarButton({
-                  key: "chat",
-                  icon: "chat",
-                  label: "Перейти в чат канала",
+                  key: "activities",
+                  icon: "activities",
+                  label: "Активности",
                   onClick: onOpenTextChat,
                 })}
-                {activeStage?.kind === "local"
-                  ? renderToolbarButton({
-                      key: "stop-local",
-                      icon: "close",
-                      label: activeStage.mode === "camera" ? "Остановить камеру" : "Остановить стрим",
-                      onClick: activeStage.mode === "camera" ? onStopCameraShare : onStopScreenShare,
-                      danger: true,
-                    })
-                  : null}
+                {renderToolbarButton({
+                  key: "effects",
+                  icon: "effects",
+                  label: "Реакции",
+                  onClick: () => {},
+                })}
+                {renderToolbarButton({
+                  key: "more",
+                  icon: "more",
+                  label: "Ещё",
+                  onClick: () => {},
+                })}
               </div>
             </div>
 
             {renderToolbarButton({
-              key: "leave",
-              icon: "leave",
-              label: "Отключиться от голосового канала",
-              onClick: onLeave,
+              key: "stop-stream",
+              icon: "screen-stop",
+              label: activeStageStopLabel,
+              onClick: activeStageStopAction,
               danger: true,
+              disabled: !activeStageStopAction,
             })}
           </div>
 
           <div className="voice-room-stage__stream-side voice-room-stage__stream-side--right">
-            {activeStage.kind !== "local"
-              ? renderToolbarButton({
-                  key: "close-stage",
-                  icon: "close",
-                  label: "Закрыть эфир",
-                  onClick: onCloseSelectedStream,
-                })
-              : null}
+            {renderToolbarButton({
+              key: "volume",
+              icon: "volume",
+              label: isSoundMuted ? "Включить звук" : "Отключить звук",
+              onClick: onToggleSound,
+              muted: isSoundMuted,
+              ghost: true,
+            })}
+            {renderToolbarButton({
+              key: "popout",
+              icon: "popout",
+              label: activeStage.kind === "local" ? "Свернуть предпросмотр" : "Свернуть эфир",
+              onClick: activeStagePopoutAction,
+              disabled: !activeStagePopoutAction,
+              ghost: true,
+            })}
             {renderFullscreenButton("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost")}
           </div>
         </div>
@@ -1173,6 +1254,7 @@ export default function VoiceRoomStage({
               </strong>
             </div>
             <div className="voice-room-stage__hero-badges">
+              <AnimatedAvatar className="voice-room-stage__hero-badge-avatar" src={activeStage.avatar} alt={activeStage.name} />
               {getResolutionBadge(activeStage) ? <span className="voice-room-stage__pill voice-room-stage__pill--quality">{getResolutionBadge(activeStage)}</span> : null}
               <span className="voice-room-stage__pill voice-room-stage__pill--live">{getStreamBadge(activeStage)}</span>
               <VoiceStageIcon name="chat" className="voice-room-stage__hero-chat-icon" />

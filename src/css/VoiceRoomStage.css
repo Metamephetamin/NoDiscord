@@ -684,8 +684,8 @@
 .voice-room-stage__hero-top {
   top: 0;
   min-height: 52px;
-  background: rgba(0, 0, 0, 0.88);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: rgba(13, 14, 18, 0.98);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .voice-room-stage__hero-bottom {
@@ -717,23 +717,23 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   color: #f4f6fb;
 }
 
 .voice-room-stage__hero-channel-icon {
-  width: 23px;
-  height: 23px;
-  color: #b7bdca;
+  width: 28px;
+  height: 28px;
+  color: #aeb4c0;
   flex: 0 0 auto;
 }
 
 .voice-room-stage__hero-channel-name,
 .voice-room-stage__hero-stream-title {
   min-width: 0;
-  color: #f3f5f9;
-  font-size: 17px;
-  font-weight: 760;
+  color: #e7e9ef;
+  font-size: 18px;
+  font-weight: 800;
   line-height: 1.1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -749,45 +749,55 @@
 }
 
 .voice-room-stage__hero-dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: #6f7480;
+  background: #32343b;
   flex: 0 0 auto;
 }
 
 .voice-room-stage__hero-top-avatar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.voice-room-stage__hero-badge-avatar {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   flex: 0 0 auto;
   object-fit: cover;
 }
 
 .voice-room-stage__hero-chat-icon {
-  width: 26px;
-  height: 26px;
-  color: #aeb4c0;
+  width: 34px;
+  height: 34px;
+  color: #a7abb5;
   flex: 0 0 auto;
 }
 
 .voice-room-stage__pill {
-  min-height: 25px;
-  padding: 0 9px;
+  min-height: 28px;
+  padding: 0 11px;
   display: inline-flex;
   align-items: center;
-  border-radius: 7px;
-  background: rgba(98, 101, 113, 0.92);
+  border-radius: 9px;
+  background: rgba(91, 94, 106, 0.96);
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 850;
   line-height: 1;
   white-space: nowrap;
 }
 
 .voice-room-stage__pill--live {
-  background: #e73c48;
+  border-radius: 2px 9px 9px 2px;
+  background: #ef3f4c;
   color: #ffffff;
+  letter-spacing: 0;
 }
 
 .voice-room-stage__overlay-button {

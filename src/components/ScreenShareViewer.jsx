@@ -77,8 +77,64 @@ function StreamViewerIcon({ name, className = "stream-viewer__control-icon" }) {
       return (
         <svg {...commonProps}>
           <rect x="4" y="5" width="16" height="11" rx="2" />
+          <path d="M10 11.5h5" />
+          <path d="m13 9 2 2.5-2 2.5" />
           <path d="M9 19h6" />
           <path d="M12 16v3" />
+        </svg>
+      );
+    case "camera":
+      return (
+        <svg {...commonProps}>
+          <path d="M8 8h7a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z" />
+          <path d="m17 11 3-2v8l-3-2" />
+        </svg>
+      );
+    case "screen-stop":
+      return (
+        <svg {...commonProps}>
+          <rect x="4" y="5" width="16" height="11" rx="2" />
+          <path d="m10 9 4 4" />
+          <path d="m14 9-4 4" />
+          <path d="M9 19h6" />
+          <path d="M12 16v3" />
+        </svg>
+      );
+    case "activities":
+      return (
+        <svg {...commonProps} fill="currentColor" stroke="none">
+          <path d="M8.1 4.4a1.6 1.6 0 0 1 2.2 0l1.3 1.3a1.6 1.6 0 0 1 0 2.2l-1.3 1.3a1.6 1.6 0 0 1-2.2 0L6.8 7.9a1.6 1.6 0 0 1 0-2.2l1.3-1.3Z" />
+          <path d="M15.4 5.1a1.4 1.4 0 0 1 2 0l1.1 1.1a1.4 1.4 0 0 1 0 2l-1.1 1.1a1.4 1.4 0 0 1-2 0l-1.1-1.1a1.4 1.4 0 0 1 0-2l1.1-1.1Z" />
+          <path d="M5.7 13.9a1.4 1.4 0 0 1 2 0l1.1 1.1a1.4 1.4 0 0 1 0 2l-1.1 1.1a1.4 1.4 0 0 1-2 0L4.6 17a1.4 1.4 0 0 1 0-2l1.1-1.1Z" />
+          <path d="M14 13.3a1.8 1.8 0 0 1 2.5 0l1.5 1.5a1.8 1.8 0 0 1 0 2.5l-1.5 1.5a1.8 1.8 0 0 1-2.5 0l-1.5-1.5a1.8 1.8 0 0 1 0-2.5l1.5-1.5Z" />
+        </svg>
+      );
+    case "effects":
+      return (
+        <svg {...commonProps}>
+          <path d="M6 18 8.8 6.8a2.2 2.2 0 0 1 3.8-.92l5.6 6.48a2.2 2.2 0 0 1-1.45 3.62L6 18Z" />
+          <path d="M9.3 9.2 15 15" />
+          <path d="M16.7 4.4 18 2.8" />
+          <path d="M19 8.2h2.2" />
+          <path d="M13.9 2.9l-.2-2" />
+          <path d="M18.6 11.9l2 1" />
+          <path d="M4 6.6 2.5 5.1" />
+        </svg>
+      );
+    case "more":
+      return (
+        <svg {...commonProps} fill="currentColor" stroke="none">
+          <circle cx="5.5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="18.5" cy="12" r="1.8" />
+        </svg>
+      );
+    case "popout":
+      return (
+        <svg {...commonProps}>
+          <path d="M9 5H6.5A2.5 2.5 0 0 0 4 7.5v10A2.5 2.5 0 0 0 6.5 20h10a2.5 2.5 0 0 0 2.5-2.5V15" />
+          <path d="M14 4h6v6" />
+          <path d="m20 4-8 8" />
         </svg>
       );
     case "fullscreen":
@@ -131,9 +187,11 @@ function StreamViewerControlButton({
   active = false,
   danger = false,
   muted = false,
+  slashed = false,
   menu = false,
   ghost = false,
   className = "",
+  disabled = false,
 }) {
   return (
     <button
@@ -141,8 +199,9 @@ function StreamViewerControlButton({
       className={`stream-viewer__control-button ${active ? "stream-viewer__control-button--active" : ""} ${danger ? "stream-viewer__control-button--danger" : ""} ${muted ? "stream-viewer__control-button--muted" : ""} ${menu ? "stream-viewer__control-button--menu" : ""} ${ghost ? "stream-viewer__control-button--ghost" : ""} ${className}`.trim()}
       onClick={onClick}
       aria-label={label}
+      disabled={disabled}
     >
-      <span className={`stream-viewer__control-icon-shell ${muted ? "stream-viewer__control-icon-shell--slashed" : ""}`}>
+      <span className={`stream-viewer__control-icon-shell ${muted || slashed ? "stream-viewer__control-icon-shell--slashed" : ""}`}>
         <StreamViewerIcon name={icon} />
       </span>
       {menu ? <StreamViewerIcon name="chevron-down" className="stream-viewer__control-chevron" /> : null}
@@ -169,7 +228,6 @@ export default function ScreenShareViewer({
   onClose,
   actionLabel,
   onAction,
-  actionVariant = "default",
   mirrored = false,
   secondaryStream = null,
   secondaryTitle = "",
@@ -177,10 +235,13 @@ export default function ScreenShareViewer({
   isMicMuted = false,
   isSoundMuted = false,
   isScreenShareActive = false,
+  isCameraShareActive = false,
   onToggleMic,
   onToggleSound,
   onOpenTextChat,
   onScreenShareAction,
+  onOpenCamera,
+  onStopCameraShare,
   onLeave,
 }) {
   const videoRef = useRef(null);
@@ -323,6 +384,9 @@ export default function ScreenShareViewer({
   const resolvedChannelName = channelName || subtitle || "Голосовой канал";
   const resolvedStreamTitle = streamTitle || (title ? title.replace(/^Трансляция\s+/i, "Экран ") : `Экран ${resolvedOwnerName}`);
   const resolvedQualityLabel = qualityLabel || getResolutionBadge({ width, height, fps });
+  const cameraAction = isCameraShareActive ? onStopCameraShare : onOpenCamera;
+  const stopStreamAction = onAction || onClose || onLeave;
+  const stopStreamLabel = actionLabel || "Закрыть эфир";
 
   return (
     <div className="stream-viewer" ref={containerRef}>
@@ -336,6 +400,7 @@ export default function ScreenShareViewer({
         </div>
 
         <div className="stream-viewer__badges">
+          <AnimatedAvatar className="stream-viewer__badge-avatar" src={avatarSrc} alt={resolvedOwnerName} />
           {resolvedQualityLabel ? <span className="stream-viewer__pill stream-viewer__pill--quality">{resolvedQualityLabel}</span> : null}
           <span className="stream-viewer__pill stream-viewer__pill--live">В ЭФИРЕ</span>
           <StreamViewerIcon name="chat" className="stream-viewer__topbar-chat" />
@@ -402,7 +467,7 @@ export default function ScreenShareViewer({
           </div>
 
           <div className="stream-viewer__control-center">
-            {onToggleMic || onToggleSound ? (
+            {onToggleMic || cameraAction ? (
               <div className="stream-viewer__control-group" role="toolbar" aria-label="Управление звуком">
                 {onToggleMic ? (
                   <StreamViewerControlButton
@@ -413,51 +478,53 @@ export default function ScreenShareViewer({
                     menu
                   />
                 ) : null}
-                {onToggleSound ? (
+                {onToggleMic || cameraAction ? (
                   <StreamViewerControlButton
-                    icon="headphones"
-                    label={isSoundMuted ? "Включить звук" : "Отключить звук"}
-                    onClick={onToggleSound}
-                    muted={isSoundMuted}
-                  />
-                ) : null}
-              </div>
-            ) : null}
-
-            {onScreenShareAction || onOpenTextChat || onAction ? (
-              <div className="stream-viewer__control-group" role="toolbar" aria-label="Управление трансляцией">
-                {onScreenShareAction ? (
-                  <StreamViewerControlButton
-                    icon="screen"
-                    label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
-                    onClick={onScreenShareAction}
-                    active={isScreenShareActive}
+                    icon="camera"
+                    label={isCameraShareActive ? "Остановить камеру" : "Включить камеру"}
+                    onClick={cameraAction}
+                    active={isCameraShareActive}
+                    slashed={!isCameraShareActive}
                     menu
-                  />
-                ) : null}
-                {onOpenTextChat ? (
-                  <StreamViewerControlButton
-                    icon="chat"
-                    label="Перейти в чат канала"
-                    onClick={onOpenTextChat}
-                  />
-                ) : null}
-                {onAction ? (
-                  <StreamViewerControlButton
-                    icon="close"
-                    label={actionLabel || "Действие"}
-                    onClick={onAction}
-                    danger={actionVariant === "danger"}
+                    disabled={!cameraAction}
                   />
                 ) : null}
               </div>
             ) : null}
 
-            {onLeave ? (
+            {onScreenShareAction || onOpenTextChat || onAction || hasVideo ? (
+              <div className="stream-viewer__control-group" role="toolbar" aria-label="Управление трансляцией">
+                <StreamViewerControlButton
+                  icon="screen"
+                  label={isScreenShareActive ? "Остановить трансляцию экрана" : "Начать трансляцию экрана"}
+                  onClick={onScreenShareAction}
+                  active={isScreenShareActive}
+                  menu
+                  disabled={!onScreenShareAction}
+                />
+                <StreamViewerControlButton
+                  icon="activities"
+                  label="Активности"
+                  onClick={onOpenTextChat || (() => {})}
+                />
+                <StreamViewerControlButton
+                  icon="effects"
+                  label="Реакции"
+                  onClick={() => {}}
+                />
+                <StreamViewerControlButton
+                  icon="more"
+                  label="Ещё"
+                  onClick={() => {}}
+                />
+              </div>
+            ) : null}
+
+            {stopStreamAction ? (
               <StreamViewerControlButton
-                icon="leave"
-                label="Отключиться от голосового канала"
-                onClick={onLeave}
+                icon="screen-stop"
+                label={stopStreamLabel}
+                onClick={stopStreamAction}
                 danger
                 className="stream-viewer__control-button--leave"
               />
@@ -465,14 +532,19 @@ export default function ScreenShareViewer({
           </div>
 
           <div className="stream-viewer__control-side stream-viewer__control-side--right">
-            {onClose ? (
-              <StreamViewerControlButton
-                icon="close"
-                label="Закрыть эфир"
-                onClick={onClose}
-                ghost
-              />
-            ) : null}
+            <StreamViewerControlButton
+              icon="volume"
+              label={isSoundMuted ? "Включить звук" : "Отключить звук"}
+              onClick={onToggleSound || (() => {})}
+              muted={isSoundMuted}
+              ghost
+            />
+            <StreamViewerControlButton
+              icon="popout"
+              label="Свернуть эфир"
+              onClick={onClose || (() => {})}
+              ghost
+            />
             <StreamViewerControlButton
               icon="fullscreen"
               label="Открыть эфир на весь экран"
