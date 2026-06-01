@@ -3,15 +3,16 @@ const INDEXED_DB_CACHE_NAMES = new Set(["lanaya-text-chat-cache"]);
 const MAX_INDEXED_DB_RECORDS_PER_STORE = 20_000;
 const APP_CACHE_POLICY_STORAGE_KEY = "lanaya-app-cache-policy-v1";
 const MB = 1024 * 1024;
+const GB = 1024 * MB;
 
 export const APP_CACHE_LIMIT_OPTIONS = [
-  50 * MB,
-  100 * MB,
-  250 * MB,
   500 * MB,
-  1024 * MB,
+  1 * GB,
+  3 * GB,
+  5 * GB,
+  10 * GB,
 ];
-export const DEFAULT_APP_CACHE_LIMIT_BYTES = 250 * MB;
+export const DEFAULT_APP_CACHE_LIMIT_BYTES = 500 * MB;
 
 const toSafeByteCount = (value) => {
   const numericValue = Number(value);
@@ -63,7 +64,10 @@ export const formatStorageBytes = (bytes) => {
 };
 
 export const normalizeAppCachePolicy = (policy = {}) => {
-  const maxCacheBytes = toSafeByteCount(policy?.maxCacheBytes) || DEFAULT_APP_CACHE_LIMIT_BYTES;
+  const requestedMaxCacheBytes = toSafeByteCount(policy?.maxCacheBytes);
+  const maxCacheBytes = APP_CACHE_LIMIT_OPTIONS.includes(requestedMaxCacheBytes)
+    ? requestedMaxCacheBytes
+    : DEFAULT_APP_CACHE_LIMIT_BYTES;
 
   return {
     autoClearEnabled: Boolean(policy?.autoClearEnabled),

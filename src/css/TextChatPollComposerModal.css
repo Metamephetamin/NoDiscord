@@ -146,7 +146,7 @@
 
 .poll-composer__textarea:focus,
 .poll-composer__option-input:focus {
-  border-color: rgba(133, 118, 255, 0.5);
+  border-color: color-mix(in srgb, var(--app-accent) 50%, transparent);
   background: rgba(255, 255, 255, 0.045);
 }
 
@@ -263,8 +263,8 @@
 }
 
 .poll-composer__theme-swatch--active {
-  border-color: rgba(108, 99, 255, 0.78);
-  box-shadow: 0 0 0 1px rgba(108, 99, 255, 0.34);
+  border-color: color-mix(in srgb, var(--app-accent) 78%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 34%, transparent);
 }
 
 .poll-composer__theme-preview {
@@ -372,7 +372,7 @@
 }
 
 .poll-composer__toggle input:checked + .poll-composer__toggle-track {
-  background: #6c63ff;
+  background: var(--app-accent);
 }
 
 .poll-composer__toggle input:checked + .poll-composer__toggle-track::after {
@@ -395,7 +395,7 @@
   padding: 0 16px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(180deg, rgba(108, 99, 255, 0.96), rgba(91, 84, 235, 0.96));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 92%, #ffffff), var(--app-accent));
   color: #fdfefe;
   font-size: 14px;
   font-weight: 700;

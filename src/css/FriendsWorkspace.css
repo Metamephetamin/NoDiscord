@@ -233,7 +233,7 @@
 }
 
 .friends-nav__item--accent {
-  background: rgba(94, 86, 255, 0.16);
+  background: color-mix(in srgb, var(--app-accent) 16%, transparent);
 }
 
 .friends-nav__item--active::before,
@@ -506,7 +506,7 @@
 }
 
 .friends-main__tab--accent {
-  background: rgba(94, 86, 255, 0.22);
+  background: color-mix(in srgb, var(--app-accent) 22%, transparent);
   color: #ffffff;
 }
 
@@ -676,7 +676,7 @@
 }
 
 .friends-search-mode__button--active {
-  background: rgba(94, 86, 255, 0.24);
+  background: color-mix(in srgb, var(--app-accent) 24%, transparent);
   color: #ffffff;
 }
 
@@ -867,9 +867,9 @@
 }
 
 .friends-directory__filter--active {
-  background: linear-gradient(180deg, rgba(94, 86, 255, 0.94), rgba(92, 119, 255, 0.82));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 94%, #ffffff), var(--app-accent));
   color: #ffffff;
-  box-shadow: 0 12px 24px rgba(84, 92, 237, 0.24);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--app-accent) 24%, transparent);
 }
 
 .friends-directory__filter span {
@@ -1149,7 +1149,7 @@
   padding: 0 16px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(94, 86, 255, 0.9), rgba(92, 119, 255, 0.82));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 90%, #ffffff), var(--app-accent));
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
@@ -1326,7 +1326,7 @@
   padding: 0 16px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(94, 86, 255, 0.9), rgba(92, 119, 255, 0.82));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 90%, #ffffff), var(--app-accent));
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
@@ -1395,8 +1395,8 @@
 }
 
 .friends-results__icon-action--primary {
-  border-color: rgba(108, 119, 255, 0.42);
-  background: linear-gradient(180deg, rgba(94, 86, 255, 0.9), rgba(92, 119, 255, 0.82));
+  border-color: color-mix(in srgb, var(--app-accent) 42%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 90%, #ffffff), var(--app-accent));
   color: #ffffff;
 }
 
@@ -3123,7 +3123,7 @@ html[data-ui-theme="light"] .friends-results__action--accept,
 html[data-ui-theme="light"] .friends-main__tab--accent,
 html[data-ui-theme="light"] .friends-nav__item--accent {
   border-color: transparent;
-  background: #6b6cff;
+  background: var(--app-accent);
   color: #ffffff;
 }
 

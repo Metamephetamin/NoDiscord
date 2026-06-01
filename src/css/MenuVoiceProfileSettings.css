@@ -69,8 +69,8 @@ html[data-ui-theme="purple"] .voice-profile-option__copy span {
 }
 
 .voice-profile-option input:checked {
-  border-color: #6c63ff;
-  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.16);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 16%, transparent);
 }
 
 .voice-profile-option input:checked::after {
@@ -80,7 +80,7 @@ html[data-ui-theme="purple"] .voice-profile-option__copy span {
 
 .voice-profile-option input:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.28);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 28%, transparent);
 }
 
 .voice-profile-option__copy {

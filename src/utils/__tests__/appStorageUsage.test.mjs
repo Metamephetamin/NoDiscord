@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  APP_CACHE_LIMIT_OPTIONS,
   DEFAULT_APP_CACHE_LIMIT_BYTES,
   deriveStorageUsageBreakdown,
   formatStorageBytes,
@@ -18,6 +19,20 @@ test("formats storage byte sizes for settings UI", () => {
   assert.equal(formatStorageBytes(1536), "1,5 КБ");
   assert.equal(formatStorageBytes(1_572_864), "1,5 МБ");
   assert.equal(formatStorageBytes(Number.NaN), "нет данных");
+});
+
+test("app cache limit options match settings policy choices", () => {
+  const MB = 1024 * 1024;
+
+  assert.deepEqual(APP_CACHE_LIMIT_OPTIONS, [
+    500 * MB,
+    1024 * MB,
+    3 * 1024 * MB,
+    5 * 1024 * MB,
+    10 * 1024 * MB,
+  ]);
+  assert.equal(DEFAULT_APP_CACHE_LIMIT_BYTES, 500 * MB);
+  assert.deepEqual(APP_CACHE_LIMIT_OPTIONS.map((value) => formatStorageBytes(value)), ["500 МБ", "1 ГБ", "3 ГБ", "5 ГБ", "10 ГБ"]);
 });
 
 test("normalizes storage usage and derives percentages", () => {
@@ -71,23 +86,25 @@ test("normalizes app cache auto-clean policy", () => {
     maxCacheBytes: 123456,
   }), {
     autoClearEnabled: true,
-    maxCacheBytes: 123456,
+    maxCacheBytes: DEFAULT_APP_CACHE_LIMIT_BYTES,
   });
 });
 
 test("detects when cache auto-clean should run", () => {
+  const limitBytes = DEFAULT_APP_CACHE_LIMIT_BYTES;
+
   assert.equal(shouldAutoClearAppCache({
     autoClearEnabled: false,
-    maxCacheBytes: 100,
-  }, { cacheBytes: 200 }), false);
+    maxCacheBytes: limitBytes,
+  }, { cacheBytes: limitBytes + 1 }), false);
 
   assert.equal(shouldAutoClearAppCache({
     autoClearEnabled: true,
-    maxCacheBytes: 100,
-  }, { cacheBytes: 100 }), false);
+    maxCacheBytes: limitBytes,
+  }, { cacheBytes: limitBytes }), false);
 
   assert.equal(shouldAutoClearAppCache({
     autoClearEnabled: true,
-    maxCacheBytes: 100,
-  }, { cacheBytes: 101 }), true);
+    maxCacheBytes: limitBytes,
+  }, { cacheBytes: limitBytes + 1 }), true);
 });

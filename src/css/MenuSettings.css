@@ -763,8 +763,8 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .voice-settings-select--native:focus {
-  border-color: rgba(133, 118, 255, 0.52);
-  box-shadow: 0 0 0 3px rgba(114, 96, 255, 0.15);
+  border-color: color-mix(in srgb, var(--app-accent) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 15%, transparent);
   outline: none;
 }
 

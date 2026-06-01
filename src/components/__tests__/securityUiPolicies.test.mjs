@@ -24,6 +24,32 @@ test("voice channel settings button is only rendered for channel managers", () =
   assert.doesNotMatch(source, /disabled=\{!canManageChannels\}/);
 });
 
+test("voice channel timer keeps a small right edge gap without reserving hidden settings space", () => {
+  const css = readRepoFile("src/css/ListChannels.css");
+
+  assert.match(css, /\.voice-channel__button \{[\s\S]*?padding: 0 12px 0 0;/);
+  assert.match(css, /\.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__button \{[\s\S]*?padding-right: 34px;/);
+  assert.match(css, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?width: 76px;/);
+});
+
+test("text channel settings button is only rendered for channel managers", () => {
+  const source = readRepoFile("src/components/ServerWorkspace.jsx");
+  const renderTextChannelItemStart = source.indexOf("const renderTextChannelItem =");
+  const renderVoiceChannelsStart = source.indexOf("const renderVoiceChannels =", renderTextChannelItemStart);
+  const renderTextChannelItemSource = source.slice(renderTextChannelItemStart, renderVoiceChannelsStart);
+
+  assert.match(renderTextChannelItemSource, /\{canManageChannels \? \(/);
+  assert.match(renderTextChannelItemSource, /className="channel-edit-button"/);
+  assert.doesNotMatch(renderTextChannelItemSource, /disabled=\{!canManageChannels\}/);
+});
+
+test("desktop login card stays near the auth sphere center", () => {
+  const authCss = readRepoFile("src/css/Auth.css");
+
+  assert.match(authCss, /@media \(min-width: 641px\)[\s\S]*?\.auth-page--login \.auth-card,[\s\S]*?transform: translateY\(56px\);/);
+  assert.doesNotMatch(authCss, /\.auth-page--login \.auth-card\.auth-card--login\s*\{[\s\S]*?transform: translateY\(150px\);[\s\S]*?\}/);
+});
+
 test("media preview delete button requires delete handler", () => {
   const previewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
@@ -149,6 +175,11 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   const storageSource = readRepoFile("src/features/menu-main/menuMainWorkspaceStorage.js");
 
   assert.match(controllerSource, /setIsMicMuted\(false\);\s*setIsMicTestActive\(true\);/);
+  assert.match(controllerSource, /if \(isMicTestActive\) \{\s*setIsMicTestActive\(false\);\s*setIsMicMuted\(false\);/);
+  assert.match(controllerSource, /voiceClient\.startMicrophoneTestPlayback\?\.\(\)/);
+  assert.match(controllerSource, /voiceClient\.stopMicrophoneTestPlayback\?\.\(\)/);
+  assert.match(voiceClientSource, /async startMicrophoneTestPlayback\(\) \{\s*microphoneMonitorActive = true;\s*await ensureAudioPipeline\(\);\s*await connectMicrophoneMonitor\(\);/);
+  assert.match(voiceClientSource, /microphoneMonitorAudioElement\.muted = false;/);
   assert.match(controllerSource, /const activeMicSettingsBars = getMeterActiveBars\(micLevel, 32\);/);
   assert.match(settingsSource, /Array\.from\(\{ length: 32 \}\)/);
   assert.match(storageSource, /nd:auto-input-sensitivity:/);
@@ -520,6 +551,15 @@ test("direct message chat sounds use the shared system sound volume", () => {
   assert.doesNotMatch(textChatSource, /\], \{ volume: 0\.4, poolSize: 3 \}/);
 });
 
+test("system sound volume defaults to 80 percent for new users", () => {
+  const soundVolumeSource = readRepoFile("src/utils/systemSoundVolume.js");
+  const notificationSoundSource = readRepoFile("src/features/menu-main/useMenuMainNotificationSound.js");
+
+  assert.match(soundVolumeSource, /export const DEFAULT_SYSTEM_SOUND_VOLUME = 80;/);
+  assert.match(notificationSoundSource, /systemSoundVolume: DEFAULT_SYSTEM_SOUND_VOLUME/);
+  assert.match(soundVolumeSource, /: DEFAULT_SYSTEM_SOUND_VOLUME;/);
+});
+
 test("text chat location picker styles stay split from the main chat stylesheet", () => {
   const pickerSource = readRepoFile("src/components/TextChatLocationPickerModal.jsx");
   const textChatCss = readRepoFile("src/css/TextChat.css");
@@ -731,6 +771,36 @@ test("interface accent color is customizable through appearance settings", () =>
   assert.match(controllerSource, /applyUiAccentPreference\(uiAccentColor, \{ root, body \}\)/);
   assert.match(rendererSource, /uiAccentColor=\{uiAccentColor\}/);
   assert.match(settingsSource, /type="color"[\s\S]*?value=\{uiAccentColor \|\| "#8b7cff"\}/);
+});
+
+test("custom accent color paints shared purple control surfaces", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const deviceMenuCss = readRepoFile("src/css/MenuProfileDeviceMenu.css");
+  const mediaFrameCss = readRepoFile("src/css/MediaFrameEditorModal.css");
+  const serverCss = readRepoFile("src/css/ServerWorkspace.css");
+  const pollCss = readRepoFile("src/css/TextChatPollComposerModal.css");
+  const voiceProfileCss = readRepoFile("src/css/MenuVoiceProfileSettings.css");
+
+  assert.match(mainCss, /\.voice-settings-field input\[type="range"\],[\s\S]*?accent-color: var\(--app-accent/);
+  assert.match(mainCss, /\.voice-settings-card--voice \.slider-with-tooltip__input::-webkit-slider-runnable-track \{[\s\S]*?linear-gradient\(90deg, var\(--app-accent/);
+  assert.match(mainCss, /\.voice-settings-meter__bars span\.is-active \{[\s\S]*?background: var\(--app-accent/);
+  assert.match(mainCss, /\.voice-switch--active \{[\s\S]*?background: var\(--app-accent/);
+  assert.match(mainCss, /\.settings-inline-button,[\s\S]*?\.voice-settings-meter__button \{[\s\S]*?background: linear-gradient\(180deg, color-mix\(in srgb, var\(--app-accent/);
+  assert.match(mainCss, /\.settings-role-permission input,[\s\S]*?accent-color: var\(--app-accent/);
+  assert.match(mainCss, /\.settings-checkbox input \{[\s\S]*?accent-color: var\(--app-accent/);
+  assert.match(mainCss, /\.stream-modal__check input \{[\s\S]*?accent-color: var\(--app-accent/);
+
+  assert.match(deviceMenuCss, /\.device-menu__submenu-option\.is-active \.device-menu__submenu-radio \{[\s\S]*?background: var\(--app-accent/);
+  assert.match(deviceMenuCss, /\.device-menu__toggle--active \.device-menu__toggle-switch \{[\s\S]*?background: var\(--app-accent/);
+  assert.match(deviceMenuCss, /\.device-menu__slider input \{[\s\S]*?accent-color: var\(--app-accent/);
+  assert.match(deviceMenuCss, /\.device-menu__meter span\.is-active \{[\s\S]*?background: var\(--app-accent/);
+
+  assert.match(mediaFrameCss, /\.media-frame-editor__slider-field input \{[\s\S]*?accent-color: var\(--app-accent/);
+  assert.match(serverCss, /\.channel-settings-switch\.is-active \{[\s\S]*?background: var\(--app-accent/);
+  assert.match(serverCss, /\.channel-settings-range input\[type="range"\]::-webkit-slider-runnable-track \{[\s\S]*?linear-gradient\(90deg, var\(--app-accent/);
+  assert.match(serverCss, /\.channel-settings-permissions input \{[\s\S]*?accent-color: var\(--app-accent/);
+  assert.match(pollCss, /\.poll-composer__toggle input:checked \+ \.poll-composer__toggle-track \{[\s\S]*?background: var\(--app-accent/);
+  assert.match(voiceProfileCss, /\.voice-profile-option input:checked \{[\s\S]*?border-color: var\(--app-accent/);
 });
 
 test("media-only message layout stays stable after reactions are added", () => {

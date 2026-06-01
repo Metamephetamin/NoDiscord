@@ -917,7 +917,7 @@
   display: grid;
   grid-template-columns: minmax(360px, 36vw) minmax(0, 1fr);
   background:
-    radial-gradient(circle at 78% 0%, rgba(108, 99, 255, 0.08), transparent 30%),
+    radial-gradient(circle at 78% 0%, color-mix(in srgb, var(--app-accent) 8%, transparent), transparent 30%),
     linear-gradient(180deg, rgba(17, 20, 29, 0.995), rgba(13, 15, 22, 1));
   color: #f7f8fb;
 }
@@ -1049,7 +1049,7 @@
 
 .channel-settings-shell__nav button:hover,
 .channel-settings-shell__nav button.is-active {
-  background: linear-gradient(180deg, rgba(108, 99, 255, 0.18), rgba(108, 99, 255, 0.1));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 18%, transparent), color-mix(in srgb, var(--app-accent) 10%, transparent));
   color: #ffffff;
 }
 
@@ -1390,7 +1390,7 @@
 
 
 .channel-settings-switch.is-active {
-  background: #6c63ff;
+  background: var(--app-accent);
 }
 
 
@@ -1448,7 +1448,7 @@
 .channel-settings-range input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #6c63ff 0 var(--channel-range-progress, 50%), rgba(78, 82, 99, 0.92) var(--channel-range-progress, 50%) 100%);
+  background: linear-gradient(90deg, var(--app-accent) 0 var(--channel-range-progress, 50%), rgba(78, 82, 99, 0.92) var(--channel-range-progress, 50%) 100%);
 }
 
 
@@ -1461,7 +1461,7 @@
   border-radius: 50%;
   appearance: none;
   background: #f6f7fb;
-  box-shadow: 0 0 0 4px rgba(108, 99, 255, 0.13);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 13%, transparent);
 }
 
 
@@ -1477,7 +1477,7 @@
 .channel-settings-range input[type="range"]::-moz-range-progress {
   height: 4px;
   border-radius: 999px;
-  background: #6c63ff;
+  background: var(--app-accent);
 }
 
 
@@ -1488,7 +1488,7 @@
   border: 0;
   border-radius: 50%;
   background: #f6f7fb;
-  box-shadow: 0 0 0 4px rgba(108, 99, 255, 0.13);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 13%, transparent);
 }
 
 
@@ -1656,7 +1656,7 @@
   padding: 0 12px;
   border: 0;
   border-radius: 7px;
-  background: rgba(108, 99, 255, 0.18);
+  background: color-mix(in srgb, var(--app-accent) 18%, transparent);
   color: #ffffff;
   font: inherit;
   font-size: 13px;
@@ -1669,7 +1669,7 @@
 .channel-settings-card button:not(.channel-settings-switch):hover,
 .channel-settings-integration button:hover,
 .channel-settings-table__actions button:hover {
-  background: rgba(108, 99, 255, 0.28);
+  background: color-mix(in srgb, var(--app-accent) 28%, transparent);
 }
 
 
@@ -1746,7 +1746,7 @@
 .channel-settings-permissions input {
   width: 18px;
   height: 18px;
-  accent-color: #6c63ff;
+  accent-color: var(--app-accent);
 }
 
 
@@ -1768,7 +1768,7 @@
 
 
 .channel-settings-danger.is-muted {
-  background: rgba(108, 99, 255, 0.24);
+  background: color-mix(in srgb, var(--app-accent) 24%, transparent);
 }
 
 
@@ -1906,7 +1906,7 @@
 .channel-settings-integration-note {
   padding: 12px 14px;
   border-radius: 8px;
-  background: rgba(108, 99, 255, 0.12);
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
   color: #cdd5e6;
   font-size: 13px;
   line-height: 1.45;
@@ -1980,7 +1980,7 @@
   padding: 0 16px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(94, 86, 255, 0.9), rgba(92, 119, 255, 0.82));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 90%, #ffffff), var(--app-accent));
   color: #ffffff;
   font-weight: 700;
   cursor: pointer;
@@ -2101,7 +2101,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  background: rgba(94, 86, 255, 0.18);
+  background: color-mix(in srgb, var(--app-accent) 18%, transparent);
   color: #dadfff;
   font-size: 13px;
   font-weight: 700;
@@ -2710,7 +2710,7 @@ html[data-ui-theme="light"] .server-summary-menu__checkbox {
 
 
 html[data-ui-theme="light"] .server-summary-menu__checkbox.is-checked {
-  border-color: #6b6cff;
-  background: #6b6cff;
+  border-color: var(--app-accent);
+  background: var(--app-accent);
   box-shadow: inset 0 0 0 4px #ffffff;
 }

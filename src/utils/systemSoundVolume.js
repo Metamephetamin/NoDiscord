@@ -1,4 +1,4 @@
-export const DEFAULT_SYSTEM_SOUND_VOLUME = 42;
+export const DEFAULT_SYSTEM_SOUND_VOLUME = 80;
 
 const getSystemSoundVolumeScope = (user) => String(user?.id || user?.email || "guest").trim() || "guest";
 

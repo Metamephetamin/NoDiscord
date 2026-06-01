@@ -2143,9 +2143,11 @@ export const ServersSidebar = memo(({
           </button>
           </>
         )}
-        <button type="button" className="channel-edit-button" onClick={() => onOpenChannelSettings?.("text", channel)} aria-label="Настройки канала" disabled={!canManageChannels}>
-          <img src={icons.settings} alt="" />
-        </button>
+        {canManageChannels ? (
+          <button type="button" className="channel-edit-button" onClick={() => onOpenChannelSettings?.("text", channel)} aria-label="Настройки канала">
+            <img src={icons.settings} alt="" />
+          </button>
+        ) : null}
       </li>
     );
   };

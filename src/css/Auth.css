@@ -950,7 +950,7 @@
   height: 16px;
   margin: 0;
   flex: 0 0 auto;
-  accent-color: #7657ff;
+  accent-color: var(--app-accent, #7657ff);
 }
 
 .auth-terms-link {
@@ -2779,10 +2779,6 @@
     max-width: calc(100vw - 48px);
     margin: 0;
     transform: translateY(56px);
-  }
-
-  .auth-page--login .auth-card.auth-card--login {
-    transform: translateY(150px);
   }
 
   .auth-card--login,

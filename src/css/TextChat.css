@@ -5588,7 +5588,7 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 
 .composer-ai-review__text--result {
   border-color: rgba(117, 140, 255, 0.28);
-  background: rgba(108, 99, 255, 0.11);
+  background: color-mix(in srgb, var(--app-accent) 11%, transparent);
 }
 
 .composer-ai-review__text span {

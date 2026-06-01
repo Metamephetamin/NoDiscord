@@ -6005,6 +6005,7 @@ export default function MenuMain({
   const toggleMicrophoneTestPreview = async () => {
     if (isMicTestActive) {
       setIsMicTestActive(false);
+      setIsMicMuted(false);
       return;
     }
 
