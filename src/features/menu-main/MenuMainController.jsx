@@ -5418,6 +5418,7 @@ export default function MenuMain({
     user,
     activeServer,
     canManageChannels,
+    canEditVoiceChannelStatus: isServerOwner,
     currentTextChannelId,
     setCurrentTextChannelId,
     currentVoiceChannel,
@@ -6508,6 +6509,11 @@ export default function MenuMain({
     const directChannelId = String(friend.directChannelId || buildDirectMessageChannelId(currentUserId, friend.id));
     const hasClearableChat = Boolean(currentUserId && directChannelId && readCachedTextChatMessages(currentUserId, directChannelId).length > 0);
     const friendId = String(friend.id || "");
+    const matchedDirectTarget = directConversationTargets.find((target) => String(target?.id || "") === friendId) || null;
+    const isPendingRelation = ["pending_outgoing", "pending_incoming"].includes(
+      String(friend.friendshipStatus || friend.friendship_status || "")
+    );
+    const isFriend = Boolean(friend.isFriend ?? (!isPendingRelation && (matchedDirectTarget ? !matchedDirectTarget?.isSelf : true)));
     const isBlocked = Boolean(friend.isBlocked || blockedFriendIds.has(friendId));
     const blockedYou = Boolean(friend.blockedYou || blockedByFriendIds.has(friendId));
     const isIgnored = Boolean(friend.isIgnored || ignoredFriendIds.has(friendId));
@@ -6528,13 +6534,13 @@ export default function MenuMain({
       lastSeenAt: String(friend.lastSeenAt || friend.last_seen_at || friend.lastSeen || friend.last_seen || ""),
       presence: friend.presence || friend.presenceStatus || friend.presence_status || "",
       isSelf: Boolean(friend.isSelf),
-      isFriend: true,
+      isFriend,
       isBlocked,
       blockedYou,
       isIgnored,
-      canOpenDirectChat: !friend.isSelf,
-      canInviteToServer: !isBlocked && !blockedYou && canInviteFriendToAnyServer(friendId),
-      hasClearableChat,
+      canOpenDirectChat: !friend.isSelf && isFriend && !isBlocked && !blockedYou,
+      canInviteToServer: isFriend && !isBlocked && !blockedYou && canInviteFriendToAnyServer(friendId),
+      hasClearableChat: isFriend && hasClearableChat,
       socialStats: buildFriendProfileStats(friend, directChannelId),
     });
   };
@@ -6594,7 +6600,7 @@ export default function MenuMain({
       lastSeenAt: friendListUserContextMenu.lastSeenAt || "",
       presence: friendListUserContextMenu.presence || "",
       isSelf: friendListUserContextMenu.isSelf,
-      isFriend: true,
+      isFriend: Boolean(friendListUserContextMenu.isFriend),
       isBlocked: friendListUserContextMenu.isBlocked,
       blockedYou: friendListUserContextMenu.blockedYou,
       isIgnored: friendListUserContextMenu.isIgnored,
@@ -6794,7 +6800,7 @@ export default function MenuMain({
           id: "direct-call",
           label: "Позвонить",
           icon: "☎",
-          disabled: Boolean(!friendListUserContextMenu?.userId || friendListUserContextMenu?.isBlocked || friendListUserContextMenu?.blockedYou || !isUserCurrentlyOnline(friendListUserContextMenu)),
+          disabled: Boolean(!friendListUserContextMenu?.userId || !friendListUserContextMenu?.canOpenDirectChat || friendListUserContextMenu?.isBlocked || friendListUserContextMenu?.blockedYou || !isUserCurrentlyOnline(friendListUserContextMenu)),
           onClick: () => {
             const targetUserId = friendListUserContextMenu?.userId;
             if (!targetUserId) {
@@ -6836,14 +6842,14 @@ export default function MenuMain({
         disabled: false,
         onClick: handleToggleFriendListBlock,
       },
-      {
+      ...(friendListUserContextMenu?.isFriend ? [{
         id: "remove-friend",
         label: "Удалить из друзей",
         icon: "×",
         danger: true,
         disabled: !friendListUserContextMenu?.userId,
         onClick: handleRemoveFriendListUser,
-      },
+      }] : []),
     ],
     [
       {
@@ -6948,6 +6954,7 @@ export default function MenuMain({
       currentUserId={currentUserId}
       canManageServer={canManageServer}
       canManageChannels={canManageChannels}
+      canEditVoiceChannelStatus={isServerOwner}
       channelSettingsState={channelSettingsState}
       channelRenameState={channelRenameState}
       serverUnreadCounts={visibleServerUnreadCounts}

@@ -922,9 +922,9 @@
   justify-content: center;
   gap: 0;
   flex-wrap: nowrap;
-  padding: 18px 28px;
+  padding: 14px 22px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 40px;
+  border-radius: 34px;
   background: rgba(7, 9, 13, 0.92);
   backdrop-filter: blur(22px);
   box-shadow: 0 24px 58px rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(255, 255, 255, 0.025);
@@ -933,8 +933,8 @@
 .voice-room-stage__toolbar-group {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 22px;
+  gap: 10px;
+  padding: 0 16px;
 }
 
 .voice-room-stage__toolbar-group:first-child {
@@ -943,25 +943,25 @@
 
 .voice-room-stage__toolbar-group + .voice-room-stage__toolbar-group {
   border-left: 1px solid rgba(255, 255, 255, 0.08);
-  padding-left: 26px;
-  margin-left: 4px;
+  padding-left: 20px;
+  margin-left: 2px;
 }
 
 .voice-room-stage__toolbar-group--danger {
-  padding-left: 26px;
+  padding-left: 20px;
   padding-right: 0;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .voice-room-stage__toolbar-button {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
+  border-radius: 20px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.045));
   color: #e7ebf5;
   cursor: pointer;
@@ -1040,7 +1040,7 @@
 .voice-room-stage__toolbar-icon-shell--slashed::after {
   content: "";
   position: absolute;
-  width: 26px;
+  width: 23px;
   height: 2.5px;
   border-radius: 999px;
   background: currentColor;
@@ -1049,8 +1049,8 @@
 }
 
 .voice-room-stage__toolbar-icon {
-  width: 26px;
-  height: 26px;
+  width: 23px;
+  height: 23px;
 }
 
 .voice-room-stage__empty {
@@ -1113,9 +1113,9 @@
   }
 
   .voice-room-stage__toolbar-button {
-    width: 54px;
-    height: 54px;
-    border-radius: 19px;
+    width: 48px;
+    height: 48px;
+    border-radius: 17px;
   }
 }
 

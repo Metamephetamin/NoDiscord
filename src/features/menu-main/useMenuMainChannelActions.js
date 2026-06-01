@@ -54,6 +54,7 @@ export default function useMenuMainChannelActions({
   user,
   activeServer,
   canManageChannels,
+  canEditVoiceChannelStatus = false,
   currentTextChannelId,
   setCurrentTextChannelId,
   currentVoiceChannel,
@@ -93,11 +94,15 @@ export default function useMenuMainChannelActions({
     if (!canManageChannels || !channelId || !patch) return;
 
     if (type === "voice") {
+      const safePatch = canEditVoiceChannelStatus ? patch : { ...patch };
+      if (!canEditVoiceChannelStatus) {
+        delete safePatch.status;
+      }
       updateServer((server) => ({
         ...server,
         voiceChannels: server.voiceChannels.map((channel) =>
           channel.id === channelId
-            ? { ...channel, ...patch, name: patch.name !== undefined ? String(patch.name ?? "") : channel.name }
+            ? { ...channel, ...safePatch, name: safePatch.name !== undefined ? String(safePatch.name ?? "") : channel.name }
             : channel
         ),
       }));

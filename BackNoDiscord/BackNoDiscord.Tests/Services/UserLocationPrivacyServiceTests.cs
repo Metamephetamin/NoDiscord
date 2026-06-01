@@ -7,14 +7,14 @@ namespace BackNoDiscord.Tests.Services;
 public sealed class UserLocationPrivacyServiceTests
 {
     [Fact]
-    public async Task CanPublishLocationAsync_AllowsDefaultSharing()
+    public async Task CanPublishLocationAsync_RejectsDefaultSharing()
     {
         await using var context = CreateContext();
         context.Users.Add(CreateUser(id: 42));
         await context.SaveChangesAsync();
         var service = new UserLocationPrivacyService(context, CreateConfiguration());
 
-        Assert.True(await service.CanPublishLocationAsync(42, CancellationToken.None));
+        Assert.False(await service.CanPublishLocationAsync(42, CancellationToken.None));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public sealed class UserLocationPrivacyServiceTests
             })
             .Build();
 
-    private static User CreateUser(int id, bool sharingEnabled = true, string visibility = "public") =>
+    private static User CreateUser(int id, bool sharingEnabled = false, string visibility = "none") =>
         new()
         {
             id = id,

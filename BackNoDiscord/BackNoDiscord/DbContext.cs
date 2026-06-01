@@ -274,10 +274,10 @@ public class User
     public DateTimeOffset? last_location_expires_at { get; set; }
 
     [Column("location_sharing_enabled")]
-    public bool location_sharing_enabled { get; set; } = true;
+    public bool location_sharing_enabled { get; set; } = false;
 
     [Column("location_visibility")]
-    public string location_visibility { get; set; } = "public";
+    public string location_visibility { get; set; } = "none";
 
     [Column("terms_accepted_at")]
     public DateTimeOffset? terms_accepted_at { get; set; }
@@ -1080,8 +1080,8 @@ public class AppDbContext : DbContext
             entity.Property(x => x.last_location_longitude).IsRequired(false);
             entity.Property(x => x.last_location_updated_at).IsRequired(false);
             entity.Property(x => x.last_location_expires_at).IsRequired(false);
-            entity.Property(x => x.location_sharing_enabled).HasDefaultValue(true);
-            entity.Property(x => x.location_visibility).HasDefaultValue("public").IsRequired();
+            entity.Property(x => x.location_sharing_enabled).HasDefaultValue(false);
+            entity.Property(x => x.location_visibility).HasDefaultValue("none").IsRequired();
             entity.Property(x => x.terms_accepted_at).IsRequired(false);
             entity.Property(x => x.terms_version).IsRequired(false);
             entity.Property(x => x.privacy_version).IsRequired(false);

@@ -6,8 +6,8 @@ import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
 const LOCATION_UPDATE_MIN_INTERVAL_MS = 1800;
 const LOCATION_PRIVACY_DECIMALS = 1;
 const DEFAULT_LOCATION_SHARING_PREFERENCE = Object.freeze({
-  enabled: true,
-  visibility: "public",
+  enabled: false,
+  visibility: "none",
   retentionHours: 24,
 });
 
@@ -84,6 +84,19 @@ export function formatSharedLocationCell(latitude, longitude) {
   }
 
   return `${formatLocationCellPart(latitude)},${formatLocationCellPart(longitude)}`;
+}
+
+export function getGeolocationErrorMessage(error) {
+  const errorCode = Number(error?.code);
+  if (errorCode === 1) {
+    return "геолокация выключена в браузере";
+  }
+
+  if (errorCode === 2 || errorCode === 3) {
+    return "геолокация временно недоступна";
+  }
+
+  return "геолокация недоступна";
 }
 
 export default function useLocationSharingPreference({ user, apiBaseUrl = API_BASE_URL } = {}) {
@@ -231,8 +244,8 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
 
     const watchId = navigator.geolocation.watchPosition(
       publishLocation,
-      () => {
-        setStatus("геолокация выключена в браузере");
+      (error) => {
+        setStatus(getGeolocationErrorMessage(error));
       },
       {
         enableHighAccuracy: true,

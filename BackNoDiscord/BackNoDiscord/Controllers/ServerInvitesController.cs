@@ -435,6 +435,7 @@ public class ServerInvitesController : ControllerBase
             return Forbid();
         }
 
+        var existingStatusByChannelId = GetVoiceChannelStatusesByChannelId(existingSnapshot);
         var snapshotToSave = request.ServerSnapshot;
         if (existingSnapshot is not null && !ServerPermissionEvaluator.CanManageServer(existingSnapshot, currentUser.UserId))
         {
@@ -442,6 +443,11 @@ public class ServerInvitesController : ControllerBase
             snapshotToSave.ChannelCategories = request.ServerSnapshot.ChannelCategories ?? new List<ChannelCategorySnapshot>();
             snapshotToSave.TextChannels = request.ServerSnapshot.TextChannels ?? new List<ChannelSnapshot>();
             snapshotToSave.VoiceChannels = request.ServerSnapshot.VoiceChannels ?? new List<ChannelSnapshot>();
+        }
+        if (existingSnapshot is not null &&
+            !string.Equals(existingSnapshot.OwnerId, currentUser.UserId, StringComparison.Ordinal))
+        {
+            PreserveVoiceChannelStatusesForNonOwner(existingStatusByChannelId, snapshotToSave);
         }
 
         var snapshot = _serverState.UpsertSnapshot(snapshotToSave, currentUser.UserId);
@@ -458,6 +464,29 @@ public class ServerInvitesController : ControllerBase
             },
             cancellationToken: cancellationToken);
         return Ok(snapshot);
+    }
+
+    private static IReadOnlyDictionary<string, string> GetVoiceChannelStatusesByChannelId(ServerSnapshot? existingSnapshot)
+    {
+        return (existingSnapshot?.VoiceChannels ?? new List<ChannelSnapshot>())
+            .Where(channel => !string.IsNullOrWhiteSpace(channel.Id))
+            .GroupBy(channel => channel.Id.Trim(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Status ?? string.Empty, StringComparer.Ordinal);
+    }
+
+    private static void PreserveVoiceChannelStatusesForNonOwner(IReadOnlyDictionary<string, string> existingStatusByChannelId, ServerSnapshot snapshotToSave)
+    {
+        foreach (var channel in snapshotToSave.VoiceChannels ?? new List<ChannelSnapshot>())
+        {
+            var channelId = channel.Id?.Trim() ?? string.Empty;
+            if (existingStatusByChannelId.TryGetValue(channelId, out var existingStatus))
+            {
+                channel.Status = existingStatus;
+                continue;
+            }
+
+            channel.Status = string.Empty;
+        }
     }
 
     private static string ResolveSnapshotAuditAction(ServerSnapshot? previous, ServerSnapshot next)

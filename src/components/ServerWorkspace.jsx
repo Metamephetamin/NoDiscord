@@ -4,7 +4,7 @@ import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
-import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { createId, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { isServerRailItemActive } from "./serverRailState.mjs";
 import {
   DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
@@ -1618,6 +1618,7 @@ export const ServersSidebar = memo(({
   currentUserId,
   canManageServer = false,
   canManageChannels,
+  canEditVoiceChannelStatus = false,
   channelSettingsState,
   channelRenameState,
   serverUnreadCounts,
@@ -2271,6 +2272,7 @@ export const ServersSidebar = memo(({
         onWatchStream={onWatchStream}
         onParticipantVolumeChange={onParticipantVolumeChange}
         canManageChannels={canManageChannels}
+        canEditChannelStatus={canEditVoiceChannelStatus}
         editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
         editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}
         onRenameValueChange={onUpdateChannelRenameValue}
@@ -3336,6 +3338,8 @@ export const MobileDirectChat = ({
   onClearChannelSearch,
   onStartDirectCall,
 }) => {
+  const mobileDirectTitle = currentDirectFriend?.title || getDisplayName(currentDirectFriend);
+  const mobileDirectAvatar = currentDirectFriend?.avatar || currentDirectFriend?.avatarUrl || currentDirectFriend?.avatar_url || "";
   const directBlockNotice = currentDirectFriend?.blockedYou
     ? {
       title: "Пользователь ограничил общение с вами",
@@ -3353,9 +3357,15 @@ export const MobileDirectChat = ({
       <div className="chat__box chat__box--servers">
         <div className="chat__topbar chat__topbar--mobile-direct">
           <div className="chat__topbar-title">
+            <AnimatedAvatar
+              className="chat__topbar-mobile-avatar"
+              src={mobileDirectAvatar}
+              alt={mobileDirectTitle || "Чат"}
+              loading="eager"
+              decoding="sync"
+            />
             <div className="chat__topbar-copy">
-              <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{getDisplayName(currentDirectFriend)}</strong>
-              <span>{formatUserPresenceStatus(currentDirectFriend)}</span>
+              <strong className={isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>{mobileDirectTitle}</strong>
             </div>
           </div>
         </div>

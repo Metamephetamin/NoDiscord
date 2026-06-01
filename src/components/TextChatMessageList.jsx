@@ -1618,6 +1618,8 @@ function MessageAttachmentCard({
   canDeleteAttachments = false,
   selectionMode,
   onToggleSelection,
+  onOpenContextMenu,
+  isOwnMessage = false,
   onOpenMediaPreview,
   onCancelLocalEchoUpload,
   onRetryLocalEchoUpload,
@@ -1663,6 +1665,10 @@ function MessageAttachmentCard({
 
     handlePreviewClick(event);
   };
+  const handleAttachmentContextMenu = (event) => {
+    event.stopPropagation();
+    onOpenContextMenu?.(event, messageItem, isOwnMessage);
+  };
 
   const handleCancelLocalEchoAttachment = () => {
     const didCancel = onCancelLocalEchoUpload?.(messageItem?.id, attachmentItem?.sourcePendingUploadId);
@@ -1698,6 +1704,7 @@ function MessageAttachmentCard({
           type="button"
           className="message-inline-emoji message-inline-emoji--button"
           onClick={handlePreviewClick}
+          onContextMenu={handleAttachmentContextMenu}
           aria-label={`Открыть смайлик ${attachmentItem.attachmentName || ""}`.trim()}
         >
           {TEXT_CHAT_STATIC_EMOJI_IN_FEED ? (
@@ -1729,6 +1736,7 @@ function MessageAttachmentCard({
           className={`message-media message-media--button ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
           onKeyDown={handlePreviewKeyDown}
+          onContextMenu={handleAttachmentContextMenu}
           aria-label={`Открыть изображение ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <MessageMediaImage
@@ -1758,6 +1766,7 @@ function MessageAttachmentCard({
           className={`message-media message-media--video message-media--button ${showLocalEchoOverlay ? "message-media--local-echo" : ""}`}
           onClick={handlePreviewClick}
           onKeyDown={handlePreviewKeyDown}
+          onContextMenu={handleAttachmentContextMenu}
           aria-label={`Открыть видео ${attachmentItem.attachmentName || ""}`.trim()}
         >
           <MessageMediaVideo
@@ -1807,6 +1816,7 @@ function MessageAttachmentCard({
     return (
       <DocumentAttachmentWrapper
         className={`message-attachment ${isDocumentAttachment ? "message-attachment--document" : ""} ${showLocalEchoOverlay ? "message-attachment--local-echo" : ""}`}
+        onContextMenu={handleAttachmentContextMenu}
         {...documentAttachmentProps}
       >
         {showDocumentPreview ? (
@@ -1907,6 +1917,8 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     attachments,
     galleryAttachments = attachments,
     canDeleteAttachments = false,
+    onOpenContextMenu,
+    isOwnMessage = false,
     mediaOverlayFooter,
     priorityMediaMessageIdSet,
   } = props;
@@ -1978,6 +1990,8 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 attachmentItem={singleAttachment}
                 galleryAttachments={galleryAttachments}
                 canDeleteAttachments={canDeleteAttachments}
+                onOpenContextMenu={onOpenContextMenu}
+                isOwnMessage={isOwnMessage}
                 priorityMedia={isPriorityMediaMessage || Boolean(singleAttachment?.isImage)}
               />
             </div>
@@ -1993,6 +2007,8 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
         attachmentItem={singleAttachment}
         galleryAttachments={galleryAttachments}
         canDeleteAttachments={canDeleteAttachments}
+        onOpenContextMenu={onOpenContextMenu}
+        isOwnMessage={isOwnMessage}
         priorityMedia={isPriorityMediaMessage || Boolean(singleAttachment?.isImage)}
       />
     );
@@ -2023,6 +2039,8 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                   attachmentItem={attachmentItem}
                   galleryAttachments={galleryAttachments}
                   canDeleteAttachments={canDeleteAttachments}
+                  onOpenContextMenu={onOpenContextMenu}
+                  isOwnMessage={isOwnMessage}
                   priorityMedia={isPriorityMediaMessage && attachmentIndex === 0}
                 />
               </div>
@@ -2041,6 +2059,8 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
                 attachmentItem={attachmentItem}
                 galleryAttachments={galleryAttachments}
                 canDeleteAttachments={canDeleteAttachments}
+                onOpenContextMenu={onOpenContextMenu}
+                isOwnMessage={isOwnMessage}
                 priorityMedia={isPriorityMediaMessage}
               />
             </div>
@@ -2389,9 +2409,7 @@ function TextChatMessageList({
           const nextMessage = messages[messageIndex + 1] || null;
           const messageDayKey = getMessageDayKey(messageItem.timestamp);
           const previousMessageDayKey = getMessageDayKey(previousMessage?.timestamp);
-          const nextMessageDayKey = getMessageDayKey(nextMessage?.timestamp);
           const shouldShowStartDayDivider = !previousMessageDayKey || previousMessageDayKey !== messageDayKey;
-          const shouldShowEndDayDivider = messageDayKey && previousMessageDayKey === messageDayKey && nextMessageDayKey !== messageDayKey;
           const attachments = renderedAttachmentsByMessageId.get(String(messageItem.id)) || [];
           const mediaPreviewGalleryItems = mediaPreviewGalleryItemsByMessageId.get(String(messageItem.id)) || [];
           const hasRenderableAttachments = attachments.length > 0;
@@ -2498,7 +2516,6 @@ function TextChatMessageList({
             return (
               <Fragment key={messageRenderKey}>
                 {shouldShowStartDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="start" /> : null}
-                {shouldShowEndDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="end" /> : null}
                 <div
                   ref={(node) => registerMessageNode(messageItem.id, node)}
                   className={`message-item message-item--system ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
@@ -2524,7 +2541,6 @@ function TextChatMessageList({
           return (
             <Fragment key={messageRenderKey}>
               {shouldShowStartDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="start" /> : null}
-              {shouldShowEndDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="end" /> : null}
               <div
                 ref={(node) => registerMessageNode(messageItem.id, node)}
                 className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${isVoiceOnlyMessage ? "message-item--voice-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
@@ -2700,6 +2716,8 @@ function TextChatMessageList({
                   mediaPreviewGalleryItems={mediaPreviewGalleryItems}
                   selectionMode={selectionMode}
                   onToggleSelection={onToggleSelection}
+                  onOpenContextMenu={onOpenContextMenu}
+                  isOwnMessage={isOwnMessage}
                   onOpenMediaPreview={onOpenMediaPreview}
                   mediaOverlayFooter={
                     showAttachmentOverlayFooter

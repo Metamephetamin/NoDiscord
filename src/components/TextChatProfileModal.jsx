@@ -166,7 +166,17 @@ export default function TextChatProfileModal({
     { id: "contact", icon: "contact", label: "Связь", value: canMessage ? (canCall ? "Сообщения и звонки" : "Личные сообщения") : "Недоступно" },
     { id: "id", icon: "id", label: "ID", value: profile.userId ? `#${profile.userId}` : "Не указан" },
   ];
-  const profileStatPlaceholders = ["mutual-friends", "mutual-chats", "known-since", "last-dialog"];
+  const profileSummaryRows = [
+    { id: "contact", label: "Контакт", value: canMessage ? "Можно написать" : "Личные сообщения закрыты" },
+    { id: "calls", label: "Звонки", value: canCall ? "Доступны сейчас" : showCallAction ? "Когда будет в сети" : "Недоступны" },
+    { id: "relation", label: "Отношение", value: relationshipLabel },
+    { id: "seen", label: "Активность", value: isOnline ? "Сейчас в сети" : formatLastSeen(profile.lastSeenAt) },
+  ];
+  const profileSummaryNote = profile.isSelf
+    ? "Так вас видят в личных чатах и беседах."
+    : profile.isFriend
+      ? "Профиль друга: можно быстро перейти к общению."
+      : "Публичная карточка пользователя до добавления в друзья.";
   const submitReport = async (event) => {
     event.preventDefault();
     if (!canReport || reportBusy) {
@@ -382,13 +392,14 @@ export default function TextChatProfileModal({
             <section className="chat-profile-modal__side-widget" aria-label="Общая статистика">
               <div className="chat-profile-modal__side-widget-header">
                 <ProfileIcon kind="info" className="chat-profile-modal__side-widget-icon" />
-                <span />
+                <span>Сводка</span>
               </div>
+              <p className="chat-profile-modal__side-widget-note">{profileSummaryNote}</p>
               <div className="chat-profile-modal__side-widget-list">
-                {profileStatPlaceholders.map((item) => (
-                  <div key={item} className="chat-profile-modal__side-widget-row">
-                    <span />
-                    <b />
+                {profileSummaryRows.map((item) => (
+                  <div key={item.id} className="chat-profile-modal__side-widget-row">
+                    <span>{item.label}</span>
+                    <b>{item.value}</b>
                   </div>
                 ))}
               </div>

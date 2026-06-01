@@ -243,8 +243,8 @@
   color: rgba(216, 222, 235, 0.64);
   text-align: left;
   font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.15;
   cursor: pointer;
 }
@@ -359,11 +359,12 @@
   position: absolute;
   top: 50%;
   right: 0;
+  z-index: 2;
   transform: translateY(calc(-50% + 2px));
 }
 
 .voice-channel__row:has(> .channel-edit-button) .voice-channel__button {
-  padding-right: 34px;
+  padding-right: 0;
 }
 
 .voice-channel__row:has(> .channel-edit-button) .voice-channel__status-button,

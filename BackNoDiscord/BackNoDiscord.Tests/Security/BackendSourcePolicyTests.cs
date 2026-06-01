@@ -146,6 +146,25 @@ public sealed class BackendSourcePolicyTests
     }
 
     [Fact]
+    public void ServerSyncPreservesVoiceChannelStatusForNonOwners()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Controllers",
+            "ServerInvitesController.cs"));
+
+        Assert.Contains("GetVoiceChannelStatusesByChannelId(existingSnapshot)", source);
+        Assert.Contains("PreserveVoiceChannelStatusesForNonOwner(existingStatusByChannelId, snapshotToSave);", source);
+        Assert.Contains("existingStatusByChannelId", source);
+        Assert.Contains("channel.Status = existingStatus;", source);
+        Assert.Contains("channel.Status = string.Empty;", source);
+    }
+
+    [Fact]
     public void ChatHubReactionLimitQueryIsBounded()
     {
         var source = File.ReadAllText(Path.Combine(

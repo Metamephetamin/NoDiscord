@@ -2076,6 +2076,14 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   display: flex;
 }
 
+.chat__topbar-mobile-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .menu__main--mobile .mobile-shell__workspace--friends,
 .menu__main--mobile .chat__wrapper--friends {
   overflow-y: auto;

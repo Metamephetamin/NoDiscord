@@ -346,7 +346,7 @@
 
 .chat-profile-modal__quick-card {
   min-width: 0;
-  min-height: 86px;
+  min-height: 96px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-content: center;
@@ -384,7 +384,7 @@
 
 .chat-profile-modal__quick-card span {
   color: rgba(210, 219, 242, 0.62);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
   text-overflow: ellipsis;
@@ -393,7 +393,7 @@
 
 .chat-profile-modal__quick-card strong {
   color: #f6f8ff;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 800;
   display: -webkit-box;
   line-height: 1.22;
@@ -659,11 +659,13 @@
 }
 
 .chat-profile-modal__side-widget-header span {
-  display: block;
-  width: min(48%, 112px);
-  height: 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chat-profile-accent) 34%, rgba(246, 248, 255, 0.5));
+  min-width: 0;
+  color: #f6f8ff;
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-profile-modal__side-widget-icon {
@@ -675,6 +677,17 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   flex: 0 0 auto;
+}
+
+.chat-profile-modal__side-widget-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--chat-profile-accent) 12%, rgba(255, 255, 255, 0.045));
+  color: rgba(228, 235, 250, 0.82);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .chat-profile-modal__side-widget-list {
@@ -703,21 +716,21 @@
 }
 
 .chat-profile-modal__side-widget-row span {
-  display: block;
-  width: min(62%, 140px);
-  height: 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chat-profile-accent) 28%, rgba(210, 219, 242, 0.34));
+  color: rgba(214, 222, 241, 0.74);
+  font-size: 12px;
+  font-weight: 700;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-profile-modal__side-widget-row b {
-  display: block;
-  width: min(78%, 172px);
-  height: 9px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chat-profile-accent-2) 30%, rgba(246, 248, 255, 0.52));
+  color: #f6f8ff;
+  font-size: 14px;
+  line-height: 1.25;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 760px) {

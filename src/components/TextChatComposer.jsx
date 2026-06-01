@@ -19,12 +19,18 @@ import { punctuateComposerText } from "../utils/speechPunctuation";
 import { copyTextToClipboard } from "../utils/clipboard";
 import "../css/TextChatComposerPopovers.css";
 
-const LOCATION_DESIRED_ACCURACY_METERS = 25;
-const LOCATION_ACCURACY_TIMEOUT_MS = 9000;
+const LOCATION_DESIRED_ACCURACY_METERS = 60;
+const LOCATION_ACCEPTABLE_ACCURACY_METERS = 200;
+const LOCATION_ACCURACY_TIMEOUT_MS = 3200;
+const LOCATION_FAST_GEOLOCATION_OPTIONS = {
+  enableHighAccuracy: false,
+  timeout: 1800,
+  maximumAge: 60000,
+};
 const LOCATION_HIGH_ACCURACY_OPTIONS = {
   enableHighAccuracy: true,
-  timeout: 15000,
-  maximumAge: 0,
+  timeout: 5000,
+  maximumAge: 1000,
 };
 
 function clampLocationLatitude(value) {
@@ -93,7 +99,7 @@ function getBestAvailableGeolocation(geolocation) {
       }
 
       const accuracy = Number(normalizedPosition.accuracy) || Number.POSITIVE_INFINITY;
-      if (accuracy <= LOCATION_DESIRED_ACCURACY_METERS) {
+      if (accuracy <= LOCATION_DESIRED_ACCURACY_METERS || (bestPosition === normalizedPosition && accuracy <= LOCATION_ACCEPTABLE_ACCURACY_METERS)) {
         finish(normalizedPosition, null);
       }
     };
@@ -107,6 +113,7 @@ function getBestAvailableGeolocation(geolocation) {
     }, LOCATION_ACCURACY_TIMEOUT_MS);
 
     try {
+      geolocation.getCurrentPosition(handlePosition, handleError, LOCATION_FAST_GEOLOCATION_OPTIONS);
       if (typeof geolocation.watchPosition === "function") {
         watchId = geolocation.watchPosition(handlePosition, handleError, LOCATION_HIGH_ACCURACY_OPTIONS);
       }
@@ -1388,4 +1395,3 @@ function areTextChatComposerPropsEqual(previousProps, nextProps) {
 TextChatComposer.displayName = "TextChatComposer";
 
 export default memo(TextChatComposer, areTextChatComposerPropsEqual);
-

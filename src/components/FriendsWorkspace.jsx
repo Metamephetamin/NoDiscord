@@ -14,6 +14,7 @@ import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import {
   LOCATION_SHARING_PREFERENCE_EVENT,
   SELF_LOCATION_UPDATED_EVENT,
+  getGeolocationErrorMessage,
   readStoredLocationSharingPreference,
   readStoredSelfLocation,
 } from "../hooks/useLocationSharingPreference";
@@ -147,6 +148,58 @@ function FriendsActionIcon({ kind }) {
     default:
       return null;
   }
+}
+
+function FriendRequestDirectoryRow({
+  requestUser,
+  actionContent = null,
+  statusContent = null,
+  getDisplayName,
+  onOpenActions,
+  onOpenProfile,
+}) {
+  const handleProfileOpen = (event) => {
+    if (event.target instanceof Element && event.target.closest(".friends-directory__action")) {
+      return;
+    }
+
+    onOpenProfile?.(requestUser);
+  };
+  const handleContextMenuOpen = (event) => {
+    if (event.target instanceof Element && event.target.closest(".friends-directory__action")) {
+      return;
+    }
+
+    onOpenActions?.(event, requestUser);
+  };
+  const handleKeyDown = (event) => {
+    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+
+    event.preventDefault();
+    onOpenProfile?.(requestUser);
+  };
+
+  return (
+    <div
+      className="friends-directory__row friends-directory__row--request friends-directory__row--interactive"
+      role="button"
+      tabIndex={0}
+      onClick={handleProfileOpen}
+      onContextMenu={handleContextMenuOpen}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="friends-directory__identity">
+        <AnimatedAvatar className="friends-directory__avatar" src={requestUser.avatar || ""} alt={getDisplayName(requestUser)} loading="lazy" decoding="async" />
+        <span className="friends-directory__copy">
+          <strong>{getDisplayName(requestUser)}</strong>
+          <span>{requestUser.email || `ID: ${requestUser.id}`}</span>
+        </span>
+      </div>
+      {actionContent || statusContent}
+    </div>
+  );
 }
 
 function ActiveContactStatusIcon({ kind }) {
@@ -1009,7 +1062,6 @@ const WhereIsEveryoneView = ({
       minZoom: LANAYA_WORLD_MIN_ZOOM,
       maxZoom: LANAYA_WORLD_MAX_ZOOM,
       subdomains: ["a", "b", "c", "d"],
-      crossOrigin: true,
       className: "lanaya-world-base-tile",
       noWrap: true,
     }).addTo(map);
@@ -1168,8 +1220,8 @@ const WhereIsEveryoneView = ({
           animate: true,
         });
       },
-      () => {
-        setLocationStatus("геолокация выключена");
+      (error) => {
+        setLocationStatus(getGeolocationErrorMessage(error));
       },
       {
         enableHighAccuracy: true,
@@ -1421,6 +1473,10 @@ export const FriendsMain = ({
     || currentDirectFriend?.avatarUrl
     || currentDirectFriend?.avatar_url
     || "";
+  const currentDirectTopbarName = currentConversationTarget ? currentConversationTarget.title : getDisplayName(currentDirectFriend);
+  const currentDirectTopbarAvatar = currentConversationTarget
+    ? currentConversationTarget.avatar || currentConversationTarget.avatarUrl || currentConversationTarget.avatar_url || ""
+    : currentDirectFriend?.avatar || currentDirectFriend?.avatarUrl || currentDirectFriend?.avatar_url || "";
 
   useEffect(() => {
     if (isWatchingCurrentDirectStream) {
@@ -2104,15 +2160,18 @@ export const FriendsMain = ({
                 >
                   <span aria-hidden="true">←</span>
                 </button>
+                <AnimatedAvatar
+                  className="friends-direct-chat-topbar__avatar"
+                  src={currentDirectTopbarAvatar}
+                  alt={currentDirectTopbarName || "Чат"}
+                  loading="eager"
+                  decoding="sync"
+                />
                 <div className="chat__topbar-copy">
-                  <strong className={currentDirectFriend && isUserCurrentlyOnline(currentDirectFriend) ? "chat__topbar-copy-name--online" : ""}>
-                    {currentConversationTarget ? currentConversationTarget.title : getDisplayName(currentDirectFriend)}
-                  </strong>
-                  <span>
-                    {currentConversationTarget
-                      ? `${Number(currentConversationTarget.memberCount || currentConversationTarget.members?.length || 0)} участников`
-                      : formatUserPresenceStatus(currentDirectFriend)}
-                  </span>
+                  <strong>{currentDirectTopbarName}</strong>
+                  {currentConversationTarget ? (
+                    <span>{`${Number(currentConversationTarget.memberCount || currentConversationTarget.members?.length || 0)} участников`}</span>
+                  ) : null}
                 </div>
               </div>
 
@@ -2418,23 +2477,27 @@ export const FriendsMain = ({
                     </div>
                   ) : null}
                   {!friendRequestsError && incomingFriendRequests.map((request) => (
-                    <div key={request.id} className="friends-directory__row friends-directory__row--request">
-                      <div className="friends-directory__identity">
-                        <AnimatedAvatar className="friends-directory__avatar" src={request.sender.avatar || ""} alt={getDisplayName(request.sender)} loading="lazy" decoding="async" />
-                        <span className="friends-directory__copy">
-                          <strong>{getDisplayName(request.sender)}</strong>
-                          <span>{request.sender.email || `ID: ${request.sender.id}`}</span>
-                        </span>
-                      </div>
-                      <div className="friends-directory__actions">
-                        <button type="button" className="friends-directory__action friends-directory__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
-                          {friendRequestActionId === request.id ? "..." : "✓"}
-                        </button>
-                        <button type="button" className="friends-directory__action" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
-                          {friendRequestActionId === request.id ? "..." : <FriendsActionIcon kind="close" />}
-                        </button>
-                      </div>
-                    </div>
+                    <FriendRequestDirectoryRow
+                      key={request.id}
+                      requestUser={{
+                        ...request.sender,
+                        isFriend: false,
+                        friendshipStatus: "pending_incoming",
+                      }}
+                      getDisplayName={getDisplayName}
+                      onOpenProfile={onOpenDirectProfile}
+                      onOpenActions={onOpenDirectActions}
+                      actionContent={(
+                        <div className="friends-directory__actions">
+                          <button type="button" className="friends-directory__action friends-directory__action--accept" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "accept")}>
+                            {friendRequestActionId === request.id ? "..." : "✓"}
+                          </button>
+                          <button type="button" className="friends-directory__action" aria-label="Отклонить заявку" disabled={friendRequestActionId === request.id} onClick={() => onFriendRequestAction(request.id, "decline")}>
+                            {friendRequestActionId === request.id ? "..." : <FriendsActionIcon kind="close" />}
+                          </button>
+                        </div>
+                      )}
+                    />
                   ))}
                   {!friendRequestsError && outgoingFriendRequests.length ? (
                     <div className="friends-directory__summary">
@@ -2442,20 +2505,24 @@ export const FriendsMain = ({
                     </div>
                   ) : null}
                   {!friendRequestsError && outgoingFriendRequests.map((request) => (
-                    <div key={request.id} className="friends-directory__row friends-directory__row--request">
-                      <div className="friends-directory__identity">
-                        <AnimatedAvatar className="friends-directory__avatar" src={request.receiver.avatar || ""} alt={getDisplayName(request.receiver)} loading="lazy" decoding="async" />
-                        <span className="friends-directory__copy">
-                          <strong>{getDisplayName(request.receiver)}</strong>
-                          <span>{request.receiver.email || `ID: ${request.receiver.id}`}</span>
-                        </span>
-                      </div>
-                      <div className="friends-directory__status friends-directory__status--offline">
-                        <span>
-                          <strong>Ожидает ответа</strong>
-                        </span>
-                      </div>
-                    </div>
+                    <FriendRequestDirectoryRow
+                      key={request.id}
+                      requestUser={{
+                        ...request.receiver,
+                        isFriend: false,
+                        friendshipStatus: "pending_outgoing",
+                      }}
+                      getDisplayName={getDisplayName}
+                      onOpenProfile={onOpenDirectProfile}
+                      onOpenActions={onOpenDirectActions}
+                      statusContent={(
+                        <div className="friends-directory__status friends-directory__status--offline">
+                          <span>
+                            <strong>Ожидает ответа</strong>
+                          </span>
+                        </div>
+                      )}
+                    />
                   ))}
                   {!friendRequestsError && !friendRequestQueueCount ? (
                     <div className="friends-panel__empty">Заявок нет.</div>

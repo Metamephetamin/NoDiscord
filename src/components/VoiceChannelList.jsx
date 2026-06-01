@@ -105,6 +105,7 @@ const VoiceChannelList = ({
   onWatchStream,
   onParticipantVolumeChange,
   canManageChannels = true,
+  canEditChannelStatus = false,
   joiningChannelId = "",
   mutedChannelIds = [],
 }) => {
@@ -233,7 +234,7 @@ const VoiceChannelList = ({
   const startStatusEdit = (event, channel, channelStatus) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!canManageChannels || !channel?.id) {
+    if (!canEditChannelStatus || !channel?.id) {
       return;
     }
 
@@ -246,7 +247,7 @@ const VoiceChannelList = ({
   const submitStatusEdit = (event, channel) => {
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    if (!canManageChannels || !channel?.id || statusEditor.channelId !== channel.id) {
+    if (!canEditChannelStatus || !channel?.id || statusEditor.channelId !== channel.id) {
       closeStatusEditor();
       return;
     }
@@ -313,7 +314,7 @@ const VoiceChannelList = ({
         const isMuted = mutedChannels.has(String(channel.id));
         const channelStatus = normalizeVoiceChannelStatus(channel.status ?? channel.Status ?? "");
         const isStatusEditing = statusEditor.channelId === channel.id;
-        const canEditStatus = canManageChannels && !isEditing && !isJoining;
+        const canEditStatus = canEditChannelStatus && !isEditing && !isJoining;
         const shouldShowStatus = Boolean(channelStatus) || (isActive && canEditStatus);
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
@@ -483,7 +484,7 @@ const VoiceChannelList = ({
                         aria-label={channelStatus ? "Изменить статус канала" : "Выбрать статус канала"}
                       >
                         <span>{channelStatus || "Выбрать статус канала"}</span>
-                        <span className="voice-channel__status-pencil" aria-hidden="true">✎</span>
+                        {!channelStatus ? <span className="voice-channel__status-pencil" aria-hidden="true">✎</span> : null}
                       </button>
                     ) : (
                       <span className="voice-channel__status-button voice-channel__status-button--readonly">

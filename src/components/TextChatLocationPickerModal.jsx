@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "../css/TextChatLocationPicker.css";
@@ -90,7 +91,6 @@ export default function TextChatLocationPickerModal({
       subdomains: ["0", "1", "2", "3"],
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
-      crossOrigin: true,
     }).addTo(map);
 
     const handleMapClick = (event) => {
@@ -207,7 +207,7 @@ export default function TextChatLocationPickerModal({
     }
   };
 
-  return (
+  const modal = (
     <div className="location-picker-backdrop" role="presentation" onMouseDown={handleBackdropPointerDown}>
       <div className="location-picker-modal" role="dialog" aria-modal="true" aria-label="Выбор локации">
         <div className="location-picker-modal__header">
@@ -281,4 +281,6 @@ export default function TextChatLocationPickerModal({
       </div>
     </div>
   );
+
+  return typeof document === "undefined" ? modal : createPortal(modal, document.body);
 }

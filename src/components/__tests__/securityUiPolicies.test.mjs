@@ -28,7 +28,8 @@ test("voice channel timer keeps a small right edge gap without reserving hidden 
   const css = readRepoFile("src/css/ListChannels.css");
 
   assert.match(css, /\.voice-channel__button \{[\s\S]*?padding: 0 12px 0 0;/);
-  assert.match(css, /\.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__button \{[\s\S]*?padding-right: 34px;/);
+  assert.match(css, /\.voice-channel__row > \.channel-edit-button \{[\s\S]*?z-index: 2;/);
+  assert.match(css, /\.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__button \{[\s\S]*?padding-right: 0;/);
   assert.match(css, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?width: 76px;/);
 });
 
@@ -129,15 +130,24 @@ test("media preview can browse previous message media without forward wraparound
 
 test("shared location is reduced to a privacy cell before realtime publication", () => {
   const hookSource = readRepoFile("src/hooks/useLocationSharingPreference.js");
+  const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
   const hubSource = readRepoFile("BackNoDiscord/BackNoDiscord/ChatHub.cs");
   const userControllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/UserController.cs");
   const friendsControllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/FriendsController.cs");
+  const dbContextSource = readRepoFile("BackNoDiscord/BackNoDiscord/DbContext.cs");
+  const schemaInitializerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Infrastructure/DatabaseSchemaInitializer.cs");
 
+  assert.match(hookSource, /enabled: false,/);
+  assert.match(dbContextSource, /public bool location_sharing_enabled \{ get; set; \} = false;/);
+  assert.match(dbContextSource, /entity\.Property\(x => x\.location_sharing_enabled\)\.HasDefaultValue\(false\);/);
+  assert.match(schemaInitializerSource, /location_sharing_enabled boolean NOT NULL DEFAULT false/);
   assert.match(hookSource, /const LOCATION_PRIVACY_DECIMALS = 1;/);
   assert.match(hookSource, /Number\(numericValue\.toFixed\(LOCATION_PRIVACY_DECIMALS\)\)/);
   assert.match(hookSource, /normalizeSharedLocationCoordinate\(position\?\.coords\?\.latitude\)/);
   assert.match(hookSource, /formatSharedLocationCell\(latitude, longitude\)/);
   assert.match(hookSource, /invoke\?\.\("UpdateLocationCell", \{ cell: locationCell \}\)/);
+  assert.match(hookSource, /setStatus\(getGeolocationErrorMessage\(error\)\);/);
+  assert.match(friendsSource, /setLocationStatus\(getGeolocationErrorMessage\(error\)\);/);
   assert.match(hookSource, /window\.localStorage\?\.removeItem\(SELF_LOCATION_STORAGE_KEY\)/);
   assert.doesNotMatch(hookSource, /safeWriteJson\(SELF_LOCATION_STORAGE_KEY/);
   assert.doesNotMatch(hookSource, /invoke\?\.\("UpdateLocation", latitude, longitude\)/);
@@ -173,9 +183,69 @@ test("message timestamps show only time while dates render as day dividers", () 
   assert.match(messageListSource, /function MessageDateDivider\(\{ timestamp, placement = "start" \}\)/);
   assert.match(messageListSource, /const dayLabel = formatDayLabel\(timestamp\);/);
   assert.match(messageListSource, /const shouldShowStartDayDivider = !previousMessageDayKey \|\| previousMessageDayKey !== messageDayKey;/);
-  assert.match(messageListSource, /const shouldShowEndDayDivider = messageDayKey && previousMessageDayKey === messageDayKey && nextMessageDayKey !== messageDayKey;/);
   assert.match(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="start" \/>/);
-  assert.match(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="end" \/>/);
+  assert.doesNotMatch(messageListSource, /shouldShowEndDayDivider/);
+  assert.doesNotMatch(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="end" \/>/);
+});
+
+test("direct chat topbar does not render online presence under the title", () => {
+  const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+  const friendsCss = readRepoFile("src/css/FriendsWorkspace.css");
+  const topbarStart = friendsSource.indexOf('className="chat__topbar friends-direct-chat-topbar"');
+  const topbarEnd = friendsSource.indexOf('className="chat__topbar-actions friends-direct-chat-topbar__actions"', topbarStart);
+  const topbarSource = friendsSource.slice(topbarStart, topbarEnd);
+
+  assert.match(topbarSource, /friends-direct-chat-topbar__avatar/);
+  assert.match(topbarSource, /currentDirectTopbarAvatar/);
+  assert.doesNotMatch(topbarSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
+  assert.doesNotMatch(topbarSource, /chat__topbar-copy-name--online/);
+  assert.doesNotMatch(topbarSource, /isUserCurrentlyOnline\(currentDirectFriend\)/);
+  assert.match(topbarSource, /currentConversationTarget \? \(/);
+  assert.match(topbarSource, /участников/);
+  assert.match(friendsCss, /\.friends-direct-chat-topbar \.chat__topbar-copy \{[\s\S]*?gap: 8px;/);
+});
+
+test("personal chat memoization ignores volatile presence fields", () => {
+  const textChatSource = readRepoFile("src/components/TextChat.jsx");
+  const comparatorStart = textChatSource.indexOf("function areUserLikeEntriesEqual");
+  const comparatorEnd = textChatSource.indexOf("function areRoleEntriesEqual", comparatorStart);
+  const comparatorSource = textChatSource.slice(comparatorStart, comparatorEnd);
+
+  assert.match(comparatorSource, /directChannelId/);
+  assert.match(comparatorSource, /isBlocked/);
+  assert.match(comparatorSource, /blockedYou/);
+  assert.doesNotMatch(comparatorSource, /lastSeenAt|last_seen_at/);
+  assert.doesNotMatch(comparatorSource, /isOnline|is_online|online/);
+});
+
+test("voice channel status editing is restricted to server owner", () => {
+  const voiceChannelSource = readRepoFile("src/components/VoiceChannelList.jsx");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const channelActionsSource = readRepoFile("src/features/menu-main/useMenuMainChannelActions.js");
+
+  assert.match(voiceChannelSource, /canEditChannelStatus = false/);
+  assert.match(voiceChannelSource, /const canEditStatus = canEditChannelStatus && !isEditing && !isJoining;/);
+  assert.match(voiceChannelSource, /if \(!canEditChannelStatus \|\| !channel\?\.id\)/);
+  assert.match(voiceChannelSource, /if \(!canEditChannelStatus \|\| !channel\?\.id \|\| statusEditor\.channelId !== channel\.id\)/);
+  assert.doesNotMatch(voiceChannelSource, /const canEditStatus = canManageChannels && !isEditing && !isJoining;/);
+  assert.match(workspaceSource, /canEditChannelStatus=\{canEditVoiceChannelStatus\}/);
+  assert.match(controllerSource, /canEditVoiceChannelStatus=\{isServerOwner\}/);
+  assert.match(controllerSource, /canEditVoiceChannelStatus: isServerOwner/);
+  assert.match(channelActionsSource, /canEditVoiceChannelStatus = false/);
+  assert.match(channelActionsSource, /delete safePatch\.status;/);
+});
+
+test("mobile direct chat topbar keeps avatar without online presence text", () => {
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const mobileStart = workspaceSource.indexOf("export const MobileDirectChat =");
+  const mobileExportEnd = workspaceSource.indexOf("export default", mobileStart);
+  const mobileEnd = mobileExportEnd === -1 ? workspaceSource.length : mobileExportEnd;
+  const mobileSource = workspaceSource.slice(mobileStart, mobileEnd);
+
+  assert.match(mobileSource, /chat__topbar-mobile-avatar/);
+  assert.match(mobileSource, /mobileDirectAvatar/);
+  assert.doesNotMatch(mobileSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
 });
 
 test("text chat does not render a floating date pinned to the top center", () => {
@@ -767,11 +837,23 @@ test("text chat location picker styles stay split from the main chat stylesheet"
   const textChatCss = readRepoFile("src/css/TextChat.css");
   const pickerCss = readRepoFileIfExists("src/css/TextChatLocationPicker.css");
 
+  assert.match(pickerSource, /createPortal\(modal, document\.body\)/);
   assert.match(pickerSource, /import "\.\.\/css\/TextChatLocationPicker\.css";/);
   assert.doesNotMatch(textChatCss, /\.location-picker-modal/);
   assert.doesNotMatch(textChatCss, /\.location-picker-map/);
   assert.match(pickerCss, /\.location-picker-modal/);
   assert.match(pickerCss, /\.location-picker-map/);
+});
+
+test("location maps avoid CORS-only tile loading and use a quick geolocation pass", () => {
+  const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+  const composerSource = readRepoFile("src/components/TextChatComposer.jsx");
+
+  assert.match(friendsSource, /LANAYA_WORLD_BASE_TILE_URL/);
+  assert.doesNotMatch(friendsSource, /crossOrigin:\s*true/);
+  assert.match(composerSource, /LOCATION_FAST_GEOLOCATION_OPTIONS/);
+  assert.match(composerSource, /LOCATION_ACCURACY_TIMEOUT_MS = 3200;/);
+  assert.match(composerSource, /maximumAge:\s*60000/);
 });
 
 test("role deletion uses an in-app confirmation instead of browser confirm", () => {
@@ -1147,6 +1229,13 @@ test("chat profile modal styles stay split from the main text chat stylesheet", 
   const profileSource = readRepoFile("src/components/TextChatProfileModal.jsx");
 
   assert.match(profileSource, /import "\.\.\/css\/TextChatProfileModal\.css";/);
+  assert.match(profileSource, /profileSummaryRows/);
+  assert.match(profileSource, /Сводка/);
+  assert.match(profileSource, /profileSummaryNote/);
+  assert.match(profileSource, /chat-profile-modal__side-widget-note/);
+  assert.match(profileCss, /\.chat-profile-modal__quick-card span \{[\s\S]*?font-size: 13px;/);
+  assert.match(profileCss, /\.chat-profile-modal__quick-card strong \{[\s\S]*?font-size: 16px;/);
+  assert.match(profileCss, /\.chat-profile-modal__side-widget-note \{/);
   assert.match(profileCss, /\.chat-profile-modal-backdrop \{/);
   assert.match(profileCss, /\.chat-profile-modal \{/);
   assert.match(profileCss, /html\[data-ui-theme="light"\] \.chat-profile-modal/);
@@ -1190,6 +1279,18 @@ test("message context menu styles stay split from the main text chat stylesheet"
   assert.match(contextMenuCss, /html\[data-ui-theme="light"\] \.message-context-menu/);
   assert.doesNotMatch(textChatCss, /^\s*\.message-context-menu[^\n{]*\{/m);
   assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.message-context-menu/m);
+});
+
+test("message attachments explicitly forward right clicks to the message context menu", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+
+  assert.match(messageListSource, /onOpenContextMenu,\n\s+isOwnMessage = false,/);
+  assert.match(messageListSource, /const handleAttachmentContextMenu = \(event\) => \{\n\s+event\.stopPropagation\(\);\n\s+onOpenContextMenu\?\.\(event, messageItem, isOwnMessage\);/);
+  assert.match(messageListSource, /className="message-inline-emoji message-inline-emoji--button"[\s\S]*?onContextMenu=\{handleAttachmentContextMenu\}/);
+  assert.match(messageListSource, /className=\{`message-media message-media--button[\s\S]*?onContextMenu=\{handleAttachmentContextMenu\}/);
+  assert.match(messageListSource, /className=\{`message-media message-media--video message-media--button[\s\S]*?onContextMenu=\{handleAttachmentContextMenu\}/);
+  assert.match(messageListSource, /className=\{`message-attachment \$\{isDocumentAttachment[\s\S]*?onContextMenu=\{handleAttachmentContextMenu\}/);
+  assert.match(messageListSource, /onOpenContextMenu=\{onOpenContextMenu\}[\s\S]*?isOwnMessage=\{isOwnMessage\}/);
 });
 
 test("chat report modal styles stay split from the main text chat stylesheet", () => {

@@ -2617,6 +2617,14 @@
   min-width: 0;
 }
 
+.friends-direct-chat-topbar__avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .friends-direct-chat-topbar__back {
   flex: 0 0 auto;
   width: 26px;
@@ -2635,6 +2643,11 @@
 
 .friends-direct-chat-topbar__back:hover {
   color: #ffffff;
+}
+
+.friends-direct-chat-topbar .chat__topbar-copy {
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .friends-direct-chat-topbar .chat__topbar-copy strong {
