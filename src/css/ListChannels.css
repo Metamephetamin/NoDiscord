@@ -33,8 +33,11 @@
 }
 
 .list__items--active > .voice-channel__row {
-  background: rgba(91, 124, 255, 0.12);
-  border-color: rgba(91, 124, 255, 0.28);
+  min-height: 72px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.145);
+  border-color: transparent;
 }
 
 .list__items--muted {
@@ -184,14 +187,29 @@
   flex: 0 0 auto;
   margin-left: auto;
   width: 76px;
-  color: color-mix(in srgb, var(--app-accent) 86%, #0f1115);
+  color: color-mix(in srgb, var(--app-accent) 78%, #d8deeb);
   text-align: end;
-  font-family: var(--font-heading);
-  font-size: 14px;
-  font-weight: 500;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   transform: translateX(5px);
+}
+
+.list__items--active .voice-channel__button {
+  min-height: 38px;
+}
+
+.list__items--active .voice-channel__title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.list__items--active .voice-channel__status-button {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .voice-channel__timer + .voice-channel__count {
