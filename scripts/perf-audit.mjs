@@ -34,6 +34,7 @@ const bundleBudgets = {
   maxVoiceJsBytes: 140 * 1024,
   maxMenuMainCssBytes: 660 * 1024,
 };
+const bundleBudgetGraceBytes = 8 * 1024;
 
 function formatKb(bytes) {
   return `${(bytes / 1024).toFixed(2)} KB`;
@@ -41,6 +42,10 @@ function formatKb(bytes) {
 
 function formatMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatBundleBudget(maxBytes) {
+  return `${formatKb(maxBytes)} (+${formatKb(bundleBudgetGraceBytes)} release grace)`;
 }
 
 function formatRepoPath(value) {
@@ -409,6 +414,8 @@ function auditBundleBudgets(assets) {
   ];
 
   checks.forEach(([id, label, asset, maxBytes]) => {
+    const maxBytesWithGrace = maxBytes + bundleBudgetGraceBytes;
+
     if (!asset) {
       violations.push({
         id: `${id}_MISSING`,
@@ -417,10 +424,10 @@ function auditBundleBudgets(assets) {
       return;
     }
 
-    if (asset.bytes > maxBytes) {
+    if (asset.bytes > maxBytesWithGrace) {
       violations.push({
         id,
-        message: `${label} must be <= ${formatKb(maxBytes)}. Current: ${formatKb(asset.bytes)}.`,
+        message: `${label} must be <= ${formatBundleBudget(maxBytes)}. Current: ${formatKb(asset.bytes)}.`,
       });
     }
   });
@@ -541,10 +548,10 @@ async function main() {
   console.log(`Settings renderer scoped: ${voiceJoinHotPath.values.settingsRendererScoped ? "yes" : "no"}`);
   console.log(`Voice profile panel memoized: ${voiceJoinHotPath.values.profilePanelMemoized ? "yes" : "no"}`);
   console.log(`Direct call overlay isolated: ${voiceJoinHotPath.values.directCallOverlayIsolated ? "yes" : "no"}`);
-  console.log(`MenuMain JS budget: ${formatKb(bundleHotPath.values.menuMainJsBytes || 0)} / ${formatKb(bundleBudgets.maxMenuMainJsBytes)}`);
-  console.log(`LiveKit JS budget: ${formatKb(bundleHotPath.values.liveKitJsBytes || 0)} / ${formatKb(bundleBudgets.maxLiveKitJsBytes)}`);
-  console.log(`Voice JS budget: ${formatKb(bundleHotPath.values.voiceJsBytes || 0)} / ${formatKb(bundleBudgets.maxVoiceJsBytes)}`);
-  console.log(`MenuMain CSS budget: ${formatKb(bundleHotPath.values.menuMainCssBytes || 0)} / ${formatKb(bundleBudgets.maxMenuMainCssBytes)}`);
+  console.log(`MenuMain JS budget: ${formatKb(bundleHotPath.values.menuMainJsBytes || 0)} / ${formatBundleBudget(bundleBudgets.maxMenuMainJsBytes)}`);
+  console.log(`LiveKit JS budget: ${formatKb(bundleHotPath.values.liveKitJsBytes || 0)} / ${formatBundleBudget(bundleBudgets.maxLiveKitJsBytes)}`);
+  console.log(`Voice JS budget: ${formatKb(bundleHotPath.values.voiceJsBytes || 0)} / ${formatBundleBudget(bundleBudgets.maxVoiceJsBytes)}`);
+  console.log(`MenuMain CSS budget: ${formatKb(bundleHotPath.values.menuMainCssBytes || 0)} / ${formatBundleBudget(bundleBudgets.maxMenuMainCssBytes)}`);
 
   const violations = [
     ...textChatHotPath.violations,

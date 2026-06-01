@@ -2065,7 +2065,6 @@ function TextChatMessageList({
   topSpacerHeight = 0,
   bottomSpacerHeight = 0,
   registerMeasuredNode,
-  floatingDateLabel,
   decryptedAttachmentsByMessageId,
   selectedMessageIdSet,
   highlightedMessageId,
@@ -2382,8 +2381,6 @@ function TextChatMessageList({
 
   return (
     <div className="messages-list-shell">
-      {floatingDateLabel ? <div className="messages-floating-date">{floatingDateLabel}</div> : null}
-
       <div ref={messagesListRef} className={`messages-list ${virtualizationEnabled ? "messages-list--virtualized" : "messages-list--plain"}`}>
         {virtualizationEnabled && topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
         {visibleMessages.map((messageItem, visibleIndex) => {
@@ -2795,7 +2792,6 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
     && previousProps.topSpacerHeight === nextProps.topSpacerHeight
     && previousProps.bottomSpacerHeight === nextProps.bottomSpacerHeight
     && previousProps.registerMeasuredNode === nextProps.registerMeasuredNode
-    && previousProps.floatingDateLabel === nextProps.floatingDateLabel
     && previousProps.decryptedAttachmentsByMessageId === nextProps.decryptedAttachmentsByMessageId
     && previousProps.selectedMessageIdSet === nextProps.selectedMessageIdSet
     && previousProps.highlightedMessageId === nextProps.highlightedMessageId

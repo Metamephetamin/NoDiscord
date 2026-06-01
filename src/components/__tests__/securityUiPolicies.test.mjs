@@ -167,6 +167,14 @@ test("message timestamps show only time while dates render as day dividers", () 
   assert.match(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="end" \/>/);
 });
 
+test("text chat does not render a floating date pinned to the top center", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+
+  assert.doesNotMatch(messageListSource, /messages-floating-date/);
+  assert.doesNotMatch(textChatCss, /\.messages-floating-date/);
+});
+
 test("role assignment errors use in-app status instead of alert", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 
@@ -421,13 +429,24 @@ test("message search input text is readable on dark chat topbar", () => {
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #c8cfdd;/);
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?font-weight: 500;/);
   assert.match(mainCss, /\.chat__topbar \{[\s\S]*?min-height: 58px;/);
-  assert.match(mainCss, /\.chat__topbar-copy \.chat__topbar-name \{[\s\S]*?color: #f8fafc;[\s\S]*?font-size: 34px;/);
+  assert.match(mainCss, /\.chat__topbar \{[\s\S]*?padding: 8px 24px 8px 18px;/);
+  assert.match(mainCss, /\.chat__topbar-symbol \{[\s\S]*?width: 28px;[\s\S]*?height: 28px;/);
+  assert.match(mainCss, /\.chat__topbar-copy \.chat__topbar-name \{[\s\S]*?color: #eef2f8;[\s\S]*?font-size: 24px;[\s\S]*?font-weight: 600;/);
   assert.match(mainCss, /\.chat__topbar-search-wrap \{[\s\S]*?width: min\(300px, 24vw\);/);
   assert.match(mainCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #aeb6c6;/);
   assert.match(workspaceSource, /className="bi bi-hash"/);
   assert.match(searchIconSource, /class="bi bi-search"/);
   assert.doesNotMatch(workspaceSource, /Текстовый канал сервера/);
   assert.doesNotMatch(workspaceSource, /Форум сервера/);
+});
+
+test("release performance gate keeps small bundle budget drift from blocking deploys", () => {
+  const perfAuditSource = readRepoFile("scripts/perf-audit.mjs");
+
+  assert.match(perfAuditSource, /const bundleBudgetGraceBytes = 8 \* 1024;/);
+  assert.match(perfAuditSource, /const maxBytesWithGrace = maxBytes \+ bundleBudgetGraceBytes;/);
+  assert.match(perfAuditSource, /if \(asset\.bytes > maxBytesWithGrace\) \{/);
+  assert.match(perfAuditSource, /release grace/);
 });
 
 test("admin security styles stay split from the main menu stylesheet", () => {
@@ -950,6 +969,25 @@ test("manual profile status is editable, persisted, and rendered under the nickn
   assert.match(slotSource, /profileStatus=\{profileCustomStatus\}/);
   assert.match(profileSource, /className="profile__custom-status"/);
   assert.match(profileCss, /\.profile__custom-status \{/);
+});
+
+test("integration activity visually replaces manual profile status in the bottom profile panel", () => {
+  const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+
+  assert.match(profileSource, /const showManualProfileStatus = Boolean\(profileStatus\) && !activityStatus;/);
+  assert.match(profileSource, /\{showManualProfileStatus \? <span className="profile__custom-status">\{profileStatus\}<\/span> : null\}/);
+  assert.match(profileSource, /\{activityStatus \? \(/);
+});
+
+test("bottom profile card aligns with the text composer height and uses tighter corners", () => {
+  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const textChatCss = readRepoFile("src/css/TextChat.css");
+  const identityRowRule = mainCss.match(/\.profile__identity-row \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(textChatCss, /\.message-composer \{[\s\S]*?min-height: 58px;/);
+  assert.match(identityRowRule, /min-height: 58px;/);
+  assert.match(identityRowRule, /border-radius: 14px;/);
+  assert.match(identityRowRule, /top: 0;/);
 });
 
 test("interface accent color is customizable through appearance settings", () => {

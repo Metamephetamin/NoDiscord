@@ -1693,7 +1693,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   justify-content: space-between;
   gap: 16px;
   min-height: 58px;
-  padding: 8px 28px;
+  padding: 8px 24px 8px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(14, 16, 22, 0.92);
 }
@@ -1714,7 +1714,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .chat__topbar-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   color: #f5f7ff;
   font-family: var(--font-heading);
@@ -1722,9 +1722,9 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .chat__topbar-symbol {
-  width: 34px;
-  height: 34px;
-  color: #d9deea;
+  width: 28px;
+  height: 28px;
+  color: #cfd6e6;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1738,7 +1738,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .chat__topbar-symbol {
-  font-size: 34px;
+  font-size: 28px;
   line-height: 1;
   font-style: normal;
 }
@@ -1766,16 +1766,18 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  color: #f8fafc;
-  font-size: 34px;
+  color: #eef2f8;
+  font-size: 24px;
   line-height: 1.08;
-  text-shadow: 0 0 18px rgba(248, 250, 252, 0.12);
+  font-weight: 600;
+  text-shadow: 0 0 12px rgba(248, 250, 252, 0.08);
 }
 
 .chat__topbar-copy .chat__topbar-name {
-  color: #f8fafc;
-  font-size: 34px;
+  color: #eef2f8;
+  font-size: 24px;
   line-height: 1.08;
+  font-weight: 600;
 }
 
 .chat__topbar-badge {
@@ -3069,14 +3071,14 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   gap: 6px;
   width: 100%;
   box-sizing: border-box;
-  min-height: 56px;
+  min-height: 58px;
   padding: 6px 8px 6px 6px;
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(22, 24, 30, 0.94), rgba(9, 10, 13, 0.985));
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
   margin-left: 0;
-  top: 7px;
+  top: 0;
 
 }
 
