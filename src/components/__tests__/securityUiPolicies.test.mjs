@@ -358,9 +358,15 @@ test("light theme text tools menu is opaque and readable", () => {
 
 test("message search input text is readable on dark chat topbar", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
 
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?color: #f8fbff;/);
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
+  assert.match(mainCss, /\.chat__topbar \{[\s\S]*?min-height: 78px;/);
+  assert.match(mainCss, /\.chat__topbar-copy strong \{[\s\S]*?color: #ffffff;[\s\S]*?font-size: 34px;/);
+  assert.match(mainCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #d8deeb;/);
+  assert.doesNotMatch(workspaceSource, /Текстовый канал сервера/);
+  assert.doesNotMatch(workspaceSource, /Форум сервера/);
 });
 
 test("admin security styles stay split from the main menu stylesheet", () => {
@@ -433,12 +439,15 @@ test("server message authors render role badges after nicknames", () => {
 
 test("voice stage toolbar buttons avoid native title tooltips", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
   const mobileStageSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
   assert.doesNotMatch(stageSource, /title=\{label\}/);
   assert.doesNotMatch(stageSource, /title="Открыть сцену на весь экран"/);
   assert.match(stageSource, /aria-label=\{label\}/);
   assert.match(stageSource, /aria-label="Открыть сцену на весь экран"/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-button::after \{[\s\S]*?content: attr\(aria-label\);/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-button:hover::after,[\s\S]*?\.voice-room-stage__toolbar-button:focus-visible::after/);
   assert.doesNotMatch(mobileStageSource, /\stitle=/);
 });
 
@@ -688,6 +697,8 @@ test("voice stage toolbar does not render a duplicate center camera button", () 
   const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
   assert.doesNotMatch(stageSource, /key: "camera"[\s\S]*?label: "Включить камеру"/);
+  assert.match(stageSource, /activeStage && activeStage\.kind !== "local"[\s\S]*?key: "close-stage"/);
+  assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
 });

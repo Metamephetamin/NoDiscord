@@ -2761,7 +2761,6 @@ function ServerMainComponent({
                   <span>{isVoicePreviewVisible ? selectedVoiceChannel.name : getChannelDisplayName(currentTextChannel?.name || "channel", "text")}</span>
                   {activeServerUnreadCount > 0 ? <span className="chat__topbar-badge">{Math.min(activeServerUnreadCount, 99)}</span> : null}
                 </strong>
-                <span>{getTextChannelKind(currentTextChannel) === "forum" ? "Форум сервера" : "Текстовый канал сервера"}</span>
               </div>
             </div>
             <div className="chat__topbar-actions">

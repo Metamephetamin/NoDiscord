@@ -918,12 +918,12 @@ export default function VoiceRoomStage({
               <VoiceStageIcon name="fullscreen" />
             </button>
           ) : null}
-          {activeStage
+          {activeStage && activeStage.kind !== "local"
             ? renderToolbarButton({
                 key: "close-stage",
                 icon: "close",
-                label: activeStage.kind === "local" ? "Скрыть предпросмотр" : "Закрыть эфир",
-                onClick: activeStage.kind === "local" ? onCloseLocalSharePreview : onCloseSelectedStream,
+                label: "Закрыть эфир",
+                onClick: onCloseSelectedStream,
               })
             : null}
         </div>
