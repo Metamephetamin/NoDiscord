@@ -10,6 +10,8 @@ import {
   reorderById,
 } from "./menuMainControllerUtils";
 import {
+  DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
+  DEFAULT_VOICE_CHANNEL_CATEGORY_ID,
   moveServerChannelAcrossLists,
   removeChannelCategoryWithChannels,
 } from "./channelManagementUtils";
@@ -273,10 +275,18 @@ export default function useMenuMainChannelActions({
     const normalizedType = String(type || "");
 
     if (normalizedType === "voice") {
-      const removedChannels = (activeServer.voiceChannels || []).filter((channel) => !String(channel.categoryId || ""));
-      if (!removedChannels.length) return;
+      const removedVoiceChannels = (activeServer.voiceChannels || []).filter((channel) => {
+        const categoryId = String(channel.categoryId || "");
+        return !categoryId || categoryId === DEFAULT_VOICE_CHANNEL_CATEGORY_ID;
+      });
+      const removedTextChannelIds = new Set(
+        (activeServer.textChannels || [])
+          .filter((channel) => String(channel.categoryId || "") === DEFAULT_VOICE_CHANNEL_CATEGORY_ID)
+          .map((channel) => String(channel.id || ""))
+      );
+      if (!removedVoiceChannels.length && !removedTextChannelIds.size) return;
 
-      const shouldLeaveVoice = removedChannels.some((channel) => {
+      const shouldLeaveVoice = removedVoiceChannels.some((channel) => {
         const channelId = String(channel.id || "");
         return currentVoiceChannel === channelId || currentVoiceChannel === getScopedVoiceChannelId(activeServer.id, channelId);
       });
@@ -287,15 +297,26 @@ export default function useMenuMainChannelActions({
 
       const nextServer = {
         ...activeServer,
-        voiceChannels: (activeServer.voiceChannels || []).filter((channel) => String(channel.categoryId || "")),
+        voiceChannels: (activeServer.voiceChannels || []).filter((channel) => {
+          const categoryId = String(channel.categoryId || "");
+          return categoryId && categoryId !== DEFAULT_VOICE_CHANNEL_CATEGORY_ID;
+        }),
+        textChannels: (activeServer.textChannels || []).filter((channel) => String(channel.categoryId || "") !== DEFAULT_VOICE_CHANNEL_CATEGORY_ID),
       };
       updateServer(() => nextServer);
       syncSharedServer(nextServer);
-      setChannelSettingsState((previous) =>
-        previous?.type === "voice" && removedChannels.some((channel) => String(channel.id || "") === String(previous.channelId || ""))
-          ? null
-          : previous
-      );
+      if (removedTextChannelIds.has(String(currentTextChannelId || ""))) {
+        setCurrentTextChannelId(nextServer.textChannels?.[0]?.id || "");
+      }
+      setChannelSettingsState((previous) => {
+        if (previous?.type === "text" && removedTextChannelIds.has(String(previous.channelId || ""))) {
+          return null;
+        }
+        if (previous?.type === "voice" && removedVoiceChannels.some((channel) => String(channel.id || "") === String(previous.channelId || ""))) {
+          return null;
+        }
+        return previous;
+      });
       return;
     }
 
@@ -303,27 +324,49 @@ export default function useMenuMainChannelActions({
 
     const removedChannelIds = new Set(
       (activeServer.textChannels || [])
-        .filter((channel) => !String(channel.categoryId || ""))
+        .filter((channel) => {
+          const categoryId = String(channel.categoryId || "");
+          return !categoryId || categoryId === DEFAULT_TEXT_CHANNEL_CATEGORY_ID;
+        })
         .map((channel) => String(channel.id || ""))
     );
-    if (!removedChannelIds.size) return;
+    const removedVoiceChannels = (activeServer.voiceChannels || []).filter(
+      (channel) => String(channel.categoryId || "") === DEFAULT_TEXT_CHANNEL_CATEGORY_ID
+    );
+    if (!removedChannelIds.size && !removedVoiceChannels.length) return;
 
-    const nextChannels = (activeServer.textChannels || []).filter((channel) => String(channel.categoryId || ""));
+    const nextChannels = (activeServer.textChannels || []).filter((channel) => {
+      const categoryId = String(channel.categoryId || "");
+      return categoryId && categoryId !== DEFAULT_TEXT_CHANNEL_CATEGORY_ID;
+    });
     const nextServer = {
       ...activeServer,
       textChannels: nextChannels,
+      voiceChannels: (activeServer.voiceChannels || []).filter((channel) => String(channel.categoryId || "") !== DEFAULT_TEXT_CHANNEL_CATEGORY_ID),
     };
+    const shouldLeaveVoice = removedVoiceChannels.some((channel) => {
+      const channelId = String(channel.id || "");
+      return currentVoiceChannel === channelId || currentVoiceChannel === getScopedVoiceChannelId(activeServer.id, channelId);
+    });
+    if (shouldLeaveVoice) {
+      await leaveVoiceChannel();
+    }
+
     updateServer(() => nextServer);
     syncSharedServer(nextServer);
 
     if (removedChannelIds.has(String(currentTextChannelId || ""))) {
       setCurrentTextChannelId(nextChannels[0]?.id || "");
     }
-    setChannelSettingsState((previous) =>
-      previous?.type === "text" && removedChannelIds.has(String(previous.channelId || ""))
-        ? null
-        : previous
-    );
+    setChannelSettingsState((previous) => {
+      if (previous?.type === "text" && removedChannelIds.has(String(previous.channelId || ""))) {
+        return null;
+      }
+      if (previous?.type === "voice" && removedVoiceChannels.some((channel) => String(channel.id || "") === String(previous.channelId || ""))) {
+        return null;
+      }
+      return previous;
+    });
   };
 
   const reorderChannelCategories = (sourceCategoryId, targetCategoryId) => {

@@ -1,17 +1,37 @@
 const normalizeCategoryId = (categoryId) => String(categoryId || "");
 const normalizeChannelType = (type) => (String(type || "text") === "voice" ? "voice" : "text");
+export const DEFAULT_TEXT_CHANNEL_CATEGORY_ID = "__default_text_channels";
+export const DEFAULT_VOICE_CHANNEL_CATEGORY_ID = "__default_voice_channels";
+
+const getDefaultCategoryIdForType = (type) =>
+  normalizeChannelType(type) === "voice" ? DEFAULT_VOICE_CHANNEL_CATEGORY_ID : DEFAULT_TEXT_CHANNEL_CATEGORY_ID;
+
+const getDisplayCategoryId = (type, channel) => {
+  const categoryId = normalizeCategoryId(channel?.categoryId);
+  return categoryId || getDefaultCategoryIdForType(type);
+};
+
+const materializeCategoryIdForType = (type, categoryId) => {
+  const normalizedCategoryId = normalizeCategoryId(categoryId);
+  if (normalizedCategoryId === getDefaultCategoryIdForType(type)) {
+    return "";
+  }
+
+  return normalizedCategoryId;
+};
+
 const getChannelOrder = (channel, fallbackIndex) => {
   const order = Number(channel?.order);
   return Number.isFinite(order) ? order : fallbackIndex;
 };
 
 export const getOrderedServerChannelItems = (textChannels = [], voiceChannels = [], categoryId = "") => {
-  const normalizedCategoryId = normalizeCategoryId(categoryId);
+  const normalizedCategoryId = normalizeCategoryId(categoryId) || DEFAULT_TEXT_CHANNEL_CATEGORY_ID;
   return [
     ...(textChannels || []).map((channel, index) => ({ type: "text", channel, sourceIndex: index })),
     ...(voiceChannels || []).map((channel, index) => ({ type: "voice", channel, sourceIndex: index })),
   ]
-    .filter((item) => normalizeCategoryId(item.channel?.categoryId) === normalizedCategoryId)
+    .filter((item) => getDisplayCategoryId(item.type, item.channel) === normalizedCategoryId)
     .sort((first, second) => {
       const firstOrder = getChannelOrder(first.channel, first.sourceIndex);
       const secondOrder = getChannelOrder(second.channel, second.sourceIndex);
@@ -30,12 +50,15 @@ export const getOrderedServerChannelItems = (textChannels = [], voiceChannels = 
 };
 
 const getServerChannelCategoryIds = (server) => {
-  const categoryIds = new Set([""]);
+  const categoryIds = new Set([DEFAULT_TEXT_CHANNEL_CATEGORY_ID, DEFAULT_VOICE_CHANNEL_CATEGORY_ID]);
   (server?.channelCategories || []).forEach((category) => {
     categoryIds.add(normalizeCategoryId(category?.id));
   });
-  [...(server?.textChannels || []), ...(server?.voiceChannels || [])].forEach((channel) => {
-    categoryIds.add(normalizeCategoryId(channel?.categoryId));
+  (server?.textChannels || []).forEach((channel) => {
+    categoryIds.add(getDisplayCategoryId("text", channel));
+  });
+  (server?.voiceChannels || []).forEach((channel) => {
+    categoryIds.add(getDisplayCategoryId("voice", channel));
   });
   return [...categoryIds];
 };
@@ -79,7 +102,7 @@ export const moveServerChannelAcrossLists = (
     ...sourceItem,
     channel: {
       ...sourceItem.channel,
-      categoryId: normalizedTargetCategoryId,
+      categoryId: materializeCategoryIdForType(sourceItem.type, normalizedTargetCategoryId),
     },
   };
   let insertIndex = -1;
@@ -96,7 +119,7 @@ export const moveServerChannelAcrossLists = (
   if (insertIndex === -1) {
     insertIndex = nextMixedChannels.length;
     for (let index = nextMixedChannels.length - 1; index >= 0; index -= 1) {
-      if (normalizeCategoryId(nextMixedChannels[index]?.channel?.categoryId) === normalizedTargetCategoryId) {
+      if (getDisplayCategoryId(nextMixedChannels[index]?.type, nextMixedChannels[index]?.channel) === normalizedTargetCategoryId) {
         insertIndex = index + 1;
         break;
       }
@@ -109,10 +132,10 @@ export const moveServerChannelAcrossLists = (
   const orderedTextChannels = [];
   const orderedVoiceChannels = [];
   nextMixedChannels.forEach((item) => {
-    const categoryKey = normalizeCategoryId(item.channel?.categoryId);
+    const categoryKey = getDisplayCategoryId(item.type, item.channel);
     const order = categoryOrder.get(categoryKey) || 0;
     categoryOrder.set(categoryKey, order + 1);
-    const channel = { ...item.channel, categoryId: categoryKey, order };
+    const channel = { ...item.channel, categoryId: materializeCategoryIdForType(item.type, categoryKey), order };
     if (item.type === "voice") {
       orderedVoiceChannels.push(channel);
       return;

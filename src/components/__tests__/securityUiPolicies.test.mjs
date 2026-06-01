@@ -57,7 +57,23 @@ test("message timestamps render in the bottom message footer", () => {
 
   assert.doesNotMatch(messageListSource, /<span className="message-meta">[\s\S]*?<MessageTimestamp messageItem=\{messageItem\} \/>[\s\S]*?<\/span>/);
   assert.match(messageListSource, /const showBottomFooter = !useInlineFooter[\s\S]*!usesEmbeddedLocationFooter;/);
-  assert.match(messageListSource, /import \{ formatFileSize, formatTimestamp \}/);
+  assert.match(messageListSource, /import \{ formatDayLabel, formatFileSize, formatTime \}/);
+});
+
+test("message timestamps show only time while dates render as day dividers", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const messageTimestampStart = messageListSource.indexOf("function MessageTimestamp");
+  const messageTimestampEnd = messageListSource.indexOf("function MessageDeliveryStatus", messageTimestampStart);
+  const messageTimestampSource = messageListSource.slice(messageTimestampStart, messageTimestampEnd);
+
+  assert.match(messageTimestampSource, /const timestampLabel = formatTime\(messageItem\?\.timestamp\);/);
+  assert.doesNotMatch(messageTimestampSource, /formatTimestamp/);
+  assert.match(messageListSource, /function MessageDateDivider\(\{ timestamp, placement = "start" \}\)/);
+  assert.match(messageListSource, /const dayLabel = formatDayLabel\(timestamp\);/);
+  assert.match(messageListSource, /const shouldShowStartDayDivider = !previousMessageDayKey \|\| previousMessageDayKey !== messageDayKey;/);
+  assert.match(messageListSource, /const shouldShowEndDayDivider = messageDayKey && previousMessageDayKey === messageDayKey && nextMessageDayKey !== messageDayKey;/);
+  assert.match(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="start" \/>/);
+  assert.match(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="end" \/>/);
 });
 
 test("role assignment errors use in-app status instead of alert", () => {
@@ -373,13 +389,13 @@ test("mobile voice room styles stay split from the main menu stylesheet", () => 
   assert.match(mobileVoiceSource, /import "\.\.\/css\/MobileVoiceRoom\.css";/);
 });
 
-test("profile voice action uses a soundpad glyph instead of settings gear", () => {
+test("profile voice action uses the visible settings glyph", () => {
   const panelSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const mainCss = readRepoFile("src/css/MenuMain.css");
 
-  assert.match(panelSource, /profile__mini-glyph profile__mini-glyph--soundpad/);
-  assert.doesNotMatch(panelSource, /profile__mini-glyph profile__mini-glyph--settings/);
-  assert.match(mainCss, /\.profile__mini-glyph--soundpad::before/);
+  assert.match(panelSource, /profile__mini-glyph profile__mini-glyph--settings/);
+  assert.doesNotMatch(panelSource, /profile__mini-glyph profile__mini-glyph--soundpad/);
+  assert.match(mainCss, /\.profile__mini-glyph--settings[\s\S]*?url\("\/icons\/settings\.png"\)/);
 });
 
 test("profile store styles are split out of the main menu bundle", () => {

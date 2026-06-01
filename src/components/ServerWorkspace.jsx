@@ -7,7 +7,11 @@ import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { isServerRailItemActive } from "./serverRailState.mjs";
-import { getOrderedServerChannelItems } from "../features/menu-main/channelManagementUtils";
+import {
+  DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
+  DEFAULT_VOICE_CHANNEL_CATEGORY_ID,
+  getOrderedServerChannelItems,
+} from "../features/menu-main/channelManagementUtils";
 import { getMutedChannelKey } from "../features/menu-main/mutedServerChannels";
 import "../css/MemberRoleMenu.css";
 import "../css/ServerInviteModal.css";
@@ -16,8 +20,6 @@ import "../css/ServerWorkspace.css";
 const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
 const EMPTY_CHANNEL_LIST = Object.freeze([]);
-const DEFAULT_TEXT_CATEGORY_ID = "__default_text_channels";
-const DEFAULT_VOICE_CATEGORY_ID = "__default_voice_channels";
 const DEFAULT_TEXT_CATEGORY_NAME = "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
 const DEFAULT_VOICE_CATEGORY_NAME = "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
 
@@ -389,11 +391,17 @@ const getOrderedItems = (items = []) =>
 
 const getDragCategoryId = (categoryId) => String(categoryId || "");
 
-const groupOrderedChannelsByCategory = (channels = EMPTY_CHANNEL_LIST) => {
+const getDefaultCategoryIdForChannelType = (type) =>
+  String(type || "text") === "voice" ? DEFAULT_VOICE_CHANNEL_CATEGORY_ID : DEFAULT_TEXT_CHANNEL_CATEGORY_ID;
+
+const getDisplayCategoryIdForChannel = (type, channel) =>
+  getDragCategoryId(channel?.categoryId) || getDefaultCategoryIdForChannelType(type);
+
+const groupOrderedChannelsByCategory = (channels = EMPTY_CHANNEL_LIST, type = "text") => {
   const groupedChannels = new Map();
 
   getOrderedItems(channels).forEach((channel) => {
-    const categoryId = getDragCategoryId(channel?.categoryId);
+    const categoryId = getDisplayCategoryIdForChannel(type, channel);
     const categoryChannels = groupedChannels.get(categoryId);
     if (categoryChannels) {
       categoryChannels.push(channel);
@@ -1704,7 +1712,7 @@ export const ServersSidebar = memo(({
   const openDefaultCategoryContextMenu = (event, type) => {
     const normalizedType = String(type || "");
     openCategoryContextMenu(event, {
-      id: normalizedType === "voice" ? DEFAULT_VOICE_CATEGORY_ID : DEFAULT_TEXT_CATEGORY_ID,
+      id: normalizedType === "voice" ? DEFAULT_VOICE_CHANNEL_CATEGORY_ID : DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
       name: normalizedType === "voice" ? DEFAULT_VOICE_CATEGORY_NAME : DEFAULT_TEXT_CATEGORY_NAME,
       defaultType: normalizedType === "voice" ? "voice" : "text",
     });
@@ -1802,20 +1810,31 @@ export const ServersSidebar = memo(({
     [activeServer?.channelCategories]
   );
   const textChannelsByCategory = useMemo(
-    () => groupOrderedChannelsByCategory(activeServer?.textChannels || EMPTY_CHANNEL_LIST),
+    () => groupOrderedChannelsByCategory(activeServer?.textChannels || EMPTY_CHANNEL_LIST, "text"),
     [activeServer?.textChannels]
   );
   const voiceChannelsByCategory = useMemo(
-    () => groupOrderedChannelsByCategory(activeServer?.voiceChannels || EMPTY_CHANNEL_LIST),
+    () => groupOrderedChannelsByCategory(activeServer?.voiceChannels || EMPTY_CHANNEL_LIST, "voice"),
     [activeServer?.voiceChannels]
   );
-  const uncategorizedTextChannels = textChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
-  const uncategorizedVoiceChannels = voiceChannelsByCategory.get("") || EMPTY_CHANNEL_LIST;
-  const visibleUncategorizedTextChannels = getVisibleServerChannels("text", uncategorizedTextChannels);
-  const visibleUncategorizedVoiceChannels = getVisibleServerChannels("voice", uncategorizedVoiceChannels);
-  const hasUncategorizedTextChannels = visibleUncategorizedTextChannels.length > 0;
-  const hasUncategorizedVoiceChannels = visibleUncategorizedVoiceChannels.length > 0;
-  const hasUncategorizedChannels = hasUncategorizedTextChannels || hasUncategorizedVoiceChannels;
+  const defaultTextChannels = {
+    textChannels: textChannelsByCategory.get(DEFAULT_TEXT_CHANNEL_CATEGORY_ID) || EMPTY_CHANNEL_LIST,
+    voiceChannels: voiceChannelsByCategory.get(DEFAULT_TEXT_CHANNEL_CATEGORY_ID) || EMPTY_CHANNEL_LIST,
+  };
+  const defaultVoiceChannels = {
+    textChannels: textChannelsByCategory.get(DEFAULT_VOICE_CHANNEL_CATEGORY_ID) || EMPTY_CHANNEL_LIST,
+    voiceChannels: voiceChannelsByCategory.get(DEFAULT_VOICE_CHANNEL_CATEGORY_ID) || EMPTY_CHANNEL_LIST,
+  };
+  const visibleDefaultTextChannels = {
+    textChannels: getVisibleServerChannels("text", defaultTextChannels.textChannels),
+    voiceChannels: getVisibleServerChannels("voice", defaultTextChannels.voiceChannels),
+  };
+  const visibleDefaultVoiceChannels = {
+    textChannels: getVisibleServerChannels("text", defaultVoiceChannels.textChannels),
+    voiceChannels: getVisibleServerChannels("voice", defaultVoiceChannels.voiceChannels),
+  };
+  const hasDefaultTextChannels = visibleDefaultTextChannels.textChannels.length > 0 || visibleDefaultTextChannels.voiceChannels.length > 0;
+  const hasDefaultVoiceChannels = visibleDefaultVoiceChannels.textChannels.length > 0 || visibleDefaultVoiceChannels.voiceChannels.length > 0;
   const canDragChannels = Boolean(canManageChannels && activeServer);
   const endDrag = () => {
     dragEndedRef.current = true;
@@ -2515,13 +2534,23 @@ export const ServersSidebar = memo(({
 
       {activeServer ? (
         <>
-          {hasUncategorizedChannels ? (
+          {hasDefaultTextChannels ? (
             <div className="server-panel__section">
               <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "text")}>
-                <span>Каналы</span>
+                <span>Текстовые каналы</span>
                 <button type="button" onClick={onAddTextChannel} disabled={!canManageChannels}>+</button>
               </div>
-              {renderMixedChannelRows(visibleUncategorizedTextChannels, visibleUncategorizedVoiceChannels, "")}
+              {renderMixedChannelRows(visibleDefaultTextChannels.textChannels, visibleDefaultTextChannels.voiceChannels, DEFAULT_TEXT_CHANNEL_CATEGORY_ID)}
+            </div>
+          ) : null}
+
+          {hasDefaultVoiceChannels ? (
+            <div className="server-panel__section">
+              <div className="server-panel__header" onContextMenu={(event) => openDefaultCategoryContextMenu(event, "voice")}>
+                <span>Голосовые каналы</span>
+                <button type="button" onClick={onAddVoiceChannel} disabled={!canManageChannels}>+</button>
+              </div>
+              {renderMixedChannelRows(visibleDefaultVoiceChannels.textChannels, visibleDefaultVoiceChannels.voiceChannels, DEFAULT_VOICE_CHANNEL_CATEGORY_ID)}
             </div>
           ) : null}
 

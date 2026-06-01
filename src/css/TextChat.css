@@ -451,6 +451,34 @@
   content: none;
 }
 
+.message-date-divider {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 10px;
+  pointer-events: none;
+}
+
+.message-date-divider--end {
+  margin-top: 18px;
+}
+
+.message-date-divider span {
+  max-width: calc(100% - 32px);
+  padding: 5px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  background: rgba(15, 19, 29, 0.72);
+  color: rgba(223, 229, 245, 0.78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .message-item {
   position: relative;
   display: flex;
@@ -6734,6 +6762,13 @@ html[data-ui-density="compact"] .message-composer {
 /* Theme surface corrections */
 html[data-ui-theme="light"] .messages-floating-date,
 html[data-ui-theme="purple"] .messages-floating-date {
+  color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .message-date-divider span,
+html[data-ui-theme="purple"] .message-date-divider span {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.82);
   color: var(--app-text-muted);
 }
 

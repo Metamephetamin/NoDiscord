@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceMessageBubble from "./VoiceMessageBubble";
@@ -18,7 +18,7 @@ import {
 import { getPollDisplayOptions, resolvePollTheme } from "../utils/pollMessages";
 import { extractInviteCode, getInviteRoute } from "../utils/serverInviteLinks";
 import { copyTextToClipboard } from "../utils/clipboard";
-import { formatFileSize, formatTimestamp } from "../utils/textChatHelpers";
+import { formatDayLabel, formatFileSize, formatTime } from "../utils/textChatHelpers";
 import {
   shouldReserveVisualAttachmentWidth,
   shouldUseInlineDirectMessageFooter,
@@ -59,6 +59,16 @@ const CHAT_SYSTEM_EVENT_AVATAR_UPDATED = "conversation_avatar_updated";
 
 function getMessageRenderId(messageItem) {
   return String(messageItem?.id || messageItem?.clientId || messageItem?.localId || "");
+}
+
+function getMessageDayKey(timestamp) {
+  const date = new Date(timestamp);
+  const time = date.getTime();
+  if (!Number.isFinite(time)) {
+    return "";
+  }
+
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
 function getMentionSegmentCacheKey(mentions) {
@@ -390,12 +400,22 @@ function EditedBadge({ message }) {
 }
 
 function MessageTimestamp({ messageItem }) {
-  const timestampLabel = formatTimestamp(messageItem?.timestamp);
+  const timestampLabel = formatTime(messageItem?.timestamp);
 
   return (
     <span className={`message-time ${messageItem?.isLocalEcho ? "message-time--pending" : ""}`}>
       {timestampLabel}
     </span>
+  );
+}
+
+function MessageDateDivider({ timestamp, placement = "start" }) {
+  const dayLabel = formatDayLabel(timestamp);
+
+  return (
+    <div className={`message-date-divider message-date-divider--${placement}`}>
+      <span>{dayLabel}</span>
+    </div>
   );
 }
 
@@ -2291,6 +2311,11 @@ function TextChatMessageList({
           const messageIndex = Math.max(0, Number(visibleStartIndex) || 0) + visibleIndex;
           const previousMessage = messages[messageIndex - 1] || null;
           const nextMessage = messages[messageIndex + 1] || null;
+          const messageDayKey = getMessageDayKey(messageItem.timestamp);
+          const previousMessageDayKey = getMessageDayKey(previousMessage?.timestamp);
+          const nextMessageDayKey = getMessageDayKey(nextMessage?.timestamp);
+          const shouldShowStartDayDivider = !previousMessageDayKey || previousMessageDayKey !== messageDayKey;
+          const shouldShowEndDayDivider = messageDayKey && previousMessageDayKey === messageDayKey && nextMessageDayKey !== messageDayKey;
           const attachments = renderedAttachmentsByMessageId.get(String(messageItem.id)) || [];
           const hasRenderableAttachments = attachments.length > 0;
           const reactions = normalizedReactionsByMessageId.get(String(messageItem.id)) || [];
@@ -2394,13 +2419,16 @@ function TextChatMessageList({
 
           if (systemEvent) {
             return (
-              <div
-                key={messageRenderKey}
-                ref={(node) => registerMessageNode(messageItem.id, node)}
-                className={`message-item message-item--system ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
-              >
-                <ChatSystemEventMessage systemEvent={systemEvent} />
-              </div>
+              <Fragment key={messageRenderKey}>
+                {shouldShowStartDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="start" /> : null}
+                {shouldShowEndDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="end" /> : null}
+                <div
+                  ref={(node) => registerMessageNode(messageItem.id, node)}
+                  className={`message-item message-item--system ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""}`}
+                >
+                  <ChatSystemEventMessage systemEvent={systemEvent} />
+                </div>
+              </Fragment>
             );
           }
 
@@ -2417,14 +2445,16 @@ function TextChatMessageList({
             : undefined;
 
           return (
-            <div
-              key={messageRenderKey}
-              ref={(node) => registerMessageNode(messageItem.id, node)}
-              className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${isVoiceOnlyMessage ? "message-item--voice-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
-              onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
-              onClick={handleMessageClick}
-            >
-              {selectionMode ? (
+            <Fragment key={messageRenderKey}>
+              {shouldShowStartDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="start" /> : null}
+              {shouldShowEndDayDivider ? <MessageDateDivider timestamp={messageItem.timestamp} placement="end" /> : null}
+              <div
+                ref={(node) => registerMessageNode(messageItem.id, node)}
+                className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${isVoiceOnlyMessage ? "message-item--voice-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
+                onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
+                onClick={handleMessageClick}
+              >
+                {selectionMode ? (
                 <button
                   type="button"
                   className={`message-select-toggle ${isSelectedMessage ? "message-select-toggle--active" : ""}`}
@@ -2653,8 +2683,9 @@ function TextChatMessageList({
                     ) : null}
                   </div>
                 ) : null}
+                </div>
               </div>
-            </div>
+            </Fragment>
           );
         })}
         {virtualizationEnabled && bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}

@@ -4,6 +4,8 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
+  DEFAULT_VOICE_CHANNEL_CATEGORY_ID,
   getOrderedServerChannelItems,
   moveServerChannelAcrossLists,
   removeChannelCategoryWithChannels,
@@ -82,12 +84,64 @@ test("text and voice channels share one saved order inside a category", () => {
   assert.deepEqual(nextServer.voiceChannels.map((channel) => [channel.id, channel.order]), [["voice", 2]]);
 });
 
-test("server sidebar renders channels from one mixed order", () => {
+test("default text and voice categories stay visually separate but accept mixed channel types", () => {
+  const server = {
+    textChannels: [
+      { id: "general", name: "general", categoryId: "", order: 0 },
+    ],
+    voiceChannels: [
+      { id: "voice", name: "voice", categoryId: "", order: 0 },
+    ],
+  };
+
+  const movedVoiceServer = moveServerChannelAcrossLists(server, {
+    type: "voice",
+    channelId: "voice",
+    targetType: "text",
+    targetChannelId: "general",
+    targetCategoryId: DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
+    placement: "after",
+  });
+
+  assert.deepEqual(
+    getOrderedServerChannelItems(movedVoiceServer.textChannels, movedVoiceServer.voiceChannels, DEFAULT_TEXT_CHANNEL_CATEGORY_ID)
+      .map((item) => `${item.type}:${item.channel.id}`),
+    ["text:general", "voice:voice"]
+  );
+  assert.deepEqual(
+    getOrderedServerChannelItems(movedVoiceServer.textChannels, movedVoiceServer.voiceChannels, DEFAULT_VOICE_CHANNEL_CATEGORY_ID)
+      .map((item) => `${item.type}:${item.channel.id}`),
+    []
+  );
+
+  const movedTextServer = moveServerChannelAcrossLists(movedVoiceServer, {
+    type: "text",
+    channelId: "general",
+    targetType: "voice",
+    targetChannelId: "",
+    targetCategoryId: DEFAULT_VOICE_CHANNEL_CATEGORY_ID,
+    placement: "end",
+  });
+
+  assert.deepEqual(
+    getOrderedServerChannelItems(movedTextServer.textChannels, movedTextServer.voiceChannels, DEFAULT_VOICE_CHANNEL_CATEGORY_ID)
+      .map((item) => `${item.type}:${item.channel.id}`),
+    ["text:general"]
+  );
+});
+
+test("server sidebar renders separate default categories with mixed rows inside each category", () => {
   const source = readRepoFile("src/components/ServerWorkspace.jsx");
 
+  assert.match(source, /DEFAULT_TEXT_CHANNEL_CATEGORY_ID/);
+  assert.match(source, /DEFAULT_VOICE_CHANNEL_CATEGORY_ID/);
+  assert.match(source, /<span>Текстовые каналы<\/span>/);
+  assert.match(source, /<span>Голосовые каналы<\/span>/);
+  assert.doesNotMatch(source, /<span>Каналы<\/span>/);
+  assert.match(source, /renderMixedChannelRows\(visibleDefaultTextChannels\.textChannels, visibleDefaultTextChannels\.voiceChannels, DEFAULT_TEXT_CHANNEL_CATEGORY_ID\)/);
+  assert.match(source, /renderMixedChannelRows\(visibleDefaultVoiceChannels\.textChannels, visibleDefaultVoiceChannels\.voiceChannels, DEFAULT_VOICE_CHANNEL_CATEGORY_ID\)/);
   assert.match(source, /getOrderedServerChannelItems\(textChannels, voiceChannels, categoryId\)/);
   assert.match(source, /targetType: type/);
-  assert.doesNotMatch(source, /renderTextChannelListItems\(visibleTextChannels, category\.id\)[\s\S]*?renderVoiceChannels\(visibleVoiceChannels, category\.id\)/);
 });
 
 test("server workspace styles are split out of the main menu stylesheet", () => {
