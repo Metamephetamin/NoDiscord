@@ -426,6 +426,71 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
+.voice-participant-volume-menu {
+  position: fixed;
+  z-index: 1200;
+  width: 236px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(18, 22, 31, 0.98);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  color: #eef2ff;
+}
+
+.voice-participant-volume-menu__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.voice-participant-volume-menu__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.voice-participant-volume-menu__value {
+  flex: 0 0 auto;
+  color: #61d485;
+  font-size: 13px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-participant-volume-menu__slider {
+  width: 100%;
+  accent-color: #61d485;
+}
+
+.voice-participant-volume-menu__actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.voice-participant-volume-menu__actions button {
+  min-height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #dbe4f6;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.voice-participant-volume-menu__actions button:hover {
+  background: rgba(97, 212, 133, 0.16);
+  color: #ffffff;
+}
+
 html[data-ui-theme="light"] .list__items {
   border-color: transparent;
   background: transparent;
@@ -493,6 +558,28 @@ html[data-ui-theme="light"] .channel-edit-button {
 }
 
 html[data-ui-theme="light"] .channel-edit-button:hover {
+  background: #eef3ff;
+  color: #2637c7;
+}
+
+html[data-ui-theme="light"] .voice-participant-volume-menu {
+  border-color: #d9e0ec;
+  background: rgba(255, 255, 255, 0.98);
+  color: #172033;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+}
+
+html[data-ui-theme="light"] .voice-participant-volume-menu__value {
+  color: #138a4c;
+}
+
+html[data-ui-theme="light"] .voice-participant-volume-menu__actions button {
+  border-color: #d9e0ec;
+  background: #f3f6fb;
+  color: #263248;
+}
+
+html[data-ui-theme="light"] .voice-participant-volume-menu__actions button:hover {
   background: #eef3ff;
   color: #2637c7;
 }

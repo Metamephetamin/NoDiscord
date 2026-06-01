@@ -21,6 +21,10 @@ const getVoiceDisplayName = (name) => {
 
 const normalizeVoiceUserLimit = (value) => Math.min(99, Math.max(0, Number(value) || 0));
 const formatVoiceLimitCount = (value) => String(Math.min(99, Math.max(0, Number(value) || 0))).padStart(2, "0");
+const clampParticipantVolumeMenuPercent = (value, fallback = 100) => {
+  const numericValue = Number(value);
+  return Math.min(200, Math.max(0, Math.round(Number.isFinite(numericValue) ? numericValue : fallback)));
+};
 const getMonotonicNow = () =>
   typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
 
@@ -61,6 +65,7 @@ const VoiceChannelList = ({
   mutedChannelIds = [],
 }) => {
   const [durationNowMs, setDurationNowMs] = useState(() => getMonotonicNow());
+  const [activeParticipantVolumeMenu, setActiveParticipantVolumeMenu] = useState(null);
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
   const speakingUsers = useMemo(() => new Set(speakingUserIds), [speakingUserIds]);
   const mutedChannels = useMemo(() => new Set((mutedChannelIds || []).map((channelId) => String(channelId))), [mutedChannelIds]);
@@ -92,6 +97,60 @@ const VoiceChannelList = ({
 
     return () => window.clearInterval(intervalId);
   }, []);
+  useEffect(() => {
+    if (!activeParticipantVolumeMenu || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (event.target instanceof Element && event.target.closest(".voice-participant-volume-menu")) {
+        return;
+      }
+
+      setActiveParticipantVolumeMenu(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setActiveParticipantVolumeMenu(null);
+      }
+    };
+    const closeMenu = () => setActiveParticipantVolumeMenu(null);
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [activeParticipantVolumeMenu]);
+
+  const openParticipantVolumeMenu = (event, participant) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const userId = String(participant?.userId || "");
+    if (!userId || userId === String(currentUserId || "")) {
+      setActiveParticipantVolumeMenu(null);
+      return;
+    }
+
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 320;
+    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 240;
+    setActiveParticipantVolumeMenu({
+      userId,
+      name: participant?.name || "Участник",
+      x: Math.min(Math.max(8, event.clientX), Math.max(8, viewportWidth - 252)),
+      y: Math.min(Math.max(8, event.clientY), Math.max(8, viewportHeight - 148)),
+    });
+  };
+
+  const activeParticipantVolume = activeParticipantVolumeMenu
+    ? clampParticipantVolumeMenuPercent(participantVolumeByUserId[activeParticipantVolumeMenu.userId] ?? 100)
+    : 100;
 
   const renderDropPlaceholder = (targetChannelId = "", placement = "end") => {
     const key = getDropKey(targetChannelId, placement);
@@ -135,12 +194,13 @@ const VoiceChannelList = ({
   };
 
   return (
-    <ul
-      className="voice-channel-list"
-      onDragOver={(event) => onChannelDragOver?.(event, "voice", null, categoryId)}
-      onDrop={(event) => onChannelDrop?.(event, "voice", null, categoryId)}
-    >
-      {channels.flatMap((channel) => {
+    <>
+      <ul
+        className="voice-channel-list"
+        onDragOver={(event) => onChannelDragOver?.(event, "voice", null, categoryId)}
+        onDrop={(event) => onChannelDrop?.(event, "voice", null, categoryId)}
+      >
+        {channels.flatMap((channel) => {
         const runtimeId = getChannelRuntimeId(serverId, channel.id);
         const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || []).map(normalizeParticipant);
         const isActive = activeChannelId === runtimeId || activeChannelId === channel.id;
@@ -278,6 +338,7 @@ const VoiceChannelList = ({
                     key={participant.userId}
                     className={`participant-item ${speakingUsers.has(participant.userId) ? "participant-item--speaking" : ""}`}
                     style={{ "--participant-role-color": participant.roleColor || "#c8d0e2" }}
+                    onContextMenu={(event) => openParticipantVolumeMenu(event, participant)}
                   >
                     <span className="participant-item__avatar-shell" aria-hidden="true">
                       <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} />
@@ -294,21 +355,6 @@ const VoiceChannelList = ({
                       {participant.name}
                     </button>
                     <div className="participant-item__voice-flags">
-                      {String(participant.userId || "") !== String(currentUserId || "") ? (
-                        <label className="participant-item__volume" title="Громкость участника">
-                          <span>{Math.round(Number(participantVolumeByUserId[participant.userId] ?? 100))}%</span>
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="1"
-                            value={Math.round(Number(participantVolumeByUserId[participant.userId] ?? 100))}
-                            onChange={(event) => onParticipantVolumeChange?.(participant.userId, Number(event.target.value))}
-                            onClick={(event) => event.stopPropagation()}
-                            aria-label={`Громкость ${participant.name}`}
-                          />
-                        </label>
-                      ) : null}
                       {participant.isMicMuted && (
                         <span className="participant-item__voice-flag participant-item__voice-flag--slashed" title="Микрофон выключен">
                           <img src={MICROPHONE_ICON_URL} alt="" />
@@ -338,9 +384,51 @@ const VoiceChannelList = ({
           </li>,
           renderDropPlaceholder(channel.id, "after"),
         ].filter(Boolean);
-      })}
-      {renderDropPlaceholder("", "end")}
-    </ul>
+        })}
+        {renderDropPlaceholder("", "end")}
+      </ul>
+      {activeParticipantVolumeMenu ? (
+        <div
+          className="voice-participant-volume-menu"
+          style={{
+            left: `${activeParticipantVolumeMenu.x}px`,
+            top: `${activeParticipantVolumeMenu.y}px`,
+          }}
+          role="menu"
+          aria-label={`Громкость ${activeParticipantVolumeMenu.name}`}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <div className="voice-participant-volume-menu__header">
+            <span className="voice-participant-volume-menu__name">{activeParticipantVolumeMenu.name}</span>
+            <span className="voice-participant-volume-menu__value">{activeParticipantVolume}%</span>
+          </div>
+          <input
+            className="voice-participant-volume-menu__slider"
+            type="range"
+            min="0"
+            max="200"
+            step="1"
+            value={activeParticipantVolume}
+            onChange={(event) => onParticipantVolumeChange?.(activeParticipantVolumeMenu.userId, Number(event.target.value))}
+            aria-label={`Громкость ${activeParticipantVolumeMenu.name}`}
+          />
+          <div className="voice-participant-volume-menu__actions">
+            <button type="button" onClick={() => onParticipantVolumeChange?.(activeParticipantVolumeMenu.userId, 50)}>
+              50%
+            </button>
+            <button type="button" onClick={() => onParticipantVolumeChange?.(activeParticipantVolumeMenu.userId, 100)}>
+              100%
+            </button>
+            <button type="button" onClick={() => onParticipantVolumeChange?.(activeParticipantVolumeMenu.userId, 150)}>
+              150%
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 };
 
