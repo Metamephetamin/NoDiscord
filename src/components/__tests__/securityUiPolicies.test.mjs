@@ -861,10 +861,12 @@ test("stream viewer styles are split out of the main menu stylesheet", () => {
 
 test("direct call overlay styles stay split from the main menu stylesheet", () => {
   const overlayLayerSource = readRepoFile("src/features/menu-main/MenuMainOverlayLayer.jsx");
+  const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const directCallCss = readRepoFileIfExists("src/css/DirectCallOverlay.css");
 
   assert.match(overlayLayerSource, /import\("\.\.\/\.\.\/css\/DirectCallOverlay\.css"\)/);
+  assert.match(friendsSource, /import "\.\.\/css\/DirectCallOverlay\.css";/);
   assert.doesNotMatch(mainCss, /\.direct-call-overlay/);
   assert.doesNotMatch(mainCss, /\.direct-call-inline/);
   assert.match(directCallCss, /\.direct-call-overlay/);

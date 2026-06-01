@@ -4,6 +4,7 @@ import { Suspense, lazy } from "react";
 import "leaflet/dist/leaflet.css";
 import "../css/FriendsWorkspace.css";
 import "../css/ProfileStore.css";
+import "../css/DirectCallOverlay.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
 import TextChat from "./TextChat";
