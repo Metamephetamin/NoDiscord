@@ -310,7 +310,12 @@ export default function useTextChatMessageActions({
       }
 
       const itemCount = current.items.length;
-      const nextIndex = (Number(current.activeIndex || 0) + direction + itemCount) % itemCount;
+      const currentIndex = Math.min(Math.max(Number(current.activeIndex || 0), 0), itemCount - 1);
+      const nextIndex = Math.min(Math.max(currentIndex + direction, 0), itemCount - 1);
+      if (nextIndex === currentIndex) {
+        return current;
+      }
+
       const nextItem = current.items[nextIndex] || current.items[0];
       return {
         ...current,

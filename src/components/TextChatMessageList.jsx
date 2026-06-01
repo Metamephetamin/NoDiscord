@@ -165,6 +165,54 @@ const getPreviewableMediaItems = (messageItem, attachments) =>
       sourceUrl: attachmentItem.attachmentSourceUrl || attachmentItem.attachmentUrl,
     }));
 
+function buildPreviewAttachmentFallbacks(messageItem) {
+  return getNormalizedMessageAttachments(messageItem).map((attachmentItem, attachmentIndex) => {
+    const remoteAttachmentUrl = attachmentItem.attachmentUrl
+      ? resolveMediaUrl(attachmentItem.attachmentUrl, attachmentItem.attachmentUrl)
+      : "";
+    const localPreviewUrl = String(attachmentItem?.localPreviewUrl || "").startsWith("blob:")
+      ? String(attachmentItem.localPreviewUrl)
+      : "";
+    const attachmentUrl = localPreviewUrl || (
+      attachmentItem.attachmentEncryption
+        ? ""
+        : remoteAttachmentUrl
+    );
+    const attachmentContentType = attachmentItem.attachmentContentType || "";
+    const attachmentAsFile = Boolean(attachmentItem.attachmentAsFile);
+    const mediaTypeAttachment = {
+      ...attachmentItem,
+      attachmentUrl,
+      attachmentSourceUrl: attachmentItem.attachmentUrl
+        ? remoteAttachmentUrl
+        : attachmentUrl,
+      attachmentContentType,
+    };
+    const isImageContent = isImageLikeDocumentAttachment(mediaTypeAttachment);
+    const isVideoContent = isVideoLikeAttachment(mediaTypeAttachment);
+
+    return {
+      ...attachmentItem,
+      attachmentIndex,
+      attachmentUrl,
+      attachmentSourceUrl: attachmentItem.attachmentUrl
+        ? remoteAttachmentUrl
+        : attachmentUrl,
+      attachmentContentType,
+      attachmentAsFile,
+      isImage: isImageContent && !attachmentAsFile,
+      isVideo: isVideoContent && !attachmentAsFile,
+    };
+  });
+}
+
+function canDeleteMessageAttachments(messageItem, currentUserId, currentUserName) {
+  const messageAuthorUserId = String(messageItem?.authorUserId || "").trim();
+  const isOwnMessage = messageAuthorUserId === currentUserId
+    || (!messageItem?.authorUserId && messageItem?.username?.toLowerCase() === currentUserName);
+  return Boolean(messageAuthorUserId) && isOwnMessage;
+}
+
 const DOCUMENT_IMAGE_EXTENSION_PATTERN = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:[?#].*)?$/i;
 const DOCUMENT_VIDEO_EXTENSION_PATTERN = /\.(?:m4v|mov|mp4|ogv|webm)(?:[?#].*)?$/i;
 const PRIORITY_MEDIA_MESSAGE_COUNT = 0;
@@ -1566,6 +1614,7 @@ function MessageAttachmentCard({
   messageItem,
   attachmentItem,
   galleryAttachments,
+  mediaPreviewGalleryItems,
   canDeleteAttachments = false,
   selectionMode,
   onToggleSelection,
@@ -1577,10 +1626,12 @@ function MessageAttachmentCard({
 }) {
   const openAttachmentMediaPreview = () => {
     const type = attachmentItem.isImage ? "image" : "video";
-    const previewItems = getPreviewableMediaItems(messageItem, galleryAttachments).map((item) => ({
-      ...item,
-      canDelete: canDeleteAttachments,
-    }));
+    const previewItems = Array.isArray(mediaPreviewGalleryItems) && mediaPreviewGalleryItems.length
+      ? mediaPreviewGalleryItems
+      : getPreviewableMediaItems(messageItem, galleryAttachments).map((item) => ({
+          ...item,
+          canDelete: canDeleteAttachments,
+        }));
 
     onOpenMediaPreview(
       type,
@@ -2177,6 +2228,34 @@ function TextChatMessageList({
       }),
     ])
   ), [decryptedAttachmentsByMessageId, visibleMessages]);
+  const mediaPreviewGalleryItemsByMessageId = useMemo(() => {
+    const cumulativePreviewItems = [];
+    const nextGalleryItemsByMessageId = new Map();
+
+    messages.forEach((messageItem, messageIndex) => {
+      const messageId = String(messageItem?.id || "");
+      if (!messageId) {
+        return;
+      }
+
+      const attachments = renderedAttachmentsByMessageId.get(messageId) || buildPreviewAttachmentFallbacks(messageItem);
+      const canDeleteAttachments = canDeleteMessageAttachments(messageItem, currentUserId, currentUserName);
+      const messagePreviewItems = getPreviewableMediaItems(messageItem, attachments).map((item) => ({
+        ...item,
+        canDelete: canDeleteAttachments,
+      }));
+
+      cumulativePreviewItems.push(...messagePreviewItems);
+
+      if (messagePreviewItems.length) {
+        nextGalleryItemsByMessageId.set(messageId, cumulativePreviewItems.slice());
+      } else if (messageIndex > 0 && cumulativePreviewItems.length) {
+        nextGalleryItemsByMessageId.set(messageId, cumulativePreviewItems.slice());
+      }
+    });
+
+    return nextGalleryItemsByMessageId;
+  }, [currentUserId, currentUserName, messages, renderedAttachmentsByMessageId]);
   const normalizedReactionsByMessageId = useMemo(() => new Map(
     visibleMessages.map((messageItem) => [
       String(messageItem?.id || ""),
@@ -2317,6 +2396,7 @@ function TextChatMessageList({
           const shouldShowStartDayDivider = !previousMessageDayKey || previousMessageDayKey !== messageDayKey;
           const shouldShowEndDayDivider = messageDayKey && previousMessageDayKey === messageDayKey && nextMessageDayKey !== messageDayKey;
           const attachments = renderedAttachmentsByMessageId.get(String(messageItem.id)) || [];
+          const mediaPreviewGalleryItems = mediaPreviewGalleryItemsByMessageId.get(String(messageItem.id)) || [];
           const hasRenderableAttachments = attachments.length > 0;
           const reactions = normalizedReactionsByMessageId.get(String(messageItem.id)) || [];
           const messageText = String(messageItem.message || "");
@@ -2620,6 +2700,7 @@ function TextChatMessageList({
                   messageItem={messageItem}
                   attachments={attachments}
                   canDeleteAttachments={Boolean(messageAuthorUserId) && isOwnMessage}
+                  mediaPreviewGalleryItems={mediaPreviewGalleryItems}
                   selectionMode={selectionMode}
                   onToggleSelection={onToggleSelection}
                   onOpenMediaPreview={onOpenMediaPreview}

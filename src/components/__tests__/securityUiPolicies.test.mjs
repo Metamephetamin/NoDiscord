@@ -61,6 +61,17 @@ test("media preview delete button requires delete handler", () => {
   assert.match(messageListSource, /canDelete: canDeleteAttachments/);
 });
 
+test("media preview can browse previous message media without forward wraparound", () => {
+  const actionsSource = readRepoFile("src/hooks/useTextChatMessageActions.js");
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+
+  assert.doesNotMatch(actionsSource, /activeIndex[\s\S]*?direction[\s\S]*?itemCount[\s\S]*?% itemCount/);
+  assert.match(actionsSource, /const nextIndex = Math\.min\(Math\.max\(currentIndex \+ direction, 0\), itemCount - 1\);/);
+  assert.match(messageListSource, /mediaPreviewGalleryItemsByMessageId/);
+  assert.match(messageListSource, /messages\.forEach\(\(messageItem, messageIndex\) =>/);
+  assert.match(messageListSource, /cumulativePreviewItems/);
+});
+
 test("shared location is reduced to a privacy cell before realtime publication", () => {
   const hookSource = readRepoFile("src/hooks/useLocationSharingPreference.js");
   const hubSource = readRepoFile("BackNoDiscord/BackNoDiscord/ChatHub.cs");
@@ -361,12 +372,13 @@ test("message search input text is readable on dark chat topbar", () => {
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
   const searchIconSource = readRepoFile("public/icons/search.svg");
 
-  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?color: #f8fbff;/);
-  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
+  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?color: #c8cfdd;/);
+  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #c8cfdd;/);
+  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?font-weight: 500;/);
   assert.match(mainCss, /\.chat__topbar \{[\s\S]*?min-height: 58px;/);
-  assert.match(mainCss, /\.chat__topbar-name \{[\s\S]*?color: #f2f4fa;[\s\S]*?font-size: 24px;/);
+  assert.match(mainCss, /\.chat__topbar-copy \.chat__topbar-name \{[\s\S]*?color: #f8fafc;[\s\S]*?font-size: 34px;/);
   assert.match(mainCss, /\.chat__topbar-search-wrap \{[\s\S]*?width: min\(300px, 24vw\);/);
-  assert.match(mainCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #d8deeb;/);
+  assert.match(mainCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #aeb6c6;/);
   assert.match(workspaceSource, /className="bi bi-hash"/);
   assert.match(searchIconSource, /class="bi bi-search"/);
   assert.doesNotMatch(workspaceSource, /Текстовый канал сервера/);
@@ -467,6 +479,14 @@ test("active voice stream chrome auto-hides after pointer inactivity", () => {
   assert.doesNotMatch(stageCss, /\.voice-room-stage--active-stream \.voice-room-stage__hero-top,[\s\S]*?display: none;/);
   assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-controls/);
   assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-top,[\s\S]*?\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-bottom/);
+  assert.match(stageSource, /voice-room-stage__hero-stream-meta/);
+  assert.match(stageSource, /VoiceStageIcon name="volume"/);
+  assert.match(stageSource, /\(activeStage\.mode === "camera" \? "Камера" : "Экран"\)[\s\S]*?\{activeStage\.name\}/);
+  assert.match(stageSource, /voice-room-stage__pill--quality/);
+  assert.match(stageSource, /voice-room-stage__pill--live/);
+  assert.match(stageSource, /VoiceStageIcon name="chat" className="voice-room-stage__hero-chat-icon"/);
+  assert.match(stageSource, /кадров в секунду/);
+  assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
 });
 
 test("mobile voice room styles stay split from the main menu stylesheet", () => {
@@ -711,11 +731,20 @@ test("screen and camera shares render as separate viewing windows", () => {
 
 test("voice stage toolbar does not render a duplicate center camera button", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
   assert.doesNotMatch(stageSource, /key: "camera"[\s\S]*?label: "Включить камеру"/);
-  assert.match(stageSource, /activeStage && activeStage\.kind !== "local"[\s\S]*?key: "close-stage"/);
+  assert.match(stageSource, /voice-room-stage__stream-toolbar-layout/);
+  assert.match(stageSource, /VoiceStageIcon name="users-add"/);
+  assert.match(stageSource, /voice-room-stage__stream-toolbar-center/);
+  assert.match(stageSource, /activeStage\.kind !== "local"[\s\S]*?key: "close-stage"/);
+  assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
+  assert.match(stageCss, /\.voice-room-stage__stream-toolbar-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
+  assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 76px;/);
+  assert.match(stageSource, /VoiceStageIcon name="chevron-down"/);
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
