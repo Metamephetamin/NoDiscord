@@ -827,24 +827,24 @@ test("local stream banner shows a friendly screen or window title", () => {
   assert.match(profileSource, /normalizedSourceTitle \|\| \(isScreenShareActive \? "Экран в эфире" : "Камера в эфире"\)/);
 });
 
-test("active stream toolbar stays compact without decorative side controls", () => {
+test("active stream chrome keeps the segmented Discord-style controls", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
   assert.doesNotMatch(stageSource, /key: "camera"[\s\S]*?label: "Включить камеру"/);
-  assert.doesNotMatch(stageSource, /voice-room-stage__stream-toolbar-layout/);
-  assert.doesNotMatch(stageSource, /VoiceStageIcon name="users-add"/);
-  assert.doesNotMatch(stageSource, /voice-room-stage__stream-toolbar-center/);
+  assert.match(stageSource, /voice-room-stage__stream-toolbar-layout/);
+  assert.match(stageSource, /VoiceStageIcon name="users-add"/);
+  assert.match(stageSource, /voice-room-stage__stream-toolbar-center/);
   assert.match(stageSource, /activeStage\.kind !== "local"[\s\S]*?key: "close-stage"/);
-  assert.match(stageSource, /renderFullscreenButton\(\)/);
-  assert.doesNotMatch(stageCss, /\.voice-room-stage__stream-toolbar-layout/);
-  assert.doesNotMatch(stageCss, /\.voice-room-stage__stream-toolbar-center/);
-  assert.doesNotMatch(stageCss, /\.voice-room-stage__stream-side/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar \{[\s\S]*?max-width: min\(720px, calc\(100vw - 32px\)\);/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button \{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--danger \{[\s\S]*?border-radius: 17px;/);
+  assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
+  assert.match(stageCss, /\.voice-room-stage__stream-toolbar-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
+  assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;[\s\S]*?height: 58px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group \{[\s\S]*?min-height: 58px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 82px;/);
+  assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
+  assert.match(stageSource, /VoiceStageIcon name="volume" className="voice-room-stage__hero-channel-icon"/);
   assert.match(stageSource, /case "leave":[\s\S]*?viewBox="0 0 24 24"[\s\S]*?fill="currentColor"/);
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
