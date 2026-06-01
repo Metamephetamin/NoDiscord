@@ -1,9 +1,9 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import "../css/ListChannels.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { resolveStaticAssetUrl } from "../utils/media";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
-import { formatVoiceChannelDuration, getVoiceChannelDurationMs } from "../utils/voiceChannelDuration";
+import { formatVoiceChannelDuration, resolveVoiceChannelSessionStartedAtMs } from "../utils/voiceChannelDuration";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
@@ -27,6 +27,44 @@ const clampParticipantVolumeMenuPercent = (value, fallback = 100) => {
 };
 const getMonotonicNow = () =>
   typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
+
+const normalizeDurationParticipant = (participant = {}, nowMs = 0) => ({
+  voiceElapsedMs: Number(participant.voiceElapsedMs ?? participant.VoiceElapsedMs ?? 0) || 0,
+  voiceElapsedSyncedAtMs: Number(participant.voiceElapsedSyncedAtMs ?? participant.VoiceElapsedSyncedAtMs ?? nowMs) || 0,
+});
+
+const resolveVoiceChannelSessionStarts = ({
+  previous = {},
+  channels = [],
+  participantsMap = {},
+  serverId = "",
+  nowMs = getMonotonicNow(),
+} = {}) => {
+  const next = {};
+
+  (Array.isArray(channels) ? channels : []).forEach((channel) => {
+    const runtimeId = getChannelRuntimeId(serverId, channel.id);
+    const participants = (participantsMap?.[channel.id] || participantsMap?.[runtimeId] || [])
+      .map((participant) => normalizeDurationParticipant(participant, nowMs));
+    const sessionStartedAtMs = resolveVoiceChannelSessionStartedAtMs({
+      previousStartedAtMs: previous[runtimeId],
+      participants,
+      nowMs,
+    });
+
+    if (sessionStartedAtMs !== null) {
+      next[runtimeId] = sessionStartedAtMs;
+    }
+  });
+
+  return next;
+};
+
+const areVoiceChannelSessionStartsEqual = (left = {}, right = {}) => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && rightKeys.every((key) => left[key] === right[key]);
+};
 
 const VoiceChannelList = ({
   channels,
@@ -64,8 +102,13 @@ const VoiceChannelList = ({
   joiningChannelId = "",
   mutedChannelIds = [],
 }) => {
-  const [durationNowMs, setDurationNowMs] = useState(() => getMonotonicNow());
+  const [durationState, setDurationState] = useState(() => ({
+    nowMs: getMonotonicNow(),
+    channelSessionStartedAtMsById: {},
+  }));
   const [activeParticipantVolumeMenu, setActiveParticipantVolumeMenu] = useState(null);
+  const durationNowMs = durationState.nowMs;
+  const channelSessionStartedAtMsById = durationState.channelSessionStartedAtMsById;
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
   const speakingUsers = useMemo(() => new Set(speakingUserIds), [speakingUserIds]);
   const mutedChannels = useMemo(() => new Set((mutedChannelIds || []).map((channelId) => String(channelId))), [mutedChannelIds]);
@@ -91,12 +134,36 @@ const VoiceChannelList = ({
       return undefined;
     }
 
-    const intervalId = window.setInterval(() => {
-      setDurationNowMs(getMonotonicNow());
-    }, 1000);
+    const syncDurationState = () => {
+      const nowMs = getMonotonicNow();
+      setDurationState((previous) => {
+        const nextSessionStarts = resolveVoiceChannelSessionStarts({
+          previous: previous.channelSessionStartedAtMsById,
+          channels,
+          participantsMap,
+          serverId,
+          nowMs,
+        });
 
-    return () => window.clearInterval(intervalId);
-  }, []);
+        if (previous.nowMs === nowMs && areVoiceChannelSessionStartsEqual(previous.channelSessionStartedAtMsById, nextSessionStarts)) {
+          return previous;
+        }
+
+        return {
+          nowMs,
+          channelSessionStartedAtMsById: nextSessionStarts,
+        };
+      });
+    };
+
+    const timeoutId = window.setTimeout(syncDurationState, 0);
+    const intervalId = window.setInterval(syncDurationState, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [channels, participantsMap, serverId]);
   useEffect(() => {
     if (!activeParticipantVolumeMenu || typeof window === "undefined") {
       return undefined;
@@ -176,7 +243,7 @@ const VoiceChannelList = ({
     );
   };
 
-  const normalizeParticipant = (participant = {}) => {
+  const normalizeParticipant = useCallback((participant = {}) => {
     const userId = participant.userId || participant.UserId || "";
 
     return {
@@ -192,7 +259,7 @@ const VoiceChannelList = ({
       voiceElapsedSyncedAtMs: Number(participant.voiceElapsedSyncedAtMs ?? participant.VoiceElapsedSyncedAtMs ?? durationNowMs) || 0,
       roleColor: roleColorByUserId.get(String(userId)) || "#7b89a8",
     };
-  };
+  }, [durationNowMs, memberNameByUserId, roleColorByUserId]);
 
   return (
     <>
@@ -211,8 +278,13 @@ const VoiceChannelList = ({
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
         const participantCount = participants.length;
+        const sessionStartedAtMs = resolveVoiceChannelSessionStartedAtMs({
+          previousStartedAtMs: channelSessionStartedAtMsById[runtimeId],
+          participants,
+          nowMs: durationNowMs,
+        });
         const durationLabel = participantCount > 0
-          ? formatVoiceChannelDuration(getVoiceChannelDurationMs(participants, durationNowMs))
+          ? formatVoiceChannelDuration(durationNowMs - sessionStartedAtMs)
           : "";
         const canJoinFromRow = !isEditing && !isJoining;
         const triggerPrewarm = () => {

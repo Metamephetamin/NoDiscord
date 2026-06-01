@@ -54,3 +54,23 @@ export function getVoiceChannelDurationMs(participants = [], nowMs = getMonotoni
     0
   );
 }
+
+export function resolveVoiceChannelSessionStartedAtMs({
+  previousStartedAtMs,
+  participants = [],
+  nowMs = getMonotonicNow(),
+} = {}) {
+  const participantList = Array.isArray(participants) ? participants : [];
+  if (!participantList.length) {
+    return null;
+  }
+
+  const hasPreviousStartedAt = previousStartedAtMs !== undefined && previousStartedAtMs !== null && previousStartedAtMs !== "";
+  const previousStartedAtNumber = Number(previousStartedAtMs);
+  if (hasPreviousStartedAt && Number.isFinite(previousStartedAtNumber)) {
+    return previousStartedAtNumber;
+  }
+
+  const normalizedNowMs = Number.isFinite(Number(nowMs)) ? Number(nowMs) : getMonotonicNow();
+  return normalizedNowMs - getVoiceChannelDurationMs(participantList, normalizedNowMs);
+}

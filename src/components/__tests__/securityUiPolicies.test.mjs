@@ -359,12 +359,16 @@ test("light theme text tools menu is opaque and readable", () => {
 test("message search input text is readable on dark chat topbar", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const searchIconSource = readRepoFile("public/icons/search.svg");
 
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?color: #f8fbff;/);
   assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #f8fbff;/);
-  assert.match(mainCss, /\.chat__topbar \{[\s\S]*?min-height: 78px;/);
-  assert.match(mainCss, /\.chat__topbar-copy strong \{[\s\S]*?color: #ffffff;[\s\S]*?font-size: 34px;/);
+  assert.match(mainCss, /\.chat__topbar \{[\s\S]*?min-height: 58px;/);
+  assert.match(mainCss, /\.chat__topbar-name \{[\s\S]*?color: #f2f4fa;[\s\S]*?font-size: 24px;/);
+  assert.match(mainCss, /\.chat__topbar-search-wrap \{[\s\S]*?width: min\(300px, 24vw\);/);
   assert.match(mainCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #d8deeb;/);
+  assert.match(workspaceSource, /className="bi bi-hash"/);
+  assert.match(searchIconSource, /class="bi bi-search"/);
   assert.doesNotMatch(workspaceSource, /Текстовый канал сервера/);
   assert.doesNotMatch(workspaceSource, /Форум сервера/);
 });
@@ -449,6 +453,20 @@ test("voice stage toolbar buttons avoid native title tooltips", () => {
   assert.match(stageCss, /\.voice-room-stage__toolbar-button::after \{[\s\S]*?content: attr\(aria-label\);/);
   assert.match(stageCss, /\.voice-room-stage__toolbar-button:hover::after,[\s\S]*?\.voice-room-stage__toolbar-button:focus-visible::after/);
   assert.doesNotMatch(mobileStageSource, /\stitle=/);
+});
+
+test("active voice stream chrome auto-hides after pointer inactivity", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
+
+  assert.match(stageSource, /stageChromeHideTimeoutRef/);
+  assert.match(stageSource, /setStageChromeVisible\(false\);[\s\S]*?\}, 3000\);/);
+  assert.match(stageSource, /onPointerMove=\{revealStageChrome\}/);
+  assert.match(stageSource, /onPointerLeave=\{scheduleStageChromeHide\}/);
+  assert.match(stageSource, /voice-room-stage__hero--chrome-visible/);
+  assert.doesNotMatch(stageCss, /\.voice-room-stage--active-stream \.voice-room-stage__hero-top,[\s\S]*?display: none;/);
+  assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-controls/);
+  assert.match(stageCss, /\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-top,[\s\S]*?\.voice-room-stage__hero--chrome-visible \.voice-room-stage__hero-bottom/);
 });
 
 test("mobile voice room styles stay split from the main menu stylesheet", () => {
@@ -701,6 +719,17 @@ test("voice stage toolbar does not render a duplicate center camera button", () 
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
   assert.match(profileSource, /aria-label=\{isCameraShareActive \? "Остановить камеру" : "Открыть камеру"\}/);
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
+});
+
+test("clicking own stream opens local preview instead of remote loading state", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const selfShareBranch = stageSource.slice(
+    stageSource.indexOf("if (participant.isSelf && participant.share) {"),
+    stageSource.indexOf("if (participant.isLive && isInlineStreamActive) {"),
+  );
+
+  assert.match(selfShareBranch, /onOpenLocalSharePreview\?\.\(\);[\s\S]*?return;/);
+  assert.doesNotMatch(selfShareBranch, /onPreviewStream\?\.\(participant\.userId\)/);
 });
 
 test("voice stage does not keep a separate eye preview control", () => {

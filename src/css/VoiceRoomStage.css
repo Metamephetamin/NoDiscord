@@ -20,9 +20,7 @@
   padding: 10px 12px 12px;
 }
 
-.voice-room-stage--active-stream .voice-room-stage__header,
-.voice-room-stage--active-stream .voice-room-stage__hero-top,
-.voice-room-stage--active-stream .voice-room-stage__hero-bottom {
+.voice-room-stage--active-stream .voice-room-stage__header {
   display: none;
 }
 
@@ -405,7 +403,7 @@
   transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
-.voice-room-stage__hero:hover .voice-room-stage__hero-controls,
+.voice-room-stage__hero--chrome-visible .voice-room-stage__hero-controls,
 .voice-room-stage__hero:focus-within .voice-room-stage__hero-controls {
   opacity: 1;
   transform: translateY(0);
@@ -535,16 +533,30 @@
   gap: 12px;
   padding: 14px;
   pointer-events: none;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 5;
 }
 
 .voice-room-stage__hero-top {
   top: 0;
+  background: linear-gradient(180deg, rgba(4, 6, 10, 0.68), rgba(0, 0, 0, 0));
 }
 
 .voice-room-stage__hero-bottom {
   bottom: 0;
   padding-bottom: 22px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.72));
+  transform: translateY(8px);
+}
+
+.voice-room-stage__hero--chrome-visible .voice-room-stage__hero-top,
+.voice-room-stage__hero--chrome-visible .voice-room-stage__hero-bottom,
+.voice-room-stage__hero:focus-within .voice-room-stage__hero-top,
+.voice-room-stage__hero:focus-within .voice-room-stage__hero-bottom {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .voice-room-stage__hero-badges,

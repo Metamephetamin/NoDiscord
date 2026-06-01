@@ -1691,9 +1691,9 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  min-height: 78px;
-  padding: 12px 30px;
+  gap: 16px;
+  min-height: 58px;
+  padding: 8px 28px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(14, 16, 22, 0.92);
 }
@@ -1714,7 +1714,7 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 .chat__topbar-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   color: #f5f7ff;
   font-family: var(--font-heading);
@@ -1722,8 +1722,23 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .chat__topbar-symbol {
-  color: #9aa5bf;
-  font-size: 24px;
+  width: 26px;
+  height: 26px;
+  color: #aeb5c6;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.92;
+}
+
+.chat__topbar-symbol svg {
+  width: 100%;
+  height: 100%;
+}
+
+.chat__topbar-symbol {
+  font-size: 26px;
   line-height: 1;
   font-style: normal;
 }
@@ -1751,10 +1766,16 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  color: #ffffff;
-  font-size: 34px;
-  line-height: 1;
-  text-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+  color: #f2f4fa;
+  font-size: 24px;
+  line-height: 1.08;
+  text-shadow: 0 0 16px rgba(242, 244, 250, 0.1);
+}
+
+.chat__topbar-name {
+  color: #f2f4fa;
+  font-size: 24px;
+  line-height: 1.08;
 }
 
 .chat__topbar-badge {
@@ -1832,13 +1853,13 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 
 .chat__topbar-search {
   width: 100%;
-  min-height: 44px;
+  min-height: 36px;
   border: 0;
   background: transparent;
   color: #f8fbff;
   caret-color: #f8fbff;
   padding: 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 650;
 }
 
@@ -1848,22 +1869,22 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .chat__topbar-search-wrap {
-  width: min(520px, 34vw);
-  min-height: 50px;
+  width: min(300px, 24vw);
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 18px;
-  border-radius: 16px;
+  gap: 9px;
+  padding: 0 12px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   background: rgba(255, 255, 255, 0.055);
 }
 
 .chat__topbar-search-wrap img {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
   object-fit: contain;
-  opacity: 0.92;
+  opacity: 0.86;
   filter: brightness(0) invert(88%);
 }
 

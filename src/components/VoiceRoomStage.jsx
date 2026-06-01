@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import "../css/VoiceRoomStage.css";
 
@@ -550,8 +550,10 @@ export default function VoiceRoomStage({
   pendingParticipant = null,
 }) {
   const shellRef = useRef(null);
+  const stageChromeHideTimeoutRef = useRef(null);
   const [avatarAccentMap, setAvatarAccentMap] = useState({});
   const [inlineStreamUserIds, setInlineStreamUserIds] = useState(() => new Set());
+  const [stageChromeVisible, setStageChromeVisible] = useState(true);
   const isEffectiveMicMuted = Boolean(isMicMuted);
   const remoteShareByUserId = useMemo(
     () => new Map((remoteShares || []).map((share) => [String(share.userId || ""), share])),
@@ -720,6 +722,47 @@ export default function VoiceRoomStage({
       ? avatarAccentMap[`pending:${pendingParticipant.avatar}`] || createFallbackAccent(pendingParticipant.name || pendingParticipant.avatar)
       : createFallbackAccent(activeStage?.name || pendingParticipant?.name || "voice-stage");
 
+  const clearStageChromeHideTimer = useCallback(() => {
+    if (stageChromeHideTimeoutRef.current && typeof window !== "undefined") {
+      window.clearTimeout(stageChromeHideTimeoutRef.current);
+    }
+    stageChromeHideTimeoutRef.current = null;
+  }, []);
+
+  const scheduleStageChromeHide = useCallback(() => {
+    if (!activeStage || typeof window === "undefined") {
+      return;
+    }
+
+    clearStageChromeHideTimer();
+    stageChromeHideTimeoutRef.current = window.setTimeout(() => {
+      setStageChromeVisible(false);
+      stageChromeHideTimeoutRef.current = null;
+    }, 3000);
+  }, [activeStage, clearStageChromeHideTimer]);
+
+  const revealStageChrome = useCallback(() => {
+    if (!activeStage) {
+      return;
+    }
+
+    clearStageChromeHideTimer();
+    setStageChromeVisible(true);
+    scheduleStageChromeHide();
+  }, [activeStage, clearStageChromeHideTimer, scheduleStageChromeHide]);
+
+  useEffect(() => {
+    if (activeStage && stageChromeVisible) {
+      scheduleStageChromeHide();
+      return undefined;
+    }
+
+    clearStageChromeHideTimer();
+    return undefined;
+  }, [activeStage, clearStageChromeHideTimer, scheduleStageChromeHide, stageChromeVisible]);
+
+  useEffect(() => () => clearStageChromeHideTimer(), [clearStageChromeHideTimer]);
+
   const handleCardClick = (participant) => {
     if (!participant) {
       return;
@@ -729,17 +772,7 @@ export default function VoiceRoomStage({
     const isInlineStreamActive = Boolean(participant.share && inlineStreamUserIds.has(participantUserId));
 
     if (participant.isSelf && participant.share) {
-      if (isInlineStreamActive) {
-        onOpenLocalSharePreview?.();
-        return;
-      }
-
-      setInlineStreamUserIds((previous) => {
-        const next = new Set(previous);
-        next.add(participantUserId);
-        return next;
-      });
-      onPreviewStream?.(participant.userId);
+      onOpenLocalSharePreview?.();
       return;
     }
 
@@ -961,7 +994,16 @@ export default function VoiceRoomStage({
       </div>
 
       {activeStage ? (
-        <div className="voice-room-stage__hero" ref={shellRef} style={buildAccentVariables(activeStageAccent)}>
+        <div
+          className={`voice-room-stage__hero ${stageChromeVisible ? "voice-room-stage__hero--chrome-visible" : ""}`}
+          ref={shellRef}
+          style={buildAccentVariables(activeStageAccent)}
+          onPointerEnter={revealStageChrome}
+          onPointerMove={revealStageChrome}
+          onPointerLeave={scheduleStageChromeHide}
+          onFocus={revealStageChrome}
+          onBlur={scheduleStageChromeHide}
+        >
           <VoiceStageMedia
             stream={activeStage.stream}
             videoSrc={activeStage.videoSrc}

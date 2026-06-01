@@ -5,6 +5,7 @@ import {
   formatVoiceChannelDuration,
   getVoiceChannelDurationMs,
   getVoiceParticipantDurationMs,
+  resolveVoiceChannelSessionStartedAtMs,
 } from "../voiceChannelDuration.js";
 
 test("formats voice channel duration as hours minutes and seconds", () => {
@@ -30,4 +31,36 @@ test("channel duration uses oldest active participant", () => {
   ];
 
   assert.equal(getVoiceChannelDurationMs(participants, 8_000), 33_000);
+});
+
+test("channel session start survives when the oldest participant leaves", () => {
+  const startedAtMs = resolveVoiceChannelSessionStartedAtMs({
+    previousStartedAtMs: null,
+    participants: [
+      { voiceElapsedMs: 60_000, voiceElapsedSyncedAtMs: 1_000 },
+      { voiceElapsedMs: 20_000, voiceElapsedSyncedAtMs: 1_000 },
+    ],
+    nowMs: 1_000,
+  });
+
+  assert.equal(startedAtMs, -59_000);
+
+  const nextStartedAtMs = resolveVoiceChannelSessionStartedAtMs({
+    previousStartedAtMs: startedAtMs,
+    participants: [
+      { voiceElapsedMs: 22_000, voiceElapsedSyncedAtMs: 3_000 },
+    ],
+    nowMs: 3_000,
+  });
+
+  assert.equal(nextStartedAtMs, startedAtMs);
+  assert.equal(formatVoiceChannelDuration(63_000 - nextStartedAtMs), "0:02:02");
+});
+
+test("channel session start resets when channel becomes empty", () => {
+  assert.equal(resolveVoiceChannelSessionStartedAtMs({
+    previousStartedAtMs: -59_000,
+    participants: [],
+    nowMs: 10_000,
+  }), null);
 });
