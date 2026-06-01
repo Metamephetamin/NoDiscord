@@ -317,6 +317,36 @@ public sealed class AuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Refresh_WhenRotatingActiveToken_PreservesOriginalSessionCreatedAt()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var originalCreatedAt = now.AddDays(-3);
+        var user = BuildUser(19, "refresh-created-at@gmail.com");
+        _context.Users.Add(user);
+        _context.RefreshTokens.Add(new RefreshTokenRecord
+        {
+            UserId = user.id,
+            TokenHash = HashRawToken("current-refresh-token"),
+            CreatedAt = originalCreatedAt,
+            ExpiresAt = now.AddDays(7),
+            UserAgent = "Current Browser",
+            DeviceLabel = "Current Browser",
+            LastIp = "127.0.0.1",
+            LastUsedAt = now.AddMinutes(-4)
+        });
+        await _context.SaveChangesAsync();
+        var controller = BuildController();
+
+        var result = await controller.Refresh(new RefreshTokenDto { refreshToken = "current-refresh-token" });
+
+        Assert.IsType<OkObjectResult>(result);
+        var replacement = await _context.RefreshTokens.SingleAsync(item =>
+            item.UserId == user.id &&
+            !item.RevokedAt.HasValue);
+        Assert.Equal(originalCreatedAt, replacement.CreatedAt);
+    }
+
+    [Fact]
     public async Task ResetTotp_WithPasswordAndEmailCode_DisablesTotp()
     {
         var passwordHasher = new PasswordHasher<User>();
@@ -326,8 +356,10 @@ public sealed class AuthControllerTests : IDisposable
         user.totp_secret = "broken-secret";
         user.totp_enabled_at = DateTimeOffset.UtcNow.AddDays(-1);
         _context.Users.Add(user);
+        _context.RefreshTokens.Add(BuildRefreshToken(user.id, "current-refresh-token", DateTimeOffset.UtcNow.AddHours(-2)));
         await _context.SaveChangesAsync();
         var controller = BuildController(currentUserId: user.id);
+        controller.Request.Headers["X-Refresh-Token"] = "current-refresh-token";
 
         var codeResult = await controller.RequestTotpResetCode(
             new TotpResetCodeRequestDto { password = "current-password" },
@@ -349,6 +381,69 @@ public sealed class AuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task SetupTotp_FromNewSessionWithOlderActiveSession_IsBlocked()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var user = BuildUser(16, "new-session-totp@gmail.com");
+        _context.Users.Add(user);
+        _context.RefreshTokens.AddRange(
+            BuildRefreshToken(user.id, "older-refresh-token", now.AddHours(-3)),
+            BuildRefreshToken(user.id, "current-refresh-token", now.AddMinutes(-5)));
+        await _context.SaveChangesAsync();
+        var controller = BuildController(currentUserId: user.id);
+        controller.Request.Headers["X-Refresh-Token"] = "current-refresh-token";
+
+        var result = await controller.SetupTotp();
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        var updatedUser = await _context.Users.SingleAsync(item => item.id == user.id);
+        Assert.Null(updatedUser.totp_secret);
+        Assert.False(updatedUser.is_totp_enabled);
+    }
+
+    [Fact]
+    public async Task CreateQrAccountLoginSession_FromNewSessionWithOlderActiveSession_IsBlocked()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var user = BuildUser(17, "new-session-qr@gmail.com");
+        _context.Users.Add(user);
+        _context.RefreshTokens.AddRange(
+            BuildRefreshToken(user.id, "older-refresh-token", now.AddHours(-3)),
+            BuildRefreshToken(user.id, "current-refresh-token", now.AddMinutes(-5)));
+        await _context.SaveChangesAsync();
+        var controller = BuildController(currentUserId: user.id);
+        controller.Request.Headers["X-Refresh-Token"] = "current-refresh-token";
+
+        var result = await controller.CreateQrAccountLoginSession();
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Empty(_context.QrLoginSessions);
+    }
+
+    [Fact]
+    public async Task RevokeOtherDeviceSessions_FromNewSessionWithOlderActiveSession_IsBlocked()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var user = BuildUser(18, "new-session-revoke@gmail.com");
+        var olderSession = BuildRefreshToken(user.id, "older-refresh-token", now.AddHours(-3));
+        _context.Users.Add(user);
+        _context.RefreshTokens.AddRange(
+            olderSession,
+            BuildRefreshToken(user.id, "current-refresh-token", now.AddMinutes(-5)));
+        await _context.SaveChangesAsync();
+        var controller = BuildController(currentUserId: user.id);
+        controller.Request.Headers["X-Refresh-Token"] = "current-refresh-token";
+
+        var result = await controller.RevokeOtherDeviceSessions(CancellationToken.None);
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Null((await _context.RefreshTokens.SingleAsync(item => item.Id == olderSession.Id)).RevokedAt);
+    }
+
+    [Fact]
     public async Task RequestTotpResetCode_WithWrongPassword_DoesNotSendCode()
     {
         var passwordHasher = new PasswordHasher<User>();
@@ -356,8 +451,10 @@ public sealed class AuthControllerTests : IDisposable
         user.password_hash = passwordHasher.HashPassword(user, "current-password");
         user.is_totp_enabled = true;
         _context.Users.Add(user);
+        _context.RefreshTokens.Add(BuildRefreshToken(user.id, "current-refresh-token", DateTimeOffset.UtcNow.AddHours(-2)));
         await _context.SaveChangesAsync();
         var controller = BuildController(currentUserId: user.id);
+        controller.Request.Headers["X-Refresh-Token"] = "current-refresh-token";
 
         var result = await controller.RequestTotpResetCode(
             new TotpResetCodeRequestDto { password = "wrong-password" },
@@ -376,7 +473,10 @@ public sealed class AuthControllerTests : IDisposable
     {
         var values = new Dictionary<string, string?>
         {
-            ["Crypto:Key"] = "0123456789abcdef0123456789abcdef"
+            ["Crypto:Key"] = "0123456789abcdef0123456789abcdef",
+            ["Jwt:Key"] = "0123456789abcdef0123456789abcdef",
+            ["Jwt:Issuer"] = "BackNoDiscord.Tests",
+            ["Jwt:Audience"] = "BackNoDiscord.Tests"
         };
 
         if (emailMode != null)
@@ -433,6 +533,21 @@ public sealed class AuthControllerTests : IDisposable
             email = email,
             is_email_verified = true,
             password_hash = "hash"
+        };
+    }
+
+    private static RefreshTokenRecord BuildRefreshToken(int userId, string rawToken, DateTimeOffset createdAt)
+    {
+        return new RefreshTokenRecord
+        {
+            UserId = userId,
+            TokenHash = HashRawToken(rawToken),
+            CreatedAt = createdAt,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
+            UserAgent = "Test Browser",
+            DeviceLabel = "Test Browser",
+            LastIp = "127.0.0.1",
+            LastUsedAt = createdAt
         };
     }
 

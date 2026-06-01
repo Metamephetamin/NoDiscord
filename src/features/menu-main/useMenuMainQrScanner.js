@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE_URL } from "../../config/runtime";
-import { authFetch, getApiErrorMessage, parseApiResponse } from "../../utils/auth";
-import { parseQrLoginPayload } from "./menuMainControllerUtils";
+import { authFetch, getApiErrorMessage, getStoredRefreshToken, parseApiResponse } from "../../utils/auth";
+import { DEVICE_SESSION_REFRESH_TOKEN_HEADER, parseQrLoginPayload } from "./menuMainControllerUtils";
+
+function buildCurrentSessionHeaders(extraHeaders = {}) {
+  const refreshToken = getStoredRefreshToken();
+  return refreshToken
+    ? { ...extraHeaders, [DEVICE_SESSION_REFRESH_TOKEN_HEADER]: refreshToken }
+    : extraHeaders;
+}
 
 export default function useMenuMainQrScanner({
   refreshDeviceSessions,
@@ -100,7 +107,7 @@ export default function useMenuMainQrScanner({
 
       const approveResponse = await authFetch(`${API_BASE_URL}/auth/qr-login/approve`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildCurrentSessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       const approveData = await parseApiResponse(approveResponse);

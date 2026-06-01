@@ -24,8 +24,9 @@ import { APP_LOGO_OPTIONS } from "../utils/appLogo";
 import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
-import { authFetch, getApiErrorMessage, parseApiResponse } from "../utils/auth";
+import { authFetch, getApiErrorMessage, getStoredRefreshToken, parseApiResponse } from "../utils/auth";
 import { MAX_SERVER_NAME_LENGTH } from "../utils/menuMainModel";
+import { DEVICE_SESSION_REFRESH_TOKEN_HEADER } from "../features/menu-main/menuMainControllerUtils";
 import {
   APP_CACHE_LIMIT_OPTIONS,
   clearAppCacheStorage,
@@ -38,6 +39,13 @@ import {
   writeAppCachePolicy,
 } from "../utils/appStorageUsage.mjs";
 import AccountSessionsPanel from "../features/account-security/AccountSessionsPanel";
+
+function buildCurrentSessionHeaders(extraHeaders = {}) {
+  const refreshToken = getStoredRefreshToken();
+  return refreshToken
+    ? { ...extraHeaders, [DEVICE_SESSION_REFRESH_TOKEN_HEADER]: refreshToken }
+    : extraHeaders;
+}
 
 const VoiceSwitch = ({ active, onClick, label }) => (
   <button
@@ -1172,6 +1180,7 @@ export const DevicesSettings = ({
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/qr-login/account-session`, {
         method: "POST",
+        headers: buildCurrentSessionHeaders(),
       });
       const data = await parseApiResponse(response);
 

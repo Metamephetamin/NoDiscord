@@ -26,6 +26,7 @@ public class AuthController : ControllerBase
     private static readonly TimeSpan QrLoginLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan EmailVerificationLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan EmailVerificationResendCooldown = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan HighRiskSessionHoldDuration = TimeSpan.FromHours(24);
     private const string CurrentTermsVersion = "2026-05-13-rf-1";
     private const string CurrentPrivacyVersion = "2026-05-13-rf-1";
     private const string MediaAccessTokenCookieName = "tend_access_token";
@@ -259,6 +260,12 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Google Authenticator уже подключён." });
         }
 
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, HttpContext.RequestAborted);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
+        }
+
         var secret = TotpService.GenerateSecret();
         user.totp_secret = ProtectTotpSecret(secret);
         user.is_totp_enabled = false;
@@ -289,6 +296,12 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, HttpContext.RequestAborted);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
+        }
+
         if (!VerifyUserTotpCode(user, dto.code, DateTimeOffset.UtcNow))
         {
             return BadRequest(new { message = "Неверный код из Google Authenticator." });
@@ -310,6 +323,12 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return Unauthorized();
+        }
+
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, HttpContext.RequestAborted);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
         }
 
         if (user.is_totp_enabled && !VerifyUserTotpCode(user, dto.code, DateTimeOffset.UtcNow))
@@ -344,6 +363,12 @@ public class AuthController : ControllerBase
         if (!user.is_totp_enabled)
         {
             return BadRequest(new { message = "Google Authenticator is not enabled." });
+        }
+
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, cancellationToken);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
         }
 
         if (string.IsNullOrWhiteSpace(user.email) || !user.is_email_verified)
@@ -400,6 +425,12 @@ public class AuthController : ControllerBase
         if (user.IsBanned)
         {
             return CreateAccountBannedResponse(user);
+        }
+
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, cancellationToken);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
         }
 
         var verificationToken = (dto.verificationToken ?? string.Empty).Trim();
@@ -517,6 +548,12 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return Unauthorized();
+        }
+
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, HttpContext.RequestAborted);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -686,6 +723,12 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return Unauthorized();
+        }
+
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, HttpContext.RequestAborted);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
         }
 
         var record = await FindPendingQrLoginSessionAsync(dto.sessionId, dto.scannerToken);
@@ -1239,7 +1282,11 @@ public class AuthController : ControllerBase
         }
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        var authSession = await IssueAuthSessionAsync(storedToken.User, dto.deviceToken, cancellationToken);
+        var authSession = await IssueAuthSessionAsync(
+            storedToken.User,
+            dto.deviceToken,
+            cancellationToken,
+            sessionCreatedAt: storedToken.CreatedAt);
         var revoked = await RevokeRefreshTokenForRotationAsync(
             storedToken.Id,
             authSession.RefreshToken,
@@ -1315,6 +1362,12 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, cancellationToken);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
+        }
+
         var revoked = await _userSessionService.RevokeSessionAsync(
             user.id,
             sessionId,
@@ -1338,6 +1391,12 @@ public class AuthController : ControllerBase
         if (user == null)
         {
             return Unauthorized();
+        }
+
+        var highRiskBlock = await RequireTrustedSessionForHighRiskActionAsync(user, cancellationToken);
+        if (highRiskBlock != null)
+        {
+            return highRiskBlock;
         }
 
         var revoked = await _userSessionService.RevokeOtherSessionsAsync(
@@ -1391,7 +1450,38 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
     }
 
-    private async Task<AuthSessionResult> IssueAuthSessionAsync(User user, string? deviceToken = null, CancellationToken cancellationToken = default)
+    private async Task<IActionResult?> RequireTrustedSessionForHighRiskActionAsync(
+        User user,
+        CancellationToken cancellationToken)
+    {
+        var decision = await _userSessionService.EvaluateHighRiskSessionAsync(
+            user.id,
+            GetCurrentRefreshTokenHash(),
+            DateTimeOffset.UtcNow,
+            HighRiskSessionHoldDuration,
+            cancellationToken);
+        if (decision.IsAllowed)
+        {
+            return null;
+        }
+
+        var message = string.Equals(decision.Code, "new_session_hold", StringComparison.Ordinal)
+            ? "Из новой сессии это действие временно недоступно. Повторите позже или выполните его со старого устройства."
+            : "Подтвердите текущую сессию и повторите действие.";
+
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            code = decision.Code,
+            message,
+            availableAt = decision.AvailableAt?.ToString("O")
+        });
+    }
+
+    private async Task<AuthSessionResult> IssueAuthSessionAsync(
+        User user,
+        string? deviceToken = null,
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? sessionCreatedAt = null)
     {
         var now = DateTimeOffset.UtcNow;
         var accessTokenExpiresAt = now.AddMinutes(GetAccessTokenLifetimeMinutes());
@@ -1418,7 +1508,7 @@ public class AuthController : ControllerBase
         {
             UserId = user.id,
             TokenHash = HashToken(refreshToken),
-            CreatedAt = now,
+            CreatedAt = sessionCreatedAt ?? now,
             ExpiresAt = refreshTokenExpiresAt,
             UserAgent = userAgent,
             DeviceLabel = deviceLabel,
@@ -2230,4 +2320,3 @@ public sealed class EmailVerificationResult
         };
     }
 }
-

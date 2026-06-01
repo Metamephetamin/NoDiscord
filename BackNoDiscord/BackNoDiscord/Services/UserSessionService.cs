@@ -186,6 +186,55 @@ public sealed class UserSessionService
             : null;
     }
 
+    public async Task<HighRiskSessionDecision> EvaluateHighRiskSessionAsync(
+        int userId,
+        string? currentRefreshTokenHash,
+        DateTimeOffset now,
+        TimeSpan holdDuration,
+        CancellationToken cancellationToken)
+    {
+        var normalizedCurrentHash = (currentRefreshTokenHash ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedCurrentHash))
+        {
+            return HighRiskSessionDecision.CurrentSessionRequired();
+        }
+
+        var currentSession = await _context.RefreshTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item =>
+                    item.UserId == userId &&
+                    item.TokenHash == normalizedCurrentHash &&
+                    !item.RevokedAt.HasValue &&
+                    item.ExpiresAt > now,
+                cancellationToken);
+        if (currentSession is null)
+        {
+            return HighRiskSessionDecision.CurrentSessionRequired();
+        }
+
+        var availableAt = currentSession.CreatedAt.Add(holdDuration);
+        if (availableAt <= now)
+        {
+            return HighRiskSessionDecision.Allowed();
+        }
+
+        var hasOlderActiveSession = await _context.RefreshTokens
+            .AsNoTracking()
+            .AnyAsync(
+                item =>
+                    item.UserId == userId &&
+                    item.Id != currentSession.Id &&
+                    item.CreatedAt < currentSession.CreatedAt &&
+                    !item.RevokedAt.HasValue &&
+                    item.ExpiresAt > now,
+                cancellationToken);
+
+        return hasOlderActiveSession
+            ? HighRiskSessionDecision.NewSessionHold(availableAt)
+            : HighRiskSessionDecision.Allowed();
+    }
+
     private static string NormalizeDeviceTokenHash(string? value)
     {
         var normalized = (value ?? string.Empty).Trim();
@@ -231,3 +280,15 @@ public sealed record LoginSecuritySignal(
     bool IsSuspicious,
     bool IsNewDevice,
     bool IsNewIpFamily);
+
+public sealed record HighRiskSessionDecision(
+    bool IsAllowed,
+    string Code,
+    DateTimeOffset? AvailableAt)
+{
+    public static HighRiskSessionDecision Allowed() => new(true, "allowed", null);
+
+    public static HighRiskSessionDecision CurrentSessionRequired() => new(false, "current_session_required", null);
+
+    public static HighRiskSessionDecision NewSessionHold(DateTimeOffset availableAt) => new(false, "new_session_hold", availableAt);
+}

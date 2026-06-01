@@ -29,6 +29,7 @@ export async function fetchAccountSessions() {
 export async function revokeAccountSession(sessionId) {
   const response = await authFetch(`${API_BASE_URL}/auth/sessions/${encodeURIComponent(String(sessionId))}`, {
     method: "DELETE",
+    headers: buildRefreshTokenHeaders(),
   });
   const data = await parseApiResponse(response);
 

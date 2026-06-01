@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../css/Auth.css";
 import { API_BASE_URL } from "../config/runtime";
-import { authFetch, getApiErrorMessage, getStoredToken, parseApiResponse } from "../utils/auth";
+import { authFetch, getApiErrorMessage, getStoredRefreshToken, getStoredToken, parseApiResponse } from "../utils/auth";
+import { DEVICE_SESSION_REFRESH_TOKEN_HEADER } from "../features/menu-main/menuMainControllerUtils";
+
+function buildCurrentSessionHeaders(extraHeaders = {}) {
+  const refreshToken = getStoredRefreshToken();
+  return refreshToken
+    ? { ...extraHeaders, [DEVICE_SESSION_REFRESH_TOKEN_HEADER]: refreshToken }
+    : extraHeaders;
+}
 
 export default function QrLoginConfirmPage({ user }) {
   const location = useLocation();
@@ -83,7 +91,7 @@ export default function QrLoginConfirmPage({ user }) {
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/qr-login/approve`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildCurrentSessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(qrParams),
       });
       const data = await parseApiResponse(response);

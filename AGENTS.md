@@ -18,6 +18,12 @@ Production domain: https://lanaya.space
   - TextChatPanels
   - TextChatMediaPreview
 
+# Component size
+
+- Do not create or grow huge monolithic React components. Large files make routine edits exceed agent/context limits and can break validation or deployment.
+- Keep wrappers thin, split UI into focused child components, and move stateful behavior into feature controllers, hooks, or small helper modules that match the existing feature structure.
+- When editing an already oversized component, prefer extracting a focused piece first instead of adding more unrelated logic to the same file.
+
 # Commands
 
 Frontend:
@@ -45,4 +51,3 @@ Deploy rules:
 - if deploy is requested:
   1. ensure changes are committed;
   2. push to origin master;
-

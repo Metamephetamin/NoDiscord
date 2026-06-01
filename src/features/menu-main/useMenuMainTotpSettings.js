@@ -9,6 +9,7 @@ import {
   storeSession,
 } from "../../utils/auth";
 import { useState } from "react";
+import { DEVICE_SESSION_REFRESH_TOKEN_HEADER } from "./menuMainControllerUtils";
 
 const initialTotpSetup = {
   secret: "",
@@ -31,6 +32,13 @@ const TOTP_MESSAGES = {
   disableFailed: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043a\u043b\u044e\u0447\u0438\u0442\u044c Google Authenticator.",
   disabled: "Google Authenticator \u043e\u0442\u043a\u043b\u044e\u0447\u0451\u043d.",
 };
+
+function buildCurrentSessionHeaders(extraHeaders = {}) {
+  const refreshToken = getStoredRefreshToken();
+  return refreshToken
+    ? { ...extraHeaders, [DEVICE_SESSION_REFRESH_TOKEN_HEADER]: refreshToken }
+    : extraHeaders;
+}
 
 export default function useMenuMainTotpSettings({ user, setUser }) {
   const [totpSetup, setTotpSetup] = useState(initialTotpSetup);
@@ -79,6 +87,7 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/totp/setup`, {
         method: "POST",
+        headers: buildCurrentSessionHeaders(),
       });
       const data = await parseApiResponse(response);
       if (!response.ok) {
@@ -113,7 +122,7 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/totp/verify`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildCurrentSessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ code }),
       });
       const data = await parseApiResponse(response);
@@ -147,7 +156,7 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/totp/disable`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildCurrentSessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ code }),
       });
       const data = await parseApiResponse(response);
@@ -181,7 +190,7 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/totp/reset-code`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildCurrentSessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ password }),
       });
       const data = await parseApiResponse(response);
@@ -219,7 +228,7 @@ export default function useMenuMainTotpSettings({ user, setUser }) {
     try {
       const response = await authFetch(`${API_BASE_URL}/auth/totp/reset`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildCurrentSessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ password, verificationToken, code }),
       });
       const data = await parseApiResponse(response);

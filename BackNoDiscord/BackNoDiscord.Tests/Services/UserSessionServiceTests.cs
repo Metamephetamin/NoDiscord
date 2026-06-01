@@ -104,6 +104,69 @@ public sealed class UserSessionServiceTests
         Assert.True(signal.IsNewDevice);
     }
 
+    [Fact]
+    public async Task EvaluateHighRiskSessionAsync_BlocksNewSessionWhenOlderSessionIsStillActive()
+    {
+        await using var context = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        context.RefreshTokens.AddRange(
+            BuildToken(id: 1, userId: 42, tokenHash: "older-session", now, createdAt: now.AddHours(-3)),
+            BuildToken(id: 2, userId: 42, tokenHash: "new-session", now, createdAt: now.AddMinutes(-5)));
+        await context.SaveChangesAsync();
+        var service = new UserSessionService(context);
+
+        var decision = await service.EvaluateHighRiskSessionAsync(
+            userId: 42,
+            currentRefreshTokenHash: "new-session",
+            now,
+            holdDuration: TimeSpan.FromHours(24),
+            CancellationToken.None);
+
+        Assert.False(decision.IsAllowed);
+        Assert.Equal("new_session_hold", decision.Code);
+        Assert.Equal(now.AddMinutes(-5).AddHours(24), decision.AvailableAt);
+    }
+
+    [Fact]
+    public async Task EvaluateHighRiskSessionAsync_AllowsOnlyActiveSessionEvenWhenNew()
+    {
+        await using var context = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        context.RefreshTokens.Add(BuildToken(id: 1, userId: 42, tokenHash: "only-session", now, createdAt: now.AddMinutes(-5)));
+        await context.SaveChangesAsync();
+        var service = new UserSessionService(context);
+
+        var decision = await service.EvaluateHighRiskSessionAsync(
+            userId: 42,
+            currentRefreshTokenHash: "only-session",
+            now,
+            holdDuration: TimeSpan.FromHours(24),
+            CancellationToken.None);
+
+        Assert.True(decision.IsAllowed);
+        Assert.Equal("allowed", decision.Code);
+    }
+
+    [Fact]
+    public async Task EvaluateHighRiskSessionAsync_RequiresCurrentRefreshTokenProof()
+    {
+        await using var context = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        context.RefreshTokens.Add(BuildToken(id: 1, userId: 42, tokenHash: "known-session", now));
+        await context.SaveChangesAsync();
+        var service = new UserSessionService(context);
+
+        var decision = await service.EvaluateHighRiskSessionAsync(
+            userId: 42,
+            currentRefreshTokenHash: "",
+            now,
+            holdDuration: TimeSpan.FromHours(24),
+            CancellationToken.None);
+
+        Assert.False(decision.IsAllowed);
+        Assert.Equal("current_session_required", decision.Code);
+    }
+
     private static RefreshTokenRecord BuildToken(
         int id,
         int userId,
@@ -111,14 +174,15 @@ public sealed class UserSessionServiceTests
         DateTimeOffset now,
         DateTimeOffset? revokedAt = null,
         string? replacedByTokenHash = null,
-        string deviceTokenHash = "")
+        string deviceTokenHash = "",
+        DateTimeOffset? createdAt = null)
     {
         return new RefreshTokenRecord
         {
             Id = id,
             UserId = userId,
             TokenHash = tokenHash,
-            CreatedAt = now.AddHours(-1),
+            CreatedAt = createdAt ?? now.AddHours(-1),
             ExpiresAt = now.AddDays(7),
             RevokedAt = revokedAt,
             ReplacedByTokenHash = replacedByTokenHash,
