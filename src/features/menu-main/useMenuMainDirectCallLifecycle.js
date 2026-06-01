@@ -11,6 +11,8 @@ export default function useMenuMainDirectCallLifecycle({
   setDirectCallState,
   voiceClientRef,
   user,
+  systemSoundVolumeRatio = 1,
+  isSystemSoundEventEnabled,
 }) {
   const directCallToneStopRef = useRef(null);
 
@@ -78,7 +80,12 @@ export default function useMenuMainDirectCallLifecycle({
     }
 
     void (async () => {
-      const stopTone = await startDirectCallTone(directCallState.phase === "incoming" ? "incoming" : "outgoing");
+      const toneKind = directCallState.phase === "incoming" ? "incoming" : "outgoing";
+      const toneEvent = toneKind === "incoming" ? "directCallIncoming" : "directCallOutgoing";
+      const stopTone = await startDirectCallTone(toneKind, {
+        enabled: isSystemSoundEventEnabled?.(toneEvent) !== false,
+        volumeScale: systemSoundVolumeRatio,
+      });
       if (disposed) {
         stopTone?.();
         return;
@@ -92,5 +99,5 @@ export default function useMenuMainDirectCallLifecycle({
       directCallToneStopRef.current?.();
       directCallToneStopRef.current = null;
     };
-  }, [directCallState.phase]);
+  }, [directCallState.phase, isSystemSoundEventEnabled, systemSoundVolumeRatio]);
 }

@@ -29,12 +29,13 @@
 }
 
 .list__items--active {
+  padding: 0 6px;
   border-color: transparent;
 }
 
 .list__items--active > .voice-channel__row {
-  min-height: 72px;
-  padding: 8px 10px;
+  min-height: 58px;
+  padding: 5px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.145);
   border-color: transparent;
@@ -68,6 +69,7 @@
 
 .voice-channel__row {
   position: relative;
+  box-sizing: border-box;
   width: 100%;
   min-height: 38px;
   display: flex;
@@ -194,11 +196,16 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  transform: translateX(5px);
 }
 
 .list__items--active .voice-channel__button {
-  min-height: 38px;
+  min-height: 32px;
+  padding-right: 6px;
+}
+
+.list__items--active .voice-channel__body {
+  align-self: auto;
+  padding: 0;
 }
 
 .list__items--active .voice-channel__title {
@@ -207,7 +214,7 @@
 }
 
 .list__items--active .voice-channel__status-button {
-  margin-top: 3px;
+  margin-top: 1px;
   font-size: 14px;
   font-weight: 650;
 }

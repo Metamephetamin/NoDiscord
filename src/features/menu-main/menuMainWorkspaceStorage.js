@@ -24,6 +24,7 @@ import {
   getDirectMessageSoundEnabledStorageKey,
 } from "../../utils/directMessageSounds";
 import { getSystemSoundVolumeStorageKey } from "../../utils/systemSoundVolume";
+import { getSystemSoundEventsStorageKey } from "../../utils/systemSounds";
 
 const getLocalApiStorageScope = () => {
   try {
@@ -178,6 +179,7 @@ export function useMenuMainStorageKeys(user) {
     notificationSoundCustomDataStorageKey: getNotificationSoundCustomDataStorageKey(user),
     notificationSoundCustomNameStorageKey: getNotificationSoundCustomNameStorageKey(user),
     systemSoundVolumeStorageKey: getSystemSoundVolumeStorageKey(user),
+    systemSoundEventsStorageKey: getSystemSoundEventsStorageKey(user),
     autoInputSensitivityStorageKey: getAutoInputSensitivityStorageKey(user),
     audioInputDeviceStorageKey: getAudioInputDeviceStorageKey(user),
     audioOutputDeviceStorageKey: getAudioOutputDeviceStorageKey(user),

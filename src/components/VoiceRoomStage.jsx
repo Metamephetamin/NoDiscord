@@ -1160,6 +1160,15 @@ export default function VoiceRoomStage({
               onClick: onToggleSound,
               muted: isSoundMuted,
             })}
+            {renderToolbarButton({
+              key: "camera",
+              icon: "camera",
+              label: isCameraShareActive ? "Остановить камеру" : "Включить камеру",
+              onClick: cameraAction,
+              active: isCameraShareActive,
+              slashed: !isCameraShareActive,
+              disabled: !cameraAction,
+            })}
           </div>
 
           <div className="voice-room-stage__toolbar-group">

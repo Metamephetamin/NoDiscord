@@ -1953,6 +1953,8 @@ export const NotificationsSettings = ({
   notificationSoundEnabled,
   notificationSoundId,
   systemSoundVolume,
+  systemSoundEventOptions = [],
+  systemSoundEvents = {},
   notificationSoundOptions,
   customNotificationSoundData,
   customNotificationSoundName,
@@ -1967,6 +1969,7 @@ export const NotificationsSettings = ({
   onToggleNotificationSound,
   onNotificationSoundChange,
   onSystemSoundVolumeChange,
+  onSystemSoundEventToggle,
   onRemoveCustomNotificationSound,
   onCustomNotificationSoundChange,
   getDirectMessageSoundOptions,
@@ -2061,6 +2064,26 @@ export const NotificationsSettings = ({
         />
         <span className="voice-settings-caption">Влияет на уведомления и звуки голосовой комнаты.</span>
       </label>
+
+      <div className="voice-settings-field voice-settings-field--stacked system-sound-controls">
+        <span>Управление системными звуками</span>
+        <div className="system-sound-controls__list">
+          {systemSoundEventOptions.map((option) => (
+            <div key={option.id} className="voice-toggle-row voice-toggle-row--compact system-sound-controls__row">
+              <div>
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
+              </div>
+              <VoiceSwitch
+                active={systemSoundEvents?.[option.id] !== false}
+                onClick={() => onSystemSoundEventToggle?.(option.id)}
+                label={option.label}
+              />
+            </div>
+          ))}
+        </div>
+        <span className="voice-settings-caption">Не влияет на голоса участников, звук стрима и индивидуальную громкость людей.</span>
+      </div>
 
       <div className="voice-settings-field voice-settings-field--stacked">
         <span>Свой звук уведомления</span>

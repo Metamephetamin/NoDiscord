@@ -116,6 +116,8 @@ export function MenuMainSettingsContent({
   notificationSoundEnabled,
   notificationSoundId,
   systemSoundVolume,
+  systemSoundEventOptions,
+  systemSoundEvents,
   notificationSoundOptions,
   customNotificationSoundData,
   customNotificationSoundName,
@@ -130,6 +132,7 @@ export function MenuMainSettingsContent({
   setNotificationSoundEnabled,
   setNotificationSoundId,
   setSystemSoundVolume,
+  setSystemSoundEventEnabled,
   setCustomNotificationSoundData,
   setCustomNotificationSoundName,
   setNotificationSoundError,
@@ -292,6 +295,8 @@ export function MenuMainSettingsContent({
           notificationSoundEnabled={notificationSoundEnabled}
           notificationSoundId={notificationSoundId}
           systemSoundVolume={systemSoundVolume}
+          systemSoundEventOptions={systemSoundEventOptions}
+          systemSoundEvents={systemSoundEvents}
           notificationSoundOptions={notificationSoundOptions}
           customNotificationSoundData={customNotificationSoundData}
           customNotificationSoundName={customNotificationSoundName}
@@ -307,6 +312,7 @@ export function MenuMainSettingsContent({
           onToggleNotificationSound={() => setNotificationSoundEnabled((previous) => !previous)}
           onNotificationSoundChange={setNotificationSoundId}
           onSystemSoundVolumeChange={setSystemSoundVolume}
+          onSystemSoundEventToggle={(eventId) => setSystemSoundEventEnabled(eventId, (previous) => !previous)}
           onRemoveCustomNotificationSound={() => {
             setCustomNotificationSoundData("");
             setCustomNotificationSoundName("");

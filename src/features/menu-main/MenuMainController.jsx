@@ -782,6 +782,7 @@ export default function MenuMain({
     notificationSoundCustomDataStorageKey,
     notificationSoundCustomNameStorageKey,
     systemSoundVolumeStorageKey,
+    systemSoundEventsStorageKey,
     autoInputSensitivityStorageKey,
     audioInputDeviceStorageKey,
     audioOutputDeviceStorageKey,
@@ -819,6 +820,10 @@ export default function MenuMain({
     systemSoundVolume,
     systemSoundVolumeRatio,
     setSystemSoundVolume,
+    systemSoundEventOptions,
+    systemSoundEvents,
+    setSystemSoundEventEnabled,
+    isSystemSoundEventEnabled,
     notificationSoundOptions,
     customNotificationSoundData,
     setCustomNotificationSoundData,
@@ -846,6 +851,7 @@ export default function MenuMain({
     notificationSoundCustomDataStorageKey,
     notificationSoundCustomNameStorageKey,
     systemSoundVolumeStorageKey,
+    systemSoundEventsStorageKey,
   });
   const {
     deviceSessions,
@@ -936,6 +942,8 @@ export default function MenuMain({
     setDirectCallState,
     voiceClientRef,
     user,
+    systemSoundVolumeRatio,
+    isSystemSoundEventEnabled,
   });
   const {
     flushQueuedSelfVoiceState,
@@ -1909,6 +1917,10 @@ export default function MenuMain({
 
   const playUiTone = (type) => {
     try {
+      if (!isSystemSoundEventEnabled(type)) {
+        return;
+      }
+
       const soundPath = UI_SOUND_PATHS[type];
       if (!soundPath) return;
 
@@ -6176,6 +6188,8 @@ export default function MenuMain({
     notificationSoundEnabled,
     notificationSoundId,
     systemSoundVolume,
+    systemSoundEventOptions,
+    systemSoundEvents,
     notificationSoundOptions,
     customNotificationSoundData,
     customNotificationSoundName,
@@ -6190,6 +6204,7 @@ export default function MenuMain({
     setNotificationSoundEnabled,
     setNotificationSoundId,
     setSystemSoundVolume,
+    setSystemSoundEventEnabled,
     setCustomNotificationSoundData,
     setCustomNotificationSoundName,
     setNotificationSoundError,

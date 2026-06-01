@@ -14,6 +14,15 @@ const DIRECT_CALL_TONE_CONFIG = {
 
 const directCallAudioCache = new Map();
 
+const normalizeToneVolumeScale = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 1;
+  }
+
+  return Math.max(0, Math.min(1, numericValue));
+};
+
 const createOscillatorBurst = (audioContext, destination, {
   frequency,
   type = "sine",
@@ -22,6 +31,7 @@ const createOscillatorBurst = (audioContext, destination, {
   duration = 0.18,
   release = 0.16,
   volume = 0.08,
+  volumeScale = 1,
 }) => {
   const oscillator = audioContext.createOscillator();
   const gainNode = audioContext.createGain();
@@ -30,7 +40,7 @@ const createOscillatorBurst = (audioContext, destination, {
   oscillator.frequency.setValueAtTime(frequency, startAt);
 
   gainNode.gain.setValueAtTime(0.0001, startAt);
-  gainNode.gain.linearRampToValueAtTime(volume, startAt + attack);
+  gainNode.gain.linearRampToValueAtTime(volume * normalizeToneVolumeScale(volumeScale), startAt + attack);
   gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + attack + duration + release);
 
   oscillator.connect(gainNode);
@@ -39,7 +49,7 @@ const createOscillatorBurst = (audioContext, destination, {
   oscillator.stop(startAt + attack + duration + release + 0.03);
 };
 
-const scheduleOutgoingLoop = (audioContext) => {
+const scheduleOutgoingLoop = (audioContext, volumeScale = 1) => {
   const startedAt = audioContext.currentTime + 0.02;
   createOscillatorBurst(audioContext, audioContext.destination, {
     frequency: 392,
@@ -48,6 +58,7 @@ const scheduleOutgoingLoop = (audioContext) => {
     duration: 0.09,
     release: 0.08,
     volume: 0.03,
+    volumeScale,
   });
   createOscillatorBurst(audioContext, audioContext.destination, {
     frequency: 392,
@@ -56,10 +67,11 @@ const scheduleOutgoingLoop = (audioContext) => {
     duration: 0.09,
     release: 0.08,
     volume: 0.03,
+    volumeScale,
   });
 };
 
-const scheduleIncomingLoop = (audioContext) => {
+const scheduleIncomingLoop = (audioContext, volumeScale = 1) => {
   const startedAt = audioContext.currentTime + 0.02;
   createOscillatorBurst(audioContext, audioContext.destination, {
     frequency: 523.25,
@@ -67,6 +79,7 @@ const scheduleIncomingLoop = (audioContext) => {
     duration: 0.18,
     release: 0.2,
     volume: 0.045,
+    volumeScale,
   });
   createOscillatorBurst(audioContext, audioContext.destination, {
     frequency: 659.25,
@@ -74,6 +87,7 @@ const scheduleIncomingLoop = (audioContext) => {
     duration: 0.2,
     release: 0.22,
     volume: 0.04,
+    volumeScale,
   });
   createOscillatorBurst(audioContext, audioContext.destination, {
     frequency: 783.99,
@@ -81,6 +95,7 @@ const scheduleIncomingLoop = (audioContext) => {
     duration: 0.16,
     release: 0.2,
     volume: 0.03,
+    volumeScale,
   });
 };
 
@@ -124,7 +139,7 @@ const getDirectCallAudioElement = (kind) => {
   }
 };
 
-const startLoopingAudioTone = async (kind) => {
+const startLoopingAudioTone = async (kind, volumeScale = 1) => {
   if (typeof window === "undefined" || typeof Audio === "undefined") {
     return null;
   }
@@ -141,7 +156,7 @@ const startLoopingAudioTone = async (kind) => {
     }
 
     audio.loop = true;
-    audio.volume = toneConfig.volume;
+    audio.volume = Math.max(0, Math.min(1, toneConfig.volume * normalizeToneVolumeScale(volumeScale)));
     audio.currentTime = 0;
 
     await audio.play();
@@ -154,7 +169,7 @@ const startLoopingAudioTone = async (kind) => {
   }
 };
 
-const startSynthTone = async (kind = "outgoing") => {
+const startSynthTone = async (kind = "outgoing", volumeScale = 1) => {
   const audioContext = createPreferredAudioContext();
   if (!audioContext) {
     return () => {};
@@ -170,11 +185,11 @@ const startSynthTone = async (kind = "outgoing") => {
 
   const playLoop = () => {
     if (kind === "incoming") {
-      scheduleIncomingLoop(audioContext);
+      scheduleIncomingLoop(audioContext, volumeScale);
       return;
     }
 
-    scheduleOutgoingLoop(audioContext);
+    scheduleOutgoingLoop(audioContext, volumeScale);
   };
 
   playLoop();
@@ -187,8 +202,13 @@ const startSynthTone = async (kind = "outgoing") => {
   };
 };
 
-export const startDirectCallTone = async (kind = "outgoing") => {
+export const startDirectCallTone = async (kind = "outgoing", options = {}) => {
   if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const volumeScale = normalizeToneVolumeScale(options.volumeScale);
+  if (options.enabled === false || volumeScale <= 0) {
     return () => {};
   }
 
@@ -203,7 +223,7 @@ export const startDirectCallTone = async (kind = "outgoing") => {
       return synthStop || (() => {});
     }
 
-    synthStop = await startSynthTone(kind);
+    synthStop = await startSynthTone(kind, volumeScale);
     if (stopped || htmlToneActive) {
       synthStop?.();
       synthStop = null;
@@ -219,7 +239,7 @@ export const startDirectCallTone = async (kind = "outgoing") => {
     }, fallbackDelayMs);
   });
 
-  const htmlAudioStop = await startLoopingAudioTone(kind);
+  const htmlAudioStop = await startLoopingAudioTone(kind, volumeScale);
   if (htmlAudioStop) {
     htmlToneActive = true;
     stopped = false;

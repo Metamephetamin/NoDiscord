@@ -561,7 +561,7 @@ test("active voice stream chrome auto-hides after pointer inactivity", () => {
   assert.match(stageSource, /voice-room-stage__pill--live/);
   assert.match(stageSource, /VoiceStageIcon name="chat" className="voice-room-stage__hero-chat-icon"/);
   assert.match(stageSource, /кадров в секунду/);
-  assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
+  assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?background: rgba\(13, 14, 18, 0\.98\);/);
 });
 
 test("voice participant live badge uses lowercase on-air copy", () => {
@@ -746,6 +746,22 @@ test("system sound volume defaults to 80 percent for new users", () => {
   assert.match(soundVolumeSource, /: DEFAULT_SYSTEM_SOUND_VOLUME;/);
 });
 
+test("system sound controls cover app events without controlling participant audio", () => {
+  const systemSoundsSource = readRepoFile("src/utils/systemSounds.js");
+  const notificationSettingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const directCallLifecycleSource = readRepoFile("src/features/menu-main/useMenuMainDirectCallLifecycle.js");
+
+  assert.match(systemSoundsSource, /id: "shareStart"/);
+  assert.match(systemSoundsSource, /id: "shareStop"/);
+  assert.match(systemSoundsSource, /id: "directCallIncoming"/);
+  assert.match(systemSoundsSource, /id: "directCallOutgoing"/);
+  assert.match(notificationSettingsSource, /Не влияет на голоса участников/);
+  assert.match(controllerSource, /isSystemSoundEventEnabled\(type\)/);
+  assert.match(directCallLifecycleSource, /directCallIncoming/);
+  assert.match(directCallLifecycleSource, /directCallOutgoing/);
+});
+
 test("text chat location picker styles stay split from the main chat stylesheet", () => {
   const pickerSource = readRepoFile("src/components/TextChatLocationPickerModal.jsx");
   const textChatCss = readRepoFile("src/css/TextChat.css");
@@ -855,17 +871,17 @@ test("active stream chrome keeps the segmented Discord-style controls", () => {
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const mobileSource = readRepoFile("src/components/MobileVoiceRoom.jsx");
 
-  assert.doesNotMatch(stageSource, /key: "camera"[\s\S]*?label: "Включить камеру"/);
+  assert.match(stageSource, /key: "camera"[\s\S]*?label: isCameraShareActive \? "Остановить камеру" : "Включить камеру"/);
   assert.match(stageSource, /voice-room-stage__stream-toolbar-layout/);
   assert.match(stageSource, /VoiceStageIcon name="users-add"/);
   assert.match(stageSource, /voice-room-stage__stream-toolbar-center/);
-  assert.match(stageSource, /activeStage\.kind !== "local"[\s\S]*?key: "close-stage"/);
+  assert.match(stageSource, /const activeStageStopAction = activeStage\?\.kind === "local"/);
   assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;[\s\S]*?height: 58px;/);
   assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group \{[\s\S]*?min-height: 58px;/);
   assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-button--menu \{[\s\S]*?width: 82px;/);
-  assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
+  assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(13, 14, 18, 0\.98\);/);
   assert.match(stageSource, /VoiceStageIcon name="volume" className="voice-room-stage__hero-channel-icon"/);
   assert.match(stageSource, /case "leave":[\s\S]*?viewBox="0 0 24 24"[\s\S]*?fill="currentColor"/);
   assert.doesNotMatch(stageSource, /label: activeStage\.kind === "local" \? "Скрыть предпросмотр" : "Закрыть эфир"/);
@@ -890,7 +906,7 @@ test("standalone stream viewer uses Discord-style top and bottom chrome", () => 
   assert.match(viewerSource, /stream-viewer__pill--quality/);
   assert.doesNotMatch(viewerSource, />\s*На весь экран\s*</);
   assert.doesNotMatch(viewerSource, />\s*Закрыть\s*</);
-  assert.match(viewerCss, /\.stream-viewer__topbar \{[\s\S]*?top: 0;[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
+  assert.match(viewerCss, /\.stream-viewer__topbar \{[\s\S]*?top: 0;[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(13, 14, 18, 0\.98\);/);
   assert.match(viewerCss, /\.stream-viewer__control-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
   assert.match(viewerCss, /\.stream-viewer__control-group \{[\s\S]*?min-height: 58px;/);
   assert.match(viewerCss, /\.stream-viewer__control-button--menu \{[\s\S]*?width: 82px;/);
@@ -1053,7 +1069,7 @@ test("bottom profile card aligns with the text composer height and uses tighter 
   assert.match(textChatCss, /\.message-composer \{[\s\S]*?min-height: 58px;/);
   assert.match(identityRowRule, /min-height: 58px;/);
   assert.match(identityRowRule, /border-radius: 14px;/);
-  assert.match(identityRowRule, /top: 0;/);
+  assert.match(identityRowRule, /top: 7px;/);
 });
 
 test("interface accent color is customizable through appearance settings", () => {
