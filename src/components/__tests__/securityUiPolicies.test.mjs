@@ -64,18 +64,28 @@ test("media preview delete button requires delete handler", () => {
 test("shared location is reduced to a privacy cell before realtime publication", () => {
   const hookSource = readRepoFile("src/hooks/useLocationSharingPreference.js");
   const hubSource = readRepoFile("BackNoDiscord/BackNoDiscord/ChatHub.cs");
+  const userControllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/UserController.cs");
+  const friendsControllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/FriendsController.cs");
 
   assert.match(hookSource, /const LOCATION_PRIVACY_DECIMALS = 1;/);
   assert.match(hookSource, /Number\(numericValue\.toFixed\(LOCATION_PRIVACY_DECIMALS\)\)/);
   assert.match(hookSource, /normalizeSharedLocationCoordinate\(position\?\.coords\?\.latitude\)/);
   assert.match(hookSource, /formatSharedLocationCell\(latitude, longitude\)/);
   assert.match(hookSource, /invoke\?\.\("UpdateLocationCell", \{ cell: locationCell \}\)/);
+  assert.match(hookSource, /window\.localStorage\?\.removeItem\(SELF_LOCATION_STORAGE_KEY\)/);
+  assert.doesNotMatch(hookSource, /safeWriteJson\(SELF_LOCATION_STORAGE_KEY/);
   assert.doesNotMatch(hookSource, /invoke\?\.\("UpdateLocation", latitude, longitude\)/);
   assert.doesNotMatch(hubSource, /public async Task UpdateLocation\(double latitude, double longitude\)/);
   assert.match(hubSource, /public sealed record LocationCellInput\(string\? Cell\);/);
   assert.match(hubSource, /public async Task UpdateLocationCell\(LocationCellInput\? input\)/);
   assert.match(hubSource, /TryParseLocationCell\(input\?\.Cell, out var latitude, out var longitude\)/);
   assert.match(hubSource, /Math\.Round\(value, LocationPrivacyDecimals, MidpointRounding\.AwayFromZero\)/);
+  assert.doesNotMatch(hubSource, /latitude\s*=\s*safeLatitude/);
+  assert.doesNotMatch(hubSource, /longitude\s*=\s*safeLongitude/);
+  assert.doesNotMatch(userControllerSource, /latitude\s*=\s*user\.last_location_latitude/);
+  assert.doesNotMatch(userControllerSource, /longitude\s*=\s*user\.last_location_longitude/);
+  assert.doesNotMatch(friendsControllerSource, /latitude\s*=\s*canShowLocation/);
+  assert.doesNotMatch(friendsControllerSource, /longitude\s*=\s*canShowLocation/);
 });
 
 test("message timestamps render in the bottom message footer", () => {
@@ -161,10 +171,29 @@ test("text chat scroll positions persist per user and channel", () => {
 
 test("avatar crop editor exposes vertical positioning control", () => {
   const editorSource = readRepoFile("src/components/MediaFrameEditorModal.jsx");
+  const editorCss = readRepoFile("src/css/MediaFrameEditorModal.css");
 
   assert.match(editorSource, /const handleVerticalPositionChange = \(event\) => \{/);
   assert.match(editorSource, /ariaLabel="Положение аватара вверх и вниз"/);
   assert.match(editorSource, /value=\{normalizedDraftFrame\.y\}/);
+  assert.match(editorSource, />\s*Сохранить\s*</);
+  assert.match(editorCss, /\.media-frame-editor__dialog--avatar \{[\s\S]*?overflow-y: auto;/);
+  assert.match(editorCss, /\.media-frame-editor__avatar-stage \{[\s\S]*?min-height: clamp\(/);
+});
+
+test("avatar frame survives text chat profile updates", () => {
+  const mediaFramesSource = readRepoFile("src/utils/mediaFrames.js");
+  const profileCss = readRepoFile("src/css/MenuProfile.css");
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const textChatControllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+
+  assert.match(mediaFramesSource, /"--media-frame-zoom": frame\.zoom/);
+  assert.match(mediaFramesSource, /transform: "scale\(var\(--media-frame-zoom, 1\)\)"/);
+  assert.doesNotMatch(profileCss, /\.avatar-shell--speaking \.avatar \{[\s\S]*?animation:/);
+  assert.match(messageListSource, /frame=\{messageItem\.avatarFrame/);
+  assert.match(textChatControllerSource, /import \{ parseMediaFrame \} from "\.\.\/\.\.\/utils\/mediaFrames";/);
+  assert.match(textChatControllerSource, /const nextAvatarFrame = parseMediaFrame\(payload\?\.avatar_frame, payload\?\.avatarFrame\);/);
+  assert.match(textChatControllerSource, /avatarFrame: resolvedAvatarFrame/);
 });
 
 test("microphone test and auto sensitivity are wired to the voice client", () => {
@@ -302,7 +331,7 @@ test("owner role can be renamed without exposing role descriptions or permission
   assert.match(controllerSource, /string\.Equals\(existingRole\.Id, "owner", StringComparison\.Ordinal\)[\s\S]*string\.Equals\(snapshot\.OwnerId, actorUserId, StringComparison\.Ordinal\)/);
 });
 
-test("speaking indicators animate without adding profile status dots", () => {
+test("speaking indicators stay out of the bottom profile avatar", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const stageCss = readRepoFile("src/css/VoiceRoomStage.css");
   const channelCss = readRepoFile("src/css/ListChannels.css");
@@ -311,8 +340,11 @@ test("speaking indicators animate without adding profile status dots", () => {
   assert.match(`${mainCss}\n${stageCss}`, /@keyframes voice-speaking-card-pulse/);
   assert.match(`${mainCss}\n${stageCss}`, /@keyframes voice-speaking-avatar-pulse/);
   assert.match(channelCss, /@keyframes participant-speaking-avatar-pulse/);
-  assert.match(profileCss, /\.avatar-shell--speaking::after \{[\s\S]*?content: none;/);
-  assert.match(profileCss, /@keyframes profile-speaking-avatar-pulse/);
+  assert.match(channelCss, /\.participant-item--speaking \.participant-item__avatar-shell \{[\s\S]*?border-color: rgba\(86, 220, 124, 0\.8\);/);
+  assert.match(stageCss, /\.voice-room-stage__card--speaking,[\s\S]*?\.voice-room-stage__strip-card--speaking \{[\s\S]*?border-color: rgba\(80, 214, 137, 0\.72\);/);
+  assert.doesNotMatch(profileCss, /\.avatar-shell--speaking \.avatar \{[\s\S]*?animation: profile-speaking-avatar-pulse/);
+  assert.doesNotMatch(profileCss, /@keyframes profile-speaking-avatar-pulse/);
+  assert.match(profileCss, /\.menu__profile--voice-connected \.avatar-shell::after \{[\s\S]*?background: #65e48f;/);
 });
 
 test("light theme text tools menu is opaque and readable", () => {

@@ -36,6 +36,7 @@ import {
 import { normalizeVoiceMessageMetadata } from "../../utils/voiceMessages";
 import { shouldTrackIncomingUnread } from "../../utils/unreadState";
 import { isUserCurrentlyOnline } from "../../utils/menuMainModel";
+import { parseMediaFrame } from "../../utils/mediaFrames";
 
 import {
   createPinnedSnapshot,
@@ -1356,6 +1357,7 @@ export default function TextChat({
       replyToMessageId: String(messageItem?.replyToMessageId || messageItem?.ReplyToMessageId || "").trim(),
       replyToUsername: String(messageItem?.replyToUsername || messageItem?.ReplyToUsername || "").trim(),
       replyPreview: String(messageItem?.replyPreview || messageItem?.ReplyPreview || "").trim(),
+      avatarFrame: parseMediaFrame(messageItem?.avatarFrame, messageItem?.avatar_frame, messageItem?.AvatarFrame),
       encryptionState: decrypted.encryptionState,
       reactions: normalizeReactions(messageItem?.reactions),
       mentions: normalizedMentions.length
@@ -1596,7 +1598,7 @@ export default function TextChat({
     const matchedDirectTarget = directTargets.find((target) => String(target?.id || "") === userId) || null;
     const username = String(messageItem?.username || getUserName(matchedDirectTarget) || "User").trim() || "User";
     const avatarUrl = String(messageItem?.photoUrl || matchedDirectTarget?.avatar || matchedDirectTarget?.avatarUrl || "").trim();
-    const avatarFrame = matchedDirectTarget?.avatarFrame || null;
+    const avatarFrame = messageItem?.avatarFrame || messageItem?.avatar_frame || matchedDirectTarget?.avatarFrame || null;
     const backgroundUrl = String(matchedDirectTarget?.profileBackgroundUrl || matchedDirectTarget?.profile_background_url || "").trim();
     const backgroundFrame = matchedDirectTarget?.profileBackgroundFrame || matchedDirectTarget?.profile_background_frame || null;
     const profileCustomization = matchedDirectTarget?.profileCustomization || matchedDirectTarget?.profile_customization || null;
@@ -2610,6 +2612,7 @@ export default function TextChat({
       const nextLastName = String(payload?.last_name || payload?.lastName || "").trim();
       const nextNickname = String(payload?.nickname || payload?.nick_name || "").trim();
       const nextAvatar = String(payload?.avatar_url || payload?.avatarUrl || payload?.avatar || "").trim();
+      const nextAvatarFrame = parseMediaFrame(payload?.avatar_frame, payload?.avatarFrame);
       const nextUsername = nextNickname || `${nextFirstName} ${nextLastName}`.trim();
 
       setMessagesByChannel((previous) => {
@@ -2627,7 +2630,14 @@ export default function TextChat({
 
             const resolvedUsername = nextUsername || messageItem.username || "User";
             const resolvedPhotoUrl = nextAvatar || messageItem.photoUrl || "";
-            if (messageItem.username === resolvedUsername && String(messageItem.photoUrl || "") === resolvedPhotoUrl) {
+            const currentAvatarFrame = messageItem.avatarFrame || messageItem.avatar_frame || null;
+            const resolvedAvatarFrame = nextAvatarFrame || currentAvatarFrame;
+            const didAvatarFrameChange = JSON.stringify(currentAvatarFrame || null) !== JSON.stringify(resolvedAvatarFrame || null);
+            if (
+              messageItem.username === resolvedUsername
+              && String(messageItem.photoUrl || "") === resolvedPhotoUrl
+              && !didAvatarFrameChange
+            ) {
               return messageItem;
             }
 
@@ -2636,6 +2646,7 @@ export default function TextChat({
               ...messageItem,
               username: resolvedUsername,
               photoUrl: resolvedPhotoUrl,
+              avatarFrame: resolvedAvatarFrame,
             };
           });
 
@@ -2751,6 +2762,7 @@ export default function TextChat({
     const startedAt = Date.now();
     const username = String(getUserName(user) || "User").trim() || "User";
     const photoUrl = String(user?.avatarUrl || user?.avatar || "").trim();
+    const avatarFrame = parseMediaFrame(user?.avatarFrame, user?.avatar_frame);
     const createLocalEchoAttachment = (attachmentDraft, attachmentIndex = 0) => {
       const file = attachmentDraft?.file instanceof File ? attachmentDraft.file : null;
       let attachmentUrl = "";
@@ -2809,6 +2821,7 @@ export default function TextChat({
         authorUserId: currentUserId,
         username,
         photoUrl,
+        avatarFrame,
         timestamp: new Date(startedAt + index).toISOString(),
         message: descriptor.message,
         encryption: null,

@@ -187,9 +187,6 @@ public class ChatHub : Hub
         await Clients.All.SendAsync(RealtimeEvents.FriendLocationUpdated, new
         {
             userId = currentUserId,
-            latitude = safeLatitude,
-            longitude = safeLongitude,
-            locationLabel = "Местоположение",
             displayName = currentUser.DisplayName,
             updatedAt = now
         }, Context.ConnectionAborted);

@@ -183,6 +183,7 @@ const VoiceChannelList = ({
       userId,
       name: getVoiceDisplayName(memberNameByUserId.get(String(userId)) || participant.name || participant.Name || "Unknown"),
       avatar: participant.avatar || participant.Avatar || "",
+      avatarFrame: participant.avatarFrame || participant.avatar_frame || participant.AvatarFrame || null,
       isScreenSharing: Boolean(participant.isScreenSharing || participant.IsScreenSharing),
       isMicMuted: Boolean(participant.isMicMuted || participant.IsMicMuted),
       isDeafened: Boolean(participant.isDeafened || participant.IsDeafened),
@@ -341,7 +342,7 @@ const VoiceChannelList = ({
                     onContextMenu={(event) => openParticipantVolumeMenu(event, participant)}
                   >
                     <span className="participant-item__avatar-shell" aria-hidden="true">
-                      <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} />
+                      <AnimatedAvatar className="participant-item__avatar" src={participant.avatar} alt={participant.name} frame={participant.avatarFrame} />
                     </span>
                     <button
                       type="button"

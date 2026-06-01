@@ -298,9 +298,12 @@
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
+  box-sizing: border-box;
   overflow: hidden;
   border-radius: 50%;
+  border: 2px solid transparent;
   isolation: isolate;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .participant-item__avatar {
@@ -314,11 +317,10 @@
   image-rendering: -webkit-optimize-contrast;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  border: 2px solid transparent;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  transition: filter 0.15s ease;
 }
 
-.participant-item--speaking .participant-item__avatar {
+.participant-item--speaking .participant-item__avatar-shell {
   border-color: rgba(86, 220, 124, 0.8);
   box-shadow: 0 0 0 2px rgba(86, 220, 124, 0.16);
   animation: participant-speaking-avatar-pulse 0.9s ease-in-out infinite;

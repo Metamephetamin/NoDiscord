@@ -281,7 +281,7 @@ export default function MediaFrameEditorModal({
                   className="mobile-profile-screen__primary"
                   onClick={() => onConfirm?.(normalizeMediaFrame(normalizedDraftFrame))}
                 >
-                  Отправить
+                  Сохранить
                 </button>
               </div>
             </div>

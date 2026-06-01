@@ -75,10 +75,12 @@
 .media-frame-editor__dialog--avatar {
   width: min(100%, 600px);
   max-width: calc(100vw - 48px);
+  max-height: min(92vh, 820px);
   gap: 22px;
   padding: 22px 22px 18px;
   border-radius: 24px;
   background: #2a2b31;
+  overflow-y: auto;
 }
 
 .media-frame-editor__header {
@@ -123,7 +125,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 438px;
+  min-height: clamp(260px, 48vh, 438px);
   padding: 20px;
   border-radius: 16px;
   background: #1f2024;

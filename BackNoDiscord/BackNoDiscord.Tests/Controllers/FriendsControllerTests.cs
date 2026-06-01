@@ -13,7 +13,7 @@ namespace BackNoDiscord.Tests.Controllers;
 public sealed class FriendsControllerTests
 {
     [Fact]
-    public async Task GetFriends_IncludesFreshVisibleLocation()
+    public async Task GetFriends_DoesNotExposeFreshVisibleLocation()
     {
         await using var context = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -31,9 +31,10 @@ public sealed class FriendsControllerTests
 
         using var document = ToJsonDocument(result);
         var firstFriend = document.RootElement[0];
-        Assert.Equal(55.7558, firstFriend.GetProperty("latitude").GetDouble());
-        Assert.Equal(37.6173, firstFriend.GetProperty("longitude").GetDouble());
-        Assert.Equal("Последняя локация", firstFriend.GetProperty("locationLabel").GetString());
+        Assert.False(firstFriend.TryGetProperty("latitude", out _));
+        Assert.False(firstFriend.TryGetProperty("longitude", out _));
+        Assert.False(firstFriend.TryGetProperty("locationLabel", out _));
+        Assert.False(firstFriend.TryGetProperty("locationUpdatedAt", out _));
     }
 
     [Fact]
@@ -55,10 +56,10 @@ public sealed class FriendsControllerTests
 
         using var document = ToJsonDocument(result);
         var firstFriend = document.RootElement[0];
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("latitude").ValueKind);
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("longitude").ValueKind);
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("locationLabel").ValueKind);
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("locationUpdatedAt").ValueKind);
+        Assert.False(firstFriend.TryGetProperty("latitude", out _));
+        Assert.False(firstFriend.TryGetProperty("longitude", out _));
+        Assert.False(firstFriend.TryGetProperty("locationLabel", out _));
+        Assert.False(firstFriend.TryGetProperty("locationUpdatedAt", out _));
     }
 
     [Fact]
@@ -80,10 +81,10 @@ public sealed class FriendsControllerTests
 
         using var document = ToJsonDocument(result);
         var firstFriend = document.RootElement[0];
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("latitude").ValueKind);
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("longitude").ValueKind);
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("locationLabel").ValueKind);
-        Assert.Equal(JsonValueKind.Null, firstFriend.GetProperty("locationUpdatedAt").ValueKind);
+        Assert.False(firstFriend.TryGetProperty("latitude", out _));
+        Assert.False(firstFriend.TryGetProperty("longitude", out _));
+        Assert.False(firstFriend.TryGetProperty("locationLabel", out _));
+        Assert.False(firstFriend.TryGetProperty("locationUpdatedAt", out _));
     }
 
     private static JsonDocument ToJsonDocument(IActionResult result)

@@ -142,15 +142,14 @@ export function serializeMediaFrame(value, { allowNull = false } = {}) {
 export function getMediaFrameStyle(value, additionalStyle = undefined) {
   const frame = normalizeMediaFrame(value);
   const style = {
-    objectPosition: `${frame.x}% ${frame.y}%`,
-    transform: Math.abs(frame.zoom - 1) > 0.001 ? `scale(${frame.zoom})` : "scale(1)",
+    "--media-frame-x": `${frame.x}%`,
+    "--media-frame-y": `${frame.y}%`,
+    "--media-frame-zoom": frame.zoom,
+    objectPosition: "var(--media-frame-x) var(--media-frame-y)",
+    transform: "scale(var(--media-frame-zoom, 1))",
     transformOrigin: "center center",
     ...additionalStyle,
   };
-
-  if (style.transform === "scale(1)") {
-    delete style.transform;
-  }
 
   return style;
 }

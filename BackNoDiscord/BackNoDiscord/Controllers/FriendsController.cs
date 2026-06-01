@@ -816,7 +816,6 @@ public class FriendsController : ControllerBase
         var isOnline = _userPresenceService.IsOnline(friend.id.ToString());
         UserIntegrationRecord? activity = null;
         activityByUserId?.TryGetValue(friend.id, out activity);
-        var canShowLocation = _locationPrivacy.IsLocationVisible(friend, DateTimeOffset.UtcNow);
         return new
         {
             id = friend.id,
@@ -833,10 +832,6 @@ public class FriendsController : ControllerBase
             is_online = isOnline,
             presence = isOnline ? "online" : "offline",
             last_seen_at = friend.last_seen_at,
-            latitude = canShowLocation ? friend.last_location_latitude : null,
-            longitude = canShowLocation ? friend.last_location_longitude : null,
-            locationLabel = canShowLocation ? "Последняя локация" : null,
-            locationUpdatedAt = canShowLocation ? friend.last_location_updated_at : null,
             activity = isOnline ? BuildActivityPayload(activity) : null,
             directChannelId = BuildDirectChannelId(currentUserId, friend.id),
             unreadCount = Math.Clamp(unreadCount, 0, 999),

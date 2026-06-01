@@ -202,20 +202,15 @@ export default function useLocationSharingPreference({ user, apiBaseUrl = API_BA
         return;
       }
 
-      const payload = {
+      if (typeof window !== "undefined") {
+        window.localStorage?.removeItem(SELF_LOCATION_STORAGE_KEY);
+      }
+      dispatchBrowserEvent(SELF_LOCATION_UPDATED_EVENT, {
         id: userId,
         userId,
-        name: String(user?.nickname || user?.firstName || user?.first_name || "Вы").trim() || "Вы",
-        avatar: user?.avatar || user?.avatarUrl || "",
-        locationLabel: "Моё местоположение",
-        latitude,
-        longitude,
         kind: "self",
         updatedAt: new Date().toISOString(),
-      };
-
-      safeWriteJson(SELF_LOCATION_STORAGE_KEY, payload);
-      dispatchBrowserEvent(SELF_LOCATION_UPDATED_EVENT, payload);
+      });
       setStatus("");
 
       const now = Date.now();

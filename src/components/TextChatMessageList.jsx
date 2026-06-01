@@ -2472,6 +2472,7 @@ function TextChatMessageList({
                 fallback={messageAvatarFallback}
                 alt="avatar"
                 className={`msg-avatar ${pressedAvatarMessageId === String(messageItem.id) ? "msg-avatar--pressing" : ""}`}
+                frame={messageItem.avatarFrame || messageItem.avatar_frame || null}
                 loading="eager"
                 decoding="sync"
                 onContextMenu={(event) => onOpenUserContextMenu?.(event, messageItem)}
