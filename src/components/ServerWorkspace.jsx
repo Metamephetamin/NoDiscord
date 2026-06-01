@@ -2801,6 +2801,10 @@ function ServerMainComponent({
   const selectedVoiceParticipants = selectedVoiceChannel
     ? (activeVoiceParticipantsMap?.[selectedVoiceChannel.id] || activeVoiceParticipantsMap?.[selectedVoiceRuntimeId] || [])
     : [];
+  const selectedStreamOwnerName = selectedStreamParticipant?.name || "участника";
+  const selectedStreamAvatarSrc = selectedStreamParticipant?.avatar || selectedStreamParticipant?.avatarUrl || selectedStreamParticipant?.avatar_url || "";
+  const currentUserDisplayName = user?.nickname || user?.username || user?.name || user?.email || "Вы";
+  const currentUserAvatarSrc = user?.avatar || user?.avatarUrl || user?.avatar_url || "";
   const shouldShowFloatingStream = Boolean(activeServer && desktopServerPane !== "voice" && (selectedStreamUserId || hasLocalSharePreview));
   const floatingStream = shouldShowFloatingStream && selectedStreamUserId
     ? {
@@ -2920,18 +2924,40 @@ function ServerMainComponent({
             imageSrc={selectedStream?.imageSrc || ""}
             muted={!Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
             hasAudio={Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
-            title={`Трансляция ${selectedStreamParticipant?.name || "участника"}`}
+            title={`Трансляция ${selectedStreamOwnerName}`}
             subtitle="Просмотр видеопотока участника"
+            channelName={currentVoiceChannelName || selectedVoiceChannel?.name || ""}
+            ownerName={selectedStreamOwnerName}
+            avatarSrc={selectedStreamAvatarSrc}
+            streamTitle={`Экран ${selectedStreamOwnerName}`}
+            width={selectedStream?.width || 0}
+            height={selectedStream?.height || 0}
+            fps={selectedStream?.fps || 0}
             onClose={onCloseSelectedStream}
             debugInfo={selectedStreamDebugInfo}
             secondaryStream={selectedStream?.cameraStream || null}
             secondaryTitle="Камера"
+            isMicMuted={isMicMuted}
+            isSoundMuted={isSoundMuted}
+            isScreenShareActive={isScreenShareActive}
+            onToggleMic={onToggleMic}
+            onToggleSound={onToggleSound}
+            onOpenTextChat={onOpenTextChat}
+            onScreenShareAction={onScreenShareAction}
+            onLeave={onLeave}
           />
         ) : desktopServerPane === "voice" && isLocalSharePreviewVisible && hasLocalSharePreview ? (
           <ScreenShareViewer
             stream={localSharePreview?.stream || null}
             title={localSharePreviewMeta.title}
             subtitle={localSharePreviewMeta.subtitle}
+            channelName={currentVoiceChannelName || selectedVoiceChannel?.name || ""}
+            ownerName={currentUserDisplayName}
+            avatarSrc={currentUserAvatarSrc}
+            streamTitle={`${localSharePreview?.mode === "camera" ? "Камера" : "Экран"} ${currentUserDisplayName}`}
+            width={localSharePreview?.stream?.getVideoTracks?.()[0]?.getSettings?.().width || 0}
+            height={localSharePreview?.stream?.getVideoTracks?.()[0]?.getSettings?.().height || 0}
+            fps={localSharePreview?.stream?.getVideoTracks?.()[0]?.getSettings?.().frameRate || 0}
             onAction={localSharePreview?.mode === "camera" ? onStopCameraShare : onStopScreenShare}
             actionLabel={localSharePreview?.mode === "camera" ? "Остановить камеру" : "Остановить стрим"}
             actionVariant="danger"
@@ -2941,6 +2967,14 @@ function ServerMainComponent({
             secondaryStream={localSharePreview?.secondaryStream || null}
             secondaryTitle={localSharePreview?.secondaryTitle || "Камера"}
             secondaryMirrored={localSharePreview?.secondaryMode === "camera"}
+            isMicMuted={isMicMuted}
+            isSoundMuted={isSoundMuted}
+            isScreenShareActive={isScreenShareActive}
+            onToggleMic={onToggleMic}
+            onToggleSound={onToggleSound}
+            onOpenTextChat={onOpenTextChat}
+            onScreenShareAction={onScreenShareAction}
+            onLeave={onLeave}
           />
         ) : isVoicePreviewVisible ? (
           <VoiceChannelPreview

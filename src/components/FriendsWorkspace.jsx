@@ -1409,6 +1409,15 @@ export const FriendsMain = ({
     currentDirectFriend &&
     selectedStreamUserId &&
     String(selectedStreamUserId) === String(currentDirectFriend.id || "");
+  const directStreamOwnerName = selectedStreamParticipant?.name || (currentDirectFriend ? getDisplayName(currentDirectFriend) : "участника");
+  const directStreamAvatarSrc =
+    selectedStreamParticipant?.avatar
+    || selectedStreamParticipant?.avatarUrl
+    || selectedStreamParticipant?.avatar_url
+    || currentDirectFriend?.avatar
+    || currentDirectFriend?.avatarUrl
+    || currentDirectFriend?.avatar_url
+    || "";
 
   const currentConversationMemberIds = useMemo(
     () => new Set((currentConversationTarget?.members || []).map((member) => String(member?.id || ""))),
@@ -2194,8 +2203,15 @@ export const FriendsMain = ({
                 videoSrc={selectedStream?.videoSrc || ""}
                 imageSrc={selectedStream?.imageSrc || ""}
                 muted={!Boolean(selectedStream?.hasAudio || selectedStream?.stream?.getAudioTracks?.().length)}
-                title={`Трансляция ${selectedStreamParticipant?.name || getDisplayName(currentDirectFriend)}`}
+                title={`Трансляция ${directStreamOwnerName}`}
                 subtitle="Личный звонок"
+                channelName="Личный звонок"
+                ownerName={directStreamOwnerName}
+                avatarSrc={directStreamAvatarSrc}
+                streamTitle={`Экран ${directStreamOwnerName}`}
+                width={selectedStream?.width || 0}
+                height={selectedStream?.height || 0}
+                fps={selectedStream?.fps || 0}
                 onClose={onCloseSelectedStream}
                 debugInfo={selectedStreamDebugInfo}
               />

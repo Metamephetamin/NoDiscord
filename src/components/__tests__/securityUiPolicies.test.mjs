@@ -873,6 +873,32 @@ test("active stream chrome keeps the segmented Discord-style controls", () => {
   assert.match(mobileSource, /aria-label=\{isCameraShareActive \? "Управление камерой" : "Открыть камеру"\}/);
 });
 
+test("standalone stream viewer uses Discord-style top and bottom chrome", () => {
+  const viewerSource = readRepoFile("src/components/ScreenShareViewer.jsx");
+  const viewerCss = readRepoFile("src/css/ScreenShareViewer.css");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+
+  assert.match(viewerSource, /stream-viewer__topbar/);
+  assert.match(viewerSource, /stream-viewer__stream-meta/);
+  assert.match(viewerSource, /stream-viewer__control-layout/);
+  assert.match(viewerSource, /stream-viewer__control-center/);
+  assert.match(viewerSource, /stream-viewer__control-group/);
+  assert.match(viewerSource, /stream-viewer__control-button--menu/);
+  assert.match(viewerSource, /label=\{isMicMuted \? "Включить микрофон" : "Выключить микрофон"\}/);
+  assert.match(viewerSource, /label=\{isScreenShareActive \? "Остановить трансляцию экрана" : "Начать трансляцию экрана"\}/);
+  assert.match(viewerSource, /stream-viewer__pill--quality/);
+  assert.doesNotMatch(viewerSource, />\s*На весь экран\s*</);
+  assert.doesNotMatch(viewerSource, />\s*Закрыть\s*</);
+  assert.match(viewerCss, /\.stream-viewer__topbar \{[\s\S]*?top: 0;[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(0, 0, 0, 0\.88\);/);
+  assert.match(viewerCss, /\.stream-viewer__control-layout \{[\s\S]*?grid-template-columns: minmax\(44px, 1fr\) auto minmax\(44px, 1fr\);/);
+  assert.match(viewerCss, /\.stream-viewer__control-group \{[\s\S]*?min-height: 58px;/);
+  assert.match(viewerCss, /\.stream-viewer__control-button--menu \{[\s\S]*?width: 82px;/);
+  assert.match(workspaceSource, /channelName=\{currentVoiceChannelName \|\| selectedVoiceChannel\?\.name \|\| ""\}/);
+  assert.match(workspaceSource, /onToggleMic=\{onToggleMic\}/);
+  assert.match(workspaceSource, /onScreenShareAction=\{onScreenShareAction\}/);
+  assert.match(workspaceSource, /onLeave=\{onLeave\}/);
+});
+
 test("clicking own stream opens local preview instead of remote loading state", () => {
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const menuControllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
