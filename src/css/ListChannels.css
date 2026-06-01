@@ -131,12 +131,14 @@
   flex: 0 0 auto;
   margin-left: auto;
   width: 76px;
-  color: #61d485;
+  color: color-mix(in srgb, var(--app-accent) 86%, #0f1115);
   text-align: end;
-  font-size: 13px;
-  font-weight: 750;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  transform: translateX(5px);
 }
 
 .voice-channel__timer + .voice-channel__count {
@@ -522,7 +524,7 @@ html[data-ui-theme="light"] .voice-channel__count {
 }
 
 html[data-ui-theme="light"] .voice-channel__timer {
-  color: #138a4c;
+  color: color-mix(in srgb, var(--app-accent) 76%, #0f172a);
 }
 
 html[data-ui-theme="light"] .participant-item {

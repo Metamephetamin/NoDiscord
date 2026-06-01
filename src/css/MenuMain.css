@@ -2818,27 +2818,37 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   grid-column: 2 / 5;
   display: flex;
   align-items: center;
-  min-height: 35px;
+  min-height: 42px;
   overflow: hidden;
-  margin-top: 5px;
 }
 
 .profile__connection-line {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 5px;
+  row-gap: 2px;
   font-size: 14px;
-  line-height: 1.2;
+  line-height: 1.18;
   transform: translateY(-1px);
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .profile__connection-label {
-  color: #7ce08d;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--app-accent) 88%, #ffffff);
   font-weight: 700;
 }
 
 .profile__connection-channel {
+  flex: 1 1 92px;
+  min-width: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   color: #f3f5ff;
   font-weight: 600;
 }

@@ -1970,7 +1970,7 @@ export const NotificationsSettings = ({
       </div>
     </div>
 
-    <section className="voice-settings-card">
+    <section className="voice-settings-card voice-settings-card--notifications">
       <div className="voice-toggle-row">
         <div>
           <strong>Личные чаты</strong>

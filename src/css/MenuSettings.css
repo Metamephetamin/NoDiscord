@@ -688,6 +688,73 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
+.voice-settings-card--notifications {
+  padding: 24px 26px 28px;
+}
+
+.voice-settings-card--notifications .voice-toggle-row {
+  gap: 22px;
+  padding: 18px 0;
+}
+
+.voice-settings-card--notifications .voice-toggle-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.voice-settings-card--notifications .voice-toggle-row strong {
+  margin-bottom: 0;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.voice-settings-card--notifications .voice-toggle-row span {
+  color: #8f9ab2;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.voice-settings-card--notifications .voice-settings-field-grid {
+  gap: 18px 42px;
+  margin: 12px 0 8px;
+}
+
+.voice-settings-card--notifications .voice-settings-field {
+  gap: 10px;
+}
+
+.voice-settings-card--notifications .voice-settings-field--stacked,
+.voice-settings-card--notifications .voice-settings-field--volume {
+  margin-top: 20px;
+}
+
+.voice-settings-card--notifications .voice-settings-field > span {
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.voice-settings-card--notifications .voice-settings-select--compact {
+  max-width: none;
+  min-height: 48px;
+  font-size: 15px;
+}
+
+.voice-settings-card--notifications .voice-settings-caption {
+  color: #8f9ab2;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.voice-settings-card--notifications .settings-shell__actions {
+  margin-top: 8px;
+}
+
 .voice-settings-card--profile {
   overflow: hidden;
   padding: 0;
