@@ -239,6 +239,7 @@ export default function ScreenShareViewer({
   onToggleMic,
   onToggleSound,
   onOpenTextChat,
+  onOpenSoundboard,
   onScreenShareAction,
   onOpenCamera,
   onStopCameraShare,
@@ -492,7 +493,7 @@ export default function ScreenShareViewer({
               </div>
             ) : null}
 
-            {onScreenShareAction || onOpenTextChat || onAction || hasVideo ? (
+            {onScreenShareAction || onOpenSoundboard || onOpenTextChat || onAction || hasVideo ? (
               <div className="stream-viewer__control-group" role="toolbar" aria-label="Управление трансляцией">
                 <StreamViewerControlButton
                   icon="screen"
@@ -503,14 +504,9 @@ export default function ScreenShareViewer({
                   disabled={!onScreenShareAction}
                 />
                 <StreamViewerControlButton
-                  icon="activities"
-                  label="Активности"
-                  onClick={onOpenTextChat || (() => {})}
-                />
-                <StreamViewerControlButton
                   icon="effects"
                   label="Реакции"
-                  onClick={() => {}}
+                  onClick={onOpenSoundboard || onOpenTextChat || (() => {})}
                 />
                 <StreamViewerControlButton
                   icon="more"

@@ -555,17 +555,24 @@
 
 .participant-live-badge {
   flex: 0 0 auto;
-  min-height: 20px;
-  padding: 2px 8px;
+  box-sizing: border-box;
+  width: 64px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
   border: 0;
   border-radius: 999px;
   background: #d92d20;
   color: #ffffff;
-  font-size: 11px;
-  font-weight: 760;
-  line-height: 16px;
+  font-size: 13px;
+  font-weight: 820;
+  line-height: 1;
   letter-spacing: 0;
   text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
 }
 

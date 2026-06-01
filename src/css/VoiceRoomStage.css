@@ -477,9 +477,10 @@
 .voice-room-stage__toolbar-split-divider {
   width: 1px;
   flex: 0 0 1px;
-  align-self: stretch;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  align-self: center;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: none;
 }
 
 .voice-room-stage__toolbar-group > :is(.voice-room-stage__toolbar-button, .voice-room-stage__toolbar-split):first-child,
@@ -497,7 +498,7 @@
 .voice-room-stage__toolbar-button + .voice-room-stage__toolbar-button,
 .voice-room-stage__toolbar-split + .voice-room-stage__toolbar-button,
 .voice-room-stage__toolbar-button + .voice-room-stage__toolbar-split {
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.07);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.035);
 }
 
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button:hover {

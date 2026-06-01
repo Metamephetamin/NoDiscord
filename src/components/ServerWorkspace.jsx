@@ -2824,6 +2824,7 @@ function ServerMainComponent({
   onOpenCamera,
   onOpenCameraSettings,
   onOpenVoiceSettings,
+  onOpenSoundboard,
   onLeave,
   onJoinVoiceChannel,
   onCreateForumPost,
@@ -2959,6 +2960,7 @@ function ServerMainComponent({
             onOpenCamera={onOpenCamera}
             onOpenCameraSettings={onOpenCameraSettings}
             onOpenVoiceSettings={onOpenVoiceSettings}
+            onOpenSoundboard={onOpenSoundboard}
             onLeave={onLeave}
           />
           </Suspense>
@@ -2990,6 +2992,7 @@ function ServerMainComponent({
             onToggleMic={onToggleMic}
             onToggleSound={onToggleSound}
             onOpenTextChat={onOpenTextChat}
+            onOpenSoundboard={onOpenSoundboard}
             onScreenShareAction={onScreenShareAction}
             onOpenCamera={onOpenCamera}
             onStopCameraShare={onStopCameraShare}
@@ -3025,6 +3028,7 @@ function ServerMainComponent({
             onToggleMic={onToggleMic}
             onToggleSound={onToggleSound}
             onOpenTextChat={onOpenTextChat}
+            onOpenSoundboard={onOpenSoundboard}
             onScreenShareAction={onScreenShareAction}
             onOpenCamera={onOpenCamera}
             onStopCameraShare={onStopCameraShare}
@@ -3133,6 +3137,7 @@ function areServerMainPropsEqual(previousProps, nextProps) {
     && previousProps.onOpenCamera === nextProps.onOpenCamera
     && previousProps.onOpenCameraSettings === nextProps.onOpenCameraSettings
     && previousProps.onOpenVoiceSettings === nextProps.onOpenVoiceSettings
+    && previousProps.onOpenSoundboard === nextProps.onOpenSoundboard
     && previousProps.onLeave === nextProps.onLeave
     && previousProps.onJoinVoiceChannel === nextProps.onJoinVoiceChannel
     && previousProps.onCreateForumPost === nextProps.onCreateForumPost

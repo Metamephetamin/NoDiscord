@@ -12,6 +12,7 @@ import {
   ServerToastStack,
   SettingsOverlay,
 } from "../../components/MenuMainOverlays";
+import SoundboardPanel from "../../components/SoundboardPanel";
 import {
   DEFAULT_SERVER_ICON,
 } from "../../utils/media";
@@ -120,6 +121,18 @@ export default function MenuMainOverlayLayer({
   setQuickSwitcherQuery,
   handleQuickSwitcherSelect,
   closeQuickSwitcher,
+  soundboardOpen,
+  soundboardInputRef,
+  soundboardSounds,
+  soundboardQuery,
+  soundboardStatus,
+  soundboardActiveSoundId,
+  setSoundboardQuery,
+  handleSoundboardUpload,
+  playSoundboardSound,
+  stopSoundboardSound,
+  removeSoundboardSound,
+  closeSoundboard,
   directCallState,
   directCallHistory,
   isMicMuted,
@@ -199,6 +212,23 @@ export default function MenuMainOverlayLayer({
         onQueryChange={setQuickSwitcherQuery}
         onSelectIndex={setQuickSwitcherSelectedIndex}
         onSelect={handleQuickSwitcherSelect}
+      />
+
+      <SoundboardPanel
+        open={soundboardOpen}
+        query={soundboardQuery}
+        sounds={soundboardSounds}
+        activeSoundId={soundboardActiveSoundId}
+        status={soundboardStatus}
+        inputRef={soundboardInputRef}
+        onQueryChange={setSoundboardQuery}
+        onUpload={handleSoundboardUpload}
+        onPlay={playSoundboardSound}
+        onRemove={removeSoundboardSound}
+        onClose={() => {
+          closeSoundboard?.();
+          stopSoundboardSound?.();
+        }}
       />
 
       {showDirectCallOverlay ? (

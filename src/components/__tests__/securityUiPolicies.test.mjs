@@ -723,6 +723,9 @@ test("voice participant live badge uses lowercase on-air copy", () => {
   assert.doesNotMatch(voiceChannelSource, />\s*Стрим\s*<\/button>/);
   assert.match(listCss, /\.participant-live-badge \{[\s\S]*?text-transform: none;/);
   assert.match(listCss, /\.participant-live-badge \{[\s\S]*?letter-spacing: 0;/);
+  assert.match(listCss, /\.participant-live-badge \{[\s\S]*?width: 64px;[\s\S]*?height: 20px;/);
+  assert.match(listCss, /\.participant-live-badge \{[\s\S]*?font-size: 13px;/);
+  assert.match(listCss, /\.participant-live-badge \{[\s\S]*?overflow: hidden;[\s\S]*?white-space: nowrap;/);
 });
 
 test("voice channel active card keeps participants outside the highlight and exposes bounded status", () => {
@@ -1044,6 +1047,7 @@ test("active stream chrome keeps the segmented Discord-style controls", () => {
   assert.match(stageSource, /onMenuClick: onOpenVoiceSettings/);
   assert.match(stageSource, /onMenuClick: onOpenCameraSettings/);
   assert.match(stageSource, /onMenuClick: onOpenScreenShareSettings/);
+  assert.match(stageSource, /key: "effects"[\s\S]*?onClick: onOpenSoundboard/);
   assert.match(stageSource, /renderFullscreenButton\("voice-room-stage__toolbar-button voice-room-stage__toolbar-button--ghost"\)/);
   assert.match(stageCss, /\.voice-room-stage--active-stream \{[\s\S]*?gap: 0;[\s\S]*?padding: 0;/);
   assert.match(stageCss, /\.voice-room-stage--active-stream \.voice-room-stage__hero \{[\s\S]*?width: 100%;[\s\S]*?height: 100%;/);
@@ -1051,7 +1055,7 @@ test("active stream chrome keeps the segmented Discord-style controls", () => {
   assert.match(stageCss, /\.voice-room-stage__stream-toolbar-center > \.voice-room-stage__toolbar-button--danger \{[\s\S]*?width: 78px;[\s\S]*?height: 58px;/);
   assert.match(stageCss, /\.voice-room-stage__hero-controls \.voice-room-stage__toolbar-group \{[\s\S]*?min-height: 58px;/);
   assert.match(stageCss, /\.voice-room-stage__toolbar-split \{[\s\S]*?width: 82px;/);
-  assert.match(stageCss, /\.voice-room-stage__toolbar-split-divider \{[\s\S]*?width: 1px;[\s\S]*?background: rgba\(255, 255, 255, 0\.12\);/);
+  assert.match(stageCss, /\.voice-room-stage__toolbar-split-divider \{[\s\S]*?width: 1px;[\s\S]*?background: rgba\(255, 255, 255, 0\.055\);[\s\S]*?box-shadow: none;/);
   assert.doesNotMatch(stageSource, /voice-room-stage__hero-person/);
   assert.doesNotMatch(stageCss, /\.voice-room-stage__hero-person/);
   assert.match(stageCss, /\.voice-room-stage__hero-top \{[\s\S]*?min-height: 52px;[\s\S]*?background: rgba\(13, 14, 18, 0\.98\);/);
@@ -1074,12 +1078,40 @@ test("voice stage idle toolbar matches stream controls without activities shortc
   assert.match(idleToolbarSource, /key: "mic"[\s\S]*?menuLabel: "Настройки микрофона"[\s\S]*?onMenuClick: onOpenVoiceSettings/);
   assert.match(idleToolbarSource, /key: "camera"[\s\S]*?menuLabel: "Настройки камеры"[\s\S]*?onMenuClick: onOpenCameraSettings/);
   assert.match(idleToolbarSource, /key: "screen"[\s\S]*?menuLabel: "Настройки трансляции"[\s\S]*?onMenuClick: onOpenScreenShareSettings/);
-  assert.match(idleToolbarSource, /key: "effects"[\s\S]*?onClick: onOpenTextChat/);
+  assert.match(idleToolbarSource, /key: "effects"[\s\S]*?onClick: onOpenSoundboard/);
   assert.match(idleToolbarSource, /key: "more"[\s\S]*?onClick: onOpenVoiceSettings/);
   assert.doesNotMatch(idleToolbarSource, /key: "activities"/);
   assert.doesNotMatch(idleToolbarSource, /key: "headphones"/);
   assert.match(stageCss, /\.voice-room-stage__toolbar-group \{[\s\S]*?gap: 0;[\s\S]*?min-height: 58px;/);
   assert.match(stageCss, /\.voice-room-stage__toolbar-split \{[\s\S]*?width: 82px;/);
+});
+
+test("voice stage soundboard panel uploads short sounds and plays one at a time", () => {
+  const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const overlaySource = readRepoFile("src/features/menu-main/MenuMainOverlayLayer.jsx");
+  const hookSource = readRepoFile("src/features/menu-main/useMenuMainSoundboard.js");
+  const panelSource = readRepoFile("src/components/SoundboardPanel.jsx");
+  const panelCss = readRepoFile("src/css/SoundboardPanel.css");
+  const viewerSource = readRepoFile("src/components/ScreenShareViewer.jsx");
+
+  assert.match(stageSource, /onOpenSoundboard/);
+  assert.match(workspaceSource, /onOpenSoundboard=\{onOpenSoundboard\}/);
+  assert.match(controllerSource, /useMenuMainSoundboard\(\{[\s\S]*?user,[\s\S]*?systemSoundVolumeRatio/);
+  assert.match(controllerSource, /const stableOpenSoundboard = useStableEvent\(\(\) => setSoundboardOpen\(true\)\)/);
+  assert.match(overlaySource, /<SoundboardPanel[\s\S]*?open=\{soundboardOpen\}/);
+  assert.match(hookSource, /const SOUNDBOARD_MAX_DURATION_SECONDS = 20;/);
+  assert.match(hookSource, /audio\.duration > SOUNDBOARD_MAX_DURATION_SECONDS/);
+  assert.match(hookSource, /activeAudioRef\.current\.pause\(\)/);
+  assert.match(hookSource, /activeAudioRef\.current\.currentTime = 0/);
+  assert.match(panelSource, /placeholder="Найдите идеальный звук"/);
+  assert.match(panelSource, /accept="audio\/mpeg,audio\/wav,audio\/ogg,audio\/mp4,audio\/webm,audio\/\*"/);
+  assert.match(panelSource, /Загрузить звук/);
+  assert.match(panelCss, /\.soundboard-panel__grid \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(viewerSource, /onOpenSoundboard/);
+  assert.match(viewerSource, /icon="effects"[\s\S]*?onClick=\{onOpenSoundboard \|\| onOpenTextChat \|\| \(\(\) => \{\}\)\}/);
+  assert.doesNotMatch(viewerSource, /icon="activities"[\s\S]*?label="Активности"/);
 });
 
 test("standalone stream viewer uses Discord-style top and bottom chrome", () => {

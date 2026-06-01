@@ -80,6 +80,7 @@ import useMenuMainNavigation from "./useMenuMainNavigation";
 import useMenuMainNotificationSound from "./useMenuMainNotificationSound";
 import useMenuMainQrScanner from "./useMenuMainQrScanner";
 import useMenuMainSelfVoiceStateSync from "./useMenuMainSelfVoiceStateSync";
+import useMenuMainSoundboard from "./useMenuMainSoundboard";
 import useMenuMainServerInviteFlow, { useMenuMainServerInvitePermissions } from "./useMenuMainServerInviteFlow";
 import useMenuMainTotpSettings from "./useMenuMainTotpSettings";
 import useMenuMainVoiceProcessing from "./useMenuMainVoiceProcessing";
@@ -852,6 +853,22 @@ export default function MenuMain({
     notificationSoundCustomNameStorageKey,
     systemSoundVolumeStorageKey,
     systemSoundEventsStorageKey,
+  });
+  const [soundboardOpen, setSoundboardOpen] = useState(false);
+  const {
+    soundboardInputRef,
+    filteredSoundboardSounds,
+    soundboardQuery,
+    setSoundboardQuery,
+    soundboardStatus,
+    soundboardActiveSoundId,
+    handleSoundboardUpload,
+    playSoundboardSound,
+    stopSoundboardSound,
+    removeSoundboardSound,
+  } = useMenuMainSoundboard({
+    user,
+    systemSoundVolumeRatio,
   });
   const {
     deviceSessions,
@@ -6320,6 +6337,7 @@ export default function MenuMain({
   const stableOpenCameraModal = useStableEvent(openCameraModal);
   const stableHandleCameraAction = useStableEvent(handleCameraAction);
   const stableOpenVoiceSettings = useStableEvent(() => openSettingsPanel("voice_video"));
+  const stableOpenSoundboard = useStableEvent(() => setSoundboardOpen(true));
   const stableLeaveVoiceChannel = useStableEvent(leaveVoiceChannel);
   const stableJoinVoiceChannel = useStableEvent(joinVoiceChannel);
   const stableCreateForumPost = useStableEvent(createForumPost);
@@ -7190,6 +7208,7 @@ export default function MenuMain({
       onOpenCamera={stableHandleCameraAction}
       onOpenCameraSettings={stableOpenCameraModal}
       onOpenVoiceSettings={stableOpenVoiceSettings}
+      onOpenSoundboard={stableOpenSoundboard}
       onLeave={stableLeaveVoiceChannel}
       onJoinVoiceChannel={stableJoinVoiceChannel}
       onCreateForumPost={stableCreateForumPost}
@@ -7661,6 +7680,21 @@ export default function MenuMain({
       setQuickSwitcherQuery={setQuickSwitcherQuery}
       handleQuickSwitcherSelect={handleQuickSwitcherSelect}
       closeQuickSwitcher={closeQuickSwitcher}
+      soundboardOpen={soundboardOpen}
+      soundboardInputRef={soundboardInputRef}
+      soundboardSounds={filteredSoundboardSounds}
+      soundboardQuery={soundboardQuery}
+      soundboardStatus={soundboardStatus}
+      soundboardActiveSoundId={soundboardActiveSoundId}
+      setSoundboardQuery={setSoundboardQuery}
+      handleSoundboardUpload={handleSoundboardUpload}
+      playSoundboardSound={playSoundboardSound}
+      stopSoundboardSound={stopSoundboardSound}
+      removeSoundboardSound={removeSoundboardSound}
+      closeSoundboard={() => {
+        setSoundboardOpen(false);
+        stopSoundboardSound();
+      }}
       directCallState={directCallState}
       directCallHistory={directCallHistory}
       isMicMuted={isMicMuted}

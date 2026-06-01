@@ -628,6 +628,7 @@ export default function VoiceRoomStage({
   onOpenCamera,
   onOpenCameraSettings,
   onOpenVoiceSettings,
+  onOpenSoundboard,
   onLeave,
   isJoining = false,
   pendingParticipant = null,
@@ -1154,7 +1155,7 @@ export default function VoiceRoomStage({
                   key: "effects",
                   icon: "effects",
                   label: "Реакции",
-                  onClick: onOpenTextChat,
+                  onClick: onOpenSoundboard,
                 })}
                 {renderToolbarButton({
                   key: "more",
@@ -1237,7 +1238,7 @@ export default function VoiceRoomStage({
               key: "effects",
               icon: "effects",
               label: "Реакции",
-              onClick: onOpenTextChat,
+              onClick: onOpenSoundboard,
             })}
             {renderToolbarButton({
               key: "more",
