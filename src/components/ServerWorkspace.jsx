@@ -1,6 +1,5 @@
 import { Suspense, lazy, memo, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
-import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
@@ -19,6 +18,8 @@ import "../css/ServerWorkspace.css";
 
 const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomStage"));
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
+const loadScreenShareViewer = () => recoverChunkImport(() => import("./ScreenShareViewer"));
+const ScreenShareViewer = lazy(loadScreenShareViewer);
 const EMPTY_CHANNEL_LIST = Object.freeze([]);
 const DEFAULT_TEXT_CATEGORY_NAME = "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
 const DEFAULT_VOICE_CATEGORY_NAME = "\u0413\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
@@ -2838,6 +2839,12 @@ function ServerMainComponent({
     }
   }, [currentVoiceChannelName, desktopServerPane, selectedVoiceChannel?.id]);
 
+  useEffect(() => {
+    if (desktopServerPane === "voice" && (selectedStreamUserId || (isLocalSharePreviewVisible && hasLocalSharePreview))) {
+      void loadScreenShareViewer();
+    }
+  }, [desktopServerPane, hasLocalSharePreview, isLocalSharePreviewVisible, selectedStreamUserId]);
+
   return (
     <main className="chat__wrapper chat__wrapper--servers">
       <div className={`chat__box chat__box--servers ${isVoiceStageVisible ? "chat__box--voice-stage" : ""}`}>
@@ -2918,6 +2925,7 @@ function ServerMainComponent({
           />
           </Suspense>
         ) : desktopServerPane === "voice" && selectedStreamUserId ? (
+          <Suspense fallback={null}>
           <ScreenShareViewer
             stream={selectedStream?.stream || null}
             videoSrc={selectedStream?.videoSrc || ""}
@@ -2946,7 +2954,9 @@ function ServerMainComponent({
             onScreenShareAction={onScreenShareAction}
             onLeave={onLeave}
           />
+          </Suspense>
         ) : desktopServerPane === "voice" && isLocalSharePreviewVisible && hasLocalSharePreview ? (
+          <Suspense fallback={null}>
           <ScreenShareViewer
             stream={localSharePreview?.stream || null}
             title={localSharePreviewMeta.title}
@@ -2976,6 +2986,7 @@ function ServerMainComponent({
             onScreenShareAction={onScreenShareAction}
             onLeave={onLeave}
           />
+          </Suspense>
         ) : isVoicePreviewVisible ? (
           <VoiceChannelPreview
             channel={selectedVoiceChannel}

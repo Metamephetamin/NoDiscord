@@ -1,15 +1,16 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
+import { Suspense, lazy } from "react";
 import "leaflet/dist/leaflet.css";
 import "../css/FriendsWorkspace.css";
 import "../css/ProfileStore.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { DirectCallOverlayView } from "./MenuMainOverlays";
-import ScreenShareViewer from "./ScreenShareViewer";
 import TextChat from "./TextChat";
 import chatConnection from "../SignalR/ChatConnect";
 import { REALTIME_EVENTS } from "../realtime/realtimeEvents";
 import { API_BASE_URL } from "../config/runtime";
+import { recoverChunkImport } from "../utils/chunkLoadRecovery";
 import {
   LOCATION_SHARING_PREFERENCE_EVENT,
   SELF_LOCATION_UPDATED_EVENT,
@@ -32,6 +33,8 @@ import {
 
 const PROFILE_STORE_ENABLED = false;
 const MAP_LOCATION_COORDINATE_EPSILON = 0.00001;
+const loadScreenShareViewer = () => recoverChunkImport(() => import("./ScreenShareViewer"));
+const ScreenShareViewer = lazy(loadScreenShareViewer);
 
 const hasMeaningfulMapLocationChange = (current, next) => {
   if (!current) {
@@ -1419,6 +1422,12 @@ export const FriendsMain = ({
     || currentDirectFriend?.avatar_url
     || "";
 
+  useEffect(() => {
+    if (isWatchingCurrentDirectStream) {
+      void loadScreenShareViewer();
+    }
+  }, [isWatchingCurrentDirectStream]);
+
   const currentConversationMemberIds = useMemo(
     () => new Set((currentConversationTarget?.members || []).map((member) => String(member?.id || ""))),
     [currentConversationTarget?.members]
@@ -2198,6 +2207,7 @@ export const FriendsMain = ({
                 <span>{directBlockNotice.detail}</span>
               </div>
             ) : isWatchingCurrentDirectStream ? (
+              <Suspense fallback={null}>
               <ScreenShareViewer
                 stream={selectedStream?.stream || null}
                 videoSrc={selectedStream?.videoSrc || ""}
@@ -2215,6 +2225,7 @@ export const FriendsMain = ({
                 onClose={onCloseSelectedStream}
                 debugInfo={selectedStreamDebugInfo}
               />
+              </Suspense>
             ) : (
               <TextChat
                 resolvedChannelId={currentConversationTarget ? currentConversationChannelId : currentDirectChannelId}

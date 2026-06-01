@@ -877,6 +877,7 @@ test("standalone stream viewer uses Discord-style top and bottom chrome", () => 
   const viewerSource = readRepoFile("src/components/ScreenShareViewer.jsx");
   const viewerCss = readRepoFile("src/css/ScreenShareViewer.css");
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
 
   assert.match(viewerSource, /stream-viewer__topbar/);
   assert.match(viewerSource, /stream-viewer__stream-meta/);
@@ -897,6 +898,12 @@ test("standalone stream viewer uses Discord-style top and bottom chrome", () => 
   assert.match(workspaceSource, /onToggleMic=\{onToggleMic\}/);
   assert.match(workspaceSource, /onScreenShareAction=\{onScreenShareAction\}/);
   assert.match(workspaceSource, /onLeave=\{onLeave\}/);
+  assert.doesNotMatch(workspaceSource, /import ScreenShareViewer from "\.\/ScreenShareViewer";/);
+  assert.match(workspaceSource, /const loadScreenShareViewer = \(\) => recoverChunkImport\(\(\) => import\("\.\/ScreenShareViewer"\)\);/);
+  assert.match(workspaceSource, /const ScreenShareViewer = lazy\(loadScreenShareViewer\);/);
+  assert.match(workspaceSource, /<Suspense fallback=\{null\}>\s*<ScreenShareViewer/);
+  assert.doesNotMatch(friendsSource, /import ScreenShareViewer from "\.\/ScreenShareViewer";/);
+  assert.match(friendsSource, /const loadScreenShareViewer = \(\) => recoverChunkImport\(\(\) => import\("\.\/ScreenShareViewer"\)\);/);
 });
 
 test("clicking own stream opens local preview instead of remote loading state", () => {
