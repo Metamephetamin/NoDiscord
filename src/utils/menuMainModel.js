@@ -1,5 +1,6 @@
 ﻿import { DEFAULT_SERVER_ICON, resolveStaticAssetUrl } from "./media";
 import { normalizeMediaFrame, parseMediaFrame } from "./mediaFrames";
+import { normalizeVoiceChannelStatus } from "./voiceChannelStatus";
 import { API_URL } from "../config/runtime";
 import { getStoredUser } from "./auth";
 export const SERVERS_STORAGE_KEY = "nd_servers_v2";
@@ -597,6 +598,7 @@ export const normalizeChannels = (channels, type) => {
       normalizedChannel.userLimit = Math.min(99, Math.max(0, Number(channel?.userLimit || 0)));
       normalizedChannel.videoQuality = String(channel?.videoQuality || "auto");
       normalizedChannel.region = String(channel?.region || "auto");
+      normalizedChannel.status = normalizeVoiceChannelStatus(channel?.status ?? channel?.Status ?? "");
     }
 
     normalizedChannel.ageRestricted = Boolean(channel?.ageRestricted);

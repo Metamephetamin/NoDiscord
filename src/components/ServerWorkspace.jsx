@@ -2260,6 +2260,7 @@ export const ServersSidebar = memo(({
           onPrewarmVoiceChannel?.(channelId);
         }}
         onRenameChannel={onOpenChannelSettings}
+        onUpdateChannelStatus={(channelId, status) => onUpdateChannelSettings?.("voice", channelId, { status })}
         liveUserIds={liveUserIds}
         speakingUserIds={speakingUserIds}
         watchedStreamUserId={watchedStreamUserId}

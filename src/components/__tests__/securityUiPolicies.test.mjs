@@ -574,6 +574,28 @@ test("voice participant live badge uses lowercase on-air copy", () => {
   assert.match(listCss, /\.participant-live-badge \{[\s\S]*?letter-spacing: 0;/);
 });
 
+test("voice channel active card keeps participants outside the highlight and exposes bounded status", () => {
+  const voiceChannelSource = readRepoFile("src/components/VoiceChannelList.jsx");
+  const listCss = readRepoFile("src/css/ListChannels.css");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const modelSource = readRepoFile("src/utils/menuMainModel.js");
+  const serverStateSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/ServerStateService.cs");
+  const serverInviteSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/ServerInviteService.cs");
+
+  assert.match(voiceChannelSource, /normalizeVoiceChannelStatus/);
+  assert.match(voiceChannelSource, /VOICE_CHANNEL_STATUS_CHAR_LIMIT/);
+  assert.match(voiceChannelSource, /placeholder="Выбрать статус канала"/);
+  assert.match(voiceChannelSource, /className="voice-channel__status-button"/);
+  assert.match(workspaceSource, /onUpdateChannelStatus=\{\(channelId, status\) => onUpdateChannelSettings\?\.\("voice", channelId, \{ status \}\)\}/);
+  assert.match(modelSource, /normalizedChannel\.status = normalizeVoiceChannelStatus\(channel\?\.status \?\? channel\?\.Status \?\? ""\);/);
+  assert.match(serverStateSource, /channel\.Status = NormalizeVoiceChannelStatus\(channel\.Status\);/);
+  assert.match(serverInviteSource, /public string Status \{ get; set; \} = string\.Empty;/);
+  assert.doesNotMatch(listCss, /\.list__items--active \{[^}]*background:/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
+  assert.match(listCss, /\.voice-channel__status-button \{/);
+  assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
+});
+
 test("mobile voice room styles stay split from the main menu stylesheet", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const mobileVoiceCss = readRepoFileIfExists("src/css/MobileVoiceRoom.css");

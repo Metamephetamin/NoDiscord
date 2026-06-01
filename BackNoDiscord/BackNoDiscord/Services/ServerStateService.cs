@@ -6,6 +6,9 @@ namespace BackNoDiscord.Services;
 
 public class ServerStateService
 {
+    private const int VoiceChannelStatusMaxWords = 12;
+    private const int VoiceChannelStatusMaxLength = 80;
+
     private static readonly HashSet<string> AllowedRolePermissions = new(StringComparer.Ordinal)
     {
         "manage_server",
@@ -333,6 +336,7 @@ public class ServerStateService
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
+            channel.Status = NormalizeVoiceChannelStatus(channel.Status);
             channel.Order = channel.Order < 0 ? index : channel.Order;
         }
 
@@ -584,12 +588,24 @@ public class ServerStateService
             UserLimit = channel.UserLimit,
             VideoQuality = channel.VideoQuality,
             Region = channel.Region,
+            Status = channel.Status,
             InvitesPaused = channel.InvitesPaused,
             Invites = channel.Invites,
             Webhooks = channel.Webhooks,
             FollowedChannels = channel.FollowedChannels,
             IntegrationInfoOpen = channel.IntegrationInfoOpen
         };
+    }
+
+    private static string NormalizeVoiceChannelStatus(string? value)
+    {
+        var words = (value ?? string.Empty)
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Take(VoiceChannelStatusMaxWords);
+        var normalized = string.Join(" ", words);
+        return normalized.Length <= VoiceChannelStatusMaxLength
+            ? normalized
+            : normalized[..VoiceChannelStatusMaxLength].Trim();
     }
 
     private static ServerSnapshot CloneSnapshot(ServerSnapshot snapshot)

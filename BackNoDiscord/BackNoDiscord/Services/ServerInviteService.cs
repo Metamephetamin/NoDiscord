@@ -10,6 +10,8 @@ public class ServerInviteService
 {
     private const string InviteAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private const int InviteCodeLength = 20;
+    private const int VoiceChannelStatusMaxWords = 12;
+    private const int VoiceChannelStatusMaxLength = 80;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -278,6 +280,7 @@ public class ServerInviteService
             channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
+            channel.Status = NormalizeVoiceChannelStatus(channel.Status);
             channel.Order = channel.Order < 0 ? index : channel.Order;
         }
 
@@ -313,6 +316,17 @@ public class ServerInviteService
     private static string SerializeSnapshot(ServerSnapshot snapshot)
     {
         return JsonSerializer.Serialize(snapshot, JsonOptions);
+    }
+
+    private static string NormalizeVoiceChannelStatus(string? value)
+    {
+        var words = (value ?? string.Empty)
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Take(VoiceChannelStatusMaxWords);
+        var normalized = string.Join(" ", words);
+        return normalized.Length <= VoiceChannelStatusMaxLength
+            ? normalized
+            : normalized[..VoiceChannelStatusMaxLength].Trim();
     }
 
     private static List<string> DeserializeRedeemedUserIds(string? rawValue)
@@ -421,6 +435,7 @@ public class ChannelSnapshot
     public int UserLimit { get; set; }
     public string VideoQuality { get; set; } = string.Empty;
     public string Region { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
     public bool InvitesPaused { get; set; }
     public JsonElement? Invites { get; set; }
     public JsonElement? Webhooks { get; set; }

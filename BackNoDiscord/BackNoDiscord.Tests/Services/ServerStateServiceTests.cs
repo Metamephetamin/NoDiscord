@@ -134,6 +134,36 @@ public class ServerStateServiceTests
     }
 
     [Fact]
+    public void UpsertSnapshot_NormalizesAndPersistsVoiceChannelStatus()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        var merged = service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            VoiceChannels = new List<ChannelSnapshot>
+            {
+                new()
+                {
+                    Id = "voice",
+                    Name = "Voice",
+                    Status = "  one two three four five six seven eight nine ten eleven twelve thirteen fourteen  "
+                }
+            }
+        }, "owner-1");
+
+        var channel = Assert.Single(merged.VoiceChannels);
+        Assert.Equal("one two three four five six seven eight nine ten eleven twelve", channel.Status);
+
+        var persisted = service.GetSnapshot("server-guild");
+        Assert.NotNull(persisted);
+        Assert.Equal("one two three four five six seven eight nine ten eleven twelve", Assert.Single(persisted!.VoiceChannels).Status);
+    }
+
+    [Fact]
     public void UpsertSnapshot_PreservesIncomingChannelOrderForExistingChannels()
     {
         using var context = CreateContext();

@@ -4,9 +4,14 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import { resolveStaticAssetUrl } from "../utils/media";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import { formatVoiceChannelDuration, resolveVoiceChannelSessionStartedAtMs } from "../utils/voiceChannelDuration";
+import {
+  VOICE_CHANNEL_STATUS_CHAR_LIMIT,
+  normalizeVoiceChannelStatus,
+} from "../utils/voiceChannelStatus";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const SETTINGS_ICON_URL = resolveStaticAssetUrl("/icons/settings.png");
+const VOICE_CHANNEL_ICON_URL = resolveStaticAssetUrl("/icons/volumespeacker.png");
 const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
 const HEADPHONES_ICON_URL = resolveStaticAssetUrl("/icons/headphones-fill-svgrepo-com.svg");
 
@@ -78,6 +83,7 @@ const VoiceChannelList = ({
   onLeaveChannel,
   onPrewarmChannel,
   onRenameChannel,
+  onUpdateChannelStatus,
   editingChannelId = "",
   editingChannelValue = "",
   onRenameValueChange,
@@ -107,6 +113,7 @@ const VoiceChannelList = ({
     channelSessionStartedAtMsById: {},
   }));
   const [activeParticipantVolumeMenu, setActiveParticipantVolumeMenu] = useState(null);
+  const [statusEditor, setStatusEditor] = useState({ channelId: "", value: "" });
   const durationNowMs = durationState.nowMs;
   const channelSessionStartedAtMsById = durationState.channelSessionStartedAtMsById;
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
@@ -219,6 +226,35 @@ const VoiceChannelList = ({
     ? clampParticipantVolumeMenuPercent(participantVolumeByUserId[activeParticipantVolumeMenu.userId] ?? 100)
     : 100;
 
+  const closeStatusEditor = () => {
+    setStatusEditor({ channelId: "", value: "" });
+  };
+
+  const startStatusEdit = (event, channel, channelStatus) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!canManageChannels || !channel?.id) {
+      return;
+    }
+
+    setStatusEditor({
+      channelId: channel.id,
+      value: channelStatus,
+    });
+  };
+
+  const submitStatusEdit = (event, channel) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (!canManageChannels || !channel?.id || statusEditor.channelId !== channel.id) {
+      closeStatusEditor();
+      return;
+    }
+
+    onUpdateChannelStatus?.(channel.id, normalizeVoiceChannelStatus(statusEditor.value));
+    closeStatusEditor();
+  };
+
   const renderDropPlaceholder = (targetChannelId = "", placement = "end") => {
     const key = getDropKey(targetChannelId, placement);
     if (dragOverState?.key !== key) {
@@ -275,6 +311,10 @@ const VoiceChannelList = ({
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
         const isMuted = mutedChannels.has(String(channel.id));
+        const channelStatus = normalizeVoiceChannelStatus(channel.status ?? channel.Status ?? "");
+        const isStatusEditing = statusEditor.channelId === channel.id;
+        const canEditStatus = canManageChannels && !isEditing && !isJoining;
+        const shouldShowStatus = Boolean(channelStatus) || (isActive && canEditStatus);
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
         const participantCount = participants.length;
@@ -296,7 +336,10 @@ const VoiceChannelList = ({
             return;
           }
 
-          if (event.target instanceof Element && event.target.closest(".channel-edit-button, .channel-drag-handle")) {
+          if (
+            event.target instanceof Element
+            && event.target.closest(".channel-edit-button, .channel-drag-handle, .voice-channel__status-button, .voice-channel__status-form, .voice-channel__status-input")
+          ) {
             return;
           }
 
@@ -336,7 +379,10 @@ const VoiceChannelList = ({
               onPointerEnter={triggerPrewarm}
               onTouchStart={triggerPrewarm}
               onPointerDown={(event) => {
-                if (event.target instanceof Element && event.target.closest(".channel-edit-button, .channel-drag-handle")) {
+                if (
+                  event.target instanceof Element
+                  && event.target.closest(".channel-edit-button, .channel-drag-handle, .voice-channel__status-button, .voice-channel__status-form, .voice-channel__status-input")
+                ) {
                   return;
                 }
 
@@ -344,6 +390,11 @@ const VoiceChannelList = ({
               }}
               onClick={handleRowJoin}
             >
+              {!isEditing ? (
+                <span className={`voice-channel__icon ${isActive ? "voice-channel__icon--active" : ""}`} aria-hidden="true">
+                  <img src={VOICE_CHANNEL_ICON_URL} alt="" />
+                </span>
+              ) : null}
               {isEditing ? (
                 <input
                   className="channel-inline-input"
@@ -368,24 +419,79 @@ const VoiceChannelList = ({
                   }}
                 />
               ) : (
-                <button
-                  type="button"
-                  className="voice-channel__button"
-                  onFocus={triggerPrewarm}
-                  onClick={handleRowJoin}
-                  disabled={isJoining}
-                >
-                  <span className="voice-channel__title">{channel.name}</span>
-                  {isMuted ? <span className="voice-channel__muted" aria-label="Канал заглушён">Тихо</span> : null}
-                  {durationLabel ? <span className="voice-channel__timer">{durationLabel}</span> : null}
-                  {shouldShowLimit ? (
-                    <span className="voice-channel__count" aria-label={`${participantCount} / ${userLimit}`}>
-                      <span>{formatVoiceLimitCount(participantCount)}</span>
-                      <span aria-hidden="true">/</span>
-                      <span>{formatVoiceLimitCount(userLimit)}</span>
-                    </span>
+                <div className="voice-channel__body">
+                  <button
+                    type="button"
+                    className="voice-channel__button"
+                    onFocus={triggerPrewarm}
+                    onClick={handleRowJoin}
+                    disabled={isJoining}
+                  >
+                    <span className="voice-channel__title">{channel.name}</span>
+                    {isMuted ? <span className="voice-channel__muted" aria-label="Канал заглушён">Тихо</span> : null}
+                    {durationLabel ? <span className="voice-channel__timer">{durationLabel}</span> : null}
+                    {shouldShowLimit ? (
+                      <span className="voice-channel__count" aria-label={`${participantCount} / ${userLimit}`}>
+                        <span>{formatVoiceLimitCount(participantCount)}</span>
+                        <span aria-hidden="true">/</span>
+                        <span>{formatVoiceLimitCount(userLimit)}</span>
+                      </span>
+                    ) : null}
+                  </button>
+                  {isStatusEditing ? (
+                    <form
+                      className="voice-channel__status-form"
+                      onSubmit={(event) => submitStatusEdit(event, channel)}
+                    >
+                      <input
+                        className="voice-channel__status-input"
+                        value={statusEditor.value}
+                        maxLength={VOICE_CHANNEL_STATUS_CHAR_LIMIT}
+                        autoFocus
+                        spellCheck={false}
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        placeholder="Выбрать статус канала"
+                        onChange={(event) => setStatusEditor((previous) => (
+                          previous.channelId === channel.id
+                            ? { ...previous, value: event.target.value.slice(0, VOICE_CHANNEL_STATUS_CHAR_LIMIT) }
+                            : previous
+                        ))}
+                        onBlur={(event) => {
+                          if (event.currentTarget.dataset.cancelStatus === "true") {
+                            return;
+                          }
+
+                          submitStatusEdit(event, channel);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            event.currentTarget.dataset.cancelStatus = "true";
+                            closeStatusEditor();
+                          }
+                        }}
+                      />
+                    </form>
+                  ) : shouldShowStatus ? (
+                    canEditStatus ? (
+                      <button
+                        type="button"
+                        className="voice-channel__status-button"
+                        onClick={(event) => startStatusEdit(event, channel, channelStatus)}
+                        aria-label={channelStatus ? "Изменить статус канала" : "Выбрать статус канала"}
+                      >
+                        <span>{channelStatus || "Выбрать статус канала"}</span>
+                        <span className="voice-channel__status-pencil" aria-hidden="true">✎</span>
+                      </button>
+                    ) : (
+                      <span className="voice-channel__status-button voice-channel__status-button--readonly">
+                        <span>{channelStatus}</span>
+                      </span>
+                    )
                   ) : null}
-                </button>
+                </div>
               )}
 
               {canManageChannels ? (
