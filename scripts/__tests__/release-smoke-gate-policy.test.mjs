@@ -48,3 +48,31 @@ test("production health checks are pinned to lanaya.space", () => {
   assert.match(deployWorkflow, /\/chatHub\/negotiate\?negotiateVersion=1/);
   assert.match(deployWorkflow, /\/voiceHub\/negotiate\?negotiateVersion=1/);
 });
+
+test("production health checks retry while backend warms after restart", () => {
+  assert.match(
+    deployWorkflow,
+    /retry_healthcheck\(\)/,
+    "deploy health checks should use one bounded retry helper",
+  );
+  assert.match(
+    deployWorkflow,
+    /for attempt in \{1\.\.12\}/,
+    "health checks should allow the backend and nginx upstream to warm for about a minute",
+  );
+  assert.match(
+    deployWorkflow,
+    /retry_healthcheck "backend API" check_api_once/,
+    "backend /api/ping should be retried instead of failing on a transient 502",
+  );
+  assert.match(
+    deployWorkflow,
+    /retry_healthcheck "chat negotiate" check_hub_once "Chat hub" "\$CHAT_NEGOTIATE_HEALTHCHECK"/,
+    "chat negotiate should also tolerate the short post-restart window",
+  );
+  assert.match(
+    deployWorkflow,
+    /retry_healthcheck "voice negotiate" check_hub_once "Voice hub" "\$VOICE_NEGOTIATE_HEALTHCHECK"/,
+    "voice negotiate should also tolerate the short post-restart window",
+  );
+});
