@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRepoFile } from "../../components/__tests__/readRepoFile.mjs";
 
 const chatThemeSource = readFileSync("src/utils/chatTheme.mjs", "utf8");
-const textChatCss = readFileSync("src/css/TextChat.css", "utf8");
+const textChatCss = readRepoFile("src/css/TextChat.css");
 
 test("custom chat backgrounds are scoped away from inherited root variables", () => {
   assert.match(chatThemeSource, /CHAT_CUSTOM_BACKGROUND_STYLE_ID/);

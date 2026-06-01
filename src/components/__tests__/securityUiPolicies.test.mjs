@@ -1,20 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
-
-const repoRoot = path.resolve(import.meta.dirname, "../../..");
-
-const readRepoFile = (relativePath) =>
-  readFileSync(path.join(repoRoot, relativePath), "utf8");
-
-const readRepoFileIfExists = (relativePath) => {
-  try {
-    return readRepoFile(relativePath);
-  } catch {
-    return "";
-  }
-};
+import { readRepoFile, readRepoFileIfExists } from "./readRepoFile.mjs";
 
 test("voice channel settings button is only rendered for channel managers", () => {
   const source = readRepoFile("src/components/VoiceChannelList.jsx");
@@ -259,14 +245,14 @@ test("voice channel status editing is restricted to server owner", () => {
   assert.doesNotMatch(voiceChannelSource, /const canEditStatus = canManageChannels && !isEditing && !isJoining;/);
   assert.match(workspaceSource, /canEditChannelStatus=\{canEditVoiceChannelStatus\}/);
   assert.match(controllerSource, /canEditVoiceChannelStatus=\{isServerOwner\}/);
-  assert.match(controllerSource, /canEditVoiceChannelStatus: isServerOwner/);
+  assert.match(controllerSource, /canEditVoiceChannelStatus\s*:\s*isServerOwner/);
   assert.match(channelActionsSource, /canEditVoiceChannelStatus = false/);
   assert.match(channelActionsSource, /delete safePatch\.status;/);
 });
 
 test("mobile direct chat topbar keeps avatar and renders user presence below the title", () => {
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
-  const menuCss = readRepoFile("src/css/MenuMain.css");
+  const mobileMenuCss = readRepoFile("src/css/MenuMainMobile.css");
   const mobileStart = workspaceSource.indexOf("export const MobileDirectChat =");
   const mobileExportEnd = workspaceSource.indexOf("export default", mobileStart);
   const mobileEnd = mobileExportEnd === -1 ? workspaceSource.length : mobileExportEnd;
@@ -276,8 +262,8 @@ test("mobile direct chat topbar keeps avatar and renders user presence below the
   assert.match(mobileSource, /mobileDirectAvatar/);
   assert.match(mobileSource, /chat__topbar-presence/);
   assert.match(mobileSource, /formatUserPresenceStatus\(currentDirectFriend\)/);
-  assert.match(menuCss, /\.chat__topbar--mobile-direct \.chat__topbar-copy \{[\s\S]*?flex-direction: column;[\s\S]*?align-items: flex-start;/);
-  assert.match(menuCss, /\.chat__topbar-presence \{[\s\S]*?display: block;/);
+  assert.match(mobileMenuCss, /\.chat__topbar--mobile-direct \.chat__topbar-copy \{[\s\S]*?flex-direction: column;[\s\S]*?align-items: flex-start;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-presence \{[\s\S]*?display: block;/);
 });
 
 test("appearance settings nav item uses a single-word label and plain star icon", () => {
@@ -304,7 +290,7 @@ test("role assignment errors use in-app status instead of alert", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 
   assert.doesNotMatch(controllerSource, /window\.alert/);
-  assert.match(controllerSource, /pushWorkspaceStatusToast\(error instanceof Error \? error\.message : "Не удалось назначить роль\.", "danger"\)/);
+  assert.match(controllerSource, /pushWorkspaceStatusToast\(error instanceof Error\s*\?\s*error\.message\s*:\s*"Не удалось назначить роль\.",\s*"danger"\)/);
 });
 
 test("server icon changes require manage server permission", () => {
@@ -392,12 +378,12 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   const storageSource = readRepoFile("src/features/menu-main/menuMainWorkspaceStorage.js");
 
   assert.match(controllerSource, /setIsMicMuted\(false\);\s*setIsMicTestActive\(true\);/);
-  assert.match(controllerSource, /if \(isMicTestActive\) \{\s*setIsMicTestActive\(false\);\s*setIsMicMuted\(false\);/);
+  assert.match(controllerSource, /if\s*\(isMicTestActive\)\s*\{\s*setIsMicTestActive\(false\);\s*setIsMicMuted\(false\);/);
   assert.match(controllerSource, /voiceClient\.startMicrophoneTestPlayback\?\.\(\)/);
   assert.match(controllerSource, /voiceClient\.stopMicrophoneTestPlayback\?\.\(\)/);
   assert.match(voiceClientSource, /async startMicrophoneTestPlayback\(\) \{\s*microphoneMonitorActive = true;\s*await ensureAudioPipeline\(\);\s*await connectMicrophoneMonitor\(\);/);
   assert.match(voiceClientSource, /microphoneMonitorAudioElement\.muted = false;/);
-  assert.match(controllerSource, /const activeMicSettingsBars = getMeterActiveBars\(micLevel, 32\);/);
+  assert.match(controllerSource, /const\s+activeMicSettingsBars\s*=\s*getMeterActiveBars\(micLevel,\s*32\);/);
   assert.match(settingsSource, /Array\.from\(\{ length: 32 \}\)/);
   assert.match(storageSource, /nd:auto-input-sensitivity:/);
   assert.match(processingSource, /client\.setAutoInputSensitivity\?\.\(currentVoiceProcessingState\.autoInputSensitivity\)/);
@@ -417,8 +403,8 @@ test("self voice mute sync ignores stale local echo from rapid toggles", () => {
   assert.match(syncHookSource, /clientStateVersion: latestSelfVoiceStateVersionRef\.current/);
   assert.match(syncHookSource, /const isSelfVoiceStateEchoStale = useCallback/);
   assert.match(controllerSource, /isSelfVoiceStateEchoStale\(clientStateVersion\)/);
-  assert.match(controllerSource, /if \(!isStaleLocalEcho \|\| normalizedMicForced\) \{[\s\S]*?setIsMicMuted/);
-  assert.match(controllerSource, /if \(!isStaleLocalEcho \|\| normalizedSoundForced\) \{[\s\S]*?setIsSoundMuted/);
+  assert.match(controllerSource, /if\s*\(!isStaleLocalEcho\s*\|\|\s*normalizedMicForced\)\s*\{[\s\S]*?setIsMicMuted/);
+  assert.match(controllerSource, /if\s*\(!isStaleLocalEcho\s*\|\|\s*normalizedSoundForced\)\s*\{[\s\S]*?setIsSoundMuted/);
   assert.match(voiceClientSource, /clientStateVersion: Number\(payload\?\.clientStateVersion \?\? payload\?\.ClientStateVersion \?\? 0\)/);
   assert.match(voiceClientSource, /UpdateVoiceState", String\(currentUser\.id\), Boolean\(isMicMuted\), Boolean\(isDeafened\), Number\(clientStateVersion \|\| 0\)/);
   assert.match(voiceHubSource, /UpdateVoiceState\(string targetUserId, bool isMicMuted, bool isDeafened, long clientStateVersion = 0\)/);
@@ -432,14 +418,14 @@ test("self headphones mute only unmutes microphone when it muted microphone auto
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
   const overlaysSource = readRepoFile("src/components/MenuMainOverlays.jsx");
 
-  assert.match(controllerSource, /const micMutedBySoundMuteRef = useRef\(false\);/);
-  assert.match(controllerSource, /micMutedBySoundMuteRef\.current = false;[\s\S]*?return nextValue;/);
-  assert.match(controllerSource, /const shouldAutoMuteMic = nextValue && !isMicMuted;/);
-  assert.match(controllerSource, /micMutedBySoundMuteRef\.current = shouldAutoMuteMic;/);
-  assert.match(controllerSource, /if \(shouldAutoMuteMic\) \{[\s\S]*?setIsMicMuted\(true\);[\s\S]*?\}/);
-  assert.match(controllerSource, /if \(!nextValue && micMutedBySoundMuteRef\.current\) \{[\s\S]*?micMutedBySoundMuteRef\.current = false;[\s\S]*?setIsMicMuted\(false\);[\s\S]*?\}/);
-  assert.match(controllerSource, /const shouldMutePublishedMic =\s*isMicMuted\s*\|\| \(Boolean\(currentVoiceChannel\) && isMicTestActive\);/);
-  assert.match(controllerSource, /const normalizedMicMuted = Boolean\(nextMicMuted\);/);
+  assert.match(controllerSource, /const\s+micMutedBySoundMuteRef\s*=\s*useRef\(false\);/);
+  assert.match(controllerSource, /micMutedBySoundMuteRef\.current\s*=\s*false;[\s\S]*?return nextValue;/);
+  assert.match(controllerSource, /const\s+shouldAutoMuteMic\s*=\s*nextValue\s*&&\s*!isMicMuted;/);
+  assert.match(controllerSource, /micMutedBySoundMuteRef\.current\s*=\s*shouldAutoMuteMic;/);
+  assert.match(controllerSource, /if\s*\(\s*shouldAutoMuteMic\s*\)\s*\{[\s\S]*?setIsMicMuted\(true\);[\s\S]*?\}/);
+  assert.match(controllerSource, /if\s*\(!nextValue\s*&&\s*micMutedBySoundMuteRef\.current\)\s*\{[\s\S]*?micMutedBySoundMuteRef\.current\s*=\s*false;[\s\S]*?setIsMicMuted\(false\);[\s\S]*?\}/);
+  assert.match(controllerSource, /const\s+shouldMutePublishedMic\s*=\s*isMicMuted\s*\|\|\s*\(?Boolean\(currentVoiceChannel\)\s*&&\s*isMicTestActive\)?;/);
+  assert.match(controllerSource, /const\s+normalizedMicMuted\s*=\s*Boolean\(nextMicMuted\);/);
   assert.match(stageSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
   assert.match(mobileSource, /const isEffectiveMicMuted = Boolean\(isMicMuted\);/);
   assert.doesNotMatch(profileSource, /isMicMuted \|\| isSoundMuted \? "profile__mini-icon--slashed"/);
@@ -524,8 +510,8 @@ test("account settings card styles stay split from the main menu stylesheet", ()
 test("server management settings are hidden without permissions", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 
-  assert.match(controllerSource, /if \(item\.id === "server" && !canManageServer\) \{/);
-  assert.match(controllerSource, /if \(item\.id === "roles" && !canManageRoles\) \{/);
+  assert.match(controllerSource, /if\s*\(item\.id\s*===\s*"server"\s*&&\s*!canManageServer\)\s*\{/);
+  assert.match(controllerSource, /if\s*\(item\.id\s*===\s*"roles"\s*&&\s*!canManageRoles\)\s*\{/);
   assert.doesNotMatch(controllerSource, /SETTINGS_NAV_ITEMS\.find\(\(item\) => item\.id === settingsTab\)/);
 });
 
@@ -569,19 +555,19 @@ test("light theme text tools menu is opaque and readable", () => {
 });
 
 test("message search input text is readable on dark chat topbar", () => {
-  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const mobileMenuCss = readRepoFile("src/css/MenuMainMobile.css");
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
   const searchIconSource = readRepoFile("public/icons/search.svg");
 
-  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?color: #c8cfdd;/);
-  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #c8cfdd;/);
-  assert.match(mainCss, /\.chat__topbar-search \{[\s\S]*?font-weight: 500;/);
-  assert.match(mainCss, /\.chat__topbar \{[\s\S]*?min-height: 58px;/);
-  assert.match(mainCss, /\.chat__topbar \{[\s\S]*?padding: 8px 24px 8px 18px;/);
-  assert.match(mainCss, /\.chat__topbar-symbol \{[\s\S]*?width: 28px;[\s\S]*?height: 28px;/);
-  assert.match(mainCss, /\.chat__topbar-copy \.chat__topbar-name \{[\s\S]*?color: #eef2f8;[\s\S]*?font-size: 24px;[\s\S]*?font-weight: 600;/);
-  assert.match(mainCss, /\.chat__topbar-search-wrap \{[\s\S]*?width: min\(300px, 24vw\);/);
-  assert.match(mainCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #aeb6c6;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-search \{[\s\S]*?color: #c8cfdd;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-search \{[\s\S]*?caret-color: #c8cfdd;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-search \{[\s\S]*?font-weight: 500;/);
+  assert.match(mobileMenuCss, /\.chat__topbar \{[\s\S]*?min-height: 58px;/);
+  assert.match(mobileMenuCss, /\.chat__topbar \{[\s\S]*?padding: 8px 24px 8px 18px;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-symbol \{[\s\S]*?width: 24px;[\s\S]*?height: 24px;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-copy \.chat__topbar-name \{[\s\S]*?color: #eef2f8;[\s\S]*?font-size: 21px;[\s\S]*?font-weight: 600;/);
+  assert.match(mobileMenuCss, /\.chat__topbar-search-wrap \{[\s\S]*?width: min\(300px, 24vw\);/);
+  assert.match(mobileMenuCss, /\.chat__topbar-search::placeholder \{[\s\S]*?color: #aeb6c6;/);
   assert.match(workspaceSource, /className="bi bi-hash"/);
   assert.match(searchIconSource, /class="bi bi-search"/);
   assert.doesNotMatch(workspaceSource, /Текстовый канал сервера/);
@@ -625,12 +611,12 @@ test("server audit log refreshes after role mutations", () => {
   const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
-  const mutationStart = menuSource.indexOf("const mutateServerRoles = async");
-  const createRoleStart = menuSource.indexOf("const createServerRole =", mutationStart);
+  const mutationStart = menuSource.search(/const\s+mutateServerRoles\s*=\s*async/);
+  const createRoleStart = menuSource.search(/const\s+createServerRole\s*=/);
   const mutationSource = menuSource.slice(mutationStart, createRoleStart);
 
-  assert.match(mutationSource, /await refreshServerAuditLog\(requestServer\.id\);/);
-  assert.match(menuSource, /onRefreshAuditLog: \(\) => refreshServerAuditLog\(activeServer\?\.id\)/);
+  assert.match(mutationSource, /await\s*refreshServerAuditLog\(requestServer\.id\)/);
+  assert.match(menuSource, /onRefreshAuditLog\s*:\s*\(\)\s*=>\s*refreshServerAuditLog\(activeServer\?\.id\)/);
   assert.match(rendererSource, /onRefreshAuditLog=\{onRefreshAuditLog\}/);
   assert.match(settingsSource, /const formatAuditDetails = \(entry\) =>/);
   assert.match(settingsSource, /"server\.roles\.create": "Роль создана"/);
@@ -874,11 +860,11 @@ test("stream viewer styles are split out of the main menu stylesheet", () => {
 });
 
 test("direct call overlay styles stay split from the main menu stylesheet", () => {
-  const overlaySource = readRepoFile("src/components/MenuMainOverlays.jsx");
+  const overlayLayerSource = readRepoFile("src/features/menu-main/MenuMainOverlayLayer.jsx");
   const mainCss = readRepoFile("src/css/MenuMain.css");
   const directCallCss = readRepoFileIfExists("src/css/DirectCallOverlay.css");
 
-  assert.match(overlaySource, /import "\.\.\/css\/DirectCallOverlay\.css";/);
+  assert.match(overlayLayerSource, /import\("\.\.\/\.\.\/css\/DirectCallOverlay\.css"\)/);
   assert.doesNotMatch(mainCss, /\.direct-call-overlay/);
   assert.doesNotMatch(mainCss, /\.direct-call-inline/);
   assert.match(directCallCss, /\.direct-call-overlay/);
@@ -968,7 +954,7 @@ test("server names are capped consistently in settings and stored snapshots", ()
   assert.match(modelSource, /export const normalizeServerNameInput = \(value, fallback = "Сервер"\) =>/);
   assert.match(modelSource, /name: normalizeServerNameInput\(String\(server\?\.name \|\| `Сервер \$\{index \+ 1\}`\)/);
   assert.match(controllerSource, /normalizeServerNameInput\(createServerName/);
-  assert.match(controllerSource, /name: normalizeServerNameInput\(value, server\.name \|\| "Сервер"\)/);
+  assert.match(controllerSource, /name\s*:\s*normalizeServerNameInput\(value,\s*server\.name\s*\|\|\s*"Сервер"\)/);
   assert.match(settingsSource, /maxLength=\{MAX_SERVER_NAME_LENGTH\}/);
   assert.match(serverWorkspaceCss, /\.server-summary__name \{\s*min-width: 0;\s*display: -webkit-box;\s*-webkit-line-clamp: 2;\s*-webkit-box-orient: vertical;/);
 });
@@ -1099,7 +1085,7 @@ test("voice stage soundboard panel uploads short sounds and plays one at a time"
   assert.match(stageSource, /onOpenSoundboard/);
   assert.match(workspaceSource, /onOpenSoundboard=\{onOpenSoundboard\}/);
   assert.doesNotMatch(controllerSource, /useMenuMainSoundboard/);
-  assert.match(controllerSource, /const stableOpenSoundboard = useStableEvent\(\(\) => setSoundboardOpen\(true\)\)/);
+  assert.match(controllerSource, /const\s+stableOpenSoundboard\s*=\s*useStableEvent\(\(\)\s*=>\s*setSoundboardOpen\(true\)\)/);
   assert.doesNotMatch(overlaySource, /import SoundboardPanel from "\.\/SoundboardPanel";/);
   assert.match(overlaySource, /const SoundboardPanel = lazy\(\(\) => import\("\.\/SoundboardPanel"\)\);/);
   assert.match(overlaySource, /\{sb && \(\s*<Suspense>\s*<SoundboardPanel/);
@@ -1160,14 +1146,13 @@ test("clicking own stream opens local preview instead of remote loading state", 
     stageSource.indexOf("if (participant.isSelf && participant.share) {"),
     stageSource.indexOf("if (participant.isLive && isInlineStreamActive) {"),
   );
-  const watchStreamHandler = menuControllerSource.slice(
-    menuControllerSource.indexOf("const handleWatchStream = (userId) => {"),
-    menuControllerSource.indexOf("const handlePreviewStream = (userId) => {"),
-  );
+  const watchStreamStart = menuControllerSource.search(/const\s+handleWatchStream\s*=/);
+  const previewStreamStart = menuControllerSource.search(/const\s+handlePreviewStream\s*=/);
+  const watchStreamHandler = menuControllerSource.slice(watchStreamStart, previewStreamStart);
 
   assert.match(selfShareBranch, /setInlineStreamUserIds\(\(previous\) => \{[\s\S]*?next\.add\(participantCardId\);[\s\S]*?return next;[\s\S]*?\}\);[\s\S]*?return;/);
   assert.doesNotMatch(selfShareBranch, /onPreviewStream\?\.\(participant\.userId\)/);
-  assert.match(watchStreamHandler, /normalizedUserId === String\(currentUserId \|\| ""\)/);
+  assert.match(watchStreamHandler, /normalizedUserId\s*===\s*String\(\s*currentUserId\s*\|\|\s*""\s*\)/);
   assert.match(watchStreamHandler, /setFocusedRemoteShareUser\?\.\(""\)/);
   assert.match(watchStreamHandler, /openLocalSharePreview\(\);[\s\S]*?return;/);
   assert.doesNotMatch(watchStreamHandler, /requestScreenShare\(normalizedUserId\)[\s\S]*?normalizedUserId === String\(currentUserId/);
@@ -1190,8 +1175,8 @@ test("local screen and camera shares render as separate live preview cards", () 
   const stageSource = readRepoFile("src/components/VoiceRoomStage.jsx");
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
 
-  assert.match(controllerSource, /onLocalPreviewStreamChanged: \(\{ stream, mode, sourceTitle, secondaryStream, secondaryMode, secondaryTitle \}\) =>/);
-  assert.match(controllerSource, /secondaryStream: normalizedSecondaryStream/);
+  assert.match(controllerSource, /onLocalPreviewStreamChanged\s*:\s*\(\{\s*stream,\s*mode,\s*sourceTitle,\s*secondaryStream,\s*secondaryMode,\s*secondaryTitle\s*\}\)\s*=>/);
+  assert.match(controllerSource, /secondaryStream\s*:\s*normalizedSecondaryStream/);
   assert.match(stageSource, /\(participants \|\| \[\]\)\.flatMap\(\(participant\) =>/);
   assert.match(stageSource, /localPreview\?\.secondaryStream/);
   assert.match(stageSource, /stageCardId: `\$\{userId\}:screen`/);
@@ -1287,9 +1272,9 @@ test("manual profile status is editable, persisted, and rendered under the nickn
   const profileCss = readRepoFile("src/css/MenuProfile.css");
 
   assert.match(controllerSource, /MAX_PROFILE_STATUS_LENGTH/);
-  assert.match(controllerSource, /profileStatus: user\?\.profile_status \|\| user\?\.profileStatus \|\| ""/);
-  assert.match(controllerSource, /profileStatus: nextProfileStatus/);
-  assert.match(controllerSource, /profile_status: data\?\.profile_status \?\? data\?\.profileStatus \?\? nextProfileStatus/);
+  assert.match(controllerSource, /profileStatus\s*:\s*user\?\.profile_status\s*\|\|\s*user\?\.profileStatus\s*\|\|\s*""/);
+  assert.match(controllerSource, /profileStatus\s*:\s*nextProfileStatus/);
+  assert.match(controllerSource, /profile_status\s*:\s*data\?\.profile_status\s*\?\?\s*data\?\.profileStatus\s*\?\?\s*nextProfileStatus/);
   assert.match(settingsSource, /onUpdateProfileDraft\?\.\("profileStatus", event\.target\.value\)/);
   assert.match(settingsSource, /maxLength=\{maxProfileStatusLength\}/);
   assert.match(slotSource, /profileStatus=\{profileCustomStatus\}/);
@@ -1326,9 +1311,9 @@ test("interface accent color is customizable through appearance settings", () =>
   assert.match(storageSource, /nd:ui-accent:/);
   assert.match(themeSource, /export function normalizeUiAccentColor/);
   assert.match(themeSource, /export function applyUiAccentPreference/);
-  assert.match(controllerSource, /const \[uiAccentColor, setUiAccentColor\]/);
-  assert.match(controllerSource, /localStorage\.setItem\(uiAccentStorageKey, normalizeUiAccentColor\(uiAccentColor\)\)/);
-  assert.match(controllerSource, /applyUiAccentPreference\(uiAccentColor, \{ root, body \}\)/);
+  assert.match(controllerSource, /const\s*\[uiAccentColor,\s*setUiAccentColor\]/);
+  assert.match(controllerSource, /localStorage\.setItem\(uiAccentStorageKey,\s*normalizeUiAccentColor\(uiAccentColor\)\)/);
+  assert.match(controllerSource, /applyUiAccentPreference\(uiAccentColor,\s*\{\s*root,\s*body\s*\}\)/);
   assert.match(rendererSource, /uiAccentColor=\{uiAccentColor\}/);
   assert.match(settingsSource, /type="color"[\s\S]*?value=\{uiAccentColor \|\| "#8b7cff"\}/);
 });

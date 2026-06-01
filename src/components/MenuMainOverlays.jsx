@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import SiriWave from "siriwave";
 import AnimatedAvatar from "./AnimatedAvatar";
-import MediaFrameEditorModal from "./MediaFrameEditorModal";
-import QuickSwitcherModal from "./QuickSwitcherModal";
 import ScreenShareButton from "./ScreenShareButton";
 import { DONATION_CONFIG } from "../config/runtime";
 import { copyTextToClipboard } from "../utils/clipboard";
@@ -11,7 +9,9 @@ import { buildDonationUrlForAmount, getDonationAmountOptions } from "../utils/do
 import { createDonationPayment } from "../utils/donationPayments";
 import { formatTimestamp } from "../utils/textChatHelpers";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
-import "../css/DirectCallOverlay.css";
+
+const MediaFrameEditorModal = lazy(() => import("./MediaFrameEditorModal"));
+const QuickSwitcherModal = lazy(() => import("./QuickSwitcherModal"));
 
 const DONATION_DETAILS = [
   {
@@ -1437,26 +1437,28 @@ export const MediaFrameEditorOverlay = ({
   onCancel,
   onConfirm,
 }) => (
-  <MediaFrameEditorModal
-    open={Boolean(state)}
-    source={state?.previewUrl || ""}
-    fallback={
-      state?.target === "serverIcon"
-        ? defaultServerIcon
-        : state?.target === "profileBackground"
-          ? fallbackProfileBackground
-          : fallbackAvatar
-    }
-    frame={state?.frame}
-    target={state?.target || "avatar"}
-    avatarSource={fallbackAvatar}
-    avatarFrame={avatarFrame}
-    avatarAlt={avatarAlt}
-    mediaType={state?.file?.type || ""}
-    autoFrame={state?.autoFrame}
-    onCancel={onCancel}
-    onConfirm={onConfirm}
-  />
+  <Suspense fallback={null}>
+    <MediaFrameEditorModal
+      open={Boolean(state)}
+      source={state?.previewUrl || ""}
+      fallback={
+        state?.target === "serverIcon"
+          ? defaultServerIcon
+          : state?.target === "profileBackground"
+            ? fallbackProfileBackground
+            : fallbackAvatar
+      }
+      frame={state?.frame}
+      target={state?.target || "avatar"}
+      avatarSource={fallbackAvatar}
+      avatarFrame={avatarFrame}
+      avatarAlt={avatarAlt}
+      mediaType={state?.file?.type || ""}
+      autoFrame={state?.autoFrame}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  </Suspense>
 );
 
 export const DirectToastStack = ({ toasts, onOpenToast, onDismiss }) => {

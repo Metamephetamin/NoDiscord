@@ -1,0 +1,59 @@
+
+html[data-ui-theme="light"] .message-poll-card__add-option {
+  color: #315fc7;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) * {
+  scrollbar-color: transparent transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) .is-scroll-active {
+  scrollbar-color: rgba(150, 160, 184, 0.42) transparent !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) .is-scroll-active::-webkit-scrollbar-thumb {
+  background: rgba(150, 160, 184, 0.42) !important;
+}
+
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) :where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus,
+:where(.chat__wrapper, .text-chat-shell, .messages-list-shell, .message-context-menu, .composer-emoji-picker, .mention-suggestions) :where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: none !important;
+}

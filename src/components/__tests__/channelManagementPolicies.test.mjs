@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
+import { readRepoFile } from "./readRepoFile.mjs";
 
 import {
   DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
@@ -11,10 +10,6 @@ import {
   removeChannelCategoryWithChannels,
 } from "../../features/menu-main/channelManagementUtils.js";
 import { getMutedChannelKey, toggleMutedChannelKey } from "../../features/menu-main/mutedServerChannels.js";
-
-const repoRoot = path.resolve(import.meta.dirname, "../../..");
-const readRepoFile = (relativePath) =>
-  readFileSync(path.join(repoRoot, relativePath), "utf8");
 
 test("deleting a custom category removes its text and voice channels", () => {
   const server = {

@@ -310,8 +310,9 @@ async function auditVoiceJoinHotPath() {
     });
   }
 
-  const joinStart = source.indexOf("const joinVoiceChannel = async");
-  const leaveStart = source.indexOf("const leaveVoiceChannel =", joinStart);
+  const joinStart = source.search(/const\s+joinVoiceChannel\s*=\s*async/);
+  const leaveMatch = joinStart >= 0 ? source.slice(joinStart).match(/const\s+leaveVoiceChannel\s*=/) : null;
+  const leaveStart = leaveMatch ? joinStart + leaveMatch.index : -1;
   const joinSource = joinStart >= 0 && leaveStart > joinStart ? source.slice(joinStart, leaveStart) : "";
 
   if (!joinSource) {

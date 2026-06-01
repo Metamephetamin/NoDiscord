@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
-
-const repoRoot = path.resolve(import.meta.dirname, "../../..");
-
-const readRepoFile = (relativePath) =>
-  readFileSync(path.join(repoRoot, relativePath), "utf8");
+import { readRepoFile } from "./readRepoFile.mjs";
 
 test("light UI theme overrides every customized bottom profile card surface", () => {
   const mainCss = readRepoFile("src/css/MenuMain.css");

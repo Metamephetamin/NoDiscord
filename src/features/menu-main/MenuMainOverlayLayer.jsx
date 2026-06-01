@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import {
   AdminSecurityPageOverlay,
   CameraModal,
@@ -164,6 +164,12 @@ export default function MenuMainOverlayLayer({
   const useCompactDirectCallOverlay =
     !isMobileViewport && showPendingDirectCallPopup && Boolean(directCallState?.isMiniMode);
 
+  useEffect(() => {
+    if (showDirectCallOverlay) {
+      void import("../../css/DirectCallOverlay.css");
+    }
+  }, [showDirectCallOverlay]);
+
   return (
     <>
       <input
@@ -195,16 +201,18 @@ export default function MenuMainOverlayLayer({
 
       {children}
 
-      <QuickSwitcherModal
-        open={quickSwitcherOpen}
-        query={quickSwitcherQuery}
-        items={quickSwitcherItems}
-        selectedIndex={quickSwitcherSelectedIndex}
-        onClose={closeQuickSwitcher}
-        onQueryChange={setQuickSwitcherQuery}
-        onSelectIndex={setQuickSwitcherSelectedIndex}
-        onSelect={handleQuickSwitcherSelect}
-      />
+      <Suspense fallback={null}>
+        <QuickSwitcherModal
+          open={quickSwitcherOpen}
+          query={quickSwitcherQuery}
+          items={quickSwitcherItems}
+          selectedIndex={quickSwitcherSelectedIndex}
+          onClose={closeQuickSwitcher}
+          onQueryChange={setQuickSwitcherQuery}
+          onSelectIndex={setQuickSwitcherSelectedIndex}
+          onSelect={handleQuickSwitcherSelect}
+        />
+      </Suspense>
 
       {sb && (
         <Suspense>

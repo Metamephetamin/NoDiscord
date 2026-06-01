@@ -9,8 +9,12 @@ const source = readFileSync(join(testDir, "../MenuMainController.jsx"), "utf8");
 const voiceClientSource = readFileSync(join(testDir, "../../../webrtc/livekitVoiceRoomClient.js"), "utf8");
 
 function sliceFunction(name) {
-  const start = source.indexOf(`const ${name} =`);
-  const end = source.indexOf("const leaveVoiceChannel =", start);
+  const spacedStart = source.indexOf(`const ${name} =`);
+  const compactStart = source.indexOf(`const ${name}=`);
+  const start = spacedStart === -1 ? compactStart : spacedStart;
+  const spacedEnd = source.indexOf("const leaveVoiceChannel =", start);
+  const compactEnd = source.indexOf("const leaveVoiceChannel=", start);
+  const end = spacedEnd === -1 ? compactEnd : spacedEnd;
   assert.notEqual(start, -1, `${name} function must exist`);
   assert.notEqual(end, -1, "leaveVoiceChannel marker must exist after joinVoiceChannel");
   return source.slice(start, end);

@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
-
-const repoRoot = path.resolve(import.meta.dirname, "../../..");
-
-const readRepoFile = (relativePath) =>
-  readFileSync(path.join(repoRoot, relativePath), "utf8");
+import { readRepoFile } from "./readRepoFile.mjs";
 
 test("friend request rows open profile on click and user menu on right click", () => {
   const source = readRepoFile("src/components/FriendsWorkspace.jsx");
@@ -22,7 +16,7 @@ test("friend request rows open profile on click and user menu on right click", (
 });
 
 test("pending request context menus do not expose friend-only removal actions", () => {
-  const source = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const source = readRepoFile("src/features/menu-main/useFriendListOverlays.jsx");
 
   assert.match(source, /const isPendingRelation = \["pending_outgoing", "pending_incoming"\]\.includes/);
   assert.match(source, /isFriend,\s+isBlocked,/);

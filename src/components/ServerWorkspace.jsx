@@ -1,6 +1,5 @@
 import { Suspense, lazy, memo, useEffect, useMemo, useRef, useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
-import TextChat from "./TextChat";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
@@ -20,6 +19,8 @@ const loadVoiceRoomStage = () => recoverChunkImport(() => import("./VoiceRoomSta
 const VoiceRoomStage = lazy(loadVoiceRoomStage);
 const loadScreenShareViewer = () => recoverChunkImport(() => import("./ScreenShareViewer"));
 const ScreenShareViewer = lazy(loadScreenShareViewer);
+const loadTextChat = () => recoverChunkImport(() => import("./TextChat"));
+const TextChat = lazy(loadTextChat);
 const SERVER_SUMMARY_MENU_WIDTH = 280;
 const EMPTY_CHANNEL_LIST = Object.freeze([]);
 const DEFAULT_TEXT_CATEGORY_NAME = "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b";
@@ -3050,21 +3051,23 @@ function ServerMainComponent({
           />
         ) : (
           currentTextChannel ? (
-            <TextChat
-              serverId={activeServer?.id}
-              channelId={currentTextChannel.id}
-              channelSlowMode={currentTextChannel?.slowMode || "off"}
-              user={user}
-              searchQuery={channelSearchQuery}
-              onClearSearchQuery={onClearChannelSearch}
-              directTargets={directConversationTargets}
-              serverMembers={serverMembers}
-              serverRoles={serverRoles}
-              navigationRequest={textChatNavigationRequest}
-              onNavigationIndexChange={onTextChatNavigationIndexChange}
-              onOpenDirectChat={onOpenDirectChat}
-              onStartDirectCall={onStartDirectCall}
-            />
+            <Suspense fallback={null}>
+              <TextChat
+                serverId={activeServer?.id}
+                channelId={currentTextChannel.id}
+                channelSlowMode={currentTextChannel?.slowMode || "off"}
+                user={user}
+                searchQuery={channelSearchQuery}
+                onClearSearchQuery={onClearChannelSearch}
+                directTargets={directConversationTargets}
+                serverMembers={serverMembers}
+                serverRoles={serverRoles}
+                navigationRequest={textChatNavigationRequest}
+                onNavigationIndexChange={onTextChatNavigationIndexChange}
+                onOpenDirectChat={onOpenDirectChat}
+                onStartDirectCall={onStartDirectCall}
+              />
+            </Suspense>
           ) : null
         )}
       </div>
@@ -3420,16 +3423,18 @@ export const MobileDirectChat = ({
             <span>{directBlockNotice.detail}</span>
           </div>
         ) : (
-          <TextChat
-            resolvedChannelId={currentDirectChannelId}
-            localMessageStateVersion={textChatLocalStateVersion}
-            user={user}
-            onClearSearchQuery={onClearChannelSearch}
-            directTargets={directConversationTargets}
-            navigationRequest={textChatNavigationRequest}
-            onNavigationIndexChange={onTextChatNavigationIndexChange}
-            onStartDirectCall={onStartDirectCall}
-          />
+          <Suspense fallback={null}>
+            <TextChat
+              resolvedChannelId={currentDirectChannelId}
+              localMessageStateVersion={textChatLocalStateVersion}
+              user={user}
+              onClearSearchQuery={onClearChannelSearch}
+              directTargets={directConversationTargets}
+              navigationRequest={textChatNavigationRequest}
+              onNavigationIndexChange={onTextChatNavigationIndexChange}
+              onStartDirectCall={onStartDirectCall}
+            />
+          </Suspense>
         )}
       </div>
     </main>

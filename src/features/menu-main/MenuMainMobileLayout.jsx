@@ -4,6 +4,7 @@ import {
   getChannelDisplayName,
   getDisplayName,
 } from "../../utils/menuMainModel";
+import "../../css/MenuMainMobile.css";
 
 export default function MenuMainMobileLayout({
   mobileSection,
