@@ -919,9 +919,17 @@ html[data-ui-density="compact"] .message-composer {
 /* Theme surface corrections */
 html[data-ui-theme="light"] .message-date-divider span,
 html[data-ui-theme="purple"] .message-date-divider span {
-  border-color: rgba(148, 163, 184, 0.24);
-  background: rgba(255, 255, 255, 0.82);
   color: var(--app-text-muted);
+}
+
+html[data-ui-theme="light"] .message-date-divider::before,
+html[data-ui-theme="purple"] .message-date-divider::before {
+  background: linear-gradient(90deg, transparent, rgba(100, 116, 139, 0.28));
+}
+
+html[data-ui-theme="light"] .message-date-divider::after,
+html[data-ui-theme="purple"] .message-date-divider::after {
+  background: linear-gradient(90deg, rgba(100, 116, 139, 0.28), transparent);
 }
 
 html[data-ui-theme="light"] .message-item:not(.message-item--dm),

@@ -432,6 +432,56 @@ function mergeLocalEchoPreviewSources(localEchoMessage, serverMessage) {
   };
 }
 
+function hasAttachmentUpdatePayload(messageItem) {
+  if (!messageItem || typeof messageItem !== "object") {
+    return false;
+  }
+
+  if (Array.isArray(messageItem.attachments) || Array.isArray(messageItem.Attachments)) {
+    return true;
+  }
+
+  return Boolean(
+    messageItem.attachmentUrl
+      || messageItem.AttachmentUrl
+      || messageItem.attachment_url
+      || messageItem.attachmentSourceUrl
+      || messageItem.AttachmentSourceUrl
+      || messageItem.attachment_source_url
+      || messageItem.attachmentEncryption
+      || messageItem.AttachmentEncryption
+      || messageItem.attachment_encryption
+      || messageItem.voiceMessage
+      || messageItem.VoiceMessage
+      || messageItem.voice_message
+  );
+}
+
+function mergeIncomingMessageUpdate(previousMessage, normalizedMessage, rawMessage) {
+  if (hasAttachmentUpdatePayload(rawMessage)) {
+    return normalizedMessage;
+  }
+
+  const previousAttachments = normalizeAttachmentItems(previousMessage);
+  if (!previousAttachments.length || normalizeAttachmentItems(normalizedMessage).length) {
+    return normalizedMessage;
+  }
+
+  const primaryAttachment = previousAttachments[0] || null;
+  return {
+    ...normalizedMessage,
+    attachments: Array.isArray(previousMessage?.attachments) && previousMessage.attachments.length
+      ? previousMessage.attachments
+      : previousAttachments,
+    attachmentUrl: previousMessage?.attachmentUrl || primaryAttachment?.attachmentUrl || normalizedMessage?.attachmentUrl || "",
+    attachmentName: previousMessage?.attachmentName || primaryAttachment?.attachmentName || normalizedMessage?.attachmentName || "",
+    attachmentSize: previousMessage?.attachmentSize ?? primaryAttachment?.attachmentSize ?? normalizedMessage?.attachmentSize ?? null,
+    attachmentContentType: previousMessage?.attachmentContentType || primaryAttachment?.attachmentContentType || normalizedMessage?.attachmentContentType || "",
+    attachmentAsFile: Boolean(previousMessage?.attachmentAsFile || primaryAttachment?.attachmentAsFile || normalizedMessage?.attachmentAsFile),
+    voiceMessage: previousMessage?.voiceMessage || primaryAttachment?.voiceMessage || normalizedMessage?.voiceMessage || null,
+  };
+}
+
 function normalizeChatSystemEvent(rawEvent) {
   if (!rawEvent || typeof rawEvent !== "object") {
     return null;
@@ -2473,7 +2523,7 @@ export default function TextChat({
             }
 
             didChange = true;
-            return normalizedMessage;
+            return mergeIncomingMessageUpdate(messageItem, normalizedMessage, updatedMessage);
           });
 
           return didChange ? nextChannelMessages : channelMessages;

@@ -3,9 +3,9 @@
   inset: 0;
   z-index: 1600;
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-  padding: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
 }
 
 .direct-call-overlay__backdrop {
@@ -21,11 +21,11 @@
 .direct-call-overlay__workspace {
   position: relative;
   z-index: 1;
-  width: min(1180px, 100%);
-  min-height: min(840px, calc(100vh - 40px));
-  margin: 0 auto;
-  padding: 28px;
-  border-radius: 34px;
+  width: min(940px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+  margin: auto;
+  padding: 24px;
+  border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
     linear-gradient(180deg, rgba(18, 22, 34, 0.97), rgba(10, 12, 20, 0.98)),
@@ -33,8 +33,8 @@
   box-shadow: 0 32px 120px rgba(0, 0, 0, 0.42);
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  overflow: hidden;
+  gap: 18px;
+  overflow: auto;
 }
 
 .direct-call-overlay__header {
@@ -47,7 +47,7 @@
 .direct-call-overlay__header-copy {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .direct-call-overlay__eyebrow {
@@ -60,7 +60,7 @@
 
 .direct-call-overlay__header-copy strong {
   color: #f7f9ff;
-  font-size: clamp(28px, 4vw, 40px);
+  font-size: clamp(24px, 3vw, 34px);
   font-weight: 800;
   line-height: 1.02;
 }
@@ -72,15 +72,16 @@
 
 .direct-call-overlay__stage {
   position: relative;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 44px 32px;
-  border-radius: 30px;
+  gap: 16px;
+  min-height: clamp(300px, 42vh, 440px);
+  padding: 34px 28px;
+  border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background:
     radial-gradient(circle at top, rgba(94, 117, 228, 0.18), transparent 34%),
@@ -89,8 +90,8 @@
 
 .direct-call-overlay__stage-surface {
   position: absolute;
-  inset: 18px;
-  border-radius: 26px;
+  inset: 14px;
+  border-radius: 22px;
   background:
     linear-gradient(140deg, rgba(255, 255, 255, 0.035), transparent 38%),
     radial-gradient(circle at bottom, rgba(50, 72, 155, 0.2), transparent 42%);
@@ -99,7 +100,7 @@
 
 .direct-call-overlay__pulse {
   position: absolute;
-  width: min(42vw, 460px);
+  width: min(34vw, 340px);
   aspect-ratio: 1;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(98, 122, 255, 0.3), rgba(98, 122, 255, 0.06) 58%, transparent 74%);
@@ -111,8 +112,8 @@
 .direct-call-overlay__avatar {
   position: relative;
   z-index: 1;
-  width: clamp(136px, 20vw, 220px);
-  height: clamp(136px, 20vw, 220px);
+  width: clamp(112px, 14vw, 168px);
+  height: clamp(112px, 14vw, 168px);
   border-radius: 999px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
 }
@@ -127,13 +128,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-align: center;
 }
 
 .direct-call-overlay__copy strong {
   color: #fff;
-  font-size: clamp(32px, 4.2vw, 52px);
+  font-size: clamp(28px, 3.6vw, 44px);
   font-weight: 800;
   line-height: 1.05;
 }
@@ -184,8 +185,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 22px;
-  border-radius: 24px;
+  padding: 14px 18px;
+  border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(13, 16, 27, 0.92);
 }
@@ -206,7 +207,7 @@
 
 .direct-call-overlay__dock-meta strong {
   color: #edf2ff;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -219,9 +220,9 @@
 }
 
 .direct-call-overlay__button {
-  min-width: 146px;
-  min-height: 54px;
-  padding: 0 22px;
+  min-width: 132px;
+  min-height: 48px;
+  padding: 0 18px;
   border: 0;
   border-radius: 999px;
   font: inherit;
@@ -277,12 +278,14 @@
   }
 
   .direct-call-overlay__workspace {
-    min-height: calc(100vh - 24px);
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
     padding: 18px;
     border-radius: 24px;
   }
 
   .direct-call-overlay__stage {
+    min-height: clamp(280px, 50vh, 420px);
     padding: 28px 18px;
     border-radius: 22px;
   }

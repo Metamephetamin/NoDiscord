@@ -10,12 +10,12 @@ test("voice channel settings button is only rendered for channel managers", () =
   assert.doesNotMatch(source, /disabled=\{!canManageChannels\}/);
 });
 
-test("voice channel timer keeps a small right edge gap without reserving hidden settings space", () => {
+test("voice channel timer reserves the hover settings slot cleanly", () => {
   const css = readRepoFile("src/css/ListChannels.css");
 
   assert.match(css, /\.voice-channel__button \{[\s\S]*?padding: 0 12px 0 0;/);
   assert.match(css, /\.voice-channel__row > \.channel-edit-button \{[\s\S]*?z-index: 2;/);
-  assert.match(css, /\.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__button \{[\s\S]*?padding-right: 0;/);
+  assert.match(css, /\.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__button \{[\s\S]*?padding-right: 46px;/);
   assert.match(css, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?width: 76px;/);
 });
 
@@ -103,6 +103,21 @@ test("media preview delete button requires delete handler", () => {
   assert.match(messageListSource, /canDelete: canDeleteAttachments/);
 });
 
+test("company info panel exposes copyable work contacts instead of site details", () => {
+  const panelsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const settingsCss = readRepoFile("src/css/MenuSettings.css");
+
+  assert.match(panelsSource, /COMPANY_WORK_EMAIL = "andrey1689123pro@gmail\.com"/);
+  assert.match(panelsSource, /COMPANY_TELEGRAM_HANDLE = "zzzCHUL"/);
+  assert.match(panelsSource, /copyCompanyContact/);
+  assert.match(panelsSource, /globalThis\.navigator\.clipboard\.writeText/);
+  assert.match(panelsSource, /Скопировано/);
+  assert.doesNotMatch(panelsSource, /<dt>Сайт<\/dt>[\s\S]*?https:\/\/lanaya\.space/);
+  assert.doesNotMatch(panelsSource, /<dt>ИНН<\/dt>[\s\S]*?504417743063/);
+  assert.match(settingsCss, /\.company-info-panel__photo/);
+  assert.match(settingsCss, /\.company-info-panel__toast/);
+});
+
 test("media preview photo actions use bootstrap icons without a theme shell", () => {
   const previewSource = readRepoFile("src/components/TextChatMediaPreview.jsx");
   const mediaPreviewCss = readRepoFileIfExists("src/css/TextChatMediaPreview.css");
@@ -178,6 +193,20 @@ test("shared location is reduced to a privacy cell before realtime publication",
   assert.doesNotMatch(friendsControllerSource, /longitude\s*=\s*canShowLocation/);
 });
 
+test("friends map avoids layout invalidation on every user list render", () => {
+  const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+  const markerEffectStart = friendsSource.indexOf("const map = mapInstanceRef.current;", friendsSource.indexOf("const centerOnSelf ="));
+  const markerEffectEnd = friendsSource.indexOf("return (", markerEffectStart);
+  const markerEffectSource = friendsSource.slice(markerEffectStart, markerEffectEnd);
+
+  assert.match(friendsSource, /const visibleUsersSignature = useMemo/);
+  assert.match(friendsSource, /visibleUsersRef\.current = visibleUsers;/);
+  assert.match(friendsSource, /new ResizeObserver\(handleMapResize\)/);
+  assert.match(markerEffectSource, /const mapUsers = visibleUsersRef\.current;/);
+  assert.match(markerEffectSource, /\}, \[visibleUsersSignature\]\);/);
+  assert.doesNotMatch(markerEffectSource, /map\.invalidateSize\(\)/);
+});
+
 test("message timestamps render in the bottom message footer", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
 
@@ -188,9 +217,11 @@ test("message timestamps render in the bottom message footer", () => {
 
 test("message timestamps show only time while dates render as day dividers", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const messageLayoutCss = readRepoFile("src/css/TextChatLayoutMessages.css");
   const messageTimestampStart = messageListSource.indexOf("function MessageTimestamp");
   const messageTimestampEnd = messageListSource.indexOf("function MessageDeliveryStatus", messageTimestampStart);
   const messageTimestampSource = messageListSource.slice(messageTimestampStart, messageTimestampEnd);
+  const dateTextRule = messageLayoutCss.match(/\.message-date-divider span \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(messageTimestampSource, /const timestampLabel = formatTime\(messageItem\?\.timestamp\);/);
   assert.doesNotMatch(messageTimestampSource, /formatTimestamp/);
@@ -200,6 +231,10 @@ test("message timestamps show only time while dates render as day dividers", () 
   assert.match(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="start" \/>/);
   assert.doesNotMatch(messageListSource, /shouldShowEndDayDivider/);
   assert.doesNotMatch(messageListSource, /<MessageDateDivider timestamp=\{messageItem\.timestamp\} placement="end" \/>/);
+  assert.match(messageLayoutCss, /\.message-date-divider::before,[\s\S]*?\.message-date-divider::after \{[\s\S]*?height: 1px;/);
+  assert.match(dateTextRule, /background: transparent;/);
+  assert.match(dateTextRule, /border: 0;/);
+  assert.match(dateTextRule, /box-shadow: none;/);
 });
 
 test("direct chat topbar renders user presence on a second line", () => {
@@ -834,10 +869,15 @@ test("message reports use an in-app dialog instead of browser prompt", () => {
 test("profile user reports use a modal dialog instead of an inline alert panel", () => {
   const profileSource = readRepoFile("src/components/TextChatProfileModal.jsx");
   const modalSource = readRepoFile("src/components/TextChatReportModal.jsx");
+  const profileCss = readRepoFile("src/css/TextChatProfileModal.css");
+  const reportModalCss = readRepoFileIfExists("src/css/TextChatReportModal.css");
+  const profileBackdropZIndex = Number(profileCss.match(/\.chat-profile-modal-backdrop\s*\{[\s\S]*?z-index:\s*(\d+);/)?.[1] || 0);
+  const reportModalZIndex = Number(reportModalCss.match(/\.chat-report-modal\s*\{[\s\S]*?z-index:\s*(\d+);/)?.[1] || 0);
 
   assert.match(profileSource, /import TextChatReportModal from "\.\/TextChatReportModal";/);
   assert.match(profileSource, /<TextChatReportModal[\s\S]*ariaLabel="Жалоба на пользователя"[\s\S]*title="Пожаловаться на пользователя"/);
   assert.match(profileSource, /onClick=\{\(\) => setReportOpen\(true\)\}/);
+  assert.ok(reportModalZIndex > profileBackdropZIndex);
   assert.doesNotMatch(profileSource, /className="chat-profile-modal__report"/);
   assert.doesNotMatch(profileSource, /className="chat-profile-modal__report-actions"/);
   assert.match(modalSource, /title = "Пожаловаться"/);
@@ -900,6 +940,15 @@ test("friends workspace styles are split out of the main menu stylesheet", () =>
   assert.match(friendsCss, /\.friends-modal/);
 });
 
+test("conversation cards do not shift position on hover", () => {
+  const friendsCss = readRepoFileIfExists("src/css/FriendsWorkspace.css");
+  const conversationCardRule = friendsCss.match(/\.friends-conversation-card \{[\s\S]*?\n\}/)?.[0] || "";
+  const hoverRule = friendsCss.match(/\.friends-conversation-card:hover \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.doesNotMatch(conversationCardRule, /transform 140ms ease/);
+  assert.doesNotMatch(hoverRule, /transform:\s*translate/);
+});
+
 test("stream viewer styles are split out of the main menu stylesheet", () => {
   const viewerSource = readRepoFile("src/components/ScreenShareViewer.jsx");
   const mainCss = readRepoFile("src/css/MenuMain.css");
@@ -924,6 +973,23 @@ test("direct call overlay styles stay split from the main menu stylesheet", () =
   assert.doesNotMatch(mainCss, /\.direct-call-inline/);
   assert.match(directCallCss, /\.direct-call-overlay/);
   assert.match(directCallCss, /\.direct-call-inline/);
+});
+
+test("direct call overlay stays compact on desktop", () => {
+  const directCallCss = readRepoFileIfExists("src/css/DirectCallOverlay.css");
+
+  assert.match(directCallCss, /\.direct-call-overlay\s*\{[\s\S]*?align-items: center;[\s\S]*?justify-content: center;[\s\S]*?padding: 28px;/);
+  assert.match(directCallCss, /\.direct-call-overlay__workspace\s*\{[\s\S]*?width: min\(940px, calc\(100vw - 56px\)\);[\s\S]*?max-height: calc\(100vh - 56px\);/);
+  assert.match(directCallCss, /\.direct-call-overlay__stage\s*\{[\s\S]*?min-height: clamp\(300px, 42vh, 440px\);/);
+  assert.match(directCallCss, /\.direct-call-overlay__avatar\s*\{[\s\S]*?width: clamp\(112px, 14vw, 168px\);[\s\S]*?height: clamp\(112px, 14vw, 168px\);/);
+});
+
+test("direct call ringtone only uses bundled audio files", () => {
+  const directCallSoundsSource = readRepoFile("src/utils/directCallSounds.js");
+
+  assert.match(directCallSoundsSource, /direct-call-incoming\.wav/);
+  assert.match(directCallSoundsSource, /direct-call-outgoing\.wav/);
+  assert.doesNotMatch(directCallSoundsSource, /createOscillator|createPreferredAudioContext|startSynthTone|fallbackDelayMs/);
 });
 
 test("direct message chat sounds use the shared system sound volume", () => {
@@ -978,6 +1044,10 @@ test("location maps avoid CORS-only tile loading and use a quick geolocation pas
 
   assert.match(friendsSource, /LANAYA_WORLD_BASE_TILE_URL/);
   assert.doesNotMatch(friendsSource, /crossOrigin:\s*true/);
+  assert.match(friendsSource, /function|const constrainLanayaWorldMinZoom/);
+  assert.match(friendsSource, /map\.getBoundsZoom\(LANAYA_WORLD_BOUNDS, true, LANAYA_WORLD_MIN_VISIBLE_ZOOM_PADDING\)/);
+  assert.match(friendsSource, /map\.setMinZoom\(nextMinZoom\)/);
+  assert.match(friendsSource, /map\.on\("resize", handleMapResize\)/);
   assert.match(composerSource, /LOCATION_FAST_GEOLOCATION_OPTIONS/);
   assert.match(composerSource, /LOCATION_ACCURACY_TIMEOUT_MS = 3200;/);
   assert.match(composerSource, /maximumAge:\s*60000/);
@@ -1390,6 +1460,15 @@ test("bottom profile voice controls stay compact and use one icon color", () => 
   assert.match(chevronRule, /background-color: currentColor;/);
 });
 
+test("voice channel settings gear replaces the timer cleanly on hover", () => {
+  const listChannelsCss = readRepoFile("src/css/ListChannels.css");
+
+  assert.match(listChannelsCss, /\.voice-channel__row > \.channel-edit-button \{[\s\S]*?right: 8px;[\s\S]*?width: 34px;[\s\S]*?height: 34px;[\s\S]*?opacity: 0;/);
+  assert.match(listChannelsCss, /\.voice-channel__row > \.channel-edit-button img \{[\s\S]*?width: 19px;[\s\S]*?height: 19px;/);
+  assert.match(listChannelsCss, /\.list__items:hover \.voice-channel__row > \.channel-edit-button,[\s\S]*?background-color: #262932;[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/);
+  assert.match(listChannelsCss, /\.list__items:hover \.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__timer,[\s\S]*?opacity: 0;[\s\S]*?visibility: hidden;/);
+});
+
 test("interface accent color is customizable through appearance settings", () => {
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
@@ -1445,6 +1524,14 @@ test("media-only message layout stays stable after reactions are added", () => {
 
   assert.match(mediaOnlySource, /hasRenderableAttachments/);
   assert.doesNotMatch(mediaOnlySource, /!reactions\.length/);
+});
+
+test("partial message updates preserve existing media attachments", () => {
+  const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+
+  assert.match(controllerSource, /function mergeIncomingMessageUpdate/);
+  assert.match(controllerSource, /normalizeAttachmentItems\(previousMessage\)/);
+  assert.match(controllerSource, /mergeIncomingMessageUpdate\(messageItem, normalizedMessage, updatedMessage\)/);
 });
 
 test("batch upload sheet styles stay split from the main text chat stylesheet", () => {
@@ -1538,6 +1625,16 @@ test("message bubble content opens the message context menu directly on right cl
 
   assert.match(messageListSource, /const handleMessageContextMenu = \(event\) => \{\n\s+event\.stopPropagation\(\);\n\s+onOpenContextMenu\(event, messageItem, isOwnMessage\);\n\s+\};/);
   assert.match(messageListSource, /className=\{`msg-content[\s\S]*?onContextMenu=\{handleMessageContextMenu\}/);
+});
+
+test("direct message bubble tail uses a straight single-edge shape", () => {
+  const messageLayoutCss = readRepoFile("src/css/TextChatLayoutMessages.css");
+  const tailRule = messageLayoutCss.match(/\.msg-content--dm:not\([\s\S]*?::before\s*\{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(tailRule, /width: 18px;/);
+  assert.match(tailRule, /height: 16px;/);
+  assert.match(tailRule, /clip-path: polygon\(44% 0, 100% 0, 100% 100%, 0 100%\);/);
+  assert.doesNotMatch(tailRule, /20% 80%|35% 45%/);
 });
 
 test("chat report modal styles stay split from the main text chat stylesheet", () => {

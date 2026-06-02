@@ -2177,13 +2177,14 @@ function TextChatMessageList({
     [serverMembers, serverRoleById]
   );
   const registerMessageNode = useCallback((messageId, node) => {
-    registerMeasuredNode?.(messageId, node);
+    const normalizedMessageId = String(messageId || "");
+    registerMeasuredNode?.(normalizedMessageId, node);
     if (node) {
-      messageRefs.current.set(messageId, node);
+      messageRefs.current.set(normalizedMessageId, node);
       return;
     }
 
-    messageRefs.current.delete(messageId);
+    messageRefs.current.delete(normalizedMessageId);
   }, [messageRefs, registerMeasuredNode]);
 
   const renderedAttachmentsByMessageId = useMemo(() => new Map(

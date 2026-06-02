@@ -8,10 +8,12 @@ import {
   resolveVoiceChannelSessionStartedAtMs,
 } from "../voiceChannelDuration.js";
 
-test("formats voice channel duration as hours minutes and seconds", () => {
-  assert.equal(formatVoiceChannelDuration(0), "0:00:00");
-  assert.equal(formatVoiceChannelDuration(5_000), "0:00:05");
-  assert.equal(formatVoiceChannelDuration(65_000), "0:01:05");
+test("formats voice channel duration without hours until an hour passes", () => {
+  assert.equal(formatVoiceChannelDuration(0), "00:00");
+  assert.equal(formatVoiceChannelDuration(5_000), "00:05");
+  assert.equal(formatVoiceChannelDuration(65_000), "01:05");
+  assert.equal(formatVoiceChannelDuration(3_599_000), "59:59");
+  assert.equal(formatVoiceChannelDuration(3_600_000), "1:00:00");
   assert.equal(formatVoiceChannelDuration(21_322_000), "5:55:22");
 });
 
@@ -54,7 +56,7 @@ test("channel session start survives when the oldest participant leaves", () => 
   });
 
   assert.equal(nextStartedAtMs, startedAtMs);
-  assert.equal(formatVoiceChannelDuration(63_000 - nextStartedAtMs), "0:02:02");
+  assert.equal(formatVoiceChannelDuration(63_000 - nextStartedAtMs), "02:02");
 });
 
 test("channel session start resets when channel becomes empty", () => {

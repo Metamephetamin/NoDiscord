@@ -29,3 +29,18 @@ test("bottom profile mini controls stay compact and inherit one icon color", () 
   assert.match(chevronRule, /background-color: currentColor;/);
   assert.match(mobileCss, /\.profile__mini-icon,\n\.profile__mini-arrow \{\n {2}min-height: 30px;\n\}/);
 });
+
+test("empty avatars render a shared VK-like silhouette placeholder", () => {
+  const animatedAvatarSource = readRepoFile("src/components/AnimatedAvatar.jsx");
+  const animatedMediaSource = readRepoFile("src/components/AnimatedMedia.jsx");
+  const shellCss = readRepoFile("src/css/MenuMainShell.css");
+  const emptyAvatarRule = shellCss.match(/\.animated-avatar--empty \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(animatedAvatarSource, /fallback = DEFAULT_AVATAR/);
+  assert.match(animatedMediaSource, /className=\{\["animated-avatar--empty", className\]/);
+  assert.match(emptyAvatarRule, /position: relative;/);
+  assert.match(emptyAvatarRule, /overflow: hidden;/);
+  assert.match(shellCss, /\.animated-avatar--empty::before/);
+  assert.match(shellCss, /\.animated-avatar--empty::after/);
+  assert.match(shellCss, /border-radius: 999px;/);
+});

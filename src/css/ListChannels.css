@@ -196,6 +196,7 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  transition: opacity 0.12s ease, visibility 0.12s ease;
 }
 
 .list__items--active .voice-channel__button {
@@ -358,13 +359,23 @@
 .voice-channel__row > .channel-edit-button {
   position: absolute;
   top: 50%;
-  right: 0;
+  right: 8px;
   z-index: 2;
-  transform: translateY(calc(-50% + 2px));
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.11);
+  color: #eef2ff;
+  opacity: 0;
+  transform: translateY(-50%);
 }
 
 .voice-channel__row:has(> .channel-edit-button) .voice-channel__button {
-  padding-right: 0;
+  padding-right: 46px;
+}
+
+.list__items--active .voice-channel__row:has(> .channel-edit-button) .voice-channel__button {
+  padding-right: 46px;
 }
 
 .voice-channel__row:has(> .channel-edit-button) .voice-channel__status-button,
@@ -375,7 +386,23 @@
 .list__items:hover .voice-channel__row > .channel-edit-button,
 .list__items:focus-within .voice-channel__row > .channel-edit-button,
 .list__items--editing .voice-channel__row > .channel-edit-button {
+  background-color: #262932;
+  color: #eef2ff;
   transform: translateY(-50%);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.voice-channel__row > .channel-edit-button img {
+  width: 19px;
+  height: 19px;
+}
+
+.list__items:hover .voice-channel__row:has(> .channel-edit-button) .voice-channel__timer,
+.list__items:focus-within .voice-channel__row:has(> .channel-edit-button) .voice-channel__timer,
+.list__items--editing .voice-channel__row:has(> .channel-edit-button) .voice-channel__timer {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .channel-inline-input {

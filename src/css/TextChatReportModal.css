@@ -5,7 +5,7 @@
 .chat-report-modal {
   position: fixed;
   inset: 0;
-  z-index: 7200;
+  z-index: 11000;
   display: grid;
   place-items: center;
   padding: 18px;

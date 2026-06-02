@@ -365,6 +365,7 @@ const LANAYA_WORLD_MAX_ZOOM = 19;
 const LANAYA_WORLD_DEFAULT_CENTER = [25, 25];
 const LANAYA_WORLD_DEFAULT_ZOOM = 2;
 const LANAYA_WORLD_BOUNDS = [[-60, -180], [84, 180]];
+const LANAYA_WORLD_MIN_VISIBLE_ZOOM_PADDING = [0, 0];
 const LANAYA_WORLD_CITY_LABELS = [
   ["Москва", 55.76, 37.62],
   ["Санкт-Петербург", 59.93, 30.31],
@@ -396,6 +397,23 @@ const LANAYA_WORLD_CITY_LABELS = [
   ["Токио", 35.68, 139.69],
   ["Сидней", -33.87, 151.21],
 ];
+
+const constrainLanayaWorldMinZoom = (map) => {
+  if (!map) {
+    return LANAYA_WORLD_MIN_ZOOM;
+  }
+
+  const nextMinZoom = Math.max(
+    LANAYA_WORLD_MIN_ZOOM,
+    map.getBoundsZoom(LANAYA_WORLD_BOUNDS, true, LANAYA_WORLD_MIN_VISIBLE_ZOOM_PADDING),
+  );
+  map.setMinZoom(nextMinZoom);
+  if (map.getZoom() < nextMinZoom) {
+    map.setZoom(nextMinZoom, { animate: false });
+  }
+
+  return nextMinZoom;
+};
 
 const escapeMapHtml = (value) => String(value || "")
   .replace(/&/g, "&amp;")
@@ -819,6 +837,7 @@ const WhereIsEveryoneView = ({
   const markerLayerRef = useRef(null);
   const didInitialMapFitRef = useRef(false);
   const currentUserId = String(user?.id || user?.userId || user?.email || "self").trim() || "self";
+  const visibleUsersRef = useRef([]);
   const [selectedMapUserId, setSelectedMapUserId] = useState("");
   const [mapFriendActionStatus, setMapFriendActionStatus] = useState("");
   const [mapFriendActionUserId, setMapFriendActionUserId] = useState("");
@@ -936,6 +955,21 @@ const WhereIsEveryoneView = ({
       return String(left.name || "").localeCompare(String(right.name || ""), "ru");
     });
   }, [currentUserId, globalLocationUsers, liveSelfLocation, realtimeLocations, users]);
+  const visibleUsersSignature = useMemo(
+    () => visibleUsers
+      .map((item) => [
+        item.id,
+        item.kind,
+        item.name,
+        item.avatar,
+        item.locationLabel,
+        item.latitude,
+        item.longitude,
+      ].map((value) => String(value ?? "")).join(":"))
+      .join("|"),
+    [visibleUsers]
+  );
+  visibleUsersRef.current = visibleUsers;
   const onlineCount = visibleUsers.filter((item) => item.kind === "self" || item.kind === "online").length;
   const selectedMapUser = useMemo(
     () => visibleUsers.find((item) => String(item.id || "") === selectedMapUserId) || null,
@@ -1087,14 +1121,28 @@ const WhereIsEveryoneView = ({
     markerLayerRef.current = L.layerGroup().addTo(map);
     map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: false });
     map.setMaxBounds(LANAYA_WORLD_BOUNDS);
+    constrainLanayaWorldMinZoom(map);
     mapInstanceRef.current = map;
 
-    const resizeTimer = window.setTimeout(() => {
+    const handleMapResize = () => {
       map.invalidateSize();
-    }, 120);
+      constrainLanayaWorldMinZoom(map);
+    };
+    map.on("resize", handleMapResize);
+
+    const resizeObserver = typeof ResizeObserver !== "undefined" && mapElementRef.current
+      ? new ResizeObserver(handleMapResize)
+      : null;
+    resizeObserver?.observe(mapElementRef.current);
+    window.addEventListener("resize", handleMapResize);
+
+    const resizeTimer = window.setTimeout(handleMapResize, 120);
 
     return () => {
       window.clearTimeout(resizeTimer);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", handleMapResize);
+      map.off("resize", handleMapResize);
       map.remove();
       mapInstanceRef.current = null;
       markerLayerRef.current = null;
@@ -1239,9 +1287,11 @@ const WhereIsEveryoneView = ({
       return undefined;
     }
 
+    const mapUsers = visibleUsersRef.current;
+
     markerLayer.clearLayers();
 
-    visibleUsers.forEach((mapUser) => {
+    mapUsers.forEach((mapUser) => {
       const userName = escapeMapHtml(mapUser.name);
       const locationLabel = escapeMapHtml(mapUser.locationLabel || `${mapUser.latitude.toFixed(2)}, ${mapUser.longitude.toFixed(2)}`);
       const marker = L.marker([mapUser.latitude, mapUser.longitude], {
@@ -1268,24 +1318,23 @@ const WhereIsEveryoneView = ({
       marker.addTo(markerLayer);
     });
 
-    if (!didInitialMapFitRef.current && visibleUsers.length > 1) {
-      const bounds = L.latLngBounds(visibleUsers.map((item) => [item.latitude, item.longitude]));
+    if (!didInitialMapFitRef.current && mapUsers.length > 1) {
+      const bounds = L.latLngBounds(mapUsers.map((item) => [item.latitude, item.longitude]));
       map.fitBounds(bounds.pad(0.34), {
         animate: true,
         duration: 0.45,
         maxZoom: 5,
       });
       didInitialMapFitRef.current = true;
-    } else if (!didInitialMapFitRef.current && visibleUsers.length === 1) {
-      map.setView([visibleUsers[0].latitude, visibleUsers[0].longitude], 9, { animate: true });
+    } else if (!didInitialMapFitRef.current && mapUsers.length === 1) {
+      map.setView([mapUsers[0].latitude, mapUsers[0].longitude], 9, { animate: true });
       didInitialMapFitRef.current = true;
-    } else if (!visibleUsers.length) {
-      map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: true });
+    } else if (!mapUsers.length && !didInitialMapFitRef.current) {
+      map.setView(LANAYA_WORLD_DEFAULT_CENTER, LANAYA_WORLD_DEFAULT_ZOOM, { animate: false });
     }
 
-    map.invalidateSize();
     return undefined;
-  }, [visibleUsers]);
+  }, [visibleUsersSignature]);
 
   return (
     <div className="friends-main__content friends-main__content--where">

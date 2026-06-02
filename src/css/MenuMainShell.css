@@ -295,11 +295,39 @@ html[data-ui-density="compact"] .desktop-app-topbar {
 }
 
 .animated-avatar--empty {
+  position: relative;
   display: block;
+  overflow: hidden;
+  border-radius: 999px;
   background:
-    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.16), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.2), transparent 30%),
+    linear-gradient(180deg, rgba(121, 132, 153, 0.82), rgba(63, 72, 91, 0.88));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 -16px 26px rgba(10, 14, 22, 0.22);
+}
+
+.animated-avatar--empty::before,
+.animated-avatar--empty::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(226, 232, 242, 0.88);
+}
+
+.animated-avatar--empty::before {
+  top: 20%;
+  width: 34%;
+  height: 34%;
+  border-radius: 999px;
+}
+
+.animated-avatar--empty::after {
+  bottom: -16%;
+  width: 72%;
+  height: 48%;
+  border-radius: 999px 999px 0 0;
 }
 
 .sidebar__servers,

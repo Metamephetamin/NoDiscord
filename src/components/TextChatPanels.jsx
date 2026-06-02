@@ -45,39 +45,57 @@ export function MessageSearchPanel({ query, results, loading = false, error = ""
 }
 
 export function PinnedMessagesPanel({ pinnedMessages, onOpenMessage, onRemovePinned }) {
+  const [activePinnedIndex, setActivePinnedIndex] = useState(0);
+
   if (!pinnedMessages.length) {
     return null;
   }
 
+  const safeActivePinnedIndex = Math.min(activePinnedIndex, pinnedMessages.length - 1);
+  const activePinnedMessage = pinnedMessages[safeActivePinnedIndex] || pinnedMessages[0];
+
   return (
     <div className="chat-pins">
-      <div className="chat-pins__header">
-        <strong>Закреплённые сообщения</strong>
-        <span>{pinnedMessages.length}</span>
-      </div>
-      <div className="chat-pins__list">
-        {pinnedMessages.map((pinnedMessage) => (
-          <div key={pinnedMessage.id} className="chat-pins__item">
-            <button type="button" className="chat-pins__link" onClick={() => onOpenMessage(pinnedMessage.id)}>
-              <span className="chat-pins__meta">
-                <strong>{pinnedMessage.username}</strong>
-                <small>{formatTimestamp(pinnedMessage.timestamp)}</small>
-              </span>
-              <span className="chat-pins__preview">{pinnedMessage.preview}</span>
-            </button>
-            <button
-              type="button"
-              className="chat-pins__remove"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRemovePinned(pinnedMessage.id);
-              }}
-              aria-label="Открепить сообщение"
-            >
-              ×
-            </button>
-          </div>
+      <div className="chat-pins__rail" aria-label="Закреплённые сообщения">
+        {pinnedMessages.map((pinnedMessage, pinnedIndex) => (
+          <button
+            key={pinnedMessage.id}
+            type="button"
+            className={`chat-pins__rail-item ${pinnedIndex === safeActivePinnedIndex ? "chat-pins__rail-item--active" : ""}`}
+            onClick={() => setActivePinnedIndex(pinnedIndex)}
+            aria-label={`Показать закреп ${pinnedIndex + 1} из ${pinnedMessages.length}`}
+            aria-pressed={pinnedIndex === safeActivePinnedIndex}
+          />
         ))}
+      </div>
+      <button
+        type="button"
+        className="chat-pins__content"
+        onClick={() => onOpenMessage?.(activePinnedMessage.id, {
+          behavior: "smooth",
+          block: "center",
+          highlight: true,
+        })}
+      >
+        <span className="chat-pins__title">Закреплённое сообщение</span>
+        <span className="chat-pins__preview">{activePinnedMessage.preview || "Сообщение без текста"}</span>
+      </button>
+      <div className="chat-pins__actions">
+        <span className="chat-pins__count">{safeActivePinnedIndex + 1}/{pinnedMessages.length}</span>
+        {typeof onRemovePinned === "function" ? (
+          <button
+            type="button"
+            className="chat-pins__remove"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemovePinned(activePinnedMessage.id);
+              setActivePinnedIndex((current) => Math.max(0, Math.min(current, pinnedMessages.length - 2)));
+            }}
+            aria-label="Открепить сообщение"
+          >
+            ×
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -149,19 +167,16 @@ export function ChatNavigationBar({
   firstUnreadMessageId,
   mentionMessages = [],
   replyMessages = [],
-  pinnedMessages = [],
   canReturnToJumpPoint = false,
   onJumpToFirstUnread,
   onOpenMention,
   onOpenReply,
-  onOpenPinned,
   onReturnToJumpPoint,
 }) {
   const latestMention = mentionMessages[mentionMessages.length - 1] || null;
   const latestReply = replyMessages[replyMessages.length - 1] || null;
-  const latestPinned = pinnedMessages[0] || null;
 
-  if (!firstUnreadMessageId && !latestMention && !latestReply && !latestPinned && !canReturnToJumpPoint) {
+  if (!firstUnreadMessageId && !latestMention && !latestReply && !canReturnToJumpPoint) {
     return null;
   }
 
@@ -180,11 +195,6 @@ export function ChatNavigationBar({
       {latestReply ? (
         <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenReply(latestReply.id)}>
           Ответы {replyMessages.length}
-        </button>
-      ) : null}
-      {latestPinned ? (
-        <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenPinned(latestPinned.id)}>
-          Закрепы {pinnedMessages.length}
         </button>
       ) : null}
       {canReturnToJumpPoint ? (

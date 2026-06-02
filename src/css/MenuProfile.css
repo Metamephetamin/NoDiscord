@@ -309,13 +309,69 @@
 }
 
 .avatar-shell {
+  --profile-avatar-border: #ffb23f;
+  --profile-avatar-border-dark: #7a4212;
+  --profile-avatar-frame-size: 40px;
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: var(--profile-avatar-frame-size);
+  height: var(--profile-avatar-frame-size);
   flex: 0 0 auto;
   overflow: visible;
   border-radius: 50%;
   isolation: isolate;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.36));
+}
+
+.avatar-shell::before,
+.avatar-shell::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.avatar-shell::before {
+  inset: -3px;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 50% -2px, #ffe59b 0 3px, transparent 4px),
+    radial-gradient(circle at 50% calc(100% + 2px), #ffe59b 0 3px, transparent 4px),
+    radial-gradient(circle at -2px 50%, #ffe59b 0 3px, transparent 4px),
+    radial-gradient(circle at calc(100% + 2px) 50%, #ffe59b 0 3px, transparent 4px),
+    repeating-conic-gradient(
+      from -10deg,
+      var(--profile-avatar-border) 0deg 13deg,
+      #ffd77a 13deg 19deg,
+      var(--profile-avatar-border-dark) 19deg 23deg,
+      transparent 23deg 31deg
+    );
+  -webkit-mask: radial-gradient(circle, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  mask: radial-gradient(circle, transparent calc(100% - 7px), #000 calc(100% - 6px));
+}
+
+.avatar-shell::after {
+  inset: -6px;
+  z-index: 3;
+  background:
+    conic-gradient(
+      from 25deg,
+      transparent 0 7deg,
+      rgba(255, 228, 153, 0.95) 7deg 13deg,
+      transparent 13deg 83deg,
+      rgba(255, 228, 153, 0.95) 83deg 89deg,
+      transparent 89deg 172deg,
+      rgba(255, 228, 153, 0.95) 172deg 178deg,
+      transparent 178deg 263deg,
+      rgba(255, 228, 153, 0.95) 263deg 269deg,
+      transparent 269deg 360deg
+    );
+  -webkit-mask: radial-gradient(circle, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(circle, transparent calc(100% - 3px), #000 calc(100% - 2px));
+}
+
+.avatar-shell--speaking {
+  --profile-avatar-border: #67d6b5;
+  --profile-avatar-border-dark: #1f7e67;
 }
 
 .avatar {
@@ -326,15 +382,26 @@
   clip-path: inset(0 round 50%);
   object-fit: cover;
   object-position: center 24%;
-  border: 2px solid rgba(255, 255, 255, 0.14);
+  border: 0;
+  box-shadow:
+    0 0 0 2px #151922,
+    0 0 0 4px var(--profile-avatar-border);
   image-rendering: auto;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.menu__profile--voice-connected .avatar-shell .avatar {
+  box-shadow:
+    0 0 0 2px #151922,
+    0 0 0 4px var(--profile-avatar-border),
+    0 0 18px rgba(103, 214, 181, 0.32);
 }
 
 .menu__profile--voice-connected .avatar-shell::after {
+  inset: auto;
   content: "";
   position: absolute;
   right: -1px;
@@ -345,7 +412,9 @@
   background: #65e48f;
   border: 2px solid #101319;
   box-shadow: 0 0 12px rgba(101, 228, 143, 0.42);
-  z-index: 2;
+  z-index: 4;
+  -webkit-mask: none;
+  mask: none;
 }
 
 .profile__names {

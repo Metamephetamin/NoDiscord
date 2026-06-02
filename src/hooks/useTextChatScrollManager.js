@@ -582,8 +582,10 @@ export default function useTextChatScrollManager({
 
       if (attempt === 0 && typeof estimateMessageOffsetById === "function") {
         const estimatedOffset = estimateMessageOffsetById(normalizedMessageId);
-        const targetTop = getTargetScrollTopForBlock(list, estimatedOffset, 96, block);
-        scrollToPosition(targetTop, { behavior: "auto", scrollIntent: "jump" });
+        if (Number.isFinite(estimatedOffset)) {
+          const targetTop = getTargetScrollTopForBlock(list, estimatedOffset, 96, block);
+          scrollToPosition(targetTop, { behavior: "auto", scrollIntent: "jump" });
+        }
       }
 
       if (attempt >= 6) {

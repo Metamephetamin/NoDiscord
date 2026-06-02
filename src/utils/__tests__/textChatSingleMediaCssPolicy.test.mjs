@@ -40,4 +40,14 @@ test("media-only reactions stay outside the absolute media footer overlay", () =
     /\.msg-content--media-only\s+\.message-bottom-row--media-reactions\s*\{[\s\S]*?position:\s*static;[\s\S]*?pointer-events:\s*auto;/,
     "reaction rows should participate in layout instead of being painted as the media footer overlay",
   );
+  assert.match(
+    css,
+    /\.msg-content--media-only,[\s\S]*?\.msg-content--dm-own\.msg-content--media-only\s*\{[\s\S]*?flex-direction:\s*column;/,
+    "media-only shells should stack attachments and reactions vertically",
+  );
+  assert.match(
+    css,
+    /\.msg-content--media-only\s+\.message-attachments-stack--single,[\s\S]*?\.msg-content--media-only\s+\.message-attachment-single\s+\.message-media\s*\{[\s\S]*?flex-shrink:\s*0;/,
+    "single media attachments should not be squeezed away when reactions render below them",
+  );
 });

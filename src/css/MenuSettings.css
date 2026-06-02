@@ -322,32 +322,27 @@ html[data-ui-density="compact"] .settings-popup--shell {
   height: 92px;
   display: grid;
   place-items: center;
-  grid-template-columns: repeat(5, 8px);
-  gap: 6px;
   border-radius: 22px;
-  background: #ffffff;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(221, 228, 242, 0.92));
   box-shadow: 0 20px 46px rgba(0, 0, 0, 0.28);
 }
 
-.company-info-panel__mark i {
+.company-info-panel__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
-  width: 8px;
-  border-radius: 999px;
-  background: #05070b;
 }
 
-.company-info-panel__mark i:nth-child(1),
-.company-info-panel__mark i:nth-child(5) {
-  height: 22px;
-}
-
-.company-info-panel__mark i:nth-child(2),
-.company-info-panel__mark i:nth-child(4) {
-  height: 40px;
-}
-
-.company-info-panel__mark i:nth-child(3) {
-  height: 56px;
+.company-info-panel__photo-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #101521;
+  font-size: 40px;
+  font-weight: 900;
 }
 
 .company-info-panel h2 {
@@ -397,6 +392,48 @@ html[data-ui-density="compact"] .settings-popup--shell {
   font-size: 14px;
   font-weight: 800;
   overflow-wrap: anywhere;
+}
+
+.company-info-panel__facts button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.company-info-panel__facts button:hover,
+.company-info-panel__facts button:focus-visible {
+  color: var(--app-accent, #8ea7ff);
+  outline: none;
+}
+
+.company-info-panel__facts button:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.company-info-panel__toast {
+  min-height: 28px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.1));
+  color: var(--app-text, rgba(245, 247, 255, 0.94));
+  background: var(--app-surface-strong, rgba(19, 27, 43, 0.92));
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: none;
+}
+
+.company-info-panel__toast--visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 html[data-ui-theme="light"] .memory-settings-card--hero {

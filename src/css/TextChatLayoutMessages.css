@@ -425,9 +425,24 @@
 .message-date-divider {
   width: 100%;
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 12px;
   margin: 14px 0 10px;
   pointer-events: none;
+}
+
+.message-date-divider::before,
+.message-date-divider::after {
+  content: "";
+  flex: 1 1 0;
+  max-width: 280px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.24));
+}
+
+.message-date-divider::after {
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.24), transparent);
 }
 
 .message-date-divider--end {
@@ -436,14 +451,14 @@
 
 .message-date-divider span {
   max-width: calc(100% - 32px);
-  padding: 5px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 999px;
-  background: rgba(15, 19, 29, 0.72);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: rgba(223, 229, 245, 0.78);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
@@ -653,25 +668,25 @@
 .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
   content: "";
   position: absolute;
-  left: -9px;
+  left: -8px;
   bottom: 0;
-  width: 22px;
-  height: 19px;
+  width: 18px;
+  height: 16px;
   border-left: 0;
   border-bottom: 0;
-  border-bottom-left-radius: 11px;
+  border-bottom-left-radius: 8px;
   background: var(--message-bubble-bg);
   background-size: var(--message-bubble-bg-size);
-  background-position: 9px bottom;
+  background-position: 8px bottom;
   background-repeat: no-repeat;
-  clip-path: polygon(44% 0, 100% 0, 100% 100%, 0 100%, 20% 80%, 35% 45%);
+  clip-path: polygon(44% 0, 100% 0, 100% 100%, 0 100%);
   z-index: -1;
   pointer-events: none;
 }
 
 .message-item--dm-own .msg-content--dm:not(.msg-content--attachments):not(.msg-content--media-only):not(.msg-content--file-attachments):not(.msg-content--emoji-only-text)::before {
   right: auto;
-  left: -9px;
+  left: -8px;
   transform: none;
 }
 

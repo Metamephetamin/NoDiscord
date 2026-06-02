@@ -914,6 +914,8 @@
 .msg-content--dm.msg-content--media-only,
 .msg-content--dm-own.msg-content--media-only {
   position: relative;
+  flex-direction: column;
+  align-items: flex-start;
   flex: 0 0 auto;
   width: auto;
   max-width: 100%;
@@ -1032,6 +1034,13 @@
   max-width: 100%;
 }
 
+.msg-content--media-only .message-attachments-stack--single,
+.msg-content--media-only .message-attachments-stack--single .message-media-overlay-anchor,
+.msg-content--media-only .message-attachment-single,
+.msg-content--media-only .message-attachment-single .message-media {
+  flex-shrink: 0;
+}
+
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single.message-attachments-stack--with-overlay,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachments-stack--single.message-attachments-stack--with-overlay .message-media-overlay-anchor,
 .msg-content--media-only:not(.msg-content--single-video-only) .message-attachment-single,
@@ -1100,6 +1109,8 @@
 
 .msg-content--media-only .message-bottom-row--media-reactions {
   position: static;
+  flex: 0 0 auto;
+  align-self: stretch;
   right: auto;
   bottom: auto;
   width: 100%;

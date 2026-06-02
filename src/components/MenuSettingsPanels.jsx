@@ -636,34 +636,105 @@ export const AccountSettings = ({
   );
 };
 
-export const ProductCompanyInfoSettings = () => (
-  <div className="settings-shell__content settings-shell__content--company-info">
-    <section className="account-settings-section company-info-panel" aria-label="О Lanaya">
-      <div className="company-info-panel__mark" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
-      <h2>Lanaya</h2>
-      <p>
-        Lanaya — приложение для общения с личными чатами, серверами, голосовыми комнатами и звонками.
-        Здесь можно переписываться, собирать сообщества и общаться голосом в реальном времени.
-      </p>
-      <dl className="company-info-panel__facts">
-        <div>
-          <dt>Сайт</dt>
-          <dd>https://lanaya.space</dd>
+const COMPANY_WORK_EMAIL = "andrey1689123pro@gmail.com";
+const COMPANY_TELEGRAM_HANDLE = "zzzCHUL";
+const COMPANY_PROFILE_PHOTO_SRC = "/image/company-profile-photo.png";
+
+const writeClipboardFallback = (value) => {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.setAttribute("readonly", "");
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.select();
+
+  try {
+    return document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textArea);
+  }
+};
+
+export const ProductCompanyInfoSettings = () => {
+  const [copiedContact, setCopiedContact] = useState("");
+  const [isProfilePhotoMissing, setIsProfilePhotoMissing] = useState(false);
+
+  const copyCompanyContact = async (value, label) => {
+    try {
+      if (globalThis.navigator?.clipboard?.writeText) {
+        await globalThis.navigator.clipboard.writeText(value);
+      } else if (!writeClipboardFallback(value)) {
+        throw new Error("Clipboard fallback failed");
+      }
+      setCopiedContact(label);
+    } catch {
+      if (writeClipboardFallback(value)) {
+        setCopiedContact(label);
+      } else {
+        setCopiedContact("Ошибка копирования");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!copiedContact) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setCopiedContact(""), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, [copiedContact]);
+
+  return (
+    <div className="settings-shell__content settings-shell__content--company-info">
+      <section className="account-settings-section company-info-panel" aria-label="О Lanaya">
+        <div className="company-info-panel__mark" aria-hidden="true">
+          {isProfilePhotoMissing ? (
+            <span className="company-info-panel__photo-fallback">A</span>
+          ) : (
+            <img
+              className="company-info-panel__photo"
+              src={COMPANY_PROFILE_PHOTO_SRC}
+              alt=""
+              onError={() => setIsProfilePhotoMissing(true)}
+            />
+          )}
         </div>
-        <div>
-          <dt>ИНН</dt>
-          <dd>504417743063</dd>
+        <h2>Lanaya</h2>
+        <p>
+          Lanaya — приложение для общения с личными чатами, серверами, голосовыми комнатами и звонками.
+          Здесь можно переписываться, собирать сообщества и общаться голосом в реальном времени.
+        </p>
+        <dl className="company-info-panel__facts">
+          <div>
+            <dt>Почта</dt>
+            <dd>
+              <button type="button" onClick={() => copyCompanyContact(COMPANY_WORK_EMAIL, "почта")}>
+                {COMPANY_WORK_EMAIL}
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>Telegram</dt>
+            <dd>
+              <button type="button" onClick={() => copyCompanyContact(COMPANY_TELEGRAM_HANDLE, "Telegram")}>
+                @{COMPANY_TELEGRAM_HANDLE}
+              </button>
+            </dd>
+          </div>
+        </dl>
+        <div className={`company-info-panel__toast ${copiedContact ? "company-info-panel__toast--visible" : ""}`} role="status" aria-live="polite">
+          {copiedContact === "Ошибка копирования" ? copiedContact : copiedContact ? `Скопировано: ${copiedContact}` : "Скопировано"}
         </div>
-      </dl>
-    </section>
-  </div>
-);
+      </section>
+    </div>
+  );
+};
 
 export const MemorySettings = () => {
   const [storageUsage, setStorageUsage] = useState(null);

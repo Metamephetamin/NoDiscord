@@ -541,7 +541,7 @@ export default function useTextChatVirtualizer({
     const normalizedMessageId = String(messageId || "");
     const messageIndex = measurements.messageIndexById.get(normalizedMessageId);
     if (!Number.isInteger(messageIndex)) {
-      return 0;
+      return null;
     }
 
     return measurements.offsets[messageIndex] || 0;
