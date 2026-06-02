@@ -55,3 +55,22 @@ test("pinned messages render as one switchable bar instead of navigation jump pi
   assert.doesNotMatch(navSource, /latestPinned/);
   assert.doesNotMatch(navSource, /onOpenPinned/);
 });
+
+test("text chat view owns its shell CSS contract", () => {
+  const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
+  const layoutCss = readRepoFile("src/css/TextChatLayoutMessages.css");
+  const panelCss = readRepoFile("src/css/TextChatPanelsAndOverlays.css");
+  const containerRule = layoutCss.match(/\.textchat-container \{[\s\S]*?\n\}/)?.[0] || "";
+  const messageShellRule = layoutCss.match(/\.messages-list-shell \{[\s\S]*?\n\}/)?.[0] || "";
+  const inputAreaRule = panelCss.match(/\.input-area \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(viewSource, /import "\.\.\/\.\.\/css\/TextChat\.css";/);
+  assert.match(containerRule, /display: flex;/);
+  assert.match(containerRule, /flex-direction: column;/);
+  assert.match(containerRule, /overflow: hidden;/);
+  assert.match(messageShellRule, /flex: 1/);
+  assert.match(messageShellRule, /min-height: 0;/);
+  assert.match(inputAreaRule, /flex: 0 0 auto;/);
+  assert.match(inputAreaRule, /position: relative;/);
+  assert.match(inputAreaRule, /z-index: 2;/);
+});

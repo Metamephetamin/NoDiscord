@@ -10,6 +10,7 @@ import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButt
 import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
 import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
+import "../../css/TextChat.css";
 
 const TextChatForwardModal = lazy(() => recoverChunkImport(() => import("../../components/TextChatForwardModal")));
 
