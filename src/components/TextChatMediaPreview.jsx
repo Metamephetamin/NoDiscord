@@ -17,7 +17,7 @@ const DEFAULT_VIDEO_CONTROL_STATE = {
   volume: 1,
   playbackRate: 1,
 };
-const VIDEO_PLAYBACK_RATES = [1, 1.25, 1.5, 2];
+const VIDEO_PLAYBACK_RATES = [1, 1.25, 1.5, 2, 3, 4];
 
 function formatPreviewTime(value) {
   const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
@@ -40,11 +40,20 @@ function setMediaElementProperty(mediaNode, propertyName, value) {
 }
 
 const BOOTSTRAP_ICON_PATHS = {
+  copy: (
+    <path d="M4 1.5A1.5 1.5 0 0 1 5.5 0h7A1.5 1.5 0 0 1 14 1.5v7a1.5 1.5 0 0 1-1.5 1.5H12v1.5A1.5 1.5 0 0 1 10.5 13h-7A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3H4V1.5Zm1 7A.5.5 0 0 0 5.5 9h7a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5v7ZM3.5 4a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V10H5.5A1.5 1.5 0 0 1 4 8.5V4h-.5Z" />
+  ),
   download: (
     <>
       <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5Z" />
       <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3Z" />
     </>
+  ),
+  forward: (
+    <path d="M9.502 3.5a.5.5 0 0 1 .86-.348l5.5 5a.5.5 0 0 1 0 .696l-5.5 5A.5.5 0 0 1 9.5 13.5V10h-.75C5.716 10 3.56 11.46 1.9 13.12a.5.5 0 0 1-.852-.39C1.36 7.45 4.36 5 8.75 5h.75V3.5Zm1 1.13V5.5a.5.5 0 0 1-.5.5H8.75c-3.12 0-5.25 1.39-6.38 4.04C3.8 8.91 5.82 7 8.75 7H10a.5.5 0 0 1 .5.5v.87L14.78 8.5 10.5 4.63Z" />
+  ),
+  threeDotsVertical: (
+    <path d="M9.5 2a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
   ),
   trash3: (
     <>
@@ -87,6 +96,7 @@ function TextChatMediaPreview({
   onClose,
   onDownload,
   onDeleteActive,
+  onForwardActive,
   onNavigate,
   onZoom,
   onPan,
@@ -109,6 +119,7 @@ function TextChatMediaPreview({
   const [missingMediaVersion, setMissingMediaVersion] = useState(0);
   const [loadedImageUrls, setLoadedImageUrls] = useState(() => new Set());
   const [videoControlState, setVideoControlState] = useState(DEFAULT_VIDEO_CONTROL_STATE);
+  const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const zoom = Number(mediaPreview?.zoom) || 1;
   const hasGallery = (mediaPreview?.items?.length || 0) > 1;
   const canPan = zoom > 1;
@@ -138,6 +149,51 @@ function TextChatMediaPreview({
   const stopEvent = useCallback((event) => {
     event.stopPropagation();
   }, []);
+
+  const closePreviewMenu = useCallback(() => {
+    setPreviewMenuOpen(false);
+  }, []);
+
+  const handlePreviewMenuOpen = useCallback((event) => {
+    stopEvent(event);
+    setPreviewMenuOpen(true);
+  }, [stopEvent]);
+
+  const handlePreviewMenuClose = useCallback(() => {
+    setPreviewMenuOpen(false);
+  }, []);
+
+  const handlePreviewMenuToggle = useCallback((event) => {
+    stopEvent(event);
+    setPreviewMenuOpen((current) => !current);
+  }, [stopEvent]);
+
+  const handlePreviewCopy = useCallback((event) => {
+    stopEvent(event);
+    const value = String(mediaPreview?.sourceUrl || mediaPreview?.url || "").trim();
+    if (value && globalThis.navigator?.clipboard?.writeText) {
+      globalThis.navigator.clipboard.writeText(value).catch?.(() => {});
+    }
+    closePreviewMenu();
+  }, [closePreviewMenu, mediaPreview?.sourceUrl, mediaPreview?.url, stopEvent]);
+
+  const handlePreviewForward = useCallback((event) => {
+    stopEvent(event);
+    onForwardActive?.();
+    closePreviewMenu();
+  }, [closePreviewMenu, onForwardActive, stopEvent]);
+
+  const handlePreviewDownload = useCallback((event) => {
+    stopEvent(event);
+    onDownload?.();
+    closePreviewMenu();
+  }, [closePreviewMenu, onDownload, stopEvent]);
+
+  const handlePreviewDelete = useCallback((event) => {
+    stopEvent(event);
+    onDeleteActive?.();
+    closePreviewMenu();
+  }, [closePreviewMenu, onDeleteActive, stopEvent]);
 
   const syncVideoControlState = useCallback(() => {
     const mediaNode = videoRef?.current;
@@ -226,21 +282,6 @@ function TextChatMediaPreview({
     setMediaElementProperty(mediaNode, "playbackRate", nextRate);
     syncVideoControlState();
   }, [stopEvent, syncVideoControlState, videoRef]);
-
-  const handleVideoPictureInPicture = useCallback((event) => {
-    stopEvent(event);
-    const mediaNode = videoRef?.current;
-    if (!mediaNode || typeof document === "undefined" || !document.pictureInPictureEnabled) {
-      return;
-    }
-
-    if (document.pictureInPictureElement) {
-      document.exitPictureInPicture?.().catch?.(() => {});
-      return;
-    }
-
-    mediaNode.requestPictureInPicture?.().catch?.(() => {});
-  }, [stopEvent, videoRef]);
 
   const buildZoomAnchor = useCallback((event) => {
     const rect = viewportRef.current?.getBoundingClientRect?.();
@@ -429,7 +470,7 @@ function TextChatMediaPreview({
         <div className="media-preview__header">
           <div className="media-preview__meta" onClick={stopEvent}>
             <span>
-              {isImagePreview ? "Изображение" : "Видео"}
+              {isImagePreview ? "Фото" : "Видео"}
               {hasGallery ? ` ${Number(mediaPreview.activeIndex || 0) + 1}/${mediaPreview.items.length}` : ""}
             </span>
           </div>
@@ -598,14 +639,6 @@ function TextChatMediaPreview({
                 <button
                   type="button"
                   className="media-preview__video-control-button"
-                  onClick={handleVideoPictureInPicture}
-                  aria-label="Picture in picture"
-                >
-                  <span className="media-preview__video-icon media-preview__video-icon--pip" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="media-preview__video-control-button"
                   onClick={cycleVideoPlaybackRate}
                   aria-label="Change video speed"
                 >
@@ -641,26 +674,51 @@ function TextChatMediaPreview({
 
           {!isVideoPreview ? (
           <div className="media-preview__dock media-preview__dock--bottom-right" onClick={stopEvent}>
-            {onDeleteActive ? (
-              <button
-                type="button"
-                className="media-preview__icon-button media-preview__icon-button--danger"
-                onClick={() => onDeleteActive()}
-                aria-label="Удалить текущее вложение"
-                title="Удалить текущее вложение"
-              >
-                <BootstrapIcon kind="trash3" />
-              </button>
-            ) : null}
             <button
               type="button"
               className="media-preview__icon-button"
-              onClick={() => onDownload?.()}
-              aria-label="Скачать текущее вложение"
-              title="Скачать текущее вложение"
+              onClick={handlePreviewDownload}
+              aria-label="Сохранить текущее вложение"
+              title="Сохранить текущее вложение"
             >
               <BootstrapIcon kind="download" />
             </button>
+            <div
+              className={`media-preview__menu-wrap ${previewMenuOpen ? "media-preview__menu-wrap--open" : ""}`}
+              onMouseEnter={handlePreviewMenuOpen}
+              onMouseLeave={handlePreviewMenuClose}
+            >
+              <button
+                type="button"
+                className="media-preview__icon-button media-preview__menu-button"
+                onClick={handlePreviewMenuToggle}
+                aria-label="Открыть меню вложения"
+                aria-expanded={previewMenuOpen}
+                title="Меню"
+              >
+                <BootstrapIcon kind="threeDotsVertical" />
+              </button>
+              <div className="media-preview__menu" role="menu" aria-label="Действия с вложением">
+                <button type="button" className="media-preview__menu-item" onClick={handlePreviewCopy} role="menuitem">
+                  <BootstrapIcon kind="copy" />
+                  <span>Копировать</span>
+                </button>
+                <button type="button" className="media-preview__menu-item" onClick={handlePreviewForward} disabled={!onForwardActive} role="menuitem">
+                  <BootstrapIcon kind="forward" />
+                  <span>Переслать</span>
+                </button>
+                {onDeleteActive ? (
+                  <button type="button" className="media-preview__menu-item media-preview__menu-item--danger" onClick={handlePreviewDelete} role="menuitem">
+                    <BootstrapIcon kind="trash3" />
+                    <span>Удалить</span>
+                  </button>
+                ) : null}
+                <button type="button" className="media-preview__menu-item" onClick={handlePreviewDownload} role="menuitem">
+                  <BootstrapIcon kind="download" />
+                  <span>Сохранить как...</span>
+                </button>
+              </div>
+            </div>
           </div>
           ) : null}
         </div>
@@ -677,6 +735,7 @@ function areMediaPreviewPropsEqual(previousProps, nextProps) {
     && previousProps.onClose === nextProps.onClose
     && previousProps.onDownload === nextProps.onDownload
     && previousProps.onDeleteActive === nextProps.onDeleteActive
+    && previousProps.onForwardActive === nextProps.onForwardActive
     && previousProps.onNavigate === nextProps.onNavigate
     && previousProps.onZoom === nextProps.onZoom
     && previousProps.onPan === nextProps.onPan;

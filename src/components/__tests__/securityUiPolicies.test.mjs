@@ -107,7 +107,13 @@ test("media preview delete button requires delete handler", () => {
   const viewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
 
-  assert.match(previewSource, /\{onDeleteActive \? \(/);
+  assert.match(previewSource, /onClick=\{handlePreviewMenuToggle\}/);
+  assert.match(previewSource, /onMouseEnter=\{handlePreviewMenuOpen\}/);
+  assert.match(previewSource, /className="media-preview__icon-button media-preview__menu-button"/);
+  assert.match(previewSource, /className="media-preview__menu"/);
+  assert.match(previewSource, />\s*Удалить\s*</);
+  assert.doesNotMatch(previewSource, /media-preview__icon-button media-preview__icon-button--danger/);
+  assert.doesNotMatch(previewSource, /aria-label="Удалить текущее вложение"[\s\S]*?<BootstrapIcon kind="trash3" \/>/);
   assert.match(viewSource, /onDeleteActive=\{mediaPreview\?\.canDelete \? handleDeleteMediaPreviewItem : null\}/);
   assert.match(messageListSource, /canDeleteAttachments=\{Boolean\(messageAuthorUserId\) && isOwnMessage\}/);
   assert.match(messageListSource, /canDelete: canDeleteAttachments/);
@@ -135,9 +141,16 @@ test("media preview photo actions use bootstrap icons without a theme shell", ()
   assert.match(previewSource, /BootstrapIcon/);
   assert.match(previewSource, /kind="trash3"/);
   assert.match(previewSource, /kind="download"/);
+  assert.match(previewSource, /kind="threeDotsVertical"/);
+  assert.match(previewSource, /\{isImagePreview \? "Фото" : "Видео"\}/);
+  assert.match(previewSource, />\s*Копировать\s*</);
+  assert.match(previewSource, />\s*Переслать\s*</);
+  assert.match(previewSource, />\s*Сохранить как\.\.\.\s*</);
   assert.doesNotMatch(previewSource, /kind="collection"/);
   assert.doesNotMatch(previewSource, /Скачать все вложения/);
   assert.match(mediaPreviewCss, /\.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
+  assert.match(mediaPreviewCss, /\.media-preview__menu-wrap:hover \.media-preview__menu,[\s\S]*?\.media-preview__menu-wrap--open \.media-preview__menu \{[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/);
+  assert.match(mediaPreviewCss, /\.media-preview__menu-button \{[\s\S]*?writing-mode: vertical-rl;/);
   assert.match(mediaPreviewCss, /html\[data-ui-theme="light"\] \.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
 });
 
@@ -839,10 +852,16 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background: rgba\(255, 255, 255, 0\.085\);/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 0;/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*grid-template-columns: 34px minmax\(0, 1fr\);/);
   assert.match(voiceChannelSource, /className="voice-channel__icon-svg"/);
+  assert.match(listCss, /\.voice-channel__icon \{[\s\S]*?flex: 0 0 28px;[\s\S]*?margin-left: 6px;/);
+  assert.match(listCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?margin-left: 6px;/);
   assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?fill: currentColor;/);
   assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon \{[\s\S]*?color: #1f2937;/);
-  assert.match(listCss, /\.voice-channel__status-button \{/);
+  assert.match(listCss, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?margin-right: 8px;[\s\S]*?text-align: right;/);
+  assert.match(listCss, /\.voice-channel__status-button \{[\s\S]*?font-size: 11px;/);
+  assert.match(listCss, /\.list__items--active \.voice-channel__status-button \{[\s\S]*?font-size: 11px;/);
+  assert.match(listCss, /\.voice-channel__status-pencil \{[\s\S]*?transform: scaleX\(-1\);/);
   assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
 });
 
@@ -869,7 +888,7 @@ test("profile voice action opens soundpad with a visible effects glyph", () => {
   assert.match(panelSource, /ProfileQuickSoundpadIcon/);
   assert.match(panelSource, /ProfileLeaveCallIcon/);
   assert.match(panelSource, /viewBox="0 0 16 16"[\s\S]*?fillRule="evenodd"/);
-  assert.match(mobileCss, /\.profile__leave-call-icon \{[\s\S]*?width: 27px;[\s\S]*?transform: rotate\(135deg\);/);
+  assert.match(mobileCss, /\.profile__leave-call-icon \{[\s\S]*?width: 22px;[\s\S]*?transform: rotate\(135deg\);/);
   assert.match(panelSource, /className="profile__connection-actions"[\s\S]*?className="profile__leave-call-button ui-tooltip-anchor"[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
   assert.match(panelSource, /profile__quick-glyph profile__quick-glyph--soundpad/);
   assert.doesNotMatch(panelSource, /profile__quick-button profile__quick-button--danger[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
@@ -1282,10 +1301,10 @@ test("voice stage soundboard panel uploads short sounds and plays one at a time"
   assert.match(panelSource, /Обрезка звука/);
   assert.match(panelSource, /Название звука/);
   assert.match(panelSource, /Соответствующее эмодзи/);
-  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?align-items: flex-start;/);
-  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?padding: 72px 24px 24px;/);
-  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?width: min\(840px, calc\(100vw - 32px\)\);/);
-  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?max-height: min\(560px, calc\(100vh - 96px\)\);/);
+  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?align-items: flex-end;/);
+  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?padding: 24px 24px 138px;/);
+  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?width: min\(560px, calc\(100vw - 32px\)\);/);
+  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?max-height: min\(430px, calc\(100vh - 168px\)\);/);
   assert.match(panelCss, /\.soundboard-editor-modal \{/);
   assert.match(panelCss, /\.soundboard-panel__grid \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(viewerSource, /onOpenSoundboard/);

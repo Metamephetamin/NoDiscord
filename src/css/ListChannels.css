@@ -35,6 +35,9 @@
 
 .list__items--active > .voice-channel__row {
   min-height: 38px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 8px;
   padding: 0;
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.085);
@@ -90,6 +93,7 @@
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
+  margin-left: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -187,10 +191,11 @@
 
 .voice-channel__timer {
   flex: 0 0 auto;
-  margin-left: 8px;
+  margin-left: auto;
+  margin-right: 8px;
   width: 56px;
   color: color-mix(in srgb, var(--app-accent) 78%, #d8deeb);
-  text-align: left;
+  text-align: right;
   font-family: var(--font-body);
   font-size: 13.5px;
   font-weight: 400;
@@ -201,7 +206,11 @@
 
 .list__items--active .voice-channel__button {
   min-height: 30px;
-  padding-right: 12px;
+  padding-right: 0;
+}
+
+.list__items--active .voice-channel__icon {
+  margin-left: 6px;
 }
 
 .list__items--active .voice-channel__body {
@@ -217,7 +226,7 @@
 
 .list__items--active .voice-channel__status-button {
   margin-top: 1px;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 450;
 }
 
@@ -245,7 +254,7 @@
   color: rgba(216, 222, 235, 0.64);
   text-align: left;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 450;
   line-height: 1.15;
   cursor: pointer;
@@ -272,6 +281,7 @@
   font-size: 13px;
   line-height: 1;
   opacity: 0.82;
+  transform: scaleX(-1);
 }
 
 .voice-channel__status-form {

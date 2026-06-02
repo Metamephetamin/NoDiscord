@@ -684,6 +684,7 @@ export default function TextChatView(props) {
         onClose={handleCloseMediaPreview}
         onDownload={handleDownloadActiveMediaPreview}
         onDeleteActive={mediaPreview?.canDelete ? handleDeleteMediaPreviewItem : null}
+        onForwardActive={mediaPreview?.messageId ? () => stableOpenForwardModal([mediaPreview.messageId]) : null}
         onFullscreen={handleOpenMediaPreviewFullscreen}
         onNavigate={updateMediaPreviewIndex}
         onZoom={updateMediaPreviewZoom}

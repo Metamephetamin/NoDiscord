@@ -1430,8 +1430,8 @@
 }
 
 .profile__leave-call-icon {
-  width: 27px;
-  height: 27px;
+  width: 22px;
+  height: 22px;
   display: block;
   fill: currentColor;
   transform: rotate(135deg);
