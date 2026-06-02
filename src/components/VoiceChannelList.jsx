@@ -85,6 +85,7 @@ const VoiceChannelList = ({
   activeChannelId,
   participantsMap,
   serverId = "",
+  serverName = "",
   serverMembers = [],
   serverRoles = [],
   onJoinChannel,
@@ -322,9 +323,14 @@ const VoiceChannelList = ({
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
         const isMuted = mutedChannels.has(String(channel.id));
         const channelStatus = normalizeVoiceChannelStatus(channel.status ?? channel.Status ?? "");
+        const activeServerVoiceStatus = isActive && String(serverName || "").trim()
+          ? `В голосовом канале: ${String(serverName || "").trim()}`
+          : "";
+        const visibleChannelStatus = isActive && activeServerVoiceStatus ? activeServerVoiceStatus : channelStatus;
         const isStatusEditing = statusEditor.channelId === channel.id && participantCount > 0;
         const canEditStatus = canEditChannelStatus && participantCount > 0 && !isEditing && !isJoining;
-        const shouldShowStatus = participantCount > 0 && (Boolean(channelStatus) || (isActive && canEditStatus));
+        const canEditVisibleStatus = canEditStatus && !activeServerVoiceStatus;
+        const shouldShowStatus = participantCount > 0 && (Boolean(visibleChannelStatus) || (isActive && canEditVisibleStatus));
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
         const sessionStartedAtMs = resolveVoiceChannelSessionStartedAtMs({
@@ -485,19 +491,20 @@ const VoiceChannelList = ({
                       />
                     </form>
                   ) : shouldShowStatus ? (
-                    canEditStatus ? (
+                    canEditVisibleStatus ? (
                       <button
                         type="button"
                         className="voice-channel__status-button"
                         onClick={(event) => startStatusEdit(event, channel, channelStatus)}
                         aria-label={channelStatus ? "Изменить статус канала" : "Выбрать статус канала"}
+                        title={visibleChannelStatus || "Выбрать статус канала"}
                       >
-                        <span>{channelStatus || "Выбрать статус канала"}</span>
+                        <span>{visibleChannelStatus || "Выбрать статус канала"}</span>
                         {!channelStatus ? <span className="voice-channel__status-pencil" aria-hidden="true">✎</span> : null}
                       </button>
                     ) : (
-                      <span className="voice-channel__status-button voice-channel__status-button--readonly">
-                        <span>{channelStatus}</span>
+                      <span className="voice-channel__status-button voice-channel__status-button--readonly" title={visibleChannelStatus}>
+                        <span>{visibleChannelStatus}</span>
                       </span>
                     )
                   ) : null}

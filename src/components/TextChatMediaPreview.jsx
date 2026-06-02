@@ -694,7 +694,6 @@ function TextChatMediaPreview({
                 onClick={handlePreviewMenuToggle}
                 aria-label="Открыть меню вложения"
                 aria-expanded={previewMenuOpen}
-                title="Меню"
               >
                 <BootstrapIcon kind="threeDotsVertical" />
               </button>

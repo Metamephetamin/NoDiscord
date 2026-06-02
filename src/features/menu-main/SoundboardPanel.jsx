@@ -1,5 +1,26 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "../../css/SoundboardPanel.css";
 import useMenuMainSoundboard from "./useMenuMainSoundboard";
+import { normalizeWaveformSamples } from "./soundboardWaveform.mjs";
+
+const SOUNDBOARD_EMOJI_OPTIONS = [
+  "🔊",
+  "🎵",
+  "🎶",
+  "📣",
+  "🔔",
+  "👏",
+  "😂",
+  "😱",
+  "🔥",
+  "✨",
+  "💥",
+  "✅",
+  "❌",
+  "👀",
+  "🎉",
+  "💀",
+];
 
 const formatDuration = (durationSeconds) => {
   const totalSeconds = Math.max(0, Math.round(Number(durationSeconds) || 0));
@@ -11,15 +32,6 @@ const formatDuration = (durationSeconds) => {
 const formatTrimValue = (value) => {
   const numberValue = Math.max(0, Number(value || 0));
   return numberValue.toFixed(1);
-};
-
-const createWaveformBars = (seedValue) => {
-  const seed = String(seedValue || "sound");
-
-  return Array.from({ length: 56 }, (_, index) => {
-    const code = seed.charCodeAt(index % seed.length) || 17;
-    return 18 + ((code + index * 13) % 46);
-  });
 };
 
 function SoundboardSearchIcon() {
@@ -38,6 +50,121 @@ function SoundboardVolumeIcon() {
   );
 }
 
+function SoundboardPlayIcon() {
+  return (
+    <svg className="soundboard-editor-modal__play-icon bi bi-play-fill" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="m11.596 8.697-6.363 3.692A.5.5 0 0 1 4.5 11.956V4.044a.5.5 0 0 1 .733-.433l6.363 3.692a.5.5 0 0 1 0 .864z" />
+    </svg>
+  );
+}
+
+function SoundboardEditorWaveform({
+  sound,
+  maxTrimSeconds,
+  onChange,
+  onPreview,
+}) {
+  const trackRef = useRef(null);
+  const [activeHandle, setActiveHandle] = useState("");
+  const waveformSamples = useMemo(
+    () => normalizeWaveformSamples(sound?.waveformSamples),
+    [sound?.waveformSamples],
+  );
+  const safeMaxTrimSeconds = Math.max(0.1, Number(maxTrimSeconds || 0) || 0.1);
+  const trimStartSeconds = Math.max(0, Number(sound?.trimStartSeconds || 0) || 0);
+  const trimEndSeconds = Math.min(
+    safeMaxTrimSeconds,
+    Math.max(trimStartSeconds + 0.1, Number(sound?.trimEndSeconds || safeMaxTrimSeconds) || safeMaxTrimSeconds),
+  );
+  const startPercent = (trimStartSeconds / safeMaxTrimSeconds) * 100;
+  const endPercent = (trimEndSeconds / safeMaxTrimSeconds) * 100;
+
+  const updateTrimFromPointer = useCallback((event, handle) => {
+    const bounds = trackRef.current?.getBoundingClientRect?.();
+
+    if (!bounds?.width) {
+      return;
+    }
+
+    const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
+    const nextSeconds = Number((ratio * safeMaxTrimSeconds).toFixed(1));
+
+    if (handle === "start") {
+      onChange({ trimStartSeconds: Math.min(nextSeconds, trimEndSeconds - 0.1) });
+      return;
+    }
+
+    onChange({ trimEndSeconds: Math.max(nextSeconds, trimStartSeconds + 0.1) });
+  }, [onChange, safeMaxTrimSeconds, trimEndSeconds, trimStartSeconds]);
+
+  useEffect(() => {
+    if (!activeHandle) {
+      return undefined;
+    }
+
+    const handlePointerMove = (event) => updateTrimFromPointer(event, activeHandle);
+    const handlePointerUp = () => setActiveHandle("");
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [activeHandle, updateTrimFromPointer]);
+
+  const beginTrimDrag = (event, handle) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setActiveHandle(handle);
+    updateTrimFromPointer(event, handle);
+  };
+
+  return (
+    <div className="soundboard-editor-modal__waveform">
+      <button type="button" className="soundboard-editor-modal__play" onClick={() => onPreview(sound)} aria-label="Прослушать звук">
+        <SoundboardPlayIcon />
+      </button>
+      <div className="soundboard-editor-modal__wave-track" ref={trackRef}>
+        <div className="soundboard-editor-modal__bars" aria-hidden="true">
+          {waveformSamples.map((level, index) => {
+            const barPercent = (index / Math.max(1, waveformSamples.length - 1)) * 100;
+            const isTrimmed = barPercent < startPercent || barPercent > endPercent;
+
+            return (
+              <span
+                key={`${index}-${level}`}
+                className={isTrimmed ? "soundboard-editor-modal__bar--trimmed" : ""}
+                style={{ height: `${18 + level * 76}%` }}
+              />
+            );
+          })}
+        </div>
+        <div
+          className="soundboard-editor-modal__trim-selection"
+          style={{ left: `${startPercent}%`, right: `${100 - endPercent}%` }}
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          className="soundboard-editor-modal__trim-handle soundboard-editor-modal__trim-handle--start"
+          style={{ left: `${startPercent}%` }}
+          onPointerDown={(event) => beginTrimDrag(event, "start")}
+          aria-label="Обрезать начало звука"
+        />
+        <button
+          type="button"
+          className="soundboard-editor-modal__trim-handle soundboard-editor-modal__trim-handle--end"
+          style={{ left: `${endPercent}%` }}
+          onPointerDown={(event) => beginTrimDrag(event, "end")}
+          aria-label="Обрезать конец звука"
+        />
+      </div>
+    </div>
+  );
+}
+
 function SoundboardEditorModal({
   soundboardEditor,
   onChange,
@@ -45,6 +172,8 @@ function SoundboardEditorModal({
   onClose,
   onSave,
 }) {
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+
   if (!soundboardEditor) {
     return null;
   }
@@ -53,7 +182,6 @@ function SoundboardEditorModal({
     Number(soundboardEditor.sourceDurationSeconds || 0) || 0,
     20,
   );
-  const waveformBars = createWaveformBars(`${soundboardEditor.name}-${soundboardEditor.durationSeconds}`);
 
   return (
     <div className="soundboard-editor-backdrop" role="presentation" onMouseDown={onClose}>
@@ -73,16 +201,12 @@ function SoundboardEditorModal({
 
         <div className="soundboard-editor-modal__preview">
           <strong>Предпросмотр</strong>
-          <div className="soundboard-editor-modal__waveform">
-            <button type="button" className="soundboard-editor-modal__play" onClick={() => onPreview(soundboardEditor)} aria-label="Прослушать звук">
-              ▶
-            </button>
-            <div className="soundboard-editor-modal__bars" aria-hidden="true">
-              {waveformBars.map((height, index) => (
-                <span key={`${height}-${index}`} style={{ height: `${height}%` }} />
-              ))}
-            </div>
-          </div>
+          <SoundboardEditorWaveform
+            sound={soundboardEditor}
+            maxTrimSeconds={maxTrimSeconds}
+            onChange={onChange}
+            onPreview={onPreview}
+          />
         </div>
 
         <div className="soundboard-editor-modal__fields">
@@ -94,13 +218,41 @@ function SoundboardEditorModal({
               onChange={(event) => onChange({ name: event.target.value })}
             />
           </label>
-          <label className="soundboard-editor-modal__field">
+          <label className="soundboard-editor-modal__field soundboard-editor-modal__field--emoji">
             <span>Соответствующее эмодзи</span>
-            <input
-              value={soundboardEditor.emoji}
-              maxLength={8}
-              onChange={(event) => onChange({ emoji: event.target.value })}
-            />
+            <div className="soundboard-editor-modal__emoji-wrap">
+              <button
+                type="button"
+                className="soundboard-editor-modal__emoji-button"
+                onClick={() => setEmojiPickerOpen((isOpen) => !isOpen)}
+                aria-label="Выбрать эмодзи для звука"
+                aria-expanded={emojiPickerOpen}
+              >
+                {soundboardEditor.emoji || "🔊"}
+              </button>
+              <input
+                value={soundboardEditor.emoji}
+                maxLength={8}
+                onChange={(event) => onChange({ emoji: event.target.value })}
+              />
+              {emojiPickerOpen ? (
+                <div className="soundboard-editor-modal__emoji-picker" role="menu" aria-label="Эмодзи звука">
+                  {SOUNDBOARD_EMOJI_OPTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        onChange({ emoji });
+                        setEmojiPickerOpen(false);
+                      }}
+                      aria-label={`Выбрать ${emoji}`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </label>
         </div>
 
@@ -162,8 +314,10 @@ function SoundboardEditorModal({
 export default function SoundboardPanel({
   u,
   c,
+  voiceClientRef,
 }) {
   const close = () => c(false);
+  const [volumeMenuOpen, setVolumeMenuOpen] = useState(false);
   const {
     soundboardInputRef,
     filteredSoundboardSounds,
@@ -172,6 +326,8 @@ export default function SoundboardPanel({
     soundboardStatus,
     soundboardActiveSoundId,
     soundboardEditor,
+    soundboardVolume,
+    setSoundboardVolume,
     handleSoundboardUpload,
     updateSoundboardEditor,
     closeSoundboardEditor,
@@ -180,6 +336,7 @@ export default function SoundboardPanel({
     removeSoundboardSound,
   } = useMenuMainSoundboard({
     user: u,
+    voiceClientRef,
   });
 
   return (
@@ -202,9 +359,29 @@ export default function SoundboardPanel({
               autoFocus
             />
           </label>
-          <button type="button" className="soundboard-panel__volume" aria-label="Громкость системных звуков">
-            <SoundboardVolumeIcon />
-          </button>
+          <div className="soundboard-panel__volume-wrap">
+            <button
+              type="button"
+              className={`soundboard-panel__volume ${volumeMenuOpen ? "soundboard-panel__volume--active" : ""}`}
+              onClick={() => setVolumeMenuOpen((isOpen) => !isOpen)}
+              aria-label="Громкость soundpad"
+              aria-expanded={volumeMenuOpen}
+            >
+              <SoundboardVolumeIcon />
+            </button>
+            {volumeMenuOpen ? (
+              <div className="soundboard-panel__volume-popover" role="group" aria-label="Громкость soundpad">
+                <span>{soundboardVolume}%</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={soundboardVolume}
+                  onChange={(event) => setSoundboardVolume(event.target.value)}
+                />
+              </div>
+            ) : null}
+          </div>
           <button type="button" className="soundboard-panel__close" onClick={close} aria-label="Закрыть звуковую панель">
             ×
           </button>
@@ -237,7 +414,7 @@ export default function SoundboardPanel({
                     <button
                       type="button"
                       className="soundboard-panel__tile"
-                      onClick={() => playSoundboardSound(sound)}
+                      onClick={() => playSoundboardSound(sound, { broadcast: true })}
                       aria-label={`Воспроизвести ${sound.name}`}
                     >
                       <span className="soundboard-panel__tile-emoji" aria-hidden="true">{sound.emoji || "🔊"}</span>

@@ -111,6 +111,7 @@ test("media preview delete button requires delete handler", () => {
   assert.match(previewSource, /onMouseEnter=\{handlePreviewMenuOpen\}/);
   assert.match(previewSource, /className="media-preview__icon-button media-preview__menu-button"/);
   assert.match(previewSource, /className="media-preview__menu"/);
+  assert.doesNotMatch(previewSource, /title="Меню"/);
   assert.match(previewSource, />\s*Удалить\s*</);
   assert.doesNotMatch(previewSource, /media-preview__icon-button media-preview__icon-button--danger/);
   assert.doesNotMatch(previewSource, /aria-label="Удалить текущее вложение"[\s\S]*?<BootstrapIcon kind="trash3" \/>/);
@@ -149,6 +150,8 @@ test("media preview photo actions use bootstrap icons without a theme shell", ()
   assert.doesNotMatch(previewSource, /kind="collection"/);
   assert.doesNotMatch(previewSource, /Скачать все вложения/);
   assert.match(mediaPreviewCss, /\.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
+  assert.match(mediaPreviewCss, /\.media-preview__menu-wrap::before \{[\s\S]*?height: 12px;[\s\S]*?pointer-events: none;/);
+  assert.match(mediaPreviewCss, /\.media-preview__menu-wrap:hover::before,[\s\S]*?\.media-preview__menu-wrap--open::before \{[\s\S]*?pointer-events: auto;/);
   assert.match(mediaPreviewCss, /\.media-preview__menu-wrap:hover \.media-preview__menu,[\s\S]*?\.media-preview__menu-wrap--open \.media-preview__menu \{[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/);
   assert.match(mediaPreviewCss, /\.media-preview__menu-button \{[\s\S]*?writing-mode: vertical-rl;/);
   assert.match(mediaPreviewCss, /html\[data-ui-theme="light"\] \.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
@@ -841,9 +844,14 @@ test("voice channel active card keeps participants outside the highlight and exp
 
   assert.match(voiceChannelSource, /normalizeVoiceChannelStatus/);
   assert.match(voiceChannelSource, /VOICE_CHANNEL_STATUS_CHAR_LIMIT/);
+  assert.match(voiceChannelSource, /serverName = ""/);
+  assert.match(voiceChannelSource, /const activeServerVoiceStatus = isActive && String\(serverName \|\| ""\)\.trim\(\)/);
+  assert.match(voiceChannelSource, /`В голосовом канале: \$\{String\(serverName \|\| ""\)\.trim\(\)\}`/);
+  assert.match(voiceChannelSource, /const visibleChannelStatus = isActive && activeServerVoiceStatus \? activeServerVoiceStatus : channelStatus;/);
   assert.match(voiceChannelSource, /const shouldShowStatus = participantCount > 0 && \(/);
   assert.match(voiceChannelSource, /placeholder="Выбрать статус канала"/);
   assert.match(voiceChannelSource, /className="voice-channel__status-button"/);
+  assert.match(workspaceSource, /serverName=\{activeServer\?\.name \|\| ""\}/);
   assert.match(workspaceSource, /onUpdateChannelStatus=\{\(channelId, status\) => onUpdateChannelSettings\?\.\("voice", channelId, \{ status \}\)\}/);
   assert.match(modelSource, /normalizedChannel\.status = normalizeVoiceChannelStatus\(channel\?\.status \?\? channel\?\.Status \?\? ""\);/);
   assert.match(serverStateSource, /channel\.Status = NormalizeVoiceChannelStatus\(channel\.Status\);/);
@@ -856,7 +864,8 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*grid-template-columns: 42px minmax\(0, 1fr\);/);
   assert.match(voiceChannelSource, /className="voice-channel__icon-svg"/);
   assert.match(listCss, /\.voice-channel__icon \{[\s\S]*?width: 32px;[\s\S]*?height: 32px;[\s\S]*?flex: 0 0 32px;[\s\S]*?margin-left: 6px;/);
-  assert.match(listCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?align-self: start;[\s\S]*?margin-top: 18px;[\s\S]*?margin-left: 8px;/);
+  assert.match(listCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?align-self: center;[\s\S]*?margin-top: 0;[\s\S]*?margin-left: 6px;/);
+  assert.doesNotMatch(listCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?margin-top: 18px;/);
   assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?width: 22px;[\s\S]*?height: 22px;/);
   assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?fill: currentColor;/);
   assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon \{[\s\S]*?color: #1f2937;/);
@@ -1490,7 +1499,10 @@ test("manual profile status is editable, persisted, and rendered under the nickn
   assert.match(settingsSource, /maxLength=\{maxProfileStatusLength\}/);
   assert.match(slotSource, /profileStatus=\{profileCustomStatus\}/);
   assert.match(profileSource, /className="profile__custom-status"/);
+  assert.match(profileSource, /title=\{visibleProfileStatus\}/);
+  assert.match(profileSource, /className="profile__status-track"/);
   assert.match(profileCss, /\.profile__custom-status \{/);
+  assert.match(profileCss, /\.profile__status-track \{[\s\S]*?animation: profileActivityMarquee 20s linear infinite;/);
 });
 
 test("integration activity visually replaces manual profile status in the bottom profile panel", () => {
@@ -1502,7 +1514,7 @@ test("integration activity visually replaces manual profile status in the bottom
   assert.match(profileSource, /`В голосовом канале: \$\{currentVoiceChannelName\}`/);
   assert.match(profileSource, /const visibleProfileStatus = activityStatus \? "" : voiceProfileStatus \|\| profileStatus;/);
   assert.match(profileSource, /const showProfileStatus = Boolean\(visibleProfileStatus\);/);
-  assert.match(profileSource, /\{showProfileStatus \? <span className="profile__custom-status">\{visibleProfileStatus\}<\/span> : null\}/);
+  assert.match(profileSource, /\{showProfileStatus \? \(/);
   assert.match(profileSource, /\{activityStatus \? \(/);
   assert.match(activeContactsSource, /const status = activityStatus \|\| voiceStatus \|\| onlineStatus;/);
   assert.match(activeContactsSource, /activity: 0,[\s\S]*?voice: 1,[\s\S]*?online: 2,/);
@@ -1554,6 +1566,7 @@ test("active voice channel keeps title sizing stable and timer visible", () => {
   const listChannelsCss = readRepoFile("src/css/ListChannels.css");
 
   assert.match(listChannelsCss, /\.list__items--active > \.voice-channel__row \{[\s\S]*?min-height: 38px;[\s\S]*?padding: 0;/);
+  assert.match(listChannelsCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?align-self: center;[\s\S]*?margin-top: 0;/);
   assert.match(listChannelsCss, /\.list__items--active \.voice-channel__title \{[\s\S]*?font-size: 16px;[\s\S]*?font-weight: 450;/);
   assert.doesNotMatch(listChannelsCss, /\.list__items--active \.voice-channel__title \{[\s\S]*?font-size: 17px;/);
   assert.doesNotMatch(listChannelsCss, /\.list__items:hover \.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__timer/);
@@ -1626,6 +1639,30 @@ test("seven visual attachments use the dedicated no-gap mosaic", () => {
   assert.match(collectionSource, /visualAttachments\.length === 7/);
   assert.match(collectionSource, /useDenseGalleryLayout = \([\s\S]*visualAttachments\.length >= 8/);
   assert.match(collectionSource, /useSevenTileLayout \? "message-attachment-grid--seven-tile"/);
+});
+
+test("dense media gallery remainder rows fill available columns through twenty attachments", () => {
+  const attachmentsCss = readRepoFile("src/css/TextChatAttachments.css");
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+
+  assert.match(messageListSource, /if \(attachmentCount <= 20\) \{[\s\S]*?return 5;/);
+  [
+    ["4", "1", /dense-gallery-cols-4\.message-attachment-grid--dense-gallery-rem-1[\s\S]*grid-column: 1 \/ span 4;/],
+    ["4", "2", /dense-gallery-cols-4\.message-attachment-grid--dense-gallery-rem-2[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-4\.message-attachment-grid--dense-gallery-rem-2[\s\S]*grid-column: 3 \/ span 2;/],
+    ["4", "3", /dense-gallery-cols-4\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-4\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 3;[\s\S]*dense-gallery-cols-4\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 4;/],
+    ["5", "1", /dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-1[\s\S]*grid-column: 1 \/ span 5;/],
+    ["5", "2", /dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-2[\s\S]*grid-column: 1 \/ span 3;[\s\S]*dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-2[\s\S]*grid-column: 4 \/ span 2;/],
+    ["5", "3", /dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 3 \/ span 2;[\s\S]*dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 5;/],
+    ["5", "4", /dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 3;[\s\S]*dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 4;[\s\S]*dense-gallery-cols-5\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 5;/],
+    ["6", "1", /dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-1[\s\S]*grid-column: 1 \/ span 6;/],
+    ["6", "2", /dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-2[\s\S]*grid-column: 1 \/ span 3;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-2[\s\S]*grid-column: 4 \/ span 3;/],
+    ["6", "3", /dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 3 \/ span 2;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-3[\s\S]*grid-column: 5 \/ span 2;/],
+    ["6", "4", /dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 3 \/ span 2;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 5;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-4[\s\S]*grid-column: 6;/],
+    ["6", "5", /dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-5[\s\S]*grid-column: 1 \/ span 2;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-5[\s\S]*grid-column: 3;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-5[\s\S]*grid-column: 4;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-5[\s\S]*grid-column: 5;[\s\S]*dense-gallery-cols-6\.message-attachment-grid--dense-gallery-rem-5[\s\S]*grid-column: 6;/],
+  ].forEach(([columns, remainder, rulePattern]) => {
+    const selector = `.message-attachment-grid--dense-gallery-cols-${columns}.message-attachment-grid--dense-gallery-rem-${remainder}`;
+    assert.match(attachmentsCss, rulePattern, `${selector} should fill the last row`);
+  });
 });
 
 test("partial message updates preserve existing media attachments", () => {

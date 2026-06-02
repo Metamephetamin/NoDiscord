@@ -125,6 +125,7 @@ export default function MenuMainOverlayLayer({
   closeQuickSwitcher,
   sb,
   c,
+  voiceClientRef,
   directCallState,
   directCallHistory,
   isMicMuted,
@@ -219,6 +220,7 @@ export default function MenuMainOverlayLayer({
           <SoundboardPanel
             u={user}
             c={c}
+            voiceClientRef={voiceClientRef}
           />
         </Suspense>
       )}

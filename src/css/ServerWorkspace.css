@@ -2036,6 +2036,17 @@
 
 
 
+.server-panel__header--category .server-panel__category-toggle {
+  height: auto;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+}
+
+
+
 .server-panel__category-toggle[draggable="true"] {
   cursor: grab;
 }
@@ -2307,8 +2318,8 @@ html[data-ui-theme="purple"] .channel-settings-shell__nav button.is-active {
 
 .channel-create-modal__types {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   margin-bottom: 16px;
 }
 
@@ -2316,7 +2327,7 @@ html[data-ui-theme="purple"] .channel-settings-shell__nav button.is-active {
 
 .channel-create-modal__type {
   min-height: 104px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.035);
@@ -2362,6 +2373,14 @@ html[data-ui-theme="purple"] .channel-settings-shell__nav button.is-active {
   color: #aab2c4;
   font-size: 12px;
   line-height: 1.35;
+}
+
+
+
+@media (max-width: 520px) {
+  .channel-create-modal__types {
+    grid-template-columns: 1fr;
+  }
 }
 
 

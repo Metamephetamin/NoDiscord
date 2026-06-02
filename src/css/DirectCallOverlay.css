@@ -723,6 +723,8 @@
 }
 
 .direct-call-inline__icon--phone {
+  width: 30px;
+  height: 30px;
   -webkit-mask: url("/icons/phone.png") center / contain no-repeat;
   mask: url("/icons/phone.png") center / contain no-repeat;
 }

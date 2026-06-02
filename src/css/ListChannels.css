@@ -210,9 +210,9 @@
 }
 
 .list__items--active .voice-channel__icon {
-  align-self: start;
-  margin-top: 18px;
-  margin-left: 8px;
+  align-self: center;
+  margin-top: 0;
+  margin-left: 6px;
 }
 
 .list__items--active .voice-channel__body {

@@ -579,7 +579,14 @@ export default function MenuProfilePanel({
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={onAvatarChange} />
             <div className="profile__names">
               <span className="profile__username">{displayName}</span>
-              {showProfileStatus ? <span className="profile__custom-status">{visibleProfileStatus}</span> : null}
+              {showProfileStatus ? (
+                <span className="profile__custom-status" title={visibleProfileStatus}>
+                  <span key={visibleProfileStatus} className="profile__status-track">
+                    <span className="profile__status-text">{visibleProfileStatus}</span>
+                    <span className="profile__status-text" aria-hidden="true">{visibleProfileStatus}</span>
+                  </span>
+                </span>
+              ) : null}
               {activityStatus ? (
                 <span className="profile__activity-status">
                   <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">

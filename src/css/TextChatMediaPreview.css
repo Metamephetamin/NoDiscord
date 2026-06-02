@@ -205,6 +205,22 @@
   justify-content: center;
 }
 
+.media-preview__menu-wrap::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  width: 206px;
+  height: 12px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.media-preview__menu-wrap:hover::before,
+.media-preview__menu-wrap--open::before {
+  pointer-events: auto;
+}
+
 .media-preview__menu-button {
   writing-mode: vertical-rl;
 }

@@ -76,6 +76,7 @@ const MICROPHONE_TRACK_NAME = "microphone";
 const SCREEN_VIDEO_TRACK_NAME = "screen-share";
 const SCREEN_AUDIO_TRACK_NAME = "screen-share-audio";
 const CAMERA_TRACK_NAME = "camera-share";
+const SOUNDBOARD_TRACK_NAME_PREFIX = "soundboard-";
 const VOICE_DEBUG_PREFIX = "[voice]";
 const PREWARMED_SESSION_TTL_MS = 20_000;
 const LOCAL_AUDIO_REBUILD_RECOVERY_WINDOW_MS = 15_000;
@@ -385,6 +386,20 @@ function getScreenShareAudioPublishOptions() {
   };
 }
 
+function getSoundboardAudioPublishOptions() {
+  return {
+    audioPreset: HIGH_QUALITY_SCREEN_AUDIO_PRESET,
+    dtx: false,
+    red: true,
+    forceStereo: true,
+  };
+}
+
+function isSoundboardPublication(publication) {
+  const trackName = String(publication?.trackName || publication?.name || publication?.track?.name || "");
+  return trackName.startsWith(SOUNDBOARD_TRACK_NAME_PREFIX);
+}
+
 function bytesToBase64(value) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
   let binary = "";
@@ -553,6 +568,7 @@ export function createVoiceRoomClient({
   let localScreenVideoPublication = null;
   let localCameraVideoPublication = null;
   let localShareAudioPublication = null;
+  const localSoundboardCleanups = new Set();
   let localShareOperationPromise = null;
   let localShareOperationKey = "";
   let localAudioRebuildOperationPromise = null;
@@ -3664,7 +3680,7 @@ const handleDeviceChange = () => {
         state.screenVideoPublication = publication;
       } else if (publication.source === Track.Source.Camera) {
         state.cameraPublication = publication;
-      } else if (publication.source === Track.Source.ScreenShareAudio) {
+      } else if (publication.source === Track.Source.ScreenShareAudio || isSoundboardPublication(publication)) {
         state.screenAudioPublication = publication;
         attachRemoteAudioTrack(track, publication, participant).catch(() => {});
       } else if (publication.source === Track.Source.Microphone) {
@@ -3694,7 +3710,7 @@ const handleDeviceChange = () => {
         state.screenVideoPublication = null;
       } else if (publication.source === Track.Source.Camera) {
         state.cameraPublication = null;
-      } else if (publication.source === Track.Source.ScreenShareAudio) {
+      } else if (publication.source === Track.Source.ScreenShareAudio || isSoundboardPublication(publication)) {
         state.screenAudioPublication = null;
       } else if (publication.source === Track.Source.Microphone) {
         state.microphonePublication = null;
@@ -3723,7 +3739,7 @@ const handleDeviceChange = () => {
         state.screenVideoPublication = publication;
       } else if (publication.source === Track.Source.Camera) {
         state.cameraPublication = publication;
-      } else if (publication.source === Track.Source.ScreenShareAudio) {
+      } else if (publication.source === Track.Source.ScreenShareAudio || isSoundboardPublication(publication)) {
         state.screenAudioPublication = publication;
       } else if (publication.source === Track.Source.Microphone) {
         state.microphonePublication = publication;
@@ -3736,7 +3752,7 @@ const handleDeviceChange = () => {
           quality: publication.source === Track.Source.Camera ? VideoQuality.MEDIUM : VideoQuality.HIGH,
         });
       } else if (
-        (publication.source === Track.Source.ScreenShareAudio || publication.source === Track.Source.Microphone)
+        (publication.source === Track.Source.ScreenShareAudio || publication.source === Track.Source.Microphone || isSoundboardPublication(publication))
         && publication?.isManualOperationAllowed?.()
       ) {
         publication.setSubscribed(true);
@@ -3764,7 +3780,7 @@ const handleDeviceChange = () => {
         state.screenVideoPublication = null;
       } else if (publication.source === Track.Source.Camera) {
         state.cameraPublication = null;
-      } else if (publication.source === Track.Source.ScreenShareAudio) {
+      } else if (publication.source === Track.Source.ScreenShareAudio || isSoundboardPublication(publication)) {
         state.screenAudioPublication = null;
       } else if (publication.source === Track.Source.Microphone) {
         state.microphonePublication = null;
@@ -4433,6 +4449,10 @@ const handleDeviceChange = () => {
     },
 
     async leaveChannel({ preserveMic = false } = {}) {
+      for (const cleanup of Array.from(localSoundboardCleanups)) {
+        cleanup();
+      }
+
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
         await signalConnection.invoke("LeaveChannel", String(currentUser.id));
       }
@@ -4702,6 +4722,132 @@ const handleDeviceChange = () => {
       }
     },
 
+    async playSoundboardSound(sound, { volumePercent = 100 } = {}) {
+      if (!sound?.dataUrl) {
+        return;
+      }
+
+      if (!currentChannel || !room?.localParticipant) {
+        throw new Error("Join a voice channel first.");
+      }
+
+      for (const cleanup of Array.from(localSoundboardCleanups)) {
+        cleanup();
+      }
+
+      const soundboardContext = createPreferredAudioContext();
+      const audioElement = document.createElement("audio");
+      const sourceNode = soundboardContext.createMediaElementSource(audioElement);
+      const gain = soundboardContext.createGain();
+      const destination = soundboardContext.createMediaStreamDestination();
+      const trimStartSeconds = Math.max(0, Number(sound.trimStartSeconds || 0) || 0);
+      const trimEndSeconds = Math.max(trimStartSeconds, Number(sound.trimEndSeconds || sound.durationSeconds || 0) || 0);
+      const soundVolume = clampDeviceVolumePercent(sound.volume ?? 100) / 100;
+      const soundboardVolume = clampDeviceVolumePercent(volumePercent) / 100;
+      const trackName = `${SOUNDBOARD_TRACK_NAME_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      let publication = null;
+      let cleanedUp = false;
+
+      gain.gain.value = soundVolume * soundboardVolume;
+      sourceNode.connect(gain);
+      gain.connect(destination);
+
+      audioElement.preload = "auto";
+      audioElement.src = String(sound.dataUrl || "");
+      audioElement.volume = 1;
+      audioElement.muted = false;
+
+      const [soundboardTrack] = destination.stream.getAudioTracks();
+      if (!soundboardTrack) {
+        throw new Error("Soundboard track could not be created.");
+      }
+
+      soundboardTrack.contentHint = "music";
+
+      const cleanup = () => {
+        if (cleanedUp) {
+          return;
+        }
+
+        cleanedUp = true;
+        localSoundboardCleanups.delete(cleanup);
+
+        try {
+          audioElement.pause();
+          audioElement.src = "";
+        } catch {
+          // Ignore cleanup failures for a temporary soundboard element.
+        }
+
+        try {
+          sourceNode.disconnect();
+        } catch {
+          // Ignore disconnect failures for settled soundboard nodes.
+        }
+
+        try {
+          gain.disconnect();
+        } catch {
+          // Ignore disconnect failures for settled soundboard nodes.
+        }
+
+        try {
+          soundboardTrack.stop();
+        } catch {
+          // Ignore already-ended temporary tracks.
+        }
+
+        if (publication?.track && room?.localParticipant) {
+          room.localParticipant.unpublishTrack(publication.track, false).catch(() => {});
+        }
+
+        soundboardContext.close?.().catch?.(() => {});
+      };
+
+      localSoundboardCleanups.add(cleanup);
+
+      const stopAtTrimEnd = () => {
+        if (trimEndSeconds > trimStartSeconds && audioElement.currentTime >= trimEndSeconds) {
+          cleanup();
+        }
+      };
+
+      audioElement.ontimeupdate = stopAtTrimEnd;
+      audioElement.onended = cleanup;
+      audioElement.onerror = cleanup;
+
+      publication = await room.localParticipant.publishTrack(soundboardTrack, {
+        name: trackName,
+        ...getSoundboardAudioPublishOptions(),
+      });
+
+      if (soundboardContext.state === "suspended") {
+        await soundboardContext.resume().catch(() => {});
+      }
+
+      if (audioElement.readyState >= 1) {
+        audioElement.currentTime = trimStartSeconds;
+      } else {
+        audioElement.onloadedmetadata = () => {
+          try {
+            audioElement.currentTime = trimStartSeconds;
+          } catch {
+            // Some browsers only allow seeking after metadata settles.
+          }
+        };
+      }
+
+      await audioElement.play();
+      logVoiceDebug("soundboard:published", {
+        currentChannel,
+        trackName,
+        trimStartSeconds,
+        trimEndSeconds,
+        soundVolume,
+        soundboardVolume,
+      });
+    },
+
     setMicrophoneVolume(value) {
       micVolume = clampDeviceVolumePercent(value) / 100;
       if (gainNode) {
@@ -4913,6 +5059,10 @@ const handleDeviceChange = () => {
     },
 
     async disconnect() {
+      for (const cleanup of Array.from(localSoundboardCleanups)) {
+        cleanup();
+      }
+
       await stopAllLocalSharesInternal();
       await stopRoom({ preserveChannel: true });
       stopLocalMic();

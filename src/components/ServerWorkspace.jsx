@@ -471,7 +471,6 @@ const getInviteFriendName = (friend) =>
 const CHANNEL_CREATE_OPTIONS = [
   { id: "text", label: "Текстовый", description: "Обычный чат для сообщений.", icon: "#" },
   { id: "voice", label: "Голосовой", description: "Комната для звонков и стримов.", icon: "♪" },
-  { id: "forum", label: "Форум", description: "Публикации с отдельными обсуждениями.", icon: "◔" },
 ];
 
 const getTextChannelKind = (channel) => String(channel?.kind || channel?.type || "text") === "forum" ? "forum" : "text";
@@ -664,7 +663,7 @@ function CreateChannelModal({
             type="text"
             value={draft.name}
             onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
-            placeholder={draft.type === "voice" ? "голосовой-канал" : draft.type === "forum" ? "форум" : "новый-канал"}
+            placeholder={draft.type === "voice" ? "голосовой-канал" : "новый-канал"}
             maxLength={MAX_CHANNEL_NAME_LENGTH}
             autoFocus
           />
@@ -2299,6 +2298,7 @@ export const ServersSidebar = memo(({
         activeChannelId={currentVoiceChannel || ""}
         participantsMap={activeVoiceParticipantsMap}
         serverId={activeServer?.id || ""}
+        serverName={activeServer?.name || ""}
         serverMembers={activeServer?.members || []}
         serverRoles={activeServer?.roles || []}
         onJoinChannel={onJoinVoiceChannel}

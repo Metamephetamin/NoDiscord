@@ -1032,6 +1032,7 @@ export default function VoiceRoomStage({
             className={`${buttonClassName} voice-room-stage__toolbar-button--split-main`}
             onClick={onClick}
             aria-label={label}
+            title={label}
             disabled={disabled}
           >
             <span className={`voice-room-stage__toolbar-icon-shell ${muted || slashed ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
@@ -1044,6 +1045,7 @@ export default function VoiceRoomStage({
             className={`${buttonClassName} voice-room-stage__toolbar-button--split-menu`}
             onClick={onMenuClick || onClick}
             aria-label={menuLabel}
+            title={menuLabel}
             disabled={disabled || !(onMenuClick || onClick)}
           >
             <VoiceStageIcon name="chevron-down" className="voice-room-stage__toolbar-chevron" />
@@ -1059,6 +1061,7 @@ export default function VoiceRoomStage({
         className={buttonClassName}
         onClick={onClick}
         aria-label={label}
+        title={label}
         disabled={disabled}
       >
         <span className={`voice-room-stage__toolbar-icon-shell ${muted || slashed ? "voice-room-stage__toolbar-icon-shell--slashed" : ""}`}>
@@ -1073,6 +1076,7 @@ export default function VoiceRoomStage({
       type="button"
       className={className}
       aria-label="Открыть сцену на весь экран"
+      title="Открыть сцену на весь экран"
       onClick={async () => {
         try {
           if (document.fullscreenElement === shellRef.current) {
