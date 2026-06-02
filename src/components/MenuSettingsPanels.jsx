@@ -1929,21 +1929,20 @@ export const VoiceSettingsPanel = ({
   audioVolume,
   activeMicSettingsBars,
   isMicTestActive,
-  denoiserModeOptions = [],
-  audioDenoiserMode = "",
   noiseProfileOptions,
   noiseSuppressionMode,
   echoCancellationEnabled,
   autoInputSensitivity,
+  manualInputSensitivityDb,
   onInputDeviceChange,
   onOutputDeviceChange,
   onMicVolumeChange,
   onAudioVolumeChange,
   onToggleMicTest,
-  onDenoiserModeChange,
   onNoiseProfileChange,
   onToggleEchoCancellation,
   onToggleAutoSensitivity,
+  onManualInputSensitivityChange,
 }) => (
     <div className="settings-shell__content settings-shell__content--voice">
       <div className="settings-shell__content-header">
@@ -2017,18 +2016,6 @@ export const VoiceSettingsPanel = ({
       </section>
 
       <section className="voice-settings-card voice-settings-card--processing">
-        <div className="voice-settings-card__title">Движок шумоподавления</div>
-        <div className="voice-profile-list voice-profile-list--processing">
-          {denoiserModeOptions.map((option) => (
-            <label key={option.id} className="voice-profile-option voice-profile-option--single-line">
-              <input type="radio" name="denoiserMode" checked={audioDenoiserMode === option.id} onChange={() => onDenoiserModeChange(option.id)} />
-              <span className="voice-profile-option__copy">
-                <strong>{option.title}</strong>
-              </span>
-            </label>
-          ))}
-        </div>
-
         <div className="voice-settings-card__title">Профиль ввода</div>
         <div className="voice-profile-list voice-profile-list--processing">
           {noiseProfileOptions.map((option) => (
@@ -2056,6 +2043,20 @@ export const VoiceSettingsPanel = ({
             </div>
             <VoiceSwitch active={autoInputSensitivity} onClick={onToggleAutoSensitivity} label="Автоматическая чувствительность" />
           </div>
+
+          {!autoInputSensitivity && (
+            <label className="voice-settings-field voice-settings-field--manual-threshold">
+              <span>Порог срабатывания микрофона: {Math.round(manualInputSensitivityDb)} dB</span>
+              <PercentageSlider
+                min={-80}
+                max={-20}
+                value={manualInputSensitivityDb}
+                onChange={(event) => onManualInputSensitivityChange(Number(event.target.value))}
+                ariaLabel="Порог срабатывания микрофона"
+                formatValue={(value) => `${Math.round(value)} dB`}
+              />
+            </label>
+          )}
         </div>
       </section>
     </div>

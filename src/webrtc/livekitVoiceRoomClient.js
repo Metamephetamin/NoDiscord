@@ -542,6 +542,7 @@ export function createVoiceRoomClient({
   let noiseSuppressionStrength = 85;
   let echoCancellationEnabled = true;
   let autoInputSensitivityEnabled = true;
+  let manualInputSensitivityDb = -42;
   let localScreenStream = null;
   let localCameraStream = null;
   let localPreviewShareMode = "";
@@ -1849,6 +1850,10 @@ const handleDeviceChange = () => {
   };
 
   const getNoiseSuppressionStrengthRatio = () => normalizeNoiseSuppressionStrength(noiseSuppressionStrength) / 100;
+  const getManualInputSensitivityThreshold = () => {
+    const normalizedDb = Math.min(-20, Math.max(-80, Number(manualInputSensitivityDb)));
+    return Math.pow(10, normalizedDb / 20);
+  };
 
   const getNoiseGateProfile = (mode = noiseSuppressionMode) => {
     if (mode === NOISE_SUPPRESSION_MODE_HARD_GATE) {
@@ -1996,13 +2001,13 @@ const handleDeviceChange = () => {
           gateProfile.maxAdaptiveOpenThreshold || gateProfile.openThreshold,
           Math.max(gateProfile.openThreshold, nextState.noiseFloor * (gateProfile.adaptiveOpenRatio || 1))
         )
-        : gateProfile.openThreshold;
+        : getManualInputSensitivityThreshold();
       const adaptiveCloseThreshold = autoInputSensitivityEnabled
         ? Math.max(
           gateProfile.closeThreshold,
           Math.min(adaptiveOpenThreshold * 0.82, nextState.noiseFloor * (gateProfile.adaptiveCloseRatio || 1))
         )
-        : gateProfile.closeThreshold;
+        : adaptiveOpenThreshold * 0.5;
 
       if (rms >= adaptiveOpenThreshold) {
         nextState.isOpen = true;
@@ -4862,6 +4867,23 @@ const handleDeviceChange = () => {
       autoInputSensitivityEnabled = nextEnabled;
       logVoiceDebug("local-audio:auto-input-sensitivity-set", {
         autoInputSensitivityEnabled,
+      });
+    },
+
+    async setManualInputSensitivityDb(value) {
+      const nextValue = Math.round(Number(value));
+      if (!Number.isFinite(nextValue)) {
+        return;
+      }
+
+      const clampedValue = Math.min(-20, Math.max(-80, nextValue));
+      if (manualInputSensitivityDb === clampedValue) {
+        return;
+      }
+
+      manualInputSensitivityDb = clampedValue;
+      logVoiceDebug("local-audio:manual-input-sensitivity-set", {
+        manualInputSensitivityDb,
       });
     },
 

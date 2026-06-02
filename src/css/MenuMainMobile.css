@@ -1430,10 +1430,12 @@
 }
 
 .profile__leave-call-icon {
-  width: 24px;
-  height: 24px;
+  width: 27px;
+  height: 27px;
   display: block;
   fill: currentColor;
+  transform: rotate(135deg);
+  transform-origin: center;
 }
 
 .profile__waveform {

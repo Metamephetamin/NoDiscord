@@ -861,6 +861,31 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   overflow: visible;
 }
 
+.sidebar__channels--servers {
+  padding: 0;
+}
+
+.sidebar__channels--servers .sidebar__channels-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 18px 7px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__channels--servers .channels__top {
+  flex: 1 1 auto;
+}
+
+.sidebar__channels--servers > .menu__profile-wrapper {
+  --profile-card-bleed: 0px;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+}
+
 .sidebar__channels--friends {
   justify-content: flex-start;
   overflow: visible;

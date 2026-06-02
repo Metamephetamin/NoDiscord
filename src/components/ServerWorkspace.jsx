@@ -1911,6 +1911,22 @@ export const ServersSidebar = memo(({
     });
     setCategoryContextMenu(null);
   };
+  const openChannelSettingsFromContextMenu = () => {
+    if (categoryContextMenu?.mode !== "channel" || !categoryContextMenu.channelId) {
+      return;
+    }
+
+    const channelType = categoryContextMenu.channelType || "text";
+    const channelId = String(categoryContextMenu.channelId || "");
+    const channelSource = channelType === "voice" ? activeServer?.voiceChannels : activeServer?.textChannels;
+    const channel = (channelSource || []).find((item) => String(item.id) === channelId) || {
+      id: channelId,
+      name: categoryContextMenu.name || "",
+    };
+
+    setCategoryContextMenu(null);
+    onOpenChannelSettings?.(channelType, channel);
+  };
   const channelCategories = useMemo(
     () => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : EMPTY_CHANNEL_LIST),
     [activeServer?.channelCategories]
@@ -2280,7 +2296,6 @@ export const ServersSidebar = memo(({
           void loadVoiceRoomStage();
           onPrewarmVoiceChannel?.(channelId);
         }}
-        onRenameChannel={onOpenChannelSettings}
         onUpdateChannelStatus={(channelId, status) => onUpdateChannelSettings?.("voice", channelId, { status })}
         liveUserIds={liveUserIds}
         speakingUserIds={speakingUserIds}
@@ -2346,6 +2361,7 @@ export const ServersSidebar = memo(({
   return (
     <>
   <aside className="sidebar__channels sidebar__channels--servers">
+    <div className="sidebar__channels-body">
     <div className="channels__top">
       {activeServer ? (
         <div className="server-summary-wrap" ref={serverMembersRef}>
@@ -2615,13 +2631,22 @@ export const ServersSidebar = memo(({
                   </button>
                   {canManageChannels ? <div className="member-role-menu__separator" /> : null}
                   {canManageChannels ? (
-                  <button
-                    type="button"
-                    className="member-role-menu__item member-role-menu__item--danger"
-                    onClick={deleteCategoryFromContextMenu}
-                  >
-                    Удалить канал
-                  </button>
+                    <>
+                      <button
+                        type="button"
+                        className="member-role-menu__item"
+                        onClick={openChannelSettingsFromContextMenu}
+                      >
+                        Настройки канала
+                      </button>
+                      <button
+                        type="button"
+                        className="member-role-menu__item member-role-menu__item--danger"
+                        onClick={deleteCategoryFromContextMenu}
+                      >
+                        Удалить канал
+                      </button>
+                    </>
                   ) : null}
                 </>
               ) : (
@@ -2719,6 +2744,7 @@ export const ServersSidebar = memo(({
           })}
         </>
       ) : null}
+    </div>
     </div>
 
     {includeProfilePanel ? profilePanel : null}

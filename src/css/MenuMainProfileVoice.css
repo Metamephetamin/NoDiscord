@@ -1161,6 +1161,21 @@ html[data-ui-theme="purple"] .chat__topbar-copy span {
   --slider-tooltip-top: -38px;
 }
 
+.voice-settings-field--manual-threshold {
+  margin-top: 2px;
+  gap: 10px;
+}
+
+.voice-settings-field--manual-threshold > span {
+  font-size: 14px;
+  color: #c9d2e6;
+}
+
+.voice-settings-field--manual-threshold .slider-with-tooltip {
+  padding-top: 12px;
+  --slider-tooltip-top: -38px;
+}
+
 .app-logo-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -2,21 +2,31 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readRepoFile, readRepoFileIfExists } from "./readRepoFile.mjs";
 
-test("voice channel settings button is only rendered for channel managers", () => {
-  const source = readRepoFile("src/components/VoiceChannelList.jsx");
+test("voice channel settings use the channel context menu instead of hover gear", () => {
+  const voiceSource = readRepoFile("src/components/VoiceChannelList.jsx");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const renderVoiceChannelsStart = workspaceSource.indexOf("const renderVoiceChannels =");
+  const renderVoiceChannelsEnd = workspaceSource.indexOf("const renderMixedChannelRows =", renderVoiceChannelsStart);
+  const renderVoiceChannelsSource = workspaceSource.slice(renderVoiceChannelsStart, renderVoiceChannelsEnd);
 
-  assert.match(source, /\{canManageChannels \? \(/);
-  assert.match(source, /className="channel-edit-button"/);
-  assert.doesNotMatch(source, /disabled=\{!canManageChannels\}/);
+  assert.match(voiceSource, /onChannelContextMenu/);
+  assert.doesNotMatch(voiceSource, /className="channel-edit-button"/);
+  assert.doesNotMatch(renderVoiceChannelsSource, /onRenameChannel=\{onOpenChannelSettings\}/);
+  assert.match(workspaceSource, /const openChannelSettingsFromContextMenu = \(\) => \{/);
+  assert.match(workspaceSource, />\s*Настройки канала\s*<\/button>/);
 });
 
-test("voice channel timer reserves the hover settings slot cleanly", () => {
+test("voice channel timer stays visible without a hover settings slot", () => {
   const css = readRepoFile("src/css/ListChannels.css");
+  const timerRule = css.match(/\.voice-channel__timer \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(css, /\.voice-channel__button \{[\s\S]*?padding: 0 12px 0 0;/);
-  assert.match(css, /\.voice-channel__row > \.channel-edit-button \{[\s\S]*?z-index: 2;/);
-  assert.match(css, /\.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__button \{[\s\S]*?padding-right: 46px;/);
-  assert.match(css, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?width: 76px;/);
+  assert.match(timerRule, /margin-left: 8px;/);
+  assert.match(timerRule, /width: 56px;/);
+  assert.match(timerRule, /text-align: left;/);
+  assert.doesNotMatch(timerRule, /visibility: hidden;/);
+  assert.doesNotMatch(css, /\.voice-channel__row > \.channel-edit-button/);
+  assert.doesNotMatch(css, /\.voice-channel__row:has\(> \.channel-edit-button\)/);
 });
 
 test("text channel settings button is only rendered for channel managers", () => {
@@ -422,10 +432,17 @@ test("microphone test and auto sensitivity are wired to the voice client", () =>
   assert.match(controllerSource, /const\s+activeMicSettingsBars\s*=\s*getMeterActiveBars\(micLevel,\s*32\);/);
   assert.match(settingsSource, /Array\.from\(\{ length: 32 \}\)/);
   assert.match(storageSource, /nd:auto-input-sensitivity:/);
+  assert.match(storageSource, /nd:manual-input-sensitivity-db:/);
+  assert.match(settingsSource, /Порог срабатывания микрофона: \{Math\.round\(manualInputSensitivityDb\)\} dB/);
+  assert.match(settingsSource, /formatValue=\{\(value\) => `\$\{Math\.round\(value\)\} dB`\}/);
   assert.match(processingSource, /client\.setAutoInputSensitivity\?\.\(currentVoiceProcessingState\.autoInputSensitivity\)/);
+  assert.match(processingSource, /client\.setManualInputSensitivityDb\?\.\(currentVoiceProcessingState\.manualInputSensitivityDb\)/);
   assert.match(processingSource, /voiceClientRef\.current\.setAutoInputSensitivity\?\.\(autoInputSensitivity\)/);
+  assert.match(processingSource, /voiceClientRef\.current\.setManualInputSensitivityDb\?\.\(manualInputSensitivityDb\)/);
   assert.match(voiceClientSource, /let autoInputSensitivityEnabled = true;/);
+  assert.match(voiceClientSource, /let manualInputSensitivityDb = -42;/);
   assert.match(voiceClientSource, /async setAutoInputSensitivity\(enabled\)/);
+  assert.match(voiceClientSource, /async setManualInputSensitivityDb\(value\)/);
   assert.match(voiceClientSource, /const adaptiveOpenThreshold = autoInputSensitivityEnabled/);
 });
 
@@ -474,6 +491,16 @@ test("voice settings microphone meter stays compact", () => {
 
   assert.match(profileDeviceCss, /\.device-menu__meter span \{\s*height: 7px;/);
   assert.match(mainCss, /\.voice-settings-card--voice \.voice-settings-meter \{\s*margin-top: 22px;\s*gap: 12px;/);
+});
+
+test("voice settings hide denoiser engine choices but keep input profiles", () => {
+  const panelsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
+
+  assert.doesNotMatch(panelsSource, /Движок шумоподавления|name="denoiserMode"|onDenoiserModeChange/);
+  assert.doesNotMatch(rendererSource, /denoiserModeOptions|audioDenoiserMode|onDenoiserModeChange/);
+  assert.match(panelsSource, /Профиль ввода/);
+  assert.match(panelsSource, /name="noiseProfile"/);
 });
 
 test("profile device menu styles stay split from the main menu stylesheet", () => {
@@ -811,8 +838,10 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(listCss, /\.list__items--active \{[^}]*padding: 0;/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background: rgba\(255, 255, 255, 0\.085\);/);
-  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 5px 8px;/);
-  assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon img \{[\s\S]*?filter: brightness\(0\) saturate\(100%\);/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 0;/);
+  assert.match(voiceChannelSource, /className="voice-channel__icon-svg"/);
+  assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?fill: currentColor;/);
+  assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon \{[\s\S]*?color: #1f2937;/);
   assert.match(listCss, /\.voice-channel__status-button \{/);
   assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
 });
@@ -839,6 +868,8 @@ test("profile voice action opens soundpad with a visible effects glyph", () => {
   assert.match(panelSource, /onClick=\{onScreenShareAction\}[\s\S]*?onClick=\{isCameraShareActive \? onStopCameraShare : onOpenCamera\}[\s\S]*?onClick=\{onOpenSoundboard\}/);
   assert.match(panelSource, /ProfileQuickSoundpadIcon/);
   assert.match(panelSource, /ProfileLeaveCallIcon/);
+  assert.match(panelSource, /viewBox="0 0 16 16"[\s\S]*?fillRule="evenodd"/);
+  assert.match(mobileCss, /\.profile__leave-call-icon \{[\s\S]*?width: 27px;[\s\S]*?transform: rotate\(135deg\);/);
   assert.match(panelSource, /className="profile__connection-actions"[\s\S]*?className="profile__leave-call-button ui-tooltip-anchor"[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
   assert.match(panelSource, /profile__quick-glyph profile__quick-glyph--soundpad/);
   assert.doesNotMatch(panelSource, /profile__quick-button profile__quick-button--danger[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
@@ -1464,6 +1495,23 @@ test("bottom profile card aligns with the text composer height and uses tighter 
   assert.match(identityRowRule, /top: 7px;/);
 });
 
+test("server channel sidebar padding is separated from the bottom profile panel", () => {
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const shellCss = readRepoFile("src/css/MenuMainShell.css");
+  const sidebarStart = workspaceSource.indexOf('<aside className="sidebar__channels sidebar__channels--servers">');
+  const profileStart = workspaceSource.indexOf("{includeProfilePanel ? profilePanel : null}", sidebarStart);
+  const bodyStart = workspaceSource.indexOf('className="sidebar__channels-body"', sidebarStart);
+  const bodyEnd = workspaceSource.indexOf("</div>\n\n    {includeProfilePanel ? profilePanel : null}", bodyStart);
+
+  assert.ok(sidebarStart >= 0, "server channel sidebar is rendered");
+  assert.ok(bodyStart > sidebarStart, "server channel sidebar has a body wrapper");
+  assert.ok(bodyEnd > bodyStart, "server channel sidebar body closes before profile");
+  assert.ok(profileStart > bodyEnd, "bottom profile panel is outside the padded body");
+  assert.match(shellCss, /\.sidebar__channels--servers \{[\s\S]*?padding: 0;/);
+  assert.match(shellCss, /\.sidebar__channels--servers \.sidebar__channels-body \{[\s\S]*?padding: 18px 7px 16px;/);
+  assert.match(shellCss, /\.sidebar__channels--servers > \.menu__profile-wrapper \{[\s\S]*?margin: 0;/);
+});
+
 test("bottom profile voice controls stay compact and use one icon color", () => {
   const profileVoiceCss = readRepoFile("src/css/MenuMainProfileVoice.css");
   const miniIconRule = profileVoiceCss.match(/\.profile__mini-icon \{[\s\S]*?\n\}/)?.[0] || "";
@@ -1478,13 +1526,13 @@ test("bottom profile voice controls stay compact and use one icon color", () => 
   assert.match(chevronRule, /background-color: currentColor;/);
 });
 
-test("voice channel settings gear replaces the timer cleanly on hover", () => {
+test("active voice channel keeps title sizing stable and timer visible", () => {
   const listChannelsCss = readRepoFile("src/css/ListChannels.css");
 
-  assert.match(listChannelsCss, /\.voice-channel__row > \.channel-edit-button \{[\s\S]*?right: 8px;[\s\S]*?width: 34px;[\s\S]*?height: 34px;[\s\S]*?opacity: 0;/);
-  assert.match(listChannelsCss, /\.voice-channel__row > \.channel-edit-button img \{[\s\S]*?width: 19px;[\s\S]*?height: 19px;/);
-  assert.match(listChannelsCss, /\.list__items:hover \.voice-channel__row > \.channel-edit-button,[\s\S]*?background-color: #262932;[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/);
-  assert.match(listChannelsCss, /\.list__items:hover \.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__timer,[\s\S]*?opacity: 0;[\s\S]*?visibility: hidden;/);
+  assert.match(listChannelsCss, /\.list__items--active > \.voice-channel__row \{[\s\S]*?min-height: 38px;[\s\S]*?padding: 0;/);
+  assert.match(listChannelsCss, /\.list__items--active \.voice-channel__title \{[\s\S]*?font-size: 16px;[\s\S]*?font-weight: 450;/);
+  assert.doesNotMatch(listChannelsCss, /\.list__items--active \.voice-channel__title \{[\s\S]*?font-size: 17px;/);
+  assert.doesNotMatch(listChannelsCss, /\.list__items:hover \.voice-channel__row:has\(> \.channel-edit-button\) \.voice-channel__timer/);
 });
 
 test("interface accent color is customizable through appearance settings", () => {
@@ -1680,6 +1728,15 @@ test("text chat panel styles stay split from the main text chat stylesheet", () 
   assert.doesNotMatch(textChatCss, /^\s*\.message-search-panel[^\n{]*\{/m);
   assert.doesNotMatch(textChatCss, /^\s*\.chat-pins[^\n{]*\{/m);
   assert.doesNotMatch(textChatCss, /^html\[data-ui-theme="light"\] \.chat-pins/m);
+});
+
+test("server channel message timestamps align to message content width", () => {
+  const messageLayoutCss = readRepoFile("src/css/TextChatLayoutMessages.css");
+  const serverMessageContentRule = messageLayoutCss.match(/\.message-item:not\(\.message-item--dm\) \.msg-content \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(serverMessageContentRule, /width: fit-content;/);
+  assert.match(serverMessageContentRule, /max-width: min\(100%, 840px\);/);
+  assert.doesNotMatch(serverMessageContentRule, /width: 100%;/);
 });
 
 test("text chat composer popover styles stay split from the main text chat stylesheet", () => {

@@ -620,8 +620,8 @@
 
 .message-item:not(.message-item--dm) .msg-content {
   display: flex;
-  width: 100%;
-  max-width: 100%;
+  width: fit-content;
+  max-width: min(100%, 840px);
   min-width: 0;
   padding: 0;
   border: 0;

@@ -726,12 +726,20 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .voice-settings-card--notifications {
-  padding: 24px 26px 28px;
+  padding: 30px 34px 36px;
 }
 
 .voice-settings-card--notifications .voice-toggle-row {
   gap: 22px;
-  padding: 18px 0;
+  padding: 20px 0;
+}
+
+.voice-settings-card--notifications > .voice-toggle-row:first-child {
+  padding-top: 0;
+}
+
+.voice-settings-card--notifications > .voice-toggle-row + .voice-toggle-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
 }
 
 .voice-settings-card--notifications .voice-toggle-row > div {
@@ -756,8 +764,10 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 }
 
 .voice-settings-card--notifications .voice-settings-field-grid {
-  gap: 18px 42px;
-  margin: 12px 0 8px;
+  gap: 20px 42px;
+  margin: 18px 0 8px;
+  padding-top: 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .voice-settings-card--notifications .voice-settings-field {
@@ -766,12 +776,21 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .voice-settings-card--notifications .voice-settings-field--stacked,
 .voice-settings-card--notifications .voice-settings-field--volume {
-  margin-top: 20px;
+  margin-top: 24px;
+}
+
+.voice-settings-card--notifications .voice-settings-field-grid + .voice-toggle-row,
+.voice-settings-card--notifications > .voice-settings-field--volume,
+.voice-settings-card--notifications > .system-sound-controls,
+.voice-settings-card--notifications > .system-sound-controls + .voice-settings-field {
+  margin-top: 34px;
+  padding-top: 30px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .voice-settings-card--notifications .voice-settings-field > span {
   color: #ffffff;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -794,21 +813,48 @@ html[data-ui-density="compact"] .settings-shell__nav-item {
 
 .system-sound-controls__list {
   display: grid;
-  gap: 2px;
+  gap: 0;
+  margin-top: 8px;
 }
 
 .voice-settings-card--notifications .system-sound-controls__row {
-  padding: 9px 0;
+  padding: 18px 0;
+}
+
+.voice-settings-card--notifications .system-sound-controls__row + .system-sound-controls__row {
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
 }
 
 .voice-settings-card--notifications .system-sound-controls__row > div > strong {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .voice-settings-card--notifications .system-sound-controls__row > div > span {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.35;
+}
+
+.settings-popup--mobile .voice-settings-card--notifications {
+  padding: 18px;
+}
+
+.settings-popup--mobile .voice-settings-card--notifications .voice-toggle-row {
+  padding: 16px 0;
+}
+
+.settings-popup--mobile .voice-settings-card--notifications .voice-settings-field-grid,
+.settings-popup--mobile .voice-settings-card--notifications .voice-settings-field-grid + .voice-toggle-row,
+.settings-popup--mobile .voice-settings-card--notifications > .voice-settings-field--volume,
+.settings-popup--mobile .voice-settings-card--notifications > .system-sound-controls,
+.settings-popup--mobile .voice-settings-card--notifications > .system-sound-controls + .voice-settings-field {
+  margin-top: 24px;
+  padding-top: 22px;
+}
+
+.settings-popup--mobile .voice-settings-card--notifications .system-sound-controls__row {
+  padding: 15px 0;
 }
 
 .voice-settings-card--profile {

@@ -54,6 +54,7 @@ export default function useMenuMainVoiceProcessing({
   noiseSuppressionStorageKey,
   echoCancellationStorageKey,
   autoInputSensitivity,
+  manualInputSensitivityDb,
 }) {
   const [noiseSuppressionMode, setNoiseSuppressionMode] = useState(DEFAULT_VOICE_INPUT_MODE);
   const [audioDenoiserMode, setAudioDenoiserMode] = useState(AUDIO_DENOISER_MODE_DEEPFILTERNET3);
@@ -69,6 +70,7 @@ export default function useMenuMainVoiceProcessing({
       noiseSuppressionStrength: getVoiceInputModeNoiseStrength(DEFAULT_VOICE_INPUT_MODE),
       echoCancellationEnabled: true,
       autoInputSensitivity: true,
+      manualInputSensitivityDb: -42,
     },
   }), []);
 
@@ -79,8 +81,9 @@ export default function useMenuMainVoiceProcessing({
       noiseSuppressionStrength,
       echoCancellationEnabled,
       autoInputSensitivity,
+      manualInputSensitivityDb,
     };
-  }, [audioDenoiserMode, autoInputSensitivity, echoCancellationEnabled, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
+  }, [audioDenoiserMode, autoInputSensitivity, echoCancellationEnabled, manualInputSensitivityDb, noiseSuppressionMode, noiseSuppressionStrength, voiceProcessingStateRef]);
 
   useEffect(() => {
     if (!user) {
@@ -186,6 +189,9 @@ export default function useMenuMainVoiceProcessing({
     client.setAutoInputSensitivity?.(currentVoiceProcessingState.autoInputSensitivity).catch((error) => {
       console.error("Ошибка применения автоматической чувствительности:", error);
     });
+    client.setManualInputSensitivityDb?.(currentVoiceProcessingState.manualInputSensitivityDb).catch((error) => {
+      console.error("Ошибка применения ручного порога микрофона:", error);
+    });
   }, [voiceClientRef, voiceProcessingStateRef]);
 
   useEffect(() => {
@@ -237,6 +243,16 @@ export default function useMenuMainVoiceProcessing({
       console.error("Ошибка переключения автоматической чувствительности:", error);
     });
   }, [autoInputSensitivity, voiceClientRef]);
+
+  useEffect(() => {
+    if (!voiceClientRef.current) {
+      return;
+    }
+
+    voiceClientRef.current.setManualInputSensitivityDb?.(manualInputSensitivityDb).catch((error) => {
+      console.error("Ошибка переключения ручного порога микрофона:", error);
+    });
+  }, [manualInputSensitivityDb, voiceClientRef]);
 
   const noiseProfileOptions = NOISE_PROFILE_OPTIONS;
   const activeNoiseProfile = useMemo(

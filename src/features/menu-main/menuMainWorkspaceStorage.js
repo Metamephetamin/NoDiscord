@@ -46,6 +46,7 @@ const getChatBackgroundStorageKey = (user) => `nd:chat-background:${getCurrentUs
 const getChatBackgroundNameStorageKey = (user) => `nd:chat-background-name:${getCurrentUserId(user) || "guest"}`;
 const getChatBackgroundFitStorageKey = (user) => `nd:chat-background-fit:${getCurrentUserId(user) || "guest"}`;
 const getAutoInputSensitivityStorageKey = (user) => `nd:auto-input-sensitivity:${getCurrentUserId(user) || "guest"}`;
+const getManualInputSensitivityDbStorageKey = (user) => `nd:manual-input-sensitivity-db:${getCurrentUserId(user) || "guest"}`;
 
 const getDirectCallHistoryStorageKey = (user) => {
   const userId = String(user?.id || user?.email || "").trim();
@@ -181,6 +182,7 @@ export function useMenuMainStorageKeys(user) {
     systemSoundVolumeStorageKey: getSystemSoundVolumeStorageKey(user),
     systemSoundEventsStorageKey: getSystemSoundEventsStorageKey(user),
     autoInputSensitivityStorageKey: getAutoInputSensitivityStorageKey(user),
+    manualInputSensitivityDbStorageKey: getManualInputSensitivityDbStorageKey(user),
     audioInputDeviceStorageKey: getAudioInputDeviceStorageKey(user),
     audioOutputDeviceStorageKey: getAudioOutputDeviceStorageKey(user),
     videoInputDeviceStorageKey: getVideoInputDeviceStorageKey(user),

@@ -92,22 +92,21 @@ export function MenuMainSettingsContent({
   audioVolume,
   activeMicSettingsBars,
   isMicTestActive,
-  denoiserModeOptions,
-  audioDenoiserMode,
   noiseProfileOptions,
   noiseSuppressionMode,
   activeNoiseProfile,
   echoCancellationEnabled,
   autoInputSensitivity,
+  manualInputSensitivityDb,
   handleInputDeviceChange,
   handleOutputDeviceChange,
   updateMicVolume,
   updateAudioVolume,
   toggleMicrophoneTestPreview,
-  handleDenoiserModeChange,
   handleNoiseSuppressionModeChange,
   toggleEchoCancellation,
   setAutoInputSensitivity,
+  setManualInputSensitivityDb,
   directNotificationsEnabled,
   conversationNotificationsEnabled,
   serverNotificationsEnabled,
@@ -425,22 +424,21 @@ export function MenuMainSettingsContent({
           audioVolume={audioVolume}
           activeMicSettingsBars={activeMicSettingsBars}
           isMicTestActive={isMicTestActive}
-          denoiserModeOptions={denoiserModeOptions}
-          audioDenoiserMode={audioDenoiserMode}
           noiseProfileOptions={noiseProfileOptions}
           noiseSuppressionMode={noiseSuppressionMode}
           activeNoiseProfile={activeNoiseProfile}
           echoCancellationEnabled={echoCancellationEnabled}
           autoInputSensitivity={autoInputSensitivity}
+          manualInputSensitivityDb={manualInputSensitivityDb}
           onInputDeviceChange={handleInputDeviceChange}
           onOutputDeviceChange={handleOutputDeviceChange}
           onMicVolumeChange={updateMicVolume}
           onAudioVolumeChange={updateAudioVolume}
           onToggleMicTest={toggleMicrophoneTestPreview}
-          onDenoiserModeChange={handleDenoiserModeChange}
           onNoiseProfileChange={handleNoiseSuppressionModeChange}
           onToggleEchoCancellation={toggleEchoCancellation}
           onToggleAutoSensitivity={() => setAutoInputSensitivity((previous) => !previous)}
+          onManualInputSensitivityChange={setManualInputSensitivityDb}
         />
       );
   }
