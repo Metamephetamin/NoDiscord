@@ -393,6 +393,17 @@ html[data-ui-theme="light"] .profile__mini-arrow:hover {
   box-shadow: none;
 }
 
+html[data-ui-theme="light"] .profile__leave-call-button {
+  color: #172033;
+}
+
+html[data-ui-theme="light"] .profile__leave-call-button:hover,
+html[data-ui-theme="light"] .profile__leave-call-button:focus-visible {
+  background: #da3b45;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(218, 59, 69, 0.22);
+}
+
 html[data-ui-theme="light"] .profile__quick-glyph,
 html[data-ui-theme="light"] .profile__mini-glyph,
 html[data-ui-theme="light"] .profile__mini-chevron,

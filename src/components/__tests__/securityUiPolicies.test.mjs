@@ -779,16 +779,22 @@ test("profile voice action opens soundpad with a visible effects glyph", () => {
   const slotSource = readRepoFile("src/features/menu-main/MenuMainProfilePanelSlot.jsx");
   const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const profileVoiceCss = readRepoFile("src/css/MenuMainProfileVoice.css");
+  const mobileCss = readRepoFile("src/css/MenuMainMobile.css");
 
   assert.match(panelSource, /onOpenSoundboard,/);
   assert.match(panelSource, /onClick=\{onOpenSoundboard\} aria-label="Soundpad" data-tooltip="Soundpad"/);
   assert.match(panelSource, /onClick=\{onScreenShareAction\}[\s\S]*?onClick=\{isCameraShareActive \? onStopCameraShare : onOpenCamera\}[\s\S]*?onClick=\{onOpenSoundboard\}/);
   assert.match(panelSource, /ProfileQuickSoundpadIcon/);
+  assert.match(panelSource, /ProfileLeaveCallIcon/);
+  assert.match(panelSource, /className="profile__connection-actions"[\s\S]*?className="profile__leave-call-button ui-tooltip-anchor"[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
   assert.match(panelSource, /profile__quick-glyph profile__quick-glyph--soundpad/);
   assert.doesNotMatch(panelSource, /profile__quick-button profile__quick-button--danger[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
   assert.match(slotSource, /onOpenSoundboard=\{openSoundboard\}/);
   assert.match(controllerSource, /openSoundboard:stableOpenSoundboard/);
   assert.match(profileVoiceCss, /\.profile__quick-glyph--soundpad \{/);
+  assert.match(mobileCss, /\.profile__connection-card \{[\s\S]*?grid-template-columns: auto minmax\(0, 1fr\) auto;/);
+  assert.match(mobileCss, /\.profile__quick-actions \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(mobileCss, /\.profile__leave-call-button:hover,[\s\S]*?background: #da3b45;/);
 });
 
 test("profile store styles are split out of the main menu bundle", () => {

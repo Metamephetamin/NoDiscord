@@ -25,6 +25,12 @@ const ProfileQuickSoundpadIcon = () => (
   </svg>
 );
 
+const ProfileLeaveCallIcon = () => (
+  <svg className="profile__leave-call-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M7.2 9.2c3.05-1.6 6.55-1.6 9.6 0 .92.48 1.62 1.28 1.95 2.25l.17.52a1.2 1.2 0 0 1-.76 1.5l-2.46.82a1.25 1.25 0 0 1-1.45-.52l-.96-1.45a1.1 1.1 0 0 0-.91-.49h-.76c-.37 0-.71.18-.91.49l-.96 1.45a1.25 1.25 0 0 1-1.45.52l-2.46-.82a1.2 1.2 0 0 1-.76-1.5l.17-.52c.33-.97 1.03-1.77 1.95-2.25Z" />
+  </svg>
+);
+
 const DeviceMenuOptionSubmenu = ({
   options,
   activeId,
@@ -467,6 +473,9 @@ export default function MenuProfilePanel({
   onAudioVolumeChange,
   onSuppressTooltip,
   onRestoreTooltip,
+  onLeaveVoiceChannel,
+  leaveVoiceActionLabel = "Отключиться",
+  leaveVoiceActionAriaLabel = "Отключиться от голосового канала",
   directCallPanel = null,
 }) {
   const profileCardClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
@@ -520,13 +529,16 @@ export default function MenuProfilePanel({
                 <span className="profile__connection-channel">{currentVoiceChannelName}</span>
               </span>
             </div>
-            <div className="profile__connection-icons">
-              <span className="profile__waveform profile__waveform--live" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-              </span>
+            <div className="profile__connection-actions">
+              <button
+                type="button"
+                className="profile__leave-call-button ui-tooltip-anchor"
+                onClick={onLeaveVoiceChannel}
+                aria-label={leaveVoiceActionAriaLabel}
+                data-tooltip={leaveVoiceActionLabel}
+              >
+                <ProfileLeaveCallIcon />
+              </button>
             </div>
           </div>
 
