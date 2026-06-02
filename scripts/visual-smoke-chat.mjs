@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-const css = readFileSync("src/css/TextChat.css", "utf8");
+function readCssWithImports(path, seen = new Set()) {
+  if (seen.has(path)) {
+    return "";
+  }
+
+  seen.add(path);
+  const source = readFileSync(path, "utf8");
+  const baseDir = dirname(path);
+  const imports = [...source.matchAll(/@import\s+["'](.+?)["'];/g)]
+    .map((match) => readCssWithImports(join(baseDir, match[1]), seen));
+
+  return [source, ...imports].join("\n");
+}
+
+const css = readCssWithImports("src/css/TextChat.css");
 const messageListSource = readFileSync("src/components/TextChatMessageList.jsx", "utf8");
 const friendsControllerSource = readFileSync("BackNoDiscord/BackNoDiscord/Controllers/FriendsController.cs", "utf8");
 const conversationsControllerSource = readFileSync("BackNoDiscord/BackNoDiscord/Controllers/ConversationsController.cs", "utf8");
