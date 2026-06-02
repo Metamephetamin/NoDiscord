@@ -4,8 +4,15 @@ import { readRepoFile } from "../../components/__tests__/readRepoFile.mjs";
 
 const css = readRepoFile("src/css/TextChat.css");
 
-test("direct single media messages keep a concrete responsive width", () => {
-  assert.match(css, /\.message-item--dm\s+\.msg-content--media-only:not\(\.msg-content--single-video-only\)\s+\.message-attachment-single[\s\S]*?\.message-item--dm\s+\.msg-content--media-only:not\(\.msg-content--single-video-only\)\s+\.message-attachment-single\s+\.message-media[\s\S]*?\{[\s\S]*?min-width:\s*min\(220px,\s*calc\(100vw\s*-\s*128px\)\)/);
+test("single image messages match the large feature tile size from grouped media", () => {
+  assert.match(
+    css,
+    /\.msg-content--media-only:not\(\.msg-content--single-video-only\)\s+\.message-attachment-single[\s\S]*?\.msg-content--media-only:not\(\.msg-content--single-video-only\)\s+\.message-attachment-single\s+\.message-media[\s\S]*?\{[\s\S]*?width:\s*clamp\(320px,\s*52vw,\s*520px\)\s*!important;[\s\S]*?height:\s*clamp\(320px,\s*84vw,\s*430px\);/,
+  );
+  assert.match(
+    css,
+    /\.msg-content--media-only:not\(\.msg-content--single-video-only\)\s+\.message-attachment-single\s+\.message-media__image\s*\{[\s\S]*?width:\s*100%\s*!important;[\s\S]*?height:\s*100%\s*!important;[\s\S]*?object-fit:\s*cover;/,
+  );
 });
 
 test("single video messages keep a concrete responsive width in every chat", () => {

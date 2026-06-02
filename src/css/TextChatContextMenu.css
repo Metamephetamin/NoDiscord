@@ -4,7 +4,7 @@
 
 .message-context-menu-stack {
   position: fixed;
-  z-index: 1650;
+  z-index: 2147482400;
   display: flex;
   flex-direction: column;
   gap: 6px;

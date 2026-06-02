@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import AnimatedEmojiGlyph from "./AnimatedEmojiGlyph";
 import "../css/TextChatContextMenu.css";
 
@@ -16,7 +17,7 @@ export default function TextChatContextMenu({
     return null;
   }
 
-  return (
+  const menuElement = (
     <>
       <div className="mobile-sheet-backdrop" aria-hidden="true" />
       <div
@@ -24,6 +25,7 @@ export default function TextChatContextMenu({
         className="message-context-menu-stack"
         style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
         onClick={(event) => event.stopPropagation()}
+        onContextMenu={(event) => event.preventDefault()}
       >
         <div className="message-reaction-picker" aria-label="Быстрые реакции">
           <div className="message-reaction-picker__row">
@@ -85,4 +87,6 @@ export default function TextChatContextMenu({
       </div>
     </>
   );
+
+  return typeof document === "undefined" ? menuElement : createPortal(menuElement, document.body);
 }

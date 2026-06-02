@@ -733,7 +733,9 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(serverStateSource, /channel\.Status = NormalizeVoiceChannelStatus\(channel\.Status\);/);
   assert.match(serverInviteSource, /public string Status \{ get; set; \} = string\.Empty;/);
   assert.doesNotMatch(listCss, /\.list__items--active \{[^}]*background:/);
+  assert.match(listCss, /\.list__items--active \{[^}]*padding: 0 8px;/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 5px 0;/);
   assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon img \{[\s\S]*?filter: brightness\(0\) saturate\(100%\);/);
   assert.match(listCss, /\.voice-channel__status-button \{/);
   assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
@@ -1449,9 +1451,12 @@ test("message context menu styles stay split from the main text chat stylesheet"
   const contextMenuCss = readRepoFileIfExists("src/css/TextChatContextMenu.css");
   const contextMenuSource = readRepoFile("src/components/TextChatContextMenu.jsx");
 
+  assert.match(contextMenuSource, /import \{ createPortal \} from "react-dom";/);
   assert.match(contextMenuSource, /import "\.\.\/css\/TextChatContextMenu\.css";/);
+  assert.match(contextMenuSource, /createPortal\(menuElement, document\.body\)/);
   assert.match(contextMenuCss, /\.message-context-menu-stack \{/);
   assert.match(contextMenuCss, /\.message-context-menu \{/);
+  assert.match(contextMenuCss, /\.message-context-menu-stack \{[\s\S]*?z-index: 2147482400;/);
   assert.match(contextMenuCss, /@media \(max-width: 640px\) and \(hover: none\) and \(pointer: coarse\)/);
   assert.match(contextMenuCss, /html\[data-ui-theme="light"\] \.message-context-menu/);
   assert.doesNotMatch(textChatCss, /^\s*\.message-context-menu[^\n{]*\{/m);
