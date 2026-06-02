@@ -1459,7 +1459,6 @@
 .profile__mini-icon,
 .profile__mini-arrow {
   position: relative;
-  min-height: 42px;
   border: 0;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
@@ -1469,6 +1468,15 @@
   justify-content: center;
   cursor: pointer;
   transition: background-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, color 0.18s ease;
+}
+
+.profile__quick-button {
+  min-height: 42px;
+}
+
+.profile__mini-icon,
+.profile__mini-arrow {
+  min-height: 30px;
 }
 
 .profile__quick-button:hover,

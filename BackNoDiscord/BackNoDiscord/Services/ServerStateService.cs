@@ -16,6 +16,7 @@ public class ServerStateService
         "manage_roles",
         "manage_messages",
         "manage_nicknames",
+        "view_audit_log",
         "invite_members",
         "mute_members",
         "deafen_members",

@@ -453,7 +453,6 @@ export default function MenuProfilePanel({
   onOpenLocalSharePreview,
   onStreamResolutionChange,
   onStreamFpsChange,
-  onLeaveVoiceChannel,
   onAvatarChange,
   onToggleMicMute,
   onToggleSoundMute,
@@ -468,8 +467,6 @@ export default function MenuProfilePanel({
   onAudioVolumeChange,
   onSuppressTooltip,
   onRestoreTooltip,
-  leaveVoiceActionLabel = "Отключиться",
-  leaveVoiceActionAriaLabel = "Отключиться от голосового канала",
   directCallPanel = null,
 }) {
   const profileCardClassName = getProfileCustomizationClassName(profileCustomization, "profileCard");
@@ -534,9 +531,6 @@ export default function MenuProfilePanel({
           </div>
 
           <div className="profile__quick-actions">
-            <button type="button" className="profile__quick-button ui-tooltip-anchor" onClick={onOpenSoundboard} aria-label="Soundpad" data-tooltip="Soundpad">
-              <ProfileQuickSoundpadIcon />
-            </button>
             <button
               type="button"
               className={`profile__quick-button ui-tooltip-anchor ${isScreenShareActive ? "profile__quick-button--active" : ""}`}
@@ -555,8 +549,8 @@ export default function MenuProfilePanel({
             >
               <span className={`profile__quick-glyph ${isCameraShareActive ? "profile__quick-glyph--close" : "profile__quick-glyph--camera"}`} aria-hidden="true" />
             </button>
-            <button type="button" className="profile__quick-button profile__quick-button--danger ui-tooltip-anchor" onClick={onLeaveVoiceChannel} aria-label={leaveVoiceActionAriaLabel} data-tooltip={leaveVoiceActionLabel}>
-              <span className="profile__quick-glyph profile__quick-glyph--disconnect" aria-hidden="true" />
+            <button type="button" className="profile__quick-button ui-tooltip-anchor" onClick={onOpenSoundboard} aria-label="Soundpad" data-tooltip="Soundpad">
+              <ProfileQuickSoundpadIcon />
             </button>
           </div>
         </div>

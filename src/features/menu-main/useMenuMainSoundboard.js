@@ -8,11 +8,30 @@ const SOUNDBOARD_MAX_ITEMS = 48;
 
 const createSoundboardStorageKey = (user) => `${SOUNDBOARD_STORAGE_PREFIX}:${getScopedUserStorageScope(user)}`;
 
+const clampNumber = (value, min, max, fallback = min) => {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, numberValue));
+};
+
+const clampSoundVolume = (value) => Math.round(clampNumber(value, 0, 100, 100));
+
+const normalizeSoundEmoji = (value) => String(value || "🔊").trim().slice(0, 8) || "🔊";
+
 const normalizeSound = (sound) => {
   const id = String(sound?.id || "").trim();
   const name = String(sound?.name || "").trim();
   const dataUrl = String(sound?.dataUrl || "").trim();
-  const durationSeconds = Number(sound?.durationSeconds || 0);
+  const storedDurationSeconds = Number(sound?.durationSeconds || 0);
+  const trimStartSeconds = Math.max(0, Number(sound?.trimStartSeconds || 0) || 0);
+  const trimEndSeconds = Math.max(trimStartSeconds, Number(sound?.trimEndSeconds || 0) || 0);
+  const durationSeconds = storedDurationSeconds > 0
+    ? storedDurationSeconds
+    : Math.max(0, trimEndSeconds - trimStartSeconds);
 
   if (!id || !name || !dataUrl) {
     return null;
@@ -21,8 +40,13 @@ const normalizeSound = (sound) => {
   return {
     id,
     name,
+    emoji: normalizeSoundEmoji(sound?.emoji),
     dataUrl,
     durationSeconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0,
+    sourceDurationSeconds: Number(sound?.sourceDurationSeconds || 0) || 0,
+    trimStartSeconds,
+    trimEndSeconds,
+    volume: clampSoundVolume(sound?.volume ?? 100),
     createdAt: Number(sound?.createdAt || Date.now()),
   };
 };
@@ -86,12 +110,12 @@ const readAudioMetadata = (file) => {
         return;
       }
 
-      if (audio.duration > SOUNDBOARD_MAX_DURATION_SECONDS) {
-        reject(new Error("Звук должен быть не длиннее 20 секунд."));
-        return;
-      }
-
-      resolve(duration);
+      resolve({
+        durationSeconds: duration,
+        trimEndSeconds: audio.duration > SOUNDBOARD_MAX_DURATION_SECONDS
+          ? SOUNDBOARD_MAX_DURATION_SECONDS
+          : duration,
+      });
     };
     audio.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -109,19 +133,24 @@ const readFileAsDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
-const createSoundFromFile = async (file) => {
+const createSoundDraftFromFile = async (file) => {
   if (!isSupportedAudioFile(file)) {
     throw new Error("Можно загрузить только аудиофайл.");
   }
 
-  const durationSeconds = await readAudioMetadata(file);
+  const metadata = await readAudioMetadata(file);
   const dataUrl = await readFileAsDataUrl(file);
 
   return {
     id: `sound-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: getSoundFileName(file),
+    emoji: "🔊",
     dataUrl,
-    durationSeconds,
+    sourceDurationSeconds: metadata.durationSeconds,
+    trimStartSeconds: 0,
+    trimEndSeconds: metadata.trimEndSeconds,
+    durationSeconds: metadata.trimEndSeconds,
+    volume: 100,
     createdAt: Date.now(),
   };
 };
@@ -139,6 +168,7 @@ export default function useMenuMainSoundboard({
   const [soundboardQuery, setSoundboardQuery] = useState("");
   const [soundboardStatus, setSoundboardStatus] = useState("");
   const [soundboardActiveSoundId, setSoundboardActiveSoundId] = useState("");
+  const [soundboardEditor, setSoundboardEditor] = useState(null);
   const soundboardSounds = soundboardStorageState.storageKey === storageKey
     ? soundboardStorageState.sounds
     : readStoredSoundboardSounds(storageKey);
@@ -163,12 +193,31 @@ export default function useMenuMainSoundboard({
     stopSoundboardSound();
 
     const audio = new Audio(sound.dataUrl);
-    audio.volume = Math.max(0, Math.min(1, Number(readSystemSoundVolumeRatio(user)) || 0));
+    const trimStartSeconds = Math.max(0, Number(sound.trimStartSeconds || 0) || 0);
+    const trimEndSeconds = Math.max(trimStartSeconds, Number(sound.trimEndSeconds || sound.durationSeconds || 0) || 0);
+    audio.volume = Math.max(0, Math.min(1, Number(readSystemSoundVolumeRatio(user)) || 0))
+      * (clampSoundVolume(sound.volume ?? 100) / 100);
     audio.preload = "auto";
     activeAudioRef.current = audio;
     setSoundboardActiveSoundId(sound.id);
     setSoundboardStatus("");
 
+    const stopAtTrimEnd = () => {
+      if (trimEndSeconds > trimStartSeconds && audio.currentTime >= trimEndSeconds) {
+        audio.pause();
+        audio.currentTime = trimStartSeconds;
+        audio.onended?.();
+      }
+    };
+
+    audio.onloadedmetadata = () => {
+      try {
+        audio.currentTime = trimStartSeconds;
+      } catch {
+        // Some browsers only allow seeking after enough data is buffered.
+      }
+    };
+    audio.ontimeupdate = stopAtTrimEnd;
     audio.onended = () => {
       if (activeAudioRef.current === audio) {
         activeAudioRef.current = null;
@@ -182,6 +231,12 @@ export default function useMenuMainSoundboard({
       }
       setSoundboardStatus("Не удалось воспроизвести звук.");
     };
+
+    try {
+      audio.currentTime = trimStartSeconds;
+    } catch {
+      // Metadata may not be ready yet.
+    }
 
     audio.play().catch(() => {
       if (activeAudioRef.current === audio) {
@@ -206,24 +261,73 @@ export default function useMenuMainSoundboard({
     setSoundboardStatus("");
 
     try {
-      const createdSounds = [];
+      const draft = await createSoundDraftFromFile(files[0]);
+      setSoundboardEditor(draft);
+      setSoundboardStatus(files.length > 1 ? "Открыл первый звук. Остальные добавь по одному." : "");
+    } catch (error) {
+      setSoundboardStatus(error?.message || "Не удалось загрузить звук.");
+    }
+  }, []);
 
-      for (const file of files) {
-        createdSounds.push(await createSoundFromFile(file));
+  const updateSoundboardEditor = useCallback((patch) => {
+    setSoundboardEditor((previous) => {
+      if (!previous) {
+        return previous;
       }
 
-      const nextSounds = [...createdSounds, ...soundboardSounds].slice(0, SOUNDBOARD_MAX_ITEMS);
+      const next = { ...previous, ...patch };
+      const sourceDurationSeconds = Math.max(0, Number(next.sourceDurationSeconds || 0) || 0);
+      const maxTrimEndSeconds = Math.min(sourceDurationSeconds || SOUNDBOARD_MAX_DURATION_SECONDS, SOUNDBOARD_MAX_DURATION_SECONDS);
+      const trimStartSeconds = clampNumber(next.trimStartSeconds, 0, Math.max(0, maxTrimEndSeconds - 0.1), 0);
+      const trimEndSeconds = clampNumber(next.trimEndSeconds, trimStartSeconds + 0.1, maxTrimEndSeconds, maxTrimEndSeconds);
 
+      return {
+        ...next,
+        name: String(next.name || "").slice(0, 60),
+        emoji: normalizeSoundEmoji(next.emoji),
+        trimStartSeconds,
+        trimEndSeconds,
+        durationSeconds: Math.max(0.1, trimEndSeconds - trimStartSeconds),
+        volume: clampSoundVolume(next.volume),
+      };
+    });
+  }, []);
+
+  const closeSoundboardEditor = useCallback(() => {
+    setSoundboardEditor(null);
+  }, []);
+
+  const saveSoundboardEditor = useCallback(() => {
+    if (!soundboardEditor) {
+      return;
+    }
+
+    const normalizedSound = normalizeSound({
+      ...soundboardEditor,
+      name: String(soundboardEditor.name || "").trim() || "Звук",
+      durationSeconds: Math.max(0.1, Number(soundboardEditor.trimEndSeconds || 0) - Number(soundboardEditor.trimStartSeconds || 0)),
+      createdAt: Date.now(),
+    });
+
+    if (!normalizedSound) {
+      setSoundboardStatus("Не удалось сохранить звук.");
+      return;
+    }
+
+    const nextSounds = [normalizedSound, ...soundboardSounds].slice(0, SOUNDBOARD_MAX_ITEMS);
+
+    try {
       writeStoredSoundboardSounds(storageKey, nextSounds);
       setSoundboardStorageState({
         storageKey,
         sounds: nextSounds,
       });
-      setSoundboardStatus(createdSounds.length > 1 ? "Звуки загружены." : "Звук загружен.");
-    } catch (error) {
-      setSoundboardStatus(error?.message || "Не удалось загрузить звук.");
+      setSoundboardEditor(null);
+      setSoundboardStatus("Звук загружен.");
+    } catch {
+      setSoundboardStatus("Не удалось сохранить звук.");
     }
-  }, [soundboardSounds, storageKey]);
+  }, [soundboardEditor, soundboardSounds, storageKey]);
 
   const removeSoundboardSound = useCallback((soundId) => {
     const nextSounds = soundboardSounds.filter((sound) => sound.id !== soundId);
@@ -261,7 +365,11 @@ export default function useMenuMainSoundboard({
     setSoundboardQuery,
     soundboardStatus,
     soundboardActiveSoundId,
+    soundboardEditor,
     handleSoundboardUpload,
+    updateSoundboardEditor,
+    closeSoundboardEditor,
+    saveSoundboardEditor,
     playSoundboardSound,
     stopSoundboardSound,
     removeSoundboardSound,

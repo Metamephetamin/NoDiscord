@@ -516,6 +516,28 @@ test("server management settings are hidden without permissions", () => {
   assert.doesNotMatch(controllerSource, /SETTINGS_NAV_ITEMS\.find\(\(item\) => item\.id === settingsTab\)/);
 });
 
+test("server audit log has a dedicated role permission and settings page", () => {
+  const modelSource = readRepoFile("src/utils/menuMainModel.js");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
+  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const auditSettingsSource = readRepoFile("src/components/ServerAuditLogSettings.jsx");
+  const backendPermissionSource = readRepoFile("BackNoDiscord/BackNoDiscord/Security/ServerPermissionEvaluator.cs");
+  const backendControllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/ServerInvitesController.cs");
+
+  assert.match(modelSource, /view_audit_log: "Просмотр журнала действий"/);
+  assert.match(modelSource, /\{ id: "audit_log", label: "Журнал действий", section: "Текущий сервер" \}/);
+  assert.match(controllerSource, /const canViewAuditLog=useMemo\(\(\)=>canManageServer\|\|hasServerPermission\(activeServer,currentUserId,"view_audit_log"\)/);
+  assert.match(controllerSource, /item\.id==="audit_log"&&!canViewAuditLog\)\{return false;[\s\S]*?\}return true;/);
+  assert.match(controllerSource, /settingsTab!=="audit_log"/);
+  assert.match(rendererSource, /case "audit_log":/);
+  assert.match(rendererSource, /<ServerAuditLogSettings/);
+  assert.doesNotMatch(settingsSource, /<h4>Журнал действий<\/h4>/);
+  assert.match(auditSettingsSource, /export default function ServerAuditLogSettings/);
+  assert.match(backendPermissionSource, /CanViewAuditLog/);
+  assert.match(backendControllerSource, /ServerPermissionEvaluator\.CanViewAuditLog\(snapshot, currentUser\.UserId\)/);
+});
+
 test("owner role can be renamed without exposing role descriptions or permission edits", () => {
   const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
   const controllerSource = readRepoFile("BackNoDiscord/BackNoDiscord/Controllers/ServerInvitesController.cs");
@@ -611,7 +633,7 @@ test("API_BASE_URL callers do not duplicate the api prefix", () => {
 test("server audit log refreshes after role mutations", () => {
   const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const rendererSource = readRepoFile("src/features/menu-main/MenuMainSettingsRenderer.jsx");
-  const settingsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+  const auditSettingsSource = readRepoFile("src/components/ServerAuditLogSettings.jsx");
   const mutationStart = menuSource.search(/const\s+mutateServerRoles\s*=\s*async/);
   const createRoleStart = menuSource.search(/const\s+createServerRole\s*=/);
   const mutationSource = menuSource.slice(mutationStart, createRoleStart);
@@ -619,10 +641,10 @@ test("server audit log refreshes after role mutations", () => {
   assert.match(mutationSource, /await\s*refreshServerAuditLog\(requestServer\.id\)/);
   assert.match(menuSource, /onRefreshAuditLog\s*:\s*\(\)\s*=>\s*refreshServerAuditLog\(activeServer\?\.id\)/);
   assert.match(rendererSource, /onRefreshAuditLog=\{onRefreshAuditLog\}/);
-  assert.match(settingsSource, /const formatAuditDetails = \(entry\) =>/);
-  assert.match(settingsSource, /"server\.roles\.create": "Роль создана"/);
-  assert.match(settingsSource, /"server\.member\.role\.update": "Роль участника изменена"/);
-  assert.match(settingsSource, /onClick=\{refreshAuditLog\}/);
+  assert.match(auditSettingsSource, /const formatAuditDetails = \(entry\) =>/);
+  assert.match(auditSettingsSource, /"server\.roles\.create": "Роль создана"/);
+  assert.match(auditSettingsSource, /"server\.member\.role\.update": "Роль участника изменена"/);
+  assert.match(auditSettingsSource, /onClick=\{refreshAuditLog\}/);
 });
 
 test("message search indexes attachment media kinds, not only file names", () => {
@@ -733,9 +755,10 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(serverStateSource, /channel\.Status = NormalizeVoiceChannelStatus\(channel\.Status\);/);
   assert.match(serverInviteSource, /public string Status \{ get; set; \} = string\.Empty;/);
   assert.doesNotMatch(listCss, /\.list__items--active \{[^}]*background:/);
-  assert.match(listCss, /\.list__items--active \{[^}]*padding: 0 8px;/);
+  assert.match(listCss, /\.list__items--active \{[^}]*padding: 0;/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
-  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 5px 0;/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background: rgba\(255, 255, 255, 0\.085\);/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 5px 8px;/);
   assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon img \{[\s\S]*?filter: brightness\(0\) saturate\(100%\);/);
   assert.match(listCss, /\.voice-channel__status-button \{/);
   assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
@@ -759,8 +782,10 @@ test("profile voice action opens soundpad with a visible effects glyph", () => {
 
   assert.match(panelSource, /onOpenSoundboard,/);
   assert.match(panelSource, /onClick=\{onOpenSoundboard\} aria-label="Soundpad" data-tooltip="Soundpad"/);
+  assert.match(panelSource, /onClick=\{onScreenShareAction\}[\s\S]*?onClick=\{isCameraShareActive \? onStopCameraShare : onOpenCamera\}[\s\S]*?onClick=\{onOpenSoundboard\}/);
   assert.match(panelSource, /ProfileQuickSoundpadIcon/);
   assert.match(panelSource, /profile__quick-glyph profile__quick-glyph--soundpad/);
+  assert.doesNotMatch(panelSource, /profile__quick-button profile__quick-button--danger[\s\S]*?onClick=\{onLeaveVoiceChannel\}/);
   assert.match(slotSource, /onOpenSoundboard=\{openSoundboard\}/);
   assert.match(controllerSource, /openSoundboard:stableOpenSoundboard/);
   assert.match(profileVoiceCss, /\.profile__quick-glyph--soundpad \{/);
@@ -1121,9 +1146,22 @@ test("voice stage soundboard panel uploads short sounds and plays one at a time"
   assert.match(hookSource, /activeAudioRef\.current\.currentTime = 0/);
   assert.match(panelSource, /placeholder="Найдите идеальный звук"/);
   assert.match(hookSource, /readSystemSoundVolumeRatio\(user\)/);
+  assert.match(hookSource, /sound\.volume/);
   assert.match(panelSource, /useMenuMainSoundboard\(\{[\s\S]*?user: u/);
   assert.match(panelSource, /accept="audio\/mpeg,audio\/wav,audio\/ogg,audio\/mp4,audio\/webm,audio\/\*"/);
   assert.match(panelSource, /Загрузить звук/);
+  assert.match(panelSource, /soundboardEditor/);
+  assert.match(panelSource, /soundboard-editor-modal/);
+  assert.match(panelSource, /Редактировать звук/);
+  assert.match(panelSource, /Громкость звука/);
+  assert.match(panelSource, /Обрезка звука/);
+  assert.match(panelSource, /Название звука/);
+  assert.match(panelSource, /Соответствующее эмодзи/);
+  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?align-items: flex-start;/);
+  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?padding: 72px 24px 24px;/);
+  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?width: min\(840px, calc\(100vw - 32px\)\);/);
+  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?max-height: min\(560px, calc\(100vh - 96px\)\);/);
+  assert.match(panelCss, /\.soundboard-editor-modal \{/);
   assert.match(panelCss, /\.soundboard-panel__grid \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(viewerSource, /onOpenSoundboard/);
   assert.match(viewerSource, /icon="effects"[\s\S]*?onClick=\{onOpenSoundboard \|\| onOpenTextChat \|\| \(\(\) => \{\}\)\}/);
@@ -1330,6 +1368,20 @@ test("bottom profile card aligns with the text composer height and uses tighter 
   assert.match(identityRowRule, /min-height: 58px;/);
   assert.match(identityRowRule, /border-radius: 14px;/);
   assert.match(identityRowRule, /top: 7px;/);
+});
+
+test("bottom profile voice controls stay compact and use one icon color", () => {
+  const profileVoiceCss = readRepoFile("src/css/MenuMainProfileVoice.css");
+  const miniIconRule = profileVoiceCss.match(/\.profile__mini-icon \{[\s\S]*?\n\}/)?.[0] || "";
+  const miniArrowRule = profileVoiceCss.match(/\.profile__mini-arrow \{[\s\S]*?\n\}/)?.[0] || "";
+  const chevronRule = profileVoiceCss.match(/\.profile__mini-chevron \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(miniIconRule, /height: 30px;/);
+  assert.match(miniIconRule, /min-height: 30px;/);
+  assert.match(miniArrowRule, /height: 30px;/);
+  assert.match(miniArrowRule, /min-height: 30px;/);
+  assert.match(miniArrowRule, /color: currentColor;/);
+  assert.match(chevronRule, /background-color: currentColor;/);
 });
 
 test("interface accent color is customizable through appearance settings", () => {

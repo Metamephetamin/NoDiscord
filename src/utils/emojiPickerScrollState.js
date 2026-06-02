@@ -1,5 +1,4 @@
-const EMOJI_PICKER_SEARCH_HIDE_DELTA = 6;
-const EMOJI_PICKER_SEARCH_REVEAL_SCROLL_TOP = 4;
+const EMOJI_PICKER_SEARCH_REVEAL_SCROLL_TOP = 0;
 
 export function getNextEmojiPickerSearchVisibility({
   previousScrollTop,
@@ -13,7 +12,7 @@ export function getNextEmojiPickerSearchVisibility({
     return false;
   }
 
-  if (currentTop > previousTop + EMOJI_PICKER_SEARCH_HIDE_DELTA) {
+  if (currentTop > previousTop) {
     return true;
   }
 

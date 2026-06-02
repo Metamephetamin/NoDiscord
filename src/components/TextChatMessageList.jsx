@@ -2736,7 +2736,7 @@ function TextChatMessageList({
                 />
 
                 {(showBottomFooter || reactions.length) ? (
-                  <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
+                  <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${isMediaOnlyMessage && reactions.length ? "message-bottom-row--media-reactions" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
                         <div className="message-reactions">

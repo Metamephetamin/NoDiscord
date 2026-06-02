@@ -56,9 +56,18 @@ export function getAutoMediaFrame({ width, height, target = "avatar" } = {}) {
   return getDefaultMediaFrame();
 }
 
-export function getMediaFramePositionBounds(zoomValue = DEFAULT_FRAME.zoom) {
+export function getMediaFramePositionBounds(zoomValue = DEFAULT_FRAME.zoom, options = {}) {
   const zoom = clamp(normalizeNumericValue(zoomValue, DEFAULT_FRAME.zoom), MIN_MEDIA_FRAME_ZOOM, MAX_MEDIA_FRAME_ZOOM);
-  const extraRange = Math.abs(zoom - 1) * MEDIA_FRAME_TRAVEL_MULTIPLIER;
+  const axis = String(options?.axis || "").toLowerCase();
+  const mediaAspectRatio = normalizeNumericValue(options?.mediaAspectRatio, 0);
+  const targetAspectRatio = TARGET_ASPECT_RATIO[options?.target] || TARGET_ASPECT_RATIO.avatar;
+  const horizontalOverflow = axis === "x" && mediaAspectRatio > targetAspectRatio
+    ? mediaAspectRatio / targetAspectRatio
+    : 1;
+  const verticalOverflow = axis === "y" && mediaAspectRatio > 0 && mediaAspectRatio < targetAspectRatio
+    ? targetAspectRatio / mediaAspectRatio
+    : 1;
+  const extraRange = Math.abs(zoom - 1) * MEDIA_FRAME_TRAVEL_MULTIPLIER * Math.max(horizontalOverflow, verticalOverflow);
   return {
     min: -extraRange,
     max: 100 + extraRange,

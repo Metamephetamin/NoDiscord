@@ -8,6 +8,20 @@ const formatDuration = (durationSeconds) => {
   return `${minutes}:${seconds}`;
 };
 
+const formatTrimValue = (value) => {
+  const numberValue = Math.max(0, Number(value || 0));
+  return numberValue.toFixed(1);
+};
+
+const createWaveformBars = (seedValue) => {
+  const seed = String(seedValue || "sound");
+
+  return Array.from({ length: 56 }, (_, index) => {
+    const code = seed.charCodeAt(index % seed.length) || 17;
+    return 18 + ((code + index * 13) % 46);
+  });
+};
+
 function SoundboardSearchIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -24,13 +38,124 @@ function SoundboardVolumeIcon() {
   );
 }
 
-function SoundboardTileIcon({ active }) {
+function SoundboardEditorModal({
+  soundboardEditor,
+  onChange,
+  onPreview,
+  onClose,
+  onSave,
+}) {
+  if (!soundboardEditor) {
+    return null;
+  }
+
+  const maxTrimSeconds = Math.min(
+    Number(soundboardEditor.sourceDurationSeconds || 0) || 0,
+    20,
+  );
+  const waveformBars = createWaveformBars(`${soundboardEditor.name}-${soundboardEditor.durationSeconds}`);
+
   return (
-    <span className={`soundboard-panel__tile-icon ${active ? "soundboard-panel__tile-icon--active" : ""}`} aria-hidden="true">
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path d="M5 9.5h3.1l4.35-3.8c.6-.52 1.55-.1 1.55.7v11.2c0 .8-.95 1.22-1.55.7L8.1 14.5H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Zm11.2-.85a1 1 0 0 1 1.4.17 5.35 5.35 0 0 1 0 6.36 1 1 0 0 1-1.57-1.24 3.35 3.35 0 0 0 0-3.88 1 1 0 0 1 .17-1.41Z" />
-      </svg>
-    </span>
+    <div className="soundboard-editor-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="soundboard-editor-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Редактировать звук"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="soundboard-editor-modal__head">
+          <h2>Редактировать звук</h2>
+          <button type="button" className="soundboard-editor-modal__close" onClick={onClose} aria-label="Закрыть редактор звука">
+            ×
+          </button>
+        </div>
+
+        <div className="soundboard-editor-modal__preview">
+          <strong>Предпросмотр</strong>
+          <div className="soundboard-editor-modal__waveform">
+            <button type="button" className="soundboard-editor-modal__play" onClick={() => onPreview(soundboardEditor)} aria-label="Прослушать звук">
+              ▶
+            </button>
+            <div className="soundboard-editor-modal__bars" aria-hidden="true">
+              {waveformBars.map((height, index) => (
+                <span key={`${height}-${index}`} style={{ height: `${height}%` }} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="soundboard-editor-modal__fields">
+          <label className="soundboard-editor-modal__field">
+            <span>Название звука <b aria-hidden="true">*</b></span>
+            <input
+              value={soundboardEditor.name}
+              maxLength={60}
+              onChange={(event) => onChange({ name: event.target.value })}
+            />
+          </label>
+          <label className="soundboard-editor-modal__field">
+            <span>Соответствующее эмодзи</span>
+            <input
+              value={soundboardEditor.emoji}
+              maxLength={8}
+              onChange={(event) => onChange({ emoji: event.target.value })}
+            />
+          </label>
+        </div>
+
+        <label className="soundboard-editor-modal__range">
+          <span>Громкость звука</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={soundboardEditor.volume}
+            onChange={(event) => onChange({ volume: event.target.value })}
+          />
+        </label>
+
+        <div className="soundboard-editor-modal__trim">
+          <strong>Обрезка звука</strong>
+          <div className="soundboard-editor-modal__trim-grid">
+            <label>
+              <span>Начало</span>
+              <input
+                type="number"
+                min="0"
+                max={formatTrimValue(Math.max(0, soundboardEditor.trimEndSeconds - 0.1))}
+                step="0.1"
+                value={formatTrimValue(soundboardEditor.trimStartSeconds)}
+                onChange={(event) => onChange({ trimStartSeconds: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Конец</span>
+              <input
+                type="number"
+                min={formatTrimValue(soundboardEditor.trimStartSeconds + 0.1)}
+                max={formatTrimValue(maxTrimSeconds)}
+                step="0.1"
+                value={formatTrimValue(soundboardEditor.trimEndSeconds)}
+                onChange={(event) => onChange({ trimEndSeconds: event.target.value })}
+              />
+            </label>
+            <span className="soundboard-editor-modal__duration">
+              {formatDuration(soundboardEditor.durationSeconds)}
+            </span>
+          </div>
+        </div>
+
+        <div className="soundboard-editor-modal__actions">
+          <button type="button" className="soundboard-editor-modal__secondary" onClick={onClose}>
+            Ясно
+          </button>
+          <button type="button" className="soundboard-editor-modal__primary" onClick={onSave}>
+            Сохранить
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -46,7 +171,11 @@ export default function SoundboardPanel({
     setSoundboardQuery,
     soundboardStatus,
     soundboardActiveSoundId,
+    soundboardEditor,
     handleSoundboardUpload,
+    updateSoundboardEditor,
+    closeSoundboardEditor,
+    saveSoundboardEditor,
     playSoundboardSound,
     removeSoundboardSound,
   } = useMenuMainSoundboard({
@@ -111,7 +240,7 @@ export default function SoundboardPanel({
                       onClick={() => playSoundboardSound(sound)}
                       aria-label={`Воспроизвести ${sound.name}`}
                     >
-                      <SoundboardTileIcon active={active} />
+                      <span className="soundboard-panel__tile-emoji" aria-hidden="true">{sound.emoji || "🔊"}</span>
                       <span className="soundboard-panel__tile-name">{sound.name}</span>
                       <span className="soundboard-panel__tile-duration">{formatDuration(sound.durationSeconds)}</span>
                     </button>
@@ -138,6 +267,14 @@ export default function SoundboardPanel({
 
           {soundboardStatus ? <div className="soundboard-panel__status" role="status">{soundboardStatus}</div> : null}
         </div>
+
+        <SoundboardEditorModal
+          soundboardEditor={soundboardEditor}
+          onChange={updateSoundboardEditor}
+          onPreview={playSoundboardSound}
+          onClose={closeSoundboardEditor}
+          onSave={saveSoundboardEditor}
+        />
       </section>
     </div>
   );

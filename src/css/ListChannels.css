@@ -29,15 +29,15 @@
 }
 
 .list__items--active {
-  padding: 0 8px;
+  padding: 0;
   border-color: transparent;
 }
 
 .list__items--active > .voice-channel__row {
   min-height: 58px;
-  padding: 5px 0;
+  padding: 5px 8px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.145);
+  background: rgba(255, 255, 255, 0.085);
   border-color: transparent;
 }
 

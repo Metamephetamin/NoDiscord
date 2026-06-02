@@ -36,6 +36,18 @@ public class ServerPermissionEvaluatorTests
     }
 
     [Fact]
+    public void CanViewAuditLog_AllowsDedicatedPermissionWithoutServerManagement()
+    {
+        var snapshot = CreateSnapshot();
+
+        Assert.True(ServerPermissionEvaluator.CanViewAuditLog(snapshot, "owner"));
+        Assert.True(ServerPermissionEvaluator.CanViewAuditLog(snapshot, "admin"));
+        Assert.True(ServerPermissionEvaluator.CanViewAuditLog(snapshot, "moderator"));
+        Assert.False(ServerPermissionEvaluator.CanManageServer(snapshot, "moderator"));
+        Assert.False(ServerPermissionEvaluator.CanViewAuditLog(snapshot, "member"));
+    }
+
+    [Fact]
     public void CanManageChannelsRolesAndMessages_FollowRolePermissions()
     {
         var snapshot = CreateSnapshot();
@@ -100,7 +112,7 @@ public class ServerPermissionEvaluatorTests
             [
                 new ServerRoleSnapshot { Id = "owner", Priority = 400, Permissions = ["manage_server", "mute_members", "deafen_members"] },
                 new ServerRoleSnapshot { Id = "admin", Priority = 300, Permissions = ["manage_server", "manage_channels", "manage_roles", "mute_members", "deafen_members"] },
-                new ServerRoleSnapshot { Id = "moderator", Priority = 200, Permissions = ["manage_messages"] },
+                new ServerRoleSnapshot { Id = "moderator", Priority = 200, Permissions = ["manage_messages", "view_audit_log"] },
                 new ServerRoleSnapshot { Id = "member", Priority = 100, Permissions = [] }
             ],
             Members =

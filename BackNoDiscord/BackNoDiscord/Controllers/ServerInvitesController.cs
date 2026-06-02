@@ -221,7 +221,7 @@ public class ServerInvitesController : ControllerBase
             return NotFound(new { message = "Server snapshot not found." });
         }
 
-        if (!ServerPermissionEvaluator.CanReadServer(snapshot, currentUser.UserId))
+        if (!ServerPermissionEvaluator.CanViewAuditLog(snapshot, currentUser.UserId))
         {
             return Forbid();
         }

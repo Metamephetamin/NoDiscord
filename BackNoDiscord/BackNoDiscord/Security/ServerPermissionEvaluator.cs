@@ -97,6 +97,23 @@ public static class ServerPermissionEvaluator
                permissions.Contains("manage_server", StringComparer.Ordinal);
     }
 
+    public static bool CanViewAuditLog(ServerSnapshot? snapshot, string userId)
+    {
+        if (snapshot is null || string.IsNullOrWhiteSpace(userId))
+        {
+            return false;
+        }
+
+        if (IsOwner(snapshot, userId))
+        {
+            return true;
+        }
+
+        var permissions = GetPermissions(snapshot, userId);
+        return permissions.Contains("view_audit_log", StringComparer.Ordinal) ||
+               permissions.Contains("manage_server", StringComparer.Ordinal);
+    }
+
     public static bool CanAssignRole(ServerSnapshot? snapshot, string actorUserId, string targetUserId, string nextRoleId)
     {
         if (snapshot is null ||

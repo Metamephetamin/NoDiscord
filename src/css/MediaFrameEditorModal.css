@@ -75,8 +75,8 @@
 .media-frame-editor__dialog--avatar {
   width: min(100%, 600px);
   max-width: calc(100vw - 48px);
-  max-height: min(92vh, 820px);
-  gap: 22px;
+  max-height: calc(100dvh - 48px);
+  gap: 16px;
   padding: 22px 22px 18px;
   border-radius: 24px;
   background: #2a2b31;
@@ -118,14 +118,15 @@
 .media-frame-editor__avatar-layout {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
+  min-height: 0;
 }
 
 .media-frame-editor__avatar-stage {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: clamp(260px, 48vh, 438px);
+  min-height: clamp(220px, 42dvh, 400px);
   padding: 20px;
   border-radius: 16px;
   background: #1f2024;
@@ -190,10 +191,18 @@
 }
 
 .media-frame-editor__avatar-actions {
+  position: sticky;
+  bottom: -18px;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  margin: 0 -22px -18px;
+  padding: 12px 22px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(42, 43, 49, 0.88), #2a2b31 36%);
+  backdrop-filter: blur(10px);
 }
 
 .media-frame-editor__avatar-actions-main {

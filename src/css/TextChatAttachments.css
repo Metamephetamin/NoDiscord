@@ -1098,6 +1098,20 @@
   will-change: transform;
 }
 
+.msg-content--media-only .message-bottom-row--media-reactions {
+  position: static;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  margin-top: 8px;
+  justify-content: flex-end;
+  gap: 8px;
+  z-index: auto;
+  pointer-events: auto;
+  transform: none;
+  will-change: auto;
+}
+
 .msg-content--inline-emoji-only .message-bottom-row {
   position: static;
   right: auto;

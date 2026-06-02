@@ -14,6 +14,7 @@ import {
   VoiceSettingsPanel,
 } from "../../components/MenuSettingsPanels";
 import "../../css/MenuSettings.css";
+import ServerAuditLogSettings from "../../components/ServerAuditLogSettings";
 import ModerationPanel from "../moderation/ModerationPanel";
 import {
   DEFAULT_SERVER_ICON,
@@ -396,12 +397,18 @@ export function MenuMainSettingsContent({
           canManageRoles={canManageRoles}
           currentServerRole={currentServerRole}
           rolePermissionLabels={ROLE_PERMISSION_LABELS}
-          auditLogs={serverAuditLogs}
           canAssignRoleToMember={canAssignRoleToMember}
           onCreateRole={createServerRole}
           onUpdateRole={updateServerRole}
           onDeleteRole={deleteServerRole}
           onUpdateMemberRole={updateMemberRole}
+        />
+      );
+    case "audit_log":
+      return (
+        <ServerAuditLogSettings
+          activeServer={activeServer}
+          auditLogs={serverAuditLogs}
           onRefreshAuditLog={onRefreshAuditLog}
         />
       );

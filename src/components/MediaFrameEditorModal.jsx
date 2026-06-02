@@ -102,7 +102,8 @@ export default function MediaFrameEditorModal({
       const verticalDragSpeed = 1.18 * zoomTravelBoost;
       const deltaX = ((event.clientX - dragState.startX) / rect.width) * (100 * horizontalDragSpeed);
       const deltaY = ((event.clientY - dragState.startY) / rect.height) * (100 * verticalDragSpeed);
-      const bounds = getMediaFramePositionBounds(dragState.frame.zoom);
+      const xBounds = getMediaFramePositionBounds(dragState.frame.zoom, { axis: "x", target });
+      const yBounds = getMediaFramePositionBounds(dragState.frame.zoom, { axis: "y", target });
 
       if (
         !suppressBackdropCloseRef.current
@@ -112,8 +113,8 @@ export default function MediaFrameEditorModal({
       }
 
       setDraftFrame({
-        x: clamp(dragState.frame.x - deltaX, bounds.min, bounds.max),
-        y: clamp(dragState.frame.y - deltaY, bounds.min, bounds.max),
+        x: clamp(dragState.frame.x - deltaX, xBounds.min, xBounds.max),
+        y: clamp(dragState.frame.y - deltaY, yBounds.min, yBounds.max),
         zoom: dragState.frame.zoom,
       });
     };
@@ -131,12 +132,16 @@ export default function MediaFrameEditorModal({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [open]);
+  }, [open, target]);
 
   const normalizedDraftFrame = useMemo(() => normalizeMediaFrame(draftFrame), [draftFrame]);
-  const positionBounds = useMemo(
-    () => getMediaFramePositionBounds(normalizedDraftFrame.zoom),
-    [normalizedDraftFrame.zoom]
+  const horizontalPositionBounds = useMemo(
+    () => getMediaFramePositionBounds(normalizedDraftFrame.zoom, { axis: "x", target }),
+    [normalizedDraftFrame.zoom, target]
+  );
+  const verticalPositionBounds = useMemo(
+    () => getMediaFramePositionBounds(normalizedDraftFrame.zoom, { axis: "y", target }),
+    [normalizedDraftFrame.zoom, target]
   );
 
   if (!open || !source) {
@@ -159,15 +164,27 @@ export default function MediaFrameEditorModal({
 
   const handleZoomChange = (event) => {
     const nextZoom = clamp(Number(event.target.value) || 1, 1, 5);
+    const nextHorizontalBounds = getMediaFramePositionBounds(nextZoom, { axis: "x", target });
+    const nextVerticalBounds = getMediaFramePositionBounds(nextZoom, { axis: "y", target });
     draftTouchedRef.current = true;
     setDraftFrame((previous) => ({
-      ...normalizeMediaFrame(previous),
+      x: clamp(normalizeMediaFrame(previous).x, nextHorizontalBounds.min, nextHorizontalBounds.max),
+      y: clamp(normalizeMediaFrame(previous).y, nextVerticalBounds.min, nextVerticalBounds.max),
       zoom: nextZoom,
     }));
   };
 
+  const handleHorizontalPositionChange = (event) => {
+    const nextX = clamp(Number(event.target.value) || 50, horizontalPositionBounds.min, horizontalPositionBounds.max);
+    draftTouchedRef.current = true;
+    setDraftFrame((previous) => ({
+      ...normalizeMediaFrame(previous),
+      x: nextX,
+    }));
+  };
+
   const handleVerticalPositionChange = (event) => {
-    const nextY = clamp(Number(event.target.value) || 50, positionBounds.min, positionBounds.max);
+    const nextY = clamp(Number(event.target.value) || 50, verticalPositionBounds.min, verticalPositionBounds.max);
     draftTouchedRef.current = true;
     setDraftFrame((previous) => ({
       ...normalizeMediaFrame(previous),
@@ -250,10 +267,23 @@ export default function MediaFrameEditorModal({
                 <strong>{Math.round(normalizedDraftFrame.zoom * 100)}%</strong>
               </label>
               <label className="media-frame-editor__slider-field media-frame-editor__slider-field--avatar">
+                <span className="media-frame-editor__slider-label">Влево/вправо</span>
+                <PercentageSlider
+                  min={horizontalPositionBounds.min}
+                  max={horizontalPositionBounds.max}
+                  step={0.1}
+                  value={normalizedDraftFrame.x}
+                  onChange={handleHorizontalPositionChange}
+                  ariaLabel="Положение аватара влево и вправо"
+                  formatValue={(nextValue) => `${Math.round(Number(nextValue))}%`}
+                />
+                <strong>{Math.round(normalizedDraftFrame.x)}%</strong>
+              </label>
+              <label className="media-frame-editor__slider-field media-frame-editor__slider-field--avatar">
                 <span className="media-frame-editor__slider-label">Вверх/вниз</span>
                 <PercentageSlider
-                  min={positionBounds.min}
-                  max={positionBounds.max}
+                  min={verticalPositionBounds.min}
+                  max={verticalPositionBounds.max}
                   step={0.1}
                   value={normalizedDraftFrame.y}
                   onChange={handleVerticalPositionChange}

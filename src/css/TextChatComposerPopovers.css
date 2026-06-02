@@ -147,11 +147,12 @@
 .composer-emoji-picker {
   position: absolute;
   right: 14px;
-  bottom: calc(100% + 12px);
+  bottom: calc(100% + 30px);
   width: 264px;
-  max-height: 334px;
+  max-height: min(334px, calc(100vh - 176px));
   overflow-y: auto;
   padding: 12px;
+  padding-bottom: 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(17, 20, 29, 0.98), rgba(11, 14, 22, 0.98));
@@ -434,8 +435,10 @@ html[data-ui-theme="purple"] .composer-text-tools-menu__item:hover:not(:disabled
     right: 8px;
     left: 8px;
     width: auto;
-    bottom: calc(100% + 10px);
+    bottom: calc(100% + 28px);
+    max-height: min(334px, calc(100vh - 170px));
     padding: 10px;
+    padding-bottom: 16px;
     border-radius: 16px;
   }
 

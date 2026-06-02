@@ -67,14 +67,14 @@ export const DEFAULT_SERVER_ROLES = [
     name: "Owner",
     color: "#f4c95d",
     priority: 400,
-    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "manage_nicknames", "invite_members", "mute_members", "deafen_members", "move_members"],
+    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "manage_nicknames", "view_audit_log", "invite_members", "mute_members", "deafen_members", "move_members"],
   },
   {
     id: "admin",
     name: "Admin",
     color: "#ff8a65",
     priority: 300,
-    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "manage_nicknames", "invite_members", "mute_members", "deafen_members", "move_members"],
+    permissions: ["manage_server", "manage_channels", "manage_roles", "manage_messages", "manage_nicknames", "view_audit_log", "invite_members", "mute_members", "deafen_members", "move_members"],
   },
   {
     id: "moderator",
@@ -97,6 +97,7 @@ export const ROLE_PERMISSION_LABELS = {
   manage_roles: "Управление ролями",
   manage_messages: "Управление сообщениями",
   manage_nicknames: "Управление никами",
+  view_audit_log: "Просмотр журнала действий",
   invite_members: "Приглашение участников",
 };
 export const MOBILE_VIEWPORT_QUERY = "(max-width: 900px)";
@@ -923,6 +924,7 @@ export const SETTINGS_NAV_ITEMS = [
   { id: "notifications", label: "Уведомления", section: "Пользователь" },
   { id: "server", label: "Настройки сервера", section: "Текущий сервер" },
   { id: "roles", label: "Роли и участники", section: "Текущий сервер" },
+  { id: "audit_log", label: "Журнал действий", section: "Текущий сервер" },
   { id: "voice_video", label: "Голос и видео", section: "Приложение" },
   { id: "appearance_accessibility", label: "Оформление", section: "Приложение" },
   { id: "memory", label: "Память", section: "Приложение" },
