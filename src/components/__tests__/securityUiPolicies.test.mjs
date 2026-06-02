@@ -110,7 +110,8 @@ test("media preview photo actions use bootstrap icons without a theme shell", ()
   assert.match(previewSource, /BootstrapIcon/);
   assert.match(previewSource, /kind="trash3"/);
   assert.match(previewSource, /kind="download"/);
-  assert.match(previewSource, /kind="collection"/);
+  assert.doesNotMatch(previewSource, /kind="collection"/);
+  assert.doesNotMatch(previewSource, /Скачать все вложения/);
   assert.match(mediaPreviewCss, /\.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
   assert.match(mediaPreviewCss, /html\[data-ui-theme="light"\] \.media-preview__icon-button \{[\s\S]*?background: transparent;[\s\S]*?box-shadow: none;/);
 });
@@ -748,13 +749,19 @@ test("mobile voice room styles stay split from the main menu stylesheet", () => 
   assert.match(mobileVoiceSource, /import "\.\.\/css\/MobileVoiceRoom\.css";/);
 });
 
-test("profile voice action uses the visible settings glyph", () => {
+test("profile voice action opens soundpad with a visible effects glyph", () => {
   const panelSource = readRepoFile("src/components/MenuProfilePanel.jsx");
-  const mainCss = readRepoFile("src/css/MenuMain.css");
+  const slotSource = readRepoFile("src/features/menu-main/MenuMainProfilePanelSlot.jsx");
+  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
+  const profileVoiceCss = readRepoFile("src/css/MenuMainProfileVoice.css");
 
-  assert.match(panelSource, /profile__mini-glyph profile__mini-glyph--settings/);
-  assert.doesNotMatch(panelSource, /profile__mini-glyph profile__mini-glyph--soundpad/);
-  assert.match(mainCss, /\.profile__mini-glyph--settings[\s\S]*?url\("\/icons\/settings\.png"\)/);
+  assert.match(panelSource, /onOpenSoundboard,/);
+  assert.match(panelSource, /onClick=\{onOpenSoundboard\} aria-label="Soundpad" data-tooltip="Soundpad"/);
+  assert.match(panelSource, /ProfileQuickSoundpadIcon/);
+  assert.match(panelSource, /profile__quick-glyph profile__quick-glyph--soundpad/);
+  assert.match(slotSource, /onOpenSoundboard=\{openSoundboard\}/);
+  assert.match(controllerSource, /openSoundboard:stableOpenSoundboard/);
+  assert.match(profileVoiceCss, /\.profile__quick-glyph--soundpad \{/);
 });
 
 test("profile store styles are split out of the main menu bundle", () => {
@@ -789,6 +796,19 @@ test("message reports use an in-app dialog instead of browser prompt", () => {
   assert.match(actionsSource, /submitMessageReport/);
   assert.match(viewSource, /<TextChatReportModal/);
   assert.match(modalSource, /Причина жалобы/);
+});
+
+test("profile user reports use a modal dialog instead of an inline alert panel", () => {
+  const profileSource = readRepoFile("src/components/TextChatProfileModal.jsx");
+  const modalSource = readRepoFile("src/components/TextChatReportModal.jsx");
+
+  assert.match(profileSource, /import TextChatReportModal from "\.\/TextChatReportModal";/);
+  assert.match(profileSource, /<TextChatReportModal[\s\S]*ariaLabel="Жалоба на пользователя"[\s\S]*title="Пожаловаться на пользователя"/);
+  assert.match(profileSource, /onClick=\{\(\) => setReportOpen\(true\)\}/);
+  assert.doesNotMatch(profileSource, /className="chat-profile-modal__report"/);
+  assert.doesNotMatch(profileSource, /className="chat-profile-modal__report-actions"/);
+  assert.match(modalSource, /title = "Пожаловаться"/);
+  assert.match(modalSource, /ariaLabel = "Жалоба на сообщение"/);
 });
 
 test("member nickname changes use an in-app form instead of browser prompt", () => {
@@ -1286,10 +1306,17 @@ test("manual profile status is editable, persisted, and rendered under the nickn
 
 test("integration activity visually replaces manual profile status in the bottom profile panel", () => {
   const profileSource = readRepoFile("src/components/MenuProfilePanel.jsx");
+  const activeContactsSource = readRepoFile("src/features/menu-main/menuMainActiveContacts.js");
 
-  assert.match(profileSource, /const showManualProfileStatus = Boolean\(profileStatus\) && !activityStatus;/);
-  assert.match(profileSource, /\{showManualProfileStatus \? <span className="profile__custom-status">\{profileStatus\}<\/span> : null\}/);
+  assert.match(profileSource, /const voiceProfileStatus = currentVoiceChannel/);
+  assert.match(profileSource, /isDirectCallChannelId\(currentVoiceChannel\)\s*\?\s*"В личном звонке"/);
+  assert.match(profileSource, /`В голосовом канале: \$\{currentVoiceChannelName\}`/);
+  assert.match(profileSource, /const visibleProfileStatus = activityStatus \? "" : voiceProfileStatus \|\| profileStatus;/);
+  assert.match(profileSource, /const showProfileStatus = Boolean\(visibleProfileStatus\);/);
+  assert.match(profileSource, /\{showProfileStatus \? <span className="profile__custom-status">\{visibleProfileStatus\}<\/span> : null\}/);
   assert.match(profileSource, /\{activityStatus \? \(/);
+  assert.match(activeContactsSource, /const status = activityStatus \|\| voiceStatus \|\| onlineStatus;/);
+  assert.match(activeContactsSource, /activity: 0,[\s\S]*?voice: 1,[\s\S]*?online: 2,/);
 });
 
 test("bottom profile card aligns with the text composer height and uses tighter corners", () => {
@@ -1441,6 +1468,13 @@ test("message attachments explicitly forward right clicks to the message context
   assert.match(messageListSource, /className=\{`message-media message-media--video message-media--button[\s\S]*?onContextMenu=\{handleAttachmentContextMenu\}/);
   assert.match(messageListSource, /className=\{`message-attachment \$\{isDocumentAttachment[\s\S]*?onContextMenu=\{handleAttachmentContextMenu\}/);
   assert.match(messageListSource, /onOpenContextMenu=\{onOpenContextMenu\}[\s\S]*?isOwnMessage=\{isOwnMessage\}/);
+});
+
+test("message bubble content opens the message context menu directly on right click", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+
+  assert.match(messageListSource, /const handleMessageContextMenu = \(event\) => \{\n\s+event\.stopPropagation\(\);\n\s+onOpenContextMenu\(event, messageItem, isOwnMessage\);\n\s+\};/);
+  assert.match(messageListSource, /className=\{`msg-content[\s\S]*?onContextMenu=\{handleMessageContextMenu\}/);
 });
 
 test("chat report modal styles stay split from the main text chat stylesheet", () => {

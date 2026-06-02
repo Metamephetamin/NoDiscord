@@ -2537,6 +2537,10 @@ function TextChatMessageList({
               onToggleSelection(messageItem.id);
             }
             : undefined;
+          const handleMessageContextMenu = (event) => {
+            event.stopPropagation();
+            onOpenContextMenu(event, messageItem, isOwnMessage);
+          };
 
           return (
             <Fragment key={messageRenderKey}>
@@ -2544,7 +2548,7 @@ function TextChatMessageList({
               <div
                 ref={(node) => registerMessageNode(messageItem.id, node)}
                 className={`message-item ${isDirectChat ? "message-item--dm" : ""} ${isDirectChat && isOwnMessage ? "message-item--dm-own" : ""} ${isDirectChat && !isOwnMessage ? "message-item--dm-incoming" : ""} ${isEmojiOnlyTextMessage ? "message-item--emoji-only-text" : ""} ${isFileOnlyMessage ? "message-item--file-only" : ""} ${isVoiceOnlyMessage ? "message-item--voice-only" : ""} ${messageItem?.isLocalEcho ? "message-item--local-echo" : ""} ${String(messageItem.id) === highlightedMessageId ? "message-item--highlighted" : ""} ${isSelectedMessage ? "message-item--selected" : ""} ${selectionMode ? "message-item--selectable" : ""} ${isForwardGroupStart ? "message-item--forward-group-start" : ""} ${isForwardGroupFollow ? "message-item--forward-group-follow" : ""} ${isForwardGroupEnd ? "message-item--forward-group-end" : ""}`}
-                onContextMenu={(event) => onOpenContextMenu(event, messageItem, isOwnMessage)}
+                onContextMenu={handleMessageContextMenu}
                 onClick={handleMessageClick}
               >
                 {selectionMode ? (
@@ -2568,7 +2572,10 @@ function TextChatMessageList({
                 frame={messageItem.avatarFrame || messageItem.avatar_frame || null}
                 loading="eager"
                 decoding="sync"
-                onContextMenu={(event) => onOpenUserContextMenu?.(event, messageItem)}
+                onContextMenu={(event) => {
+                  event.stopPropagation();
+                  onOpenUserContextMenu?.(event, messageItem);
+                }}
                 {...avatarLongPress.bindLongPress(messageItem, (event, pressedMessageItem) => {
                   onOpenUserContextMenu?.(event, pressedMessageItem);
                 }, {
@@ -2580,6 +2587,7 @@ function TextChatMessageList({
 
               <div
                 className={`msg-content ${isDirectChat ? "msg-content--dm" : ""} ${isDirectChat && isOwnMessage ? "msg-content--dm-own" : ""} ${isEmojiOnlyTextMessage ? "msg-content--emoji-only-text" : ""} ${locationMessage ? "msg-content--location" : ""} ${isFileOnlyMessage ? "msg-content--file-only" : ""} ${isVoiceOnlyMessage ? "msg-content--voice-only" : ""} ${isMediaOnlyMessage ? "msg-content--media-only" : ""} ${reserveVisualAttachmentWidth ? "msg-content--visual-attachments" : ""} ${hasMultiVisualAttachments ? "msg-content--multi-visual-attachments" : ""} ${isInlineEmojiOnlyMessage ? "msg-content--inline-emoji-only" : ""} ${isSingleVideoOnly ? "msg-content--single-video-only" : ""} ${hasRenderableAttachments ? "msg-content--attachments" : ""} ${hasFileLikeAttachments ? "msg-content--file-attachments" : ""} ${pressedMessageId === String(messageItem.id) ? "msg-content--pressing" : ""}`}
+                onContextMenu={handleMessageContextMenu}
                 {...messageLongPress.bindLongPress({ messageItem, isOwnMessage }, (event, payload) => {
                   onOpenContextMenu(event, payload.messageItem, payload.isOwnMessage);
                 }, {

@@ -55,6 +55,47 @@ function compareCachedMessages(leftMessage, rightMessage) {
   return Number(leftMessage?.id || 0) - Number(rightMessage?.id || 0);
 }
 
+function isVolatileLocalMediaUrl(value) {
+  return /^(?:blob:|data:|file:)/i.test(String(value || "").trim());
+}
+
+function sanitizeCachedAttachment(attachmentItem) {
+  if (!attachmentItem || typeof attachmentItem !== "object") {
+    return attachmentItem;
+  }
+
+  const nextAttachment = { ...attachmentItem };
+  const fallbackAttachmentUrl = String(
+    nextAttachment.attachmentSourceUrl
+      || nextAttachment.AttachmentSourceUrl
+      || nextAttachment.sourceUrl
+      || nextAttachment.SourceUrl
+      || ""
+  ).trim();
+
+  if (isVolatileLocalMediaUrl(nextAttachment.attachmentUrl) && fallbackAttachmentUrl && !isVolatileLocalMediaUrl(fallbackAttachmentUrl)) {
+    nextAttachment.attachmentUrl = fallbackAttachmentUrl;
+  }
+
+  if (isVolatileLocalMediaUrl(nextAttachment.AttachmentUrl) && fallbackAttachmentUrl && !isVolatileLocalMediaUrl(fallbackAttachmentUrl)) {
+    nextAttachment.AttachmentUrl = fallbackAttachmentUrl;
+  }
+
+  if (isVolatileLocalMediaUrl(nextAttachment.localPreviewUrl)) {
+    nextAttachment.localPreviewUrl = "";
+  }
+
+  if (isVolatileLocalMediaUrl(nextAttachment.LocalPreviewUrl)) {
+    nextAttachment.LocalPreviewUrl = "";
+  }
+
+  if (isVolatileLocalMediaUrl(nextAttachment.local_preview_url)) {
+    nextAttachment.local_preview_url = "";
+  }
+
+  return nextAttachment;
+}
+
 function getChannelClearKey(userId, channelId) {
   const normalizedUserId = String(userId || "").trim();
   const normalizedChannelId = String(channelId || "").trim();
@@ -85,22 +126,42 @@ function normalizeCachedMessage(messageItem) {
     return null;
   }
 
-  return {
+  const attachments = Array.isArray(messageItem.attachments)
+    ? messageItem.attachments
+    : Array.isArray(messageItem.Attachments)
+      ? messageItem.Attachments
+      : [];
+  const normalizedAttachments = attachments.map(sanitizeCachedAttachment);
+  const nextMessage = {
     ...messageItem,
     id: messageItem.id ?? messageItem.Id ?? messageId,
     timestamp: messageItem.timestamp || messageItem.Timestamp || messageItem.createdAt || messageItem.CreatedAt || "",
     message: String(messageItem.message || messageItem.Message || ""),
-    attachments: Array.isArray(messageItem.attachments)
-      ? messageItem.attachments
-      : Array.isArray(messageItem.Attachments)
-        ? messageItem.Attachments
-        : [],
+    attachments: normalizedAttachments,
     reactions: Array.isArray(messageItem.reactions)
       ? messageItem.reactions
       : Array.isArray(messageItem.Reactions)
         ? messageItem.Reactions
         : [],
   };
+
+  if (Array.isArray(messageItem.Attachments)) {
+    nextMessage.Attachments = normalizedAttachments;
+  }
+
+  if (isVolatileLocalMediaUrl(nextMessage.localPreviewUrl)) {
+    nextMessage.localPreviewUrl = "";
+  }
+
+  if (isVolatileLocalMediaUrl(nextMessage.LocalPreviewUrl)) {
+    nextMessage.LocalPreviewUrl = "";
+  }
+
+  if (isVolatileLocalMediaUrl(nextMessage.local_preview_url)) {
+    nextMessage.local_preview_url = "";
+  }
+
+  return nextMessage;
 }
 
 function openTextChatCacheDb() {

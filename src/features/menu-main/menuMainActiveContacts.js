@@ -1,10 +1,12 @@
-import { formatIntegrationActivityStatus } from "../../utils/integrations";
-import { isDirectCallChannelId } from "../../utils/directCallModel";
-import { getDisplayName, isUserCurrentlyOnline } from "../../utils/menuMainModel";
+import { formatIntegrationActivityStatus } from "../../utils/integrations.js";
+import { isDirectCallChannelId } from "../../utils/directCallModel.js";
+import { getDisplayName, isUserCurrentlyOnline } from "../../utils/menuMainModel.js";
 
 const ACTIVITY_PRIORITY = {
-  voice: 0,
-  activity: 1,
+  activity: 0,
+  music: 0,
+  game: 0,
+  voice: 1,
   online: 2,
 };
 
@@ -88,7 +90,7 @@ export function buildActiveContacts({
       const onlineStatus = isUserCurrentlyOnline(friend)
         ? { kind: "online", label: "Онлайн" }
         : null;
-      const status = voiceStatus || activityStatus || onlineStatus;
+      const status = activityStatus || voiceStatus || onlineStatus;
 
       if (!status) {
         return null;

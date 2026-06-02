@@ -38,6 +38,26 @@ test("mergeCachedTextChatMessages keeps only the latest persistent cache window"
   assert.equal(merged.at(-1).id, String(MAX_PERSISTENT_CACHED_MESSAGES + 5));
 });
 
+test("mergeCachedTextChatMessages strips volatile local media urls from cached messages", () => {
+  const merged = mergeCachedTextChatMessages([], [{
+    id: "42",
+    message: "",
+    timestamp: "2026-05-31T10:00:00.000Z",
+    localPreviewUrl: "blob:https://lanaya.space/stale-message-preview",
+    attachments: [{
+      attachmentUrl: "https://lanaya.space/api/files/photo.jpg",
+      attachmentName: "photo.jpg",
+      localPreviewUrl: "blob:https://lanaya.space/stale-attachment-preview",
+      LocalPreviewUrl: "blob:https://lanaya.space/stale-attachment-preview",
+    }],
+  }]);
+
+  assert.equal(merged[0].localPreviewUrl, "");
+  assert.equal(merged[0].attachments[0].attachmentUrl, "https://lanaya.space/api/files/photo.jpg");
+  assert.equal(merged[0].attachments[0].localPreviewUrl, "");
+  assert.equal(merged[0].attachments[0].LocalPreviewUrl, "");
+});
+
 test("cached message id helpers find sync cursors", () => {
   const messages = [
     { id: "12", timestamp: "2026-05-31T10:02:00.000Z" },

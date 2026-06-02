@@ -3406,7 +3406,6 @@ export default function TextChat({
     handleDeleteMediaPreviewItem,
     openMessageContextMenu,
     handleDownloadAttachment,
-    handleDownloadAllMediaPreviewItems,
     handleToggleReaction,
     handleOpenMediaPreviewFullscreen,
     handleForwardSubmit,
@@ -3702,7 +3701,6 @@ export default function TextChat({
       mediaPreviewVideoRef={mediaPreviewVideoRef}
       setMediaPreview={setMediaPreview}
       handleDownloadAttachment={handleDownloadAttachment}
-      handleDownloadAllMediaPreviewItems={handleDownloadAllMediaPreviewItems}
       handleOpenMediaPreviewFullscreen={handleOpenMediaPreviewFullscreen}
       updateMediaPreviewIndex={updateMediaPreviewIndex}
       updateMediaPreviewZoom={updateMediaPreviewZoom}

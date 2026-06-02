@@ -43,6 +43,23 @@
   mask-image: url("/icons/settings.png");
 }
 
+.profile__quick-glyph--soundpad {
+  width: 28px;
+  height: 28px;
+  background-color: transparent;
+  -webkit-mask-image: none;
+  mask-image: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.profile__quick-glyph--soundpad path {
+  vector-effect: non-scaling-stroke;
+}
+
 .profile__quick-glyph--monitor {
   -webkit-mask-image: url("/icons/monitor.svg");
   mask-image: url("/icons/monitor.svg");

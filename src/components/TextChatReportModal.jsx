@@ -5,6 +5,10 @@ export default function TextChatReportModal({
   onReasonChange,
   onClose,
   onSubmit,
+  title = "Пожаловаться",
+  ariaLabel = "Жалоба на сообщение",
+  placeholder = "Спам, оскорбления, угрозы...",
+  maxLength = 240,
 }) {
   if (!report?.open) {
     return null;
@@ -13,11 +17,11 @@ export default function TextChatReportModal({
   const reason = report.reason || "";
 
   return (
-    <div className="chat-report-modal" role="dialog" aria-modal="true" aria-label="Жалоба на сообщение">
+    <div className="chat-report-modal" role="dialog" aria-modal="true" aria-label={ariaLabel}>
       <button type="button" className="chat-report-modal__backdrop" aria-label="Закрыть жалобу" onClick={onClose} />
       <form className="chat-report-modal__dialog" onSubmit={onSubmit}>
         <div className="chat-report-modal__header">
-          <h3>Пожаловаться</h3>
+          <h3>{title}</h3>
           <button type="button" className="chat-report-modal__close" onClick={onClose} disabled={report.busy} aria-label="Закрыть">
             ×
           </button>
@@ -27,10 +31,10 @@ export default function TextChatReportModal({
           <textarea
             value={reason}
             onChange={(event) => onReasonChange?.(event.target.value)}
-            maxLength={240}
+            maxLength={maxLength}
             rows={4}
             autoFocus
-            placeholder="Спам, оскорбления, угрозы..."
+            placeholder={placeholder}
           />
         </label>
         {report.status ? <p className="chat-report-modal__status">{report.status}</p> : null}

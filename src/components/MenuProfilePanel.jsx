@@ -2,6 +2,7 @@ import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { getVoiceNetworkProfileLabel } from "../webrtc/voiceNetworkProfile.mjs";
 import PercentageSlider from "./PercentageSlider";
+import { isDirectCallChannelId } from "../utils/directCallModel";
 import { getProfileCustomizationClassName, getProfileCustomizationStyle } from "../utils/profileCustomization";
 import "../css/MenuProfileDeviceMenu.css";
 
@@ -10,6 +11,18 @@ const DeviceSettingsButton = ({ settingsIcon, onClick }) => (
     <span>Настройки голоса</span>
     <img src={settingsIcon} alt="" />
   </button>
+);
+
+const ProfileQuickSoundpadIcon = () => (
+  <svg className="profile__quick-glyph profile__quick-glyph--soundpad" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M6 18 8.8 6.8a2.2 2.2 0 0 1 3.8-.92l5.6 6.48a2.2 2.2 0 0 1-1.45 3.62L6 18Z" />
+    <path d="M9.3 9.2 15 15" />
+    <path d="M16.7 4.4 18 2.8" />
+    <path d="M19 8.2h2.2" />
+    <path d="M13.9 2.9l-.2-2" />
+    <path d="M18.6 11.9l2 1" />
+    <path d="M4 6.6 2.5 5.1" />
+  </svg>
 );
 
 const DeviceMenuOptionSubmenu = ({
@@ -433,6 +446,7 @@ export default function MenuProfilePanel({
   icons,
   onOpenProfileSettings,
   onOpenVoiceSettings,
+  onOpenSoundboard,
   onScreenShareAction,
   onOpenCamera,
   onStopCameraShare,
@@ -467,7 +481,15 @@ export default function MenuProfilePanel({
     currentVoiceChannel && (profileCardClassName || voiceCardClassName) ? "menu__profile-wrapper--customized" : "",
     currentVoiceChannel ? (voiceCardClassName || profileCardClassName) : "",
   ].filter(Boolean).join(" ");
-  const showManualProfileStatus = Boolean(profileStatus) && !activityStatus;
+  const voiceProfileStatus = currentVoiceChannel
+    ? isDirectCallChannelId(currentVoiceChannel)
+      ? "В личном звонке"
+      : currentVoiceChannelName
+        ? `В голосовом канале: ${currentVoiceChannelName}`
+        : "В голосовом канале"
+    : "";
+  const visibleProfileStatus = activityStatus ? "" : voiceProfileStatus || profileStatus;
+  const showProfileStatus = Boolean(visibleProfileStatus);
 
   return (
     <div className={wrapperClassName} style={profileCustomizationStyle}>
@@ -512,8 +534,8 @@ export default function MenuProfilePanel({
           </div>
 
           <div className="profile__quick-actions">
-            <button type="button" className="profile__quick-button ui-tooltip-anchor" onClick={onOpenVoiceSettings} aria-label="Голос и видео" data-tooltip="Голос и видео">
-              <span className="profile__quick-glyph profile__quick-glyph--settings" aria-hidden="true" />
+            <button type="button" className="profile__quick-button ui-tooltip-anchor" onClick={onOpenSoundboard} aria-label="Soundpad" data-tooltip="Soundpad">
+              <ProfileQuickSoundpadIcon />
             </button>
             <button
               type="button"
@@ -551,7 +573,7 @@ export default function MenuProfilePanel({
             <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,image/*,video/mp4" ref={avatarInputRef} className="hidden-input" onChange={onAvatarChange} />
             <div className="profile__names">
               <span className="profile__username">{displayName}</span>
-              {showManualProfileStatus ? <span className="profile__custom-status">{profileStatus}</span> : null}
+              {showProfileStatus ? <span className="profile__custom-status">{visibleProfileStatus}</span> : null}
               {activityStatus ? (
                 <span className="profile__activity-status">
                   <svg className="profile__activity-note" viewBox="0 0 16 16" aria-hidden="true" focusable="false">

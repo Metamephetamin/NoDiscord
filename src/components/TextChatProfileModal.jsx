@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AnimatedAvatar from "./AnimatedAvatar";
+import TextChatReportModal from "./TextChatReportModal";
 import { formatUserPresenceStatus, isUserCurrentlyOnline } from "../utils/menuMainModel";
 import { getProfileCustomizationClassName, getProfileCustomizationStyle } from "../utils/profileCustomization";
 import "../css/TextChatProfileModal.css";
@@ -177,6 +178,15 @@ export default function TextChatProfileModal({
     : profile.isFriend
       ? "Профиль друга: можно быстро перейти к общению."
       : "Публичная карточка пользователя до добавления в друзья.";
+  const closeReportModal = () => {
+    if (reportBusy) {
+      return;
+    }
+
+    setReportOpen(false);
+    setReportReason("");
+    setReportStatus("");
+  };
   const submitReport = async (event) => {
     event.preventDefault();
     if (!canReport || reportBusy) {
@@ -204,6 +214,7 @@ export default function TextChatProfileModal({
   };
 
   return (
+    <>
     <div className="chat-profile-modal-backdrop" onClick={onClose}>
       <div
         className={`chat-profile-modal ${profileThemeClassName}`.trim()}
@@ -354,39 +365,13 @@ export default function TextChatProfileModal({
                 Копировать ID
               </button>
               {canReport ? (
-                <button type="button" className="chat-profile-modal__action chat-profile-modal__action--danger" onClick={() => setReportOpen((value) => !value)}>
+                <button type="button" className="chat-profile-modal__action chat-profile-modal__action--danger" onClick={() => setReportOpen(true)}>
                   <ProfileIcon kind="report" className="chat-profile-modal__action-icon" />
                   Пожаловаться
                 </button>
               ) : null}
             </div>
-            {reportOpen ? (
-              <form className="chat-profile-modal__report" onSubmit={submitReport}>
-                <label>
-                  <span>Причина жалобы</span>
-                  <textarea
-                    value={reportReason}
-                    maxLength={700}
-                    onChange={(event) => {
-                      setReportReason(event.target.value);
-                      if (reportStatus) {
-                        setReportStatus("");
-                      }
-                    }}
-                    placeholder="Спам, оскорбления, подозрительное поведение"
-                  />
-                </label>
-                {reportStatus ? <p>{reportStatus}</p> : null}
-                <div className="chat-profile-modal__report-actions">
-                  <button type="button" className="chat-profile-modal__report-cancel" onClick={() => setReportOpen(false)} disabled={reportBusy}>
-                    Отмена
-                  </button>
-                  <button type="submit" className="chat-profile-modal__report-submit" disabled={reportBusy || reportReason.trim().length < 4}>
-                    {reportBusy ? "Отправляем..." : "Отправить"}
-                  </button>
-                </div>
-              </form>
-            ) : reportStatus ? (
+            {reportStatus ? (
               <div className="chat-profile-modal__report-status">{reportStatus}</div>
             ) : null}
             <section className="chat-profile-modal__side-widget" aria-label="Общая статистика">
@@ -408,5 +393,26 @@ export default function TextChatProfileModal({
         </div>
       </div>
     </div>
+    <TextChatReportModal
+      report={{
+        open: reportOpen,
+        reason: reportReason,
+        status: reportStatus,
+        busy: reportBusy,
+      }}
+      ariaLabel="Жалоба на пользователя"
+      title="Пожаловаться на пользователя"
+      placeholder="Спам, оскорбления, подозрительное поведение"
+      maxLength={700}
+      onReasonChange={(value) => {
+        setReportReason(value);
+        if (reportStatus) {
+          setReportStatus("");
+        }
+      }}
+      onClose={closeReportModal}
+      onSubmit={submitReport}
+    />
+    </>
   );
 }

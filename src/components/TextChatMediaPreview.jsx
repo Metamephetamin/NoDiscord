@@ -40,13 +40,6 @@ function setMediaElementProperty(mediaNode, propertyName, value) {
 }
 
 const BOOTSTRAP_ICON_PATHS = {
-  collection: (
-    <>
-      <path d="M2.5 3.5a.5.5 0 0 1 0-1h11a.5.5 0 0 1 0 1h-11Z" />
-      <path d="M4.5 1.5a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7Z" />
-      <path d="M1.5 14.5A1.5 1.5 0 0 1 0 13V6a1.5 1.5 0 0 1 1.5-1.5h13A1.5 1.5 0 0 1 16 6v7a1.5 1.5 0 0 1-1.5 1.5h-13ZM1 13a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5V6a.5.5 0 0 0-.5-.5h-13A.5.5 0 0 0 1 6v7Z" />
-    </>
-  ),
   download: (
     <>
       <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5Z" />
@@ -93,7 +86,6 @@ function TextChatMediaPreview({
   videoRef,
   onClose,
   onDownload,
-  onDownloadAll,
   onDeleteActive,
   onNavigate,
   onZoom,
@@ -669,17 +661,6 @@ function TextChatMediaPreview({
             >
               <BootstrapIcon kind="download" />
             </button>
-            {hasGallery ? (
-              <button
-                type="button"
-                className="media-preview__icon-button media-preview__icon-button--stacked"
-                onClick={() => onDownloadAll?.()}
-                aria-label="Скачать все вложения"
-                title="Скачать все вложения"
-              >
-                <BootstrapIcon kind="collection" />
-              </button>
-            ) : null}
           </div>
           ) : null}
         </div>
@@ -695,7 +676,6 @@ function areMediaPreviewPropsEqual(previousProps, nextProps) {
     && previousProps.videoRef === nextProps.videoRef
     && previousProps.onClose === nextProps.onClose
     && previousProps.onDownload === nextProps.onDownload
-    && previousProps.onDownloadAll === nextProps.onDownloadAll
     && previousProps.onDeleteActive === nextProps.onDeleteActive
     && previousProps.onNavigate === nextProps.onNavigate
     && previousProps.onZoom === nextProps.onZoom

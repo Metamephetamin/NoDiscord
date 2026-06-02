@@ -143,7 +143,6 @@ export default function TextChatView(props) {
     mediaPreviewVideoRef,
     setMediaPreview,
     handleDownloadAttachment,
-    handleDownloadAllMediaPreviewItems,
     handleOpenMediaPreviewFullscreen,
     updateMediaPreviewIndex,
     updateMediaPreviewZoom,
@@ -683,7 +682,6 @@ export default function TextChatView(props) {
         videoRef={mediaPreviewVideoRef}
         onClose={handleCloseMediaPreview}
         onDownload={handleDownloadActiveMediaPreview}
-        onDownloadAll={handleDownloadAllMediaPreviewItems}
         onDeleteActive={mediaPreview?.canDelete ? handleDeleteMediaPreviewItem : null}
         onFullscreen={handleOpenMediaPreviewFullscreen}
         onNavigate={updateMediaPreviewIndex}
