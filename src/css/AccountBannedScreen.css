@@ -7,107 +7,92 @@
   overflow: hidden;
   padding: clamp(22px, 5vw, 72px);
   background:
-    radial-gradient(circle at 50% 45%, rgba(111, 76, 255, 0.22), transparent 34%),
-    linear-gradient(135deg, #070b18, #111a35 48%, #070a12);
+    linear-gradient(90deg, rgba(5, 7, 12, 0.84), rgba(5, 7, 12, 0.48) 46%, rgba(5, 7, 12, 0.18)),
+    url("/image/account-banned-background.jpg") center / cover no-repeat,
+    #07090f;
   color: #f8fbff;
   font-family: "Rubik", "Kulim Park", sans-serif;
-}
-
-.ban-page__video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.58;
-  filter: saturate(1.15) contrast(1.08);
 }
 
 .ban-page__shade {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 58% 42%, rgba(255, 112, 220, 0.18), transparent 30%),
-    linear-gradient(180deg, rgba(4, 7, 14, 0.18), rgba(4, 7, 14, 0.72));
-  backdrop-filter: blur(1px);
+    linear-gradient(180deg, rgba(4, 6, 10, 0.16), rgba(4, 6, 10, 0.62)),
+    linear-gradient(90deg, rgba(4, 6, 10, 0.68), rgba(4, 6, 10, 0.2) 58%, rgba(4, 6, 10, 0.58));
 }
 
 .ban-card {
   position: relative;
   z-index: 1;
-  width: min(760px, 100%);
-  min-height: 430px;
+  width: min(620px, 100%);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: 34px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(238, 244, 255, 0.92));
-  box-shadow:
-    0 30px 100px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.28) inset;
-  color: #172033;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(12, 15, 22, 0.86);
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.5);
+  color: #f5f7fb;
+  backdrop-filter: blur(10px);
 }
 
 .ban-card__content {
   position: relative;
-  z-index: 2;
-  padding: clamp(28px, 5vw, 54px);
-  max-width: 560px;
+  padding: clamp(26px, 4vw, 42px);
 }
 
 .ban-card__eyebrow {
   display: inline-flex;
   width: fit-content;
-  margin-bottom: 14px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #7b61ff, #ec75cb);
-  color: #ffffff;
+  margin-bottom: 16px;
+  padding: 6px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.44);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.24);
+  color: #fecaca;
   font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .ban-card h1 {
   margin: 0;
-  color: #101827;
-  font-size: clamp(34px, 5vw, 58px);
-  font-weight: 900;
-  line-height: 0.95;
-  letter-spacing: -0.05em;
+  color: #ffffff;
+  font-size: clamp(32px, 4.6vw, 52px);
+  font-weight: 850;
+  line-height: 1.02;
+  letter-spacing: 0;
 }
 
 .ban-card__lead {
   max-width: 430px;
   margin: 16px 0 0;
-  color: #526078;
-  font-size: 17px;
-  font-weight: 650;
+  color: #cbd5e1;
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1.45;
 }
 
 .ban-profile {
-  width: min(430px, 100%);
-  margin-top: 26px;
+  margin-top: 24px;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 13px;
-  border: 1px solid #d7e0ef;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .ban-profile__avatar {
-  width: 68px;
-  height: 68px;
+  width: 56px;
+  height: 56px;
   flex: 0 0 auto;
-  border-radius: 22px;
+  border-radius: 8px;
   object-fit: cover;
-  box-shadow: 0 10px 24px rgba(45, 65, 110, 0.18);
+  box-shadow: none;
 }
 
 .ban-profile__copy {
@@ -118,201 +103,80 @@
 
 .ban-profile__copy strong {
   overflow: hidden;
-  color: #111827;
-  font-size: 18px;
-  font-weight: 900;
+  color: #f8fafc;
+  font-size: 17px;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ban-profile__copy span {
   overflow: hidden;
-  color: #66738a;
+  color: #94a3b8;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ban-reason {
-  width: min(470px, 100%);
   margin-top: 18px;
-  padding: 17px 18px;
-  border: 1px solid rgba(225, 70, 105, 0.2);
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(255, 240, 244, 0.92), rgba(247, 250, 255, 0.78));
+  padding: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.16);
 }
 
 .ban-reason span,
 .ban-card__meta span {
   display: block;
   margin-bottom: 7px;
-  color: #7d8799;
+  color: #94a3b8;
   font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .ban-reason p {
   margin: 0;
-  color: #172033;
+  color: #f8fafc;
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.45;
 }
 
 .ban-card__meta {
   margin-top: 16px;
-  color: #172033;
+  color: #f8fafc;
 }
 
 .ban-card__meta strong {
   font-size: 15px;
-  font-weight: 850;
+  font-weight: 800;
 }
 
 .ban-card__button {
   margin-top: 24px;
   min-height: 48px;
   padding: 0 22px;
-  border: 0;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #7965ff, #e78fd2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: #1f2937;
   color: #ffffff;
   font: inherit;
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 14px 32px rgba(126, 98, 255, 0.26);
+  box-shadow: none;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
-.ban-card__character {
-  position: absolute;
-  right: clamp(18px, 4vw, 54px);
-  bottom: -3px;
-  z-index: 1;
-  width: 230px;
-  height: 330px;
-  pointer-events: none;
-}
-
-.ban-girl {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 220px;
-  height: 305px;
-  transform-origin: bottom center;
-  filter: drop-shadow(0 22px 34px rgba(65, 70, 120, 0.18));
-}
-
-.ban-girl::before {
-  content: "";
-  position: absolute;
-  right: 31px;
-  bottom: 0;
-  width: 132px;
-  height: 190px;
-  border-radius: 70px 70px 28px 28px;
-  background: linear-gradient(160deg, #7e70ff, #ee7fc6 66%, #f5b6d9);
-}
-
-.ban-girl::after {
-  content: "";
-  position: absolute;
-  right: 55px;
-  bottom: 126px;
-  width: 80px;
-  height: 48px;
-  border-radius: 999px;
-  background: rgba(255, 238, 245, 0.68);
-}
-
-.ban-girl__hair--back {
-  position: absolute;
-  right: 23px;
-  bottom: 106px;
-  width: 150px;
-  height: 178px;
-  border-radius: 86px 86px 58px 58px;
-  background: linear-gradient(160deg, #2e2955, #6e5098 58%, #d178b8);
-}
-
-.ban-girl__head {
-  position: absolute;
-  right: 54px;
-  bottom: 167px;
-  width: 91px;
-  height: 101px;
-  border-radius: 48% 48% 45% 45%;
-  background: linear-gradient(180deg, #ffe4d7, #ffc8c9);
-  box-shadow: inset 0 -8px 0 rgba(224, 116, 130, 0.12);
-}
-
-.ban-girl__bang {
-  position: absolute;
-  top: -17px;
-  width: 48px;
-  height: 58px;
-  border-radius: 40px 8px 34px 8px;
-  background: linear-gradient(150deg, #34305f, #815aa0);
-}
-
-.ban-girl__bang--left {
-  left: 5px;
-  transform: rotate(18deg);
-}
-
-.ban-girl__bang--right {
-  right: 7px;
-  transform: rotate(-24deg);
-}
-
-.ban-girl__eye {
-  position: absolute;
-  top: 48px;
-  width: 14px;
-  height: 18px;
-  border-radius: 999px;
-  background: radial-gradient(circle at 52% 36%, #ffffff 0 16%, #63d6ff 18% 38%, #172033 42%);
-}
-
-.ban-girl__eye--left {
-  left: 23px;
-}
-
-.ban-girl__eye--right {
-  right: 23px;
-}
-
-.ban-girl__mouth {
-  position: absolute;
-  left: 39px;
-  top: 75px;
-  width: 17px;
-  height: 8px;
-  border-bottom: 3px solid rgba(112, 54, 75, 0.58);
-  border-radius: 0 0 999px 999px;
-}
-
-.ban-girl__hand {
-  position: absolute;
-  bottom: 129px;
-  width: 54px;
-  height: 30px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ffd9d0, #ffbfc4);
-}
-
-.ban-girl__hand--left {
-  right: 144px;
-  transform: rotate(-17deg);
-}
-
-.ban-girl__hand--right {
-  right: 8px;
-  transform: rotate(17deg);
+.ban-card__button:hover,
+.ban-card__button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #334155;
+  outline: none;
 }
 
 @media (max-width: 760px) {
@@ -321,14 +185,6 @@
   }
 
   .ban-card__content {
-    padding-bottom: 190px;
-  }
-
-  .ban-card__character {
-    right: 16px;
-    width: 178px;
-    height: 245px;
-    transform: scale(0.74);
-    transform-origin: right bottom;
+    padding: 24px;
   }
 }

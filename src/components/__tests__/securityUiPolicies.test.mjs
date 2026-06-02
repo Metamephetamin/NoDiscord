@@ -1654,6 +1654,17 @@ test("dense media gallery remainder rows fill available columns through twenty a
   });
 });
 
+test("account banned screen uses strict photo-backed card without character art", () => {
+  const screenSource = readRepoFile("src/components/AccountBannedScreen.jsx");
+  const screenCss = readRepoFile("src/css/AccountBannedScreen.css");
+
+  assert.doesNotMatch(screenSource, /ban-page__video|ban-card__character|ban-girl|GoldenDustGlow2/);
+  assert.doesNotMatch(screenCss, /\.ban-page__video|\.ban-card__character|\.ban-girl/);
+  assert.match(screenCss, /url\("\/image\/account-banned-background\.jpg"\) center \/ cover no-repeat/);
+  assert.match(screenCss, /\.ban-card \{[\s\S]*?border-radius: 8px;/);
+  assert.match(screenCss, /\.ban-card \{[\s\S]*?background: rgba\(12, 15, 22, 0\.86\);/);
+});
+
 test("partial message updates preserve existing media attachments", () => {
   const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
 
