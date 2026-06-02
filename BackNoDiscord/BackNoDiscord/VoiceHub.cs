@@ -124,6 +124,7 @@ public class VoiceHub : Hub
         }
         else
         {
+            ClearVoiceChannelStatusesForEmptyChannels(previousChannel);
             await BroadcastChannelUpdatesAsync(previousChannel, normalizedChannelName);
         }
         await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
@@ -163,6 +164,7 @@ public class VoiceHub : Hub
         var removed = _channels.LeaveChannel(currentUser.UserId);
         if (removed.VoiceStateChanged)
         {
+            ClearVoiceChannelStatusesForEmptyChannels(removed.ChannelName ?? currentChannel);
             await BroadcastChannelUpdatesAsync(removed.ChannelName ?? currentChannel);
             await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
         }
@@ -509,6 +511,7 @@ public class VoiceHub : Hub
 
         if (removed.VoiceStateChanged)
         {
+            ClearVoiceChannelStatusesForEmptyChannels(removed.ChannelName);
             await BroadcastChannelUpdatesAsync(removed.ChannelName);
             await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
         }
@@ -549,6 +552,20 @@ public class VoiceHub : Hub
         return channelUpdates.Count == 0
             ? Task.CompletedTask
             : Clients.All.SendAsync("voice:channel-update", channelUpdates);
+    }
+
+    private void ClearVoiceChannelStatusesForEmptyChannels(params string?[] channelNames)
+    {
+        foreach (var channelName in channelNames
+                     .Where(channelName => !string.IsNullOrWhiteSpace(channelName))
+                     .Select(channelName => channelName!)
+                     .Distinct(StringComparer.Ordinal))
+        {
+            if (_channels.GetParticipantsInChannel(channelName).Count == 0)
+            {
+                _serverState.ClearVoiceChannelStatus(channelName);
+            }
+        }
     }
 
     private Dictionary<string, List<Participant>> BuildChannelUpdateSnapshot(IEnumerable<string?> channelNames)

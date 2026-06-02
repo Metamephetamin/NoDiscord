@@ -2457,7 +2457,7 @@ function TextChatMessageList({
           const isInlineEmojiOnlyMessage = isMediaOnlyMessage
             && attachments.length === 1
             && isAnimatedEmojiAttachment(messageItem, attachments[0], attachments);
-          const showFloatingMediaFooter = hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
+          const showFloatingMediaFooter = isMediaOnlyMessage && hasVisualAttachmentGroup && !isInlineEmojiOnlyMessage && !reactions.length && !messagePoll;
           const hasMultiVisualAttachments = hasVisualAttachmentGroup && attachments.length > 1;
           const reserveVisualAttachmentWidth = shouldReserveVisualAttachmentWidth({
             hasVisualAttachmentGroup,

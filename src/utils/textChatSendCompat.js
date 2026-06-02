@@ -141,9 +141,13 @@ export async function sendMessagesCompat(...args) {
 
   const hubPayload = normalizedPayload.map(normalizeHubMessageInput);
   const containsTextPayload = hubPayload.some((item) => String(item?.message || "").trim());
+  const containsForwardPayload = hubPayload.some((item) => (
+    String(item?.forwardedFromUserId || item?.ForwardedFromUserId || "").trim()
+    || String(item?.forwardedFromUsername || item?.ForwardedFromUsername || "").trim()
+  ));
   const deliveredMessages = [];
 
-  if (allowBatch && hubPayload.length > 1 && !containsTextPayload) {
+  if (allowBatch && (containsForwardPayload || (hubPayload.length > 1 && !containsTextPayload))) {
     try {
       await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, hubPayload);
       return deliveredMessages;

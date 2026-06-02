@@ -153,21 +153,44 @@
 }
 
 .chat-pins__remove {
-  width: 24px;
-  height: 24px;
+  position: relative;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #8492a5;
-  font-size: 13px;
+  color: var(--app-text-muted);
+  font-size: 0;
   line-height: 1;
   cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.chat-pins__remove::before,
+.chat-pins__remove::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 13px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+}
+
+.chat-pins__remove::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.chat-pins__remove::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .chat-pins__remove:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #dce3f3;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
 }
 
 html[data-ui-theme="light"] .message-search-panel,

@@ -16,6 +16,32 @@ test("single image messages match the large feature tile size from grouped media
   );
 });
 
+test("captioned single image messages keep the large media size", () => {
+  assert.match(
+    css,
+    /\.msg-content--visual-attachments:not\(\.msg-content--media-only\)\s+\.message-attachments-stack--single[\s\S]*?\.msg-content--visual-attachments:not\(\.msg-content--media-only\)\s+\.message-attachment-single\s+\.message-media\s*\{[\s\S]*?width:\s*clamp\(320px,\s*52vw,\s*520px\)\s*!important;/,
+    "caption text should not make a single image collapse to caption width",
+  );
+  assert.match(
+    css,
+    /\.msg-content--visual-attachments:not\(\.msg-content--media-only\)\s+\.message-attachment-single\s+\.message-media\s*\{[\s\S]*?height:\s*clamp\(320px,\s*84vw,\s*430px\);/,
+    "captioned single images should keep the same stable media height as image-only messages",
+  );
+  assert.match(
+    css,
+    /\.msg-content--visual-attachments:not\(\.msg-content--media-only\)\s+\.message-attachment-single\s+\.message-media__image\s*\{[\s\S]*?width:\s*100%\s*!important;[\s\S]*?height:\s*100%\s*!important;[\s\S]*?object-fit:\s*cover;/,
+    "captioned single images should fill the same stable media frame as image-only messages",
+  );
+});
+
+test("captioned visual attachments do not render the media footer overlay", () => {
+  assert.match(
+    messageListSource,
+    /const showFloatingMediaFooter = isMediaOnlyMessage\s*&&\s*hasVisualAttachmentGroup/,
+    "only media-only messages should paint the time/read status over the image",
+  );
+});
+
 test("single video messages keep a concrete responsive width in every chat", () => {
   assert.match(
     css,

@@ -104,6 +104,7 @@ public class VoiceController : ControllerBase
         var removed = _channels.LeaveChannel(currentUser.UserId);
         if (removed.VoiceStateChanged)
         {
+            ClearVoiceChannelStatusIfEmpty(removed.ChannelName);
             await _hub.Clients.All.SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(removed.ChannelName));
         }
         return Ok();
@@ -188,5 +189,18 @@ public class VoiceController : ControllerBase
         {
             [channelName] = _channels.GetParticipantsInChannel(channelName)
         };
+    }
+
+    private void ClearVoiceChannelStatusIfEmpty(string? channelName)
+    {
+        if (string.IsNullOrWhiteSpace(channelName) ||
+            _channels.GetParticipantsInChannel(channelName).Count > 0)
+        {
+            return;
+        }
+
+        HttpContext.RequestServices
+            .GetRequiredService<ServerStateService>()
+            .ClearVoiceChannelStatus(channelName);
     }
 }

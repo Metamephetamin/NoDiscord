@@ -54,8 +54,26 @@ export function PinnedMessagesPanel({ pinnedMessages, onOpenMessage, onRemovePin
   const safeActivePinnedIndex = Math.min(activePinnedIndex, pinnedMessages.length - 1);
   const activePinnedMessage = pinnedMessages[safeActivePinnedIndex] || pinnedMessages[0];
 
+  const handlePinnedWheel = (event) => {
+    if (pinnedMessages.length <= 1) {
+      return;
+    }
+
+    const wheelDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    if (!wheelDelta) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setActivePinnedIndex((current) => {
+      const nextIndex = current + (wheelDelta > 0 ? 1 : -1);
+      return (nextIndex + pinnedMessages.length) % pinnedMessages.length;
+    });
+  };
+
   return (
-    <div className="chat-pins">
+    <div className="chat-pins" onWheel={handlePinnedWheel}>
       <div className="chat-pins__rail" aria-label="Закреплённые сообщения">
         {pinnedMessages.map((pinnedMessage, pinnedIndex) => (
           <button
@@ -92,9 +110,7 @@ export function PinnedMessagesPanel({ pinnedMessages, onOpenMessage, onRemovePin
               setActivePinnedIndex((current) => Math.max(0, Math.min(current, pinnedMessages.length - 2)));
             }}
             aria-label="Открепить сообщение"
-          >
-            ×
-          </button>
+          />
         ) : null}
       </div>
     </div>
@@ -166,17 +182,14 @@ export function JumpToLatestButton({ visible = false, pendingCount = 0, onJump }
 export function ChatNavigationBar({
   firstUnreadMessageId,
   mentionMessages = [],
-  replyMessages = [],
   canReturnToJumpPoint = false,
   onJumpToFirstUnread,
   onOpenMention,
-  onOpenReply,
   onReturnToJumpPoint,
 }) {
   const latestMention = mentionMessages[mentionMessages.length - 1] || null;
-  const latestReply = replyMessages[replyMessages.length - 1] || null;
 
-  if (!firstUnreadMessageId && !latestMention && !latestReply && !canReturnToJumpPoint) {
+  if (!firstUnreadMessageId && !latestMention && !canReturnToJumpPoint) {
     return null;
   }
 
@@ -190,11 +203,6 @@ export function ChatNavigationBar({
       {latestMention ? (
         <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenMention(latestMention.id)}>
           Упоминания {mentionMessages.length}
-        </button>
-      ) : null}
-      {latestReply ? (
-        <button type="button" className="chat-nav-bar__pill" onClick={() => onOpenReply(latestReply.id)}>
-          Ответы {replyMessages.length}
         </button>
       ) : null}
       {canReturnToJumpPoint ? (

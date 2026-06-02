@@ -164,6 +164,33 @@ public class ServerStateServiceTests
     }
 
     [Fact]
+    public void ClearVoiceChannelStatus_RemovesPersistedStatusForScopedVoiceChannel()
+    {
+        using var context = CreateContext();
+        var service = new ServerStateService(context);
+
+        service.UpsertSnapshot(new ServerSnapshot
+        {
+            Id = "server-guild",
+            OwnerId = "owner-1",
+            Name = "Guild",
+            VoiceChannels = new List<ChannelSnapshot>
+            {
+                new() { Id = "voice", Name = "Voice", Status = "Planning raid" },
+                new() { Id = "other", Name = "Other", Status = "Still busy" }
+            }
+        }, "owner-1");
+
+        var cleared = service.ClearVoiceChannelStatus("server-guild::voice");
+
+        Assert.True(cleared);
+        var persisted = service.GetSnapshot("server-guild");
+        Assert.NotNull(persisted);
+        Assert.Equal(string.Empty, persisted!.VoiceChannels.Single(channel => channel.Id == "voice").Status);
+        Assert.Equal("Still busy", persisted.VoiceChannels.Single(channel => channel.Id == "other").Status);
+    }
+
+    [Fact]
     public void UpsertSnapshot_PreservesIncomingChannelOrderForExistingChannels()
     {
         using var context = CreateContext();

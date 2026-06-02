@@ -655,6 +655,24 @@ test("admin security styles stay split from the main menu stylesheet", () => {
   assert.doesNotMatch(mainCss, /^\.admin-user-row \{/m);
 });
 
+test("admin report events open a detailed decision dialog", () => {
+  const adminCss = readRepoFile("src/css/AdminSecurity.css");
+  const dialogSource = readRepoFile("src/components/AdminReportDecisionDialog.jsx");
+  const panelsSource = readRepoFile("src/components/MenuSettingsPanels.jsx");
+
+  assert.match(panelsSource, /const \[selectedReportEvent, setSelectedReportEvent\] = useState\(null\);/);
+  assert.match(panelsSource, /<AdminReportDecisionDialog/);
+  assert.match(panelsSource, /onClick=\{\(\) => setSelectedReportEvent\(event\)\}/);
+  assert.doesNotMatch(panelsSource, /onClick=\{\(\) => dismissReport\(event\)\}/);
+  assert.match(dialogSource, /className="admin-report-dialog__backdrop"/);
+  assert.match(dialogSource, /От кого жалоба/);
+  assert.match(dialogSource, /На кого жалоба/);
+  assert.match(dialogSource, /Забанить нарушителя/);
+  assert.match(dialogSource, /Отклонить и уведомить/);
+  assert.match(adminCss, /\.admin-report-dialog__backdrop \{/);
+  assert.match(adminCss, /\.admin-risk-event-list \{[\s\S]*?max-height:/);
+});
+
 test("API_BASE_URL callers do not duplicate the api prefix", () => {
   const menuSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const textChatSource = readRepoFile("src/features/text-chat/TextChatController.jsx");

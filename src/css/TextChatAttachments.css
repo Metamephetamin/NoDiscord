@@ -356,6 +356,33 @@
   align-self: flex-start;
 }
 
+.msg-content--visual-attachments:not(.msg-content--media-only) .message-attachments-stack--single,
+.msg-content--visual-attachments:not(.msg-content--media-only) .message-attachments-stack--single .message-media-overlay-anchor,
+.msg-content--visual-attachments:not(.msg-content--media-only) .message-attachment-single,
+.msg-content--visual-attachments:not(.msg-content--media-only) .message-attachment-single .message-media {
+  width: clamp(320px, 52vw, 520px) !important;
+  min-width: min(320px, calc(100vw - 160px));
+  max-width: min(100%, 520px);
+}
+
+.msg-content--visual-attachments:not(.msg-content--media-only) .message-attachment-single .message-media {
+  aspect-ratio: auto;
+  height: clamp(320px, 84vw, 430px);
+  min-height: 320px;
+  background: transparent;
+}
+
+.msg-content--visual-attachments:not(.msg-content--media-only) .message-attachment-single .message-media__image {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: none;
+  background: transparent;
+  object-fit: cover;
+}
+
 .message-attachment-single {
   display: inline-flex;
   width: fit-content;

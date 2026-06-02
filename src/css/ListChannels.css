@@ -93,13 +93,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.74;
-  filter: grayscale(1) brightness(1.35);
+  opacity: 0.72;
+  filter: grayscale(1) brightness(1.05);
 }
 
 .voice-channel__icon--active {
-  opacity: 1;
-  filter: hue-rotate(58deg) saturate(1.45) brightness(1.08);
+  opacity: 0.9;
+  filter: hue-rotate(58deg) saturate(1.35) brightness(0.96);
 }
 
 .voice-channel__icon img {
@@ -121,7 +121,7 @@
   padding: 0 12px 0 0;
   border: 0;
   background: transparent;
-  color: #eef2ff;
+  color: #c5cde0;
   cursor: pointer;
   text-align: left;
   font-family: var(--font-body);
@@ -210,6 +210,7 @@
 }
 
 .list__items--active .voice-channel__title {
+  color: #eef3ff;
   font-size: 17px;
   font-weight: 700;
 }

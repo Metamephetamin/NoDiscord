@@ -150,6 +150,32 @@ public class ServerStateService
         return true;
     }
 
+    public bool ClearVoiceChannelStatus(string scopedVoiceChannelName)
+    {
+        if (!TryParseScopedVoiceChannelName(scopedVoiceChannelName, out var serverId, out var channelId))
+        {
+            return false;
+        }
+
+        var record = FindSnapshotRecordByServerId(serverId);
+        if (record is null)
+        {
+            return false;
+        }
+
+        var snapshot = NormalizeSnapshot(DeserializeSnapshot(record.SnapshotJson), record.OwnerUserId);
+        var channel = snapshot.VoiceChannels.FirstOrDefault(item =>
+            string.Equals(item.Id, channelId, StringComparison.Ordinal));
+        if (channel is null || string.IsNullOrWhiteSpace(channel.Status))
+        {
+            return false;
+        }
+
+        channel.Status = string.Empty;
+        SaveMutableSnapshot(record, snapshot);
+        return true;
+    }
+
     public ServerSnapshot SaveRole(string serverId, ServerRoleSnapshot role, bool create)
     {
         var (record, snapshot) = GetMutableSnapshot(serverId);
@@ -607,6 +633,23 @@ public class ServerStateService
         return normalized.Length <= VoiceChannelStatusMaxLength
             ? normalized
             : normalized[..VoiceChannelStatusMaxLength].Trim();
+    }
+
+    private static bool TryParseScopedVoiceChannelName(string? scopedVoiceChannelName, out string serverId, out string channelId)
+    {
+        serverId = string.Empty;
+        channelId = string.Empty;
+
+        var normalized = scopedVoiceChannelName?.Trim() ?? string.Empty;
+        var separatorIndex = normalized.IndexOf("::", StringComparison.Ordinal);
+        if (separatorIndex <= 0 || separatorIndex + 2 >= normalized.Length)
+        {
+            return false;
+        }
+
+        serverId = normalized[..separatorIndex].Trim();
+        channelId = normalized[(separatorIndex + 2)..].Trim();
+        return !string.IsNullOrWhiteSpace(serverId) && !string.IsNullOrWhiteSpace(channelId);
     }
 
     private static ServerSnapshot CloneSnapshot(ServerSnapshot snapshot)

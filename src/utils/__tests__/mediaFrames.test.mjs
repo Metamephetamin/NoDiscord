@@ -22,3 +22,14 @@ test("media frame bounds can allow wider horizontal avatar travel", () => {
   assert.ok(wideBounds.max > squareBounds.max);
   assert.deepEqual(verticalBounds, squareBounds);
 });
+
+test("media frame style uses frame position as transform origin", () => {
+  assert.ifError(mediaFramesLoadError);
+
+  const { getMediaFrameStyle } = mediaFramesModule;
+  const style = getMediaFrameStyle({ x: 80, y: 26, zoom: 2 });
+
+  assert.equal(style["--media-frame-x"], "80%");
+  assert.equal(style["--media-frame-y"], "26%");
+  assert.equal(style.transformOrigin, "var(--media-frame-x) var(--media-frame-y)");
+});

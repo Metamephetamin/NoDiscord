@@ -762,8 +762,12 @@ export default function useTextChatMessageActions({
     }
 
     const containsTextPayload = normalizedPayload.some((item) => String(item?.message || "").trim());
+    const containsForwardPayload = normalizedPayload.some((item) => (
+      String(item?.forwardedFromUserId || item?.ForwardedFromUserId || "").trim()
+      || String(item?.forwardedFromUsername || item?.ForwardedFromUsername || "").trim()
+    ));
 
-    if (allowBatch && normalizedPayload.length > 1 && !containsTextPayload) {
+    if (allowBatch && (containsForwardPayload || (normalizedPayload.length > 1 && !containsTextPayload))) {
       try {
         await chatConnection.invoke("ForwardMessages", targetChannelId, avatar, normalizedPayload);
         return;
@@ -843,20 +847,21 @@ export default function useTextChatMessageActions({
         throw new Error("Не удалось определить чаты получателей.");
       }
 
+      closeForwardModal();
+
       for (const target of targetChannels) {
         const payload = await buildForwardPayloadForTargetChannel(target.channelId, forwardableMessages);
         if (!payload.length) {
           throw new Error("Нет данных для пересылки.");
         }
 
-        await sendMessagesCompat(target.channelId, avatar, payload, { allowBatch: false });
+        await sendMessagesCompat(target.channelId, avatar, payload);
       }
 
       if (selectionMode) {
         clearSelectionMode();
       }
 
-      closeForwardModal();
       setActionFeedback({ tone: "success", message: "Сообщения пересланы" });
     } catch (error) {
       console.error("Forward messages error:", error);

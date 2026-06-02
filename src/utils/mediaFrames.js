@@ -156,7 +156,7 @@ export function getMediaFrameStyle(value, additionalStyle = undefined) {
     "--media-frame-zoom": frame.zoom,
     objectPosition: "var(--media-frame-x) var(--media-frame-y)",
     transform: "scale(var(--media-frame-zoom, 1))",
-    transformOrigin: "center center",
+    transformOrigin: "var(--media-frame-x) var(--media-frame-y)",
     ...additionalStyle,
   };
 

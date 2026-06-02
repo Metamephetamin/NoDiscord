@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import AnimatedMedia from "./AnimatedMedia";
+import AdminReportDecisionDialog from "./AdminReportDecisionDialog";
 import ServerInvitesPanel from "./ServerInvitesPanel";
 import "../css/AdminSecurity.css";
 import "../css/MenuVoiceProfileSettings.css";
@@ -1527,6 +1528,16 @@ const buildAdminRiskEvents = ({
     id: `chat-report-${report.id}`,
     reportId: report.id,
     reportSource: "chat",
+    reportKindLabel: getAdminReportKindLabel(report),
+    reportKind: report.reportKind || "message_report",
+    serverId: report.serverId || "",
+    channelId: report.channelId || "",
+    messageId: report.messageId || null,
+    reporterUserId: report.reporterUserId || "",
+    targetUserId: report.targetUserId || "",
+    reason: report.reason || "",
+    createdAt: report.createdAt || "",
+    createdAtLabel: formatAdminDate(report.createdAt),
     status: report.status || "open",
     canDismiss: (report.status || "open") === "open",
     tone: report.reportKind === "conversation_spam" ? "danger" : "neutral",
@@ -1538,6 +1549,15 @@ const buildAdminRiskEvents = ({
     id: `user-report-${report.id}`,
     reportId: report.id,
     reportSource: "user",
+    reportKindLabel: "Жалоба на профиль",
+    reportKind: "user_report",
+    reporterUserId: report.reporterUserId || "",
+    reporterName: report.reporterName || "",
+    targetUserId: report.targetUserId || "",
+    targetName: report.targetName || "",
+    reason: report.reason || "",
+    createdAt: report.createdAt || "",
+    createdAtLabel: formatAdminDate(report.createdAt),
     status: report.status || "open",
     canDismiss: (report.status || "open") === "open",
     tone: "neutral",
@@ -1574,6 +1594,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [busyUserId, setBusyUserId] = useState("");
   const [busyReportId, setBusyReportId] = useState("");
+  const [selectedReportEvent, setSelectedReportEvent] = useState(null);
   const suspiciousUsers = useMemo(() => getAdminOverviewArray(overview, "suspiciousUsers"), [overview]);
   const recentMessages = useMemo(() => getAdminOverviewArray(overview, "recentMessages"), [overview]);
   const recentFiles = useMemo(() => getAdminOverviewArray(overview, "recentFiles"), [overview]);
@@ -1654,7 +1675,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
     loadUsers(query);
   };
 
-  const updateBanState = async (targetUser, shouldBan) => {
+  const updateBanState = async (targetUser, shouldBan, reasonOverride = null) => {
     const userId = String(targetUser?.id || "").trim();
     if (!userId || (String(userId) === String(currentUserId || "") && shouldBan)) {
       return;
@@ -1662,11 +1683,12 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
 
     setBusyUserId(userId);
     setStatus("");
+    const nextReason = reasonOverride == null ? reason : String(reasonOverride || "");
     try {
       const response = await authFetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/${shouldBan ? "ban" : "unban"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: shouldBan ? JSON.stringify({ reason }) : undefined,
+        body: shouldBan ? JSON.stringify({ reason: nextReason }) : undefined,
       });
       const data = await parseApiResponse(response);
       if (!response.ok) {
@@ -1679,7 +1701,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
               ...user,
               isBanned: shouldBan,
               bannedAt: shouldBan ? new Date().toISOString() : "",
-              banReason: shouldBan ? reason.trim() : "",
+              banReason: shouldBan ? nextReason.trim() : "",
               bannedByUserId: shouldBan ? currentUserId : null,
             }
           : user
@@ -1693,7 +1715,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
     }
   };
 
-  const dismissReport = async (event) => {
+  const dismissReport = async (event, messageOverride = null) => {
     if (!event?.reportId || !event?.reportSource) {
       return;
     }
@@ -1706,7 +1728,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: "Мы проверили жалобу и не нашли нарушения. Спасибо, что сообщили.",
+          message: messageOverride || "Мы проверили жалобу и не нашли нарушения. Спасибо, что сообщили.",
         }),
       });
       const data = await parseApiResponse(response);
@@ -1715,12 +1737,23 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
       }
 
       setOverviewStatus("Жалоба отклонена, пользователю отправлен push, если уведомления включены.");
+      setSelectedReportEvent(null);
       void loadSecurityOverview();
     } catch (error) {
       setOverviewStatus(error?.message || "Не удалось отклонить жалобу.");
     } finally {
       setBusyReportId("");
     }
+  };
+
+  const banReportTarget = async (event, banReasonText) => {
+    const targetUserId = String(event?.targetUserId || "").trim();
+    if (!targetUserId) {
+      return;
+    }
+
+    await updateBanState({ id: targetUserId }, true, banReasonText || event?.reason || "");
+    setSelectedReportEvent(null);
   };
 
   return (
@@ -1751,7 +1784,7 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
                 <h3>События риска</h3>
                 <p>Алерты, жалобы, подозрительные профили и файлы в одном списке для быстрой проверки.</p>
               </div>
-              <button type="button" className="settings-inline-button" disabled={overviewLoading} onClick={loadSecurityOverview}>
+              <button type="button" className="settings-inline-button admin-security-refresh-button" disabled={overviewLoading} onClick={loadSecurityOverview}>
                 {overviewLoading ? "Обновляем..." : "Обновить"}
               </button>
             </div>
@@ -1769,9 +1802,9 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
                           type="button"
                           className="settings-inline-button"
                           disabled={busyReportId === `${event.reportSource}:${event.reportId}`}
-                          onClick={() => dismissReport(event)}
+                          onClick={() => setSelectedReportEvent(event)}
                         >
-                          {busyReportId === `${event.reportSource}:${event.reportId}` ? "..." : "Отклонить и уведомить"}
+                          {busyReportId === `${event.reportSource}:${event.reportId}` ? "..." : "Открыть"}
                         </button>
                       </div>
                     ) : null}
@@ -1868,6 +1901,20 @@ export const AdminSettingsPanel = ({ currentUserId, showHeader = true }) => {
           </section>
         </aside>
       </section>
+
+      <AdminReportDecisionDialog
+        key={selectedReportEvent?.id || "admin-report-dialog-empty"}
+        event={selectedReportEvent}
+        busy={Boolean(
+          selectedReportEvent && (
+            busyReportId === `${selectedReportEvent.reportSource}:${selectedReportEvent.reportId}` ||
+            busyUserId === String(selectedReportEvent.targetUserId || "")
+          )
+        )}
+        onClose={() => setSelectedReportEvent(null)}
+        onBanTarget={banReportTarget}
+        onDismissReport={dismissReport}
+      />
     </div>
   );
 };

@@ -129,7 +129,7 @@
   min-height: clamp(220px, 42dvh, 400px);
   padding: 20px;
   border-radius: 16px;
-  background: #1f2024;
+  background: transparent;
 }
 
 .media-frame-editor__frame--avatar-modal {

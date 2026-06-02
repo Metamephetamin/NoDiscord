@@ -49,11 +49,29 @@ test("pinned messages render as one switchable bar instead of navigation jump pi
   assert.notEqual(pinnedPanelEnd, -1);
   assert.match(pinnedPanelSource, /const \[activePinnedIndex, setActivePinnedIndex\] = useState\(0\);/);
   assert.match(pinnedPanelSource, /className="chat-pins__rail"/);
+  assert.match(pinnedPanelSource, /const handlePinnedWheel = \(event\) => \{/);
+  assert.match(pinnedPanelSource, /onWheel=\{handlePinnedWheel\}/);
   assert.match(pinnedPanelSource, /setActivePinnedIndex\(pinnedIndex\)/);
   assert.match(pinnedPanelSource, /onOpenMessage\?\.\(activePinnedMessage\.id/);
   assert.doesNotMatch(pinnedPanelSource, /pinnedMessages\.map\(\(pinnedMessage\) =>/);
   assert.doesNotMatch(navSource, /latestPinned/);
   assert.doesNotMatch(navSource, /onOpenPinned/);
+  assert.doesNotMatch(navSource, /Ответы/);
+});
+
+test("pinned message remove control uses theme-aware oversized cross styling", () => {
+  const panelCss = readRepoFile("src/css/TextChatPanels.css");
+  const removeRule = panelCss.match(/\.chat-pins__remove \{[\s\S]*?\n\}/)?.[0] || "";
+  const removeBeforeRule = panelCss.match(/\.chat-pins__remove::before,[\s\S]*?\.chat-pins__remove::after \{[\s\S]*?\n\}/)?.[0] || "";
+  const removeHoverRule = panelCss.match(/\.chat-pins__remove:hover \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(removeRule, /width: 30px;/);
+  assert.match(removeRule, /height: 30px;/);
+  assert.match(removeRule, /color: var\(--app-text-muted\);/);
+  assert.match(removeBeforeRule, /background: currentColor;/);
+  assert.match(removeBeforeRule, /height: 2px;/);
+  assert.match(removeHoverRule, /background: var\(--app-accent-soft\);/);
+  assert.match(removeHoverRule, /color: var\(--app-accent\);/);
 });
 
 test("text chat view owns its shell CSS contract", () => {
