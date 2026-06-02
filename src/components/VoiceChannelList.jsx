@@ -5,10 +5,6 @@ import { resolveStaticAssetUrl } from "../utils/media";
 import { MAX_CHANNEL_NAME_LENGTH } from "../utils/menuMainModel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import { formatVoiceChannelDuration, resolveVoiceChannelSessionStartedAtMs } from "../utils/voiceChannelDuration";
-import {
-  VOICE_CHANNEL_STATUS_CHAR_LIMIT,
-  normalizeVoiceChannelStatus,
-} from "../utils/voiceChannelStatus";
 
 const getChannelRuntimeId = (serverId, channelId) => (serverId && channelId ? `${serverId}::${channelId}` : channelId);
 const MICROPHONE_ICON_URL = resolveStaticAssetUrl("/icons/mic-panel.svg");
@@ -85,14 +81,12 @@ const VoiceChannelList = ({
   activeChannelId,
   participantsMap,
   serverId = "",
-  serverName = "",
   serverMembers = [],
   serverRoles = [],
   onJoinChannel,
   onSelectChannel,
   onLeaveChannel,
   onPrewarmChannel,
-  onUpdateChannelStatus,
   editingChannelId = "",
   editingChannelValue = "",
   onRenameValueChange,
@@ -114,7 +108,6 @@ const VoiceChannelList = ({
   onWatchStream,
   onParticipantVolumeChange,
   canManageChannels = true,
-  canEditChannelStatus = false,
   joiningChannelId = "",
   mutedChannelIds = [],
 }) => {
@@ -123,7 +116,6 @@ const VoiceChannelList = ({
     channelSessionStartedAtMsById: {},
   }));
   const [activeParticipantVolumeMenu, setActiveParticipantVolumeMenu] = useState(null);
-  const [statusEditor, setStatusEditor] = useState({ channelId: "", value: "" });
   const durationNowMs = durationState.nowMs;
   const channelSessionStartedAtMsById = durationState.channelSessionStartedAtMsById;
   const liveUsers = useMemo(() => new Set(liveUserIds), [liveUserIds]);
@@ -236,35 +228,6 @@ const VoiceChannelList = ({
     ? clampParticipantVolumeMenuPercent(participantVolumeByUserId[activeParticipantVolumeMenu.userId] ?? 100)
     : 100;
 
-  const closeStatusEditor = () => {
-    setStatusEditor({ channelId: "", value: "" });
-  };
-
-  const startStatusEdit = (event, channel, channelStatus) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!canEditChannelStatus || !channel?.id) {
-      return;
-    }
-
-    setStatusEditor({
-      channelId: channel.id,
-      value: channelStatus,
-    });
-  };
-
-  const submitStatusEdit = (event, channel) => {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    if (!canEditChannelStatus || !channel?.id || statusEditor.channelId !== channel.id) {
-      closeStatusEditor();
-      return;
-    }
-
-    onUpdateChannelStatus?.(channel.id, normalizeVoiceChannelStatus(statusEditor.value));
-    closeStatusEditor();
-  };
-
   const renderDropPlaceholder = (targetChannelId = "", placement = "end") => {
     const key = getDropKey(targetChannelId, placement);
     if (dragOverState?.key !== key) {
@@ -322,15 +285,6 @@ const VoiceChannelList = ({
         const isEditing = editingChannelId === channel.id;
         const isJoining = joiningChannelId === runtimeId || joiningChannelId === channel.id;
         const isMuted = mutedChannels.has(String(channel.id));
-        const channelStatus = normalizeVoiceChannelStatus(channel.status ?? channel.Status ?? "");
-        const activeServerVoiceStatus = isActive && String(serverName || "").trim()
-          ? `В голосовом канале: ${String(serverName || "").trim()}`
-          : "";
-        const visibleChannelStatus = isActive && activeServerVoiceStatus ? activeServerVoiceStatus : channelStatus;
-        const isStatusEditing = statusEditor.channelId === channel.id && participantCount > 0;
-        const canEditStatus = canEditChannelStatus && participantCount > 0 && !isEditing && !isJoining;
-        const canEditVisibleStatus = canEditStatus && !activeServerVoiceStatus;
-        const shouldShowStatus = participantCount > 0 && (Boolean(visibleChannelStatus) || (isActive && canEditVisibleStatus));
         const userLimit = normalizeVoiceUserLimit(channel.userLimit);
         const shouldShowLimit = userLimit > 0;
         const sessionStartedAtMs = resolveVoiceChannelSessionStartedAtMs({
@@ -353,7 +307,7 @@ const VoiceChannelList = ({
 
           if (
             event.target instanceof Element
-            && event.target.closest(".channel-drag-handle, .voice-channel__status-button, .voice-channel__status-form, .voice-channel__status-input")
+            && event.target.closest(".channel-drag-handle")
           ) {
             return;
           }
@@ -396,7 +350,7 @@ const VoiceChannelList = ({
               onPointerDown={(event) => {
                 if (
                   event.target instanceof Element
-                  && event.target.closest(".channel-drag-handle, .voice-channel__status-button, .voice-channel__status-form, .voice-channel__status-input")
+                  && event.target.closest(".channel-drag-handle")
                 ) {
                   return;
                 }
@@ -454,60 +408,6 @@ const VoiceChannelList = ({
                       </span>
                     ) : null}
                   </button>
-                  {isStatusEditing ? (
-                    <form
-                      className="voice-channel__status-form"
-                      onSubmit={(event) => submitStatusEdit(event, channel)}
-                    >
-                      <input
-                        className="voice-channel__status-input"
-                        value={statusEditor.value}
-                        maxLength={VOICE_CHANNEL_STATUS_CHAR_LIMIT}
-                        autoFocus
-                        spellCheck={false}
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        placeholder="Выбрать статус канала"
-                        onChange={(event) => setStatusEditor((previous) => (
-                          previous.channelId === channel.id
-                            ? { ...previous, value: event.target.value.slice(0, VOICE_CHANNEL_STATUS_CHAR_LIMIT) }
-                            : previous
-                        ))}
-                        onBlur={(event) => {
-                          if (event.currentTarget.dataset.cancelStatus === "true") {
-                            return;
-                          }
-
-                          submitStatusEdit(event, channel);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            event.currentTarget.dataset.cancelStatus = "true";
-                            closeStatusEditor();
-                          }
-                        }}
-                      />
-                    </form>
-                  ) : shouldShowStatus ? (
-                    canEditVisibleStatus ? (
-                      <button
-                        type="button"
-                        className="voice-channel__status-button"
-                        onClick={(event) => startStatusEdit(event, channel, channelStatus)}
-                        aria-label={channelStatus ? "Изменить статус канала" : "Выбрать статус канала"}
-                        title={visibleChannelStatus || "Выбрать статус канала"}
-                      >
-                        <span>{visibleChannelStatus || "Выбрать статус канала"}</span>
-                        {!channelStatus ? <span className="voice-channel__status-pencil" aria-hidden="true">✎</span> : null}
-                      </button>
-                    ) : (
-                      <span className="voice-channel__status-button voice-channel__status-button--readonly" title={visibleChannelStatus}>
-                        <span>{visibleChannelStatus}</span>
-                      </span>
-                    )
-                  ) : null}
                 </div>
               )}
             </div>

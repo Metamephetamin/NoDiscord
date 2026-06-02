@@ -294,20 +294,17 @@ test("personal chat memoization ignores volatile presence fields", () => {
   assert.doesNotMatch(comparatorSource, /isOnline|is_online|online/);
 });
 
-test("voice channel status editing is restricted to server owner", () => {
+test("voice channel status editing is not rendered in the channel list", () => {
   const voiceChannelSource = readRepoFile("src/components/VoiceChannelList.jsx");
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
-  const controllerSource = readRepoFile("src/features/menu-main/MenuMainController.jsx");
   const channelActionsSource = readRepoFile("src/features/menu-main/useMenuMainChannelActions.js");
 
-  assert.match(voiceChannelSource, /canEditChannelStatus = false/);
-  assert.match(voiceChannelSource, /const canEditStatus = canEditChannelStatus && participantCount > 0 && !isEditing && !isJoining;/);
-  assert.match(voiceChannelSource, /if \(!canEditChannelStatus \|\| !channel\?\.id\)/);
-  assert.match(voiceChannelSource, /if \(!canEditChannelStatus \|\| !channel\?\.id \|\| statusEditor\.channelId !== channel\.id\)/);
-  assert.doesNotMatch(voiceChannelSource, /const canEditStatus = canManageChannels && !isEditing && !isJoining;/);
-  assert.match(workspaceSource, /canEditChannelStatus=\{canEditVoiceChannelStatus\}/);
-  assert.match(controllerSource, /canEditVoiceChannelStatus=\{isServerOwner\}/);
-  assert.match(controllerSource, /canEditVoiceChannelStatus\s*:\s*isServerOwner/);
+  assert.doesNotMatch(voiceChannelSource, /canEditChannelStatus/);
+  assert.doesNotMatch(voiceChannelSource, /statusEditor/);
+  assert.doesNotMatch(voiceChannelSource, /voice-channel__status-button/);
+  assert.doesNotMatch(voiceChannelSource, /Выбрать статус канала/);
+  assert.doesNotMatch(workspaceSource, /canEditChannelStatus=\{canEditVoiceChannelStatus\}/);
+  assert.doesNotMatch(workspaceSource, /onUpdateChannelStatus=/);
   assert.match(channelActionsSource, /canEditVoiceChannelStatus = false/);
   assert.match(channelActionsSource, /delete safePatch\.status;/);
 });
@@ -834,7 +831,7 @@ test("voice participant live badge uses lowercase on-air copy", () => {
   assert.match(listCss, /\.participant-live-badge \{[\s\S]*?overflow: hidden;[\s\S]*?white-space: nowrap;/);
 });
 
-test("voice channel active card keeps participants outside the highlight and exposes bounded status", () => {
+test("voice channel active card keeps participants outside the highlight without rendering status", () => {
   const voiceChannelSource = readRepoFile("src/components/VoiceChannelList.jsx");
   const listCss = readRepoFile("src/css/ListChannels.css");
   const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
@@ -842,17 +839,12 @@ test("voice channel active card keeps participants outside the highlight and exp
   const serverStateSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/ServerStateService.cs");
   const serverInviteSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/ServerInviteService.cs");
 
-  assert.match(voiceChannelSource, /normalizeVoiceChannelStatus/);
-  assert.match(voiceChannelSource, /VOICE_CHANNEL_STATUS_CHAR_LIMIT/);
-  assert.match(voiceChannelSource, /serverName = ""/);
-  assert.match(voiceChannelSource, /const activeServerVoiceStatus = isActive && String\(serverName \|\| ""\)\.trim\(\)/);
-  assert.match(voiceChannelSource, /`В голосовом канале: \$\{String\(serverName \|\| ""\)\.trim\(\)\}`/);
-  assert.match(voiceChannelSource, /const visibleChannelStatus = isActive && activeServerVoiceStatus \? activeServerVoiceStatus : channelStatus;/);
-  assert.match(voiceChannelSource, /const shouldShowStatus = participantCount > 0 && \(/);
-  assert.match(voiceChannelSource, /placeholder="Выбрать статус канала"/);
-  assert.match(voiceChannelSource, /className="voice-channel__status-button"/);
-  assert.match(workspaceSource, /serverName=\{activeServer\?\.name \|\| ""\}/);
-  assert.match(workspaceSource, /onUpdateChannelStatus=\{\(channelId, status\) => onUpdateChannelSettings\?\.\("voice", channelId, \{ status \}\)\}/);
+  assert.doesNotMatch(voiceChannelSource, /normalizeVoiceChannelStatus/);
+  assert.doesNotMatch(voiceChannelSource, /VOICE_CHANNEL_STATUS_CHAR_LIMIT/);
+  assert.doesNotMatch(voiceChannelSource, /serverName = ""/);
+  assert.doesNotMatch(voiceChannelSource, /voice-channel__status-button/);
+  assert.doesNotMatch(workspaceSource, /serverName=\{activeServer\?\.name \|\| ""\}/);
+  assert.doesNotMatch(workspaceSource, /onUpdateChannelStatus=/);
   assert.match(modelSource, /normalizedChannel\.status = normalizeVoiceChannelStatus\(channel\?\.status \?\? channel\?\.Status \?\? ""\);/);
   assert.match(serverStateSource, /channel\.Status = NormalizeVoiceChannelStatus\(channel\.Status\);/);
   assert.match(serverInviteSource, /public string Status \{ get; set; \} = string\.Empty;/);
@@ -870,9 +862,6 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?fill: currentColor;/);
   assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon \{[\s\S]*?color: #1f2937;/);
   assert.match(listCss, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?margin-right: 8px;[\s\S]*?text-align: right;/);
-  assert.match(listCss, /\.voice-channel__status-button \{[\s\S]*?font-size: 11px;/);
-  assert.match(listCss, /\.list__items--active \.voice-channel__status-button \{[\s\S]*?font-size: 11px;/);
-  assert.match(listCss, /\.voice-channel__status-pencil \{[\s\S]*?transform: scaleX\(-1\);/);
   assert.match(listCss, /\.participant-list \{[\s\S]*?padding: 0 0 10px 44px;/);
 });
 

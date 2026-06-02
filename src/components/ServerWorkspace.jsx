@@ -1634,7 +1634,6 @@ export const ServersSidebar = memo(({
   currentUserId,
   canManageServer = false,
   canManageChannels,
-  canEditVoiceChannelStatus = false,
   channelSettingsState,
   channelRenameState,
   serverUnreadCounts,
@@ -2298,7 +2297,6 @@ export const ServersSidebar = memo(({
         activeChannelId={currentVoiceChannel || ""}
         participantsMap={activeVoiceParticipantsMap}
         serverId={activeServer?.id || ""}
-        serverName={activeServer?.name || ""}
         serverMembers={activeServer?.members || []}
         serverRoles={activeServer?.roles || []}
         onJoinChannel={onJoinVoiceChannel}
@@ -2307,7 +2305,6 @@ export const ServersSidebar = memo(({
           void loadVoiceRoomStage();
           onPrewarmVoiceChannel?.(channelId);
         }}
-        onUpdateChannelStatus={(channelId, status) => onUpdateChannelSettings?.("voice", channelId, { status })}
         liveUserIds={liveUserIds}
         speakingUserIds={speakingUserIds}
         watchedStreamUserId={watchedStreamUserId}
@@ -2317,7 +2314,6 @@ export const ServersSidebar = memo(({
         onWatchStream={onWatchStream}
         onParticipantVolumeChange={onParticipantVolumeChange}
         canManageChannels={canManageChannels}
-        canEditChannelStatus={canEditVoiceChannelStatus}
         editingChannelId={channelRenameState?.type === "voice" ? channelRenameState.channelId : ""}
         editingChannelValue={channelRenameState?.type === "voice" ? channelRenameState.value : ""}
         onRenameValueChange={onUpdateChannelRenameValue}

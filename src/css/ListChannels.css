@@ -226,86 +226,8 @@
   font-weight: 450;
 }
 
-.list__items--active .voice-channel__status-button {
-  margin-top: 1px;
-  font-size: 11px;
-  font-weight: 450;
-}
-
 .voice-channel__timer + .voice-channel__count {
   margin-left: 0;
-}
-
-.voice-channel__status-button,
-.voice-channel__status-form {
-  min-width: 0;
-  max-width: 100%;
-  margin-top: 1px;
-}
-
-.voice-channel__status-button {
-  width: fit-content;
-  max-width: 100%;
-  min-height: 20px;
-  padding: 0;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  color: rgba(216, 222, 235, 0.64);
-  text-align: left;
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 450;
-  line-height: 1.15;
-  cursor: pointer;
-}
-
-.voice-channel__status-button span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.voice-channel__status-button:hover {
-  color: #eef2ff;
-}
-
-.voice-channel__status-button--readonly {
-  cursor: default;
-}
-
-.voice-channel__status-pencil {
-  flex: 0 0 auto;
-  color: currentColor;
-  font-size: 13px;
-  line-height: 1;
-  opacity: 0.82;
-  transform: scaleX(-1);
-}
-
-.voice-channel__status-form {
-  display: flex;
-}
-
-.voice-channel__status-input {
-  width: min(100%, 260px);
-  height: 25px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-  outline: none;
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.voice-channel__status-input::placeholder {
-  color: rgba(216, 222, 235, 0.58);
 }
 
 .voice-channel__leave {
@@ -684,20 +606,6 @@ html[data-ui-theme="light"] .voice-channel__count {
 
 html[data-ui-theme="light"] .voice-channel__timer {
   color: color-mix(in srgb, var(--app-accent) 76%, #0f172a);
-}
-
-html[data-ui-theme="light"] .voice-channel__status-button {
-  color: #6b7487;
-}
-
-html[data-ui-theme="light"] .voice-channel__status-button:hover {
-  color: #2637c7;
-}
-
-html[data-ui-theme="light"] .voice-channel__status-input {
-  border-color: #d9e0ec;
-  background: #ffffff;
-  color: #172033;
 }
 
 html[data-ui-theme="light"] .participant-item {
