@@ -20,6 +20,7 @@ export const AUDIO_OUTPUT_DEVICE_STORAGE_KEY = "nd_audio_output_device";
 export const VIDEO_INPUT_DEVICE_STORAGE_KEY = "nd_video_input_device";
 export const MAX_PROFILE_NAME_LENGTH = 32;
 export const MAX_SERVER_NAME_LENGTH = 48;
+export const MAX_CHANNEL_NAME_LENGTH = 50;
 export const VOICE_INPUT_MODES = ["transparent", "broadcast", "noisy_room"];
 export const VOICE_INPUT_MODE_NOISE_STRENGTH = {
   transparent: 55,
@@ -251,6 +252,10 @@ export const normalizeServerNameInput = (value, fallback = "Сервер") => {
   const normalizedName = String(value || "").trim().slice(0, MAX_SERVER_NAME_LENGTH);
   return normalizedName || fallback;
 };
+export const normalizeChannelNameInput = (value, fallback = "new-channel") => {
+  const normalizedName = String(value || "").trim().slice(0, MAX_CHANNEL_NAME_LENGTH);
+  return normalizedName || fallback;
+};
 export const getFriendSearchModeForQuery = (value) =>
   String(value || "").includes("@") ? "email" : "name";
 export const parseFriendSearchInput = (value) => {
@@ -314,7 +319,8 @@ export const getScopedPrivateServerId = (serverId, user) => {
 export const normalizeTextChannelName = (value, fallback = "new-channel") => {
   const normalizedValue = String(value || "")
     .replace(/^#+\s*/, "")
-    .trim();
+    .trim()
+    .slice(0, MAX_CHANNEL_NAME_LENGTH);
   return normalizedValue || fallback;
 };
 export const getCanonicalSharedServerId = (serverId, ownerUserId) => {
@@ -565,7 +571,7 @@ export const normalizeChannels = (channels, type) => {
       name:
         type === "text"
           ? normalizeTextChannelName(channel?.name || fallback[index]?.name || "new-channel")
-          : String(channel?.name || fallback[index]?.name || "voice-channel").trim() || "voice-channel",
+          : normalizeChannelNameInput(channel?.name || fallback[index]?.name || "voice-channel", "voice-channel"),
     };
 
     if (type === "text") {
@@ -704,7 +710,7 @@ export const mergePersistedServers = (localServers, remoteServers, currentUser) 
   return Array.from(mergedByKey.values());
 };
 export const getChannelDisplayName = (name, type) =>
-  type === "text" ? normalizeTextChannelName(name, "channel") : String(name || "").trim();
+  type === "text" ? normalizeTextChannelName(name, "channel") : normalizeChannelNameInput(name, "channel");
 export const parseServerChatChannelId = (channelId) => {
   const normalizedChannelId = String(channelId || "").trim();
   const match = /^server:(.+?)::channel:(.+)$/.exec(normalizedChannelId);

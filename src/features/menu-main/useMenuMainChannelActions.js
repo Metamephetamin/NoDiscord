@@ -3,6 +3,7 @@ import {
   getDisplayName,
   getScopedVoiceChannelId,
   getUserAvatar,
+  normalizeChannelNameInput,
   normalizeTextChannelName,
 } from "../../utils/menuMainModel";
 import {
@@ -140,7 +141,7 @@ export default function useMenuMainChannelActions({
     updateServer((server) => ({
       ...server,
       voiceChannels: server.voiceChannels.map((channel) =>
-        channel.id === channelId ? { ...channel, name: value } : channel
+        channel.id === channelId ? { ...channel, name: normalizeChannelNameInput(value, "голосовой-канал") } : channel
       ),
     }));
   };
@@ -420,7 +421,7 @@ export default function useMenuMainChannelActions({
         : normalizedType === "forum"
           ? "форум"
           : "новый-канал";
-    const channelName = String(name || fallbackName).trim() || fallbackName;
+    const channelName = normalizeChannelNameInput(name, fallbackName);
 
     if (normalizedType === "voice") {
       const channel = {

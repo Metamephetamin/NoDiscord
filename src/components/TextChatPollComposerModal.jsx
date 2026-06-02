@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { DEFAULT_POLL_THEME_ID, POLL_THEME_PRESETS } from "../utils/pollMessages";
 import "../css/TextChatPollComposerModal.css";
 
@@ -172,7 +173,7 @@ export default function TextChatPollComposerModal({
     }
   };
 
-  return (
+  const modal = (
     <div className="poll-composer-backdrop" onClick={onClose} role="presentation">
       <div
         className="poll-composer-modal"
@@ -303,4 +304,6 @@ export default function TextChatPollComposerModal({
       </div>
     </div>
   );
+
+  return typeof document === "undefined" ? modal : createPortal(modal, document.body);
 }

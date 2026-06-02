@@ -1928,6 +1928,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding-left: 6px;
   margin-bottom: 8px;
   color: #95a0b8;
   font-size: 12px;
@@ -2021,11 +2022,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start !important;
-  gap: 6px;
+  gap: 10px;
   background: transparent !important;
   color: inherit;
   font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
   text-align: left;
+  text-transform: inherit;
 }
 
 

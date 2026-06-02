@@ -1175,7 +1175,7 @@ function writeStoredPollVoteState(storageKey, state) {
   }
 }
 
-function MessagePollCard({ poll, messageId, currentUserId, onSubmitPollVote }) {
+function MessagePollCard({ poll, messageId, currentUserId, onSubmitPollVote, onSubmitPollOption }) {
   const pollResetKey = JSON.stringify({
     question: String(poll?.question || ""),
     themeId: String(poll?.themeId || ""),
@@ -1187,6 +1187,7 @@ function MessagePollCard({ poll, messageId, currentUserId, onSubmitPollVote }) {
       }))
       : [],
     votes: poll?.votes || {},
+    voters: poll?.voters || {},
     settings: poll?.settings || {},
   });
 
@@ -1197,11 +1198,12 @@ function MessagePollCard({ poll, messageId, currentUserId, onSubmitPollVote }) {
       messageId={messageId}
       currentUserId={currentUserId}
       onSubmitPollVote={onSubmitPollVote}
+      onSubmitPollOption={onSubmitPollOption}
     />
   );
 }
 
-function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote }) {
+function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote, onSubmitPollOption }) {
   const pollVoteStorageKey = useMemo(
     () => getPollVoteStorageKey({ poll, messageId, currentUserId }),
     [currentUserId, messageId, poll]
@@ -1215,6 +1217,7 @@ function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote
   const [lastSubmittedOptionIds, setLastSubmittedOptionIds] = useState(() => storedVoteState?.selectedOptionIds || []);
   const [addOptionDraft, setAddOptionDraft] = useState("");
   const [pollVotePending, setPollVotePending] = useState(false);
+  const [pollOptionPending, setPollOptionPending] = useState(false);
   const [pollVoteError, setPollVoteError] = useState("");
   const baseOptions = useMemo(
     () => getPollDisplayOptions(poll, { messageId, currentUserId }),
@@ -1223,6 +1226,7 @@ function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote
   const options = [...baseOptions, ...addedOptions];
   const pollTheme = useMemo(() => resolvePollTheme(poll?.themeId), [poll?.themeId]);
   const isAnonymousPoll = Boolean(poll?.settings?.anonymous || poll?.settings?.showWhoVoted === false);
+  const shouldShowVoters = !isAnonymousPoll && Boolean(poll?.settings?.showWhoVoted);
   const totalVoters = Math.max(
     localTotalVoters,
     Object.values(localVotes).reduce((sum, voteCount) => sum + Math.max(0, Number(voteCount) || 0), 0)
@@ -1306,7 +1310,7 @@ function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote
     applyLocalVote();
   };
 
-  const handleAddOption = (event) => {
+  const handleAddOption = async (event) => {
     event?.preventDefault?.();
 
     if (!poll?.settings?.allowAddingOptions) {
@@ -1315,6 +1319,20 @@ function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote
 
     const normalizedText = addOptionDraft.trim().slice(0, 120);
     if (!normalizedText) {
+      return;
+    }
+
+    if (typeof onSubmitPollOption === "function") {
+      setPollOptionPending(true);
+      setPollVoteError("");
+      try {
+        await onSubmitPollOption(messageId, normalizedText);
+        setAddOptionDraft("");
+      } catch (error) {
+        setPollVoteError(error?.message || "Не удалось добавить вариант.");
+      } finally {
+        setPollOptionPending(false);
+      }
       return;
     }
 
@@ -1361,20 +1379,29 @@ function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote
           const isSelected = selectedOptionIds.includes(optionId);
           const voteCount = Math.max(0, Number(localVotes[optionId]) || 0);
           const percent = totalVoters > 0 ? Math.round((voteCount / totalVoters) * 100) : 0;
+          const optionVoters = shouldShowVoters && Array.isArray(poll?.voters?.[optionId])
+            ? poll.voters[optionId]
+            : [];
 
           return (
-            <button
-              key={optionId}
-              type="button"
-              className={`message-poll-card__option ${isSelected ? "message-poll-card__option--selected" : ""}`}
-              onClick={() => toggleOption(optionId)}
-              disabled={submitted && !poll?.settings?.allowRevoting}
-            >
-              <span className="message-poll-card__option-fill" style={{ width: `${percent}%` }} aria-hidden="true" />
-              <span className="message-poll-card__checkbox" aria-hidden="true" />
-              <span className="message-poll-card__option-text">{option?.text || "Вариант"}</span>
-              <span className="message-poll-card__option-percent">{percent}%</span>
-            </button>
+            <div key={optionId} className="message-poll-card__option-group">
+              <button
+                type="button"
+                className={`message-poll-card__option ${isSelected ? "message-poll-card__option--selected" : ""}`}
+                onClick={() => toggleOption(optionId)}
+                disabled={submitted && !poll?.settings?.allowRevoting}
+              >
+                <span className="message-poll-card__option-fill" style={{ width: `${percent}%` }} aria-hidden="true" />
+                <span className="message-poll-card__checkbox" aria-hidden="true" />
+                <span className="message-poll-card__option-text">{option?.text || "Вариант"}</span>
+                <span className="message-poll-card__option-percent">{percent}%</span>
+              </button>
+              {optionVoters.length ? (
+                <span className="message-poll-card__voters">
+                  {optionVoters.map((voter) => voter?.displayName || "User").join(", ")}
+                </span>
+              ) : null}
+            </div>
           );
         })}
       </div>
@@ -1391,8 +1418,8 @@ function MessagePollCardInner({ poll, messageId, currentUserId, onSubmitPollVote
               aria-label="Новый вариант ответа"
               onChange={(event) => setAddOptionDraft(event.target.value)}
             />
-            <button type="submit" className="message-poll-card__add-option" disabled={!addOptionDraft.trim()}>
-              Добавить
+            <button type="submit" className="message-poll-card__add-option" disabled={!addOptionDraft.trim() || pollOptionPending}>
+              {pollOptionPending ? "Добавляем..." : "Добавить"}
             </button>
           </form>
         ) : (
@@ -1947,8 +1974,13 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
+  const useSevenTileLayout = (
+    visualAttachments.length === 7
+    && !fileAttachments.length
+    && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
+  );
   const useDenseGalleryLayout = (
-    visualAttachments.length >= 7
+    visualAttachments.length >= 8
     && !fileAttachments.length
     && visualAttachments.every((attachmentItem) => !attachmentItem.isVoice)
   );
@@ -2023,6 +2055,7 @@ const MessageAttachmentCollection = memo(function MessageAttachmentCollection(pr
               featureStackCount ? `message-attachment-grid--feature-stack-${featureStackCount}` : ""
             } ${useFiveTileLayout ? "message-attachment-grid--five-tile" : ""
             } ${useSixTileLayout ? "message-attachment-grid--six-tile" : ""
+            } ${useSevenTileLayout ? "message-attachment-grid--seven-tile" : ""
             } ${useDenseGalleryLayout ? "message-attachment-grid--dense-gallery" : ""
             } ${useDenseGalleryLayout ? `message-attachment-grid--dense-gallery-cols-${denseGalleryColumnCount}` : ""
             } ${useDenseGalleryLayout && denseGalleryRemainder ? `message-attachment-grid--dense-gallery-rem-${denseGalleryRemainder}` : ""
@@ -2101,6 +2134,7 @@ function TextChatMessageList({
   onOpenMediaPreview,
   onToggleReaction,
   onSubmitPollVote,
+  onSubmitPollOption,
   onJumpToReply,
   onCancelLocalEchoUpload,
   onRetryLocalEchoUpload,
@@ -2149,29 +2183,6 @@ function TextChatMessageList({
           }
 
           return [[userId, resolvedRoleColor]];
-        })
-      ),
-    [serverMembers, serverRoleById]
-  );
-  const authorRoleBadgeByUserId = useMemo(
-    () =>
-      new Map(
-        (serverMembers || []).flatMap((member) => {
-          const userId = String(member?.userId || member?.id || "");
-          if (!userId) {
-            return [];
-          }
-
-          const resolvedRole = serverRoleById.get(String(member?.roleId || member?.role_id || "")) || member;
-          const roleName = getRoleNameValue(resolvedRole);
-          if (!roleName || isDefaultMemberRole(resolvedRole)) {
-            return [];
-          }
-
-          return [[userId, {
-            name: roleName,
-            color: getRoleColorValue(resolvedRole) || "#7b89a8",
-          }]];
         })
       ),
     [serverMembers, serverRoleById]
@@ -2504,8 +2515,6 @@ function TextChatMessageList({
           const forwardedFromRoleColor = !isDirectChat
             ? authorRoleColorByUserId.get(String(messageItem.forwardedFromUserId || "")) || ""
             : "";
-          const authorRoleBadge = !isDirectChat ? authorRoleBadgeByUserId.get(String(messageItem.authorUserId || "")) || null : null;
-          const forwardedFromRoleBadge = !isDirectChat ? authorRoleBadgeByUserId.get(String(messageItem.forwardedFromUserId || "")) || null : null;
           const canInsertAuthorMention = !isDirectChat && typeof onInsertMentionByUserId === "function";
           const messageRenderId = getMessageRenderId(messageItem);
           const messageRenderKey = duplicateMessageIdSet.has(messageRenderId)
@@ -2613,11 +2622,6 @@ function TextChatMessageList({
                       }}
                     >
                       <span className="message-author__name-label">{messageItem.username || "User"}</span>
-                      {authorRoleBadge ? (
-                        <span className="message-author__role-badge" style={{ "--message-author-role-color": authorRoleBadge.color }}>
-                          {authorRoleBadge.name}
-                        </span>
-                      ) : null}
                     </button>
                   </div>
                 ) : null}
@@ -2639,11 +2643,6 @@ function TextChatMessageList({
                       }}
                     >
                       <span className="message-author__name-label">{messageItem.username}</span>
-                      {authorRoleBadge ? (
-                        <span className="message-author__role-badge" style={{ "--message-author-role-color": authorRoleBadge.color }}>
-                          {authorRoleBadge.name}
-                        </span>
-                      ) : null}
                     </button>
                     <span className="message-forwarded__label">Автор</span>
                     <button
@@ -2660,11 +2659,6 @@ function TextChatMessageList({
                       }}
                     >
                       <span className="message-author__name-label">{messageItem.forwardedFromUsername}</span>
-                      {forwardedFromRoleBadge ? (
-                        <span className="message-author__role-badge" style={{ "--message-author-role-color": forwardedFromRoleBadge.color }}>
-                          {forwardedFromRoleBadge.name}
-                        </span>
-                      ) : null}
                     </button>
                   </div>
                 ) : null}
@@ -2713,6 +2707,7 @@ function TextChatMessageList({
                     messageId={messageItem.id}
                     currentUserId={currentUserId}
                     onSubmitPollVote={onSubmitPollVote}
+                    onSubmitPollOption={onSubmitPollOption}
                   />
                 ) : null}
 
@@ -2835,6 +2830,7 @@ function areTextChatMessageListPropsEqual(previousProps, nextProps) {
     && previousProps.onOpenMediaPreview === nextProps.onOpenMediaPreview
     && previousProps.onToggleReaction === nextProps.onToggleReaction
     && previousProps.onSubmitPollVote === nextProps.onSubmitPollVote
+    && previousProps.onSubmitPollOption === nextProps.onSubmitPollOption
     && previousProps.onJumpToReply === nextProps.onJumpToReply
     && previousProps.onCancelLocalEchoUpload === nextProps.onCancelLocalEchoUpload
     && previousProps.onRetryLocalEchoUpload === nextProps.onRetryLocalEchoUpload

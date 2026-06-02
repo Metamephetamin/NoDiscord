@@ -18,10 +18,14 @@ test("emoji picker search hides on downward scroll and returns at the top", () =
 
   assert.equal(
     getNextEmojiPickerSearchVisibility({ previousScrollTop: 0, currentScrollTop: 24, searchHidden: false }),
+    false,
+  );
+  assert.equal(
+    getNextEmojiPickerSearchVisibility({ previousScrollTop: 24, currentScrollTop: 48, searchHidden: false }),
     true,
   );
   assert.equal(
-    getNextEmojiPickerSearchVisibility({ previousScrollTop: 0, currentScrollTop: 2, searchHidden: false }),
+    getNextEmojiPickerSearchVisibility({ previousScrollTop: 48, currentScrollTop: 49, searchHidden: true }),
     true,
   );
   assert.equal(

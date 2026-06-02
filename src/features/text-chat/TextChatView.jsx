@@ -6,7 +6,7 @@ import TextChatComposer from "../../components/TextChatComposer";
 import TextChatMessageList from "../../components/TextChatMessageList";
 import TextChatMediaPreview from "../../components/TextChatMediaPreview";
 import TextChatReportModal from "../../components/TextChatReportModal";
-import { ChatActionStatus, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
+import { ChatActionStatus, ChatAttachmentsPanel, ChatNavigationBar, ChatSelectionBar, JumpToLatestButton, MessageSearchPanel, PinnedMessagesPanel } from "../../components/TextChatPanels";
 import useTextChatScrollManager from "../../hooks/useTextChatScrollManager";
 import { recoverChunkImport } from "../../utils/chunkLoadRecovery";
 import { PERF_ENABLED, recordReactCommit } from "../../utils/perf";
@@ -31,6 +31,16 @@ export default function TextChatView(props) {
     searchLoading,
     searchError,
     onClearSearchQuery,
+    attachmentsPanelOpen,
+    attachmentsPanelKind,
+    attachmentsItems,
+    attachmentsLoading,
+    attachmentsError,
+    attachmentsHasMore,
+    onAttachmentsKindChange,
+    onLoadMoreAttachments,
+    onRefreshAttachments,
+    onCloseAttachmentsPanel,
     scopedChannelId,
     navigationRequest,
     onNavigationIndexChange,
@@ -73,6 +83,7 @@ export default function TextChatView(props) {
     openMediaPreview,
     handleToggleReaction,
     submitPollVote,
+    submitPollOption,
     handleComposerPaste,
     selectedFiles,
     uploadingFile,
@@ -188,6 +199,7 @@ export default function TextChatView(props) {
   const stableOpenMediaPreview = useStableCallback(openMediaPreview);
   const stableHandleToggleReaction = useStableCallback(handleToggleReaction);
   const stableSubmitPollVote = useStableCallback(submitPollVote);
+  const stableSubmitPollOption = useStableCallback(submitPollOption);
   const stableOpenForwardModal = useStableCallback(openForwardModal);
   const stableHandleInsertMentionByUserId = useStableCallback(handleInsertMentionByUserId);
   const stableCancelLocalEchoUpload = useStableCallback(cancelLocalEchoUpload);
@@ -229,6 +241,16 @@ export default function TextChatView(props) {
       highlightDurationMs: 2800,
     });
     onClearSearchQuery?.("");
+  });
+  const handleAttachmentsPanelOpenMessage = useStableCallback((messageId) => {
+    scrollToMessage(messageId, {
+      behavior: "auto",
+      block: "center",
+      rememberCurrent: true,
+      highlight: true,
+      highlightDurationMs: 2800,
+    });
+    onCloseAttachmentsPanel?.();
   });
   const latestOwnMessageSignatureRef = useRef("");
   const scheduleAggressiveScrollToLatest = useStableCallback(() => {
@@ -410,6 +432,40 @@ export default function TextChatView(props) {
     });
   }, [handleDownloadAttachment, mediaPreview]);
 
+  const handleOpenAttachmentMedia = useCallback((attachmentItem, galleryItems = []) => {
+    const mediaType = attachmentItem?.mediaType === "video" ? "video" : "image";
+    const attachmentUrl = attachmentItem?.attachmentUrl || "";
+    if (!attachmentUrl) {
+      return;
+    }
+
+    onCloseAttachmentsPanel?.();
+    stableOpenMediaPreview(
+      mediaType,
+      attachmentUrl,
+      attachmentItem?.attachmentName || "",
+      attachmentItem?.attachmentContentType || "",
+      attachmentItem?.messageId || "",
+      attachmentItem?.attachmentEncryption || null,
+      attachmentItem?.attachmentSourceUrl || attachmentUrl,
+      attachmentItem?.attachmentIndex || 0,
+      galleryItems
+    );
+  }, [onCloseAttachmentsPanel, stableOpenMediaPreview]);
+
+  const handleDownloadAttachmentItem = useCallback((attachmentItem) => {
+    handleDownloadAttachment({
+      attachmentKind: attachmentItem?.mediaType || "file",
+      attachmentUrl: attachmentItem?.attachmentUrl || "",
+      attachmentSourceUrl: attachmentItem?.attachmentSourceUrl || attachmentItem?.attachmentUrl || "",
+      attachmentName: attachmentItem?.attachmentName || "",
+      attachmentContentType: attachmentItem?.attachmentContentType || "",
+      attachmentEncryption: attachmentItem?.attachmentEncryption || null,
+      messageId: attachmentItem?.messageId || "",
+      attachmentIndex: attachmentItem?.attachmentIndex || 0,
+    });
+  }, [handleDownloadAttachment]);
+
   return (
     <div
       className={`textchat-container ${composerDropActive ? "textchat-container--drag-active" : ""}`}
@@ -434,6 +490,21 @@ export default function TextChatView(props) {
         loading={searchLoading}
         error={searchError}
         onOpenMessage={handleSearchPanelOpenMessage}
+      />
+      <ChatAttachmentsPanel
+        open={attachmentsPanelOpen}
+        kind={attachmentsPanelKind}
+        items={attachmentsItems}
+        loading={attachmentsLoading}
+        error={attachmentsError}
+        hasMore={attachmentsHasMore}
+        onKindChange={onAttachmentsKindChange}
+        onClose={onCloseAttachmentsPanel}
+        onRefresh={onRefreshAttachments}
+        onLoadMore={onLoadMoreAttachments}
+        onOpenMessage={handleAttachmentsPanelOpenMessage}
+        onOpenMediaPreview={handleOpenAttachmentMedia}
+        onDownloadAttachment={handleDownloadAttachmentItem}
       />
       <PinnedMessagesPanel
         pinnedMessages={pinnedMessages}
@@ -499,6 +570,7 @@ export default function TextChatView(props) {
             onOpenMediaPreview={stableOpenMediaPreview}
             onToggleReaction={stableHandleToggleReaction}
             onSubmitPollVote={stableSubmitPollVote}
+            onSubmitPollOption={stableSubmitPollOption}
             onJumpToReply={stableScrollToMessage}
             onCancelLocalEchoUpload={stableCancelLocalEchoUpload}
             onRetryLocalEchoUpload={stableRetryLocalEchoUpload}
@@ -535,6 +607,7 @@ export default function TextChatView(props) {
           onOpenMediaPreview={stableOpenMediaPreview}
           onToggleReaction={stableHandleToggleReaction}
           onSubmitPollVote={stableSubmitPollVote}
+          onSubmitPollOption={stableSubmitPollOption}
           onJumpToReply={stableScrollToMessage}
           onCancelLocalEchoUpload={stableCancelLocalEchoUpload}
           onRetryLocalEchoUpload={stableRetryLocalEchoUpload}

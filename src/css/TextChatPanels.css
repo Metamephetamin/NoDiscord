@@ -193,6 +193,198 @@
   color: var(--app-accent);
 }
 
+.chat-attachments-panel {
+  max-height: min(62vh, 620px);
+  margin: 12px 0 14px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.55);
+  background: rgba(13, 15, 20, 0.98);
+  color: #eaf3ff;
+  overflow: hidden;
+}
+
+.chat-attachments-panel__header {
+  min-height: 54px;
+  padding: 10px 14px 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chat-attachments-panel__header > div:first-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-attachments-panel__header strong {
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.chat-attachments-panel__header span,
+.chat-attachments-panel__meta,
+.chat-attachments-panel__empty {
+  color: #96a2ba;
+  font-size: 12px;
+}
+
+.chat-attachments-panel__actions,
+.chat-attachments-panel__item-actions,
+.chat-attachments-panel__tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-attachments-panel__icon-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #dbe7ff;
+  cursor: pointer;
+}
+
+.chat-attachments-panel__icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chat-attachments-panel__tabs {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.chat-attachments-panel__tab {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #aeb9ce;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chat-attachments-panel__tab--active {
+  border-color: color-mix(in srgb, var(--app-accent) 58%, transparent);
+  background: color-mix(in srgb, var(--app-accent) 18%, rgba(255, 255, 255, 0.04));
+  color: #ffffff;
+}
+
+.chat-attachments-panel__list {
+  min-height: 0;
+  overflow: auto;
+}
+
+.chat-attachments-panel__item {
+  min-height: 78px;
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+}
+
+.chat-attachments-panel__preview {
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf3ff;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.chat-attachments-panel__preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.chat-attachments-panel__preview span {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.chat-attachments-panel__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.chat-attachments-panel__title-row,
+.chat-attachments-panel__meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-attachments-panel__title-row strong {
+  min-width: 0;
+  color: #edf4ff;
+  font-size: 13px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-attachments-panel__title-row span {
+  flex: 0 0 auto;
+  color: #8190a3;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.chat-attachments-panel__meta span,
+.chat-attachments-panel__meta small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-attachments-panel__item-actions button,
+.chat-attachments-panel__load-more {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #dbe7ff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chat-attachments-panel__load-more {
+  margin: 10px 16px 14px;
+}
+
+.chat-attachments-panel__empty {
+  padding: 12px 16px;
+}
+
 html[data-ui-theme="light"] .message-search-panel,
 html[data-ui-theme="light"] .chat-pins,
 html[data-ui-theme="purple"] .message-search-panel,

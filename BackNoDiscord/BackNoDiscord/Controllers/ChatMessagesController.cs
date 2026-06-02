@@ -32,6 +32,7 @@ public sealed class ChatMessagesController : ControllerBase
     private readonly ILogger<ChatMessagesController> _logger;
     private readonly ServerStateService _serverState;
     private readonly MessageSearchService _messageSearch;
+    private readonly ChatAttachmentHistoryService _attachmentHistory;
     private readonly ChatFileAccessService _chatFileAccess;
     private readonly ChatSpamBurstLimiter _messageBurstLimiter;
     private readonly MessageDeduplicationService _messageDeduplication;
@@ -44,6 +45,7 @@ public sealed class ChatMessagesController : ControllerBase
         ILogger<ChatMessagesController> logger,
         ServerStateService serverState,
         MessageSearchService messageSearch,
+        ChatAttachmentHistoryService attachmentHistory,
         ChatFileAccessService chatFileAccess,
         ChatSpamBurstLimiter messageBurstLimiter,
         MessageDeduplicationService messageDeduplication,
@@ -55,6 +57,7 @@ public sealed class ChatMessagesController : ControllerBase
         _logger = logger;
         _serverState = serverState;
         _messageSearch = messageSearch;
+        _attachmentHistory = attachmentHistory;
         _chatFileAccess = chatFileAccess;
         _messageBurstLimiter = messageBurstLimiter;
         _messageDeduplication = messageDeduplication;
@@ -204,6 +207,35 @@ public sealed class ChatMessagesController : ControllerBase
         var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
         var results = await _messageSearch.SearchAsync(equivalentChannelIds, q, limit, cancellationToken);
         return Ok(results);
+    }
+
+    [HttpGet("attachments")]
+    public async Task<ActionResult<ChatAttachmentHistoryPageDto>> GetAttachments(
+        [FromRoute] string chatId,
+        [FromQuery] string? kind,
+        [FromQuery] int? beforeMessageId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var normalizedChannelId = NormalizeChannelId(chatId);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            return BadRequest(new { message = "chatId is required" });
+        }
+
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+        var page = await _attachmentHistory.ListAsync(equivalentChannelIds, kind, beforeMessageId, limit, cancellationToken);
+        return Ok(page);
     }
 
     [HttpPost("outbox")]
@@ -387,7 +419,104 @@ public sealed class ChatMessagesController : ControllerBase
             .AsNoTracking()
             .Where(item => item.MessageId == message.Id)
             .ToListAsync(cancellationToken);
-        ApplyPollVoteTotals(poll, allowedOptionIds, voteRecords);
+        var votersByUserId = await BuildPollVoterLookupAsync(voteRecords, cancellationToken);
+        ApplyPollVoteTotals(poll, allowedOptionIds, voteRecords, votersByUserId);
+        payload.Message = EncodePollMessage(poll);
+        SaveMessagePayload(message, payload);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var reactionsByMessageId = await BuildReactionMapAsync([message.Id], cancellationToken);
+        var dto = ToMessageDto(
+            message,
+            payload,
+            reactionsByMessageId.TryGetValue(message.Id, out var reactions) ? reactions : []);
+        await _hubContext.Clients.Group(message.ChannelId).SendAsync("MessageUpdated", dto, cancellationToken);
+
+        return Ok(dto);
+    }
+
+    [HttpPost("{messageId:int}/poll-options")]
+    public async Task<ActionResult<MessageDto>> AddPollOption(
+        [FromRoute] string chatId,
+        [FromRoute] int messageId,
+        [FromBody] ChatPollOptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(User, out var currentUser))
+        {
+            return Unauthorized();
+        }
+
+        var normalizedChannelId = NormalizeChannelId(chatId);
+        if (string.IsNullOrWhiteSpace(normalizedChannelId))
+        {
+            return BadRequest(new { message = "chatId is required" });
+        }
+
+        if (!await TryAuthorizeChannelAccessAsync(normalizedChannelId, currentUser, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var equivalentChannelIds = GetEquivalentChannelIds(normalizedChannelId);
+        var message = await _context.Messages
+            .FirstOrDefaultAsync(item =>
+                item.Id == messageId &&
+                equivalentChannelIds.Contains(item.ChannelId) &&
+                !item.IsDeleted,
+                cancellationToken);
+        if (message is null)
+        {
+            return NotFound(new { message = "message not found" });
+        }
+
+        var payload = DeserializePayload(GetRawPayload(message));
+        if (!TryDecodePollMessage(payload.Message, out var poll))
+        {
+            return BadRequest(new { message = "poll message is required" });
+        }
+
+        if (!ReadPollSetting(poll, "allowAddingOptions"))
+        {
+            return BadRequest(new { message = "adding options is disabled for this poll" });
+        }
+
+        var optionText = UploadPolicies.TrimToLength(request.Text, 120).Trim();
+        if (string.IsNullOrWhiteSpace(optionText))
+        {
+            return BadRequest(new { message = "poll option text is required" });
+        }
+
+        var options = GetPollOptionsArray(poll);
+        if (options.Count >= 12)
+        {
+            return BadRequest(new { message = "poll option limit reached" });
+        }
+
+        var existingTexts = options
+            .OfType<JsonObject>()
+            .Select(option => option["text"]?.GetValue<string>()?.Trim() ?? string.Empty)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (existingTexts.Contains(optionText))
+        {
+            return Conflict(new { message = "poll option already exists" });
+        }
+
+        var optionId = CreatePollOptionId(options);
+        options.Add(new JsonObject
+        {
+            ["id"] = optionId,
+            ["text"] = optionText
+        });
+        poll["options"] = options;
+
+        var allowedOptionIds = GetPollOptionIds(poll);
+        var voteRecords = await _context.MessagePollVotes
+            .AsNoTracking()
+            .Where(item => item.MessageId == message.Id)
+            .ToListAsync(cancellationToken);
+        var votersByUserId = await BuildPollVoterLookupAsync(voteRecords, cancellationToken);
+        ApplyPollVoteTotals(poll, allowedOptionIds, voteRecords, votersByUserId);
         payload.Message = EncodePollMessage(poll);
         SaveMessagePayload(message, payload);
         await _context.SaveChangesAsync(cancellationToken);
@@ -548,17 +677,44 @@ public sealed class ChatMessagesController : ControllerBase
 
     private static List<string> GetPollOptionIds(JsonObject poll)
     {
-        if (poll["options"] is not JsonArray options)
-        {
-            return [];
-        }
-
-        return options
+        return GetPollOptionsArray(poll)
             .OfType<JsonObject>()
             .Select(option => option["id"]?.GetValue<string>()?.Trim() ?? string.Empty)
             .Where(optionId => !string.IsNullOrWhiteSpace(optionId))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static JsonArray GetPollOptionsArray(JsonObject poll)
+    {
+        if (poll["options"] is JsonArray options)
+        {
+            return options;
+        }
+
+        var nextOptions = new JsonArray();
+        poll["options"] = nextOptions;
+        return nextOptions;
+    }
+
+    private static string CreatePollOptionId(JsonArray options)
+    {
+        var existingIds = options
+            .OfType<JsonObject>()
+            .Select(option => option["id"]?.GetValue<string>()?.Trim() ?? string.Empty)
+            .Where(optionId => !string.IsNullOrWhiteSpace(optionId))
+            .ToHashSet(StringComparer.Ordinal);
+
+        for (var index = options.Count + 1; index <= options.Count + 100; index += 1)
+        {
+            var optionId = $"option-{index}";
+            if (!existingIds.Contains(optionId))
+            {
+                return optionId;
+            }
+        }
+
+        return $"option-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
     }
 
     private static List<string> NormalizeSelectedPollOptions(
@@ -581,12 +737,79 @@ public sealed class ChatMessagesController : ControllerBase
             enabled;
     }
 
+    private static bool ShouldExposePollVoters(JsonObject poll)
+    {
+        return ReadPollSetting(poll, "showWhoVoted") && !ReadPollSetting(poll, "anonymous");
+    }
+
+    private async Task<Dictionary<string, MessageReactionUserDto>> BuildPollVoterLookupAsync(
+        IReadOnlyList<MessagePollVoteRecord> voteRecords,
+        CancellationToken cancellationToken)
+    {
+        var voterIds = voteRecords
+            .Select(vote => vote.VoterUserId)
+            .Where(userId => !string.IsNullOrWhiteSpace(userId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var numericVoterIds = voterIds
+            .Select(userId => int.TryParse(userId, out var parsedUserId) ? parsedUserId : 0)
+            .Where(userId => userId > 0)
+            .Distinct()
+            .ToList();
+        var users = numericVoterIds.Count == 0
+            ? []
+            : await _context.Users
+                .AsNoTracking()
+                .Where(user => numericVoterIds.Contains(user.id))
+                .Select(user => new
+                {
+                    user.id,
+                    user.nickname,
+                    user.first_name,
+                    user.last_name,
+                    user.email,
+                    user.avatar_url
+                })
+                .ToListAsync(cancellationToken);
+
+        var lookup = users.ToDictionary(
+            user => user.id.ToString(),
+            user =>
+            {
+                var displayName = string.IsNullOrWhiteSpace(user.nickname)
+                    ? $"{user.first_name} {user.last_name}".Trim()
+                    : user.nickname.Trim();
+                return new MessageReactionUserDto
+                {
+                    UserId = user.id.ToString(),
+                    DisplayName = string.IsNullOrWhiteSpace(displayName) ? (user.email ?? "User") : displayName,
+                    AvatarUrl = user.avatar_url
+                };
+            },
+            StringComparer.Ordinal);
+
+        foreach (var voterId in voterIds)
+        {
+            lookup.TryAdd(voterId, new MessageReactionUserDto
+            {
+                UserId = voterId,
+                DisplayName = $"User {voterId}",
+                AvatarUrl = null
+            });
+        }
+
+        return lookup;
+    }
+
     private static void ApplyPollVoteTotals(
         JsonObject poll,
         IReadOnlyList<string> optionIds,
-        IReadOnlyList<MessagePollVoteRecord> voteRecords)
+        IReadOnlyList<MessagePollVoteRecord> voteRecords,
+        IReadOnlyDictionary<string, MessageReactionUserDto> votersByUserId)
     {
         var countsByOptionId = optionIds.ToDictionary(optionId => optionId, _ => 0, StringComparer.Ordinal);
+        var shouldExposeVoters = ShouldExposePollVoters(poll);
+        var votersByOptionId = optionIds.ToDictionary(optionId => optionId, _ => new JsonArray(), StringComparer.Ordinal);
         foreach (var voteRecord in voteRecords)
         {
             var selectedOptionIds = DeserializePollVoteOptions(voteRecord.OptionIdsJson);
@@ -595,6 +818,15 @@ public sealed class ChatMessagesController : ControllerBase
                 if (countsByOptionId.ContainsKey(optionId))
                 {
                     countsByOptionId[optionId] += 1;
+                    if (shouldExposeVoters && votersByUserId.TryGetValue(voteRecord.VoterUserId, out var voter))
+                    {
+                        votersByOptionId[optionId].Add(new JsonObject
+                        {
+                            ["userId"] = voter.UserId,
+                            ["displayName"] = voter.DisplayName,
+                            ["avatarUrl"] = voter.AvatarUrl
+                        });
+                    }
                 }
             }
         }
@@ -606,6 +838,15 @@ public sealed class ChatMessagesController : ControllerBase
         }
 
         poll["votes"] = votes;
+        var voters = new JsonObject();
+        if (shouldExposeVoters)
+        {
+            foreach (var optionId in optionIds)
+            {
+                voters[optionId] = votersByOptionId[optionId];
+            }
+        }
+        poll["voters"] = voters;
         poll["totalVoters"] = voteRecords
             .Select(vote => vote.VoterUserId)
             .Where(userId => !string.IsNullOrWhiteSpace(userId))
@@ -976,4 +1217,9 @@ public sealed class ChatOutboxMessageRequest
 public sealed class ChatPollVoteRequest
 {
     public IReadOnlyList<string> OptionIds { get; set; } = [];
+}
+
+public sealed class ChatPollOptionRequest
+{
+    public string Text { get; set; } = string.Empty;
 }

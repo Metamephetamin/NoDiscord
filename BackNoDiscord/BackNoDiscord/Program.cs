@@ -301,6 +301,7 @@ builder.Services.AddScoped<UserStorageQuotaService>();
 builder.Services.AddScoped<ChatFileCleanupService>();
 builder.Services.AddScoped<ChatFileMetadataRepairService>();
 builder.Services.AddScoped<MessageSearchService>();
+builder.Services.AddScoped<ChatAttachmentHistoryService>();
 builder.Services.AddScoped<MessageDeduplicationService>();
 builder.Services.AddScoped<ChatReadStateService>();
 builder.Services.AddScoped<UserSessionService>();

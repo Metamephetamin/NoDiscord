@@ -117,6 +117,83 @@ public sealed class MessageSearchServiceTests
         Assert.Equal("upload.bin", result.Preview);
     }
 
+    [Fact]
+    public async Task ListAsync_ReturnsAttachmentsFromFullChannelHistory()
+    {
+        await using var context = CreateContext();
+        var service = new ChatAttachmentHistoryService(context, CreateCrypto());
+        context.Messages.AddRange(
+            CreatePayloadMessage(
+                "channel-a",
+                "Alice",
+                new ChatMessagePayload
+                {
+                    AuthorUserId = "42",
+                    Attachments =
+                    [
+                        new ChatAttachmentPayload
+                        {
+                            AttachmentUrl = "/chat-files/old-image.png",
+                            AttachmentName = "old-image.png",
+                            AttachmentContentType = "image/png",
+                            AttachmentSize = 1234
+                        }
+                    ]
+                },
+                timestampOffsetSeconds: -100),
+            CreatePayloadMessage(
+                "channel-a",
+                "Bob",
+                new ChatMessagePayload
+                {
+                    AuthorUserId = "77",
+                    Attachments =
+                    [
+                        new ChatAttachmentPayload
+                        {
+                            AttachmentUrl = "/chat-files/report.pdf",
+                            AttachmentName = "report.pdf",
+                            AttachmentContentType = "application/pdf",
+                            AttachmentSize = 4321,
+                            AttachmentAsFile = true
+                        }
+                    ]
+                },
+                timestampOffsetSeconds: -10),
+            CreatePayloadMessage(
+                "channel-b",
+                "Mallory",
+                new ChatMessagePayload
+                {
+                    Attachments =
+                    [
+                        new ChatAttachmentPayload
+                        {
+                            AttachmentUrl = "/chat-files/hidden.png",
+                            AttachmentName = "hidden.png",
+                            AttachmentContentType = "image/png"
+                        }
+                    ]
+                }));
+        await context.SaveChangesAsync();
+
+        var media = await service.ListAsync(["channel-a"], "media", null, 10, CancellationToken.None);
+        var files = await service.ListAsync(["channel-a"], "files", null, 10, CancellationToken.None);
+
+        var mediaItem = Assert.Single(media.Items);
+        Assert.Equal("old-image.png", mediaItem.AttachmentName);
+        Assert.Equal("Alice", mediaItem.Username);
+        Assert.Equal("42", mediaItem.AuthorUserId);
+        Assert.Equal("media", mediaItem.Kind);
+        Assert.False(media.HasMore);
+
+        var fileItem = Assert.Single(files.Items);
+        Assert.Equal("report.pdf", fileItem.AttachmentName);
+        Assert.Equal("Bob", fileItem.Username);
+        Assert.Equal("files", fileItem.Kind);
+        Assert.DoesNotContain(media.Items.Concat(files.Items), item => item.ChannelId == "channel-b");
+    }
+
     private static Message CreateMessage(
         string channelId,
         string username,
@@ -131,6 +208,22 @@ public sealed class MessageSearchServiceTests
             Content = content,
             Timestamp = DateTime.UtcNow.AddSeconds(timestampOffsetSeconds),
             IsDeleted = isDeleted,
+        };
+    }
+
+    private static Message CreatePayloadMessage(
+        string channelId,
+        string username,
+        ChatMessagePayload payload,
+        int timestampOffsetSeconds = 0)
+    {
+        return new Message
+        {
+            ChannelId = channelId,
+            Username = username,
+            Content = $"__CHAT_PAYLOAD__:{JsonSerializer.Serialize(payload)}",
+            Timestamp = DateTime.UtcNow.AddSeconds(timestampOffsetSeconds),
+            IsDeleted = false,
         };
     }
 

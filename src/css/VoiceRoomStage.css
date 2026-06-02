@@ -524,6 +524,11 @@
   background: #e3424d;
 }
 
+.voice-room-stage__hero-controls .voice-room-stage__toolbar-group--danger .voice-room-stage__toolbar-button--danger .voice-room-stage__toolbar-icon {
+  width: 19px;
+  height: 19px;
+}
+
 .voice-room-stage__hero-controls .voice-room-stage__toolbar-button--ghost {
   width: 44px;
   height: 44px;

@@ -1106,7 +1106,7 @@
   background: linear-gradient(180deg, rgba(22, 24, 30, 0.94), rgba(9, 10, 13, 0.985));
   border: 1px solid rgba(255, 255, 255, 0.06);
   margin-left: 0;
-  top: 10px;
+  top: 0;
   pointer-events: auto;
   overflow: visible;
 }

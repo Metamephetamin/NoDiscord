@@ -103,10 +103,11 @@
 }
 
 :root {
-  --font-body: "Kulim Park", "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-heading: "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-numeric: Roboto, "Segoe UI", Arial, sans-serif;
-  --font-slogan: "Rubik Glitch", "Rubik", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-emoji: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Twemoji Mozilla";
+  --font-body: "Kulim Park", "Segoe UI", var(--font-emoji), Helvetica, Arial, sans-serif;
+  --font-heading: "Rubik", "Segoe UI", var(--font-emoji), Helvetica, Arial, sans-serif;
+  --font-numeric: Roboto, "Segoe UI", var(--font-emoji), Arial, sans-serif;
+  --font-slogan: "Rubik Glitch", "Rubik", "Segoe UI", var(--font-emoji), Helvetica, Arial, sans-serif;
   --ui-font-size-base: 16px;
   --ui-touch-target-multiplier: 1;
   --app-bg: #0f1115;

@@ -46,6 +46,31 @@ test("channel ordering mutations sync shared server snapshots", () => {
   assert.match(source, /moveServerChannelAcrossLists\(activeServer, \{[\s\S]*?targetType,[\s\S]*?targetChannelId,[\s\S]*?syncSharedServer\(nextServer\);/);
 });
 
+test("text and voice channel names are capped consistently", () => {
+  const modelSource = readRepoFile("src/utils/menuMainModel.js");
+  const channelActionsSource = readRepoFile("src/features/menu-main/useMenuMainChannelActions.js");
+  const workspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const voiceChannelListSource = readRepoFile("src/components/VoiceChannelList.jsx");
+  const serverStateServiceSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/ServerStateService.cs");
+  const serverInviteServiceSource = readRepoFile("BackNoDiscord/BackNoDiscord/Services/ServerInviteService.cs");
+
+  assert.match(modelSource, /export const MAX_CHANNEL_NAME_LENGTH = 50;/);
+  assert.match(modelSource, /export const normalizeChannelNameInput = \(value, fallback = "new-channel"\) =>/);
+  assert.match(modelSource, /\.slice\(0, MAX_CHANNEL_NAME_LENGTH\)/);
+  assert.match(modelSource, /type === "text"\s*\?\s*normalizeTextChannelName/);
+  assert.match(modelSource, /:\s*normalizeChannelNameInput\(channel\?\.name \|\| fallback\[index\]\?\.name \|\| "voice-channel", "voice-channel"\)/);
+  assert.match(channelActionsSource, /name: normalizeChannelNameInput\(value, "голосовой-канал"\)/);
+  assert.match(channelActionsSource, /const channelName = normalizeChannelNameInput\(name, fallbackName\);/);
+  assert.match(workspaceSource, /maxLength=\{MAX_CHANNEL_NAME_LENGTH\}/);
+  assert.match(voiceChannelListSource, /maxLength=\{MAX_CHANNEL_NAME_LENGTH\}/);
+  assert.match(serverStateServiceSource, /private const int MaxChannelNameLength = 50;/);
+  assert.match(serverStateServiceSource, /channel\.Name = NormalizeChannelName\(channel\.Name, "general"\);/);
+  assert.match(serverStateServiceSource, /channel\.Name = NormalizeChannelName\(channel\.Name, "Voice"\);/);
+  assert.match(serverInviteServiceSource, /private const int MaxChannelNameLength = 50;/);
+  assert.match(serverInviteServiceSource, /channel\.Name = NormalizeChannelName\(channel\.Name, "general"\);/);
+  assert.match(serverInviteServiceSource, /channel\.Name = NormalizeChannelName\(channel\.Name, "Voice"\);/);
+});
+
 test("text and voice channels share one saved order inside a category", () => {
   const server = {
     textChannels: [
@@ -137,6 +162,24 @@ test("server sidebar renders separate default categories with mixed rows inside 
   assert.match(source, /renderMixedChannelRows\(visibleDefaultVoiceChannels\.textChannels, visibleDefaultVoiceChannels\.voiceChannels, DEFAULT_VOICE_CHANNEL_CATEGORY_ID\)/);
   assert.match(source, /getOrderedServerChannelItems\(textChannels, voiceChannels, categoryId\)/);
   assert.match(source, /targetType: type/);
+});
+
+test("custom category creation actions live in the context menu", () => {
+  const source = readRepoFile("src/components/ServerWorkspace.jsx");
+
+  const customCategoryHeaderStart = source.indexOf('className="server-panel__header server-panel__header--category"');
+  const customCategoryHeaderEnd = source.indexOf("{!isCollapsed ? (", customCategoryHeaderStart);
+  const customCategoryHeaderSource = source.slice(customCategoryHeaderStart, customCategoryHeaderEnd);
+  const categoryMenuStart = source.indexOf('{categoryContextMenu.mode === "channel" ? (');
+  const categoryMenuEnd = source.indexOf("{activeServer ? (", categoryMenuStart);
+  const categoryMenuSource = source.slice(categoryMenuStart, categoryMenuEnd);
+
+  assert.doesNotMatch(customCategoryHeaderSource, /openCreateChannelModal\(category\.id, "text"\)/);
+  assert.doesNotMatch(customCategoryHeaderSource, />\+<\/button>/);
+  assert.match(categoryMenuSource, /Добавить текстовый канал/);
+  assert.match(categoryMenuSource, /Добавить голосовой канал/);
+  assert.match(categoryMenuSource, /openCreateChannelFromContextMenu\("text"\)/);
+  assert.match(categoryMenuSource, /openCreateChannelFromContextMenu\("voice"\)/);
 });
 
 test("server workspace styles are split out of the main menu stylesheet", () => {

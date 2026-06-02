@@ -432,12 +432,16 @@ function mergeLocalEchoPreviewSources(localEchoMessage, serverMessage) {
   };
 }
 
+function hasMeaningfulAttachmentArray(attachments) {
+  return Array.isArray(attachments) && normalizeAttachmentItems({ attachments }).length > 0;
+}
+
 function hasAttachmentUpdatePayload(messageItem) {
   if (!messageItem || typeof messageItem !== "object") {
     return false;
   }
 
-  if (Array.isArray(messageItem.attachments) || Array.isArray(messageItem.Attachments)) {
+  if (hasMeaningfulAttachmentArray(messageItem.attachments) || hasMeaningfulAttachmentArray(messageItem.Attachments)) {
     return true;
   }
 
@@ -474,10 +478,14 @@ function mergeIncomingMessageUpdate(previousMessage, normalizedMessage, rawMessa
       ? previousMessage.attachments
       : previousAttachments,
     attachmentUrl: previousMessage?.attachmentUrl || primaryAttachment?.attachmentUrl || normalizedMessage?.attachmentUrl || "",
+    attachmentSourceUrl: previousMessage?.attachmentSourceUrl || primaryAttachment?.attachmentSourceUrl || normalizedMessage?.attachmentSourceUrl || "",
     attachmentName: previousMessage?.attachmentName || primaryAttachment?.attachmentName || normalizedMessage?.attachmentName || "",
     attachmentSize: previousMessage?.attachmentSize ?? primaryAttachment?.attachmentSize ?? normalizedMessage?.attachmentSize ?? null,
     attachmentContentType: previousMessage?.attachmentContentType || primaryAttachment?.attachmentContentType || normalizedMessage?.attachmentContentType || "",
+    attachmentEncryption: previousMessage?.attachmentEncryption || primaryAttachment?.attachmentEncryption || normalizedMessage?.attachmentEncryption || null,
+    attachmentSpoiler: Boolean(previousMessage?.attachmentSpoiler || primaryAttachment?.attachmentSpoiler || normalizedMessage?.attachmentSpoiler),
     attachmentAsFile: Boolean(previousMessage?.attachmentAsFile || primaryAttachment?.attachmentAsFile || normalizedMessage?.attachmentAsFile),
+    localPreviewUrl: previousMessage?.localPreviewUrl || primaryAttachment?.localPreviewUrl || normalizedMessage?.localPreviewUrl || "",
     voiceMessage: previousMessage?.voiceMessage || primaryAttachment?.voiceMessage || normalizedMessage?.voiceMessage || null,
   };
 }
@@ -617,10 +625,12 @@ export default function TextChat({
   serverMembers = [],
   serverRoles = [],
   navigationRequest = null,
+  attachmentsPanelOpen = false,
   onNavigationIndexChange = null,
   onOpenDirectChat = null,
   onStartDirectCall = null,
   onClearSearchQuery = null,
+  onToggleAttachmentsPanel = null,
 }) {
   const [message, setMessage] = useState("");
   const [messageEditState, setMessageEditState] = useState(null);
@@ -654,6 +664,12 @@ export default function TextChat({
     results: [],
     loading: false,
     error: "",
+  });
+  const [attachmentsPanelKind, setAttachmentsPanelKind] = useState("media");
+  const [attachmentsHistoryState, setAttachmentsHistoryState] = useState({
+    channelId: "",
+    media: { items: [], loading: false, error: "", hasMore: false, nextCursor: null },
+    files: { items: [], loading: false, error: "", hasMore: false, nextCursor: null },
   });
   const [preferExplicitSend, setPreferExplicitSend] = useState(() => (
     typeof window !== "undefined"
@@ -702,6 +718,96 @@ export default function TextChat({
   const currentUserId = String(user?.id || "");
   const isDirectChat = isDirectMessageChannelId(scopedChannelId);
   const deferredSearchQuery = useDeferredValue(String(searchQuery || "").trim());
+
+  useEffect(() => {
+    setAttachmentsHistoryState({
+      channelId: scopedChannelId,
+      media: { items: [], loading: false, error: "", hasMore: false, nextCursor: null },
+      files: { items: [], loading: false, error: "", hasMore: false, nextCursor: null },
+    });
+    setAttachmentsPanelKind("media");
+  }, [scopedChannelId]);
+
+  const loadAttachmentHistory = useCallback(async ({ kind = attachmentsPanelKind, append = false } = {}) => {
+    const normalizedKind = kind === "files" ? "files" : "media";
+    if (!scopedChannelId || !shouldUseRestTextChatHistoryEndpoint()) {
+      return;
+    }
+
+    const currentState = attachmentsHistoryState.channelId === scopedChannelId
+      ? attachmentsHistoryState[normalizedKind]
+      : { items: [], loading: false, error: "", hasMore: false, nextCursor: null };
+    if (currentState.loading) {
+      return;
+    }
+
+    const beforeMessageId = append ? currentState.nextCursor : null;
+    setAttachmentsHistoryState((previous) => ({
+      ...previous,
+      channelId: scopedChannelId,
+      [normalizedKind]: {
+        ...(previous.channelId === scopedChannelId ? previous[normalizedKind] : { items: [], hasMore: false, nextCursor: null }),
+        loading: true,
+        error: "",
+      },
+    }));
+
+    try {
+      const queryParams = new URLSearchParams({
+        kind: normalizedKind,
+        limit: "40",
+      });
+      if (beforeMessageId) {
+        queryParams.set("beforeMessageId", String(beforeMessageId));
+      }
+
+      const response = await authFetch(`${API_BASE_URL}/chats/${encodeURIComponent(scopedChannelId)}/messages/attachments?${queryParams.toString()}`, { method: "GET" });
+      const page = await parseApiResponse(response);
+      const nextItems = Array.isArray(page?.items) ? page.items : Array.isArray(page?.Items) ? page.Items : [];
+      setAttachmentsHistoryState((previous) => {
+        const previousKindState = previous.channelId === scopedChannelId
+          ? previous[normalizedKind]
+          : { items: [], loading: false, error: "", hasMore: false, nextCursor: null };
+        const mergedItems = append
+          ? [...previousKindState.items, ...nextItems]
+          : nextItems;
+        return {
+          ...previous,
+          channelId: scopedChannelId,
+          [normalizedKind]: {
+            items: mergedItems,
+            loading: false,
+            error: "",
+            hasMore: Boolean(page?.hasMore ?? page?.HasMore),
+            nextCursor: page?.nextCursor ?? page?.NextCursor ?? null,
+          },
+        };
+      });
+    } catch (error) {
+      setAttachmentsHistoryState((previous) => ({
+        ...previous,
+        channelId: scopedChannelId,
+        [normalizedKind]: {
+          ...(previous.channelId === scopedChannelId ? previous[normalizedKind] : { items: [], hasMore: false, nextCursor: null }),
+          loading: false,
+          error: getApiErrorMessage(error, "Не удалось загрузить вложения."),
+        },
+      }));
+    }
+  }, [attachmentsHistoryState, attachmentsPanelKind, scopedChannelId]);
+
+  useEffect(() => {
+    if (!attachmentsPanelOpen) {
+      return;
+    }
+
+    const currentState = attachmentsHistoryState.channelId === scopedChannelId
+      ? attachmentsHistoryState[attachmentsPanelKind]
+      : { items: [] };
+    if (!currentState.items.length) {
+      void loadAttachmentHistory({ kind: attachmentsPanelKind, append: false });
+    }
+  }, [attachmentsHistoryState, attachmentsPanelKind, attachmentsPanelOpen, loadAttachmentHistory, scopedChannelId]);
 
   useEffect(() => {
     messageEditStateRef.current = messageEditState;
@@ -1507,6 +1613,52 @@ export default function TextChat({
     const data = await parseApiResponse(response);
     if (!response.ok) {
       throw new Error(getApiErrorMessage(response, data, "Не удалось сохранить голос."));
+    }
+
+    const normalizedMessage = await normalizeIncomingMessage(data);
+    if (isUnrecoverableLegacyEncryptedMessage(normalizedMessage)) {
+      return null;
+    }
+
+    setMessagesByChannel((previous) => updateChannelMessagesState(previous, scopedChannelId, (channelMessages) => {
+      let didChange = false;
+      const nextChannelMessages = channelMessages.map((messageItem) => {
+        if (String(messageItem?.id || "") !== String(normalizedMessage.id || "")) {
+          return messageItem;
+        }
+
+        didChange = true;
+        return normalizedMessage;
+      });
+
+      return didChange ? nextChannelMessages : channelMessages;
+    }));
+
+    return normalizedMessage;
+  }, [scopedChannelId, serverMembers, serverRoles]);
+
+  const submitPollOption = useCallback(async (messageId, text) => {
+    const normalizedMessageId = String(messageId || "").trim();
+    const normalizedText = String(text || "").trim();
+    if (!scopedChannelId || !normalizedMessageId) {
+      throw new Error("Не удалось определить опрос.");
+    }
+    if (!normalizedText) {
+      throw new Error("Введите вариант ответа.");
+    }
+
+    const response = await authFetch(`${API_BASE_URL}/chats/${encodeURIComponent(scopedChannelId)}/messages/${encodeURIComponent(messageId)}/poll-options`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: normalizedText,
+      }),
+    });
+    const data = await parseApiResponse(response);
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, data, "Не удалось добавить вариант."));
     }
 
     const normalizedMessage = await normalizeIncomingMessage(data);
@@ -3518,6 +3670,9 @@ export default function TextChat({
     () => messages.filter((messageItem) => String(messageItem.replyToMessageId || "").trim()),
     [messages]
   );
+  const activeAttachmentsState = attachmentsHistoryState.channelId === scopedChannelId
+    ? attachmentsHistoryState[attachmentsPanelKind]
+    : { items: [], loading: false, error: "", hasMore: false, nextCursor: null };
 
   useEffect(() => {
     if (!forwardModal.open) {
@@ -3638,6 +3793,16 @@ export default function TextChat({
       searchLoading={remoteSearchState.loading}
       searchError={remoteSearchState.error}
       onClearSearchQuery={onClearSearchQuery}
+      attachmentsPanelOpen={attachmentsPanelOpen}
+      attachmentsPanelKind={attachmentsPanelKind}
+      attachmentsItems={activeAttachmentsState.items}
+      attachmentsLoading={activeAttachmentsState.loading}
+      attachmentsError={activeAttachmentsState.error}
+      attachmentsHasMore={activeAttachmentsState.hasMore}
+      onAttachmentsKindChange={(kind) => setAttachmentsPanelKind(kind === "files" ? "files" : "media")}
+      onLoadMoreAttachments={() => loadAttachmentHistory({ kind: attachmentsPanelKind, append: true })}
+      onRefreshAttachments={() => loadAttachmentHistory({ kind: attachmentsPanelKind, append: false })}
+      onCloseAttachmentsPanel={() => onToggleAttachmentsPanel?.(false)}
       scopedChannelId={scopedChannelId}
       navigationRequest={navigationRequest}
       onNavigationIndexChange={onNavigationIndexChange}
@@ -3680,6 +3845,7 @@ export default function TextChat({
       openMediaPreview={openMediaPreview}
       handleToggleReaction={handleToggleReaction}
       submitPollVote={submitPollVote}
+      submitPollOption={submitPollOption}
       handleComposerPaste={handleComposerPaste}
       selectedFiles={selectedFiles}
       uploadingFile={uploadingFile}

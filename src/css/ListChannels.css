@@ -36,7 +36,7 @@
 .list__items--active > .voice-channel__row {
   min-height: 38px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
   column-gap: 8px;
   padding: 0;
   border-radius: 13px;
@@ -90,9 +90,9 @@
 }
 
 .voice-channel__icon {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   margin-left: 6px;
   display: inline-flex;
   align-items: center;
@@ -107,8 +107,8 @@
 }
 
 .voice-channel__icon-svg {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   fill: currentColor;
 }
 
@@ -210,7 +210,9 @@
 }
 
 .list__items--active .voice-channel__icon {
-  margin-left: 6px;
+  align-self: start;
+  margin-top: 18px;
+  margin-left: 8px;
 }
 
 .list__items--active .voice-channel__body {

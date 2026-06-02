@@ -767,14 +767,15 @@ test("voice message controls stay bright and aligned", () => {
   assert.match(textChatCss, /\.msg-content--voice-only \.message-bottom-row--voice \.message-read-status__check \{[\s\S]*?width: 8px;[\s\S]*?height: 12px;/);
 });
 
-test("server message authors render role badges after nicknames", () => {
+test("server message authors do not render text role badges after nicknames", () => {
   const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
   const textChatCss = readRepoFile("src/css/TextChat.css");
 
-  assert.match(messageListSource, /const authorRoleBadgeByUserId = useMemo/);
-  assert.match(messageListSource, /<span className="message-author__role-badge"/);
-  assert.match(messageListSource, /style=\{\{ "--message-author-role-color": authorRoleBadge\.color \}\}/);
-  assert.match(textChatCss, /\.message-author__role-badge/);
+  assert.match(messageListSource, /const authorRoleColorByUserId = useMemo/);
+  assert.match(messageListSource, /style=\{authorRoleColor \? \{ color: authorRoleColor \} : undefined\}/);
+  assert.doesNotMatch(messageListSource, /authorRoleBadge/);
+  assert.doesNotMatch(messageListSource, /message-author__role-badge/);
+  assert.doesNotMatch(textChatCss, /\.message-author__role-badge/);
 });
 
 test("voice stage toolbar buttons avoid native title tooltips", () => {
@@ -852,10 +853,11 @@ test("voice channel active card keeps participants outside the highlight and exp
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background:/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*background: rgba\(255, 255, 255, 0\.085\);/);
   assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*padding: 0;/);
-  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*grid-template-columns: 34px minmax\(0, 1fr\);/);
+  assert.match(listCss, /\.list__items--active > \.voice-channel__row \{[^}]*grid-template-columns: 42px minmax\(0, 1fr\);/);
   assert.match(voiceChannelSource, /className="voice-channel__icon-svg"/);
-  assert.match(listCss, /\.voice-channel__icon \{[\s\S]*?flex: 0 0 28px;[\s\S]*?margin-left: 6px;/);
-  assert.match(listCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?margin-left: 6px;/);
+  assert.match(listCss, /\.voice-channel__icon \{[\s\S]*?width: 32px;[\s\S]*?height: 32px;[\s\S]*?flex: 0 0 32px;[\s\S]*?margin-left: 6px;/);
+  assert.match(listCss, /\.list__items--active \.voice-channel__icon \{[\s\S]*?align-self: start;[\s\S]*?margin-top: 18px;[\s\S]*?margin-left: 8px;/);
+  assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?width: 22px;[\s\S]*?height: 22px;/);
   assert.match(listCss, /\.voice-channel__icon-svg \{[\s\S]*?fill: currentColor;/);
   assert.match(listCss, /html\[data-ui-theme="light"\] \.voice-channel__icon \{[\s\S]*?color: #1f2937;/);
   assert.match(listCss, /\.voice-channel__timer \{[\s\S]*?margin-left: auto;[\s\S]*?margin-right: 8px;[\s\S]*?text-align: right;/);
@@ -1446,8 +1448,11 @@ test("poll votes are submitted to the server and merged through message updates"
 
 test("poll composer backdrop fully covers and blurs the app", () => {
   const pollComposerCss = readRepoFile("src/css/TextChatPollComposerModal.css");
+  const composerSource = readRepoFile("src/components/TextChatPollComposerModal.jsx");
   const backdropRule = pollComposerCss.match(/\.poll-composer-backdrop \{[\s\S]*?\n\}/)?.[0] || "";
 
+  assert.match(composerSource, /import \{ createPortal \} from "react-dom";/);
+  assert.match(composerSource, /createPortal\(modal, document\.body\)/);
   assert.match(backdropRule, /position: fixed;/);
   assert.match(backdropRule, /inset: 0;/);
   assert.match(backdropRule, /min-width: 100vw;/);
@@ -1611,12 +1616,34 @@ test("media-only message layout stays stable after reactions are added", () => {
   assert.doesNotMatch(mediaOnlySource, /!reactions\.length/);
 });
 
+test("seven visual attachments use the dedicated no-gap mosaic", () => {
+  const messageListSource = readRepoFile("src/components/TextChatMessageList.jsx");
+  const collectionStart = messageListSource.indexOf("const MessageAttachmentCollection =");
+  const collectionEnd = messageListSource.indexOf("MessageAttachmentCollection.displayName", collectionStart);
+  const collectionSource = messageListSource.slice(collectionStart, collectionEnd);
+
+  assert.match(collectionSource, /const useSevenTileLayout = \(/);
+  assert.match(collectionSource, /visualAttachments\.length === 7/);
+  assert.match(collectionSource, /useDenseGalleryLayout = \([\s\S]*visualAttachments\.length >= 8/);
+  assert.match(collectionSource, /useSevenTileLayout \? "message-attachment-grid--seven-tile"/);
+});
+
 test("partial message updates preserve existing media attachments", () => {
   const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
 
   assert.match(controllerSource, /function mergeIncomingMessageUpdate/);
   assert.match(controllerSource, /normalizeAttachmentItems\(previousMessage\)/);
   assert.match(controllerSource, /mergeIncomingMessageUpdate\(messageItem, normalizedMessage, updatedMessage\)/);
+});
+
+test("empty attachment arrays in partial message updates do not clear existing media", () => {
+  const controllerSource = readRepoFile("src/features/text-chat/TextChatController.jsx");
+  const updatePayloadStart = controllerSource.indexOf("function hasAttachmentUpdatePayload");
+  const mergeStart = controllerSource.indexOf("function mergeIncomingMessageUpdate", updatePayloadStart);
+  const updatePayloadSource = controllerSource.slice(updatePayloadStart, mergeStart);
+
+  assert.match(updatePayloadSource, /hasMeaningfulAttachmentArray/);
+  assert.doesNotMatch(updatePayloadSource, /Array\.isArray\(messageItem\.attachments\) \|\| Array\.isArray\(messageItem\.Attachments\)/);
 });
 
 test("batch upload sheet styles stay split from the main text chat stylesheet", () => {
@@ -1752,10 +1779,30 @@ test("text chat panel styles stay split from the main text chat stylesheet", () 
 test("server channel message timestamps align to message content width", () => {
   const messageLayoutCss = readRepoFile("src/css/TextChatLayoutMessages.css");
   const serverMessageContentRule = messageLayoutCss.match(/\.message-item:not\(\.message-item--dm\) \.msg-content \{[\s\S]*?\n\}/)?.[0] || "";
+  const serverCaptionedVisualRule = messageLayoutCss.match(/\.message-item:not\(\.message-item--dm\) \.msg-content--visual-attachments:not\(\.msg-content--media-only\) \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(serverMessageContentRule, /width: fit-content;/);
   assert.match(serverMessageContentRule, /max-width: min\(100%, 840px\);/);
   assert.doesNotMatch(serverMessageContentRule, /width: 100%;/);
+  assert.match(serverCaptionedVisualRule, /width: fit-content;/);
+  assert.match(serverCaptionedVisualRule, /max-width: min\(100%, 520px\);/);
+  assert.match(serverCaptionedVisualRule, /justify-self: start;/);
+});
+
+test("text chat exposes a full history attachments panel from the topbar", () => {
+  const textChatViewSource = readRepoFile("src/features/text-chat/TextChatView.jsx");
+  const textChatPanelsSource = readRepoFile("src/components/TextChatPanels.jsx");
+  const serverWorkspaceSource = readRepoFile("src/components/ServerWorkspace.jsx");
+  const friendsWorkspaceSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+
+  assert.match(textChatViewSource, /ChatAttachmentsPanel/);
+  assert.match(textChatViewSource, /attachmentsPanelOpen/);
+  assert.match(textChatViewSource, /onOpenMediaPreview/);
+  assert.match(textChatPanelsSource, /export function ChatAttachmentsPanel/);
+  assert.match(textChatPanelsSource, /Фото и видео/);
+  assert.match(textChatPanelsSource, /Файлы/);
+  assert.match(serverWorkspaceSource, /onToggleAttachmentsPanel/);
+  assert.match(friendsWorkspaceSource, /onToggleAttachmentsPanel/);
 });
 
 test("text chat composer popover styles stay split from the main text chat stylesheet", () => {

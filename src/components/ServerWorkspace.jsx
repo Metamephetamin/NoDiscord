@@ -3,7 +3,7 @@ import AnimatedAvatar from "./AnimatedAvatar";
 import VoiceChannelList from "./VoiceChannelList";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { recoverChunkImport } from "../utils/chunkLoadRecovery";
-import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline } from "../utils/menuMainModel";
+import { createId, formatUserPresenceStatus, isServerOwnedByUser, isUserCurrentlyOnline, MAX_CHANNEL_NAME_LENGTH } from "../utils/menuMainModel";
 import { isServerRailItemActive } from "./serverRailState.mjs";
 import {
   DEFAULT_TEXT_CHANNEL_CATEGORY_ID,
@@ -665,7 +665,7 @@ function CreateChannelModal({
             value={draft.name}
             onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
             placeholder={draft.type === "voice" ? "голосовой-канал" : draft.type === "forum" ? "форум" : "новый-канал"}
-            maxLength={80}
+            maxLength={MAX_CHANNEL_NAME_LENGTH}
             autoFocus
           />
         </label>
@@ -1927,6 +1927,16 @@ export const ServersSidebar = memo(({
     setCategoryContextMenu(null);
     onOpenChannelSettings?.(channelType, channel);
   };
+  const openCreateChannelFromContextMenu = (type = "text") => {
+    if (categoryContextMenu?.mode !== "category" || !categoryContextMenu.categoryId) {
+      return;
+    }
+
+    const channelType = String(type || "text") === "voice" ? "voice" : "text";
+    const categoryId = String(categoryContextMenu.categoryId || "");
+    setCategoryContextMenu(null);
+    openCreateChannelModal(categoryId, channelType);
+  };
   const channelCategories = useMemo(
     () => getOrderedItems(Array.isArray(activeServer?.channelCategories) ? activeServer.channelCategories : EMPTY_CHANNEL_LIST),
     [activeServer?.channelCategories]
@@ -2230,6 +2240,7 @@ export const ServersSidebar = memo(({
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
+            maxLength={MAX_CHANNEL_NAME_LENGTH}
             onChange={(event) => onUpdateChannelRenameValue(event.target.value)}
             onBlur={onSubmitChannelRename}
             onKeyDown={(event) => {
@@ -2654,6 +2665,21 @@ export const ServersSidebar = memo(({
                   <div className="member-role-menu__title">{categoryContextMenu.name || "Категория"}</div>
                   <button
                     type="button"
+                    className="member-role-menu__item"
+                    onClick={() => openCreateChannelFromContextMenu("text")}
+                  >
+                    Добавить текстовый канал
+                  </button>
+                  <button
+                    type="button"
+                    className="member-role-menu__item"
+                    onClick={() => openCreateChannelFromContextMenu("voice")}
+                  >
+                    Добавить голосовой канал
+                  </button>
+                  <div className="member-role-menu__separator" />
+                  <button
+                    type="button"
                     className="member-role-menu__item member-role-menu__item--danger"
                     onClick={deleteCategoryFromContextMenu}
                   >
@@ -2722,7 +2748,6 @@ export const ServersSidebar = memo(({
                     <span className={`server-panel__category-caret ${isCollapsed ? "" : "is-open"}`} aria-hidden="true" />
                     <span>{category.name}</span>
                   </button>
-                  <button type="button" onClick={() => openCreateChannelModal(category.id, "text")} disabled={!canManageChannels}>+</button>
                 </div>
 
                 {!isCollapsed ? (
@@ -2851,10 +2876,19 @@ function ServerMainComponent({
   onAddForumReply,
   getChannelDisplayName,
 }) {
+  const [attachmentsPanelState, setAttachmentsPanelState] = useState({ channelId: "", open: false });
   const isVoiceStageVisible = Boolean(activeServer && currentVoiceChannelName && desktopServerPane === "voice");
   const isVoicePreviewVisible = Boolean(activeServer && selectedVoiceChannel && desktopServerPane === "voice" && !isVoiceStageVisible);
   const isJoiningVoiceChannel = Boolean(joiningVoiceChannelId && desktopServerPane === "voice");
   const selectedVoiceRuntimeId = selectedVoiceChannel && activeServer ? `${activeServer.id}::${selectedVoiceChannel.id}` : "";
+  const currentTextChannelKey = String(currentTextChannel?.id || "");
+  const attachmentsPanelOpen = Boolean(attachmentsPanelState.open && attachmentsPanelState.channelId === currentTextChannelKey);
+  const setCurrentAttachmentsPanelOpen = (nextOpen) => {
+    setAttachmentsPanelState({
+      channelId: currentTextChannelKey,
+      open: typeof nextOpen === "boolean" ? nextOpen : !attachmentsPanelOpen,
+    });
+  };
   const selectedVoiceParticipants = selectedVoiceChannel
     ? (activeVoiceParticipantsMap?.[selectedVoiceChannel.id] || activeVoiceParticipantsMap?.[selectedVoiceRuntimeId] || [])
     : [];
@@ -2928,6 +2962,14 @@ function ServerMainComponent({
                   {localSharePreview?.mode === "camera" ? "Моё видео" : "Мой стрим"}
                 </button>
               ) : null}
+              <button
+                type="button"
+                className={`chat__topbar-action ${attachmentsPanelOpen ? "chat__topbar-action--active" : ""}`}
+                onClick={() => setCurrentAttachmentsPanelOpen(!attachmentsPanelOpen)}
+                aria-pressed={attachmentsPanelOpen}
+              >
+                Вложения
+              </button>
               <label className="chat__topbar-search-wrap">
                 <img src={searchIcon} alt="" />
                 <input
@@ -3085,6 +3127,8 @@ function ServerMainComponent({
                 serverMembers={serverMembers}
                 serverRoles={serverRoles}
                 navigationRequest={textChatNavigationRequest}
+                attachmentsPanelOpen={attachmentsPanelOpen}
+                onToggleAttachmentsPanel={setCurrentAttachmentsPanelOpen}
                 onNavigationIndexChange={onTextChatNavigationIndexChange}
                 onOpenDirectChat={onOpenDirectChat}
                 onStartDirectCall={onStartDirectCall}

@@ -867,23 +867,6 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   white-space: nowrap;
 }
 
-.message-author__role-badge {
-  flex: 0 0 auto;
-  max-width: 128px;
-  padding: 1px 7px 2px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--message-author-role-color, #7b89a8) 54%, transparent);
-  background: color-mix(in srgb, var(--message-author-role-color, #7b89a8) 20%, transparent);
-  color: color-mix(in srgb, var(--message-author-role-color, #7b89a8) 82%, #ffffff);
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .message-author__name--interactive {
   cursor: pointer;
   transition: opacity 0.16s ease, filter 0.16s ease;
@@ -1025,6 +1008,12 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
 .message-item:not(.message-item--dm) .msg-content--visual-attachments,
 .message-item--dm .msg-content--visual-attachments {
   min-width: min(520px, 100%);
+}
+
+.message-item:not(.message-item--dm) .msg-content--visual-attachments:not(.msg-content--media-only) {
+  width: fit-content;
+  max-width: min(100%, 520px);
+  justify-self: start;
 }
 
 .message-item--dm .msg-content--visual-attachments {
@@ -1333,6 +1322,8 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   display: inline-flex;
   align-items: center;
   min-height: 0;
+  font-family: var(--font-emoji);
+  font-weight: 400;
   font-size: 36px;
   line-height: 1;
   letter-spacing: 0.01em;

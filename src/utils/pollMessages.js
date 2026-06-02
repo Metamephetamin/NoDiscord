@@ -102,6 +102,31 @@ function normalizePollVotes(rawVotes, normalizedOptions) {
   );
 }
 
+function normalizePollVoters(rawVoters, normalizedOptions, settings) {
+  const allowedOptionIds = new Set(normalizedOptions.map((option) => option.id));
+  const voters = Object.fromEntries(normalizedOptions.map((option) => [option.id, []]));
+  if (settings.anonymous || !settings.showWhoVoted || !rawVoters || typeof rawVoters !== "object") {
+    return voters;
+  }
+
+  Object.entries(rawVoters).forEach(([optionId, optionVoters]) => {
+    const normalizedOptionId = String(optionId || "");
+    if (!allowedOptionIds.has(normalizedOptionId) || !Array.isArray(optionVoters)) {
+      return;
+    }
+
+    voters[normalizedOptionId] = optionVoters
+      .map((voter) => ({
+        userId: String(voter?.userId || voter?.UserId || "").trim(),
+        displayName: clampText(voter?.displayName || voter?.DisplayName || "User", 80),
+        avatarUrl: String(voter?.avatarUrl || voter?.AvatarUrl || "").trim(),
+      }))
+      .filter((voter) => voter.userId);
+  });
+
+  return voters;
+}
+
 export function resolvePollTheme(themeId) {
   return POLL_THEME_PRESETS.find((theme) => theme.id === normalizePollThemeId(themeId)) || POLL_THEME_PRESETS[0];
 }
@@ -156,6 +181,16 @@ export function normalizePollMessage(rawPoll) {
   const votes = normalizePollVotes(rawPoll?.votes, options);
   const totalVotersFromVotes = Object.values(votes).reduce((sum, voteCount) => sum + voteCount, 0);
   const totalVoters = Math.max(0, Number(rawPoll?.totalVoters) || totalVotersFromVotes);
+  const settings = {
+    anonymous: Boolean(rawPoll?.settings?.anonymous ?? rawPoll?.settings?.showWhoVoted === false),
+    showWhoVoted: !Boolean(rawPoll?.settings?.anonymous ?? rawPoll?.settings?.showWhoVoted === false),
+    allowMultipleAnswers: Boolean(rawPoll?.settings?.allowMultipleAnswers),
+    allowAddingOptions: Boolean(rawPoll?.settings?.allowAddingOptions),
+    allowRevoting: Boolean(rawPoll?.settings?.allowRevoting),
+    shuffleOptions: Boolean(rawPoll?.settings?.shuffleOptions),
+    quizMode: Boolean(rawPoll?.settings?.quizMode),
+    limitDuration: Boolean(rawPoll?.settings?.limitDuration),
+  };
 
   return {
     version: 2,
@@ -163,17 +198,9 @@ export function normalizePollMessage(rawPoll) {
     options,
     themeId: normalizePollThemeId(rawPoll?.themeId || rawPoll?.theme || rawPoll?.backgroundTheme),
     votes,
+    voters: normalizePollVoters(rawPoll?.voters, options, settings),
     totalVoters,
-    settings: {
-      anonymous: Boolean(rawPoll?.settings?.anonymous ?? rawPoll?.settings?.showWhoVoted === false),
-      showWhoVoted: !Boolean(rawPoll?.settings?.anonymous ?? rawPoll?.settings?.showWhoVoted === false),
-      allowMultipleAnswers: Boolean(rawPoll?.settings?.allowMultipleAnswers),
-      allowAddingOptions: Boolean(rawPoll?.settings?.allowAddingOptions),
-      allowRevoting: Boolean(rawPoll?.settings?.allowRevoting),
-      shuffleOptions: Boolean(rawPoll?.settings?.shuffleOptions),
-      quizMode: Boolean(rawPoll?.settings?.quizMode),
-      limitDuration: Boolean(rawPoll?.settings?.limitDuration),
-    },
+    settings,
   };
 }
 

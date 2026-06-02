@@ -252,6 +252,114 @@ public sealed class ChatMessagesControllerTests
             item.Arguments.Count == 1);
     }
 
+    [Fact]
+    public async Task SubmitPollVote_OpenPollIncludesVoterNamesByOption()
+    {
+        await using var context = CreateContext();
+        context.Friendships.Add(new FriendshipRecord { UserLowId = 42, UserHighId = 99, CreatedAt = DateTimeOffset.UtcNow });
+        context.Users.Add(new User
+        {
+            id = 42,
+            first_name = "Тест",
+            last_name = "Юзер",
+            nickname = "lanaya",
+            email = "user@example.com",
+            password_hash = "hash"
+        });
+        var channelId = DirectMessageChannels.BuildChannelId(42, 99);
+        var pollMessage = CreatePollMessage(new
+        {
+            version = 2,
+            question = "Куда идём?",
+            options = new[]
+            {
+                new { id = "cafe", text = "Кафе" },
+                new { id = "park", text = "Парк" }
+            },
+            settings = new
+            {
+                anonymous = false,
+                showWhoVoted = true,
+                allowMultipleAnswers = false,
+                allowRevoting = true
+            }
+        });
+        context.Messages.Add(new Message
+        {
+            ChannelId = channelId,
+            Username = "Friend",
+            Content = $"__CHAT_PAYLOAD__:{JsonSerializer.Serialize(new ChatMessagePayload { AuthorUserId = "99", Message = pollMessage })}",
+            AuthorUserId = "99",
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+        var messageId = await context.Messages.Select(message => message.Id).SingleAsync();
+        var controller = BuildController(context, userId: "42");
+
+        var result = await controller.SubmitPollVote(
+            channelId,
+            messageId,
+            new ChatPollVoteRequest { OptionIds = ["park"] },
+            CancellationToken.None);
+
+        var actionResult = Assert.IsType<ActionResult<MessageDto>>(result);
+        var dto = Assert.IsType<MessageDto>(Assert.IsType<OkObjectResult>(actionResult.Result).Value);
+        var updatedPoll = ParsePollMessage(dto.Message);
+        var voters = updatedPoll.GetProperty("voters").GetProperty("park");
+        Assert.Single(voters.EnumerateArray());
+        Assert.Equal("42", voters[0].GetProperty("userId").GetString());
+        Assert.Equal("lanaya", voters[0].GetProperty("displayName").GetString());
+    }
+
+    [Fact]
+    public async Task AddPollOption_PersistsOptionWhenPollAllowsIt()
+    {
+        await using var context = CreateContext();
+        context.Friendships.Add(new FriendshipRecord { UserLowId = 42, UserHighId = 99, CreatedAt = DateTimeOffset.UtcNow });
+        var channelId = DirectMessageChannels.BuildChannelId(42, 99);
+        var pollMessage = CreatePollMessage(new
+        {
+            version = 2,
+            question = "Что заказать?",
+            options = new[]
+            {
+                new { id = "pizza", text = "Пицца" },
+                new { id = "sushi", text = "Суши" }
+            },
+            settings = new
+            {
+                anonymous = true,
+                showWhoVoted = false,
+                allowAddingOptions = true
+            }
+        });
+        context.Messages.Add(new Message
+        {
+            ChannelId = channelId,
+            Username = "Friend",
+            Content = $"__CHAT_PAYLOAD__:{JsonSerializer.Serialize(new ChatMessagePayload { AuthorUserId = "99", Message = pollMessage })}",
+            AuthorUserId = "99",
+            Timestamp = DateTime.UtcNow,
+            IsDeleted = false
+        });
+        await context.SaveChangesAsync();
+        var messageId = await context.Messages.Select(message => message.Id).SingleAsync();
+        var controller = BuildController(context, userId: "42");
+
+        var result = await controller.AddPollOption(
+            channelId,
+            messageId,
+            new ChatPollOptionRequest { Text = "Бургеры" },
+            CancellationToken.None);
+
+        var actionResult = Assert.IsType<ActionResult<MessageDto>>(result);
+        var dto = Assert.IsType<MessageDto>(Assert.IsType<OkObjectResult>(actionResult.Result).Value);
+        var updatedPoll = ParsePollMessage(dto.Message);
+        Assert.Contains(updatedPoll.GetProperty("options").EnumerateArray(), option =>
+            option.GetProperty("text").GetString() == "Бургеры");
+    }
+
     private static ChatMessagesController BuildController(
         AppDbContext context,
         string userId,
@@ -264,6 +372,7 @@ public sealed class ChatMessagesControllerTests
             NullLogger<ChatMessagesController>.Instance,
             new ServerStateService(context),
             new MessageSearchService(context, CreateCrypto()),
+            new ChatAttachmentHistoryService(context, CreateCrypto()),
             new ChatFileAccessService(context, new ServerStateService(context)),
             limiter ?? new ChatSpamBurstLimiter(),
             new MessageDeduplicationService(),

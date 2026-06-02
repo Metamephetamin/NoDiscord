@@ -1492,6 +1492,7 @@ export const FriendsMain = ({
   const [activeConversationMemberActionId, setActiveConversationMemberActionId] = useState("");
   const [friendDirectorySearch, setFriendDirectorySearch] = useState("");
   const [friendDirectoryFilter, setFriendDirectoryFilter] = useState("all");
+  const [attachmentsPanelState, setAttachmentsPanelState] = useState({ channelId: "", open: false });
   const directBlockNotice = currentConversationTarget ? null : getDirectBlockNotice(currentDirectFriend);
   const currentDirectFriendOnline = Boolean(currentDirectFriend && isUserCurrentlyOnline(currentDirectFriend));
   const activeDirectCall = directCallPanelProps?.call;
@@ -1503,6 +1504,14 @@ export const FriendsMain = ({
     String(activeDirectCall.peerUserId || "") === String(currentDirectFriend.id || "")
       ? directCallPanelProps
       : null;
+  const currentAttachmentsChannelId = String(currentConversationTarget ? currentConversationChannelId : currentDirectChannelId || "");
+  const attachmentsPanelOpen = Boolean(attachmentsPanelState.open && attachmentsPanelState.channelId === currentAttachmentsChannelId);
+  const setCurrentAttachmentsPanelOpen = (nextOpen) => {
+    setAttachmentsPanelState({
+      channelId: currentAttachmentsChannelId,
+      open: typeof nextOpen === "boolean" ? nextOpen : !attachmentsPanelOpen,
+    });
+  };
   const activeFriendsPageSection = PROFILE_STORE_ENABLED ? friendsPageSection : friendsPageSection === "store" ? "friends" : friendsPageSection;
   const friendRequestQueueCount = incomingFriendRequests.length + outgoingFriendRequests.length;
   const appliedStoreItem = getProfileStoreItemById(profileCustomization?.appliedItemId);
@@ -2251,6 +2260,15 @@ export const FriendsMain = ({
                   />
                 </label>
 
+                <button
+                  type="button"
+                  className={`chat__topbar-action ${attachmentsPanelOpen ? "chat__topbar-action--active" : ""}`}
+                  onClick={() => setCurrentAttachmentsPanelOpen(!attachmentsPanelOpen)}
+                  aria-pressed={attachmentsPanelOpen}
+                >
+                  Вложения
+                </button>
+
                 {canOpenConversationAddMembers ? (
                   <button
                     type="button"
@@ -2345,6 +2363,8 @@ export const FriendsMain = ({
                 user={user}
                 searchQuery={directSearchQuery}
                 onClearSearchQuery={onClearDirectSearchQuery}
+                attachmentsPanelOpen={attachmentsPanelOpen}
+                onToggleAttachmentsPanel={setCurrentAttachmentsPanelOpen}
                 directTargets={directConversationTargets}
                 serverMembers={currentConversationTarget ? currentConversationMentionMembers : []}
                 onOpenDirectChat={onOpenDirectChat}

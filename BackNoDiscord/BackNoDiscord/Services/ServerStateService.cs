@@ -6,6 +6,7 @@ namespace BackNoDiscord.Services;
 
 public class ServerStateService
 {
+    private const int MaxChannelNameLength = 50;
     private const int VoiceChannelStatusMaxWords = 12;
     private const int VoiceChannelStatusMaxLength = 80;
 
@@ -350,7 +351,7 @@ public class ServerStateService
         {
             var channel = normalized.TextChannels[index];
             channel.Id = channel.Id?.Trim() ?? string.Empty;
-            channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "general" : channel.Name.Trim();
+            channel.Name = NormalizeChannelName(channel.Name, "general");
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "text" : channel.Kind.Trim();
             channel.Order = channel.Order < 0 ? index : channel.Order;
@@ -360,7 +361,7 @@ public class ServerStateService
         {
             var channel = normalized.VoiceChannels[index];
             channel.Id = channel.Id?.Trim() ?? string.Empty;
-            channel.Name = string.IsNullOrWhiteSpace(channel.Name) ? "Voice" : channel.Name.Trim();
+            channel.Name = NormalizeChannelName(channel.Name, "Voice");
             channel.CategoryId = channel.CategoryId?.Trim() ?? string.Empty;
             channel.Kind = string.IsNullOrWhiteSpace(channel.Kind) ? "voice" : channel.Kind.Trim();
             channel.Status = NormalizeVoiceChannelStatus(channel.Status);
@@ -401,6 +402,14 @@ public class ServerStateService
             .ToList();
 
         return normalized;
+    }
+
+    private static string NormalizeChannelName(string? value, string fallback)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        return normalized.Length <= MaxChannelNameLength
+            ? normalized
+            : normalized[..MaxChannelNameLength];
     }
 
     private static string NormalizeRoleColor(string? value)

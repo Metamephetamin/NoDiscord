@@ -16,6 +16,7 @@ function TextChat(props) {
   const stableOnOpenDirectChat = useStableCallback(props.onOpenDirectChat);
   const stableOnStartDirectCall = useStableCallback(props.onStartDirectCall);
   const stableOnClearSearchQuery = useStableCallback(props.onClearSearchQuery);
+  const stableOnToggleAttachmentsPanel = useStableCallback(props.onToggleAttachmentsPanel);
 
   return (
     <TextChatContainer
@@ -24,6 +25,7 @@ function TextChat(props) {
       onOpenDirectChat={stableOnOpenDirectChat}
       onStartDirectCall={stableOnStartDirectCall}
       onClearSearchQuery={stableOnClearSearchQuery}
+      onToggleAttachmentsPanel={stableOnToggleAttachmentsPanel}
     />
   );
 }
@@ -111,6 +113,7 @@ function areTextChatPropsEqual(previousProps, nextProps) {
     && previousProps.localMessageStateVersion === nextProps.localMessageStateVersion
     && previousProps.user === nextProps.user
     && previousProps.searchQuery === nextProps.searchQuery
+    && previousProps.attachmentsPanelOpen === nextProps.attachmentsPanelOpen
     && areUserLikeEntriesEqual(previousProps.directTargets, nextProps.directTargets)
     && areUserLikeEntriesEqual(previousProps.serverMembers, nextProps.serverMembers)
     && areRoleEntriesEqual(previousProps.serverRoles, nextProps.serverRoles)

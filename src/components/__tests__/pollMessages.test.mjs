@@ -41,6 +41,36 @@ test("legacy open poll setting remains open", () => {
   assert.equal(parsed.settings.showWhoVoted, true);
 });
 
+test("open poll preserves voters by option", () => {
+  const payload = createPollMessagePayload({
+    question: "Куда идём?",
+    options: [
+      { id: "cafe", text: "Кафе" },
+      { id: "park", text: "Парк" },
+    ],
+    votes: {
+      cafe: 0,
+      park: 1,
+    },
+    voters: {
+      park: [
+        { userId: "42", displayName: "lanaya", avatarUrl: "/avatars/u42.png" },
+      ],
+    },
+    settings: {
+      anonymous: false,
+      showWhoVoted: true,
+    },
+  });
+
+  const parsed = parsePollMessage(payload);
+
+  assert.deepEqual(parsed.voters.park, [
+    { userId: "42", displayName: "lanaya", avatarUrl: "/avatars/u42.png" },
+  ]);
+  assert.deepEqual(parsed.voters.cafe, []);
+});
+
 test("poll display options are deterministically shuffled per viewer", () => {
   const poll = parsePollMessage(createPollMessagePayload({
     question: "Что выбрать?",

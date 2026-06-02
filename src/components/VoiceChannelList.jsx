@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import "../css/ListChannels.css";
 import AnimatedAvatar from "./AnimatedAvatar";
 import { resolveStaticAssetUrl } from "../utils/media";
+import { MAX_CHANNEL_NAME_LENGTH } from "../utils/menuMainModel";
 import { emitInsertMentionRequest } from "../utils/textChatMentionInterop";
 import { formatVoiceChannelDuration, resolveVoiceChannelSessionStartedAtMs } from "../utils/voiceChannelDuration";
 import {
@@ -412,6 +413,7 @@ const VoiceChannelList = ({
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"
+                  maxLength={MAX_CHANNEL_NAME_LENGTH}
                   onChange={(event) => onRenameValueChange?.(event.target.value)}
                   onBlur={() => onRenameSubmit?.()}
                   onKeyDown={(event) => {
