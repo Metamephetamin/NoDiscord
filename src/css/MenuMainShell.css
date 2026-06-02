@@ -733,6 +733,34 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   padding: 18px;
 }
 
+.chat__box > .textchat-container,
+.friends-main__chat > .textchat-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.textchat-container > .messages-list-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.textchat-container > .input-area {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .chat__header {
   padding-bottom: 14px;
   margin-bottom: 14px;

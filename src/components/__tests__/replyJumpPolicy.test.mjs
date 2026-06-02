@@ -74,3 +74,20 @@ test("text chat view owns its shell CSS contract", () => {
   assert.match(inputAreaRule, /position: relative;/);
   assert.match(inputAreaRule, /z-index: 2;/);
 });
+
+test("main menu shell preloads text chat layout guards", () => {
+  const menuShellCss = readRepoFile("src/css/MenuMainShell.css");
+
+  assert.match(
+    menuShellCss,
+    /\.chat__box > \.textchat-container,\s*\.friends-main__chat > \.textchat-container \{[\s\S]*?flex: 1 1 auto;[\s\S]*?overflow: hidden;[\s\S]*?\n\}/,
+  );
+  assert.match(
+    menuShellCss,
+    /\.textchat-container > \.messages-list-shell \{[\s\S]*?flex: 1 1 auto;[\s\S]*?min-height: 0;[\s\S]*?overflow: hidden;[\s\S]*?\n\}/,
+  );
+  assert.match(
+    menuShellCss,
+    /\.textchat-container > \.input-area \{[\s\S]*?flex: 0 0 auto;[\s\S]*?position: relative;[\s\S]*?z-index: 2;[\s\S]*?\n\}/,
+  );
+});
