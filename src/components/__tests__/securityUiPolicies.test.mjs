@@ -1302,9 +1302,9 @@ test("voice stage soundboard panel uploads short sounds and plays one at a time"
   assert.match(panelSource, /Название звука/);
   assert.match(panelSource, /Соответствующее эмодзи/);
   assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?align-items: flex-end;/);
-  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?padding: 24px 24px 138px;/);
+  assert.match(panelCss, /\.soundboard-panel-backdrop \{[\s\S]*?padding: 24px 420px 86px 24px;/);
   assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?width: min\(560px, calc\(100vw - 32px\)\);/);
-  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?max-height: min\(430px, calc\(100vh - 168px\)\);/);
+  assert.match(panelCss, /\.soundboard-panel \{[\s\S]*?max-height: min\(430px, calc\(100vh - 116px\)\);/);
   assert.match(panelCss, /\.soundboard-editor-modal \{/);
   assert.match(panelCss, /\.soundboard-panel__grid \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(viewerSource, /onOpenSoundboard/);
