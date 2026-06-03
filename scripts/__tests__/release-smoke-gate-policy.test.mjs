@@ -83,6 +83,19 @@ test("production health checks retry while backend warms after restart", () => {
   );
 });
 
+test("deploy does not start speech dependency installation in the background", () => {
+  assert.doesNotMatch(
+    deployWorkflow,
+    /setsid[\s\S]*install-punctuation-env\.sh[\s\S]*disown/,
+    "deploy should not report healthy while speech punctuation dependencies install in the background",
+  );
+  assert.doesNotMatch(
+    deployWorkflow,
+    /punctuation-install\.log/,
+    "deploy should not hide speech dependency installation behind an async log file",
+  );
+});
+
 test("menu main muted channel storage key is initialized before effects read it", () => {
   const storageKeyIndex = menuMainController.search(/const\s+mutedServerChannelsStorageKey\s*=\s*getMutedChannelsStorageKey\(\s*currentUserId\s*\)\s*;/);
   const effectReadIndex = menuMainController.search(/setMutedServerChannels\(\s*readMutedServerChannels\(\s*mutedServerChannelsStorageKey\s*\)\s*\)/);
