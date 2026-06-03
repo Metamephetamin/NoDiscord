@@ -348,7 +348,11 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-await DatabaseSchemaInitializer.InitializeAsync(app.Services);
+var runSchemaInitializer = app.Configuration.GetValue<bool?>("Database:RunSchemaInitializer");
+if (runSchemaInitializer ?? !app.Environment.IsProduction())
+{
+    await DatabaseSchemaInitializer.InitializeAsync(app.Services);
+}
 
 if (app.Environment.IsDevelopment())
 {

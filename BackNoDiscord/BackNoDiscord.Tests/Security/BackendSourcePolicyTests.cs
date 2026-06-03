@@ -387,6 +387,30 @@ public sealed class BackendSourcePolicyTests
     }
 
     [Fact]
+    public void ProductionDoesNotRunSchemaInitializerUnlessExplicitlyEnabled()
+    {
+        var programSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Program.cs"));
+        var productionSettingsSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "appsettings.Production.json.example"));
+
+        Assert.Contains("GetValue<bool?>(\"Database:RunSchemaInitializer\")", programSource);
+        Assert.Contains("runSchemaInitializer ?? !app.Environment.IsProduction()", programSource);
+        Assert.Contains("DatabaseSchemaInitializer.InitializeAsync(app.Services)", programSource);
+        Assert.Contains("\"RunSchemaInitializer\": false", productionSettingsSource);
+    }
+
+    [Fact]
     public void AuthControllerDoesNotKeepContradictoryDisabledEmailVerificationComment()
     {
         var authControllerSource = File.ReadAllText(Path.Combine(

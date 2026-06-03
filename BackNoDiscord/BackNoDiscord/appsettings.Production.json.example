@@ -28,6 +28,9 @@
   "Auth": {
     "RequireEmailVerification": true
   },
+  "Database": {
+    "RunSchemaInitializer": false
+  },
   "Spotify": {
     "ClientId": "REPLACE_WITH_SPOTIFY_CLIENT_ID",
     "ClientSecret": "REPLACE_WITH_SPOTIFY_CLIENT_SECRET",
