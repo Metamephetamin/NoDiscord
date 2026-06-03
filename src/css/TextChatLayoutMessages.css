@@ -877,6 +877,17 @@ body[data-chat-theme]:not([data-chat-theme="default"]) .message-item--dm-own .ms
   filter: brightness(1.08);
 }
 
+.message-footer--author {
+  align-self: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.message-footer--author .message-time {
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .message-item:not(.message-item--dm) .message-author {
   justify-content: flex-start;
   gap: 10px;

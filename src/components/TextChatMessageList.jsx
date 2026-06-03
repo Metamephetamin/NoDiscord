@@ -2509,6 +2509,12 @@ function TextChatMessageList({
           const showBottomFooter = !useInlineFooter
             && !showAttachmentOverlayFooter
             && !usesEmbeddedLocationFooter;
+          const showAuthorFooter = !isDirectChat
+            && !isForwardGroupFollow
+            && !locationMessage
+            && !hasRenderableAttachments
+            && (Boolean(messageText) || Boolean(messagePoll));
+          const showMessageBottomFooter = showBottomFooter && !showAuthorFooter;
           const authorRoleColor = !isDirectChat
             ? authorRoleColorByUserId.get(String(messageItem.authorUserId || "")) || ""
             : "";
@@ -2623,6 +2629,13 @@ function TextChatMessageList({
                     >
                       <span className="message-author__name-label">{messageItem.username || "User"}</span>
                     </button>
+                    {showAuthorFooter ? (
+                      <span className={`message-footer message-footer--author ${isOwnMessage ? "message-footer--own" : ""}`}>
+                        <MessageTimestamp messageItem={messageItem} />
+                        <EditedBadge message={messageItem} />
+                        <MessageDeliveryStatus messageItem={messageItem} isOwnMessage={isOwnMessage} />
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -2731,7 +2744,7 @@ function TextChatMessageList({
                   priorityMediaMessageIdSet={priorityMediaMessageIdSet}
                 />
 
-                {(showBottomFooter || reactions.length) ? (
+                {(showMessageBottomFooter || reactions.length) ? (
                   <div className={`message-bottom-row ${!reactions.length ? "message-bottom-row--footer-only" : ""} ${isMediaOnlyMessage && reactions.length ? "message-bottom-row--media-reactions" : ""} ${hasFileLikeAttachments ? "message-bottom-row--file" : ""} ${isVoiceOnlyMessage ? "message-bottom-row--voice" : ""}`}>
                     {reactions.length ? (
                       <div className="message-reactions-wrap">
@@ -2775,7 +2788,7 @@ function TextChatMessageList({
                       </div>
                     ) : null}
 
-                    {showBottomFooter ? (
+                    {showMessageBottomFooter ? (
                       <div className={`message-footer ${isOwnMessage ? "message-footer--own" : ""}`}>
                         <MessageTimestamp messageItem={messageItem} />
                         <EditedBadge message={messageItem} />

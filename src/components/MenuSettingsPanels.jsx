@@ -21,7 +21,7 @@ import {
   updateProfileAvatarFrame,
   updateProfileCustomPalette,
 } from "../utils/profileCustomization";
-import { APP_LOGO_OPTIONS } from "../utils/appLogo";
+import { APP_LOGO_CHANGE_EVENT, APP_LOGO_OPTIONS, getCurrentAppLogoOption } from "../utils/appLogo";
 import { UI_THEME_OPTIONS } from "../utils/uiTheme.mjs";
 import { CHAT_BACKGROUND_FIT_OPTIONS, CHAT_THEME_OPTIONS, resolveChatBackgroundFit } from "../utils/chatTheme.mjs";
 import { API_BASE_URL, API_URL } from "../config/runtime";
@@ -639,7 +639,8 @@ export const AccountSettings = ({
 
 const COMPANY_WORK_EMAIL = "andrey1689123pro@gmail.com";
 const COMPANY_TELEGRAM_HANDLE = "zzzCHUL";
-const COMPANY_PROFILE_PHOTO_SRC = "/image/company-profile-photo.png";
+const COMPANY_SITE_URL = "https://lanaya.space";
+const COMPANY_INN = "504417743063";
 
 const writeClipboardFallback = (value) => {
   if (typeof document === "undefined") {
@@ -663,7 +664,7 @@ const writeClipboardFallback = (value) => {
 
 export const ProductCompanyInfoSettings = () => {
   const [copiedContact, setCopiedContact] = useState("");
-  const [isProfilePhotoMissing, setIsProfilePhotoMissing] = useState(false);
+  const [companyLogoSrc, setCompanyLogoSrc] = useState(() => getCurrentAppLogoOption().src);
 
   const copyCompanyContact = async (value, label) => {
     try {
@@ -691,20 +692,20 @@ export const ProductCompanyInfoSettings = () => {
     return () => window.clearTimeout(timeoutId);
   }, [copiedContact]);
 
+  useEffect(() => {
+    const handleLogoChange = (event) => {
+      setCompanyLogoSrc(event.detail?.src || getCurrentAppLogoOption().src);
+    };
+
+    window.addEventListener(APP_LOGO_CHANGE_EVENT, handleLogoChange);
+    return () => window.removeEventListener(APP_LOGO_CHANGE_EVENT, handleLogoChange);
+  }, []);
+
   return (
     <div className="settings-shell__content settings-shell__content--company-info">
       <section className="account-settings-section company-info-panel" aria-label="О Lanaya">
         <div className="company-info-panel__mark" aria-hidden="true">
-          {isProfilePhotoMissing ? (
-            <span className="company-info-panel__photo-fallback">A</span>
-          ) : (
-            <img
-              className="company-info-panel__photo"
-              src={COMPANY_PROFILE_PHOTO_SRC}
-              alt=""
-              onError={() => setIsProfilePhotoMissing(true)}
-            />
-          )}
+          <img className="company-info-panel__photo" src={companyLogoSrc} alt="" />
         </div>
         <h2>Lanaya</h2>
         <p>
@@ -725,6 +726,22 @@ export const ProductCompanyInfoSettings = () => {
             <dd>
               <button type="button" onClick={() => copyCompanyContact(COMPANY_TELEGRAM_HANDLE, "Telegram")}>
                 @{COMPANY_TELEGRAM_HANDLE}
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>Сайт</dt>
+            <dd>
+              <button type="button" onClick={() => copyCompanyContact(COMPANY_SITE_URL, "сайт")}>
+                {COMPANY_SITE_URL}
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>ИНН</dt>
+            <dd>
+              <button type="button" onClick={() => copyCompanyContact(COMPANY_INN, "ИНН")}>
+                {COMPANY_INN}
               </button>
             </dd>
           </div>

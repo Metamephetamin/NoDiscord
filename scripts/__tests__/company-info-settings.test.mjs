@@ -21,6 +21,14 @@ test("settings expose product and company information with the configured INN", 
   );
 
   assert(
+    panelsSource.includes("getCurrentAppLogoOption") &&
+      panelsSource.includes("companyLogoSrc") &&
+      !panelsSource.includes("company-info-panel__photo-fallback") &&
+      !panelsSource.includes("/image/company-profile-photo.png"),
+    "Company info mark must use the configured app logo instead of a letter placeholder."
+  );
+
+  assert(
     rendererSource.includes("ProductCompanyInfoSettings") &&
       rendererSource.includes('case "company_info"'),
     "Settings renderer must route the company info tab."

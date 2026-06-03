@@ -659,41 +659,11 @@
   color: #694bcd;
 }
 
-.auth-password-toggle span {
-  position: relative;
+.auth-password-toggle__icon {
   width: 21px;
-  height: 14px;
-  border: 2px solid currentColor;
-  border-radius: 999px 999px 999px 999px / 75% 75% 75% 75%;
-}
-
-.auth-password-toggle span::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  transform: translate(-50%, -50%);
-}
-
-.auth-password-toggle span::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 2px;
-  height: 24px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.78);
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.auth-password-toggle--visible span::after {
-  opacity: 0;
+  height: 21px;
+  display: block;
+  fill: currentColor;
 }
 
 .auth-input--compact {
