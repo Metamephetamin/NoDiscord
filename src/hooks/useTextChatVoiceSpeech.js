@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
+import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadSerialization";
 import { formatServerPunctuationResult, punctuateTextOnServer } from "../utils/speechPunctuation";
 import { shouldApplySpeechDraftUpdate } from "../utils/speechDraftLifecycle.mjs";
 import {

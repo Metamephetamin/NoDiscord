@@ -89,7 +89,7 @@ public class VoiceController : ControllerBase
             Avatar = UploadPolicies.SanitizeRelativeAssetUrl(dto.Avatar, "/avatars/")
         });
 
-        await _hub.Clients.All.SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(normalizedChannel));
+        await _hub.Clients.Group(normalizedChannel).SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(normalizedChannel));
         return Ok();
     }
 
@@ -105,7 +105,10 @@ public class VoiceController : ControllerBase
         if (removed.VoiceStateChanged)
         {
             ClearVoiceChannelStatusIfEmpty(removed.ChannelName);
-            await _hub.Clients.All.SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(removed.ChannelName));
+            if (!string.IsNullOrWhiteSpace(removed.ChannelName))
+            {
+                await _hub.Clients.Group(removed.ChannelName).SendAsync("voice:channel-update", BuildChannelUpdateSnapshot(removed.ChannelName));
+            }
         }
         return Ok();
     }

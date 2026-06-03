@@ -341,7 +341,9 @@ public sealed class BackendSourcePolicyTests
         Assert.Contains("FrontendOriginPolicy.IsAllowed", programSource);
         Assert.Contains("X-Content-Type-Options", programSource);
         Assert.Contains("Content-Security-Policy", programSource);
-        Assert.Contains("SameSite = context.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax", programSource);
+        Assert.Contains("var shouldSecureCookie = !context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment() || context.Request.IsHttps", programSource);
+        Assert.Contains("Secure = shouldSecureCookie", programSource);
+        Assert.Contains("SameSite = shouldSecureCookie ? SameSiteMode.None : SameSiteMode.Lax", programSource);
         Assert.Contains("Cache-Control", programSource);
         Assert.Contains("[EnableRateLimiting(\"auth\")]", authControllerSource);
         Assert.Contains("[EnableRateLimiting(\"chat-upload\")]", chatFilesControllerSource);
@@ -364,5 +366,38 @@ public sealed class BackendSourcePolicyTests
         Assert.Contains("Rate limit rejected {Method} {Path}", programSource);
         Assert.Contains("correlationId={CorrelationId}", programSource);
         Assert.DoesNotContain("Request.Body", programSource);
+    }
+
+    [Fact]
+    public void DatabaseInitializerDefaultsEmailVerificationToFalse()
+    {
+        var initializerSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Infrastructure",
+            "DatabaseSchemaInitializer.cs"));
+
+        Assert.DoesNotContain("is_email_verified boolean NOT NULL DEFAULT true", initializerSource);
+        Assert.Contains("is_email_verified boolean NOT NULL DEFAULT false", initializerSource);
+        Assert.Contains("ALTER COLUMN is_email_verified SET DEFAULT false", initializerSource);
+        Assert.Contains("UPDATE users SET is_email_verified = false WHERE is_email_verified IS NULL", initializerSource);
+    }
+
+    [Fact]
+    public void AuthControllerDoesNotKeepContradictoryDisabledEmailVerificationComment()
+    {
+        var authControllerSource = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "AuthController.cs"));
+
+        Assert.DoesNotContain("Temporarily disabled email verification flow", authControllerSource);
+        Assert.DoesNotContain("//         var emailVerification = await CreateEmailVerificationAsync(user);", authControllerSource);
     }
 }

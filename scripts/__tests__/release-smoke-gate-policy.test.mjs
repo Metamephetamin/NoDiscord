@@ -32,11 +32,16 @@ test("auth smoke skips before touching production when smoke account is not conf
   );
 });
 
-test("pre-deploy release smoke is advisory and cannot block deployment fixes", () => {
+test("pre-deploy release smoke blocks deployment when it fails", () => {
   assert.match(
     deployWorkflow,
-    /npm run smoke:release \|\| echo "Release smoke failed before deploy; continuing because deploy may repair production."/,
-    "pre-deploy smoke must not block publish/deploy when current production is broken",
+    /run:\s*npm run smoke:release\b/,
+    "pre-deploy smoke must run as a normal blocking workflow step",
+  );
+  assert.doesNotMatch(
+    deployWorkflow,
+    /smoke:release\s*\|\|\s*echo/,
+    "pre-deploy smoke failures must stop publish/deploy instead of being downgraded to advisory output",
   );
 });
 
@@ -79,8 +84,8 @@ test("production health checks retry while backend warms after restart", () => {
 });
 
 test("menu main muted channel storage key is initialized before effects read it", () => {
-  const storageKeyIndex = menuMainController.indexOf("const mutedServerChannelsStorageKey = getMutedChannelsStorageKey(currentUserId);");
-  const effectReadIndex = menuMainController.indexOf("setMutedServerChannels(readMutedServerChannels(mutedServerChannelsStorageKey));");
+  const storageKeyIndex = menuMainController.search(/const\s+mutedServerChannelsStorageKey\s*=\s*getMutedChannelsStorageKey\(\s*currentUserId\s*\)\s*;/);
+  const effectReadIndex = menuMainController.search(/setMutedServerChannels\(\s*readMutedServerChannels\(\s*mutedServerChannelsStorageKey\s*\)\s*\)/);
 
   assert.notEqual(storageKeyIndex, -1, "muted channel storage key should be declared");
   assert.notEqual(effectReadIndex, -1, "muted channel restore effect should read the storage key");

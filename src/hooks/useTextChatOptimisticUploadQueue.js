@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
+import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadSerialization";
 import { preparePendingUploadForSend } from "../utils/chatPendingUploads";
 import { getActiveUploadedAttachments } from "../utils/textChatOptimisticUploadQueuePolicy.mjs";
 import { getChatErrorMessage } from "../utils/textChatModel";

@@ -1,5 +1,5 @@
 import chatConnection from "../SignalR/ChatConnect";
-import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
+import { prepareOutgoingTextPayload } from "../security/chatPayloadSerialization";
 import {
   canUseHttpOutboxFallback,
   isRealtimeSendUnavailableError,

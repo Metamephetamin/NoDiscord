@@ -89,6 +89,44 @@ public sealed class AuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task RequestPasswordResetCode_WhenEmailIsUnknown_ReturnsGenericSessionWithoutSendingCode()
+    {
+        var controller = BuildController(emailMode: "smtp", environmentName: "Production");
+
+        var result = await controller.RequestPasswordResetCode(new PasswordResetCodeRequestDto { email = "unknown-reset@gmail.com" });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var json = JsonSerializer.Serialize(ok.Value);
+        Assert.Contains("\"email\":\"unknown-reset@gmail.com\"", json);
+        Assert.Contains("\"deliveryMode\":\"smtp\"", json);
+        Assert.Contains("\"verificationToken\":", json);
+        Assert.DoesNotContain("Пользователь с такой почтой не найден", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("debugCode", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(_context.EmailVerificationCodes);
+        Assert.Equal(0, _emailSender.SendCount);
+    }
+
+    [Fact]
+    public async Task RequestPasswordResetCode_WhenUnknownEmailWasRecentlyRequested_ReturnsCooldownWithoutSendingCode()
+    {
+        var controller = BuildController(emailMode: "smtp", environmentName: "Production");
+
+        var firstResult = await controller.RequestPasswordResetCode(new PasswordResetCodeRequestDto { email = "unknown-cooldown@gmail.com" });
+        var secondResult = await controller.RequestPasswordResetCode(new PasswordResetCodeRequestDto { email = "unknown-cooldown@gmail.com" });
+
+        Assert.IsType<OkObjectResult>(firstResult);
+        var tooManyRequests = Assert.IsType<ObjectResult>(secondResult);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, tooManyRequests.StatusCode);
+        var json = JsonSerializer.Serialize(tooManyRequests.Value);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal("Повторно отправить код можно через 60 секунд.", document.RootElement.GetProperty("message").GetString());
+        Assert.True(document.RootElement.TryGetProperty("resendAvailableAt", out _));
+        Assert.DoesNotContain("Пользователь с такой почтой не найден", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(_context.EmailVerificationCodes);
+        Assert.Equal(0, _emailSender.SendCount);
+    }
+
+    [Fact]
     public async Task ResetPassword_WithPasswordResetCode_UpdatesPasswordAndRevokesActiveSessions()
     {
         var passwordHasher = new PasswordHasher<User>();
@@ -374,6 +412,31 @@ public sealed class AuthControllerTests : IDisposable
         Assert.Equal(2, userTokens.Count);
         Assert.NotNull(userTokens[0].RevokedAt);
         Assert.Null(userTokens[1].RevokedAt);
+    }
+
+    [Fact]
+    public async Task Login_InProduction_AppendsSecureMediaCookieEvenWhenRequestIsHttp()
+    {
+        var passwordHasher = new PasswordHasher<User>();
+        var user = BuildUser(21, "secure-cookie-login@gmail.com");
+        user.password_hash = passwordHasher.HashPassword(user, "current-password");
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        var controller = BuildController(emailMode: "smtp", environmentName: "Production");
+        controller.Request.Scheme = "http";
+
+        var result = await controller.Login(new LoginDto
+        {
+            identifier = user.email,
+            password = "current-password",
+            deviceToken = "ldv1.33333333-3333-4333-8333-333333333333.44444444-4444-4444-8444-444444444444"
+        });
+
+        Assert.IsType<OkObjectResult>(result);
+        var setCookie = controller.Response.Headers.SetCookie.ToString();
+        Assert.Contains("tend_access_token=", setCookie);
+        Assert.Contains("secure", setCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=none", setCookie, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

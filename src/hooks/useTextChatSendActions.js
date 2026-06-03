@@ -2,7 +2,7 @@
 import chatConnection from "../SignalR/ChatConnect";
 import { useCallback } from "react";
 import { flushSync } from "react-dom";
-import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
+import { prepareOutgoingTextPayload } from "../security/chatPayloadSerialization";
 import { clearChatDraft } from "../utils/chatDrafts";
 import {
   createPendingUpload,

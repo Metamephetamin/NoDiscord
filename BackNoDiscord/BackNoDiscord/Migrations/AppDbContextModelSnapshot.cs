@@ -864,7 +864,7 @@ namespace BackNoDiscord.Migrations
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
+                        .HasDefaultValue(false)
                         .HasColumnName("is_active");
 
                     b.Property<DateTimeOffset?>("LastFailureAt")

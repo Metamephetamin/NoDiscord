@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using BackNoDiscord;
 using BackNoDiscord.Controllers;
 using BackNoDiscord.Infrastructure;
@@ -54,6 +55,30 @@ public sealed class ChatFilesControllerTests : IDisposable
         Assert.Equal(string.Empty, fileResult.FileDownloadName);
     }
 
+    [Fact]
+    public async Task Upload_WhenStorageFails_ReturnsGenericUnavailableWithoutDiagnostics()
+    {
+        var controller = BuildController(new ThrowingStorageMetrics());
+        var request = BuildMultipartRequest("upload.txt", "text/plain", Encoding.UTF8.GetBytes("hello"));
+        controller.ControllerContext.HttpContext.Request.Method = request.Method;
+        controller.ControllerContext.HttpContext.Request.ContentType = request.ContentType;
+        controller.ControllerContext.HttpContext.Request.ContentLength = request.ContentLength;
+        controller.ControllerContext.HttpContext.Request.Body = request.Body;
+
+        var result = await controller.Upload(CancellationToken.None);
+
+        var unavailable = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
+        Assert.False(controller.Response.Headers.ContainsKey("X-Upload-Storage-Diagnostics"));
+        var json = System.Text.Json.JsonSerializer.Serialize(unavailable.Value);
+        Assert.Contains("Chat file storage is temporarily unavailable.", json);
+        Assert.DoesNotContain("storageDirectory=", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("rootError=", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(_storageRoot, json, StringComparison.OrdinalIgnoreCase);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        Assert.False(document.RootElement.TryGetProperty("storage", out _));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_storageRoot))
@@ -62,7 +87,7 @@ public sealed class ChatFilesControllerTests : IDisposable
         }
     }
 
-    private ChatFilesController BuildController()
+    private ChatFilesController BuildController(IChatFileUploadStorageMetrics? storageMetrics = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -74,7 +99,7 @@ public sealed class ChatFilesControllerTests : IDisposable
         var controller = new ChatFilesController(
             new UploadStoragePaths(configuration, new TestWebHostEnvironment()),
             configuration,
-            new TestStorageMetrics(),
+            storageMetrics ?? new TestStorageMetrics(),
             new ChatFileAccessService(dbContext, new ServerStateService(dbContext)),
             new UserStorageQuotaService(dbContext),
             NullLogger<ChatFilesController>.Instance)
@@ -100,11 +125,48 @@ public sealed class ChatFilesControllerTests : IDisposable
         return new AppDbContext(options);
     }
 
+    private static HttpRequest BuildMultipartRequest(string fileName, string contentType, byte[] fileBytes)
+    {
+        var boundary = $"----nodiscord-{Guid.NewGuid():N}";
+        using var body = new MemoryStream();
+        WriteAscii(body, $"--{boundary}\r\n");
+        WriteAscii(body, $"Content-Disposition: form-data; name=\"File\"; filename=\"{fileName}\"\r\n");
+        WriteAscii(body, $"Content-Type: {contentType}\r\n\r\n");
+        body.Write(fileBytes);
+        WriteAscii(body, $"\r\n--{boundary}--\r\n");
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Post;
+        context.Request.ContentType = $"multipart/form-data; boundary={boundary}";
+        context.Request.ContentLength = body.Length;
+        context.Request.Body = new MemoryStream(body.ToArray());
+        return context.Request;
+    }
+
+    private static void WriteAscii(Stream stream, string value)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        stream.Write(bytes);
+    }
+
     private sealed class TestStorageMetrics : IChatFileUploadStorageMetrics
     {
         public long GetUserStoredBytes(string uploadsDirectory, string userId) => 0;
 
         public long GetAvailableBytes(string uploadsDirectory) => 1024L * 1024 * 1024;
+    }
+
+    private sealed class ThrowingStorageMetrics : IChatFileUploadStorageMetrics
+    {
+        public long GetUserStoredBytes(string uploadsDirectory, string userId)
+        {
+            throw new IOException($"Storage metrics failed for {uploadsDirectory}.");
+        }
+
+        public long GetAvailableBytes(string uploadsDirectory)
+        {
+            throw new IOException($"Storage metrics failed for {uploadsDirectory}.");
+        }
     }
 
     private sealed class TestWebHostEnvironment : IWebHostEnvironment

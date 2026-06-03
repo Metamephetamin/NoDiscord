@@ -120,11 +120,9 @@ public class ChatFilesController : ControllerBase
                     "Chat file upload storage failed for user {UserId}. {Diagnostics}",
                     currentUser.UserId,
                     diagnostics.Summary);
-                Response.Headers["X-Upload-Storage-Diagnostics"] = diagnostics.Summary;
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, new
                 {
-                    message = $"{exception.Message} {diagnostics.Summary}",
-                    storage = diagnostics
+                    message = exception.Message
                 });
             }
 

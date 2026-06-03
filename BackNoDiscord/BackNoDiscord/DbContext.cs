@@ -1063,7 +1063,7 @@ public class AppDbContext : DbContext
             entity.Property(x => x.last_name).IsRequired();
             entity.Property(x => x.nickname).IsRequired();
             entity.Property(x => x.email).IsRequired(false);
-            entity.Property(x => x.is_email_verified).HasDefaultValue(true);
+            entity.Property(x => x.is_email_verified).HasDefaultValue(false);
             entity.Property(x => x.phone_number).IsRequired(false);
             entity.Property(x => x.is_phone_verified).HasDefaultValue(false);
             entity.Property(x => x.totp_secret).IsRequired(false);

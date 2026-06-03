@@ -670,11 +670,12 @@ static bool CanAcceptMediaCookieToken(HttpRequest request, PathString path)
 
 static void AppendMediaAccessCookie(HttpContext context, string cookieName, string token)
 {
+    var shouldSecureCookie = !context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment() || context.Request.IsHttps;
     context.Response.Cookies.Append(cookieName, token, new CookieOptions
     {
         HttpOnly = true,
-        Secure = context.Request.IsHttps,
-        SameSite = context.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+        Secure = shouldSecureCookie,
+        SameSite = shouldSecureCookie ? SameSiteMode.None : SameSiteMode.Lax,
         Path = "/",
         MaxAge = TimeSpan.FromMinutes(20)
     });

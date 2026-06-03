@@ -3093,7 +3093,7 @@ const handleDeviceChange = () => {
       hasDeviceChangeListener = true;
     }
 
-    await signalConnection.invoke("Register", String(user.id), getDisplayName(user), getAvatar(user));
+    await signalConnection.invoke("Register", getAvatar(user));
   };
 
   const stopRoom = async ({ preserveChannel = false } = {}) => {
@@ -3145,7 +3145,7 @@ const handleDeviceChange = () => {
       return;
     }
 
-    await signalConnection.invoke("UpdateScreenShareStatus", String(currentUser.id), Boolean(isSharing));
+    await signalConnection.invoke("UpdateScreenShareStatus", Boolean(isSharing));
   };
 
   const updateLocalLiveStatus = async () => {
@@ -3914,7 +3914,7 @@ const handleDeviceChange = () => {
 
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
         try {
-          await signalConnection.invoke("LeaveChannel", String(currentUser.id));
+          await signalConnection.invoke("LeaveChannel");
         } catch {
           // ignore control-plane cleanup failures after room disconnect
         }
@@ -4102,8 +4102,6 @@ const handleDeviceChange = () => {
           await connection.invoke(
             "JoinChannel",
             currentChannel,
-            String(currentUser.id),
-            getDisplayName(currentUser),
             getAvatar(currentUser)
           );
         }
@@ -4396,8 +4394,6 @@ const handleDeviceChange = () => {
       const joinResponse = await signalConnection.invoke(
         "JoinChannel",
         channelName,
-        String(user.id),
-        getDisplayName(user),
         getAvatar(user)
       );
 
@@ -4431,7 +4427,7 @@ const handleDeviceChange = () => {
           error: error?.message || String(error),
         });
         try {
-          await signalConnection.invoke("LeaveChannel", String(user.id));
+          await signalConnection.invoke("LeaveChannel");
         } catch {
           // ignore control-plane cleanup failures after failed room connect
         }
@@ -4454,7 +4450,7 @@ const handleDeviceChange = () => {
       }
 
       if (signalConnection && signalConnection.state === signalR.HubConnectionState.Connected && currentUser?.id) {
-        await signalConnection.invoke("LeaveChannel", String(currentUser.id));
+        await signalConnection.invoke("LeaveChannel");
       }
 
       await stopAllLocalSharesInternal();

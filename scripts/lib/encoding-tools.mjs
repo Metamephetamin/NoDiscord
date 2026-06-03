@@ -13,6 +13,7 @@ export const roots = [
 
 export const ignoredDirectories = new Set([
   ".git",
+  ".next",
   ".vite",
   "bin",
   "dist",

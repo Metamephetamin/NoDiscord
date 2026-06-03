@@ -354,7 +354,9 @@ public static class DatabaseSchemaInitializer
             ALTER TABLE IF EXISTS chatmessages
                 ADD COLUMN IF NOT EXISTS client_message_id text NULL;
             ALTER TABLE IF EXISTS users
-                ADD COLUMN IF NOT EXISTS is_email_verified boolean NOT NULL DEFAULT true;
+                ADD COLUMN IF NOT EXISTS is_email_verified boolean NOT NULL DEFAULT false;
+            ALTER TABLE IF EXISTS users
+                ALTER COLUMN is_email_verified SET DEFAULT false;
             ALTER TABLE IF EXISTS users
                 ADD COLUMN IF NOT EXISTS phone_number character varying(16) NULL;
             ALTER TABLE IF EXISTS users
@@ -517,7 +519,7 @@ public static class DatabaseSchemaInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_not_null ON users (email) WHERE email IS NOT NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone_number ON users (phone_number) WHERE phone_number IS NOT NULL;
             CREATE INDEX IF NOT EXISTS ix_users_is_banned_banned_at ON users (is_banned, banned_at);
-            UPDATE users SET is_email_verified = true WHERE is_email_verified IS NULL;
+            UPDATE users SET is_email_verified = false WHERE is_email_verified IS NULL;
             UPDATE users SET email = NULL WHERE TRIM(COALESCE(email, '')) = '';
             UPDATE users
             SET nickname = TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))

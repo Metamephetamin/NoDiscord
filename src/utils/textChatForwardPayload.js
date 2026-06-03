@@ -1,5 +1,5 @@
 import { API_URL } from "../config/runtime";
-import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadCrypto";
+import { prepareOutgoingAttachmentPayload } from "../security/chatPayloadSerialization";
 import { authFetch } from "./auth";
 import { resolveMediaUrl } from "./media";
 import {

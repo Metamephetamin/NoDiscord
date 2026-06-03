@@ -9,6 +9,7 @@ export default [
     ignores: [
       "node_modules/**",
       ".git/**",
+      "**/.next/**",
       ".vite/**",
       "dist/**",
       "out/**",
@@ -70,7 +71,7 @@ export default [
     },
   },
   {
-    files: ["src/main.js", "src/preload.js", "vite*.mjs", "scripts/**/*.{js,mjs}"],
+    files: ["src/main.js", "src/preload.js", "vite*.mjs", "scripts/**/*.{js,mjs}", "landing/scripts/**/*.mjs"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

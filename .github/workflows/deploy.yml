@@ -82,7 +82,7 @@ jobs:
       - name: Test backend before deploy
         run: dotnet test BackNoDiscord/BackNoDiscord.Tests/BackNoDiscord.Tests.csproj --configuration Release --no-restore
 
-      - name: Run optional release smoke
+      - name: Run release smoke
         env:
           SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL }}
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
@@ -91,7 +91,7 @@ jobs:
           SMOKE_CHAT_ID: ${{ vars.SMOKE_CHAT_ID }}
           SMOKE_CHAT_WRITE: ${{ vars.SMOKE_CHAT_WRITE }}
           SMOKE_VOICE_CHANNEL: ${{ vars.SMOKE_VOICE_CHANNEL }}
-        run: npm run smoke:release || echo "Release smoke failed before deploy; continuing because deploy may repair production."
+        run: npm run smoke:release
 
       - name: Publish backend
         run: dotnet publish BackNoDiscord/BackNoDiscord/BackNoDiscord.csproj --configuration Release --no-restore --output ./artifacts/backend
@@ -128,11 +128,17 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "Deploy secrets are not fully configured. Skipping deploy step."
+            exit 0
+          fi
+          if [ -z "$DEPLOY_SSH_KNOWN_HOSTS" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "DEPLOY_SSH_KNOWN_HOSTS is empty or missing. Configure pinned SSH known_hosts before deploying."
             exit 0
           fi
           if [ -n "$BACKEND_ENV_FILE" ]; then
@@ -154,16 +160,17 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/deploy_key"
           chmod 600 "$HOME/.ssh/deploy_key"
 
-      - name: Add deploy host to known_hosts
+      - name: Install pinned deploy known_hosts
         if: steps.validate.outputs.ready == 'true'
         shell: bash
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
-          PORT="${DEPLOY_PORT:-22}"
+          set -euo pipefail
           mkdir -p ~/.ssh
-          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" | tr -d '\r' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
 
       - name: SSH preflight
         if: steps.validate.outputs.ready == 'true'
@@ -175,7 +182,7 @@ jobs:
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "true"
 
       - name: Sync frontend dist to server
@@ -195,7 +202,7 @@ jobs:
           FRONTEND_OWNER="${FRONTEND_DEPLOY_OWNER:-www-data:www-data}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           FRONTEND_SOURCE="./dist"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Frontend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_PATH"
           if [ -d "$FRONTEND_SOURCE/dist" ]; then
@@ -244,7 +251,7 @@ jobs:
           TEMP_ENV_FILE="$TEMP_ROOT/backend.env"
           TEMP_YOOKASSA_ENV_FILE="$TEMP_ROOT/yookassa.env"
           BACKEND_SOURCE="./artifacts/backend"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Backend deploy target: $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_PATH"
           if [ -d "$BACKEND_SOURCE/backend" ]; then
@@ -434,7 +441,7 @@ jobs:
           PORT="${DEPLOY_PORT:-22}"
           BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cat > '$BACKEND_PATH/install-punctuation-env.sh'" <<'SPEECH_PUNCTUATION_INSTALL'
           set -e
@@ -487,7 +494,7 @@ jobs:
           BACKEND_PATH="${BACKEND_DEPLOY_PATH:-/opt/nodiscord/.deploy/backend}"
           BACKEND_OWNER="${BACKEND_DEPLOY_OWNER:-nodiscord:nodiscord}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           rsync -az --checksum -e "ssh $SSH_OPTS" scripts/db-backup.sh "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/db-backup.sh"
           rsync -az --checksum -e "ssh $SSH_OPTS" scripts/storage-backup.sh "$DEPLOY_USER@$DEPLOY_HOST:$TEMP_ROOT/storage-backup.sh"
@@ -572,6 +579,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
@@ -579,8 +587,12 @@ jobs:
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           NGINX_SOURCE="./infra/nginx/lanaya.space.load-balanced.conf"
           NGINX_BOOTSTRAP_SOURCE="./infra/nginx/lanaya.space.bootstrap.conf"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
+          if [ -z "${CERTBOT_EMAIL:-}" ]; then
+            echo "CERTBOT_EMAIL is empty or missing. Configure a monitored ops email before issuing TLS certificates." >&2
+            exit 1
+          fi
           if [ ! -f "$NGINX_SOURCE" ]; then
             echo "Nginx domain template is missing: $NGINX_SOURCE" >&2
             exit 1
@@ -597,6 +609,7 @@ jobs:
             set -e
             BACKEND_PATH='$BACKEND_PATH'
             TEMP_ROOT='$TEMP_ROOT'
+            CERTBOT_EMAIL='$CERTBOT_EMAIL'
             NGINX_SITE=/etc/nginx/sites-available/lanaya.space.conf
             NGINX_ENABLED=/etc/nginx/sites-enabled/lanaya.space.conf
             CERT_DIR=/etc/letsencrypt/live/lanaya.space
@@ -612,7 +625,7 @@ jobs:
                 exit 1
               fi
 
-              certbot certonly --webroot -w /var/www/tend-app/current --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring -d lanaya.space -d www.lanaya.space
+              certbot certonly --webroot -w /var/www/tend-app/current --non-interactive --agree-tos --email \"\$CERTBOT_EMAIL\" --keep-until-expiring -d lanaya.space -d www.lanaya.space
             fi
 
             if [ ! -s \"\$CERT_DIR/fullchain.pem\" ] || [ ! -s \"\$CERT_DIR/privkey.pem\" ]; then
@@ -644,7 +657,7 @@ jobs:
           BACKEND_SERVICE="${BACKEND_SERVICE_NAME:-nodiscord-backend.service}"
           TEMP_ROOT="/tmp/tend-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           RUNNER_UTC_EPOCH="$(date -u +%s)"
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 
           echo "Restarting backend service and reloading nginx"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "timeout 10m bash -lc '
@@ -824,6 +837,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           BACKEND_SERVICE_NAME: ${{ vars.BACKEND_SERVICE_NAME }}
         run: |
           set -euo pipefail
@@ -832,8 +846,10 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/deploy_key"
           chmod 600 "$HOME/.ssh/deploy_key"
-          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts || true
-          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" | tr -d '\r' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/known_hosts" >/dev/null
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
           ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "bash -lc '
             echo \"=== server clock ===\"
             date -u -R || true

@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import TextChatView from "./TextChatView";
 import chatConnection, { startChatConnection } from "../../SignalR/ChatConnect";
 import "../../css/TextChat.css";
-import { readIncomingMessageText } from "../../security/chatPayloadCrypto";
+import { readIncomingMessageText } from "../../security/chatPayloadSerialization";
 import { uploadChatAttachment } from "../../utils/chatAttachmentUpload";
 import { revokePendingUploadPreviews, scheduleObjectUrlRevoke } from "../../utils/chatPendingUploads";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "../../utils/chatDrafts";

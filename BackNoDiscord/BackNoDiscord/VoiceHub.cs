@@ -42,12 +42,11 @@ public class VoiceHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        await Clients.Caller.SendAsync("voice:update", _channels.GetAllChannels());
-        await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        await SendAuthorizedVoiceSnapshotToCallerAsync();
         await base.OnConnectedAsync();
     }
 
-    public async Task Register(string userId, string name, string avatar)
+    public async Task Register(string avatar)
     {
         if (!TryBuildCurrentParticipant(avatar, out var participant))
         {
@@ -56,8 +55,7 @@ public class VoiceHub : Hub
 
         _channels.RegisterConnection(Context.ConnectionId, participant);
 
-        await Clients.Caller.SendAsync("voice:update", _channels.GetAllChannels());
-        await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        await SendAuthorizedVoiceSnapshotToCallerAsync(participant.UserId);
 
         if (_channels.TryGetParticipant(participant.UserId, out var updatedParticipant))
         {
@@ -72,7 +70,7 @@ public class VoiceHub : Hub
         }
     }
 
-    public async Task<JoinChannelResponse> JoinChannel(string channelName, string userId, string name, string avatar)
+    public async Task<JoinChannelResponse> JoinChannel(string channelName, string avatar)
     {
         if (!TryBuildCurrentParticipant(avatar, out var participant))
         {
@@ -120,14 +118,14 @@ public class VoiceHub : Hub
         await Groups.AddToGroupAsync(Context.ConnectionId, normalizedChannelName);
         if (isAlreadyInRequestedChannel)
         {
-            await Clients.Caller.SendAsync("voice:update", _channels.GetAllChannels());
+            await SendAuthorizedVoiceSnapshotToCallerAsync(participant.UserId);
         }
         else
         {
             ClearVoiceChannelStatusesForEmptyChannels(previousChannel);
             await BroadcastChannelUpdatesAsync(previousChannel, normalizedChannelName);
         }
-        await Clients.Caller.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        await SendScreenShareUsersToCallerAsync(normalizedChannelName);
 
         if (_channels.TryGetParticipant(participant.UserId, out var updatedParticipant))
         {
@@ -148,7 +146,7 @@ public class VoiceHub : Hub
         };
     }
 
-    public async Task LeaveChannel(string userId)
+    public async Task LeaveChannel()
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -166,7 +164,7 @@ public class VoiceHub : Hub
         {
             ClearVoiceChannelStatusesForEmptyChannels(removed.ChannelName ?? currentChannel);
             await BroadcastChannelUpdatesAsync(removed.ChannelName ?? currentChannel);
-            await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+            await BroadcastScreenShareUsersAsync(removed.ChannelName ?? currentChannel);
         }
     }
 
@@ -274,7 +272,7 @@ public class VoiceHub : Hub
         });
     }
 
-    public async Task UpdateScreenShareStatus(string userId, bool isSharing)
+    public async Task UpdateScreenShareStatus(bool isSharing)
     {
         if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
         {
@@ -288,7 +286,7 @@ public class VoiceHub : Hub
         }
 
         await BroadcastChannelUpdatesAsync(_channels.GetChannelForUser(currentUser.UserId));
-        await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+        await BroadcastScreenShareUsersAsync(_channels.GetChannelForUser(currentUser.UserId));
     }
 
     public async Task UpdateVoiceState(string targetUserId, bool isMicMuted, bool isDeafened, long clientStateVersion = 0)
@@ -513,7 +511,7 @@ public class VoiceHub : Hub
         {
             ClearVoiceChannelStatusesForEmptyChannels(removed.ChannelName);
             await BroadcastChannelUpdatesAsync(removed.ChannelName);
-            await Clients.All.SendAsync("voice:screen-share-users", _channels.GetScreenSharingUserIds());
+            await BroadcastScreenShareUsersAsync(removed.ChannelName);
         }
         await base.OnDisconnectedAsync(exception);
     }
@@ -546,12 +544,68 @@ public class VoiceHub : Hub
                string.Equals(firstChannel, secondChannel, StringComparison.Ordinal);
     }
 
-    private Task BroadcastChannelUpdatesAsync(params string?[] channelNames)
+    private async Task SendAuthorizedVoiceSnapshotToCallerAsync(string? userId = null)
+    {
+        var snapshot = await BuildAuthorizedVoiceSnapshotAsync(userId);
+        await Clients.Caller.SendAsync("voice:update", snapshot);
+        await Clients.Caller.SendAsync("voice:screen-share-users", BuildScreenShareUserIds(snapshot));
+    }
+
+    private async Task<Dictionary<string, List<Participant>>> BuildAuthorizedVoiceSnapshotAsync(string? userId = null)
+    {
+        var effectiveUserId = UploadPolicies.TrimToLength(userId, 64);
+        if (string.IsNullOrWhiteSpace(effectiveUserId))
+        {
+            if (!AuthenticatedUserAccessor.TryGetAuthenticatedUser(Context.User, out var currentUser))
+            {
+                return new Dictionary<string, List<Participant>>(StringComparer.Ordinal);
+            }
+
+            effectiveUserId = currentUser.UserId;
+        }
+
+        if (string.IsNullOrWhiteSpace(effectiveUserId))
+        {
+            return new Dictionary<string, List<Participant>>(StringComparer.Ordinal);
+        }
+
+        var authorizedSnapshot = new Dictionary<string, List<Participant>>(StringComparer.Ordinal);
+        foreach (var channel in _channels.GetAllChannels())
+        {
+            if (await TryAuthorizeChannelAccessAsync(channel.Key, effectiveUserId))
+            {
+                authorizedSnapshot[channel.Key] = channel.Value;
+            }
+        }
+
+        return authorizedSnapshot;
+    }
+
+    private Task SendScreenShareUsersToCallerAsync(string? channelName)
+    {
+        return string.IsNullOrWhiteSpace(channelName)
+            ? Clients.Caller.SendAsync("voice:screen-share-users", Array.Empty<string>())
+            : Clients.Caller.SendAsync("voice:screen-share-users", BuildScreenShareUserIdsForChannel(channelName));
+    }
+
+    private async Task BroadcastScreenShareUsersAsync(params string?[] channelNames)
+    {
+        foreach (var channelName in NormalizeChannelNames(channelNames))
+        {
+            await Clients.Group(channelName).SendAsync("voice:screen-share-users", BuildScreenShareUserIdsForChannel(channelName));
+        }
+    }
+
+    private async Task BroadcastChannelUpdatesAsync(params string?[] channelNames)
     {
         var channelUpdates = BuildChannelUpdateSnapshot(channelNames);
-        return channelUpdates.Count == 0
-            ? Task.CompletedTask
-            : Clients.All.SendAsync("voice:channel-update", channelUpdates);
+        foreach (var channelName in channelUpdates.Keys)
+        {
+            await Clients.Group(channelName).SendAsync("voice:channel-update", new Dictionary<string, List<Participant>>(StringComparer.Ordinal)
+            {
+                [channelName] = channelUpdates[channelName]
+            });
+        }
     }
 
     private void ClearVoiceChannelStatusesForEmptyChannels(params string?[] channelNames)
@@ -570,14 +624,39 @@ public class VoiceHub : Hub
 
     private Dictionary<string, List<Participant>> BuildChannelUpdateSnapshot(IEnumerable<string?> channelNames)
     {
-        return channelNames
-            .Where(channelName => !string.IsNullOrWhiteSpace(channelName))
-            .Select(channelName => channelName!)
-            .Distinct(StringComparer.Ordinal)
+        return NormalizeChannelNames(channelNames)
             .ToDictionary(
                 channelName => channelName,
                 channelName => _channels.GetParticipantsInChannel(channelName),
                 StringComparer.Ordinal);
+    }
+
+    private static IReadOnlyList<string> BuildScreenShareUserIds(Dictionary<string, List<Participant>> snapshot)
+    {
+        return snapshot.Values
+            .SelectMany(participants => participants)
+            .Where(participant => participant.IsScreenSharing)
+            .Select(participant => participant.UserId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private IReadOnlyList<string> BuildScreenShareUserIdsForChannel(string channelName)
+    {
+        return _channels.GetParticipantsInChannel(channelName)
+            .Where(participant => participant.IsScreenSharing)
+            .Select(participant => participant.UserId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> NormalizeChannelNames(IEnumerable<string?> channelNames)
+    {
+        return channelNames
+            .Where(channelName => !string.IsNullOrWhiteSpace(channelName))
+            .Select(channelName => channelName!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     private ServerSnapshot? ResolveServerSnapshot(string channelName)

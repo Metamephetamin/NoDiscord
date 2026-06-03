@@ -1,7 +1,7 @@
 ﻿import { useMemo, useState } from "react";
 import chatConnection, { startChatConnection } from "../SignalR/ChatConnect";
 import { API_URL } from "../config/runtime";
-import { prepareOutgoingTextPayload } from "../security/chatPayloadCrypto";
+import { prepareOutgoingTextPayload } from "../security/chatPayloadSerialization";
 import { createModerationReport } from "../features/moderation/moderationApi";
 import { authFetch, getStoredToken } from "../utils/auth";
 import { copyTextToClipboard } from "../utils/clipboard";

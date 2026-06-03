@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerSaveBlocker, safeStorage, session, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerSaveBlocker, safeStorage, session, shell, systemPreferences, webContents as electronWebContents } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -25,6 +25,7 @@ const DOWNLOAD_PREFERENCES_STORE_KEY = "downloads.preferences";
 const BACKGROUND_PREFERENCES_STORE_KEY = "app.background.preferences";
 const DEVICE_IDENTITY_STORE_KEY = "auth.device.identity";
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+const ELECTRON_MEDIA_PERMISSIONS = new Set(["media", "display-capture", "microphone", "camera"]);
 const DOWNLOAD_FILE_NAME_FALLBACK = "download";
 const MAX_ELECTRON_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 const MAX_ELECTRON_FETCH_BYTES = 25 * 1024 * 1024;
@@ -59,10 +60,10 @@ const PROD_RENDERER_CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: file: http: https:",
-  "media-src 'self' data: blob: file: http: https:",
+  "img-src 'self' data: blob: file: https://lanaya.space https://www.lanaya.space",
+  "media-src 'self' data: blob: file: https://lanaya.space https://www.lanaya.space",
   "font-src 'self' data:",
-  "connect-src 'self' http: https: ws: wss:",
+  "connect-src 'self' https://lanaya.space https://www.lanaya.space wss://lanaya.space wss://www.lanaya.space",
   "worker-src 'self' blob:",
 ].join("; ");
 const DEV_RENDERER_CONTENT_SECURITY_POLICY = [
@@ -1320,7 +1321,7 @@ const readSecureSession = async () => {
       return JSON.parse(decrypted);
     }
 
-    return payload?.plain ?? null;
+    return null;
   } catch {
     return null;
   }
@@ -1330,17 +1331,16 @@ const writeSecureSession = async (sessionValue) => {
   const directory = path.dirname(getSessionStorePath());
   await fs.mkdir(directory, { recursive: true });
 
-  if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = safeStorage.encryptString(JSON.stringify(sessionValue));
-    await fs.writeFile(
-      getSessionStorePath(),
-      JSON.stringify({ encrypted: encrypted.toString("base64") }),
-      "utf8"
-    );
-    return;
+  if (safeStorage.isEncryptionAvailable() === false) {
+    throw new Error("Secure OS storage is unavailable.");
   }
 
-  await fs.writeFile(getSessionStorePath(), JSON.stringify({ plain: sessionValue }), "utf8");
+  const encrypted = safeStorage.encryptString(JSON.stringify(sessionValue));
+  await fs.writeFile(
+    getSessionStorePath(),
+    JSON.stringify({ encrypted: encrypted.toString("base64") }),
+    "utf8"
+  );
 };
 
 const clearSecureSession = async () => {
@@ -1879,6 +1879,86 @@ const isRendererMainFrameRequest = (details) => {
   }
 };
 
+const isTrustedRendererPermissionOrigin = (value) => {
+  const requestUrl = String(value || "").trim();
+  if (!requestUrl) {
+    return false;
+  }
+
+  if (requestUrl.startsWith("file://")) {
+    return !RENDERER_DEV_SERVER_URL;
+  }
+
+  if (!RENDERER_DEV_SERVER_URL) {
+    return false;
+  }
+
+  try {
+    const requestOrigin = new URL(requestUrl).origin;
+    const rendererOrigin = new URL(RENDERER_DEV_SERVER_URL).origin;
+    return requestOrigin === rendererOrigin;
+  } catch {
+    return requestUrl.startsWith(RENDERER_DEV_SERVER_URL);
+  }
+};
+
+const isTrustedRendererWebContents = (webContents) =>
+  Boolean(
+    mainWindow
+    && !mainWindow.isDestroyed()
+    && webContents
+    && !webContents.isDestroyed?.()
+    && webContents?.id === mainWindow.webContents?.id
+  );
+
+const getMediaPermissionRequestUrl = (details, fallbackOrigin = "") =>
+  String(
+    details?.requestingUrl
+    || details?.requestingOrigin
+    || details?.securityOrigin
+    || details?.frame?.url
+    || fallbackOrigin
+    || ""
+  ).trim();
+
+const getPermissionFrameWebContents = (frame) => {
+  if (!frame || typeof electronWebContents?.fromFrame !== "function") {
+    return null;
+  }
+
+  try {
+    return electronWebContents.fromFrame(frame);
+  } catch {
+    return null;
+  }
+};
+
+const isSubFramePermissionRequest = (details) => {
+  if (details?.isMainFrame === false) {
+    return true;
+  }
+
+  const frame = details?.frame;
+  return Boolean(frame?.top && frame !== frame.top);
+};
+
+const isTrustedMediaPermissionRequest = (webContents, permission, details = {}, fallbackOrigin = "") => {
+  if (!ELECTRON_MEDIA_PERMISSIONS.has(String(permission || ""))) {
+    return false;
+  }
+
+  if (!isTrustedRendererWebContents(webContents)) {
+    return false;
+  }
+
+  if (isSubFramePermissionRequest(details)) {
+    return false;
+  }
+
+  const requestUrl = getMediaPermissionRequestUrl(details, fallbackOrigin || webContents?.getURL?.());
+  return isTrustedRendererPermissionOrigin(requestUrl);
+};
+
 const installRendererContentSecurityPolicy = () => {
   const rendererContentSecurityPolicy = RENDERER_DEV_SERVER_URL
     ? DEV_RENDERER_CONTENT_SECURITY_POLICY
@@ -2071,15 +2151,12 @@ app.whenReady().then(async () => {
   applyLaunchOnStartupPreference();
   installRendererContentSecurityPolicy();
 
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowedPermissions = new Set(["media", "display-capture", "microphone", "camera"]);
-    callback(allowedPermissions.has(permission));
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(isTrustedMediaPermissionRequest(webContents, permission, details));
   });
 
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    const allowedPermissions = new Set(["media", "display-capture", "microphone", "camera"]);
-    return allowedPermissions.has(permission);
-  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) =>
+    isTrustedMediaPermissionRequest(webContents, permission, details, requestingOrigin));
 
   if (RENDERER_DEV_SERVER_URL) {
     session.defaultSession.setCertificateVerifyProc((request, callback) => {
@@ -2331,68 +2408,6 @@ app.whenReady().then(async () => {
     }));
   });
 
-  ipcMain.handle("downloads:save-file", async (_event, payload) => {
-    const fileName = sanitizeDownloadFileName(payload?.defaultFileName);
-    const targetPath = path.join(app.getPath("downloads"), fileName);
-    const { canceled, filePath } = await dialog.showSaveDialog({
-      title: "Сохранить файл",
-      defaultPath: targetPath,
-      buttonLabel: "Скачать",
-    });
-
-    if (canceled || !filePath) {
-      return { canceled: true, filePath: "" };
-    }
-
-    const bytes = payload?.bytes;
-    let buffer = null;
-
-    if (bytes instanceof Uint8Array) {
-      buffer = Buffer.from(bytes);
-    } else if (ArrayBuffer.isView(bytes)) {
-      buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    } else if (bytes instanceof ArrayBuffer) {
-      buffer = Buffer.from(new Uint8Array(bytes));
-    } else if (Array.isArray(bytes)) {
-      buffer = Buffer.from(bytes);
-    } else if (bytes && typeof bytes === "object") {
-      const numericValues = Object.values(bytes)
-        .filter((value) => Number.isInteger(value) && value >= 0 && value <= 255);
-      if (numericValues.length) {
-        buffer = Buffer.from(numericValues);
-      }
-    }
-
-    if (!buffer) {
-      throw new Error("No file bytes provided for download.");
-    }
-
-    await fs.writeFile(filePath, buffer);
-    return { canceled: false, filePath };
-  });
-  ipcMain.handle("downloads:fetch-and-save", async (_event, payload) => {
-    const response = await fetchTrustedDownloadResponse(payload?.url, { headers: payload?.headers });
-
-    const fileName = sanitizeDownloadFileName(payload?.defaultFileName);
-    const targetPath = path.join(app.getPath("downloads"), fileName);
-    const { canceled, filePath } = await dialog.showSaveDialog({
-      title: "Сохранить файл",
-      defaultPath: targetPath,
-      buttonLabel: "Скачать",
-    });
-
-    if (canceled || !filePath) {
-      return { canceled: true, filePath: "" };
-    }
-
-    const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
-    await fs.writeFile(filePath, buffer);
-    return {
-      canceled: false,
-      filePath,
-      contentType: response.headers.get("content-type") || "",
-    };
-  });
   ipcMain.handle("downloads:fetch-bytes", async (_event, payload) => {
     const response = await fetchTrustedDownloadResponse(payload?.url, { headers: payload?.headers });
     const buffer = await readDownloadResponseBuffer(response, MAX_ELECTRON_FETCH_BYTES);
@@ -2403,7 +2418,6 @@ app.whenReady().then(async () => {
     };
   });
 
-  ipcMain.removeHandler("downloads:save-file");
   ipcMain.handle("downloads:save-file", async (_event, payload) => {
     const { canceled, filePath, directoryPath, usedDialog } = await resolveDownloadTargetPath(payload?.defaultFileName, {
       forceDialog: payload?.forceDialog === true,
@@ -2423,7 +2437,6 @@ app.whenReady().then(async () => {
     return { canceled: false, filePath, directoryPath, usedDialog };
   });
 
-  ipcMain.removeHandler("downloads:fetch-and-save");
   ipcMain.handle("downloads:fetch-and-save", async (_event, payload) => {
     const response = await fetchTrustedDownloadResponse(payload?.url, { headers: payload?.headers });
 
@@ -2493,7 +2506,13 @@ app.whenReady().then(async () => {
 
   if (typeof session.defaultSession.setDisplayMediaRequestHandler === "function") {
     session.defaultSession.setDisplayMediaRequestHandler(
-      async (_request, callback) => {
+      async (request, callback) => {
+        const requestWebContents = request?.webContents || getPermissionFrameWebContents(request?.frame);
+        if (!isTrustedMediaPermissionRequest(requestWebContents, "display-capture", request, request?.securityOrigin)) {
+          callback({});
+          return;
+        }
+
         try {
           const sources = await desktopCapturer.getSources({
             types: ["screen", "window"],

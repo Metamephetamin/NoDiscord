@@ -184,8 +184,8 @@ function readSessionFromStorage(storage) {
     const rawUser = storage.getItem(USER_STORAGE_KEY);
     return {
       user: rawUser ? JSON.parse(rawUser) : null,
-      accessToken: normalizeStoredValue(storage.getItem(TOKEN_STORAGE_KEY)),
-      refreshToken: normalizeStoredValue(storage.getItem(REFRESH_TOKEN_STORAGE_KEY)),
+      accessToken: "",
+      refreshToken: "",
       accessTokenExpiresAt: normalizeStoredValue(storage.getItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY)),
       updatedAt: normalizeSessionUpdatedAt(storage.getItem(`${USER_STORAGE_KEY}_updated_at`)),
       apiUrl: normalizeApiScope(storage.getItem(SESSION_API_URL_STORAGE_KEY)),
@@ -202,7 +202,18 @@ function readSessionFromStorage(storage) {
   }
 }
 
-function writeSessionToStorage(storage, { user, accessToken, refreshToken, accessTokenExpiresAt, updatedAt, apiUrl }) {
+function buildBrowserStorageSession({ user, accessTokenExpiresAt, updatedAt, apiUrl } = {}) {
+  return {
+    user: user ?? null,
+    accessToken: "",
+    refreshToken: "",
+    accessTokenExpiresAt: normalizeStoredValue(accessTokenExpiresAt),
+    updatedAt: normalizeSessionUpdatedAt(updatedAt),
+    apiUrl: normalizeApiScope(apiUrl),
+  };
+}
+
+function writeSessionToStorage(storage, { user, accessTokenExpiresAt, updatedAt, apiUrl }) {
   if (!storage) {
     return;
   }
@@ -214,17 +225,8 @@ function writeSessionToStorage(storage, { user, accessToken, refreshToken, acces
       storage.removeItem(USER_STORAGE_KEY);
     }
 
-    if (accessToken) {
-      storage.setItem(TOKEN_STORAGE_KEY, accessToken);
-    } else {
-      storage.removeItem(TOKEN_STORAGE_KEY);
-    }
-
-    if (refreshToken) {
-      storage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
-    } else {
-      storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    }
+    storage.removeItem(TOKEN_STORAGE_KEY);
+    storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 
     if (accessTokenExpiresAt) {
       storage.setItem(ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY, accessTokenExpiresAt);
@@ -253,7 +255,7 @@ function readTransientSession() {
 }
 
 function writeTransientSession(payload) {
-  writeSessionToStorage(getWebSessionStorage(), payload);
+  writeSessionToStorage(getWebSessionStorage(), buildBrowserStorageSession(payload));
 }
 
 function readLegacySession() {

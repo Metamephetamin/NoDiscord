@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -35,6 +36,11 @@ public class AuthController : ControllerBase
     private const string LoginCodePurpose = "login";
     private const string PasswordResetPurpose = "password_reset";
     private const string TotpResetPurpose = "totp_reset";
+    private sealed record PasswordResetDecoySession(
+        DateTimeOffset ExpiresAt,
+        DateTimeOffset ResendAvailableAt);
+
+    private static readonly ConcurrentDictionary<string, PasswordResetDecoySession> PasswordResetDecoySessions = new(StringComparer.OrdinalIgnoreCase);
     private bool RequireEmailRegistrationVerification => _config.GetValue<bool?>("Auth:RequireEmailVerification") ?? true;
 
     private readonly AppDbContext _context;
@@ -830,18 +836,28 @@ public class AuthController : ControllerBase
         }
 
         var user = await _context.Users.FirstOrDefaultAsync(item => item.email == normalizedEmail, cancellationToken);
-        if (user == null)
-        {
-            return BadRequest(new { message = "Пользователь с такой почтой не найден.", fieldErrors = new { email = "Пользователь с такой почтой не найден." } });
-        }
-
-        if (user.IsBanned)
-        {
-            return CreateAccountBannedResponse(user);
-        }
-
         try
         {
+            if (user == null)
+            {
+                var decoyPayload = CreatePasswordResetDecoySession(normalizedEmail);
+                if (decoyPayload.IsRateLimited)
+                {
+                    return StatusCode(StatusCodes.Status429TooManyRequests, new
+                    {
+                        message = "Повторно отправить код можно через 60 секунд.",
+                        resendAvailableAt = decoyPayload.ResendAvailableAt
+                    });
+                }
+
+                return Ok(decoyPayload.ToResponse());
+            }
+
+            if (user.IsBanned)
+            {
+                return CreateAccountBannedResponse(user);
+            }
+
             var payload = await CreateEmailVerificationAsync(user, purpose: PasswordResetPurpose, cancellationToken: cancellationToken);
             if (payload.IsRateLimited)
             {
@@ -860,6 +876,51 @@ public class AuthController : ControllerBase
             {
                 message = "Не удалось отправить код восстановления на почту. Попробуйте немного позже."
             });
+        }
+    }
+
+    private EmailVerificationResult CreatePasswordResetDecoySession(string normalizedEmail)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var deliveryMode = GetEmailDeliveryMode();
+
+        if (PasswordResetDecoySessions.Count > 4096)
+        {
+            CleanupExpiredPasswordResetDecoySessions(now);
+        }
+
+        if (PasswordResetDecoySessions.TryGetValue(normalizedEmail, out var existingSession) &&
+            existingSession.ResendAvailableAt > now)
+        {
+            return EmailVerificationResult.RateLimited(
+                normalizedEmail,
+                existingSession.ExpiresAt,
+                existingSession.ResendAvailableAt,
+                deliveryMode);
+        }
+
+        var session = new PasswordResetDecoySession(
+            now.Add(EmailVerificationLifetime),
+            now.Add(EmailVerificationResendCooldown));
+        PasswordResetDecoySessions[normalizedEmail] = session;
+
+        return EmailVerificationResult.Success(
+            normalizedEmail,
+            GenerateVerificationToken(),
+            session.ExpiresAt,
+            session.ResendAvailableAt,
+            deliveryMode,
+            debugCode: null);
+    }
+
+    private static void CleanupExpiredPasswordResetDecoySessions(DateTimeOffset now)
+    {
+        foreach (var (email, session) in PasswordResetDecoySessions)
+        {
+            if (session.ExpiresAt <= now)
+            {
+                PasswordResetDecoySessions.TryRemove(email, out _);
+            }
         }
     }
 
@@ -1088,40 +1149,6 @@ public class AuthController : ControllerBase
                 });
             }
         }
-
-        // Temporarily disabled email verification flow.
-        // if (!string.IsNullOrWhiteSpace(normalizedEmail))
-        // {
-        //     try
-        //     {
-        //         var emailVerification = await CreateEmailVerificationAsync(user);
-        //         return Ok(new
-        //         {
-        //             pendingEmailVerification = true,
-        //             user = BuildUserPayload(user),
-        //             verification = emailVerification.ToResponse()
-        //         });
-        //     }
-        //     catch (EmailDeliveryException)
-        //     {
-        //         var createdUser = await _context.Users.FirstOrDefaultAsync(item => item.id == user.id);
-        //         if (createdUser != null)
-        //         {
-        //             var pendingCodes = await _context.EmailVerificationCodes
-        //                 .Where(item => item.UserId == createdUser.id)
-        //                 .ToListAsync();
-        //
-        //             _context.EmailVerificationCodes.RemoveRange(pendingCodes);
-        //             _context.Users.Remove(createdUser);
-        //             await _context.SaveChangesAsync();
-        //         }
-        //
-        //         return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-        //         {
-        //             message = "Не удалось отправить письмо с кодом подтверждения. Попробуйте зарегистрироваться ещё раз чуть позже."
-        //         });
-        //     }
-        // }
 
         var authSession = await IssueAuthSessionAsync(user, dto.deviceToken, cancellationToken);
         return Ok(BuildAuthResponse(user, authSession));
@@ -1650,11 +1677,12 @@ public class AuthController : ControllerBase
 
     private void AppendMediaAccessCookie(AuthSessionResult authSession)
     {
+        var shouldSecureCookie = !_environment.IsDevelopment() || Request.IsHttps;
         Response.Cookies.Append(MediaAccessTokenCookieName, authSession.AccessToken, new CookieOptions
         {
             HttpOnly = true,
-            Secure = Request.IsHttps,
-            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            Secure = shouldSecureCookie,
+            SameSite = shouldSecureCookie ? SameSiteMode.None : SameSiteMode.Lax,
             Path = "/",
             MaxAge = TimeSpan.FromMinutes(20)
         });
