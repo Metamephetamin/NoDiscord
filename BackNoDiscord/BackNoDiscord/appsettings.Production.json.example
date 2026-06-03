@@ -76,7 +76,7 @@
     }
   },
   "ChatFiles": {
-    "MaxFileSizeBytes": 524288000,
+    "MaxFileSizeBytes": 104857600,
     "MaxUserStorageBytes": 5368709120,
     "MinFreeDiskBytes": 1073741824
   },

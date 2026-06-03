@@ -387,8 +387,8 @@ jobs:
               printf \"\\nStorage__Root=%s\\n\" \"\$STORAGE_PATH\" >> \"\$BACKEND_PATH/.env\"
               echo \"Production storage root forced to: \$STORAGE_PATH\"
               sed -i.bak -E \"/^(ChatFiles__MaxFileSizeBytes|ChatFiles:MaxFileSizeBytes)=/d\" \"\$BACKEND_PATH/.env\"
-              printf \"ChatFiles__MaxFileSizeBytes=524288000\\n\" >> \"\$BACKEND_PATH/.env\"
-              echo \"Production chat upload limit forced to: 524288000 bytes\"
+              printf \"ChatFiles__MaxFileSizeBytes=104857600\\n\" >> \"\$BACKEND_PATH/.env\"
+              echo \"Production chat upload limit forced to: 104857600 bytes\"
               sed -i.bak -E \"/^(Cors__AllowedOrigins|Cors:AllowedOrigins|ND_ALLOWED_ORIGINS|ND_PUBLIC_APP_URL|ND_API_URL|ND_LIVEKIT_URL|LiveKit__Url)=/d\" \"\$BACKEND_PATH/.env\"
               {
                 printf \"Cors__AllowedOrigins=https://lanaya.space;https://www.lanaya.space\\n\"

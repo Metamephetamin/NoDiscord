@@ -44,7 +44,7 @@ if (jwtKey.Length < 32)
 }
 
 const string MediaAccessTokenCookieName = "tend_access_token";
-const long MaxChatFileUploadBytes = 500L * 1024 * 1024;
+const long MaxChatFileUploadBytes = 100L * 1024 * 1024;
 const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
 var maxChatFileUploadRequestBytes = checked(
     GetConfiguredPositiveLong(builder.Configuration, "ChatFiles:MaxFileSizeBytes", MaxChatFileUploadBytes) +
@@ -249,7 +249,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: $"chat-upload:{remoteIp}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 60,
+                PermitLimit = 12,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true

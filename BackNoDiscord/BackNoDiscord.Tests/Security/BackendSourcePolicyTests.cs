@@ -336,6 +336,8 @@ public sealed class BackendSourcePolicyTests
         Assert.Contains("options.AddPolicy(\"email-verify\"", programSource);
         Assert.Contains("options.AddPolicy(\"qr-login-poll\"", programSource);
         Assert.Contains("options.AddPolicy(\"chat-upload\"", programSource);
+        Assert.Contains("const long MaxChatFileUploadBytes = 100L * 1024 * 1024", programSource);
+        Assert.Contains("PermitLimit = 12", programSource);
         Assert.Contains("MapHub<ChatHub>(\"/chatHub\").RequireAuthorization()", programSource);
         Assert.Contains("MapHub<VoiceHub>(\"/voiceHub\").RequireAuthorization()", programSource);
         Assert.Contains("FrontendOriginPolicy.IsAllowed", programSource);
