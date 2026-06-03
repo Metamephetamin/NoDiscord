@@ -52,6 +52,11 @@ test("backup and load-balancer templates use safe production defaults", () => {
 
   assert.match(backendTemplate, /Environment=ASPNETCORE_URLS=http:\/\/127\.0\.0\.1:%i/);
   assert.match(backendTemplate, /EnvironmentFile=-\/etc\/nodiscord\/backend-%i\.env/);
+  assert.match(backendTemplate, /NoNewPrivileges=true/);
+  assert.match(backendTemplate, /PrivateTmp=true/);
+  assert.match(backendTemplate, /ProtectSystem=full/);
+  assert.match(backendTemplate, /CapabilityBoundingSet=\s*$/m);
+  assert.match(backendTemplate, /RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX/);
 
   assert.match(redisCompose, /redis:7-alpine/);
   assert.match(redisCompose, /appendonly yes/);
