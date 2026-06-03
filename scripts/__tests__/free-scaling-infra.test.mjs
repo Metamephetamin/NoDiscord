@@ -24,7 +24,9 @@ test("free production scaling templates are present", () => {
     "infra/systemd/nodiscord-db-backup.service",
     "infra/systemd/nodiscord-db-backup.timer",
     "scripts/db-backup.sh",
+    "scripts/db-backup-drill.ps1",
     "docs/release/free-scaling.md",
+    "docs/release/database-backup-restore.md",
   ];
 
   for (const filePath of expectedFiles) {
@@ -89,4 +91,19 @@ test("production deploy creates a reviewed migration artifact without applying i
   assert.match(deployWorkflow, /actions\/upload-artifact@v4/);
   assert.doesNotMatch(deployWorkflow, /dotnet\s+(?:tool\s+run\s+)?dotnet-ef\s+database\s+update/);
   assert.doesNotMatch(deployWorkflow, /dotnet\s+ef\s+database\s+update/);
+});
+
+test("database restore drill is documented and kept scriptable", () => {
+  const packageJson = read("package.json");
+  const drillScript = read("scripts/db-backup-drill.ps1");
+  const restoreDoc = read("docs/release/database-backup-restore.md");
+
+  assert.match(packageJson, /"check:db-backup-drill"/);
+  assert.match(drillScript, /DB_BACKUP_CONNECTION_STRING/);
+  assert.match(drillScript, /DB_RESTORE_CONNECTION_STRING/);
+  assert.match(drillScript, /pg_restore --clean --if-exists --no-owner --no-acl/);
+  assert.match(restoreDoc, /RPO:/);
+  assert.match(restoreDoc, /RTO:/);
+  assert.match(restoreDoc, /npm run check:db-backup-drill/);
+  assert.match(restoreDoc, /scripts\/db-backup-drill\.ps1 -Execute/);
 });

@@ -16,6 +16,12 @@
 3. Run API health check against the restored database.
 4. Record restore duration and result.
 
+## Recovery Targets
+
+- RPO: latest successful `nodiscord-db-backup.timer` run, normally less than 24 hours.
+- RTO: restore PostgreSQL backup and pass API health checks in staging within 60 minutes.
+- Drill cadence: run `npm run check:db-backup-drill` during release readiness, then run `scripts/db-backup-drill.ps1 -Execute` against a non-production restore database at least monthly.
+
 ## Production Timer
 
 See `docs/release/free-scaling.md` for the free systemd timer setup. Backups are written to `/opt/nodiscord/.deploy/backups/postgres` by default and old `lanaya-*.dump` files are deleted after `DB_BACKUP_RETENTION_DAYS`.
