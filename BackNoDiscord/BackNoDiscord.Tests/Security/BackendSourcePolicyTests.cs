@@ -400,4 +400,24 @@ public sealed class BackendSourcePolicyTests
         Assert.DoesNotContain("Temporarily disabled email verification flow", authControllerSource);
         Assert.DoesNotContain("//         var emailVerification = await CreateEmailVerificationAsync(user);", authControllerSource);
     }
+
+    [Fact]
+    public void IntegrationOAuthStateIsProtectedAndStateless()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            "..",
+            "..",
+            "..",
+            "..",
+            "BackNoDiscord",
+            "Controllers",
+            "UserIntegrationsController.cs"));
+
+        Assert.Contains("IDataProtector", source);
+        Assert.Contains("ProtectOAuthState", source);
+        Assert.Contains("TryUnprotectOAuthState", source);
+        Assert.DoesNotContain("ConcurrentDictionary<string, OAuthStateRecord>", source);
+        Assert.DoesNotContain("OAuthStates.TryRemove", source);
+        Assert.DoesNotContain("PurgeExpiredOAuthStates", source);
+    }
 }

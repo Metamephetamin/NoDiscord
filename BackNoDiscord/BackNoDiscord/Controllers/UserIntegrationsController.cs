@@ -1,11 +1,11 @@
 using BackNoDiscord.Security;
 using BackNoDiscord.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -53,7 +53,6 @@ public class UserIntegrationsController : ControllerBase
     private static readonly Uri SteamCommunityApi = new("https://steamcommunity.com/");
     private static readonly Uri SteamWebApi = new("https://api.steampowered.com/");
     private static readonly TimeSpan OAuthStateLifetime = TimeSpan.FromMinutes(10);
-    private static readonly ConcurrentDictionary<string, OAuthStateRecord> OAuthStates = new(StringComparer.Ordinal);
 
     private static readonly IntegrationProviderInfo[] Providers =
     [
@@ -76,6 +75,7 @@ public class UserIntegrationsController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly CryptoService _cryptoService;
     private readonly IWebHostEnvironment _environment;
+    private readonly IDataProtector _oauthStateProtector;
 
     public UserIntegrationsController(
         AppDbContext context,
@@ -83,7 +83,8 @@ public class UserIntegrationsController : ControllerBase
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         CryptoService cryptoService,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _context = context;
         _chatHubContext = chatHubContext;
@@ -91,6 +92,7 @@ public class UserIntegrationsController : ControllerBase
         _configuration = configuration;
         _cryptoService = cryptoService;
         _environment = environment;
+        _oauthStateProtector = dataProtectionProvider.CreateProtector("BackNoDiscord.UserIntegrations.OAuthState.v1");
     }
 
     [HttpGet]
@@ -128,10 +130,7 @@ public class UserIntegrationsController : ControllerBase
             return BadRequest(new { message = "Spotify пока не настроен на сервере. Добавьте Spotify__ClientId и Spotify__ClientSecret в .env, затем перезапустите backend." });
         }
 
-        PurgeExpiredOAuthStates();
-
-        var state = CreateSecureState();
-        OAuthStates[state] = new OAuthStateRecord(currentUserId, SpotifyProviderId, DateTimeOffset.UtcNow.Add(OAuthStateLifetime));
+        var state = CreateOAuthState(currentUserId, SpotifyProviderId);
 
         var query = BuildQueryString(new Dictionary<string, string>
         {
@@ -189,8 +188,6 @@ public class UserIntegrationsController : ControllerBase
                 return await ConnectLocalDevIntegrationAsync(currentUserId, providerId, cancellationToken);
             }
         }
-
-        PurgeExpiredOAuthStates();
 
         return providerId switch
         {
@@ -277,10 +274,7 @@ public class UserIntegrationsController : ControllerBase
     {
         var query = Request.Query.ToDictionary(item => item.Key, item => item.Value.ToString(), StringComparer.Ordinal);
         var state = query.TryGetValue("state", out var rawState) ? rawState : string.Empty;
-        if (string.IsNullOrWhiteSpace(state) ||
-            !OAuthStates.TryRemove(state, out var stateRecord) ||
-            stateRecord.ExpiresAt <= DateTimeOffset.UtcNow ||
-            !string.Equals(stateRecord.Provider, SteamProviderId, StringComparison.Ordinal))
+        if (!TryUnprotectOAuthState(state, SteamProviderId, out var stateRecord))
         {
             return IntegrationCallbackError("Steam", "Сессия подключения устарела. Закройте окно и попробуйте ещё раз.");
         }
@@ -320,9 +314,7 @@ public class UserIntegrationsController : ControllerBase
             return Content(BuildCallbackHtml("Spotify не подключен", "Авторизация была отменена или Spotify вернул ошибку."), "text/html; charset=utf-8");
         }
 
-        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state) ||
-            !OAuthStates.TryRemove(state, out var stateRecord) ||
-            stateRecord.ExpiresAt <= DateTimeOffset.UtcNow)
+        if (string.IsNullOrWhiteSpace(code) || !TryUnprotectOAuthState(state, SpotifyProviderId, out var stateRecord))
         {
             return Content(BuildCallbackHtml("Spotify не подключен", "Сессия подключения устарела. Закройте окно и попробуйте ещё раз."), "text/html; charset=utf-8");
         }
@@ -686,10 +678,8 @@ public class UserIntegrationsController : ControllerBase
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state) ||
-            !OAuthStates.TryRemove(state, out stateRecord!) ||
-            stateRecord.ExpiresAt <= DateTimeOffset.UtcNow ||
-            !string.Equals(stateRecord.Provider, providerId, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(code) ||
+            !TryUnprotectOAuthState(state, providerId, out stateRecord!))
         {
             errorResult = IntegrationCallbackError(ProviderById[providerId].Name, "Сессия подключения устарела. Закройте окно и попробуйте ещё раз.");
             return false;
@@ -1470,29 +1460,50 @@ public class UserIntegrationsController : ControllerBase
         return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
     }
 
-    private static string CreateSecureState()
+    private string CreateOAuthState(int userId, string providerId) =>
+        ProtectOAuthState(new OAuthStateRecord(
+            userId,
+            providerId,
+            DateTimeOffset.UtcNow.Add(OAuthStateLifetime),
+            CreateStateNonce()));
+
+    private string ProtectOAuthState(OAuthStateRecord stateRecord) =>
+        _oauthStateProtector.Protect(JsonSerializer.Serialize(stateRecord));
+
+    private bool TryUnprotectOAuthState(string? protectedState, string providerId, out OAuthStateRecord stateRecord)
+    {
+        stateRecord = default!;
+        if (string.IsNullOrWhiteSpace(protectedState))
+        {
+            return false;
+        }
+
+        try
+        {
+            var json = _oauthStateProtector.Unprotect(protectedState);
+            var payload = JsonSerializer.Deserialize<OAuthStateRecord>(json);
+            if (payload is null ||
+                payload.UserId <= 0 ||
+                string.IsNullOrWhiteSpace(payload.Nonce) ||
+                payload.ExpiresAt <= DateTimeOffset.UtcNow ||
+                !string.Equals(payload.Provider, providerId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            stateRecord = payload;
+            return true;
+        }
+        catch (Exception) when (!string.IsNullOrWhiteSpace(protectedState))
+        {
+            return false;
+        }
+    }
+
+    private static string CreateStateNonce()
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToBase64String(bytes).Replace("+", "-", StringComparison.Ordinal).Replace("/", "_", StringComparison.Ordinal).TrimEnd('=');
-    }
-
-    private static string CreateOAuthState(int userId, string providerId)
-    {
-        var state = CreateSecureState();
-        OAuthStates[state] = new OAuthStateRecord(userId, providerId, DateTimeOffset.UtcNow.Add(OAuthStateLifetime));
-        return state;
-    }
-
-    private static void PurgeExpiredOAuthStates()
-    {
-        var now = DateTimeOffset.UtcNow;
-        foreach (var pair in OAuthStates)
-        {
-            if (pair.Value.ExpiresAt <= now)
-            {
-                OAuthStates.TryRemove(pair.Key, out _);
-            }
-        }
     }
 
     private static string BuildQueryString(IReadOnlyDictionary<string, string> values) =>
@@ -1522,7 +1533,7 @@ public class UserIntegrationsController : ControllerBase
     }
 
     private sealed record IntegrationProviderInfo(string Id, string Name, string DefaultActivityKind, bool OAuthEnabled);
-    private sealed record OAuthStateRecord(int UserId, string Provider, DateTimeOffset ExpiresAt);
+    private sealed record OAuthStateRecord(int UserId, string Provider, DateTimeOffset ExpiresAt, string Nonce);
     private sealed record SpotifyOptions(string ClientId, string ClientSecret, string RedirectUri)
     {
         public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
