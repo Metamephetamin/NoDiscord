@@ -1037,14 +1037,6 @@ html[data-ui-density="compact"] .desktop-app-topbar {
   background: #060911;
 }
 
-.lanaya-world-map__viewport .leaflet-tile-pane {
-  filter: saturate(1.02) contrast(1.08) brightness(1.08);
-}
-
-.lanaya-world-map__viewport .lanaya-world-base-tile {
-  filter: saturate(1.05) contrast(1.12) brightness(1.18);
-}
-
 .lanaya-world-map__viewport .leaflet-control-zoom {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);

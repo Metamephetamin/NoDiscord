@@ -17,6 +17,59 @@ namespace BackNoDiscord.Tests.Controllers;
 public sealed class UserControllerTests
 {
     [Fact]
+    public async Task GetVisibleUserLocations_ReturnsOfflineUsersAtLastSharedLocation()
+    {
+        await using var context = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        context.Users.AddRange(
+            new User
+            {
+                id = 1,
+                first_name = "Current",
+                last_name = "User",
+                nickname = "current",
+                email = "current@example.com",
+                password_hash = "hash",
+                is_email_verified = true
+            },
+            new User
+            {
+                id = 2,
+                first_name = "Map",
+                last_name = "Friend",
+                nickname = "mapfriend",
+                email = "mapfriend@example.com",
+                password_hash = "hash",
+                avatar_url = "/avatars/mapfriend.png",
+                is_email_verified = true,
+                location_sharing_enabled = true,
+                location_visibility = "public",
+                last_location_latitude = 55.8,
+                last_location_longitude = 37.6,
+                last_location_updated_at = now.AddHours(-3),
+                last_location_expires_at = now.AddHours(-1),
+                last_seen_at = now.AddMinutes(-30)
+            });
+        await context.SaveChangesAsync();
+        var controller = BuildController(context, new RecordingHubContext(), userId: "1");
+
+        var result = await controller.GetVisibleUserLocations(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        using var responseJson = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        var userLocation = Assert.Single(responseJson.RootElement.EnumerateArray());
+        Assert.Equal(2, userLocation.GetProperty("id").GetInt32());
+        Assert.Equal("Map Friend", userLocation.GetProperty("name").GetString());
+        Assert.Equal("mapfriend", userLocation.GetProperty("nickname").GetString());
+        Assert.Equal("/avatars/mapfriend.png", userLocation.GetProperty("avatar").GetString());
+        Assert.Equal(55.8, userLocation.GetProperty("latitude").GetDouble());
+        Assert.Equal(37.6, userLocation.GetProperty("longitude").GetDouble());
+        Assert.Equal("offline", userLocation.GetProperty("presence").GetString());
+        Assert.Equal("offline", userLocation.GetProperty("kind").GetString());
+        Assert.True(userLocation.TryGetProperty("locationUpdatedAt", out _));
+    }
+
+    [Fact]
     public async Task UpdateProfile_PersistsProfileStatusAndBroadcastsIt()
     {
         await using var context = CreateContext();

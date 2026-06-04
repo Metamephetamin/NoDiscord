@@ -358,8 +358,8 @@ const readFiniteNumber = (value) => {
   return Number.isFinite(numericValue) ? numericValue : null;
 };
 
-const LANAYA_WORLD_BASE_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png";
-const LANAYA_WORLD_ATTRIBUTION = "&copy; OpenStreetMap contributors &copy; CARTO";
+const LANAYA_WORLD_BASE_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const LANAYA_WORLD_ATTRIBUTION = "&copy; OpenStreetMap contributors";
 const LANAYA_WORLD_MIN_ZOOM = 2;
 const LANAYA_WORLD_MAX_ZOOM = 19;
 const LANAYA_WORLD_DEFAULT_CENTER = [25, 25];

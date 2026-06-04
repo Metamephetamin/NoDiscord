@@ -112,8 +112,68 @@ public class UserController : ControllerBase
             return Unauthorized();
         }
 
-        await Task.CompletedTask;
-        return Ok(Array.Empty<object>());
+        var users = await _dbContext.Users
+            .AsNoTracking()
+            .Where(item =>
+                item.location_sharing_enabled &&
+                item.last_location_latitude != null &&
+                item.last_location_longitude != null &&
+                item.last_location_updated_at != null)
+            .OrderByDescending(item => item.last_location_updated_at)
+            .Select(item => new
+            {
+                item.id,
+                item.first_name,
+                item.last_name,
+                item.nickname,
+                item.email,
+                item.avatar_url,
+                item.last_seen_at,
+                mapLatitude = item.last_location_latitude,
+                mapLongitude = item.last_location_longitude,
+                mapUpdatedAt = item.last_location_updated_at
+            })
+            .ToListAsync(cancellationToken);
+
+        var result = users.Select(item =>
+        {
+            var isOnline = _userPresenceService.IsOnline(item.id.ToString());
+            var displayName = BuildLocationDisplayName(item.first_name, item.last_name, item.nickname);
+            return new
+            {
+                item.id,
+                name = displayName,
+                displayName,
+                nickname = item.nickname ?? string.Empty,
+                email = item.email ?? string.Empty,
+                avatar = item.avatar_url ?? string.Empty,
+                avatarUrl = item.avatar_url ?? string.Empty,
+                latitude = item.mapLatitude,
+                longitude = item.mapLongitude,
+                locationLabel = "Последнее местоположение",
+                locationUpdatedAt = item.mapUpdatedAt,
+                last_seen_at = item.last_seen_at,
+                is_online = isOnline,
+                presence = isOnline ? "online" : "offline",
+                kind = isOnline ? "online" : "offline"
+            };
+        });
+
+        return Ok(result);
+    }
+
+    private static string BuildLocationDisplayName(string? firstName, string? lastName, string? nickname)
+    {
+        var fullName = string.Join(" ", new[] { firstName, lastName }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim()));
+
+        if (!string.IsNullOrWhiteSpace(fullName))
+        {
+            return fullName;
+        }
+
+        return string.IsNullOrWhiteSpace(nickname) ? "User" : nickname.Trim();
     }
 
     [HttpGet("location-sharing")]

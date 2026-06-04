@@ -1108,10 +1108,15 @@ test("text chat location picker styles stay split from the main chat stylesheet"
 
 test("location maps avoid CORS-only tile loading and use a quick geolocation pass", () => {
   const friendsSource = readRepoFile("src/components/FriendsWorkspace.jsx");
+  const menuShellCss = readRepoFile("src/css/MenuMainShell.css");
   const composerSource = readRepoFile("src/components/TextChatComposer.jsx");
 
   assert.match(friendsSource, /LANAYA_WORLD_BASE_TILE_URL/);
+  assert.match(friendsSource, /tile\.openstreetmap\.org/);
+  assert.doesNotMatch(friendsSource, /dark_nolabels/);
   assert.doesNotMatch(friendsSource, /crossOrigin:\s*true/);
+  assert.doesNotMatch(menuShellCss, /\.lanaya-world-map__viewport \.leaflet-tile-pane\s*\{[\s\S]*?filter:/);
+  assert.doesNotMatch(menuShellCss, /\.lanaya-world-map__viewport \.lanaya-world-base-tile\s*\{[\s\S]*?filter:/);
   assert.match(friendsSource, /function|const constrainLanayaWorldMinZoom/);
   assert.match(friendsSource, /map\.getBoundsZoom\(LANAYA_WORLD_BOUNDS, true, LANAYA_WORLD_MIN_VISIBLE_ZOOM_PADDING\)/);
   assert.match(friendsSource, /map\.setMinZoom\(nextMinZoom\)/);
